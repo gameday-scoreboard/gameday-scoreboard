@@ -366,6 +366,25 @@ static void test_live_games() {
   std::string nfl = slurp("fixtures/scoreboard_nfl.json");
   CHECK(parse_live_games(nfl, none));
   CHECK_EQ(none.size(), (size_t) 0);
+  // The earliest kickoff still to come, for the wait when nothing is live.
+  int64_t next = -1;
+  games.clear();
+  CHECK(parse_live_games(json, games, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-09-05T23:00Z"));
+  none.clear();
+  CHECK(parse_live_games(nfl, none, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-09-10T00:20Z"));
+  std::string finals = slurp("fixtures/scoreboard_ncaa_conf_titles.json");
+  CHECK(parse_live_games(finals, none, &next));
+  CHECK_EQ(next, (int64_t) 0);  // every game final: nothing left to wait for
+  // A TBD kickoff sits at midnight Eastern with timeValid false and must not
+  // count, or it would hold the wait at its floor all day.
+  std::string tbd = R"({"events":[)"
+                    R"({"id":"1","date":"2026-10-24T04:00Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":false}]},)"
+                    R"({"id":"2","date":"2026-10-24T19:30Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":true}]},)"
+                    R"({"id":"3","date":"2026-10-24T16:00Z","status":{"type":{"state":"post"}},"competitions":[{}]}]})";
+  CHECK(parse_live_games(tbd, none, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-10-24T19:30Z"));
   CHECK(scan_url(League::NFL, parse_iso8601_z("2026-09-14T01:00Z")).find("dates=20260913") != std::string::npos);
   CHECK(scan_url(League::NCAA, 0).find("groups=80") != std::string::npos);
   // neutral splashes name both sides
@@ -514,6 +533,17 @@ static void test_schedule_league() {
 // the helper takes it as an argument so the test does not depend on the device
 // constant.
 static const uint32_t kSix = 6u * 60u * 60u * 1000u;
+
+static void test_no_live_rescan() {
+  const uint32_t lo = 2 * 60 * 1000, hi = 3 * 60 * 60 * 1000;
+  int64_t now = parse_iso8601_z("2026-10-17T13:00Z");
+  CHECK_EQ(no_live_rescan_ms(now, now + 45 * 60, lo, hi), (uint32_t) 45 * 60 * 1000);  // waits for kickoff
+  CHECK_EQ(no_live_rescan_ms(now, now + 8 * 3600, lo, hi), hi);                        // capped
+  CHECK_EQ(no_live_rescan_ms(now, now + 30, lo, hi), lo);                              // never under the floor
+  CHECK_EQ(no_live_rescan_ms(now, now - 600, lo, hi), lo);  // due but not under way yet
+  CHECK_EQ(no_live_rescan_ms(now, 0, lo, hi), hi);          // nothing left today
+  CHECK_EQ(no_live_rescan_ms(0, now + 3600, lo, hi), lo);   // no clock yet
+}
 
 static void test_schedule_due() {
   // Nothing fetched yet: the panel has to read the team endpoint.
@@ -791,6 +821,7 @@ int main() {
   test_favorites();
   test_schedule_league();
   test_schedule_due();
+  test_no_live_rescan();
   test_team_cache();
   test_boot_hold();
   test_rotate_minutes();
