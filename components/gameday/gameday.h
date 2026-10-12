@@ -245,6 +245,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool need_scan{false};
     std::vector<::espn::LiveGame> live;
     bool scan_ok{false};
+    int64_t next_kickoff{0};  // earliest kickoff not started yet, 0 for none
     bool need_schedule{false};
     Schedule schedule;
     bool schedule_ok{false};
@@ -260,13 +261,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint32_t our_id{0};
   };
   void start_job_();
+  void start_worker_();
   static void worker_(void *arg);
   void run_job_();
   void apply_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out);
   bool fetch_upcoming_(const ::espn::Team *team, std::vector<::espn::Upcoming> &out);
   bool fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out);
-  bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out);
+  bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff);
   bool live_mode_() const {
     return this->prefs2_.mode >= (uint8_t) Mode::LIVE_NFL && this->prefs2_.mode <= (uint8_t) Mode::LIVE_ANY;
   }
@@ -352,6 +354,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t live_started_ms_{0};   // when the current live game was picked,
                                   // or, in the fallback, when the last scan ran
   bool live_none_{false};         // last scan found nothing in progress
+  // With nothing live, the wait until the next scan: up to the next kickoff.
+  uint32_t live_rescan_ms_{2 * 60 * 1000};
   // A live mode with nothing live: the board shows the saved team's card and
   // keeps scanning. The mode the owner picked does not change.
   bool live_fallback_{false};
