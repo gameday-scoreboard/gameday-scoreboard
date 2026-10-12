@@ -8,6 +8,11 @@ uses on the network, gameday- plus the MAC's last six hex digits, the same
 name ESPHome builds at boot. Each unit gets a row in factory/log.csv and a
 label in factory/labels/<name>.svg, 50 x 25 mm, ready to print.
 
+The same write also leaves the QC flag in the panel's NVS, so its first boot
+goes straight into QC mode (firmware/pages/qc.yaml). One press of the button
+there passes the button test and clears the flag. Until then the panel runs
+QC on every boot.
+
 Run it with the ESPHome venv's python, which has esptool and pyserial:
 
     python scripts/factory_flash.py --release v1.5.5
@@ -29,11 +34,13 @@ import csv
 import datetime
 import hashlib
 import re
+import struct
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
+import zlib
 from pathlib import Path
 
 REPO = "gameday-scoreboard/gameday-scoreboard"
@@ -44,6 +51,12 @@ LABEL_W_MM = 50
 LABEL_H_MM = 25
 # ESPHome logs this at boot: "Project bharvey88.gameday-scoreboard version 1.5.5"
 BOOT_VERSION_RE = re.compile(r"gameday-scoreboard version (\d+\.\d+\.\d+)")
+# And this as the flag starts QC mode (firmware/pages/qc.yaml)
+BOOT_QC_RE = re.compile(r"QC mode on \(factory flag\)")
+# The flag the firmware reads (components/gameday/qc.h). Change both together.
+QC_FLAG_NAMESPACE = "gameday"
+QC_FLAG_KEY = "qc_pending"
+NVS_PAGE_SIZE = 0x1000
 
 
 def release_asset(tag, variant):
@@ -93,6 +106,46 @@ def check_image(data):
     if data[0x8000:0x8002] != b"\xaa\x50":
         return "no partition table at 0x8000 (an OTA .bin, not the .factory.bin?)"
     return None
+
+
+def nvs_offset(data):
+    """Flash offset of the NVS partition, from the image's partition table at 0x8000.
+
+    Each entry is 32 bytes: magic AA 50, type, subtype, offset, size, label.
+    NVS is type 1 (data), subtype 2. Returns None if there isn't one.
+    """
+    for pos in range(0x8000, 0x8000 + 0xC00, 32):
+        entry = data[pos:pos + 32]
+        if entry[:2] != b"\xaa\x50":
+            break
+        ptype, subtype, offset = struct.unpack_from("<BBI", entry, 2)
+        if ptype == 0x01 and subtype == 0x02:
+            return offset
+    return None
+
+
+def nvs_entry(ns_index, key, value):
+    """One 32-byte NVS entry holding a u8: the header, its CRC, the key, the value."""
+    head = struct.pack("<BBBB", ns_index, 0x01, 1, 0xFF)  # u8, one entry, no chunk
+    rest = key.encode().ljust(16, b"\x00") + bytes([value]) + b"\xff" * 7
+    crc = zlib.crc32(head + rest, 0xFFFFFFFF) & 0xFFFFFFFF
+    return head + struct.pack("<I", crc) + rest
+
+
+def qc_flag_page():
+    """The first NVS page with the QC flag set, as ESP-IDF's nvs_partition_gen writes it.
+
+    The rest of the partition stays erased, so this only goes on after a full
+    erase. The firmware's own settings (namespace "esphome") join it at boot.
+    """
+    header = struct.pack("<II", 0xFFFFFFFE, 0) + b"\xfe" + b"\xff" * 19  # active, seq 0, NVS v2
+    header += struct.pack("<I", zlib.crc32(header[4:28], 0xFFFFFFFF) & 0xFFFFFFFF)
+    # Two bits per entry: 10 is written. Entries 0 and 1 are.
+    bitmap = b"\xfa" + b"\xff" * 31
+    # Namespace entries live in namespace 0, their value is the namespace's index.
+    entries = nvs_entry(0, QC_FLAG_NAMESPACE, 1) + nvs_entry(1, QC_FLAG_KEY, 1)
+    page = header + bitmap + entries
+    return page + b"\xff" * (NVS_PAGE_SIZE - len(page))
 
 
 def parse_mac(output):
@@ -175,28 +228,36 @@ def pick_port():
     raise RuntimeError(f"can't tell which port is the controller; pass --port. Ports: {listed}")
 
 
-def watch_boot(port, seconds):
-    """Version the firmware logs at boot, or None if it isn't seen in time.
+def watch_boot(port, seconds, want_qc):
+    """(version, qc) from the boot log: the version the firmware logs, or None
+    if it isn't seen in time, and whether QC mode started from the flag.
 
     Native USB drops off the bus while the chip resets, so keep trying to open
-    the port until the time runs out.
+    the port until the time runs out. QC starts at the end of setup, a moment
+    after the version line, so wait up to 10 s more for it.
     """
     import serial
 
     deadline = time.monotonic() + seconds
     buf = ""
+    version = None
+    qc = False
     while time.monotonic() < deadline:
         try:
             with serial.Serial(port, 115200, timeout=0.5) as ser:
                 while time.monotonic() < deadline:
                     buf += ser.read(512).decode("utf-8", "replace")
                     m = BOOT_VERSION_RE.search(buf)
-                    if m:
-                        return m.group(1)
+                    if m and version is None:
+                        version = m.group(1)
+                        deadline = min(deadline, time.monotonic() + 10)
+                    qc = qc or bool(BOOT_QC_RE.search(buf))
+                    if version is not None and (qc or not want_qc):
+                        return version, qc
                     buf = buf[-200:]
         except (OSError, serial.SerialException):
             time.sleep(0.5)
-    return None
+    return version, qc
 
 
 def fetch_release(tag, variant, folder):
@@ -214,11 +275,13 @@ def fetch_release(tag, variant, folder):
     return path
 
 
-def flash_one(args, image, image_sha, version, out):
+def flash_one(args, image, image_sha, version, out, qc_flag):
     port = "COM?" if args.dry_run and not args.port else (args.port or pick_port())
     print(f"Port {port}")
     # esptool prints the MAC when it connects, so one write-flash call does it all
     erase = [] if args.no_erase else ["--erase-all"]
+    # (offset, file) of the QC flag page, or None
+    extra = [hex(qc_flag[0]), str(qc_flag[1])] if qc_flag else []
     row = {
         "time": datetime.datetime.now().isoformat(timespec="seconds"),
         "name": "",
@@ -232,7 +295,8 @@ def flash_one(args, image, image_sha, version, out):
     }
     log_path = out / "log.csv"
     try:
-        output = run(esptool_cmd(port, args.baud, "write-flash", *erase, "0x0", str(image)), args.dry_run)
+        output = run(esptool_cmd(port, args.baud, "write-flash", *erase, "0x0", str(image), *extra),
+                     args.dry_run)
     except RuntimeError as e:
         mac = parse_mac(str(e))
         if mac:
@@ -250,13 +314,15 @@ def flash_one(args, image, image_sha, version, out):
         print(f"  Flashed before, at {earlier[-1]['time']}. Use the label from this run.")
 
     if args.boot_check > 0 and not args.dry_run:
-        seen = watch_boot(port, args.boot_check)
+        seen, qc = watch_boot(port, args.boot_check, bool(qc_flag))
         if seen is None:
             row["boot_log"] = "not seen"
             print("  Boot log: no version line seen. Check the panel lights up.")
         else:
-            row["boot_log"] = seen
-            print(f"  Boot log: firmware {seen}")
+            row["boot_log"] = seen + (" QC" if qc else "")
+            print(f"  Boot log: firmware {seen}" + (", QC mode on" if qc else ""))
+            if qc_flag and not qc:
+                print("  No QC line in the boot log. Check the panel is cycling red, green, blue, white.")
             if version and seen != version:
                 row["result"] = "wrong version"
                 save(log_path, lambda: append_log(log_path, row))
@@ -268,6 +334,9 @@ def flash_one(args, image, image_sha, version, out):
         save(label, lambda: label.write_text(label_svg(name, mac, version), encoding="utf-8"))
         save(log_path, lambda: append_log(log_path, row))
     print(f"OK {name}  label {label}")
+
+
+QC_FLAG_PAGE_SHA256 = "78a1f6ce5bc6b96148acda0fec3819e4cd89d838d94f5781d0b3845a26141450"
 
 
 def selftest():
@@ -298,6 +367,24 @@ def selftest():
                            b"Project bharvey88.gameday-scoreboard version 1.5.5\x00")
     assert image_info(built) == ("scoreboard75", "1.5.5")
     assert image_info(bytes(good)) == ("", "")
+
+    table = bytearray(good)
+    rows = [(0x01, 0x00, 0x9000, b"otadata"), (0x00, 0x10, 0x10000, b"app0"), (0x01, 0x02, 0xF90000, b"nvs")]
+    for i, (ptype, subtype, offset, label) in enumerate(rows):
+        struct.pack_into("<2sBBII16sI", table, 0x8000 + 32 * i, b"\xaa\x50", ptype, subtype, offset, 0x1000,
+                         label, 0)
+    assert nvs_offset(bytes(table)) == 0xF90000
+    assert nvs_offset(bytes(good)) is None
+
+    # Byte for byte what ESP-IDF's nvs_partition_gen (v0.3.0, NVS v2) writes for
+    # gameday/qc_pending = u8 1, checked when this was written.
+    page = qc_flag_page()
+    assert len(page) == NVS_PAGE_SIZE
+    assert hashlib.sha256(page).hexdigest() == QC_FLAG_PAGE_SHA256, hashlib.sha256(page).hexdigest()
+    assert page[:4] == b"\xfe\xff\xff\xff" and page[0x48:0x50] == b"gameday\x00"
+
+    assert BOOT_QC_RE.search("[I][qc:066]: QC mode on (factory flag)")
+    assert not BOOT_QC_RE.search("[I][qc:066]: QC mode on")
 
     attempts = []
 
@@ -372,6 +459,7 @@ def main():
         version = version_from(image.name)
 
     image_sha = ""
+    nvs_at = None
     if image.exists():
         data = image.read_bytes()
         problem = check_image(data)
@@ -384,6 +472,10 @@ def main():
                   "if that's right.", file=sys.stderr)
             return 1
         version = built_version or version
+        nvs_at = nvs_offset(data)
+        if nvs_at is None:
+            print(f"{image}: no NVS partition in its partition table", file=sys.stderr)
+            return 1
         image_sha = hashlib.sha256(data).hexdigest()
         print(f"Image {image} ({len(data)} bytes, {built_for or 'unknown pinout'} "
               f"v{version or '?'}, sha256 {image_sha[:16]})")
@@ -392,13 +484,24 @@ def main():
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
 
+    qc_flag = None
+    if args.no_erase:
+        print("No QC flag: --no-erase keeps the old settings, and the flag only goes on an erased panel.")
+    else:
+        if nvs_at is None:  # a dry run with no image: ESPHome's 16MB layout
+            nvs_at = 0xF90000
+        flag_file = args.out / "qc_flag.bin"
+        flag_file.write_bytes(qc_flag_page())
+        qc_flag = (nvs_at, flag_file)
+        print(f"QC flag: {flag_file} at {hex(nvs_at)}, so each panel boots into QC")
+
     done = 0
     while not args.count or done < args.count:
         reply = input(f"\nPlug in controller {done + 1} and press Enter (q to stop): ").strip().lower()
         if reply == "q":
             break
         try:
-            flash_one(args, image, image_sha, version, args.out)
+            flash_one(args, image, image_sha, version, args.out, qc_flag)
             done += 1
         except (RuntimeError, OSError) as e:
             print(f"FAILED: {e}")

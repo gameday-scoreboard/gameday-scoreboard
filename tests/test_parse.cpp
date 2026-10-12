@@ -63,7 +63,7 @@ static void test_urls() {
            std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=9&dates=20260905"));
   CHECK_EQ(dark_logo("https://a.espncdn.com/i/teamlogos/ncaa/500/68.png"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/68.png&w=64&h=64"));
   CHECK_EQ(dark_logo("https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/sea.png&w=64&h=64"));
-  CHECK_EQ(team_logo_url(League::NFL, 6, "DAL"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/dal.png&w=64&h=64"));
+  CHECK_EQ(team_logo_url(League::NFL, 6, "DAL"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/dal.png&w=64&h=64"));
   CHECK_EQ(team_logo_url(League::NCAA, 228, "CLEM"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/228.png&w=64&h=64"));
   CHECK_EQ(dark_logo(""), std::string(""));
 }
@@ -84,12 +84,22 @@ static void test_team_parse() {
   CHECK_EQ(s.group, (uint32_t) 1);
   CHECK_EQ(s.team_color, std::string("8c2232"));
   CHECK_EQ(s.team_record, std::string("0-0"));
+  CHECK_EQ(s.opp_id, (uint32_t) 2132);  // Cincinnati, the other side of the next game
+  CHECK_EQ(s.opp_abbr, std::string("CIN"));
 
   Schedule d;
   CHECK(parse_team_str(slurp("fixtures/team_nfl_dal.json"), d));
   CHECK_EQ(d.event_id, std::string("401872930"));
   CHECK_EQ(d.team_color, std::string("002a5c"));
   CHECK_EQ(d.team_record, std::string("2-1"));
+  CHECK_EQ(d.opp_id, (uint32_t) 19);
+  CHECK_EQ(d.opp_abbr, std::string("NYG"));
+
+  // No next game: no opponent.
+  Schedule none;
+  CHECK(parse_team_str(R"({"team":{"id":"6","color":"002a5c","nextEvent":[]}})", none));
+  CHECK(none.event_id.empty());
+  CHECK_EQ(none.opp_id, (uint32_t) 0);
 
   Schedule bad;
   CHECK(!parse_team_str("{not json", bad));
@@ -120,6 +130,8 @@ static void test_scoreboard_live() {
   CHECK_EQ(s.opp_color, std::string("00934b"));
   CHECK_EQ(s.team_logo, std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/68.png&w=64&h=64"));
   CHECK_EQ(s.opp_logo, std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/2483.png&w=64&h=64"));
+  CHECK_EQ(team_logo_url(League::NCAA, s.team_id, "BOIS"), s.team_logo);
+  CHECK_EQ(team_logo_url(League::NCAA, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
   CHECK(s.last_play.rfind("End of 3rd quarter", 0) == 0);
   CHECK(!s.completed);
 
@@ -166,6 +178,10 @@ static void test_scoreboard_pre_nfl() {
   CHECK_EQ(s.venue, std::string("Lumen Field"));
   CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-09-10T00:20Z"));
   CHECK_EQ(s.team_logo, std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/ne.png&w=64&h=64"));
+  // The logo cache keys on the URL: the one built before the scoreboard
+  // arrives must be the one the scoreboard gives, or it downloads twice.
+  CHECK_EQ(team_logo_url(League::NFL, s.team_id, "NE"), s.team_logo);
+  CHECK_EQ(team_logo_url(League::NFL, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
   CHECK_EQ(s.possession, 0);
 }
 
@@ -632,7 +648,7 @@ static void test_mlb_urls() {
   CHECK_EQ(event_url(League::MLB, "401908016"),
            std::string("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard/401908016"));
   CHECK_EQ(team_logo_url(League::MLB, 15, "ATL"),
-           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/mlb/500-dark/atl.png&w=64&h=64"));
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/mlb/500-dark/scoreboard/atl.png&w=64&h=64"));
   CHECK_EQ(std::string(league_key(League::MLB)), std::string("mlb"));
   CHECK(league_by_key("mlb") != nullptr && league_by_key("mlb")->per_event);
   CHECK(league_by_key("cfl") == nullptr);
@@ -1274,7 +1290,7 @@ static void test_nba_urls() {
   CHECK_EQ(event_url(League::WNBA, "401918297"),
            std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard/401918297"));
   CHECK_EQ(team_logo_url(League::NBA, 11, "IND"),
-           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500-dark/ind.png&w=64&h=64"));
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500-dark/scoreboard/ind.png&w=64&h=64"));
   CHECK_EQ(team_logo_url(League::WNBA, 129689, "GS"),
            std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/wnba/500-dark/gs.png&w=64&h=64"));
   CHECK_EQ(std::string(league_key(League::NBA)), std::string("nba"));
@@ -1591,7 +1607,7 @@ static void test_nhl_urls() {
   CHECK_EQ(event_url(League::NHL, "401891830"),
            std::string("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard/401891830"));
   CHECK_EQ(team_logo_url(League::NHL, 129764, "UTAH"),
-           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nhl/500-dark/utah.png&w=64&h=64"));
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nhl/500-dark/scoreboard/utah.png&w=64&h=64"));
   CHECK_EQ(std::string(league_key(League::NHL)), std::string("nhl"));
   const LeagueInfo *nhl = league_by_key("nhl");
   CHECK(nhl != nullptr && nhl->per_event && !nhl->season_list && nhl->linger_min == 30);

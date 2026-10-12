@@ -143,6 +143,9 @@ std::string dark_logo(const std::string &url) {
   return "https://a.espncdn.com/combiner/i?img=" + out.substr(path) + "&w=64&h=64";
 }
 
+// The same URL the scoreboard gives this team, so the logo cache downloads it
+// once. The scoreboard's NFL, MLB, NBA and NHL logos sit under /scoreboard/,
+// and that variant is not always the same picture (the Jets').
 std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   std::string a = abbr ? abbr : "";
   for (auto &c : a)
@@ -151,7 +154,9 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   if (l == nullptr)
     return "";
   std::string file = l->logo_by_id ? std::to_string(espn_id) : a;
-  return dark_logo(std::string("https://a.espncdn.com/i/teamlogos/") + l->logo_dir + "/500/" + file + ".png");
+  bool scoreboard = league == League::NFL || league == League::MLB || league == League::NBA || league == League::NHL;
+  return dark_logo(std::string("https://a.espncdn.com/i/teamlogos/") + l->logo_dir +
+                   (scoreboard ? "/500/scoreboard/" : "/500/") + file + ".png");
 }
 
 bool parse_team_str(const std::string &json, Schedule &out) { return parse_team(json, out); }

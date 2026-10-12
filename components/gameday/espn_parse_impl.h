@@ -104,13 +104,18 @@ inline void fill_scan_filter(JsonDocument &f) {
 }
 
 inline void fill_team_filter(JsonDocument &f) {
+  f["team"]["id"] = true;
   f["team"]["color"] = true;
   f["team"]["record"]["items"].add<JsonObject>()["summary"] = true;
   f["team"]["groups"]["id"] = true;
   JsonObject ne = f["team"]["nextEvent"].add<JsonObject>();
   ne["id"] = true;
   ne["date"] = true;
-  ne["competitions"].add<JsonObject>()["status"]["type"]["state"] = true;
+  JsonObject comp = ne["competitions"].add<JsonObject>();
+  comp["status"]["type"]["state"] = true;
+  JsonObject c = comp["competitors"].add<JsonObject>();
+  c["id"] = true;
+  c["team"]["abbreviation"] = true;
 }
 
 inline void fill_team_game_filter(JsonDocument &f) {
@@ -290,6 +295,14 @@ template<typename TInput> bool parse_team(TInput &input, Schedule &out) {
     s.event_id = detail::str_or_empty(ne["id"]);
     s.kickoff_epoch = parse_iso8601_z(detail::str_or_empty(ne["date"]));
     s.next_final = detail::str_or_empty(ne["competitions"][0]["status"]["type"]["state"]) == "post";
+    std::string us = detail::str_or_empty(team["id"]);
+    for (JsonObjectConst c : ne["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+      std::string id = detail::str_or_empty(c["id"]);
+      if (id.empty() || id == us)
+        continue;
+      s.opp_id = (uint32_t) atol(id.c_str());
+      s.opp_abbr = detail::str_or_empty(c["team"]["abbreviation"]);
+    }
   }
   s.valid = true;
   out = s;

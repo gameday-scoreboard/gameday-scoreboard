@@ -1,6 +1,6 @@
 league 0 path=nfl
   team=https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6 sched=https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/333/schedule
-  logo=https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/dal.png&w=64&h=64 logo2=https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/ore.png&w=64&h=64
+  logo=https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/dal.png&w=64&h=64 logo2=https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/ore.png&w=64&h=64
   2026-09-05T16:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905
   2026-09-06T03:30Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905
   2026-09-06T04:59Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905

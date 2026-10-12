@@ -24,6 +24,10 @@ struct Schedule {
   std::string team_record;
   const char *comp_slug{nullptr};  // a kCups slug when the game is in that cup, nullptr for the league
   bool next_final{false};          // the team endpoint's next event is already over (ESPN lags)
+  // The other side of event_id, so its logo can download early. 0 when the
+  // team endpoint did not say.
+  uint32_t opp_id{0};
+  std::string opp_abbr;
 };
 
 enum class Half : uint8_t { NONE, TOP, MID, BOTTOM, END };
