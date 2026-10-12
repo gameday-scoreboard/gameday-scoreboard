@@ -365,7 +365,13 @@ time:
           then:
             - lambda: 'id(gd_update_checked) = true;'
             - delay: 3s
-            - lambda: 'id(gd_firmware_update).update();'
+            # Every update entity rather than id(gd_firmware_update), which
+            # the demo build removes (firmware/pages/demo.yaml).
+            - lambda: |-
+                #ifdef USE_UPDATE
+                for (auto *u : App.get_updates())
+                  u->check();
+                #endif
     # Overridden at boot by the saved Timezone choice. Present so ESPHome
     # 2026.9+ compiles its timezone support at all (posix_tz.cpp is only
     # built when a timezone is configured).
@@ -374,7 +380,8 @@ time:
 # Team logos come from the gameday component's logo cache (logo_cache.cpp).
 # This blank stands in while one downloads.
 image:
-  - file: images/logo-blank.png
+  - platform: file
+    file: images/logo-blank.png
     id: gd_logo_blank
     type: RGB565
     transparency: alpha_channel

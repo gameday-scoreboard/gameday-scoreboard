@@ -17,6 +17,7 @@
 #include "esphome/components/time/posix_tz.h"
 #endif
 
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -41,6 +42,10 @@ static const uint32_t RETRY_INTERVAL = MINUTE;
 static const uint32_t NOT_READY_INTERVAL = 500;
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
+// A college scan is ~750KB on a Saturday. With nothing live it waits for the
+// next kickoff instead of re-reading every 2 minutes, but never longer than
+// this, so a moved kickoff or the next day's slate is still picked up.
+static const uint32_t NO_GAMES_RESCAN = 3 * 60 * MINUTE;
 // How long the loop waits on a worker task before writing it off. A job chains
 // at most two requests (schedule then game, or the NFL then the NCAA
 // scoreboard). http_request in gameday-common.yaml allows each one 20s, with a
@@ -166,6 +171,9 @@ void GamedayComponent::setup() {
   this->rebuild_favorites_(false);
   this->apply_timezone_();
   this->publish_selects_();
+#ifdef GAMEDAY_DEMO
+  this->demo_setup_();
+#endif
   this->rebuild_state_(nullptr);
   if (this->base_ != nullptr)
     this->base_->add_handler(this);
@@ -234,6 +242,10 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   else
     this->rebuild_state_(&this->last_fields_);
 }
+
+#ifndef GAMEDAY_DEMO
+void GamedayComponent::remote_number(uint8_t n) { this->press_favorite(n); }
+#endif
 
 void GamedayComponent::press_favorite(uint8_t slot) {
   std::string option = this->favorite_option_(slot);
@@ -502,15 +514,7 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
   j.schedule = e.sched;
   if (refresh >= 0)
     e.fetched_ms = now == 0 ? 1 : now;
-  this->job_done_ = false;
-  this->busy_ = true;
-  this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-  BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-  if (ok != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the fetch task");
-    this->busy_ = false;
-    this->schedule_next_(RETRY_INTERVAL);
-  }
+  this->start_worker_();
 }
 
 void GamedayComponent::apply_fav_job_(uint32_t now) {
@@ -594,11 +598,12 @@ void GamedayComponent::dump_config() {
 void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
-  if (this->demo_active_) {
-    this->demo_tick_();
-    if (!this->busy_)
-      return;
-  }
+#ifdef GAMEDAY_DEMO
+  // While the scripted game plays, nothing new is fetched. A fetch already
+  // running still finishes below, and is discarded as belonging to before.
+  if (this->demo_loop_() && !this->busy_)
+    return;
+#endif
   if (this->busy_) {
     if (!this->job_done_) {
       // A worker that died without setting job_done_ would block the loop
@@ -805,6 +810,7 @@ void GamedayComponent::reset_game_() {
   this->live_away_id_ = 0;
   this->live_started_ms_ = 0;
   this->live_none_ = false;
+  this->live_rescan_ms_ = NO_LIVE_RESCAN;
   this->live_fallback_ = false;
   this->schedule_ = Schedule{};
   this->schedule_fetched_ms_ = 0;
@@ -871,7 +877,8 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
   return ok;
 }
 
-bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out) {
+bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out,
+                                         int64_t &next_kickoff) {
   std::string url = ::espn::scan_url(league, (int64_t) this->time_->timestamp_now());
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
   auto container = this->open_(url);
@@ -879,11 +886,14 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
     return false;
   ContainerReader reader(container);
   size_t before = out.size();
-  bool ok = ::espn::parse_live_games(reader, out);
+  int64_t next = 0;
+  bool ok = ::espn::parse_live_games(reader, out, &next);
   for (size_t i = before; i < out.size(); i++)
     out[i].league = (uint8_t) league;
   container->end();
   ESP_LOGI(TAG, "Scan: %u live game(s) (%u bytes)", (unsigned) out.size(), (unsigned) reader.total());
+  if (next != 0 && (next_kickoff == 0 || next < next_kickoff))
+    next_kickoff = next;
   return ok;
 }
 
@@ -932,7 +942,7 @@ uint32_t GamedayComponent::interval_for_phase_() const {
   // the 6 hours an out of season team gets, must never outlast the rescan.
   if (this->live_fallback_) {
     uint32_t since = millis() - this->live_started_ms_;
-    uint32_t left = since >= NO_LIVE_RESCAN ? 0 : NO_LIVE_RESCAN - since;
+    uint32_t left = since >= this->live_rescan_ms_ ? 0 : this->live_rescan_ms_ - since;
     if (ms > left)
       ms = left;
   }
@@ -957,7 +967,7 @@ void GamedayComponent::start_job_() {
   if (this->live_mode_()) {
     // Inside the fallback live_started_ms_ times the rescan instead of the
     // rotate: the board is on the owner's own team until a game kicks off.
-    bool rescan_due = this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= NO_LIVE_RESCAN;
+    bool rescan_due = this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= this->live_rescan_ms_;
     if (!this->live_fallback_ || rescan_due) {
       if (this->live_fallback_) {
         j.need_scan = true;
@@ -971,14 +981,7 @@ void GamedayComponent::start_job_() {
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_;
       }
       j.schedule = this->schedule_;
-      this->job_done_ = false;
-      this->busy_ = true;
-      this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-      BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-      if (ok != pdPASS) {
-        this->busy_ = false;
-        this->schedule_next_(RETRY_INTERVAL);
-      }
+      this->start_worker_();
       return;
     }
     // In the fallback with the rescan not due: fall through to the My team
@@ -1002,14 +1005,7 @@ void GamedayComponent::start_job_() {
   if (this->upcoming_due_ && !j.need_schedule && this->schedule_.valid) {
     j.need_upcoming = true;
     j.schedule = this->schedule_;
-    this->job_done_ = false;
-    this->busy_ = true;
-    this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-    BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-    if (ok != pdPASS) {
-      this->busy_ = false;
-      this->schedule_next_(RETRY_INTERVAL);
-    }
+    this->start_worker_();
     return;
   }
   if (this->post_since_ms_ != 0 && (now - this->post_since_ms_) >= POST_LINGER) {
@@ -1041,13 +1037,17 @@ void GamedayComponent::start_job_() {
     }
   }
   j.schedule = this->schedule_;
+  this->start_worker_();
+}
+
+void GamedayComponent::start_worker_() {
   this->job_done_ = false;
   this->busy_ = true;
   this->busy_since_ms_ = millis() == 0 ? 1 : millis();
   // TLS plus a nested JSON parse needs a roomy stack; 16KB has headroom.
-  BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-  if (ok != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the fetch task");
+  if (xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr) != pdPASS) {
+    ESP_LOGW(TAG, "Could not start the fetch task (largest free internal block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     this->busy_ = false;
     this->schedule_next_(RETRY_INTERVAL);
   }
@@ -1071,9 +1071,9 @@ void GamedayComponent::run_job_() {
     uint8_t mode = this->prefs2_.mode;
     j.scan_ok = true;
     if (mode == (uint8_t) Mode::LIVE_NFL || mode == (uint8_t) Mode::LIVE_ANY)
-      j.scan_ok = this->fetch_live_games_(League::NFL, j.live) && j.scan_ok;
+      j.scan_ok = this->fetch_live_games_(League::NFL, j.live, j.next_kickoff) && j.scan_ok;
     if (mode == (uint8_t) Mode::LIVE_NCAA || mode == (uint8_t) Mode::LIVE_ANY)
-      j.scan_ok = this->fetch_live_games_(League::NCAA, j.live) && j.scan_ok;
+      j.scan_ok = this->fetch_live_games_(League::NCAA, j.live, j.next_kickoff) && j.scan_ok;
     return;  // the main loop picks a game, then the next cycle polls it
   }
   if (j.need_upcoming) {
@@ -1128,6 +1128,12 @@ void GamedayComponent::apply_job_() {
     if (pick.empty() && !j.live.empty())
       pick.push_back(0);
     if (pick.empty()) {
+      // A failed scan took the retry above, so this kickoff covers every
+      // league the mode reads.
+      this->live_rescan_ms_ = ::espn::no_live_rescan_ms((int64_t) this->time_->timestamp_now(), j.next_kickoff,
+                                                        NO_LIVE_RESCAN, NO_GAMES_RESCAN);
+      if (this->live_rescan_ms_ > NO_LIVE_RESCAN)
+        ESP_LOGI(TAG, "Next scan in %u min", (unsigned) (this->live_rescan_ms_ / MINUTE));
       const ::espn::Team *saved = this->current_team_();
       if (saved != nullptr) {
         // Nothing live, but the owner has a team: show that team's card and
@@ -1177,7 +1183,7 @@ void GamedayComponent::apply_job_() {
       this->misses_ = 0;
       this->emit_({});
       this->mark_board_ready_();
-      this->schedule_next_(NO_LIVE_RESCAN);
+      this->schedule_next_(this->live_rescan_ms_);
       return;
     }
     const ::espn::LiveGame &g = j.live[pick[random_uint32() % pick.size()]];
@@ -1309,7 +1315,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   }
   f.kickoff = kickoff;
   f.status_text = ::espn::status_text(g, opts, kickoff);
-  if (this->live_mode_()) {
+  if (this->live_mode_() && !this->demo_playing_()) {
     // "college", "NFL", or nothing at all in Live any, with its own space.
     std::string league_word;
     if (this->prefs2_.mode == (uint8_t) Mode::LIVE_NCAA)
@@ -1324,9 +1330,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
                                        : "Looking for a live " + league_word + "game";
     }
   }
-  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty())
+  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_())
     f.status_text = "Favorites: add teams on the page | " + f.status_text;
-  if (this->misses_ >= 3) {
+  if (this->misses_ >= 3 && !this->demo_playing_()) {
     if (!this->ever_polled_good_()) {
       // Nothing has ever come back, so there is no age to quote. Saying "no
       // update for 1 min" here was wrong however long the panel had been
@@ -1342,7 +1348,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // Until a team, mode or favorite has been picked once, the ticker asks for
   // one. The app comes first; the address is for setting up without an
   // iPhone, over the hotspot and the device page.
-  if (!this->flag_(FLAG_SETUP) && network::is_connected()) {
+  if (!this->flag_(FLAG_SETUP) && network::is_connected() && !this->demo_playing_()) {
     std::string ip;
     for (auto &a : network::get_ip_addresses()) {
       if (a.is_set() && a.is_ip4()) {
@@ -1398,112 +1404,6 @@ void GamedayComponent::save_team_cache_(const ::espn::Team *team) {
                                                   (int64_t) this->time_->timestamp_now(), c))
     return;
   this->team_cache_pref_.save(&c);
-}
-
-// ---- demo ---------------------------------------------------------------------
-
-struct DemoStep {
-  GameState state;
-  int us, them;
-  const char *clock;
-  int period;
-  int possession;  // 1 us, 2 them
-  const char *down;
-  bool red_zone;
-  const char *play;
-  uint32_t hold_ms;
-};
-
-// A believable drive-by-drive script. Splashes come from decide_splash on the
-// score deltas, so the panel celebrates exactly as it would in a real game.
-static const DemoStep DEMO[] = {
-    {GameState::PRE, 0, 0, "", 0, 0, "", false, "", 3500},
-    {GameState::IN, 0, 0, "15:00", 1, 1, "1st & 10", false, "Kickoff", 4000},
-    {GameState::IN, 0, 0, "9:41", 1, 1, "3rd & 4", true, "Pass short left for 8 yards", 3500},
-    {GameState::IN, 7, 0, "9:35", 1, 2, "", false, "Pass deep right for 21 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 7, 3, "2:10", 1, 1, "1st & 10", false, "38 yard field goal is GOOD", 4500},
-    {GameState::IN, 7, 3, "11:22", 2, 2, "2nd & 7", false, "Rush up the middle for 3 yards", 3500},
-    {GameState::IN, 7, 10, "6:48", 2, 1, "", false, "Pass deep middle for 44 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 14, 10, "1:03", 2, 2, "", false, "Rush right end for 12 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 14, 10, "0:00", 2, 0, "", false, "End of the 2nd quarter", 3500},
-    {GameState::IN, 21, 10, "8:15", 4, 2, "", false, "Interception returned 31 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 24, 10, "2:00", 4, 2, "4th & 9", true, "27 yard field goal is GOOD", 4000},
-    {GameState::POST, 24, 10, "", 4, 0, "", false, "", 6000},
-};
-static const size_t DEMO_STEPS = sizeof(DEMO) / sizeof(DEMO[0]);
-
-void GamedayComponent::start_demo() {
-  if (this->demo_active_)
-    return;
-  ESP_LOGI(TAG, "Demo: starting");
-  this->demo_saved_game_ = this->game_;
-  this->demo_saved_prev_ = this->prev_;
-  this->generation_++;  // any fetch in flight belongs to before the demo
-  this->demo_active_ = true;
-  this->demo_step_ = 0;
-  this->demo_next_ms_ = millis();
-}
-
-void GamedayComponent::demo_tick_() {
-  uint32_t now = millis();
-  if ((int32_t) (now - this->demo_next_ms_) < 0)
-    return;
-  if (this->demo_step_ >= DEMO_STEPS) {
-    ESP_LOGI(TAG, "Demo: done, back to live data");
-    this->demo_active_ = false;
-    this->game_ = this->demo_saved_game_;
-    this->prev_ = this->demo_saved_prev_;
-    this->emit_({});
-    this->schedule_next_(0);
-    return;
-  }
-  const DemoStep &d = DEMO[this->demo_step_];
-  // Keep the real sides (logos already decoded, colors, records); fall back
-  // to a stock matchup on a panel that has nothing loaded yet.
-  GameSnapshot g = this->demo_saved_game_;
-  if (!g.valid || g.team_abbr.empty()) {
-    const ::espn::Team *t = this->current_team_();
-    g = GameSnapshot{};
-    g.team_abbr = t ? t->abbr : "DAL";
-    g.team_id = t ? t->espn_id : 6;
-    g.team_logo = t ? ::espn::team_logo_url(t->league, t->espn_id, t->abbr) : "";
-    g.opp_abbr = "PHI";
-    g.opp_id = 21;
-    g.opp_logo = ::espn::team_logo_url(League::NFL, 21, "PHI");
-    g.team_color = "041E42";
-    g.opp_color = "004C54";
-    g.team_record = "1-0";
-    g.opp_record = "1-0";
-  }
-  g.valid = true;
-  g.state = d.state;
-  g.completed = d.state == GameState::POST;
-  g.team_score = d.us;
-  g.opp_score = d.them;
-  g.display_clock = d.clock;
-  g.period = d.period;
-  g.possession = d.possession;
-  g.short_down_distance = d.down;
-  g.down_distance = d.down;
-  g.is_red_zone = d.red_zone;
-  g.last_play = d.play;
-  g.team_winner = d.state == GameState::POST && d.us > d.them;
-  g.team_timeouts = d.period <= 2 ? 3 : 2;
-  g.opp_timeouts = d.period <= 2 ? 3 : 1;
-  if (d.state == GameState::PRE) {
-    g.short_detail = "Tonight";
-    g.kickoff_epoch = this->time_ != nullptr ? (int64_t) this->time_->timestamp_now() + 3600 : 0;
-  } else if (d.state == GameState::POST) {
-    g.short_detail = "Final";
-  } else {
-    g.short_detail = std::string(d.clock) + " - " + (d.period == 1 ? "1st" : d.period == 2 ? "2nd" : d.period == 3 ? "3rd" : "4th");
-  }
-  this->prev_ = this->game_;
-  this->game_ = g;
-  ::espn::Splash splash = this->demo_step_ == 0 ? ::espn::Splash{} : ::espn::decide_splash(this->prev_, g, true, false);
-  this->emit_(splash);
-  this->demo_next_ms_ = now + d.hold_ms;
-  this->demo_step_++;
 }
 
 // ---- device page routes -----------------------------------------------------
@@ -1563,6 +1463,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   uint8_t league = this->live_mode_() && this->schedule_.valid ? this->schedule_.league : this->prefs_.league;
   if (this->favorites_mode_() && this->fav_shown_ >= 0)
     league = (uint8_t) this->fav_[this->fav_shown_].team->league;
+#ifdef GAMEDAY_DEMO
+  if (this->demo_playing_())
+    league = this->demo_league_();
+#endif
   game["l"] = LEAGUE_KEY[league == (uint8_t) League::NFL ? 0 : 1];
   game["ta"] = g.team_abbr;
   game["ti"] = g.team_id;
@@ -1578,6 +1482,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   game["rz"] = g.is_red_zone;
   game["tv"] = g.tv;
   game["venue"] = g.venue;
+  game["gn"] = g.game_name;
   game["odds"] = g.odds;
   game["ou"] = g.over_under;
   game["detail"] = g.short_detail;
@@ -1669,17 +1574,35 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
+    bool known = name == "refresh" || name == "qc";
+#ifdef GAMEDAY_DEMO
+    known = known || name == "demo" || name == "demo_stop";
+#endif
+    if (!known) {
+      request->send(404, "application/json", "{\"error\":\"unknown action\"}");
+      return;
+    }
     this->defer([this, name]() {
       if (name == "refresh")
         this->refresh_now();
+#ifdef GAMEDAY_DEMO
       else if (name == "demo")
-        this->start_demo();
+        this->start_demo((uint8_t) ::espn::DemoKind::PRO);
+      else if (name == "demo_stop")
+        this->stop_demo();
+#endif
       for (auto &cb : this->action_callbacks_)
         cb(name);
     });
     request->send(200, "application/json", "{\"ok\":true}");
     return;
   }
+#ifdef GAMEDAY_DEMO
+  if (url == StringRef("/gameday/demo")) {
+    this->handle_demo_(request);
+    return;
+  }
+#endif
   request->send(404, "application/json", "{\"error\":\"unknown route\"}");
 }
 
@@ -1700,8 +1623,7 @@ void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
   request->send(200, "application/json", "{\"ok\":true}");
 }
 
-// "nfl:6" -> league + id. False for "none"/"" (id 0) or garbage.
-static bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id) {
+bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id) {
   league = 0;
   id = 0;
   size_t colon = v.find(':');

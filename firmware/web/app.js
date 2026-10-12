@@ -58,6 +58,7 @@
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
       <div class="play" id="play"></div>
@@ -281,7 +282,8 @@
 
   const renderTeam = (node, league, id, abbr, rec, timeouts, poss, color) => {
     const img = node.querySelector("img");
-    const src = abbr || id ? logoUrl(league, id, abbr) : "";
+    // No id: a side with no team yet, or the demo build's made-up teams.
+    const src = id ? logoUrl(league, id, abbr) : "";
     if (img.getAttribute("src") !== src) img.src = src;
     img.style.visibility = src ? "visible" : "hidden";
     const a = node.querySelector(".abbr");
@@ -300,6 +302,10 @@
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
     $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // Bowl or playoff name, when ESPN gives the game one
+    const gname = $("#gname");
+    gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
+    gname.hidden = !gname.textContent;
     if (!g || g.s === "NOT_FOUND") {
       b.classList.add("empty");
       st.textContent = g ? "NO GAME" : "WAITING";
