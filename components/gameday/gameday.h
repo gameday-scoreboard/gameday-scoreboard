@@ -73,20 +73,6 @@ enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
 // jump to the first four.
 static constexpr uint8_t FAV_MAX = 16;
 
-// Allocates in PSRAM when there is some, else internal RAM. The favorite
-// cards are ~1 KB each and internal heap is the panel's scarcest resource.
-template<class T> class PsramAllocator : public RAMAllocator<T> {
- public:
-  template<class U> struct rebind {
-    using other = PsramAllocator<U>;
-  };
-  using is_always_equal = std::true_type;
-  PsramAllocator() : RAMAllocator<T>(RAMAllocator<T>::NONE) {}
-  template<class U> PsramAllocator(const PsramAllocator<U> &) : PsramAllocator() {}
-};
-template<class T, class U> bool operator==(const PsramAllocator<T> &, const PsramAllocator<U> &) { return true; }
-template<class T, class U> bool operator!=(const PsramAllocator<T> &, const PsramAllocator<U> &) { return false; }
-
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
 enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
@@ -407,6 +393,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::vector<Schedule> comps;  // soccer: reads per competition, as Job::comps
     int comp_next{-1};            // the cup read due next, -1 when none
   };
+  // The favorite cards are ~1 KB each and internal heap is the panel's
+  // scarcest resource: PSRAM (logo_cache.h's allocator).
   using FavList = std::vector<FavEntry, PsramAllocator<FavEntry>>;
   FavList fav_;
   int fav_shown_{-1};
