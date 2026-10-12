@@ -379,7 +379,8 @@ time:
 # Team logos come from the gameday component's logo cache (logo_cache.cpp).
 # This blank stands in while one downloads.
 image:
-  - file: images/logo-blank.png
+  - platform: file
+    file: images/logo-blank.png
     id: gd_logo_blank
     type: RGB565
     transparency: alpha_channel
