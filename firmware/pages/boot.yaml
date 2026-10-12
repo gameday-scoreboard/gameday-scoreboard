@@ -21,7 +21,7 @@
 #               128: QR + Wi-Fi / lost / open app
 #   setup       64:  SETUP / Game Day / app (5 s), QR (8 s), then once the
 #                    hotspot is actually up Join WiFi / Game Day /
-#                    Scoreboard (5 s)
+#                    2f6a70 (5 s), the hotspot's own name
 #               128: QR + SETUP / Game Day / app (13 s), then the hotspot
 #                    lines (5 s) once it is up
 #   connecting  Connecting to / <network name>, full width, no QR
@@ -383,9 +383,11 @@ script:
             if (provisioning) {
               const std::string joining = w->get_sta().get_ssid().str();
               id(boot_set_lines).execute("JOINING", joining.empty() ? std::string("Wi-Fi") : joining, "", "", true);
-            } else if (frame == 2)
-              id(boot_set_lines).execute("Join WiFi", "Game Day", "Scoreboard", "", true);
-            else
+            } else if (frame == 2) {
+              // The hotspot is "Game Day <suffix>", named in on_boot.
+              const std::string &name = App.get_name();
+              id(boot_set_lines).execute("Join WiFi", "Game Day", name.substr(name.rfind('-') + 1), "", true);
+            } else
               id(boot_set_lines).execute("SETUP", "Game Day", "app", "", true);
           } else {
             id(boot_qr_cycle).execute(0, false);
