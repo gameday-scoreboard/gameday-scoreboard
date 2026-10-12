@@ -9,6 +9,7 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "logo_lru.h"
+#include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
 
@@ -774,6 +775,133 @@ static void test_postseason() {
   CHECK(scoreboard_url(League::NFL, 0, sea.kickoff_epoch).find("?dates=20260208") != std::string::npos);
 }
 
+static void test_backoff() {
+  // Jitter lands in the upper half of the doubled delay.
+  CHECK_EQ(backoff_ms(1, false, 0, 0), 15000u);
+  CHECK_EQ(backoff_ms(1, false, 0, 15000), 30000u);
+  CHECK_EQ(backoff_ms(1, false, 0, 15001), 15000u);  // wraps, never past the delay
+  CHECK_EQ(backoff_ms(2, false, 0, 30000), 60000u);
+  CHECK_EQ(backoff_ms(3, false, 0, 60000), 120000u);
+  // Ordinary failures stop doubling at 10 minutes, even after a long run.
+  CHECK_EQ(backoff_ms(6, false, 0, 300000), 600000u);
+  CHECK_EQ(backoff_ms(200, false, 0, 300000), 600000u);
+  CHECK_EQ(backoff_ms(200, false, 0, 0), 300000u);
+  // 403/429 start at 5 minutes and stop at an hour.
+  CHECK_EQ(backoff_ms(1, true, 0, 150000), 300000u);
+  CHECK_EQ(backoff_ms(1, true, 0, 0), 150000u);
+  CHECK_EQ(backoff_ms(2, true, 0, 300000), 600000u);
+  CHECK_EQ(backoff_ms(250, true, 0, 1800000), 3600000u);
+  // Every jitter value stays inside its window.
+  for (uint32_t r = 0; r < 100000; r += 977) {
+    uint32_t w = backoff_ms(4, false, 0, r * 7919u);
+    CHECK(w >= 120000u && w <= 240000u);
+  }
+  // Retry-After is honored when it is longer, capped at the hour, with up to
+  // a quarter on top. A shorter one does not cut the backoff.
+  CHECK_EQ(backoff_ms(1, true, 900000, 0), 900000u);
+  CHECK_EQ(backoff_ms(1, true, 900000, 225000), 1125000u);
+  CHECK_EQ(backoff_ms(1, true, 9000000, 0), 3600000u);
+  CHECK_EQ(backoff_ms(1, true, 10000, 0), 150000u);
+  CHECK_EQ(backoff_ms(1, false, 900000, 0), 15000u);  // only a refusal carries it
+  CHECK_EQ(parse_retry_after_ms("120"), 120000u);
+  CHECK_EQ(parse_retry_after_ms("0"), 0u);
+  CHECK_EQ(parse_retry_after_ms(""), 0u);
+  CHECK_EQ(parse_retry_after_ms("Wed, 21 Oct 2015 07:28:00 GMT"), 0u);
+  CHECK_EQ(parse_retry_after_ms("1234567"), 0u);
+  CHECK(is_throttle_status(403));
+  CHECK(is_throttle_status(429));
+  CHECK(!is_throttle_status(404));
+  CHECK(!is_throttle_status(503));
+}
+
+static void test_live_clock() {
+  CHECK_EQ(clock_seconds("12:34"), 754);
+  CHECK_EQ(clock_seconds("0:42"), 42);
+  CHECK_EQ(clock_seconds("15:00"), 900);
+  CHECK_EQ(clock_seconds("42.5"), -1);
+  CHECK_EQ(clock_seconds(""), -1);
+  CHECK_EQ(clock_seconds("1:02:03"), -1);
+  CHECK_EQ(clock_seconds("1:7"), -1);
+  CHECK_EQ(clock_seconds("1:60"), -1);
+  CHECK_EQ(format_clock(754), std::string("12:34"));
+  CHECK_EQ(format_clock(7), std::string("0:07"));
+  CHECK_EQ(format_clock(-3), std::string("0:00"));
+
+  GameSnapshot g = live(7, 3);
+  g.event_id = "401";
+  g.period = 2;
+  g.display_clock = "5:36";
+  g.short_detail = "5:36 - 2nd";
+  LiveClock c;
+  c.on_poll(g, 1000);
+  CHECK(!c.running());  // one poll says nothing about the clock
+  CHECK_EQ(c.text(g, 9000), std::string("5:36 2nd"));
+
+  // 15 s later it read 14 s less: running, so it counts down on its own.
+  g.display_clock = "5:22";
+  g.short_detail = "5:22 - 2nd";
+  c.on_poll(g, 16000);
+  CHECK(c.running());
+  CHECK_EQ(c.text(g, 16000), std::string("5:22 2nd"));
+  CHECK_EQ(c.text(g, 16999), std::string("5:22 2nd"));
+  CHECK_EQ(c.text(g, 17000), std::string("5:21 2nd"));
+  CHECK_EQ(c.text(g, 30000), std::string("5:08 2nd"));
+  // A missed poll stops the count 20 s past the last good one.
+  CHECK_EQ(c.text(g, 36000), std::string("5:02 2nd"));
+  CHECK_EQ(c.text(g, 90000), std::string("5:02 2nd"));
+  // Only for the snapshot that poll put up.
+  GameSnapshot other = g;
+  other.event_id = "402";
+  CHECK_EQ(c.text(other, 30000), std::string("5:22 2nd"));
+
+  // Next poll: the clock had stopped (incomplete pass). The poll wins and the
+  // count waits until a poll shows it moving again.
+  g.display_clock = "5:17";
+  g.short_detail = "5:17 - 2nd";
+  c.on_poll(g, 31000);
+  CHECK(!c.running());  // ran 5 s of 15
+  CHECK_EQ(c.text(g, 40000), std::string("5:17 2nd"));
+  c.on_poll(g, 46000);
+  CHECK(!c.running());  // did not move at all
+  CHECK_EQ(c.text(g, 55000), std::string("5:17 2nd"));
+  // Halftime: no count, the feed's words.
+  g.display_clock = "0:00";
+  g.short_detail = "Halftime";
+  c.on_poll(g, 61000);
+  CHECK(!c.running());
+  CHECK_EQ(c.text(g, 70000), std::string("Halftime"));
+
+  // Ran only 5 of 15 s: treated as stopped.
+  GameSnapshot h = g;
+  LiveClock d;
+  h.display_clock = "8:00";
+  h.short_detail = "8:00 - 2nd";
+  d.on_poll(h, 0);
+  h.display_clock = "7:55";
+  h.short_detail = "7:55 - 2nd";
+  d.on_poll(h, 15000);
+  CHECK(!d.running());
+  h.display_clock = "7:47";
+  h.short_detail = "7:47 - 2nd";
+  d.on_poll(h, 30000);
+  CHECK(d.running());  // 8 of 15
+
+  // Never below 0:00.
+  h.display_clock = "0:10";
+  h.short_detail = "0:10 - 2nd";
+  d.on_poll(h, 45000);
+  CHECK(d.running());
+  CHECK_EQ(d.text(h, 52000), std::string("0:03 2nd"));
+  CHECK_EQ(d.text(h, 60000), std::string("0:00 2nd"));
+  // A new period starts over: no count until two of its polls agree.
+  h.period = 3;
+  h.display_clock = "15:00";
+  h.short_detail = "15:00 - 3rd";
+  d.on_poll(h, 600000);
+  CHECK(!d.running());
+  CHECK_EQ(d.text(h, 605000), std::string("15:00 3rd"));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -798,6 +926,8 @@ int main() {
   test_json_allocator();
   test_timezone_index();
   test_postseason();
+  test_backoff();
+  test_live_clock();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

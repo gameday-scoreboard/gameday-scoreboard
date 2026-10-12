@@ -19,6 +19,7 @@
 
 #include "espn_parse.h"
 #include "favorites.h"
+#include "poll_timing.h"
 #include "startup.h"
 
 namespace esphome {
@@ -140,6 +141,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
   bool board_ready() const { return this->board_ready_; }
+  // The clock row's text, counted down between live polls (poll_timing.h).
+  // The "clock_tick" action fires when it changes.
+  const std::string &clock_text() const { return this->last_fields_.clock_text; }
   // True while a boot screen hold that started at since_ms should go on
   // (startup.h). 0 means no hold is running.
   bool boot_hold(uint32_t since_ms) const { return ::espn::boot_hold(this->board_ready_, since_ms, millis()); }
@@ -243,6 +247,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // Favorite Teams mode: which cached entry this cycle refreshes or polls
     int fav_index{-1};
     uint32_t our_id{0};
+    // ESPN answered 403 or 429 to a request in this job (set by open_)
+    bool throttled{false};
+    uint32_t retry_after_ms{0};
   };
   void start_job_();
   void start_worker_();
@@ -268,7 +275,25 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void mark_good_poll_() {
     this->misses_ = 0;
     this->last_good_ms_ = millis() == 0 ? 1 : millis();
+    this->clear_backoff_();
   }
+  // A read failed: start the next, longer wait (poll_timing.h) and return it.
+  uint32_t back_off_();
+  // ESPN answered: the next failure starts the backoff over.
+  void clear_backoff_() {
+    this->fail_streak_ = 0;
+    this->throttled_ = false;
+    this->backoff_ms_ = 0;
+  }
+  // Inside a wait back_off_ started. Only Favorite Teams mode needs to ask:
+  // it ticks every second for the playlist and must not read ESPN on each one.
+  bool backing_off_() const {
+    return this->backoff_ms_ != 0 && (millis() - this->backoff_since_ms_) < this->backoff_ms_;
+  }
+  // Someone asked for fresh data (Refresh Now, a new team, mode or favorite):
+  // read now, but keep the failure count so another failure waits longer.
+  void end_backoff_wait_() { this->backoff_ms_ = 0; }
+  void tick_clock_();
   // True once a poll has actually put game data on the board this boot.
   bool ever_polled_good_() const { return this->last_good_ms_ != 0; }
   // Seconds since the last good poll. With nothing ever polled, report the
@@ -361,6 +386,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t post_since_ms_{0};
   uint32_t next_fetch_ms_{0};
   uint8_t misses_{0};
+  uint8_t fail_streak_{0};      // ESPN reads failed in a row, for the backoff
+  bool throttled_{false};       // ESPN said 403 or 429 since the last good read
+  uint32_t backoff_since_ms_{0};
+  uint32_t backoff_ms_{0};      // 0 = no wait running
+  ::espn::LiveClock live_clock_;
+  uint32_t clock_tick_ms_{0};
   uint32_t last_good_ms_{0};  // millis() of the last successful game poll, 0 = never
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned

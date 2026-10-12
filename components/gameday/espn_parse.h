@@ -110,6 +110,11 @@ const char *state_name(GameState s);
 // lags those fields by a poll or two, so it is only used for the states that
 // have no clock (Halftime, End of 3rd, Delayed).
 std::string clock_text(const GameSnapshot &s);
+// The same with the panel's own reading of the clock in place of the feed's
+// (live_clock.h), so the period and the special states stay in one place.
+std::string clock_text(const GameSnapshot &s, const std::string &display_clock);
+// True when clock_text shows a running time rather than Halftime, End of 3rd...
+bool clock_shows_time(const GameSnapshot &s);
 
 // The team endpoint does not say which league answered, so a freshly parsed
 // Schedule carries league 0 (NFL). Favorites and the live modes choose the

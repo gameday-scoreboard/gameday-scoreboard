@@ -33,9 +33,14 @@ static const uint32_t MINUTE = 60 * 1000;
 static const uint32_t SCHEDULE_INTERVAL = 6 * 60 * MINUTE;
 static const uint32_t PRE_FAR_INTERVAL = 15 * MINUTE;
 static const uint32_t PRE_NEAR_INTERVAL = MINUTE;
-static const uint32_t IN_INTERVAL = 5 * 1000;
+// The whole day's scoreboard is about 256 KB, so a live game is read every
+// 15 s, not every 5; the clock counts down on the panel in between
+// (poll_timing.h, LiveClock).
+static const uint32_t IN_INTERVAL = 15 * 1000;
 static const uint32_t POST_INTERVAL = MINUTE;
 static const uint32_t POST_LINGER = 30 * MINUTE;
+// For the panel's own trouble (a fetch task that never finished or could not
+// start). A failed ESPN read backs off instead (back_off_).
 static const uint32_t RETRY_INTERVAL = MINUTE;
 // Wi-Fi and the clock are re-checked this often at boot: every second waited
 // here is a second of boot screen.
@@ -227,6 +232,7 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
     this->game_ = GameSnapshot{};
     this->prev_ = GameSnapshot{};
     this->emit_({});
+    this->end_backoff_wait_();
     this->schedule_next_(0);
     return;
   }
@@ -256,6 +262,7 @@ void GamedayComponent::press_favorite(uint8_t slot) {
       this->game_ = this->fav_[i].game;
       this->post_since_ms_ = 0;
       this->emit_({});
+      this->end_backoff_wait_();
       this->schedule_next_(0);
       return;
     }
@@ -315,6 +322,7 @@ void GamedayComponent::select_mode(const std::string &option) {
     this->generation_++;
     this->emit_({});  // clear the board while the next fetch runs
     this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
+    this->end_backoff_wait_();
     this->schedule_next_(0);
     // Somebody asked for a different mode, so they are looking at the panel.
     this->fire_action_("user_pick");
@@ -488,7 +496,7 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
     if (this->fav_poll_ms_ == 0 || now - this->fav_poll_ms_ >= due)
       refresh = -2;  // poll the shown game
   }
-  if (refresh == -1) {
+  if (refresh == -1 || this->backing_off_()) {
     this->schedule_next_(FAV_TICK);
     return;
   }
@@ -520,9 +528,11 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   if (j.need_schedule) {
     if (!j.schedule_ok) {
       this->misses_++;
+      this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
       this->schedule_next_(0);
       return;
     }
+    this->clear_backoff_();
     e.sched = j.schedule;
     ::espn::adopt_league(e.sched, e.team->league);
     e.stale = false;
@@ -540,6 +550,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   }
   if (!j.game_ok) {
     this->misses_++;
+    this->back_off_();
     this->schedule_next_(0);
     return;
   }
@@ -555,6 +566,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     // Same game on the board: render the new poll with its splash.
     this->prev_ = this->game_;
     this->game_ = e.game;
+    this->live_clock_.on_poll(this->game_, now);
     ::espn::Splash splash = ::espn::decide_splash(this->prev_, this->game_, this->opponent_splashes(), false);
     this->emit_(splash);
   } else if (!switched) {
@@ -587,6 +599,7 @@ void GamedayComponent::dump_config() {
 void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
+  this->tick_clock_();
   if (this->demo_active_) {
     this->demo_tick_();
     if (!this->busy_)
@@ -628,6 +641,21 @@ void GamedayComponent::loop() {
     this->publish_selects_();
   }
   this->start_job_();
+}
+
+// Between live polls: count the clock row down (poll_timing.h). Only the
+// label changes; a full redraw waits for the next poll.
+void GamedayComponent::tick_clock_() {
+  uint32_t now = millis();
+  if (!this->live_clock_.running() || this->demo_active_ || this->game_.state != GameState::IN ||
+      (now - this->clock_tick_ms_) < 250)
+    return;
+  this->clock_tick_ms_ = now;
+  std::string t = this->live_clock_.text(this->game_, now);
+  if (t == this->last_fields_.clock_text)
+    return;
+  this->last_fields_.clock_text = t;
+  this->fire_action_("clock_tick");
 }
 
 const ::espn::Team *GamedayComponent::current_team_() const {
@@ -749,6 +777,7 @@ void GamedayComponent::refresh_now() {
   // the board: the owner presses this when the board looks wrong, and a
   // moved, postponed or finished game only shows up in that read.
   this->force_schedule_ = true;
+  this->end_backoff_wait_();
   this->schedule_next_(0);
 }
 
@@ -817,17 +846,37 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
       {"User-Agent", USER_AGENT},
       {"Accept", "application/json"},
   };
-  auto container = this->http_->get(url, headers);
+  auto container = this->http_->get(url, headers, {"retry-after"});
   if (container == nullptr) {
     ESP_LOGW(TAG, "Request failed: %s", url.c_str());
     return nullptr;
   }
   if (container->status_code != 200) {
     ESP_LOGW(TAG, "HTTP %d for %s", container->status_code, url.c_str());
+    if (::espn::is_throttle_status(container->status_code)) {
+      // Worker task: the job is this task's until it reports done.
+      this->job_.throttled = true;
+      uint32_t ra = ::espn::parse_retry_after_ms(container->get_response_header("retry-after"));
+      if (ra > this->job_.retry_after_ms)
+        this->job_.retry_after_ms = ra;
+    }
     container->end();
     return nullptr;
   }
   return container;
+}
+
+uint32_t GamedayComponent::back_off_() {
+  if (this->job_.throttled)
+    this->throttled_ = true;
+  if (this->fail_streak_ < 255)
+    this->fail_streak_++;
+  uint32_t ms = ::espn::backoff_ms(this->fail_streak_, this->throttled_, this->job_.retry_after_ms, random_uint32());
+  ESP_LOGW(TAG, "%u failed read(s) in a row%s: next try in %us", (unsigned) this->fail_streak_,
+           this->throttled_ ? ", ESPN is refusing" : "", (unsigned) (ms / 1000));
+  this->backoff_since_ms_ = millis();
+  this->backoff_ms_ = ms;
+  return ms;
 }
 
 bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out) {
@@ -1100,9 +1149,10 @@ void GamedayComponent::apply_job_() {
     if (!j.scan_ok && j.live.empty()) {
       this->misses_++;
       this->emit_({});
-      this->schedule_next_(RETRY_INTERVAL);
+      this->schedule_next_(this->back_off_());
       return;
     }
+    this->clear_backoff_();
     // Prefer a different game than the one we just showed.
     std::vector<size_t> pick;
     for (size_t i = 0; i < j.live.size(); i++)
@@ -1186,16 +1236,19 @@ void GamedayComponent::apply_job_() {
     if (j.upcoming_ok)
       this->upcoming_ = j.upcoming;
     this->rebuild_state_(&this->last_fields_);
-    this->schedule_next_(this->interval_for_phase_());
+    // The list is optional and waits for the next schedule read, but a
+    // refusal still holds back the game poll that would come next.
+    this->schedule_next_(j.throttled ? this->back_off_() : this->interval_for_phase_());
     return;
   }
   if (j.need_schedule) {
     if (!j.schedule_ok) {
       this->misses_++;
       this->emit_({});
-      this->schedule_next_(RETRY_INTERVAL);
+      this->schedule_next_(this->back_off_());
       return;
     }
+    this->clear_backoff_();
     this->schedule_ = j.schedule;
     this->schedule_fetched_ms_ = now == 0 ? 1 : now;  // 0 reads as "never fetched"
     this->force_schedule_ = false;
@@ -1217,7 +1270,7 @@ void GamedayComponent::apply_job_() {
   }
   if (!j.game_ok) {
     this->misses_++;
-    if (this->cache_unconfirmed_) {
+    if (this->cache_unconfirmed_ && !j.throttled) {
       // The cached game is not on that day's scoreboard (moved, or the cache
       // is simply wrong): read the team endpoint now, not in six hours.
       ESP_LOGI(TAG, "Cached game not found: reading the team again");
@@ -1227,12 +1280,13 @@ void GamedayComponent::apply_job_() {
       return;
     }
     this->emit_({});
-    this->schedule_next_(RETRY_INTERVAL);
+    this->schedule_next_(this->back_off_());
     return;
   }
   this->cache_unconfirmed_ = false;
   this->prev_ = this->game_;
   this->game_ = j.game;
+  this->live_clock_.on_poll(this->game_, now);
   this->mark_good_poll_();
   if (this->upcoming_after_poll_) {
     this->upcoming_after_poll_ = false;
@@ -1269,7 +1323,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.opponent_record = g.opp_record;
   f.last_play = g.last_play;
   if (g.valid && g.state == GameState::IN) {
-    f.clock_text = ::espn::clock_text(g);
+    f.clock_text = this->live_clock_.text(g, millis());
     f.down_distance = g.short_down_distance;
     f.is_red_zone = g.is_red_zone;
   }
