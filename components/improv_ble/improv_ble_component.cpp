@@ -1,13 +1,13 @@
-// Local override of ESPHome 2026.8.2 esphome/components/esp32_improv
+// Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
-// Game Day change: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE.
+// Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
+// the password out of the log, and goes back to the saved network after a failed handover.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
-#include "esp32_improv_component.h"
+#include "improv_ble_component.h"
 
-#include "esphome/components/bytebuffer/bytebuffer.h"
-#include "esphome/components/esp32_ble/ble.h"
-#include "esphome/components/esp32_ble_server/ble_2902.h"
+#include <array>
+
 #include "esphome/core/application.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
@@ -18,19 +18,29 @@
 
 #ifdef USE_ESP32
 
+#include "esphome/components/bytebuffer/bytebuffer.h"
+#include "esphome/components/esp32_ble/ble.h"
+#include "esphome/components/esp32_ble_server/ble_2902.h"
+
 // GAMEDAY: begin
 #include <esp_wifi.h>
 
 #include <algorithm>
 // GAMEDAY: end
 
-namespace esphome::esp32_improv {
+namespace esphome::improv_ble {
 
 using namespace bytebuffer;
 
-static const char *const TAG = "esp32_improv.component";
+static const char *const TAG = "improv_ble.component";
 static constexpr size_t IMPROV_MAX_LOG_BYTES = 128;
-static const char *const ESPHOME_MY_LINK = "https://my.home-assistant.io/redirect/config_flow_start?domain=esphome";
+static constexpr char ESPHOME_MY_LINK[] = "https://my.home-assistant.io/redirect/config_flow_start?domain=esphome";
+// command + data length + trailing byte
+static constexpr size_t RPC_RESPONSE_OVERHEAD = 3;
+// Reserves the ESPHOME_MY_LINK entry; a maximal next URL displaces only the
+// lower value web server URL
+static constexpr size_t MAX_NEXT_URL_LEN =
+    improv::RPC_RESPONSE_MAX_SIZE - RPC_RESPONSE_OVERHEAD - 1 - sizeof(ESPHOME_MY_LINK);
 static constexpr uint16_t STOP_ADVERTISING_DELAY =
     10000;  // Delay (ms) before stopping service to allow BLE clients to read the final state
 static constexpr uint16_t NAME_ADVERTISING_INTERVAL = 60000;  // Advertise name every 60 seconds
@@ -50,9 +60,9 @@ static constexpr uint32_t NETWORKS_SEND_INTERVAL_MS = 100;
 static constexpr size_t NETWORKS_MAX = 20;
 // GAMEDAY: end
 
-ESP32ImprovComponent::ESP32ImprovComponent() { global_improv_component = this; }
+ImprovBLEComponent::ImprovBLEComponent() { global_improv_component = this; }
 
-void ESP32ImprovComponent::setup() {
+void ImprovBLEComponent::setup() {
 #ifdef USE_BINARY_SENSOR
   if (this->authorizer_ != nullptr) {
     this->authorizer_->add_on_state_callback([this](bool state) {
@@ -82,7 +92,7 @@ void ESP32ImprovComponent::setup() {
   this->disable_loop();
 }
 
-void ESP32ImprovComponent::setup_characteristics() {
+void ImprovBLEComponent::setup_characteristics() {
   this->status_ = this->service_->create_characteristic(
       improv::STATUS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   BLEDescriptor *status_descriptor = new BLE2902();
@@ -120,14 +130,15 @@ void ESP32ImprovComponent::setup_characteristics() {
   this->setup_complete_ = true;
 }
 
-void ESP32ImprovComponent::loop() {
+void ImprovBLEComponent::loop() {
   if (!global_ble_server->is_running()) {
     if (this->state_ != improv::STATE_STOPPED) {
       this->state_ = improv::STATE_STOPPED;
-#ifdef USE_ESP32_IMPROV_STATE_CALLBACK
+#ifdef USE_IMPROV_BLE_STATE_CALLBACK
       this->state_callback_.call(this->state_, this->error_state_);
 #endif
     }
+    this->release_advertising_();
     this->incoming_data_.clear();
     this->cancel_wifi_networks_();  // GAMEDAY
     return;
@@ -169,8 +180,9 @@ void ESP32ImprovComponent::loop() {
           ESP_LOGV(TAG, "Starting with device name advertising");
           this->advertising_device_name_ = true;
           this->last_name_adv_time_ = App.get_loop_component_start_time();
+          // Set the payload before requesting, so advertising starts exactly once
           esp32_ble::global_ble->advertising_set_service_data_and_name(std::span<const uint8_t>{}, true);
-          esp32_ble::global_ble->advertising_start();
+          this->request_advertising_();
 
           // Set initial state based on whether we have an authorizer
           this->set_state_(this->get_initial_state_(), false);
@@ -225,23 +237,19 @@ void ESP32ImprovComponent::loop() {
   }
 }
 
-void ESP32ImprovComponent::set_status_indicator_state_(bool state) {
+void ImprovBLEComponent::set_status_indicator_state_(bool state) {
 #ifdef USE_OUTPUT
   if (this->status_indicator_ == nullptr)
     return;
   if (this->status_indicator_state_ == state)
     return;
   this->status_indicator_state_ = state;
-  if (state) {
-    this->status_indicator_->turn_on();
-  } else {
-    this->status_indicator_->turn_off();
-  }
+  this->status_indicator_->set_state(state);
 #endif
 }
 
 #if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_DEBUG
-const char *ESP32ImprovComponent::state_to_string_(improv::State state) {
+const char *ImprovBLEComponent::state_to_string_(improv::State state) {
   switch (state) {
     case improv::STATE_STOPPED:
       return "STOPPED";
@@ -259,7 +267,7 @@ const char *ESP32ImprovComponent::state_to_string_(improv::State state) {
 }
 #endif
 
-bool ESP32ImprovComponent::check_identify_() {
+bool ImprovBLEComponent::check_identify_() {
   uint32_t now = millis();
 
   bool identify = this->identify_start_ != 0 && now - this->identify_start_ <= this->identify_duration_;
@@ -271,7 +279,7 @@ bool ESP32ImprovComponent::check_identify_() {
   return identify;
 }
 
-void ESP32ImprovComponent::set_state_(improv::State state, bool update_advertising) {
+void ImprovBLEComponent::set_state_(improv::State state, bool update_advertising) {
   // Skip if state hasn't changed
   if (this->state_ == state) {
     return;
@@ -299,12 +307,12 @@ void ESP32ImprovComponent::set_state_(improv::State state, bool update_advertisi
     // Advertise the new state via service data
     this->advertise_service_data_();
   }
-#ifdef USE_ESP32_IMPROV_STATE_CALLBACK
+#ifdef USE_IMPROV_BLE_STATE_CALLBACK
   this->state_callback_.call(this->state_, this->error_state_);
 #endif
 }
 
-void ESP32ImprovComponent::set_error_(improv::Error error) {
+void ImprovBLEComponent::set_error_(improv::Error error) {
   if (error != improv::ERROR_NONE) {
     ESP_LOGE(TAG, "Error: %d", error);
   }
@@ -320,13 +328,14 @@ void ESP32ImprovComponent::set_error_(improv::Error error) {
   }
 }
 
-void ESP32ImprovComponent::send_response_(std::vector<uint8_t> &&response) {
-  this->rpc_response_->set_value(std::move(response));
+void ImprovBLEComponent::send_response_(std::span<const uint8_t> response) {
+  // The BLE characteristic owns its value, so one exact-size copy is required here
+  this->rpc_response_->set_value(std::vector<uint8_t>(response.begin(), response.end()));
   if (this->state_ != improv::STATE_STOPPED)
     this->rpc_response_->notify();
 }
 
-void ESP32ImprovComponent::start() {
+void ImprovBLEComponent::start() {
   if (this->should_start_ || this->state_ != improv::STATE_STOPPED)
     return;
 
@@ -344,7 +353,7 @@ void ESP32ImprovComponent::start() {
   this->enable_loop();
 }
 
-void ESP32ImprovComponent::stop() {
+void ImprovBLEComponent::stop() {
   this->should_start_ = false;
   // Wait before stopping the service to ensure all BLE clients see the state change.
   // This prevents clients from repeatedly reconnecting and wasting resources by allowing
@@ -352,15 +361,17 @@ void ESP32ImprovComponent::stop() {
   this->set_timeout("end-service", STOP_ADVERTISING_DELAY, [this] {
     if (this->state_ == improv::STATE_STOPPED || this->service_ == nullptr)
       return;
+    // Release first so removing the service UUID does not restart advertising on the way out
+    this->release_advertising_();
     this->service_->stop();
     this->set_state_(improv::STATE_STOPPED);
   });
 }
 
-float ESP32ImprovComponent::get_setup_priority() const { return setup_priority::AFTER_BLUETOOTH; }
+float ImprovBLEComponent::get_setup_priority() const { return setup_priority::AFTER_BLUETOOTH; }
 
-void ESP32ImprovComponent::dump_config() {
-  ESP_LOGCONFIG(TAG, "ESP32 Improv:");
+void ImprovBLEComponent::dump_config() {
+  ESP_LOGCONFIG(TAG, "Improv BLE:");
 #ifdef USE_BINARY_SENSOR
   LOG_BINARY_SENSOR("  ", "Authorizer", this->authorizer_);
 #endif
@@ -369,7 +380,7 @@ void ESP32ImprovComponent::dump_config() {
 #endif
 }
 
-void ESP32ImprovComponent::process_incoming_data_() {
+void ImprovBLEComponent::process_incoming_data_() {
   if (this->incoming_data_.size() < 3)
     return;
   uint8_t length = this->incoming_data_[1];
@@ -430,6 +441,7 @@ void ESP32ImprovComponent::process_incoming_data_() {
         }
         // GAMEDAY: end
 
+
         wifi::global_wifi_component->set_sta(sta);
         wifi::global_wifi_component->start_connecting(sta);
         this->set_state_(improv::STATE_PROVISIONING);
@@ -464,7 +476,7 @@ void ESP32ImprovComponent::process_incoming_data_() {
   }
 }
 
-void ESP32ImprovComponent::on_wifi_connect_timeout_() {
+void ImprovBLEComponent::on_wifi_connect_timeout_() {
   this->set_error_(improv::ERROR_UNABLE_TO_CONNECT);
   this->set_state_(improv::STATE_AUTHORIZED);
 #ifdef USE_BINARY_SENSOR
@@ -487,7 +499,7 @@ void ESP32ImprovComponent::on_wifi_connect_timeout_() {
   wifi::global_wifi_component->clear_sta();
 }
 
-void ESP32ImprovComponent::check_wifi_connection_() {
+void ImprovBLEComponent::check_wifi_connection_() {
   if (!wifi::global_wifi_component->is_connected()) {
     return;
   }
@@ -498,40 +510,35 @@ void ESP32ImprovComponent::check_wifi_connection_() {
     this->restore_sta_ = {};  // GAMEDAY
     this->cancel_timeout("wifi-connect-timeout");
 
-    // Build URL list with minimal allocations
-    // Maximum 3 URLs: custom next_url + ESPHOME_MY_LINK + webserver URL
-    std::string url_strings[3];
-    size_t url_count = 0;
+    // Build the URL list directly into a stack buffer with no heap allocation
+    std::array<uint8_t, improv::RPC_RESPONSE_MAX_SIZE> buf;
+    improv::RpcResponseBuilder builder(buf, improv::WIFI_SETTINGS);
 
-#ifdef USE_ESP32_IMPROV_NEXT_URL
+#ifdef USE_IMPROV_NEXT_URL
     // Add next_url if configured (should be first per Improv BLE spec)
-    {
-      char url_buffer[384];
-      size_t len = this->get_formatted_next_url_(url_buffer, sizeof(url_buffer));
-      if (len > 0) {
-        url_strings[url_count++] = std::string(url_buffer, len);
-      }
-    }
+    this->add_next_url_(builder, MAX_NEXT_URL_LEN);
 #endif
 
-    // Add default URLs for backward compatibility
-    url_strings[url_count++] = ESPHOME_MY_LINK;
+    // Add default URLs for backward compatibility; MAX_NEXT_URL_LEN reserves this
+    // entry's space, so it always fits
+    builder.add_string(ESPHOME_MY_LINK, sizeof(ESPHOME_MY_LINK) - 1);
 #ifdef USE_WEBSERVER
     for (auto &ip : wifi::global_wifi_component->wifi_sta_ip_addresses()) {
       if (ip.is_ip4()) {
-        // "http://" (7) + IPv4 max (15) + ":" (1) + port max (5) + null = 29
-        char url_buffer[32];
-        memcpy(url_buffer, "http://", 7);  // NOLINT(bugprone-not-null-terminated-result) - str_to null-terminates
-        ip.str_to(url_buffer + 7);
-        size_t len = strlen(url_buffer);
-        snprintf(url_buffer + len, sizeof(url_buffer) - len, ":%d", USE_WEBSERVER_PORT);
-        url_strings[url_count++] = url_buffer;
+        char ip_buf[network::IP_ADDRESS_BUFFER_SIZE];
+        ip.str_to(ip_buf);
+        // "http://" (7) + IP (40) + ":" (1) + port (5) + null (1) = 54
+        char webserver_url[7 + network::IP_ADDRESS_BUFFER_SIZE + 1 + 5 + 1];
+        size_t len =
+            buf_append_printf(webserver_url, sizeof(webserver_url), 0, "http://%s:%u", ip_buf, USE_WEBSERVER_PORT);
+        if (!builder.add_string(webserver_url, len)) {
+          ESP_LOGW(TAG, "Response full; URL dropped");
+        }
         break;
       }
     }
 #endif
-    this->send_response_(improv::build_rpc_response(improv::WIFI_SETTINGS,
-                                                    std::vector<std::string>(url_strings, url_strings + url_count)));
+    this->send_response_(builder.finish());
   } else if (this->is_active() && this->state_ != improv::STATE_PROVISIONED) {
     ESP_LOGD(TAG, "WiFi provisioned externally");
   }
@@ -540,7 +547,7 @@ void ESP32ImprovComponent::check_wifi_connection_() {
   this->stop();
 }
 
-void ESP32ImprovComponent::advertise_service_data_() {
+void ImprovBLEComponent::advertise_service_data_() {
   uint8_t service_data[IMPROV_SERVICE_DATA_SIZE] = {};
   service_data[0] = IMPROV_PROTOCOL_ID_1;  // PR
   service_data[1] = IMPROV_PROTOCOL_ID_2;  // IM
@@ -559,7 +566,7 @@ void ESP32ImprovComponent::advertise_service_data_() {
   esp32_ble::global_ble->advertising_set_service_data_and_name(std::span<const uint8_t>(service_data), false);
 }
 
-void ESP32ImprovComponent::update_advertising_type_() {
+void ImprovBLEComponent::update_advertising_type_() {
   uint32_t now = App.get_loop_component_start_time();
 
   // If we're advertising the device name and it's been more than NAME_ADVERTISING_DURATION, switch back to service data
@@ -584,7 +591,21 @@ void ESP32ImprovComponent::update_advertising_type_() {
   }
 }
 
-improv::State ESP32ImprovComponent::get_initial_state_() const {
+void ImprovBLEComponent::request_advertising_() {
+  if (this->advertising_requested_)
+    return;
+  this->advertising_requested_ = true;
+  esp32_ble::global_ble->advertising_start();
+}
+
+void ImprovBLEComponent::release_advertising_() {
+  if (!this->advertising_requested_)
+    return;
+  this->advertising_requested_ = false;
+  esp32_ble::global_ble->advertising_stop();
+}
+
+improv::State ImprovBLEComponent::get_initial_state_() const {
 #ifdef USE_BINARY_SENSOR
   // If we have an authorizer, start in awaiting authorization state
   return this->authorizer_ == nullptr ? improv::STATE_AUTHORIZED : improv::STATE_AWAITING_AUTHORIZATION;
@@ -600,7 +621,7 @@ improv::State ESP32ImprovComponent::get_initial_state_() const {
 // [0x04][len][ssid][rssi][YES|NO][checksum], then a result with no strings to
 // end the list. Networks are deduplicated by SSID (strongest access point
 // wins), sorted strongest first and capped at NETWORKS_MAX.
-void ESP32ImprovComponent::handle_get_wifi_networks_() {
+void ImprovBLEComponent::handle_get_wifi_networks_() {
   if (this->networks_pending_ || this->networks_wait_scan_) {
     ESP_LOGD(TAG, "Wi-Fi network list already on its way");
     return;
@@ -635,12 +656,12 @@ void ESP32ImprovComponent::handle_get_wifi_networks_() {
   this->networks_scan_start_ = App.get_loop_component_start_time();
 }
 
-void ESP32ImprovComponent::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+void ImprovBLEComponent::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
   if (this->networks_wait_scan_)
     this->queue_wifi_networks_();
 }
 
-void ESP32ImprovComponent::queue_wifi_networks_() {
+void ImprovBLEComponent::queue_wifi_networks_() {
   this->networks_wait_scan_ = false;
   this->networks_to_send_.clear();
   this->networks_sent_ = 0;
@@ -680,12 +701,12 @@ void ESP32ImprovComponent::queue_wifi_networks_() {
   this->networks_pending_ = true;
 }
 
-void ESP32ImprovComponent::send_next_wifi_network_(uint32_t now) {
+void ImprovBLEComponent::send_next_wifi_network_(uint32_t now) {
   if (now - this->networks_last_sent_ < NETWORKS_SEND_INTERVAL_MS)
     return;
   this->networks_last_sent_ = now;
   if (this->networks_sent_ < this->networks_to_send_.size()) {
-    this->send_response_(std::move(this->networks_to_send_[this->networks_sent_++]));
+    this->send_response_(this->networks_to_send_[this->networks_sent_++]);
     return;
   }
   // A result with no strings marks the end of the list.
@@ -693,7 +714,7 @@ void ESP32ImprovComponent::send_next_wifi_network_(uint32_t now) {
   this->cancel_wifi_networks_();
 }
 
-void ESP32ImprovComponent::cancel_wifi_networks_() {
+void ImprovBLEComponent::cancel_wifi_networks_() {
   this->networks_pending_ = false;
   this->networks_wait_scan_ = false;
   this->networks_sent_ = 0;
@@ -701,8 +722,8 @@ void ESP32ImprovComponent::cancel_wifi_networks_() {
 }
 // GAMEDAY: end
 
-ESP32ImprovComponent *global_improv_component = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+ImprovBLEComponent *global_improv_component = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-}  // namespace esphome::esp32_improv
+}  // namespace esphome::improv_ble
 
 #endif

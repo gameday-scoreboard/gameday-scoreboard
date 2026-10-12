@@ -113,7 +113,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.8.2"
+          version: "2026.10.0b3"
           complete-manifest: true
           release-summary: ${{ needs.notes.outputs.summary }}
           release-url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}

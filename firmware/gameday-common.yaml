@@ -28,7 +28,7 @@ substitutions:
 # The controller package (included by each board's top-level file, e.g.
 # gameday.yaml) already sets board/framework/psram; this only
 # adds sdkconfig options, which ESPHome merges into that package's esp32:
-# block. Bluetooth setup (esp32_improv) and HTTPS fetches (ESPN, update
+# block. Bluetooth setup (improv_ble) and HTTPS fetches (ESPN, update
 # manifest) were both starving internal RAM once BT was added, causing
 # mbedtls_ssl_setup to fail (MBEDTLS_ERR_SSL_ALLOC_FAILED) and the panel to
 # reboot ~50s after boot. Move the BT stack and TLS buffers into PSRAM.
@@ -94,8 +94,8 @@ esphome:
             auto *w = wifi::global_wifi_component;
             if (w != nullptr && w->has_sta() && w->get_sta().get_ssid().empty()) {
               w->set_ap_timeout(1000);
-              if (esp32_improv::global_improv_component != nullptr) {
-                esp32_improv::global_improv_component->set_wifi_timeout(1000);
+              if (improv_ble::global_improv_component != nullptr) {
+                improv_ble::global_improv_component->set_wifi_timeout(1000);
               }
             }
         # Keep Bluetooth off at boot because it shares the radio with the Wi-Fi
@@ -116,9 +116,10 @@ external_components:
   - source:
       type: local
       path: ../components
-    # esp32_improv is ESPHome 2026.8.2's own, plus answering the app's
-    # "which Wi-Fi networks can you see" request (components/esp32_improv).
-    components: [gameday, panel_layout, esp32_improv]
+    # improv_ble is ESPHome 2026.10's own, plus answering the app's "which
+    # Wi-Fi networks can you see" request and going back to the saved network
+    # when a handover fails (components/improv_ble).
+    components: [gameday, panel_layout, improv_ble]
   - source: github://pavlov-net/lvgl-page-manager@v0.3.0
     components: [lvgl_page_manager]
   # Fireworks behind the touchdown and win splashes
@@ -165,7 +166,7 @@ wifi:
   power_save_mode: none
   # Named per panel in on_boot.
   ap: {}
-  # Bluetooth (esp32_improv) is only needed to hand the panel Wi-Fi
+  # Bluetooth (improv_ble) is only needed to hand the panel Wi-Fi
   # credentials, but Bluedroid's buffers keep starving internal RAM for the
   # ESPN/update HTTPS fetches even after moving BT and TLS to PSRAM (v1.3.4),
   # causing mbedtls_ssl_setup to fail and the panel to reboot. Once Wi-Fi is
@@ -184,8 +185,8 @@ wifi:
         // counter stays parked at zero.
         id(gd_ever_connected) = true;
         id(gd_offline_seconds) = 0;
-        if (esp32_improv::global_improv_component != nullptr)
-          esp32_improv::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
+        if (improv_ble::global_improv_component != nullptr)
+          improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
         ESP_LOGI("wifi", "Connected. Internal heap free: %u bytes",
                  (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   # Wi-Fi is gone. Turn Bluetooth back on so the Game Day app can find the
@@ -236,7 +237,7 @@ script:
   # up and down is a large internal-RAM alloc and free each time, and that
   # churn is the v1.3.4 territory this release is stepping back into, so do
   # it once the panel is properly off the network instead of on every flap.
-  # ble.enable alone does not advertise. esp32_improv starts once the panel
+  # ble.enable alone does not advertise. improv_ble starts once the panel
   # has been offline for its wifi_timeout, set to match this delay below.
   # on_connect stops this script, so a blip shorter than the delay never
   # touches Bluetooth at all.
@@ -293,8 +294,8 @@ script:
                   return;
                 }
                 const bool provisioning =
-                    esp32_improv::global_improv_component != nullptr &&
-                    esp32_improv::global_improv_component->get_improv_state() ==
+                    improv_ble::global_improv_component != nullptr &&
+                    improv_ble::global_improv_component->get_improv_state() ==
                         improv::STATE_PROVISIONING;
                 const bool app_connected =
                     esp32_ble_server::global_ble_server != nullptr &&
@@ -320,7 +321,7 @@ improv_serial:
 esp32_ble:
   enable_on_boot: false
 
-esp32_improv:
+improv_ble:
   authorizer: none
   # Ready when Bluetooth comes on (gd_ble_grace) and well before the offline
   # restart, so the app can reach a panel early in an outage.
