@@ -8,7 +8,7 @@ matching section fails the build.
 Format: `## vX.Y.Z` heading, then short bullets written for the person who
 owns the panel, not for the code.
 
-## v1.6.0
+## v2026.10.0
 
 - Pick a team from MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS or the Premier League on the device page, and the panel follows it the way it follows football.
 - Baseball shows the inning, the count, outs and the runners on a small diamond. Hockey and basketball show the period and clock, and the playoff series when there is one. Soccer shows the minute, stoppage time, the latest goal and red cards, and follows Premier League clubs into the Champions League, Europa League and Conference League and MLS clubs into the CONCACAF Champions Cup.
