@@ -275,6 +275,11 @@ static void test_status_text() {
   TickerOptions no_odds = all;
   no_odds.odds = false;
   CHECK_EQ(status_text(p, no_odds, "Wed 7:20 PM"), std::string("Wed 7:20 PM | Lumen Field"));
+  // A named game leads, and a venue that repeats the name is dropped
+  p.game_name = "Super Bowl LX";
+  CHECK_EQ(status_text(p, no_odds, "Sun 5:30 PM"), std::string("Super Bowl LX | Sun 5:30 PM | Lumen Field"));
+  p.game_name = p.venue = "Rose Bowl";
+  CHECK_EQ(status_text(p, no_odds, "Thu 3:00 PM"), std::string("Rose Bowl | Thu 3:00 PM"));
   // Post
   GameSnapshot f = live(21, 20, GameState::POST);
   f.team_record = "3-0";
@@ -803,6 +808,54 @@ static void test_postseason() {
   CHECK_EQ(sea.opp_abbr, std::string("NE"));
   CHECK_EQ(sea.venue, std::string("Levi's Stadium"));
   CHECK(scoreboard_url(League::NFL, 0, sea.kickoff_epoch).find("?dates=20260208") != std::string::npos);
+
+  // Game names from competitions[0].notes[0].headline
+  CHECK_EQ(ala.game_name, std::string("Rose Bowl"));
+  CHECK_EQ(mia.game_name, std::string("CFP Championship"));
+  CHECK_EQ(duke.game_name, std::string("ACC Championship"));
+  CHECK_EQ(chi.game_name, std::string("NFC Wild Card"));
+  CHECK_EQ(sea.game_name, std::string("Super Bowl LX"));
+}
+
+static void test_short_game_name() {
+  // Every headline in the recorded fixtures
+  CHECK_EQ(short_game_name("College Football Playoff Quarterfinal at the Rose Bowl Presented by Prudential"),
+           std::string("Rose Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff Quarterfinal at the Allstate Sugar Bowl"),
+           std::string("Sugar Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff Quarterfinal at the Capital One Orange Bowl"),
+           std::string("Orange Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff National Championship Presented by AT&T"),
+           std::string("CFP Championship"));
+  CHECK_EQ(short_game_name("SEC Championship"), std::string("SEC Championship"));
+  CHECK_EQ(short_game_name("Big 12 Championship"), std::string("Big 12 Championship"));
+  CHECK_EQ(short_game_name("FCS Championship - Second Round"), std::string("FCS Championship - Second Round"));
+  CHECK_EQ(short_game_name("NFC Wild Card Playoffs"), std::string("NFC Wild Card"));
+  CHECK_EQ(short_game_name("Super Bowl LX"), std::string("Super Bowl LX"));
+  CHECK_EQ(short_game_name("NFL Melbourne Game"), std::string("NFL Melbourne Game"));
+  CHECK_EQ(short_game_name("Aflac Kickoff"), std::string("Aflac Kickoff"));
+  CHECK_EQ(short_game_name("Liberty Mutual Music City Kickoff"), std::string("Liberty Mutual Music City Kickoff"));
+  // Bowl names as ESPN has listed them in past seasons
+  CHECK_EQ(short_game_name("Rose Bowl Game Presented by Prudential"), std::string("Rose Bowl"));
+  CHECK_EQ(short_game_name("Goodyear Cotton Bowl Classic"), std::string("Cotton Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff Semifinal at the Vrbo Fiesta Bowl"), std::string("Fiesta Bowl"));
+  CHECK_EQ(short_game_name("SRS Distribution Las Vegas Bowl"), std::string("Las Vegas Bowl"));
+  CHECK_EQ(short_game_name("Tony the Tiger Sun Bowl"), std::string("Sun Bowl"));
+  CHECK_EQ(short_game_name("Snoop Dogg Arizona Bowl presented by Gin & Juice by Dre and Snoop"),
+           std::string("Arizona Bowl"));
+  CHECK_EQ(short_game_name("LA Bowl Hosted by Gronk"), std::string("LA Bowl"));
+  CHECK_EQ(short_game_name("Duke's Mayo Bowl"), std::string("Duke's Mayo Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff First Round Game"), std::string("CFP First Round Game"));
+  CHECK_EQ(short_game_name("AFC Divisional Playoffs"), std::string("AFC Divisional"));
+  CHECK_EQ(short_game_name("AFC Championship"), std::string("AFC Championship"));
+  CHECK_EQ(short_game_name("Pro Bowl Games"), std::string("Pro Bowl Games"));
+  CHECK_EQ(short_game_name("NFL London Games"), std::string("NFL London Games"));
+  CHECK_EQ(short_game_name(""), std::string(""));
+  // Kickoff windows for TBD college games come in the same notes (2026-10-24 SEC slate)
+  CHECK_EQ(short_game_name("FLEX: 3:30 - 4:30pm OR 6 - 8pm ET start"), std::string(""));
+  CHECK_EQ(short_game_name("AFTERNOON: 3:30 - 4:30pm ET start"), std::string(""));
+  CHECK_EQ(short_game_name("NIGHT: 6 - 8pm ET start"), std::string(""));
+  CHECK_EQ(short_game_name("Kickoff 7 PM ET"), std::string(""));
 }
 
 // The demo build's matchups, made-up teams and script (demo.h).
@@ -881,6 +934,7 @@ int main() {
   test_scoreboard_pre_nfl();
   test_splash();
   test_status_text();
+  test_short_game_name();
   test_kickoff_label();
   test_live_games();
   test_upcoming();

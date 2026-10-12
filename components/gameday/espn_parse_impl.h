@@ -53,6 +53,7 @@ inline void fill_scoreboard_filter(JsonDocument &f) {
   comp["odds"][0]["overUnder"] = true;
   comp["broadcasts"].add<JsonObject>()["names"] = true;
   comp["venue"]["fullName"] = true;
+  comp["notes"].add<JsonObject>()["headline"] = true;
 }
 
 inline void fill_upcoming_filter(JsonDocument &f) {
@@ -173,6 +174,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   s.over_under = format_over_under(odds["overUnder"]);
   s.tv = str_or_empty(comp["broadcasts"][0]["names"][0]);
   s.venue = str_or_empty(comp["venue"]["fullName"]);
+  s.game_name = short_game_name(str_or_empty(comp["notes"][0]["headline"]));
   s.valid = true;
   out = s;
   return true;

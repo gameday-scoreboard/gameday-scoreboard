@@ -1482,6 +1482,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   game["rz"] = g.is_red_zone;
   game["tv"] = g.tv;
   game["venue"] = g.venue;
+  game["gn"] = g.game_name;
   game["odds"] = g.odds;
   game["ou"] = g.over_under;
   game["detail"] = g.short_detail;

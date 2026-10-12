@@ -87,6 +87,7 @@ button { font: inherit; color: inherit; }
   margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1e242e;
   font-size: 13px; color: #c9d1dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.gname { margin-top: 12px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .play { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .board.empty .row { opacity: .35; }
 .board .msg { text-align: center; color: var(--muted); padding: 22px 0 8px; }

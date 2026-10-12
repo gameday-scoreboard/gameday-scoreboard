@@ -51,6 +51,7 @@ struct GameSnapshot {
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
   std::string odds, over_under, tv, venue;
+  std::string game_name;  // "Rose Bowl", "Super Bowl LX"; empty for most games
 };
 
 // One future game from the team's schedule endpoint, for the "Up next" list.
@@ -103,6 +104,11 @@ bool parse_scoreboard_str(const std::string &json, const std::string &event_id, 
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// ESPN's game headline ("College Football Playoff Quarterfinal at the Rose
+// Bowl Presented by Prudential") cut down to what people call the game
+// ("Rose Bowl"). ESPN has no short form of it. Empty for a note that is a
+// kickoff window, not a name.
+std::string short_game_name(const std::string &headline);
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local);
 int64_t parse_iso8601_z(const std::string &s);
 const char *state_name(GameState s);
