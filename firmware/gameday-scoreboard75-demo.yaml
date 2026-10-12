@@ -1,0 +1,6 @@
+# Demo build for the Game Day Scoreboard controller board:
+# gameday-scoreboard75.yaml plus the demo (pages/demo.yaml). Test firmware
+# only, never released.
+packages:
+  base: !include gameday-scoreboard75.yaml
+  demo: !include pages/demo.yaml

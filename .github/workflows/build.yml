@@ -127,6 +127,35 @@ jobs:
           name: firmware-${{ matrix.variant }}
           path: out
 
+  build-demo:
+    # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
+    # sending them to creators. A downloadable file on the run and nothing
+    # more: the artifact name does not match publish's firmware-* pattern, so
+    # it never reaches the flasher site or a manifest, and tags skip it.
+    name: Build ${{ matrix.variant }} demo
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: branch-rules
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - variant: moonhub75
+            yaml: firmware/gameday-demo.yaml
+          - variant: scoreboard75
+            yaml: firmware/gameday-scoreboard75-demo.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build firmware
+        id: esphome
+        uses: esphome/build-action@v7
+        with:
+          yaml-file: ${{ matrix.yaml }}
+          version: "2026.8.2"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-${{ matrix.variant }}
+          path: ${{ steps.esphome.outputs.name }}
+
   build-beta:
     # Early warning: the next ESPHome, allowed to fail. Nothing is published
     # from this job.
@@ -166,11 +195,11 @@ jobs:
         working-directory: tests/web
     steps:
       - uses: actions/checkout@v4
-      - name: bundle.js is built from the current app.js
+      - name: bundle.js and bundle-demo.js are built from the current sources
         run: |
           python3 ../../scripts/build_web.py
-          git diff --exit-code -- ../../firmware/web/bundle.js || {
-            echo "::error::firmware/web/bundle.js is out of date. Run python scripts/build_web.py and commit it."
+          git diff --exit-code -- ../../firmware/web/bundle.js ../../firmware/web/bundle-demo.js || {
+            echo "::error::firmware/web/bundle.js or bundle-demo.js is out of date. Run python scripts/build_web.py and commit both."
             exit 1
           }
       - uses: actions/setup-node@v4

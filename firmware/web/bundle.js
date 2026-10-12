@@ -284,7 +284,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   const renderTeam = (node, league, id, abbr, rec, timeouts, poss, color) => {
     const img = node.querySelector("img");
-    const src = abbr || id ? logoUrl(league, id, abbr) : "";
+    // No id: a side with no team yet, or the demo build's made-up teams.
+    const src = id ? logoUrl(league, id, abbr) : "";
     if (img.getAttribute("src") !== src) img.src = src;
     img.style.visibility = src ? "visible" : "hidden";
     const a = node.querySelector(".abbr");
