@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "demo.h"
 #include "espn_parse.h"
 #include "favorites.h"
 #include "logo_lru.h"
@@ -2049,6 +2050,77 @@ static void test_postseason() {
   CHECK(scoreboard_url(League::NFL, 0, sea.kickoff_epoch).find("?dates=20260208") != std::string::npos);
 }
 
+// The demo build's matchups, made-up teams and script (demo.h).
+static void test_demo() {
+  auto abbrs = [](DemoMatchup m) { return std::string(m.home->abbr) + "-" + m.away->abbr; };
+  // No picks: the panel's own team at home when it is in the league, else the stock game.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NFL, 12)) == "KC-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NCAA, 333)) == "DAL-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NCAA, 333)) == "ALA-MICH");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NFL, 6)) == "OSU-MICH");
+  // A panel that follows the stock opponent plays the stock home team instead.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NFL, 21)) == "PHI-DAL");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NCAA, 130)) == "MICH-OSU");
+  // Picks win, and a pick from the other league is no pick.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 25, League::NFL, 6)) == "SEA-SF");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 333, 0, League::NFL, 6)) == "DAL-PHI");
+  // The same team on both sides never happens.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 26, League::NFL, 6)) == "SEA-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 6, League::NFL, 6)) == "DAL-PHI");
+
+  // Made-up teams: unique, and never a real team's abbreviation.
+  for (size_t i = 0; i < kMadeUpTeamCount; i++) {
+    for (size_t j = i + 1; j < kMadeUpTeamCount; j++)
+      CHECK(std::string(kMadeUpTeams[i].abbr) != kMadeUpTeams[j].abbr);
+    for (size_t t = 0; t < kTeamCount; t++)
+      CHECK(std::string(kMadeUpTeams[i].abbr) != kTeams[t].abbr);
+  }
+  CHECK(std::string(demo_made_up(DemoKind::PRO, true).abbr) != demo_made_up(DemoKind::COLLEGE, true).abbr);
+
+  // Every football team has its color (the demo is football only), and the
+  // color table matches teams.h, where football comes first.
+  size_t football = 0;
+  while (football < kTeamCount && league_sport(kTeams[football].league) == Sport::FOOTBALL)
+    football++;
+  CHECK(kTeamColorCount == football);
+  for (size_t t = 0; t < football && t < kTeamColorCount; t++)
+    CHECK(kTeamColors[t].league == kTeams[t].league && kTeamColors[t].espn_id == kTeams[t].espn_id);
+  CHECK(team_rgb(League::NFL, 6) == 0x002A5C);
+  CHECK(team_rgb(League::NFL, 999999) == 0xFFFFFF);
+
+  // The script: starts before kickoff, ends final with the home side ahead,
+  // scores never go down, and the splashes fire along the way.
+  CHECK(kDemoSteps[0].state == GameState::PRE);
+  const DemoStep &last = kDemoSteps[kDemoStepCount - 1];
+  CHECK(last.state == GameState::POST && last.us > last.them);
+  GameSnapshot prev, cur;
+  int touchdowns = 0, wins = 0;
+  for (size_t i = 0; i < kDemoStepCount; i++) {
+    if (i > 0) {
+      CHECK(kDemoSteps[i].us >= kDemoSteps[i - 1].us && kDemoSteps[i].them >= kDemoSteps[i - 1].them);
+    }
+    cur = GameSnapshot{};
+    cur.valid = true;
+    cur.team_abbr = "HBR";
+    cur.opp_abbr = "IRN";
+    cur.state = kDemoSteps[i].state;
+    cur.completed = cur.state == GameState::POST;
+    cur.team_score = kDemoSteps[i].us;
+    cur.opp_score = kDemoSteps[i].them;
+    cur.team_winner = cur.completed && cur.team_score > cur.opp_score;
+    if (i > 0) {
+      Splash sp = decide_splash(prev, cur, true, false);
+      if (sp.text.find("TOUCHDOWN") != std::string::npos)
+        touchdowns++;
+      if (sp.text == "HBR WINS!")
+        wins++;
+    }
+    prev = cur;
+  }
+  CHECK(touchdowns == 4);
+  CHECK(wins == 1);
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -2105,6 +2177,7 @@ int main() {
   test_json_allocator();
   test_timezone_index();
   test_postseason();
+  test_demo();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

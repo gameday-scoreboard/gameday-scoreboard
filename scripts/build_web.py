@@ -2,8 +2,9 @@
 """Bundle the device web page: team table (from teams.h) + app.js -> bundle.js.
 
 ESPHome embeds a single js_include file, so the team list and the app are
-concatenated here. Run after editing firmware/web/app.js or regenerating
-components/gameday/teams.h, and commit bundle.js.
+concatenated here. bundle-demo.js is the same plus demo.js, for the demo
+build only (firmware/pages/demo.yaml). Run after editing firmware/web/app.js
+or demo.js or regenerating components/gameday/teams.h, and commit both bundles.
 """
 
 import json
@@ -14,6 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 TEAMS_H = ROOT / "components" / "gameday" / "teams.h"
 APP_JS = ROOT / "firmware" / "web" / "app.js"
 BUNDLE = ROOT / "firmware" / "web" / "bundle.js"
+DEMO_JS = ROOT / "firmware" / "web" / "demo.js"
+DEMO_BUNDLE = ROOT / "firmware" / "web" / "bundle-demo.js"
 
 TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
 LEAGUES_H = ROOT / "components" / "gameday" / "leagues.h"
@@ -36,8 +39,12 @@ def main():
     if not tzs:
         raise SystemExit("timezones.h has no entries")
     tz = "const TZS=" + json.dumps(tzs, separators=(",", ":")) + ";\n"
-    BUNDLE.write_text(header + teams + tz + APP_JS.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    page = header + teams + tz + APP_JS.read_text(encoding="utf-8")
+    BUNDLE.write_text(page, encoding="utf-8", newline="\n")
     print(f"wrote {BUNDLE} ({BUNDLE.stat().st_size} bytes, {len(rows)} teams)")
+    demo = page.replace("from teams.h and app.js", "from teams.h, app.js and demo.js", 1)
+    DEMO_BUNDLE.write_text(demo + "\n" + DEMO_JS.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    print(f"wrote {DEMO_BUNDLE} ({DEMO_BUNDLE.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
