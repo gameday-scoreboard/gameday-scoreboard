@@ -15,11 +15,15 @@
 #include "logo_cache.h"
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
+#include "esphome/core/defines.h"
 #include "esphome/core/preferences.h"
 
 #include "espn_parse.h"
 #include "favorites.h"
 #include "startup.h"
+#ifdef GAMEDAY_DEMO
+#include "demo.h"
+#endif
 
 namespace esphome {
 namespace gameday {
@@ -63,6 +67,9 @@ enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY =
 
 class GamedayComponent;
 
+// "nfl:6" -> league + id. False for "none"/"" (id 0) or garbage.
+bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id);
+
 class GamedaySelect : public select::Select, public Component {
  public:
   void set_type(SelectType type) { this->type_ = type; }
@@ -83,8 +90,9 @@ class GamedaySelect : public select::Select, public Component {
 //                                    tz=<name, IANA name or index> tzauto=0/1
 //                                    down/play/odds/opp=0/1 panels=1/2
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
-//   POST /gameday/action?do=refresh|demo|qc   (demo: a scripted game on the panel, ~40s;
-//                                               qc: the factory check, firmware/pages/qc.yaml)
+//   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
+// The demo build (firmware/gameday-demo.yaml) adds do=demo|demo_stop and
+// GET/POST /gameday/demo (demo.cpp).
 // Requests arrive on the HTTP task; settings are applied on the main loop.
 class GamedayComponent : public Component, public AsyncWebHandler {
  public:
@@ -127,9 +135,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_release_seconds(int seconds);
   void set_collision_alternate(bool alternate);
   void refresh_now();
-  // Plays a scripted game through the real splash and render path, for
-  // showing the panel off without a live game. Real data resumes after.
-  void start_demo();
+  // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
+  // them to the demo (demo.cpp).
+  void remote_number(uint8_t n);
+#ifdef GAMEDAY_DEMO
+  // Loops a scripted game through the real splash and render path, for
+  // showing the panel off without a live game, until stop_demo().
+  // kind: 1 pro football, 2 college (espn::DemoKind).
+  void start_demo(uint8_t kind);
+  void stop_demo();
+#endif
 
   bool ticker_clock() const { return this->flag_(FLAG_CLOCK); }
   bool ticker_down_distance() const { return this->flag_(FLAG_DOWN); }
@@ -349,12 +364,42 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool force_schedule_{false};
   std::vector<::espn::Upcoming> upcoming_;  // next games after the one on the board
   bool upcoming_due_{false};  // fetch the list on its own cycle, after the board has its game
-  // demo playback
-  bool demo_active_{false};
+  // True while the demo build's scripted game owns the board. Always false
+  // in release firmware, so the checks on it compile away.
+  bool demo_playing_() const {
+#ifdef GAMEDAY_DEMO
+    return this->demo_kind_ != 0 && !this->demo_gap_;
+#else
+    return false;
+#endif
+  }
+#ifdef GAMEDAY_DEMO
+  // demo.cpp
+  struct DemoPrefs {
+    uint32_t pro_home, pro_away;          // NFL ESPN ids, 0 = the default pick
+    uint32_t college_home, college_away;  // NCAA ESPN ids, 0 = the default pick
+    uint8_t madeup;                       // 1 = made-up teams, no logos
+    uint8_t running;                      // the demo playing at power off, 0 = none
+  } __attribute__((packed));
+  ESPPreferenceObject demo_pref_;
+  DemoPrefs demo_prefs_{};
+  uint8_t demo_kind_{0};    // what is playing, 0 = off
+  bool demo_gap_{false};    // between runs: the normal board's turn
+  uint8_t demo_resume_{0};  // a demo to pick back up after boot
   uint8_t demo_step_{0};
   uint32_t demo_next_ms_{0};
   GameSnapshot demo_saved_game_, demo_saved_prev_;
+  std::string demo_json_{"{}"};  // GET /gameday/demo, under state_mutex_
+  void demo_setup_();
+  bool demo_loop_();  // true while the scripted game owns the board
   void demo_tick_();
+  void demo_show_step_(bool splash);
+  ::espn::DemoMatchup demo_matchup_(uint8_t kind) const;
+  uint8_t demo_league_() const;
+  void rebuild_demo_json_();
+  void handle_demo_(AsyncWebServerRequest *request);
+  void apply_demo_(const std::vector<std::pair<std::string, std::string>> &kv);
+#endif
   GameSnapshot game_;
   GameSnapshot prev_;
   uint32_t post_since_ms_{0};
