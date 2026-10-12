@@ -105,3 +105,11 @@ Next-game look-ahead, recorded 2026-10-08 ~14:50Z:
 | `team_nhl_pit_post.json` | `.../hockey/nhl/teams/16`, still naming the 10/7 final the next morning |
 | `day_nhl_20261009.json` | `.../hockey/nhl/scoreboard?dates=20261009` (PIT @ CBJ among four games) |
 | `day_mlb_20261009.json` | `.../baseball/mlb/scoreboard?dates=20261009` (an off day: no games) |
+
+Recorded 2026-10-12 during LAD @ MIL (postseason, Bot 3rd), when ESPN's team
+endpoint had already moved on to the next game:
+
+| File | Source |
+| --- | --- |
+| `team_mlb_mil_live.json` | `.../baseball/mlb/teams/8`, nextEvent is 401908032 MIL @ LAD on 10/14 |
+| `day_mlb_20261012.json` | `.../baseball/mlb/scoreboard?dates=20261012`, 401908031 LAD @ MIL in progress, CLE @ TB pre |

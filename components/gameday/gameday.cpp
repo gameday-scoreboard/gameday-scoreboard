@@ -1394,6 +1394,24 @@ void GamedayComponent::run_job_() {
           break;
         }
       }
+    } else if (this->needs_lookahead_(j.team->league) &&
+               (j.schedule.event_id.empty() || j.schedule.kickoff_epoch > (int64_t) this->time_->timestamp_now())) {
+      // A read during a game (a boot, a team pick, the six-hour read) gets
+      // the game after it from the team endpoint, so check today's scoreboard
+      // for one on now. Its date is taken 9 hours back (team_day_url's 5 plus
+      // 4 here), so a late West Coast game still finds its own day after
+      // midnight Eastern.
+      int64_t now = (int64_t) this->time_->timestamp_now();
+      Schedule today;
+      if (this->fetch_team_day_(j.team, j.schedule.group, now - 4 * 3600, j.done_event, today) > 0 &&
+          ::espn::today_game_first(j.schedule, today)) {
+        ESP_LOGI(TAG, "%s is playing now: event %s", j.team->abbr, today.event_id.c_str());
+        j.schedule.event_id = today.event_id;
+        j.schedule.kickoff_epoch = today.kickoff_epoch;
+        // The team endpoint's opponent belongs to the next game.
+        j.schedule.opp_id = 0;
+        j.schedule.opp_abbr.clear();
+      }
     }
     if (!j.comps.empty()) {
       // Soccer: the cup reads from the last sweep still count.

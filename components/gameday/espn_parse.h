@@ -258,6 +258,17 @@ inline bool schedule_due(bool have_schedule, bool force, uint32_t now, uint32_t 
   return force || !have_schedule || (now - fetched_ms) >= interval;
 }
 
+// ESPN's team endpoint names a team's next game as soon as the current one
+// starts (MIL and LAD on 2026-10-12), so a read during a game skips it.
+// `today` is the team's first unfinished game on the day's scoreboard
+// (parse_team_game). True when it comes before the team endpoint's game, or
+// the team endpoint named none: it is the game on now.
+inline bool today_game_first(const Schedule &team, const Schedule &today) {
+  if (today.event_id.empty() || today.event_id == team.event_id)
+    return false;
+  return team.event_id.empty() || today.kickoff_epoch < team.kickoff_epoch;
+}
+
 }  // namespace espn
 
 // Streaming entry points live in the header because they are templates on

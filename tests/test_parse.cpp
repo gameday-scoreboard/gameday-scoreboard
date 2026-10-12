@@ -1845,6 +1845,32 @@ static void test_lookahead() {
   std::string off = slurp("fixtures/day_mlb_20261009.json");
   CHECK_EQ(parse_team_game(off, 15, std::string(), none), 0);
 
+  // Mid-game, the team endpoint already names the next game; today's
+  // scoreboard still has the one on now (LAD @ MIL, Bot 3rd, 2026-10-12).
+  Schedule mil;
+  CHECK(parse_team_str(slurp("fixtures/team_mlb_mil_live.json"), mil));
+  CHECK_EQ(mil.event_id, std::string("401908032"));  // MIL @ LAD, 10/14
+  Schedule playing;
+  CHECK(parse_team_game_str(slurp("fixtures/day_mlb_20261012.json"), 8, playing));
+  CHECK_EQ(playing.event_id, std::string("401908031"));
+  CHECK(today_game_first(mil, playing));
+  // CLE's game tonight hasn't started: both name it, nothing changes.
+  Schedule cle, cle_today;
+  cle.event_id = "401908023";
+  cle.kickoff_epoch = parse_iso8601_z("2026-10-13T00:00Z");
+  CHECK(parse_team_game_str(slurp("fixtures/day_mlb_20261012.json"), 5, cle_today));
+  CHECK(!today_game_first(cle, cle_today));
+  // No game today, or no next game named at all.
+  CHECK(!today_game_first(mil, Schedule{}));
+  Schedule unnamed;
+  CHECK(today_game_first(unnamed, playing));
+  // Doubleheader: game 1 on now, the team endpoint names game 2.
+  Schedule game2;
+  game2.event_id = "2";
+  game2.kickoff_epoch = parse_iso8601_z("2026-07-04T22:10Z");
+  CHECK(parse_team_game_str(dh_live, 15, next));
+  CHECK(today_game_first(game2, next));
+
   CHECK_EQ(team_day_url(League::NHL, 0, parse_iso8601_z("2026-10-09T15:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261009"));
   CHECK_EQ(team_day_url(League::MCBB, 8, parse_iso8601_z("2026-12-06T18:00Z")),
