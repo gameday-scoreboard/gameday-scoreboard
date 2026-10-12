@@ -1,9 +1,10 @@
-// Readouts for the QC screen (firmware/pages/qc.yaml). The gesture that
-// starts QC mode is in startup.h, where the host tests can reach it.
+// Readouts for the QC screen (firmware/pages/qc.yaml), and the factory flag
+// that starts it.
 #pragma once
 
 #include <esp_psram.h>
 #include <esp_wifi.h>
+#include <nvs.h>
 
 #include "esphome/components/wifi/wifi_component.h"
 
@@ -41,6 +42,34 @@ inline int qc_strongest_rssi() {
   config.scan_time.active.max = 300;
   esp_wifi_scan_start(&config, false);  // fails harmlessly while another scan runs
   return 0;
+}
+
+// The factory flag: scripts/factory_flash.py writes it into NVS right after
+// the full flash, so the panel's first boot goes straight into QC. Only a
+// press during QC clears it. ESPHome keeps its own settings in the
+// "esphome" namespace; a panel flashed any other way has no "gameday"
+// namespace at all and never sees the flag. Change these names in both
+// places or the factory flag stops working.
+static const char *const QC_FLAG_NAMESPACE = "gameday";
+static const char *const QC_FLAG_KEY = "qc_pending";
+
+inline bool qc_flag_get() {
+  nvs_handle_t h;
+  if (nvs_open(QC_FLAG_NAMESPACE, NVS_READONLY, &h) != ESP_OK)
+    return false;
+  uint8_t v = 0;
+  const bool set = nvs_get_u8(h, QC_FLAG_KEY, &v) == ESP_OK && v != 0;
+  nvs_close(h);
+  return set;
+}
+
+inline void qc_flag_clear() {
+  nvs_handle_t h;
+  if (nvs_open(QC_FLAG_NAMESPACE, NVS_READWRITE, &h) != ESP_OK)
+    return;
+  if (nvs_erase_key(h, QC_FLAG_KEY) == ESP_OK)
+    nvs_commit(h);
+  nvs_close(h);
 }
 
 }  // namespace esphome::gameday
