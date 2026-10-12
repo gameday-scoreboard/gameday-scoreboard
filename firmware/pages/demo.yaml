@@ -25,11 +25,11 @@ api:
   actions:
     - action: wizmote_button
       variables:
-        button: int
+        code: int
       then:
         - script.execute:
             id: process_wizmote_button
-            button: !lambda 'return button;'
+            button: !lambda 'return code;'
 
 # A show panel never moves itself to release firmware: no update entity, so
 # nothing checks the release manifest and nothing offers to install it. New
