@@ -7,12 +7,15 @@
 #                             strongest Wi-Fi network's RSSI (from a scan, no
 #                             join needed), panel size, and the button test
 #
-# Getting in: five quick presses of the boot button in the first 30 s after
-# power-up (qc_press in components/gameday/startup.h), or
-# POST /gameday/action?do=qc on a panel that is on Wi-Fi.
+# Getting in: scripts/factory_flash.py leaves a flag in NVS (qc_flag_get in
+# components/gameday/qc.h) and every boot with the flag set starts QC by
+# itself. On a panel that is on Wi-Fi, POST /gameday/action?do=qc starts it
+# too, for burn-in, and never touches the flag.
 #
-# The first press in QC mode is the button test: the readout comes up with
-# "Button OK" in green. The next press leaves, and so does 2 minutes in QC.
+# One press is the button test and the finish: the readout comes up with
+# "Button OK" in green for 3 s, then QC ends. That press clears the flag.
+# Unplugging first, or the 2 minute timeout, leaves the flag set, so the
+# panel runs QC again on its next boot and can't skip the check unnoticed.
 # Leaving puts the screen and the Power switch back the way they were; it
 # doesn't restart the panel, so a burn-in run doesn't count a restart.
 #
@@ -23,13 +26,10 @@ globals:
   - id: qc_active
     type: bool
     initial_value: 'false'
-  # The run of quick presses so far (qc_press)
-  - id: qc_presses
-    type: uint8_t
-    initial_value: '0'
-  - id: qc_last_press_ms
-    type: uint32_t
-    initial_value: '0'
+  # This run came from the factory flag, so the button press clears it
+  - id: qc_from_flag
+    type: bool
+    initial_value: 'false'
   # millis() when QC mode started, and when the current step started
   - id: qc_since_ms
     type: uint32_t
@@ -53,7 +53,9 @@ script:
     then:
       - lambda: |-
           if (id(qc_active)) return;
-          ESP_LOGI("qc", "QC mode on");
+          // A finish left over from a run that timed out under it
+          id(qc_finish).stop();
+          ESP_LOGI("qc", "QC mode on%s", id(qc_from_flag) ? " (factory flag)" : "");
           id(qc_active) = true;
           id(qc_since_ms) = millis();
           id(qc_button_ok) = false;
@@ -74,6 +76,7 @@ script:
           if (!id(qc_active)) return;
           ESP_LOGI("qc", "QC mode off");
           id(qc_active) = false;
+          id(qc_from_flag) = false;
           lv_obj_add_flag(id(qc_layer), LV_OBJ_FLAG_HIDDEN);
       - if:
           condition:
@@ -82,6 +85,12 @@ script:
             - switch.turn_off: power
           else:
             - switch.turn_on: power
+
+  # The button test passed: "Button OK" stays up for 3 s, then QC ends.
+  - id: qc_finish
+    then:
+      - delay: 3s
+      - script.execute: qc_stop
 
   # Draw a step: 0-3 the fills, 4 the row walk, 5 the readout.
   - id: qc_show
@@ -93,7 +102,7 @@ script:
           id(qc_step) = step;
           id(qc_step_ms) = millis();
           ESP_LOGD("qc", "Step %d", step);
-          lv_obj_t *lines[7] = {id(qc_l1), id(qc_l2), id(qc_l3), id(qc_l4), id(qc_l5), id(qc_l6), id(qc_l7)};
+          lv_obj_t *lines[6] = {id(qc_l1), id(qc_l2), id(qc_l3), id(qc_l4), id(qc_l5), id(qc_l6)};
           const bool readout = step == 5;
           for (auto *l : lines) {
             if (readout) lv_obj_clear_flag(l, LV_OBJ_FLAG_HIDDEN);
@@ -134,7 +143,6 @@ script:
           const bool ok = id(qc_button_ok);
           lv_label_set_text(id(qc_l6), ok ? "Button OK" : "Press button");
           lv_obj_set_style_text_color(id(qc_l6), lv_color_hex(ok ? 0x00FF00 : 0xFFFFFF), LV_PART_MAIN);
-          lv_label_set_text(id(qc_l7), ok ? "Again = exit" : "");
           ESP_LOGD("qc", "PSRAM %u MB, RSSI %d, panel %dx%d, button %s", (unsigned) mb, rssi,
                    (int) lv_disp_get_hor_res(d), (int) lv_disp_get_ver_res(d), ok ? "OK" : "not pressed");
 
@@ -167,32 +175,36 @@ interval:
             }
           }
 
-# Counted on the press, not the click, so QC starts as the fifth press goes
-# down. The power toggle on click (firmware/controllers) stands aside while
-# QC runs, and so does boot.yaml's hold timer: a long press here never shows
-# the address or resets Wi-Fi.
+# Counted on the press, not the click, so "Button OK" shows as the button
+# goes down. The power toggle on click (firmware/controllers) stands aside
+# while QC runs, and so does boot.yaml's hold timer: a long press here never
+# shows the address or resets Wi-Fi.
 binary_sensor:
   - id: !extend power_button
     on_press:
       - lambda: |-
-          const uint32_t now = millis();
-          if (id(qc_active)) {
-            id(boot_button_press_ms) = 0;
-            // The tail of the gesture is not the button test.
-            if (now - id(qc_since_ms) < 1000) return;
-            if (!id(qc_button_ok)) {
-              ESP_LOGI("qc", "Button OK");
-              id(qc_button_ok) = true;
-              id(qc_show).execute(5);
-            } else {
-              id(qc_stop).execute();
-            }
-            return;
+          if (!id(qc_active)) return;
+          id(boot_button_press_ms) = 0;
+          if (id(qc_button_ok)) return;
+          ESP_LOGI("qc", "Button OK");
+          id(qc_button_ok) = true;
+          if (id(qc_from_flag)) {
+            gameday::qc_flag_clear();
+            ESP_LOGI("qc", "Factory flag cleared");
           }
-          if (espn::qc_press(id(qc_presses), id(qc_last_press_ms), now)) {
-            id(boot_button_press_ms) = 0;
+          id(qc_show).execute(5);
+          id(qc_finish).execute();
+
+# After everything else is set up, so the QC layer lands on top of the boot
+# screen.
+esphome:
+  on_boot:
+    - priority: -100.0
+      then:
+        - lambda: |-
+            if (!gameday::qc_flag_get()) return;
+            id(qc_from_flag) = true;
             id(qc_start).execute();
-          }
 
 lvgl:
   top_layer:
@@ -274,15 +286,6 @@ lvgl:
                 id: qc_l6
                 x: 0
                 y: 46
-                width: 100%
-                long_mode: CLIP
-                text_align: CENTER
-                text: ""
-                styles: [st_spleen8]
-            - label:
-                id: qc_l7
-                x: 0
-                y: 55
                 width: 100%
                 long_mode: CLIP
                 text_align: CENTER
