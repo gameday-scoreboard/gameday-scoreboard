@@ -63,7 +63,7 @@ static void test_urls() {
            std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=9&dates=20260905"));
   CHECK_EQ(dark_logo("https://a.espncdn.com/i/teamlogos/ncaa/500/68.png"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/68.png&w=64&h=64"));
   CHECK_EQ(dark_logo("https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/sea.png&w=64&h=64"));
-  CHECK_EQ(team_logo_url(League::NFL, 6, "DAL"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/dal.png&w=64&h=64"));
+  CHECK_EQ(team_logo_url(League::NFL, 6, "DAL"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/dal.png&w=64&h=64"));
   CHECK_EQ(team_logo_url(League::NCAA, 228, "CLEM"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/228.png&w=64&h=64"));
   CHECK_EQ(dark_logo(""), std::string(""));
 }
@@ -84,12 +84,22 @@ static void test_team_parse() {
   CHECK_EQ(s.group, (uint32_t) 1);
   CHECK_EQ(s.team_color, std::string("8c2232"));
   CHECK_EQ(s.team_record, std::string("0-0"));
+  CHECK_EQ(s.opp_id, (uint32_t) 2132);  // Cincinnati, the other side of the next game
+  CHECK_EQ(s.opp_abbr, std::string("CIN"));
 
   Schedule d;
   CHECK(parse_team_str(slurp("fixtures/team_nfl_dal.json"), d));
   CHECK_EQ(d.event_id, std::string("401872930"));
   CHECK_EQ(d.team_color, std::string("002a5c"));
   CHECK_EQ(d.team_record, std::string("2-1"));
+  CHECK_EQ(d.opp_id, (uint32_t) 19);
+  CHECK_EQ(d.opp_abbr, std::string("NYG"));
+
+  // No next game: no opponent.
+  Schedule none;
+  CHECK(parse_team_str(R"({"team":{"id":"6","color":"002a5c","nextEvent":[]}})", none));
+  CHECK(none.event_id.empty());
+  CHECK_EQ(none.opp_id, (uint32_t) 0);
 
   Schedule bad;
   CHECK(!parse_team_str("{not json", bad));
@@ -120,6 +130,8 @@ static void test_scoreboard_live() {
   CHECK_EQ(s.opp_color, std::string("00934b"));
   CHECK_EQ(s.team_logo, std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/68.png&w=64&h=64"));
   CHECK_EQ(s.opp_logo, std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/2483.png&w=64&h=64"));
+  CHECK_EQ(team_logo_url(League::NCAA, s.team_id, "BOIS"), s.team_logo);
+  CHECK_EQ(team_logo_url(League::NCAA, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
   CHECK(s.last_play.rfind("End of 3rd quarter", 0) == 0);
   CHECK(!s.completed);
 
@@ -166,6 +178,10 @@ static void test_scoreboard_pre_nfl() {
   CHECK_EQ(s.venue, std::string("Lumen Field"));
   CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-09-10T00:20Z"));
   CHECK_EQ(s.team_logo, std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/ne.png&w=64&h=64"));
+  // The logo cache keys on the URL: the one built before the scoreboard
+  // arrives must be the one the scoreboard gives, or it downloads twice.
+  CHECK_EQ(team_logo_url(League::NFL, s.team_id, "NE"), s.team_logo);
+  CHECK_EQ(team_logo_url(League::NFL, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
   CHECK_EQ(s.possession, 0);
 }
 
@@ -603,6 +619,45 @@ static void test_boot_hold() {
   CHECK(!boot_hold(false, before_wrap, before_wrap + BOOT_HOLD_CAP_MS));
 }
 
+static void test_qc_press() {
+  // Five quick presses early on: the fifth starts QC mode.
+  uint8_t n = 0;
+  uint32_t last = 0;
+  uint32_t t = 4000;
+  for (int i = 0; i < 4; i++, t += 300)
+    CHECK(!qc_press(n, last, t));
+  CHECK(qc_press(n, last, t));
+  // It starts over after that.
+  CHECK(n == 0);
+  CHECK(!qc_press(n, last, t + 300));
+
+  // A gap longer than QC_PRESS_GAP_MS starts the count over.
+  n = 0;
+  t = 2000;
+  for (int i = 0; i < 4; i++, t += 300)
+    CHECK(!qc_press(n, last, t));
+  t += QC_PRESS_GAP_MS + 1;
+  for (int i = 0; i < 4; i++, t += 300)
+    CHECK(!qc_press(n, last, t));
+  CHECK(qc_press(n, last, t));
+
+  // Exactly the gap still counts.
+  n = 0;
+  t = 1000;
+  for (int i = 0; i < 4; i++, t += QC_PRESS_GAP_MS)
+    CHECK(!qc_press(n, last, t));
+  CHECK(qc_press(n, last, t));
+
+  // Only in the first 30 s: a run that crosses the window never finishes.
+  n = 0;
+  t = QC_WINDOW_MS - 900;
+  for (int i = 0; i < 3; i++, t += 300)
+    CHECK(!qc_press(n, last, t));
+  CHECK(!qc_press(n, last, t));
+  CHECK(!qc_press(n, last, t + 300));
+  CHECK(n == 0);
+}
+
 static void test_rotate_minutes() {
   // 1 minute is a real choice on the device page and in the app. Treating it
   // as corrupt at boot reset the mode to My team.
@@ -777,6 +832,7 @@ int main() {
   test_schedule_due();
   test_team_cache();
   test_boot_hold();
+  test_qc_press();
   test_rotate_minutes();
   test_logo_lru();
   test_json_allocator();

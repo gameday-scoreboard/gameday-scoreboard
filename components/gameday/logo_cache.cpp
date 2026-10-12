@@ -56,6 +56,25 @@ image::Image *LogoCache::get(const std::string &url) {
   return nullptr;
 }
 
+// Never drops a logo to make room, since only the main loop knows what LVGL
+// is drawing; a full cache skips the head start and get() fetches it later.
+void LogoCache::prefetch(const std::string &url) {
+  if (url.empty() || this->lock_ == nullptr)
+    return;
+  Locked guard(this->lock_);
+  for (auto &e : this->entries_) {
+    if (std::string_view(e->url) == url)
+      return;
+  }
+  if (this->entries_.size() >= MAX_LOGOS)
+    return;
+  auto e = std::make_unique<Entry>();
+  e->url.assign(url.data(), url.size());
+  e->used_ms = millis();
+  this->entries_.push_back(std::move(e));
+  this->start_task_();
+}
+
 void LogoCache::pin(const std::string &team, const std::string &opponent) {
   if (this->lock_ == nullptr || (team == this->pinned_[0] && opponent == this->pinned_[1]))
     return;
