@@ -74,6 +74,29 @@ test("an upcoming game shows kickoff and network", async ({ page, request }) => 
   await expect(page.locator("#msg")).toBeHidden();
 });
 
+test("a bowl or playoff game shows its name, other games none", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#gname")).toBeHidden();
+
+  const g = (await (await request.get("/gameday/state")).json()).game;
+  await reset(request, { game: { ...g, gn: "Super Bowl LX" } });
+  await page.reload();
+  await expect(page.locator("#gname")).toBeVisible();
+  await expect(page.locator("#gname")).toHaveText("Super Bowl LX");
+
+  await reset(request, { game: { ...g, ...LIVE, gn: "Rose Bowl" } });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("LIVE");
+  await expect(page.locator("#gname")).toHaveText("Rose Bowl");
+
+  await reset(request, { game: { s: "NOT_FOUND", l: "nfl", gn: "Rose Bowl" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("NO GAME");
+  await expect(page.locator("#gname")).toBeHidden();
+});
+
 test("no game renders the empty board for my team and for live modes", async ({ page, request }) => {
   await reset(request, { game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
   await page.goto("/");
