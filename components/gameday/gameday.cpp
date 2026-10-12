@@ -17,6 +17,7 @@
 #include "esphome/components/time/posix_tz.h"
 #endif
 
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -40,6 +41,10 @@ static const uint32_t RETRY_INTERVAL = MINUTE;
 static const uint32_t NOT_READY_INTERVAL = 500;
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
+// A college scan is ~750KB on a Saturday. With nothing live it waits for the
+// next kickoff instead of re-reading every 2 minutes, but never longer than
+// this, so a moved kickoff or the next day's slate is still picked up.
+static const uint32_t NO_GAMES_RESCAN = 3 * 60 * MINUTE;
 // How long the loop waits on a worker task before writing it off. A job chains
 // at most two requests (schedule then game, or the NFL then the NCAA
 // scoreboard). http_request in gameday-common.yaml allows each one 20s, with a
@@ -644,15 +649,7 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
   }
   if (refresh >= 0)
     e.fetched_ms = now == 0 ? 1 : now;
-  this->job_done_ = false;
-  this->busy_ = true;
-  this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-  BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-  if (ok != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the fetch task");
-    this->busy_ = false;
-    this->schedule_next_(RETRY_INTERVAL);
-  }
+  this->start_worker_();
 }
 
 void GamedayComponent::apply_fav_job_(uint32_t now) {
@@ -990,6 +987,7 @@ void GamedayComponent::reset_game_() {
   this->live_away_id_ = 0;
   this->live_started_ms_ = 0;
   this->live_none_ = false;
+  this->live_rescan_ms_ = NO_LIVE_RESCAN;
   this->live_fallback_ = false;
   this->schedule_ = Schedule{};
   this->schedule_fetched_ms_ = 0;
@@ -1083,7 +1081,8 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
   return ok;
 }
 
-bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out) {
+bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out,
+                                         int64_t &next_kickoff) {
   std::string url = ::espn::scan_url(league, (int64_t) this->time_->timestamp_now());
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
   auto container = this->open_(url);
@@ -1091,11 +1090,14 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
     return false;
   ContainerReader reader(container);
   size_t before = out.size();
-  bool ok = ::espn::parse_live_games(reader, out);
+  int64_t next = 0;
+  bool ok = ::espn::parse_live_games(reader, out, &next);
   for (size_t i = before; i < out.size(); i++)
     out[i].league = (uint8_t) league;
   container->end();
   ESP_LOGI(TAG, "Scan: %u live game(s) (%u bytes)", (unsigned) out.size(), (unsigned) reader.total());
+  if (next != 0 && (next_kickoff == 0 || next < next_kickoff))
+    next_kickoff = next;
   return ok;
 }
 
@@ -1149,7 +1151,7 @@ uint32_t GamedayComponent::interval_for_phase_() const {
   // the 6 hours an out of season team gets, must never outlast the rescan.
   if (this->live_fallback_) {
     uint32_t since = millis() - this->live_started_ms_;
-    uint32_t left = since >= NO_LIVE_RESCAN ? 0 : NO_LIVE_RESCAN - since;
+    uint32_t left = since >= this->live_rescan_ms_ ? 0 : this->live_rescan_ms_ - since;
     if (ms > left)
       ms = left;
   }
@@ -1188,7 +1190,7 @@ void GamedayComponent::start_job_() {
   if (this->live_mode_()) {
     // Inside the fallback live_started_ms_ times the rescan instead of the
     // rotate: the board is on the owner's own team until a game kicks off.
-    bool rescan_due = this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= NO_LIVE_RESCAN;
+    bool rescan_due = this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= this->live_rescan_ms_;
     if (!this->live_fallback_ || rescan_due) {
       if (this->live_fallback_) {
         j.need_scan = true;
@@ -1204,14 +1206,7 @@ void GamedayComponent::start_job_() {
       if (j.need_scan && this->prefs2_.mode == (uint8_t) Mode::LIVE)
         j.scan_leagues = this->live_leagues_();
       j.schedule = this->schedule_;
-      this->job_done_ = false;
-      this->busy_ = true;
-      this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-      BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-      if (ok != pdPASS) {
-        this->busy_ = false;
-        this->schedule_next_(RETRY_INTERVAL);
-      }
+      this->start_worker_();
       return;
     }
     // In the fallback with the rescan not due: fall through to the My team
@@ -1237,14 +1232,7 @@ void GamedayComponent::start_job_() {
     j.schedule = this->schedule_;
     j.need_game = this->game_.event_id.empty() || this->game_.event_id != this->schedule_.event_id;
     j.done_event = this->done_event_;
-    this->job_done_ = false;
-    this->busy_ = true;
-    this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-    BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-    if (ok != pdPASS) {
-      this->busy_ = false;
-      this->schedule_next_(RETRY_INTERVAL);
-    }
+    this->start_worker_();
     return;
   }
   // The season schedule is ~200KB; it is fetched on a cycle of its own right
@@ -1252,14 +1240,7 @@ void GamedayComponent::start_job_() {
   if (this->upcoming_due_ && !j.need_schedule && this->schedule_.valid) {
     j.need_upcoming = true;
     j.schedule = this->schedule_;
-    this->job_done_ = false;
-    this->busy_ = true;
-    this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-    BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-    if (ok != pdPASS) {
-      this->busy_ = false;
-      this->schedule_next_(RETRY_INTERVAL);
-    }
+    this->start_worker_();
     return;
   }
   if (this->post_since_ms_ != 0 && (now - this->post_since_ms_) >= this->linger_ms_()) {
@@ -1314,13 +1295,17 @@ void GamedayComponent::start_job_() {
     // A routine six-hour read must not cut a lingering final short.
     j.no_lookahead = this->post_since_ms_ != 0;
   }
+  this->start_worker_();
+}
+
+void GamedayComponent::start_worker_() {
   this->job_done_ = false;
   this->busy_ = true;
   this->busy_since_ms_ = millis() == 0 ? 1 : millis();
   // TLS plus a nested JSON parse needs a roomy stack; 16KB has headroom.
-  BaseType_t ok = xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr);
-  if (ok != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the fetch task");
+  if (xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr) != pdPASS) {
+    ESP_LOGW(TAG, "Could not start the fetch task (largest free internal block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     this->busy_ = false;
     this->schedule_next_(RETRY_INTERVAL);
   }
@@ -1344,11 +1329,11 @@ void GamedayComponent::run_job_() {
     uint8_t mode = this->prefs2_.mode;
     j.scan_ok = true;
     if (mode == (uint8_t) Mode::LIVE_NFL || mode == (uint8_t) Mode::LIVE_ANY)
-      j.scan_ok = this->fetch_live_games_(League::NFL, j.live) && j.scan_ok;
+      j.scan_ok = this->fetch_live_games_(League::NFL, j.live, j.next_kickoff) && j.scan_ok;
     if (mode == (uint8_t) Mode::LIVE_NCAA || mode == (uint8_t) Mode::LIVE_ANY)
-      j.scan_ok = this->fetch_live_games_(League::NCAA, j.live) && j.scan_ok;
+      j.scan_ok = this->fetch_live_games_(League::NCAA, j.live, j.next_kickoff) && j.scan_ok;
     for (League l : j.scan_leagues)
-      j.scan_ok = this->fetch_live_games_(l, j.live) && j.scan_ok;
+      j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff) && j.scan_ok;
     return;  // the main loop picks a game, then the next cycle polls it
   }
   if (j.need_upcoming) {
@@ -1461,6 +1446,12 @@ void GamedayComponent::apply_job_() {
     if (pick.empty() && !j.live.empty())
       pick.push_back(0);
     if (pick.empty()) {
+      // A failed scan took the retry above, so this kickoff covers every
+      // league the mode reads.
+      this->live_rescan_ms_ = ::espn::no_live_rescan_ms((int64_t) this->time_->timestamp_now(), j.next_kickoff,
+                                                        NO_LIVE_RESCAN, NO_GAMES_RESCAN);
+      if (this->live_rescan_ms_ > NO_LIVE_RESCAN)
+        ESP_LOGI(TAG, "Next scan in %u min", (unsigned) (this->live_rescan_ms_ / MINUTE));
       const ::espn::Team *saved = this->current_team_();
       if (saved != nullptr) {
         // Nothing live, but the owner has a team: show that team's card and
@@ -1510,7 +1501,7 @@ void GamedayComponent::apply_job_() {
       this->misses_ = 0;
       this->emit_({});
       this->mark_board_ready_();
-      this->schedule_next_(NO_LIVE_RESCAN);
+      this->schedule_next_(this->live_rescan_ms_);
       return;
     }
     const ::espn::LiveGame &g = j.live[pick[random_uint32() % pick.size()]];

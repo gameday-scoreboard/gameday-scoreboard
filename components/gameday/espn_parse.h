@@ -269,6 +269,24 @@ inline bool today_game_first(const Schedule &team, const Schedule &today) {
   return team.event_id.empty() || today.kickoff_epoch < team.kickoff_epoch;
 }
 
+// How long a live mode waits after a scan that found nothing in progress:
+// until the day's next kickoff, but at least min_ms (the game is due and
+// not under way yet) and at most max_ms (kickoffs move, and the day the scan
+// reads rolls over). With no kickoff left (next_kickoff 0) it waits max_ms,
+// and with no clock min_ms.
+inline uint32_t no_live_rescan_ms(int64_t now_epoch, int64_t next_kickoff, uint32_t min_ms, uint32_t max_ms) {
+  if (now_epoch < 1000000000)
+    return min_ms;
+  if (next_kickoff == 0)
+    return max_ms;
+  int64_t ms = (next_kickoff - now_epoch) * 1000;
+  if (ms < (int64_t) min_ms)
+    return min_ms;
+  if (ms > (int64_t) max_ms)
+    return max_ms;
+  return (uint32_t) ms;
+}
+
 }  // namespace espn
 
 // Streaming entry points live in the header because they are templates on

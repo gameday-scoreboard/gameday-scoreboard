@@ -95,8 +95,11 @@ inline void fill_upcoming_filter(JsonDocument &f) {
 inline void fill_scan_filter(JsonDocument &f) {
   JsonObject ev = f["events"].add<JsonObject>();
   ev["id"] = true;
+  ev["date"] = true;
   ev["status"]["type"]["state"] = true;
-  JsonObject c = ev["competitions"].add<JsonObject>()["competitors"].add<JsonObject>();
+  JsonObject comp = ev["competitions"].add<JsonObject>();
+  comp["timeValid"] = true;
+  JsonObject c = comp["competitors"].add<JsonObject>();
   c["id"] = true;
   c["homeAway"] = true;
   c["team"]["abbreviation"] = true;
@@ -349,8 +352,12 @@ bool parse_upcoming(TInput &input, uint32_t our_team_id, size_t max, std::vector
   return true;
 }
 
-// Lists the in-progress games in a scoreboard document.
-template<typename TInput, typename TOut> bool parse_live_games(TInput &input, TOut &out) {
+// Lists the in-progress games in a scoreboard document. With next_kickoff,
+// also reports the earliest kickoff among the games not started yet, or 0
+// when there is none. A game whose time is still TBD is listed at midnight
+// Eastern with timeValid false, and does not count.
+template<typename TInput, typename TOut>
+bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr) {
   JsonDocument filter(detail::json_allocator());
   detail::fill_scan_filter(filter);
   JsonDocument doc(detail::json_allocator());
@@ -358,8 +365,18 @@ template<typename TInput, typename TOut> bool parse_live_games(TInput &input, TO
                                               DeserializationOption::NestingLimit(40));
   if (err)
     return false;
+  if (next_kickoff != nullptr)
+    *next_kickoff = 0;
   for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
-    if (detail::str_or_empty(ev["status"]["type"]["state"]) != "in")
+    std::string state = detail::str_or_empty(ev["status"]["type"]["state"]);
+    JsonVariantConst time_valid = ev["competitions"][0]["timeValid"];
+    bool tbd = time_valid.is<bool>() && !time_valid.as<bool>();
+    if (state == "pre" && next_kickoff != nullptr && !tbd) {
+      int64_t k = parse_iso8601_z(detail::str_or_empty(ev["date"]));
+      if (k > 0 && (*next_kickoff == 0 || k < *next_kickoff))
+        *next_kickoff = k;
+    }
+    if (state != "in")
       continue;
     LiveGame g;
     g.event_id = detail::str_or_empty(ev["id"]);
