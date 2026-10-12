@@ -67,8 +67,8 @@ static void trace_stack_marks(uint32_t full_every) {
     if (dropped)
       lows[k] = free_now;
     if (full || dropped || (is_new && calls > 1)) {
-      ESP_LOGW("trace", "stack %-16s free low %5u B%s%s core %d prio %u", name, (unsigned) free_now,
-               dropped ? " (NEW LOW)" : "", is_new ? " (new task)" : "", (int) tasks[t].xCoreID,
+      ESP_LOGW("trace", "stack %-16s free low %5u B%s%s prio %u", name, (unsigned) free_now,
+               dropped ? " (NEW LOW)" : "", is_new ? " (new task)" : "",
                (unsigned) tasks[t].uxCurrentPriority);
     }
   }
