@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "demo.h"
 #include "espn_parse.h"
 #include "favorites.h"
 #include "logo_lru.h"
@@ -274,6 +275,11 @@ static void test_status_text() {
   TickerOptions no_odds = all;
   no_odds.odds = false;
   CHECK_EQ(status_text(p, no_odds, "Wed 7:20 PM"), std::string("Wed 7:20 PM | Lumen Field"));
+  // A named game leads, and a venue that repeats the name is dropped
+  p.game_name = "Super Bowl LX";
+  CHECK_EQ(status_text(p, no_odds, "Sun 5:30 PM"), std::string("Super Bowl LX | Sun 5:30 PM | Lumen Field"));
+  p.game_name = p.venue = "Rose Bowl";
+  CHECK_EQ(status_text(p, no_odds, "Thu 3:00 PM"), std::string("Rose Bowl | Thu 3:00 PM"));
   // Post
   GameSnapshot f = live(21, 20, GameState::POST);
   f.team_record = "3-0";
@@ -366,6 +372,25 @@ static void test_live_games() {
   std::string nfl = slurp("fixtures/scoreboard_nfl.json");
   CHECK(parse_live_games(nfl, none));
   CHECK_EQ(none.size(), (size_t) 0);
+  // The earliest kickoff still to come, for the wait when nothing is live.
+  int64_t next = -1;
+  games.clear();
+  CHECK(parse_live_games(json, games, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-09-05T23:00Z"));
+  none.clear();
+  CHECK(parse_live_games(nfl, none, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-09-10T00:20Z"));
+  std::string finals = slurp("fixtures/scoreboard_ncaa_conf_titles.json");
+  CHECK(parse_live_games(finals, none, &next));
+  CHECK_EQ(next, (int64_t) 0);  // every game final: nothing left to wait for
+  // A TBD kickoff sits at midnight Eastern with timeValid false and must not
+  // count, or it would hold the wait at its floor all day.
+  std::string tbd = R"({"events":[)"
+                    R"({"id":"1","date":"2026-10-24T04:00Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":false}]},)"
+                    R"({"id":"2","date":"2026-10-24T19:30Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":true}]},)"
+                    R"({"id":"3","date":"2026-10-24T16:00Z","status":{"type":{"state":"post"}},"competitions":[{}]}]})";
+  CHECK(parse_live_games(tbd, none, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-10-24T19:30Z"));
   CHECK(scan_url(League::NFL, parse_iso8601_z("2026-09-14T01:00Z")).find("dates=20260913") != std::string::npos);
   CHECK(scan_url(League::NCAA, 0).find("groups=80") != std::string::npos);
   // neutral splashes name both sides
@@ -514,6 +539,17 @@ static void test_schedule_league() {
 // the helper takes it as an argument so the test does not depend on the device
 // constant.
 static const uint32_t kSix = 6u * 60u * 60u * 1000u;
+
+static void test_no_live_rescan() {
+  const uint32_t lo = 2 * 60 * 1000, hi = 3 * 60 * 60 * 1000;
+  int64_t now = parse_iso8601_z("2026-10-17T13:00Z");
+  CHECK_EQ(no_live_rescan_ms(now, now + 45 * 60, lo, hi), (uint32_t) 45 * 60 * 1000);  // waits for kickoff
+  CHECK_EQ(no_live_rescan_ms(now, now + 8 * 3600, lo, hi), hi);                        // capped
+  CHECK_EQ(no_live_rescan_ms(now, now + 30, lo, hi), lo);                              // never under the floor
+  CHECK_EQ(no_live_rescan_ms(now, now - 600, lo, hi), lo);  // due but not under way yet
+  CHECK_EQ(no_live_rescan_ms(now, 0, lo, hi), hi);          // nothing left today
+  CHECK_EQ(no_live_rescan_ms(0, now + 3600, lo, hi), lo);   // no clock yet
+}
 
 static void test_schedule_due() {
   // Nothing fetched yet: the panel has to read the team endpoint.
@@ -772,6 +808,121 @@ static void test_postseason() {
   CHECK_EQ(sea.opp_abbr, std::string("NE"));
   CHECK_EQ(sea.venue, std::string("Levi's Stadium"));
   CHECK(scoreboard_url(League::NFL, 0, sea.kickoff_epoch).find("?dates=20260208") != std::string::npos);
+
+  // Game names from competitions[0].notes[0].headline
+  CHECK_EQ(ala.game_name, std::string("Rose Bowl"));
+  CHECK_EQ(mia.game_name, std::string("CFP Championship"));
+  CHECK_EQ(duke.game_name, std::string("ACC Championship"));
+  CHECK_EQ(chi.game_name, std::string("NFC Wild Card"));
+  CHECK_EQ(sea.game_name, std::string("Super Bowl LX"));
+}
+
+static void test_short_game_name() {
+  // Every headline in the recorded fixtures
+  CHECK_EQ(short_game_name("College Football Playoff Quarterfinal at the Rose Bowl Presented by Prudential"),
+           std::string("Rose Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff Quarterfinal at the Allstate Sugar Bowl"),
+           std::string("Sugar Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff Quarterfinal at the Capital One Orange Bowl"),
+           std::string("Orange Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff National Championship Presented by AT&T"),
+           std::string("CFP Championship"));
+  CHECK_EQ(short_game_name("SEC Championship"), std::string("SEC Championship"));
+  CHECK_EQ(short_game_name("Big 12 Championship"), std::string("Big 12 Championship"));
+  CHECK_EQ(short_game_name("FCS Championship - Second Round"), std::string("FCS Championship - Second Round"));
+  CHECK_EQ(short_game_name("NFC Wild Card Playoffs"), std::string("NFC Wild Card"));
+  CHECK_EQ(short_game_name("Super Bowl LX"), std::string("Super Bowl LX"));
+  CHECK_EQ(short_game_name("NFL Melbourne Game"), std::string("NFL Melbourne Game"));
+  CHECK_EQ(short_game_name("Aflac Kickoff"), std::string("Aflac Kickoff"));
+  CHECK_EQ(short_game_name("Liberty Mutual Music City Kickoff"), std::string("Liberty Mutual Music City Kickoff"));
+  // Bowl names as ESPN has listed them in past seasons
+  CHECK_EQ(short_game_name("Rose Bowl Game Presented by Prudential"), std::string("Rose Bowl"));
+  CHECK_EQ(short_game_name("Goodyear Cotton Bowl Classic"), std::string("Cotton Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff Semifinal at the Vrbo Fiesta Bowl"), std::string("Fiesta Bowl"));
+  CHECK_EQ(short_game_name("SRS Distribution Las Vegas Bowl"), std::string("Las Vegas Bowl"));
+  CHECK_EQ(short_game_name("Tony the Tiger Sun Bowl"), std::string("Sun Bowl"));
+  CHECK_EQ(short_game_name("Snoop Dogg Arizona Bowl presented by Gin & Juice by Dre and Snoop"),
+           std::string("Arizona Bowl"));
+  CHECK_EQ(short_game_name("LA Bowl Hosted by Gronk"), std::string("LA Bowl"));
+  CHECK_EQ(short_game_name("Duke's Mayo Bowl"), std::string("Duke's Mayo Bowl"));
+  CHECK_EQ(short_game_name("College Football Playoff First Round Game"), std::string("CFP First Round Game"));
+  CHECK_EQ(short_game_name("AFC Divisional Playoffs"), std::string("AFC Divisional"));
+  CHECK_EQ(short_game_name("AFC Championship"), std::string("AFC Championship"));
+  CHECK_EQ(short_game_name("Pro Bowl Games"), std::string("Pro Bowl Games"));
+  CHECK_EQ(short_game_name("NFL London Games"), std::string("NFL London Games"));
+  CHECK_EQ(short_game_name(""), std::string(""));
+  // Kickoff windows for TBD college games come in the same notes (2026-10-24 SEC slate)
+  CHECK_EQ(short_game_name("FLEX: 3:30 - 4:30pm OR 6 - 8pm ET start"), std::string(""));
+  CHECK_EQ(short_game_name("AFTERNOON: 3:30 - 4:30pm ET start"), std::string(""));
+  CHECK_EQ(short_game_name("NIGHT: 6 - 8pm ET start"), std::string(""));
+  CHECK_EQ(short_game_name("Kickoff 7 PM ET"), std::string(""));
+}
+
+// The demo build's matchups, made-up teams and script (demo.h).
+static void test_demo() {
+  auto abbrs = [](DemoMatchup m) { return std::string(m.home->abbr) + "-" + m.away->abbr; };
+  // No picks: the panel's own team at home when it is in the league, else the stock game.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NFL, 12)) == "KC-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NCAA, 333)) == "DAL-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NCAA, 333)) == "ALA-MICH");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NFL, 6)) == "OSU-MICH");
+  // A panel that follows the stock opponent plays the stock home team instead.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NFL, 21)) == "PHI-DAL");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NCAA, 130)) == "MICH-OSU");
+  // Picks win, and a pick from the other league is no pick.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 25, League::NFL, 6)) == "SEA-SF");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 333, 0, League::NFL, 6)) == "DAL-PHI");
+  // The same team on both sides never happens.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 26, League::NFL, 6)) == "SEA-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 6, League::NFL, 6)) == "DAL-PHI");
+
+  // Made-up teams: unique, and never a real team's abbreviation.
+  for (size_t i = 0; i < kMadeUpTeamCount; i++) {
+    for (size_t j = i + 1; j < kMadeUpTeamCount; j++)
+      CHECK(std::string(kMadeUpTeams[i].abbr) != kMadeUpTeams[j].abbr);
+    for (size_t t = 0; t < kTeamCount; t++)
+      CHECK(std::string(kMadeUpTeams[i].abbr) != kTeams[t].abbr);
+  }
+  CHECK(std::string(demo_made_up(DemoKind::PRO, true).abbr) != demo_made_up(DemoKind::COLLEGE, true).abbr);
+
+  // Every team has its color, and the color table matches teams.h.
+  CHECK(kTeamColorCount == kTeamCount);
+  for (size_t t = 0; t < kTeamCount; t++)
+    CHECK(kTeamColors[t].league == kTeams[t].league && kTeamColors[t].espn_id == kTeams[t].espn_id);
+  CHECK(team_rgb(League::NFL, 6) == 0x002A5C);
+  CHECK(team_rgb(League::NFL, 999999) == 0xFFFFFF);
+
+  // The script: starts before kickoff, ends final with the home side ahead,
+  // scores never go down, and the splashes fire along the way.
+  CHECK(kDemoSteps[0].state == GameState::PRE);
+  const DemoStep &last = kDemoSteps[kDemoStepCount - 1];
+  CHECK(last.state == GameState::POST && last.us > last.them);
+  GameSnapshot prev, cur;
+  int touchdowns = 0, wins = 0;
+  for (size_t i = 0; i < kDemoStepCount; i++) {
+    if (i > 0) {
+      CHECK(kDemoSteps[i].us >= kDemoSteps[i - 1].us && kDemoSteps[i].them >= kDemoSteps[i - 1].them);
+    }
+    cur = GameSnapshot{};
+    cur.valid = true;
+    cur.team_abbr = "HBR";
+    cur.opp_abbr = "IRN";
+    cur.state = kDemoSteps[i].state;
+    cur.completed = cur.state == GameState::POST;
+    cur.team_score = kDemoSteps[i].us;
+    cur.opp_score = kDemoSteps[i].them;
+    cur.team_winner = cur.completed && cur.team_score > cur.opp_score;
+    if (i > 0) {
+      Splash sp = decide_splash(prev, cur, true, false);
+      if (sp.text.find("TOUCHDOWN") != std::string::npos)
+        touchdowns++;
+      if (sp.text == "HBR WINS!")
+        wins++;
+    }
+    prev = cur;
+  }
+  CHECK(touchdowns == 4);
+  CHECK(wins == 1);
 }
 
 int main() {
@@ -783,6 +934,7 @@ int main() {
   test_scoreboard_pre_nfl();
   test_splash();
   test_status_text();
+  test_short_game_name();
   test_kickoff_label();
   test_live_games();
   test_upcoming();
@@ -791,6 +943,7 @@ int main() {
   test_favorites();
   test_schedule_league();
   test_schedule_due();
+  test_no_live_rescan();
   test_team_cache();
   test_boot_hold();
   test_rotate_minutes();
@@ -798,6 +951,7 @@ int main() {
   test_json_allocator();
   test_timezone_index();
   test_postseason();
+  test_demo();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

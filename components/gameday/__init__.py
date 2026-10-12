@@ -20,6 +20,9 @@ CONF_HTTP_REQUEST_ID = "http_request_id"
 CONF_PANEL_LAYOUT_ID = "panel_layout_id"
 CONF_ON_UPDATE = "on_update"
 CONF_ON_ACTION = "on_action"
+# The demo build (firmware/gameday-demo.yaml): a looping scripted game the
+# remote and the device page start and stop. Off in release firmware.
+CONF_DEMO = "demo"
 
 gameday_ns = cg.esphome_ns.namespace("gameday")
 GamedayComponent = gameday_ns.class_("GamedayComponent", cg.Component)
@@ -80,6 +83,7 @@ CONFIG_SCHEMA = cv.Schema(
             web_server_base.WebServerBase
         ),
         cv.Optional(CONF_PANEL_LAYOUT_ID): cv.use_id(PanelLayout),
+        cv.Optional(CONF_DEMO, default=False): cv.boolean,
         cv.Optional(CONF_ON_UPDATE): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(UpdateTrigger)}
         ),
@@ -101,6 +105,8 @@ async def to_code(config):
         # 2026.9 removed RealTimeClock::set_timezone and the on-device POSIX
         # parser; the clock takes a pre-parsed struct instead.
         cg.add_define("GAMEDAY_TZ_PARSED")
+    if config[CONF_DEMO]:
+        cg.add_define("GAMEDAY_DEMO")
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))

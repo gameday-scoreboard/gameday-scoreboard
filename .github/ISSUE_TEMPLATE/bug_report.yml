@@ -1,0 +1,72 @@
+name: Bug report
+description: The panel, its page or the firmware did something wrong.
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. Issues here are public, so leave out Wi-Fi passwords and anything else private.
+        Bought a scoreboard and need help with it? The [support page](https://gamedayscoreboard.app/support/) has the common fixes and the support email.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the panel or its page did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps, if you know them. "It happened once during a game" is useful too.
+      placeholder: |
+        1. Pick a team on the panel's page
+        2. Wait for kickoff
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: The Firmware row on the panel's page.
+      placeholder: "1.5.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: controller
+    attributes:
+      label: Controller
+      options:
+        - Game Day Scoreboard (bought it)
+        - Game Day Scoreboard controller, built it myself
+        - MoonHub75 or another ESP32-S3 HUB75 board, built it myself
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: panels
+    attributes:
+      label: Panel layout
+      description: The picture picked under Setup on the panel's page.
+      options:
+        - One 128x64 panel, or two 64x64 side by side
+        - One 64x64 panel
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: showing
+    attributes:
+      label: What it was showing
+      description: Your team or a live mode, and the game if one was on.
+      placeholder: "Packers, live game vs Bears, 2nd quarter"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional. If you build from source, run `esphome logs firmware/gameday.yaml --device <panel address>` while it happens.
+      render: shell
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Photos or video of the panel help a lot. Drag them in here.

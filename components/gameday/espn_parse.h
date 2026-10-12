@@ -51,6 +51,7 @@ struct GameSnapshot {
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
   std::string odds, over_under, tv, venue;
+  std::string game_name;  // "Rose Bowl", "Super Bowl LX"; empty for most games
 };
 
 // One future game from the team's schedule endpoint, for the "Up next" list.
@@ -103,6 +104,11 @@ bool parse_scoreboard_str(const std::string &json, const std::string &event_id, 
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// ESPN's game headline ("College Football Playoff Quarterfinal at the Rose
+// Bowl Presented by Prudential") cut down to what people call the game
+// ("Rose Bowl"). ESPN has no short form of it. Empty for a note that is a
+// kickoff window, not a name.
+std::string short_game_name(const std::string &headline);
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local);
 int64_t parse_iso8601_z(const std::string &s);
 const char *state_name(GameState s);
@@ -125,6 +131,24 @@ inline void adopt_league(Schedule &s, League league) { s.league = (uint8_t) leag
 // subtraction keeps the age right across the millis() wrap.
 inline bool schedule_due(bool have_schedule, bool force, uint32_t now, uint32_t fetched_ms, uint32_t interval) {
   return force || !have_schedule || (now - fetched_ms) >= interval;
+}
+
+// How long a live mode waits after a scan that found nothing in progress:
+// until the day's next kickoff, but at least min_ms (the game is due and
+// not under way yet) and at most max_ms (kickoffs move, and the day the scan
+// reads rolls over). With no kickoff left (next_kickoff 0) it waits max_ms,
+// and with no clock min_ms.
+inline uint32_t no_live_rescan_ms(int64_t now_epoch, int64_t next_kickoff, uint32_t min_ms, uint32_t max_ms) {
+  if (now_epoch < 1000000000)
+    return min_ms;
+  if (next_kickoff == 0)
+    return max_ms;
+  int64_t ms = (next_kickoff - now_epoch) * 1000;
+  if (ms < (int64_t) min_ms)
+    return min_ms;
+  if (ms > (int64_t) max_ms)
+    return max_ms;
+  return (uint32_t) ms;
 }
 
 }  // namespace espn

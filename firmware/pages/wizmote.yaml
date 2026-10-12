@@ -3,7 +3,8 @@
 # four numbered buttons pick favorite teams instead of pages.
 #
 # Buttons: ON/OFF = panel power, 1-4 = favorite teams, brightness up/down,
-# NIGHT = dim to the night level.
+# NIGHT = dim to the night level. In the demo build 1-4 run the demo instead
+# (remote_number in components/gameday/demo.cpp).
 
 substitutions:
   WIZMOTE_MAC_ADDRESS: "00:00:00:00:00:00"
@@ -34,7 +35,7 @@ script:
                   switch.is_off: power
                 then:
                   - switch.turn_on: power
-            - lambda: 'id(gameday_ctl).press_favorite(button - 15);'
+            - lambda: 'id(gameday_ctl).remote_number(button - 15);'
       - if:
           condition:
             lambda: 'return button == 1;'

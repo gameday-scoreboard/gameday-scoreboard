@@ -5,6 +5,8 @@ controller. One top-level YAML per pinout: gameday.yaml (MoonHub75) and
 gameday-scoreboard75.yaml (our controller board); each picks its pin map from
 firmware/controllers/ and shares everything else via gameday-common.yaml.
 Sibling repo: the iOS companion app at ~/development/gameday-scoreboard-ios (github.com/gameday-scoreboard/gameday-scoreboard-ios).
+AGENTS.md has the layout, build and test commands shared with outside
+contributors; read it too.
 
 ## Hard rules
 

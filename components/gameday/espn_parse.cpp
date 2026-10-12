@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
 
 namespace espn {
@@ -180,6 +181,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     case GameState::NOT_FOUND:
       return "No upcoming game";
     case GameState::PRE:
+      add_part(out, s.game_name);
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       if (o.odds) {
         add_part(out, s.odds);
@@ -187,7 +189,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
           add_part(out, "O/U " + s.over_under);
         add_part(out, s.tv);
       }
-      add_part(out, s.venue);
+      if (s.venue != s.game_name)  // "Rose Bowl | ... | Rose Bowl"
+        add_part(out, s.venue);
       return out;
     case GameState::POST:
       // A game that ended without being completed says why: Postponed,
@@ -216,6 +219,77 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+// Bowls named after their sponsor ("Allstate Sugar Bowl") go by the word
+// before "Bowl". Only bowls whose sponsor changes or runs long are listed; one
+// not here keeps its full name.
+static const char *const kBowls[] = {
+    "Rose",       "Sugar",        "Orange",     "Cotton",      "Fiesta",          "Peach",        "Citrus",
+    "Gator",      "Sun",          "Liberty",    "Alamo",       "Holiday",         "Texas",        "Music City",
+    "Las Vegas",  "Pinstripe",    "Military",   "New Mexico",  "Independence",    "Gasparilla",   "Frisco",
+    "Fenway",     "Armed Forces", "Arizona",    "Hawai'i",     "Hawaii",          "Cure",         "New Orleans",
+    "Camellia",   "Boca Raton",   "Birmingham", "Bahamas",     "First Responder", "Myrtle Beach",
+};
+
+static bool replace_first(std::string &s, const char *from, const char *to) {
+  size_t at = s.find(from);
+  if (at == std::string::npos)
+    return false;
+  s.replace(at, strlen(from), to);
+  return true;
+}
+
+// "FLEX: 3:30 - 4:30pm OR 6 - 8pm ET start": ESPN puts a TBD game's TV
+// window in the same notes as game names.
+static bool has_time_of_day(const std::string &lower) {
+  for (size_t i = 0; i + 2 < lower.size(); i++) {
+    if (!isdigit((unsigned char) lower[i]))
+      continue;
+    size_t j = i + 1;
+    while (j < lower.size() && lower[j] == ' ')
+      j++;
+    if (j + 1 < lower.size() && (lower[j] == 'a' || lower[j] == 'p') && lower[j + 1] == 'm')
+      return true;
+  }
+  return lower.find(" et start") != std::string::npos;
+}
+
+std::string short_game_name(const std::string &headline) {
+  std::string s = headline;
+  std::string lower = s;
+  for (char &c : lower)
+    c = (char) tolower((unsigned char) c);
+  if (has_time_of_day(lower))
+    return "";
+  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk"
+  for (const char *tail : {" presented by ", " powered by ", " hosted by "}) {
+    size_t at = lower.find(tail);
+    if (at != std::string::npos) {
+      s.resize(at);
+      lower.resize(at);
+    }
+  }
+  // A playoff game at a bowl goes by the bowl
+  size_t at = s.find(" at the ");
+  if (at != std::string::npos && s.find(" Bowl", at) != std::string::npos)
+    s = s.substr(at + 8);
+  if (!replace_first(s, "College Football Playoff National Championship", "CFP Championship"))
+    replace_first(s, "College Football Playoff", "CFP");
+  // "NFC Wild Card Playoffs", "AFC Divisional Playoffs"
+  static const char kPlayoffs[] = " Playoffs";
+  size_t n = sizeof(kPlayoffs) - 1;
+  if (s.size() > n && s.compare(s.size() - n, n, kPlayoffs) == 0)
+    s.resize(s.size() - n);
+  for (const char *bowl : kBowls) {
+    std::string name = std::string(bowl) + " Bowl";
+    size_t b = s.find(name);
+    if (b != std::string::npos && (b == 0 || s[b - 1] == ' ')) {
+      s = name;
+      break;
+    }
+  }
+  return s;
 }
 
 static std::string clock_12h(const struct tm &t) {
