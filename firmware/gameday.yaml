@@ -7,3 +7,26 @@ substitutions:
 packages:
   controller: !include controllers/moonhub75.yaml
   common: !include gameday-common.yaml
+
+# TRACE BUILD ONLY (backlog #84): find the task that overflows its stack when
+# QC runs with /events open. Never merges.
+esp32:
+  framework:
+    sdkconfig_options:
+      CONFIG_FREERTOS_USE_TRACE_FACILITY: y
+
+esphome:
+  includes:
+    - stack_trace.h
+  on_boot:
+    priority: 600
+    then:
+      - lambda: trace_report_overflow();
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: trace_stack_marks(30);
+  - interval: 15s
+    then:
+      - lambda: trace_report_overflow();
