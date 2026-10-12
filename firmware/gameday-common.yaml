@@ -70,6 +70,21 @@ esphome:
               switch.is_on: power
             then:
               - script.execute: gd_repaint
+    # Name the hotspot after this panel, "Game Day 2f6a70", so two panels
+    # waiting for setup in one house can be told apart. The six characters are
+    # the end of the panel's network name (gameday-2f6a70), the same ones the
+    # setup screen shows. Wi-Fi sets up at 250 and reads the name then.
+    - priority: 260.0
+      then:
+        - lambda: |-
+            auto *w = wifi::global_wifi_component;
+            const std::string &name = App.get_name();
+            const size_t dash = name.rfind('-');
+            if (w == nullptr || dash == std::string::npos)
+              return;
+            wifi::WiFiAP ap = w->get_ap();
+            ap.set_ssid("Game Day " + name.substr(dash + 1));
+            w->set_ap(ap);
     # After "Reset Wi-Fi" the saved network name is blank. ESPHome still counts it
     # as a configured network and would wait a minute before the hotspot and
     # Bluetooth setup appear. Cut both waits to a second in that one case.
@@ -148,8 +163,8 @@ ota:
 
 wifi:
   power_save_mode: none
-  ap:
-    ssid: "Game Day Scoreboard"
+  # Named per panel in on_boot.
+  ap: {}
   # Bluetooth (esp32_improv) is only needed to hand the panel Wi-Fi
   # credentials, but Bluedroid's buffers keep starving internal RAM for the
   # ESPN/update HTTPS fetches even after moving BT and TLS to PSRAM (v1.3.4),
