@@ -7,3 +7,4 @@ substitutions:
 packages:
   controller: !include controllers/moonhub75.yaml
   common: !include gameday-common.yaml
+  memprobe: !include memprobe.yaml

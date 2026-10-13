@@ -1,0 +1,19 @@
+# DO NOT MERGE: bench-only memory probe for backlog#84. Samples internal RAM
+# every second and logs it every 10 s: free now, the low-water mark since boot,
+# the largest free block now and its lowest seen, and loopTask's unused stack.
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          #include "esp_heap_caps.h"
+          static size_t min_blk = SIZE_MAX;
+          static uint32_t n = 0;
+          size_t blk = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+          if (blk < min_blk) min_blk = blk;
+          if (++n % 10 == 0) {
+            ESP_LOGW("memprobe", "free %u lowmark %u blk %u minblk %u loopstack_free %u",
+                     (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                     (unsigned) heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+                     (unsigned) blk, (unsigned) min_blk,
+                     (unsigned) uxTaskGetStackHighWaterMark(NULL));
+          }
