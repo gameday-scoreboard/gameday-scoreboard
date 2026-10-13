@@ -11,6 +11,7 @@
 #include "favorites.h"
 #include "logo_lru.h"
 #include "recap.h"
+#include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
 
@@ -1173,6 +1174,45 @@ static void test_recap() {
   CHECK(!legacy_team_unpicked(NCAA, 6, false, false));
 }
 
+static void test_backoff() {
+  // Jitter lands in the upper half of the doubled delay.
+  CHECK_EQ(backoff_ms(1, false, 0, 0), 15000u);
+  CHECK_EQ(backoff_ms(1, false, 0, 15000), 30000u);
+  CHECK_EQ(backoff_ms(1, false, 0, 15001), 15000u);  // wraps, never past the delay
+  CHECK_EQ(backoff_ms(2, false, 0, 30000), 60000u);
+  CHECK_EQ(backoff_ms(3, false, 0, 60000), 120000u);
+  // Ordinary failures stop doubling at 10 minutes, even after a long run.
+  CHECK_EQ(backoff_ms(6, false, 0, 300000), 600000u);
+  CHECK_EQ(backoff_ms(200, false, 0, 300000), 600000u);
+  CHECK_EQ(backoff_ms(200, false, 0, 0), 300000u);
+  // 403/429 start at 5 minutes and stop at an hour.
+  CHECK_EQ(backoff_ms(1, true, 0, 150000), 300000u);
+  CHECK_EQ(backoff_ms(1, true, 0, 0), 150000u);
+  CHECK_EQ(backoff_ms(2, true, 0, 300000), 600000u);
+  CHECK_EQ(backoff_ms(250, true, 0, 1800000), 3600000u);
+  // Every jitter value stays inside its window.
+  for (uint32_t r = 0; r < 100000; r += 977) {
+    uint32_t w = backoff_ms(4, false, 0, r * 7919u);
+    CHECK(w >= 120000u && w <= 240000u);
+  }
+  // Retry-After is honored when it is longer, capped at the hour, with up to
+  // a quarter on top. A shorter one does not cut the backoff.
+  CHECK_EQ(backoff_ms(1, true, 900000, 0), 900000u);
+  CHECK_EQ(backoff_ms(1, true, 900000, 225000), 1125000u);
+  CHECK_EQ(backoff_ms(1, true, 9000000, 0), 3600000u);
+  CHECK_EQ(backoff_ms(1, true, 10000, 0), 150000u);
+  CHECK_EQ(backoff_ms(1, false, 900000, 0), 15000u);  // only a refusal carries it
+  CHECK_EQ(parse_retry_after_ms("120"), 120000u);
+  CHECK_EQ(parse_retry_after_ms("0"), 0u);
+  CHECK_EQ(parse_retry_after_ms(""), 0u);
+  CHECK_EQ(parse_retry_after_ms("Wed, 21 Oct 2015 07:28:00 GMT"), 0u);
+  CHECK_EQ(parse_retry_after_ms("1234567"), 0u);
+  CHECK(is_throttle_status(403));
+  CHECK(is_throttle_status(429));
+  CHECK(!is_throttle_status(404));
+  CHECK(!is_throttle_status(503));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -1203,6 +1243,7 @@ int main() {
   test_postseason();
   test_demo();
   test_recap();
+  test_backoff();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
