@@ -8,7 +8,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   POST /gameday/action?do=name  refresh
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
-// "Game Status" event is the cue to re-read the state document.
+// "Game Status" event, sent on every board update, is the cue to re-read the
+// state document.
 // Bundled with the team table by scripts/build_web.py, which defines
 // TEAMS = [[league, espnId, abbr, name], ...] and TZS = [[name, iana], ...].
 
@@ -1020,9 +1021,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       built[e.id].update(ents[e.id]);
     }
     switch (name) {
-      // A new ticker line means the device finished a poll: re-read the state document.
-      case "Game Status": $("#ticker").textContent = e.value || ""; scheduleState(150); break;
-      case "Last Play": $("#play").textContent = e.value ? "Last play: " + e.value : ""; break;
+      // Sent on every board update: re-read the state document. Its value is
+      // Home Assistant's shorter line, so the ticker and last play come from there.
+      case "Game Status": scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;

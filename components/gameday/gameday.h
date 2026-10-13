@@ -59,6 +59,11 @@ struct UpdateFields {
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty
+  // For Home Assistant's Game Status and Last Play. They follow one game and
+  // leave out the ticker's per-play parts (espn::ha_status_text), so the
+  // recorder isn't writing a row every poll or every playlist card.
+  std::string ha_status_text;
+  std::string ha_last_play;
 };
 
 enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
@@ -86,6 +91,7 @@ class GamedaySelect : public select::Select, public Component {
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
 //   GET  /gameday/state              full snapshot + settings
+//   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6 mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
 //                                    down/play/odds/opp=0/1 panels=1/2
@@ -348,6 +354,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::FavRules fav_rules_() const;
   std::vector<::espn::FavGame> fav_games_() const;
   bool fav_choose_(int64_t now_epoch);  // true when the shown entry changed
+  const GameSnapshot &ha_game_() const;  // the game Home Assistant's sensors follow
   void start_fav_job_(uint32_t now);
   void apply_fav_job_(uint32_t now);
   uint32_t live_away_id_{0};      // the followed live game's away team

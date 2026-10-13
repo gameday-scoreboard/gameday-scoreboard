@@ -461,6 +461,15 @@ bool GamedayComponent::fav_choose_(int64_t now_epoch) {
   return true;
 }
 
+// The board's game, except in the Favorites idle playlist, where the card on
+// the board changes every 10 s and Home Assistant would log each one.
+const GameSnapshot &GamedayComponent::ha_game_() const {
+  if (!this->favorites_mode_() || this->fav_locked_ || this->demo_playing_())
+    return this->game_;
+  int i = ::espn::followed_favorite(this->fav_games_());
+  return i >= 0 ? this->fav_[i].game : this->game_;
+}
+
 // Main loop: refresh a stale entry, else poll the locked game when due, else tick.
 void GamedayComponent::start_fav_job_(uint32_t now) {
   Job &j = this->job_;
@@ -1307,14 +1316,19 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.last_play = this->ticker_last_play();
   opts.odds = this->ticker_odds();
 
-  std::string kickoff;
-  if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0 && this->time_ != nullptr) {
-    struct tm kick = ESPTime::from_epoch_local((time_t) g.kickoff_epoch).to_c_tm();
+  auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
+    if (!s.valid || s.state != GameState::PRE || s.kickoff_epoch <= 0 || this->time_ == nullptr)
+      return "";
+    struct tm kick = ESPTime::from_epoch_local((time_t) s.kickoff_epoch).to_c_tm();
     struct tm now = this->time_->now().to_c_tm();
-    kickoff = ::espn::kickoff_label(kick, now);
-  }
+    return ::espn::kickoff_label(kick, now);
+  };
+  std::string kickoff = kickoff_of(g);
   f.kickoff = kickoff;
   f.status_text = ::espn::status_text(g, opts, kickoff);
+  const GameSnapshot &ha = this->ha_game_();
+  f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
+  f.ha_last_play = ha.last_play;
   if (this->live_mode_() && !this->demo_playing_()) {
     // "college", "NFL", or nothing at all in Live any, with its own space.
     std::string league_word;
@@ -1324,25 +1338,33 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       league_word = "NFL ";
     const ::espn::Team *saved = this->current_team_();
     if (this->live_fallback_ && saved != nullptr) {
-      f.status_text = "No live " + league_word + "games, showing " + saved->abbr + " | " + f.status_text;
+      std::string showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
+      f.status_text = showing + f.status_text;
+      f.ha_status_text = showing + f.ha_status_text;
     } else if (!g.valid || g.state == GameState::NOT_FOUND) {
       f.status_text = this->live_none_ ? "No live " + league_word + "games right now"
                                        : "Looking for a live " + league_word + "game";
+      f.ha_status_text = f.status_text;
     }
   }
-  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_())
+  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
     f.status_text = "Favorites: add teams on the page | " + f.status_text;
+    f.ha_status_text = "Favorites: add teams on the page | " + f.ha_status_text;
+  }
   if (this->misses_ >= 3 && !this->demo_playing_()) {
     if (!this->ever_polled_good_()) {
       // Nothing has ever come back, so there is no age to quote. Saying "no
       // update for 1 min" here was wrong however long the panel had been
       // trying, on a screen someone is reading because something is broken.
       f.status_text += " | no update yet";
+      f.ha_status_text += " | no update yet";
     } else {
       uint32_t mins = this->stale_seconds_() / 60;
       if (mins < 1)
         mins = 1;
       f.status_text += " | no update for " + std::to_string(mins) + " min";
+      // Without the minutes, which would log a change every minute.
+      f.ha_status_text += " | not updating";
     }
   }
   // Until a team, mode or favorite has been picked once, the ticker asks for
@@ -1358,8 +1380,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
         break;
       }
     }
-    if (!ip.empty())
-      f.status_text = "Pick a team in the Game Day app or at " + ip + " | " + f.status_text;
+    if (!ip.empty()) {
+      std::string pick = "Pick a team in the Game Day app or at " + ip + " | ";
+      f.status_text = pick + f.status_text;
+      f.ha_status_text = pick + f.ha_status_text;
+    }
   }
 
   if (!f.splash_text.empty())
@@ -1562,6 +1587,17 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
     std::string body = this->current_state_json_();
     request->send(200, "application/json", body.c_str());
+    return;
+  }
+  // Free heap right now, in KiB, for bench and burn-in scripts. The Free Heap
+  // sensors only read every 5 minutes so Home Assistant isn't logging them.
+  if (url == StringRef("/gameday/heap") && request->method() == HTTP_GET) {
+    char body[128];
+    snprintf(body, sizeof(body), "{\"internal\":%.1f,\"block\":%.1f,\"psram\":%.1f}",
+             heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024.0f,
+             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024.0f,
+             heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f);
+    request->send(200, "application/json", body);
     return;
   }
   if (url == StringRef("/gameday/set") && request->method() == HTTP_POST) {

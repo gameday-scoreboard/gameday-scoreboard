@@ -221,6 +221,28 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
   return out;
 }
 
+std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local) {
+  std::string out;
+  switch (s.state) {
+    case GameState::NOT_FOUND:
+      return "No upcoming game";
+    case GameState::PRE:
+      add_part(out, s.game_name);
+      add_part(out, s.team_abbr + " vs " + s.opp_abbr);
+      add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
+      return out;
+    case GameState::POST:
+      out = s.completed || s.short_detail.empty() ? std::string("Final") : s.short_detail;
+      break;
+    case GameState::IN:
+      out = s.short_detail.find("Halftime") != std::string::npos ? "Halftime" : "Live";
+      break;
+  }
+  add_part(out, s.team_abbr + " " + std::to_string(s.team_score) + ", " + s.opp_abbr + " " +
+                    std::to_string(s.opp_score));
+  return out;
+}
+
 // Bowls named after their sponsor ("Allstate Sugar Bowl") go by the word
 // before "Bowl". Only bowls whose sponsor changes or runs long are listed; one
 // not here keeps its full name.
