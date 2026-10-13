@@ -57,6 +57,10 @@ script:
           lv_obj_set_size(id(tt_splash), W, 64);
           lv_obj_set_width(id(tt_splash_lbl), W);
           lv_obj_set_width(id(tt_no_game_msg_lbl), W);
+          // Centered both ways, so a message that wraps to three lines on a
+          // single panel ("Saturday's / college / scores") still fits.
+          lv_obj_set_style_text_font(id(tt_no_game_msg_lbl), wide ? id(spleen_12) : id(spleen_8), 0);
+          lv_obj_align(id(tt_no_game_msg_lbl), LV_ALIGN_CENTER, 0, 0);
           lv_obj_set_width(id(tt_game_status_lbl), W);
           lv_obj_t *abars[3] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3)};
           lv_obj_t *hbars[3] = {id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
@@ -155,6 +159,7 @@ script:
       opponent_record: string
       splash_text: string
       splash_color: int
+      message: string
     then:
       - lambda: |-
           // A side with no team yet (just after a team change) shows no logo
@@ -248,6 +253,12 @@ script:
       - lambda: |-
           // Toggle between the game layout and the "no game" layout
           if (game_state == "NOT_FOUND" || game_state == "BYE" || game_state == "") {
+            // The component's words for this screen (the finals rotation's
+            // headers and next kickoff, "No live games"), else the default.
+            const char *msg = message.empty() ? "No upcoming game" : message.c_str();
+            const char *cur = lv_label_get_text(id(tt_no_game_msg_lbl));
+            if (cur == nullptr || strcmp(cur, msg) != 0)
+              lv_label_set_text(id(tt_no_game_msg_lbl), msg);
             lv_obj_add_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(id(tt_no_game_container), LV_OBJ_FLAG_HIDDEN);
           } else {

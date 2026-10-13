@@ -505,6 +505,7 @@ gameday:
         opponent_record: !lambda 'return x.opponent_record;'
         splash_text: !lambda 'return x.splash_text;'
         splash_color: !lambda 'return (int) x.splash_color;'
+        message: !lambda 'return x.message;'
     - lambda: |-
         id(gd_team_logo_url) = x.team_logo;
         id(gd_opp_logo_url) = x.opponent_logo;

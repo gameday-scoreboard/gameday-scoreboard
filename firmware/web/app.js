@@ -312,7 +312,8 @@
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const liveMode = S && S.mode;
+      // With no team picked the panel runs the live board whatever the mode says.
+      const liveMode = S && (S.mode || S.recap || !(S.team && S.team.id));
       msg.textContent = !g ? "Waiting for the first fetch" : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";

@@ -20,6 +20,7 @@
 
 #include "espn_parse.h"
 #include "favorites.h"
+#include "recap.h"
 #include "startup.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -59,6 +60,7 @@ struct UpdateFields {
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty
+  std::string message;  // the no-game screen's text; empty leaves the page's default
   // For Home Assistant's Game Status and Last Play. They follow one game and
   // leave out the ticker's per-play parts (espn::ha_status_text), so the
   // recorder isn't writing a row every poll or every playlist card.
@@ -92,7 +94,7 @@ class GamedaySelect : public select::Select, public Component {
 // one JSON document and posts settings there instead of driving entities.
 //   GET  /gameday/state              full snapshot + settings
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
-//   POST /gameday/set?key=value...   team=nfl:6 mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
+//   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
 //                                    down/play/odds/opp=0/1 panels=1/2
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
@@ -144,6 +146,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
   // them to the demo (demo.cpp).
   void remote_number(uint8_t n);
+  // No team picked and nothing else chosen: the panel follows live games and
+  // the finals rotation, and the boot screen gives the app's QR code a turn
+  // every few minutes (boot.yaml, boot_app_qr_turn) until a team is picked.
+  bool no_team_default() const;
+  bool app_qr_turns() const { return this->no_team_default() && !this->demo_playing_(); }
 #ifdef GAMEDAY_DEMO
   // Loops a scripted game through the real splash and render path, for
   // showing the panel off without a live game, until stop_demo().
@@ -188,6 +195,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 
  protected:
   void apply_team_(const ::espn::Team &t);
+  void clear_team_();
   bool mark_setup_done_();
   void fire_action_(const std::string &name);
   void set_favorite_(uint8_t slot, uint8_t league, uint32_t id);
@@ -232,6 +240,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint16_t release_seconds;
     uint8_t collide;  // 0 = stick with the higher slot, 1 = alternate on the rotate timer
   } __attribute__((packed));
+  // Its presence says team_id 0 means "no team" on this panel. Firmware
+  // before it saved Dallas as the team on first boot (recap.h,
+  // legacy_team_unpicked).
+  struct Prefs5 {
+    uint8_t no_team_ok;
+  } __attribute__((packed));
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
@@ -247,6 +261,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Job {
     uint32_t generation{0};
     const ::espn::Team *team{nullptr};
+    uint8_t mode{0};  // effective_mode_() when the job was made; the worker reads this, not the prefs
     // live-game modes: scan the day's games first, then follow one
     bool need_scan{false};
     std::vector<::espn::LiveGame> live;
@@ -265,6 +280,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // Favorite Teams mode: which cached entry this cycle refreshes or polls
     int fav_index{-1};
     uint32_t our_id{0};
+    // The finals rotation. A scan keeps the day's finals too when asked, and
+    // a recap job reads one other day's scoreboard for one league.
+    bool want_finals{false};
+    std::vector<::espn::Final> finals;
+    bool need_recap{false};
+    bool recap_forward{false};  // looking for the next kickoff, not for finals
+    uint8_t recap_league{0};
+    int32_t recap_day{0};
+    bool recap_ok{false};
   };
   void start_job_();
   void start_worker_();
@@ -274,9 +298,27 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out);
   bool fetch_upcoming_(const ::espn::Team *team, std::vector<::espn::Upcoming> &out);
   bool fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out);
-  bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff);
+  // epoch picks the day (now when 0); finals, when given, also gets that
+  // day's finished games.
+  bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
+                         std::vector<::espn::Final> *finals = nullptr, int64_t epoch = 0);
+  // The mode the panel runs: the saved one, except that with no team picked
+  // My team (and Favorites with none set) runs as Live anything.
+  uint8_t effective_mode_() const {
+    return this->no_team_default() ? (uint8_t) Mode::LIVE_ANY : this->prefs2_.mode;
+  }
   bool live_mode_() const {
-    return this->prefs2_.mode >= (uint8_t) Mode::LIVE_NFL && this->prefs2_.mode <= (uint8_t) Mode::LIVE_ANY;
+    uint8_t m = this->effective_mode_();
+    return m >= (uint8_t) Mode::LIVE_NFL && m <= (uint8_t) Mode::LIVE_ANY;
+  }
+  uint8_t recap_leagues_() const {
+    return (this->mode_reads_(League::NFL) ? ::espn::kRecapNfl : 0) |
+           (this->mode_reads_(League::NCAA) ? ::espn::kRecapCollege : 0);
+  }
+  bool mode_reads_(League league) const {
+    uint8_t m = this->effective_mode_();
+    return m == (uint8_t) Mode::LIVE_ANY || m == (league == League::NFL ? (uint8_t) Mode::LIVE_NFL
+                                                                         : (uint8_t) Mode::LIVE_NCAA);
   }
   // Mode 4 with at least one favorite set; with none it behaves like My Team.
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
@@ -320,6 +362,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs3 prefs3_{};
   ESPPreferenceObject pref4_;
   Prefs4 prefs4_{};
+  ESPPreferenceObject pref5_;
   // The team endpoint's answer for the saved team (startup.h), so a boot can
   // skip that read and go straight to the scoreboard.
   ESPPreferenceObject team_cache_pref_;
@@ -366,6 +409,33 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // A live mode with nothing live: the board shows the saved team's card and
   // keeps scanning. The mode the owner picked does not change.
   bool live_fallback_{false};
+
+  // The finals rotation (recap.h): a live mode with nothing live on a panel
+  // with no team. Finals are kept across live spells and only re-read for a
+  // day the panel has not seen; the cards are rebuilt from them.
+  bool recap_on_{false};
+  std::vector<::espn::RecapDay> recap_days_;    // every league seen, newest day first
+  std::vector<::espn::RecapCard> recap_cards_;  // the leagues this mode reads; index into recap_days_
+  size_t recap_step_{0};
+  uint32_t recap_step_ms_{0};  // when the card on the board went up, 0 = none yet
+  std::string recap_message_, recap_ticker_;
+  int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
+  // Per league (0 NFL, 1 college). walk: next day back (or ahead) to read,
+  // 1 to kRecapMaxDays; 0 not started; kRecapMaxDays + 1 done. walk_day:
+  // the ESPN day a walk finished, so a fruitless one is tried again
+  // the next day rather than every scan.
+  uint8_t recap_back_[2]{0, 0};
+  int32_t recap_back_day_[2]{0, 0};
+  uint8_t recap_fwd_[2]{0, 0};
+  int32_t recap_fwd_day_[2]{0, 0};
+  int64_t recap_fwd_next_[2]{0, 0};
+  bool recap_job_(Job &j, int32_t today);  // fills j with the next walk step, if any
+  void apply_recap_job_();
+  void recap_absorb_(const Job &j, int32_t today);  // a scan's finals and next kickoff
+  int64_t recap_next_kickoff_() const;
+  void recap_rebuild_();
+  void recap_tick_();
+  void recap_show_();
 
   Schedule schedule_;
   uint32_t schedule_fetched_ms_{0};
