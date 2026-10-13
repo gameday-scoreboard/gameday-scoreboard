@@ -12,6 +12,9 @@ packages:
 # QC runs with /events open. Never merges.
 esp32:
   framework:
+    # 16 KB so the trace can measure the loop task's real peak (8 KB overflows)
+    advanced:
+      loop_task_stack_size: 16384
     sdkconfig_options:
       CONFIG_FREERTOS_USE_TRACE_FACILITY: y
 

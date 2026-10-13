@@ -4,6 +4,7 @@
 #pragma once
 #include <cstring>
 #include "esp_attr.h"
+#include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -50,6 +51,11 @@ static void trace_stack_marks(uint32_t full_every) {
   static uint32_t calls = 0;
   UBaseType_t n = uxTaskGetSystemState(tasks, 48, nullptr);
   bool full = (calls++ % full_every) == 0;
+  if (full)
+    ESP_LOGW("trace", "internal heap free %u B, lowest %u B, largest block %u B",
+             (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned) heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   for (UBaseType_t t = 0; t < n; t++) {
     const char *name = tasks[t].pcTaskName;
     uint32_t free_now = tasks[t].usStackHighWaterMark;
