@@ -116,6 +116,8 @@ def apply_set(kv):
             ref = parse_team_ref(v)
             if ref and ref in TEAMS:
                 STATE["team"] = team(*ref)
+            elif v == "none":
+                STATE["team"] = {}
         elif k == "mode":
             m = int(v) if v.lstrip("-").isdigit() else -1
             if 0 <= m <= 4:

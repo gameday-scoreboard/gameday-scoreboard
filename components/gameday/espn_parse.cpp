@@ -92,6 +92,28 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   return dark_logo("https://a.espncdn.com/i/teamlogos/ncaa/500/" + std::to_string(espn_id) + ".png");
 }
 
+GameSnapshot final_snapshot(const Final &f) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::POST;
+  g.completed = true;
+  g.kickoff_epoch = f.kickoff_epoch;
+  g.short_detail = f.detail;
+  g.team_id = f.away_id;
+  g.opp_id = f.home_id;
+  g.team_score = f.away_score;
+  g.opp_score = f.home_score;
+  g.team_abbr = f.away_abbr;
+  g.opp_abbr = f.home_abbr;
+  g.team_color = f.away_color;
+  g.opp_color = f.home_color;
+  g.team_record = f.away_record;
+  g.opp_record = f.home_record;
+  g.team_logo = team_logo_url((League) f.league, f.away_id, f.away_abbr.c_str());
+  g.opp_logo = team_logo_url((League) f.league, f.home_id, f.home_abbr.c_str());
+  return g;
+}
+
 bool parse_team_str(const std::string &json, Schedule &out) { return parse_team(json, out); }
 
 bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out) {
@@ -218,6 +240,28 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
   }
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
+  return out;
+}
+
+std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local) {
+  std::string out;
+  switch (s.state) {
+    case GameState::NOT_FOUND:
+      return "No upcoming game";
+    case GameState::PRE:
+      add_part(out, s.game_name);
+      add_part(out, s.team_abbr + " vs " + s.opp_abbr);
+      add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
+      return out;
+    case GameState::POST:
+      out = s.completed || s.short_detail.empty() ? std::string("Final") : s.short_detail;
+      break;
+    case GameState::IN:
+      out = s.short_detail.find("Halftime") != std::string::npos ? "Halftime" : "Live";
+      break;
+  }
+  add_part(out, s.team_abbr + " " + std::to_string(s.team_score) + ", " + s.opp_abbr + " " +
+                    std::to_string(s.opp_score));
   return out;
 }
 

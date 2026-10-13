@@ -477,12 +477,15 @@ gameday:
         then:
           - switch.turn_on: power
   on_update:
+    # Published on every update, though the value often repeats: Home
+    # Assistant only logs a change, and the device page takes each Game
+    # Status event as its cue to re-read /gameday/state.
     - text_sensor.template.publish:
         id: gd_status_sensor
-        state: !lambda 'return x.status_text;'
+        state: !lambda 'return x.ha_status_text;'
     - text_sensor.template.publish:
         id: gd_last_play_sensor
-        state: !lambda 'return x.last_play;'
+        state: !lambda 'return x.ha_last_play;'
     - script.execute:
         id: gd_update
         game_state: !lambda 'return x.game_state;'
@@ -503,6 +506,7 @@ gameday:
         opponent_record: !lambda 'return x.opponent_record;'
         splash_text: !lambda 'return x.splash_text;'
         splash_color: !lambda 'return (int) x.splash_color;'
+        message: !lambda 'return x.message;'
     - lambda: |-
         id(gd_team_logo_url) = x.team_logo;
         id(gd_opp_logo_url) = x.opponent_logo;
@@ -629,6 +633,10 @@ text_sensor:
       icon: "mdi:ip-outline"
       entity_category: "diagnostic"
 
+# The heap sensors are off in Home Assistant until someone turns them on, and
+# read every 5 minutes: free heap moves a little all the time, and at 30 s it
+# was a recorder row a minute per sensor. Bench and burn-in scripts read
+# GET /gameday/heap, which is live.
 sensor:
   - platform: template
     name: "Free Heap (PSRAM)"
@@ -636,24 +644,24 @@ sensor:
     state_class: measurement
     entity_category: diagnostic
     unit_of_measurement: "KiB"
-    update_interval: 30s
+    update_interval: 5min
     lambda: |-
       #include "esp_heap_caps.h"
       return (float) heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024;
     disabled_by_default: true
-  # Not disabled_by_default, unlike the PSRAM one above: internal RAM is what
-  # ran out in v1.3.4, and Bluetooth coming back on a Wi-Fi drop is what can
-  # run it out again, so this one is visible without anyone enabling it.
+  # Internal RAM is what ran out in v1.3.4, and Bluetooth coming back on a
+  # Wi-Fi drop is what can run it out again.
   - platform: template
     name: "Free Heap (internal)"
     device_class: data_size
     state_class: measurement
     entity_category: diagnostic
     unit_of_measurement: "KiB"
-    update_interval: 30s
+    update_interval: 5min
     lambda: |-
       #include "esp_heap_caps.h"
       return (float) heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024;
+    disabled_by_default: true
   # The biggest single piece of that free internal RAM. A large allocation
   # needs one piece, so this can run low while the total above looks fine.
   - platform: template
@@ -662,7 +670,7 @@ sensor:
     state_class: measurement
     entity_category: diagnostic
     unit_of_measurement: "KiB"
-    update_interval: 30s
+    update_interval: 5min
     lambda: |-
       #include "esp_heap_caps.h"
       return (float) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024;

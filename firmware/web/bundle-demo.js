@@ -8,7 +8,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   POST /gameday/action?do=name  refresh
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
-// "Game Status" event is the cue to re-read the state document.
+// "Game Status" event, sent on every board update, is the cue to re-read the
+// state document.
 // Bundled with the team table by scripts/build_web.py, which defines
 // TEAMS = [[league, espnId, abbr, name], ...] and TZS = [[name, iana], ...].
 
@@ -314,7 +315,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const liveMode = S && S.mode;
+      // With no team picked the panel runs the live board whatever the mode says.
+      const liveMode = S && (S.mode || S.recap || !(S.team && S.team.id));
       msg.textContent = !g ? "Waiting for the first fetch" : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
@@ -1020,9 +1022,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       built[e.id].update(ents[e.id]);
     }
     switch (name) {
-      // A new ticker line means the device finished a poll: re-read the state document.
-      case "Game Status": $("#ticker").textContent = e.value || ""; scheduleState(150); break;
-      case "Last Play": $("#play").textContent = e.value ? "Last play: " + e.value : ""; break;
+      // Sent on every board update: re-read the state document. Its value is
+      // Home Assistant's shorter line, so the ticker and last play come from there.
+      case "Game Status": scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
@@ -1084,7 +1086,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     <div class="sub">College football</div>
     <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
     <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
-    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
+    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
   $("#board").after(card);
 
   let D = null;
