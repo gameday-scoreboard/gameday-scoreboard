@@ -574,9 +574,6 @@ script:
                 id(boot_view).execute(wide, wide);
                 id(boot_set_lines).execute("Wi-Fi", "lost", "open app", "", true);
 
-  # A mesh system moving the panel to another access point drops Wi-Fi for a
-  # few seconds. Wait that long before covering the score, so a drop that
-  # ends in time never shows. wifi: on_connect stops this script.
   # A panel nobody has picked a team on (no_team_default in the gameday
   # component) shows the app's QR code for one turn every 3 minutes, the
   # fresh panel's 13 s of QR, until a team is picked. Only over the board:
@@ -614,6 +611,9 @@ script:
                 then:
                   - script.execute: boot_hide
 
+  # A mesh system moving the panel to another access point drops Wi-Fi for a
+  # few seconds. Wait that long before covering the score, so a drop that
+  # ends in time never shows. wifi: on_connect stops this script.
   - id: boot_wifi_lost_later
     mode: restart
     then:
