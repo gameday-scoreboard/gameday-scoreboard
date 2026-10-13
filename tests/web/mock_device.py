@@ -7,7 +7,10 @@ routes with the response shapes from components/gameday/gameday.cpp:
 
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS; 400 when none match
-  POST /gameday/action   400 without do=
+  POST /gameday/action   400 without do=, 404 for a name the firmware does not know
+
+/?demo loads bundle-demo.js instead, the demo build's page, and
+GET/POST /gameday/demo answer as demo.cpp does.
 
 Test hooks: POST /_reset with an optional JSON body
 {"state": {...overrides...}, "fail": ["state", "set"]} puts the state back,
@@ -113,6 +116,8 @@ def apply_set(kv):
             ref = parse_team_ref(v)
             if ref and ref in TEAMS:
                 STATE["team"] = team(*ref)
+            elif v == "none":
+                STATE["team"] = {}
         elif k == "mode":
             m = int(v) if v.lstrip("-").isdigit() else -1
             if 0 <= m <= 4:
@@ -142,6 +147,44 @@ def apply_set(kv):
             STATE["panels"] = int(v)
 
 
+# The demo build's /gameday/demo (components/gameday/demo.cpp), with the
+# stock matchups and made-up teams from demo.h.
+DEMO_KEYS = ("do", "kind", "pro_home", "pro_away", "college_home", "college_away", "madeup")
+DEMO_INITIAL = {"kind": "off", "madeup": False,
+                "picks": {"pro_home": ("nfl", 6), "pro_away": ("nfl", 21),
+                          "college_home": ("ncaa", 194), "college_away": ("ncaa", 130)}}
+DEMO = copy.deepcopy(DEMO_INITIAL)
+MADE_UP = {"pro": ({"abbr": "HBR", "name": "Harbor City Hawks"}, {"abbr": "IRN", "name": "Iron Valley Miners"}),
+           "college": ({"abbr": "SUM", "name": "Summit State Peaks"}, {"abbr": "CPT", "name": "Capitol Tech Comets"})}
+
+
+def demo_doc():
+    doc = {"kind": DEMO["kind"], "playing": DEMO["kind"] != "off", "madeup": DEMO["madeup"]}
+    for kind in ("pro", "college"):
+        side = {}
+        for end in ("home", "away"):
+            lg, tid = DEMO["picks"][kind + "_" + end]
+            abbr, name = TEAMS[(lg, tid)]
+            side[end] = {"l": lg, "id": tid, "abbr": abbr, "name": name}
+        side["madeup_home"], side["madeup_away"] = MADE_UP[kind]
+        doc[kind] = side
+    return doc
+
+
+def apply_demo(q):
+    for k in ("pro_home", "pro_away", "college_home", "college_away"):
+        if k in q:
+            lg, _, tid = q[k].partition(":")
+            if (lg, int(tid or 0)) in TEAMS:
+                DEMO["picks"][k] = (lg, int(tid))
+    if "madeup" in q:
+        DEMO["madeup"] = q["madeup"] == "1"
+    if q.get("do") == "start":
+        DEMO["kind"] = "college" if q.get("kind") == "college" else "pro"
+    elif q.get("do") == "stop":
+        DEMO["kind"] = "off"
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -160,11 +203,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if u.path == "/":
+            js = "/0.js?demo" if "demo" in parse_qs(u.query, keep_blank_values=True) else "/0.js"
             html = ("<!DOCTYPE html><html><head><meta charset=UTF-8><link rel=icon href=data:>"
-                    "<link rel=stylesheet href=/0.css></head><body><script src=/0.js></script></body></html>")
+                    "<link rel=stylesheet href=/0.css></head><body><script src=" + js + "></script></body></html>")
             return self._send(200, "text/html", html)
         if u.path == "/0.js":
-            return self._send(200, "text/javascript", (WEB / "bundle.js").read_bytes())
+            bundle = "bundle-demo.js" if "demo" in parse_qs(u.query, keep_blank_values=True) else "bundle.js"
+            return self._send(200, "text/javascript", (WEB / bundle).read_bytes())
+        if u.path == "/gameday/demo":
+            return self._json(200, demo_doc())
         if u.path == "/0.css":
             return self._send(200, "text/css", (WEB / "app.css").read_bytes())
         if u.path == "/gameday/state":
@@ -209,6 +256,8 @@ class Handler(BaseHTTPRequestHandler):
             STATE.update(body.get("state") or {})
             FAIL.clear()
             FAIL.update(body.get("fail") or [])
+            DEMO.clear()
+            DEMO.update(copy.deepcopy(DEMO_INITIAL))
             return self._json(200, {"ok": True})
         if u.path == "/gameday/set":
             q = {k: v[0] for k, v in pairs.items()}
@@ -225,6 +274,15 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
+            if q["do"] not in ("refresh", "qc"):
+                return self._json(404, {"error": "unknown action"})
+            return self._json(200, {"ok": True})
+        if u.path == "/gameday/demo":
+            q = {k: v[0] for k, v in pairs.items()}
+            LOG.append({"path": u.path, "q": q})
+            if not any(k in q for k in DEMO_KEYS):
+                return self._json(400, {"error": "nothing to do"})
+            apply_demo(q)
             return self._json(200, {"ok": True})
         if u.path.startswith("/gameday/"):
             return self._json(404, {"error": "unknown route"})

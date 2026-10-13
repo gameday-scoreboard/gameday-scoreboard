@@ -53,6 +53,7 @@ inline void fill_scoreboard_filter(JsonDocument &f) {
   comp["odds"][0]["overUnder"] = true;
   comp["broadcasts"].add<JsonObject>()["names"] = true;
   comp["venue"]["fullName"] = true;
+  comp["notes"].add<JsonObject>()["headline"] = true;
 }
 
 inline void fill_upcoming_filter(JsonDocument &f) {
@@ -70,15 +71,29 @@ inline void fill_upcoming_filter(JsonDocument &f) {
   comp["broadcasts"].add<JsonObject>()["media"]["shortName"] = true;
 }
 
-inline void fill_scan_filter(JsonDocument &f) {
+// finals keeps what a finished game's card needs as well (the finals
+// rotation, recap.h); without it the scan stays as lean as it was.
+inline void fill_scan_filter(JsonDocument &f, bool finals = false) {
   JsonObject ev = f["events"].add<JsonObject>();
   ev["id"] = true;
+  ev["date"] = true;
   ev["status"]["type"]["state"] = true;
-  JsonObject c = ev["competitions"].add<JsonObject>()["competitors"].add<JsonObject>();
+  JsonObject comp = ev["competitions"].add<JsonObject>();
+  comp["timeValid"] = true;
+  JsonObject c = comp["competitors"].add<JsonObject>();
   c["id"] = true;
   c["homeAway"] = true;
   c["team"]["abbreviation"] = true;
   c["team"]["conferenceId"] = true;
+  if (!finals)
+    return;
+  ev["status"]["type"]["completed"] = true;
+  ev["status"]["type"]["shortDetail"] = true;
+  c["score"] = true;
+  c["winner"] = true;
+  c["records"].add<JsonObject>()["summary"] = true;
+  c["curatedRank"]["current"] = true;
+  c["team"]["color"] = true;
 }
 
 inline void fill_team_filter(JsonDocument &f) {
@@ -170,6 +185,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   s.over_under = format_over_under(odds["overUnder"]);
   s.tv = str_or_empty(comp["broadcasts"][0]["names"][0]);
   s.venue = str_or_empty(comp["venue"]["fullName"]);
+  s.game_name = short_game_name(str_or_empty(comp["notes"][0]["headline"]));
   s.valid = true;
   out = s;
   return true;
@@ -257,17 +273,64 @@ bool parse_upcoming(TInput &input, uint32_t our_team_id, size_t max, std::vector
   return true;
 }
 
-// Lists the in-progress games in a scoreboard document.
-template<typename TInput, typename TOut> bool parse_live_games(TInput &input, TOut &out) {
+// Lists the in-progress games in a scoreboard document. With next_kickoff,
+// also reports the earliest kickoff among the games not started yet, or 0
+// when there is none. A game whose time is still TBD is listed at midnight
+// Eastern with timeValid false, and does not count. With finals, also lists
+// the games that were played to the end (not postponed or canceled), with
+// no league set: the caller knows which league it asked for.
+template<typename TInput, typename TOut>
+bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
+                      std::vector<Final> *finals = nullptr) {
   JsonDocument filter(detail::json_allocator());
-  detail::fill_scan_filter(filter);
+  detail::fill_scan_filter(filter, finals != nullptr);
   JsonDocument doc(detail::json_allocator());
   DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
                                               DeserializationOption::NestingLimit(40));
   if (err)
     return false;
+  if (next_kickoff != nullptr)
+    *next_kickoff = 0;
   for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
-    if (detail::str_or_empty(ev["status"]["type"]["state"]) != "in")
+    std::string state = detail::str_or_empty(ev["status"]["type"]["state"]);
+    JsonVariantConst time_valid = ev["competitions"][0]["timeValid"];
+    bool tbd = time_valid.is<bool>() && !time_valid.as<bool>();
+    if (state == "pre" && next_kickoff != nullptr && !tbd) {
+      int64_t k = parse_iso8601_z(detail::str_or_empty(ev["date"]));
+      if (k > 0 && (*next_kickoff == 0 || k < *next_kickoff))
+        *next_kickoff = k;
+    }
+    if (state == "post" && finals != nullptr && (ev["status"]["type"]["completed"] | false)) {
+      uint32_t away = 0;
+      int rank = 99;
+      for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+        if (detail::str_or_empty(c["homeAway"]) != "home")
+          away = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
+        int r = c["curatedRank"]["current"] | 99;
+        if (r >= 1 && r < rank)
+          rank = r;
+      }
+      GameSnapshot g;
+      if (away != 0 && detail::snapshot_from_event(ev, away, g)) {
+        Final fin;
+        fin.rank = (uint8_t) rank;
+        fin.kickoff_epoch = g.kickoff_epoch;
+        fin.detail = g.short_detail;
+        fin.away_id = g.team_id;
+        fin.home_id = g.opp_id;
+        fin.away_score = g.team_score;
+        fin.home_score = g.opp_score;
+        fin.away_abbr = g.team_abbr;
+        fin.home_abbr = g.opp_abbr;
+        fin.away_color = g.team_color;
+        fin.home_color = g.opp_color;
+        fin.away_record = g.team_record;
+        fin.home_record = g.opp_record;
+        finals->push_back(std::move(fin));
+      }
+      continue;
+    }
+    if (state != "in")
       continue;
     LiveGame g;
     g.event_id = detail::str_or_empty(ev["id"]);

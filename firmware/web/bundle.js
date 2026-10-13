@@ -8,7 +8,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   POST /gameday/action?do=name  refresh
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
-// "Game Status" event is the cue to re-read the state document.
+// "Game Status" event, sent on every board update, is the cue to re-read the
+// state document.
 // Bundled with the team table by scripts/build_web.py, which defines
 // TEAMS = [[league, espnId, abbr, name], ...] and TZS = [[name, iana], ...].
 
@@ -61,6 +62,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
       <div class="play" id="play"></div>
@@ -284,7 +286,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   const renderTeam = (node, league, id, abbr, rec, timeouts, poss, color) => {
     const img = node.querySelector("img");
-    const src = abbr || id ? logoUrl(league, id, abbr) : "";
+    // No id: a side with no team yet, or the demo build's made-up teams.
+    const src = id ? logoUrl(league, id, abbr) : "";
     if (img.getAttribute("src") !== src) img.src = src;
     img.style.visibility = src ? "visible" : "hidden";
     const a = node.querySelector(".abbr");
@@ -303,12 +306,17 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
     $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // Bowl or playoff name, when ESPN gives the game one
+    const gname = $("#gname");
+    gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
+    gname.hidden = !gname.textContent;
     if (!g || g.s === "NOT_FOUND") {
       b.classList.add("empty");
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const liveMode = S && S.mode;
+      // With no team picked the panel runs the live board whatever the mode says.
+      const liveMode = S && (S.mode || S.recap || !(S.team && S.team.id));
       msg.textContent = !g ? "Waiting for the first fetch" : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
@@ -1014,9 +1022,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       built[e.id].update(ents[e.id]);
     }
     switch (name) {
-      // A new ticker line means the device finished a poll: re-read the state document.
-      case "Game Status": $("#ticker").textContent = e.value || ""; scheduleState(150); break;
-      case "Last Play": $("#play").textContent = e.value ? "Last play: " + e.value : ""; break;
+      // Sent on every board update: re-read the state document. Its value is
+      // Home Assistant's shorter line, so the ticker and last play come from there.
+      case "Game Status": scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
