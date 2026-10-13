@@ -32,8 +32,15 @@ substitutions:
 # manifest) were both starving internal RAM once BT was added, causing
 # mbedtls_ssl_setup to fail (MBEDTLS_ERR_SSL_ALLOC_FAILED) and the panel to
 # reboot ~50s after boot. Move the BT stack and TLS buffers into PSRAM.
+#
+# The main loop task gets 12 KB of stack instead of ESPHome's 8 KB. On
+# ESPHome 2026.10 a Favorites switch during QC, with the device page's log
+# stream open, took the loop to about 9 KB and overflowed it (backlog #84).
+# 12 KB leaves about 3 KB over that peak, and internal RAM can spare the 4 KB.
 esp32:
   framework:
+    advanced:
+      loop_task_stack_size: 12288
     sdkconfig_options:
       CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST: y
       CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY: y
