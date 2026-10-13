@@ -441,7 +441,6 @@ void ImprovBLEComponent::process_incoming_data_() {
         }
         // GAMEDAY: end
 
-
         wifi::global_wifi_component->set_sta(sta);
         wifi::global_wifi_component->start_connecting(sta);
         this->set_state_(improv::STATE_PROVISIONING);
