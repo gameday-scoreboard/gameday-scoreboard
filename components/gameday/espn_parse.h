@@ -122,6 +122,10 @@ bool parse_scoreboard_str(const std::string &json, const std::string &event_id, 
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// Home Assistant's Game Status: the matchup, the state and the score, and
+// nothing that changes every play, so the recorder logs a line when the game
+// starts, scores or ends rather than every poll.
+std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local);
 // ESPN's game headline ("College Football Playoff Quarterfinal at the Rose
 // Bowl Presented by Prudential") cut down to what people call the game
 // ("Rose Bowl"). ESPN has no short form of it. Empty for a note that is a

@@ -521,6 +521,21 @@ static void test_favorites() {
 // A schedule parsed from the team endpoint does not know its own league, so
 // the caller has to stamp it. Without the stamp a college favorite polls the
 // NFL scoreboard and never finds its game.
+// The favorite Home Assistant follows while the idle playlist rotates.
+static void test_followed_favorite() {
+  const int64_t T = 1000000;
+  CHECK_EQ(followed_favorite({}), -1);
+  CHECK_EQ(followed_favorite({FavGame{}, FavGame{}}), -1);
+  // The next kickoff, whatever its slot
+  CHECK_EQ(followed_favorite({fav(GameState::PRE, T + 3 * 86400), FavGame{}, fav(GameState::PRE, T + 86400),
+                              fav(GameState::PRE, T + 2 * 86400)}),
+           2);
+  // A card that is already final loses to any upcoming game
+  CHECK_EQ(followed_favorite({fav(GameState::POST, T - 3600), fav(GameState::PRE, T + 86400)}), 1);
+  // No upcoming game: the first slot with a card
+  CHECK_EQ(followed_favorite({FavGame{}, fav(GameState::POST, T - 3600), fav(GameState::POST, T - 60)}), 1);
+}
+
 static void test_schedule_league() {
   std::string json = slurp("fixtures/team_ncaa_bc.json");
   Schedule s;
@@ -816,6 +831,38 @@ static void test_postseason() {
   CHECK_EQ(duke.game_name, std::string("ACC Championship"));
   CHECK_EQ(chi.game_name, std::string("NFC Wild Card"));
   CHECK_EQ(sea.game_name, std::string("Super Bowl LX"));
+}
+
+// Home Assistant's line: no per-play parts, so it only moves on state and score.
+static void test_ha_status_text() {
+  GameSnapshot s = live(24, 21);
+  s.down_distance = "3rd & 10 at BOIS 25";
+  s.short_down_distance = "3rd & 10";
+  s.short_detail = "15:00 - 4th";
+  s.last_play = "End of 3rd quarter.";
+  CHECK_EQ(ha_status_text(s, ""), std::string("Live | DAL 24, PHI 21"));
+  s.last_play = "Prescott pass to Lamb for 12 yards";
+  s.short_detail = "8:12 - 4th";
+  CHECK_EQ(ha_status_text(s, ""), std::string("Live | DAL 24, PHI 21"));
+  GameSnapshot h = live(14, 7);
+  h.short_detail = "Halftime";
+  CHECK_EQ(ha_status_text(h, ""), std::string("Halftime | DAL 14, PHI 7"));
+  GameSnapshot p = live(0, 0, GameState::PRE);
+  p.odds = "SEA -3.5";
+  p.venue = "Lumen Field";
+  p.short_detail = "10/15 - 8:20 PM EDT";
+  CHECK_EQ(ha_status_text(p, "Wed 7:20 PM"), std::string("DAL vs PHI | Wed 7:20 PM"));
+  CHECK_EQ(ha_status_text(p, ""), std::string("DAL vs PHI | 10/15 - 8:20 PM EDT"));
+  p.game_name = "Rose Bowl";
+  CHECK_EQ(ha_status_text(p, "Jan 1 4:00 PM"), std::string("Rose Bowl | DAL vs PHI | Jan 1 4:00 PM"));
+  GameSnapshot f = live(31, 28, GameState::POST);
+  f.team_record = "5-1";
+  CHECK_EQ(ha_status_text(f, ""), std::string("Final | DAL 31, PHI 28"));
+  GameSnapshot pp = live(0, 0, GameState::POST);
+  pp.completed = false;
+  pp.short_detail = "Postponed";
+  CHECK_EQ(ha_status_text(pp, ""), std::string("Postponed | DAL 0, PHI 0"));
+  CHECK_EQ(ha_status_text(GameSnapshot{}, ""), std::string("No upcoming game"));
 }
 
 static void test_short_game_name() {
@@ -1135,6 +1182,7 @@ int main() {
   test_scoreboard_pre_nfl();
   test_splash();
   test_status_text();
+  test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();
   test_live_games();
@@ -1142,6 +1190,7 @@ int main() {
   test_clock_text();
   test_color();
   test_favorites();
+  test_followed_favorite();
   test_schedule_league();
   test_schedule_due();
   test_no_live_rescan();
