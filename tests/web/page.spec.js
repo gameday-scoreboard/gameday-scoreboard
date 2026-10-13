@@ -244,6 +244,24 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
   await expect(page.locator('.sw[data-set="play"]')).toHaveClass(/on/);
 });
 
+test("install updates automatically: off by default, posts 0 and 1, hidden when the firmware has no such setting", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="autoupd"]');
+  await expect(page.locator("#autoupdRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/on/);
+  await sw.click();
+  await expectSet(request, { autoupd: "1" });
+  await expect(sw).toHaveClass(/on/);
+  await sw.click();
+  await expectSet(request, { autoupd: "0" });
+
+  await reset(request, { autoupd: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#autoupdRow")).toBeHidden();
+});
+
 test("favorites post one slot on change and all four on reorder", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

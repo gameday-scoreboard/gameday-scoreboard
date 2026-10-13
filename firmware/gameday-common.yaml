@@ -8,6 +8,9 @@ substitutions:
   version: "1.5.5"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
+  # Where the panel looks for new releases. A bench build can point it at a
+  # test manifest with -s update_source <url>.
+  update_source: "https://gamedayscoreboard.app/firmware/${variant}/manifest.json"
 
   display_panel_width: "64"
   display_panel_height: "64"
@@ -361,7 +364,7 @@ update:
   - platform: http_request
     id: gd_firmware_update
     name: "Firmware"
-    source: https://gamedayscoreboard.app/firmware/${variant}/manifest.json
+    source: ${update_source}
     update_interval: 6h
 
 time:
@@ -566,6 +569,19 @@ switch:
       - hub75.set_brightness:
           id: matrix
           brightness: 0
+  # Off unless the owner turns it on. The setting itself lives in the gameday
+  # component (auto_update.h) with the rest of the device page's settings;
+  # this switch is how Home Assistant sees and changes it.
+  - platform: template
+    name: "Install Updates Automatically"
+    id: gd_auto_update
+    icon: "mdi:update"
+    entity_category: config
+    lambda: 'return id(gameday_ctl).auto_update();'
+    turn_on_action:
+      - lambda: 'id(gameday_ctl).set_auto_update(true);'
+    turn_off_action:
+      - lambda: 'id(gameday_ctl).set_auto_update(false);'
 number:
   - platform: template
     name: "Brightness"
