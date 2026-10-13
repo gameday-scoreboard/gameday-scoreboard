@@ -21,6 +21,7 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "recap.h"
+#include "poll_timing.h"
 #include "startup.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -289,6 +290,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t recap_league{0};
     int32_t recap_day{0};
     bool recap_ok{false};
+    // ESPN answered 403 or 429 to a request in this job (set by open_)
+    bool throttled{false};
+    uint32_t retry_after_ms{0};
   };
   void start_job_();
   void start_worker_();
@@ -332,7 +336,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void mark_good_poll_() {
     this->misses_ = 0;
     this->last_good_ms_ = millis() == 0 ? 1 : millis();
+    this->clear_backoff_();
   }
+  // A read failed: start the next, longer wait (poll_timing.h) and return it.
+  uint32_t back_off_();
+  // ESPN answered: the next failure starts the backoff over.
+  void clear_backoff_() {
+    this->fail_streak_ = 0;
+    this->throttled_ = false;
+    this->backoff_ms_ = 0;
+  }
+  // Inside a wait back_off_ started. Only Favorite Teams mode needs to ask:
+  // it ticks every second for the playlist and must not read ESPN on each one.
+  bool backing_off_() const {
+    return this->backoff_ms_ != 0 && (millis() - this->backoff_since_ms_) < this->backoff_ms_;
+  }
+  // Someone asked for fresh data (Refresh Now, a new team, mode or favorite):
+  // read now, but keep the failure count so another failure waits longer.
+  void end_backoff_wait_() { this->backoff_ms_ = 0; }
   // True once a poll has actually put game data on the board this boot.
   bool ever_polled_good_() const { return this->last_good_ms_ != 0; }
   // Seconds since the last good poll. With nothing ever polled, report the
@@ -486,6 +507,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t post_since_ms_{0};
   uint32_t next_fetch_ms_{0};
   uint8_t misses_{0};
+  uint8_t fail_streak_{0};      // ESPN reads failed in a row, for the backoff
+  bool throttled_{false};       // ESPN said 403 or 429 since the last good read
+  uint32_t backoff_since_ms_{0};
+  uint32_t backoff_ms_{0};      // 0 = no wait running
   uint32_t last_good_ms_{0};  // millis() of the last successful game poll, 0 = never
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
