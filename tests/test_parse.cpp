@@ -10,8 +10,8 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "logo_lru.h"
-#include "poll_timing.h"
 #include "recap.h"
+#include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
 
@@ -1213,94 +1213,6 @@ static void test_backoff() {
   CHECK(!is_throttle_status(503));
 }
 
-static void test_live_clock() {
-  CHECK_EQ(clock_seconds("12:34"), 754);
-  CHECK_EQ(clock_seconds("0:42"), 42);
-  CHECK_EQ(clock_seconds("15:00"), 900);
-  CHECK_EQ(clock_seconds("42.5"), -1);
-  CHECK_EQ(clock_seconds(""), -1);
-  CHECK_EQ(clock_seconds("1:02:03"), -1);
-  CHECK_EQ(clock_seconds("1:7"), -1);
-  CHECK_EQ(clock_seconds("1:60"), -1);
-  CHECK_EQ(format_clock(754), std::string("12:34"));
-  CHECK_EQ(format_clock(7), std::string("0:07"));
-  CHECK_EQ(format_clock(-3), std::string("0:00"));
-
-  GameSnapshot g = live(7, 3);
-  g.event_id = "401";
-  g.period = 2;
-  g.display_clock = "5:36";
-  g.short_detail = "5:36 - 2nd";
-  LiveClock c;
-  c.on_poll(g, 1000);
-  CHECK(!c.running());  // one poll says nothing about the clock
-  CHECK_EQ(c.text(g, 9000), std::string("5:36 2nd"));
-
-  // 15 s later it read 14 s less: running, so it counts down on its own.
-  g.display_clock = "5:22";
-  g.short_detail = "5:22 - 2nd";
-  c.on_poll(g, 16000);
-  CHECK(c.running());
-  CHECK_EQ(c.text(g, 16000), std::string("5:22 2nd"));
-  CHECK_EQ(c.text(g, 16999), std::string("5:22 2nd"));
-  CHECK_EQ(c.text(g, 17000), std::string("5:21 2nd"));
-  CHECK_EQ(c.text(g, 30000), std::string("5:08 2nd"));
-  // A missed poll stops the count 20 s past the last good one.
-  CHECK_EQ(c.text(g, 36000), std::string("5:02 2nd"));
-  CHECK_EQ(c.text(g, 90000), std::string("5:02 2nd"));
-  // Only for the snapshot that poll put up.
-  GameSnapshot other = g;
-  other.event_id = "402";
-  CHECK_EQ(c.text(other, 30000), std::string("5:22 2nd"));
-
-  // Next poll: the clock had stopped (incomplete pass). The poll wins and the
-  // count waits until a poll shows it moving again.
-  g.display_clock = "5:17";
-  g.short_detail = "5:17 - 2nd";
-  c.on_poll(g, 31000);
-  CHECK(!c.running());  // ran 5 s of 15
-  CHECK_EQ(c.text(g, 40000), std::string("5:17 2nd"));
-  c.on_poll(g, 46000);
-  CHECK(!c.running());  // did not move at all
-  CHECK_EQ(c.text(g, 55000), std::string("5:17 2nd"));
-  // Halftime: no count, the feed's words.
-  g.display_clock = "0:00";
-  g.short_detail = "Halftime";
-  c.on_poll(g, 61000);
-  CHECK(!c.running());
-  CHECK_EQ(c.text(g, 70000), std::string("Halftime"));
-
-  // Ran only 5 of 15 s: treated as stopped.
-  GameSnapshot h = g;
-  LiveClock d;
-  h.display_clock = "8:00";
-  h.short_detail = "8:00 - 2nd";
-  d.on_poll(h, 0);
-  h.display_clock = "7:55";
-  h.short_detail = "7:55 - 2nd";
-  d.on_poll(h, 15000);
-  CHECK(!d.running());
-  h.display_clock = "7:47";
-  h.short_detail = "7:47 - 2nd";
-  d.on_poll(h, 30000);
-  CHECK(d.running());  // 8 of 15
-
-  // Never below 0:00.
-  h.display_clock = "0:10";
-  h.short_detail = "0:10 - 2nd";
-  d.on_poll(h, 45000);
-  CHECK(d.running());
-  CHECK_EQ(d.text(h, 52000), std::string("0:03 2nd"));
-  CHECK_EQ(d.text(h, 60000), std::string("0:00 2nd"));
-  // A new period starts over: no count until two of its polls agree.
-  h.period = 3;
-  h.display_clock = "15:00";
-  h.short_detail = "15:00 - 3rd";
-  d.on_poll(h, 600000);
-  CHECK(!d.running());
-  CHECK_EQ(d.text(h, 605000), std::string("15:00 3rd"));
-}
-
 int main() {
   test_urls();
   test_iso();
@@ -1329,10 +1241,9 @@ int main() {
   test_json_allocator();
   test_timezone_index();
   test_postseason();
-  test_backoff();
-  test_live_clock();
   test_demo();
   test_recap();
+  test_backoff();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

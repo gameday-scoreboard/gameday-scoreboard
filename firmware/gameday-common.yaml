@@ -432,13 +432,6 @@ gameday:
           lambda: 'return x == "logo_ready";'
         then:
           - script.execute: gd_show_logos
-    # The game clock counting down between live polls (poll_timing.h): only
-    # the clock label changes, not the whole board.
-    - if:
-        condition:
-          lambda: 'return x == "clock_tick";'
-        then:
-          - lambda: 'lv_label_set_text(id(tt_clock_lbl), id(gameday_ctl).clock_text().c_str());'
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:

@@ -400,23 +400,17 @@ static std::string period_name(int period) {
   }
 }
 
-bool clock_shows_time(const GameSnapshot &s) {
+std::string clock_text(const GameSnapshot &s) {
   bool has_clock = s.display_clock.find(':') != std::string::npos && s.period > 0;
   bool special = s.short_detail.find(':') == std::string::npos;  // Halftime, End of 3rd, Delayed, Final
-  return has_clock && !special;
-}
-
-std::string clock_text(const GameSnapshot &s) { return clock_text(s, s.display_clock); }
-
-std::string clock_text(const GameSnapshot &s, const std::string &display_clock) {
-  if (!clock_shows_time(s)) {
+  if (!has_clock || special) {
     std::string t = s.short_detail;
     size_t dash = t.find(" - ");
     if (dash != std::string::npos)
       t.replace(dash, 3, " ");
     return t;
   }
-  return display_clock + " " + period_name(s.period);
+  return s.display_clock + " " + period_name(s.period);
 }
 
 const char *state_name(GameState s) {

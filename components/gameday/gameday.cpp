@@ -26,17 +26,18 @@ namespace gameday {
 
 static const char *const TAG = "gameday";
 
-// ESPN's edge returns 403 to most unfamiliar agents but accepts curl.
-static const char *const USER_AGENT = "curl/8.0 gameday-scoreboard";
+// ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
+// them, but accepts curl.
+static const char *const USER_AGENT = "curl/8.0";
 
 static const uint32_t MINUTE = 60 * 1000;
 static const uint32_t SCHEDULE_INTERVAL = 6 * 60 * MINUTE;
 static const uint32_t PRE_FAR_INTERVAL = 15 * MINUTE;
 static const uint32_t PRE_NEAR_INTERVAL = MINUTE;
-// The whole day's scoreboard is about 256 KB, so a live game is read every
-// 15 s, not every 5; the clock counts down on the panel in between
-// (poll_timing.h, LiveClock).
-static const uint32_t IN_INTERVAL = 15 * 1000;
+// ESPN's scoreboard copy changes about every 10 s (its cache-control
+// max-age counts down from 10), so reading it any faster mostly fetches
+// the same 256 KB again.
+static const uint32_t IN_INTERVAL = 10 * 1000;
 static const uint32_t POST_INTERVAL = MINUTE;
 static const uint32_t POST_LINGER = 30 * MINUTE;
 // For the panel's own trouble (a fetch task that never finished or could not
@@ -613,7 +614,6 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     // Same game on the board: render the new poll with its splash.
     this->prev_ = this->game_;
     this->game_ = e.game;
-    this->live_clock_.on_poll(this->game_, now);
     ::espn::Splash splash = ::espn::decide_splash(this->prev_, this->game_, this->opponent_splashes(), false);
     this->emit_(splash);
   } else if (!switched) {
@@ -647,7 +647,6 @@ void GamedayComponent::dump_config() {
 void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
-  this->tick_clock_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -693,21 +692,6 @@ void GamedayComponent::loop() {
     this->publish_selects_();
   }
   this->start_job_();
-}
-
-// Between live polls: count the clock row down (poll_timing.h). Only the
-// label changes; a full redraw waits for the next poll.
-void GamedayComponent::tick_clock_() {
-  uint32_t now = millis();
-  if (!this->live_clock_.running() || this->demo_playing_() || this->game_.state != GameState::IN ||
-      (now - this->clock_tick_ms_) < 250)
-    return;
-  this->clock_tick_ms_ = now;
-  std::string t = this->live_clock_.text(this->game_, now);
-  if (t == this->last_fields_.clock_text)
-    return;
-  this->last_fields_.clock_text = t;
-  this->fire_action_("clock_tick");
 }
 
 const ::espn::Team *GamedayComponent::current_team_() const {
@@ -1278,9 +1262,9 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(this->back_off_());
       return;
     }
-    this->clear_backoff_();
     if (j.want_finals)
       this->recap_absorb_(j, ::espn::espn_day((int64_t) this->time_->timestamp_now()));
+    this->clear_backoff_();
     // Prefer a different game than the one we just showed.
     std::vector<size_t> pick;
     for (size_t i = 0; i < j.live.size(); i++)
@@ -1432,7 +1416,6 @@ void GamedayComponent::apply_job_() {
   this->cache_unconfirmed_ = false;
   this->prev_ = this->game_;
   this->game_ = j.game;
-  this->live_clock_.on_poll(this->game_, now);
   this->mark_good_poll_();
   if (this->upcoming_after_poll_) {
     this->upcoming_after_poll_ = false;
@@ -1469,7 +1452,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.opponent_record = g.opp_record;
   f.last_play = g.last_play;
   if (g.valid && g.state == GameState::IN) {
-    f.clock_text = this->live_clock_.text(g, millis());
+    f.clock_text = ::espn::clock_text(g);
     f.down_distance = g.short_down_distance;
     f.is_red_zone = g.is_red_zone;
   }
@@ -1633,11 +1616,12 @@ void GamedayComponent::apply_recap_job_() {
   int64_t tnow = (int64_t) this->time_->timestamp_now();
   int32_t today = ::espn::espn_day(tnow);
   if (!j.recap_ok) {
-    // The same day again after the retry wait. The rotation keeps going with
-    // what it has, and a live scan still comes round on its own clock.
-    this->schedule_next_(RETRY_INTERVAL);
+    // The same day again after the backoff. The rotation keeps going with
+    // what it has.
+    this->schedule_next_(this->back_off_());
     return;
   }
+  this->clear_backoff_();
   if (j.recap_forward) {
     if (j.next_kickoff > tnow) {
       this->recap_fwd_next_[i] = j.next_kickoff;

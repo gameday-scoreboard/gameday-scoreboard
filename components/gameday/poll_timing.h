@@ -3,10 +3,8 @@
 #pragma once
 
 #include <cstdint>
-#include <cstdio>
 #include <string>
 
-#include "espn_parse.h"
 
 namespace espn {
 
@@ -58,83 +56,5 @@ inline uint32_t backoff_ms(uint32_t fails, bool throttled, uint32_t retry_after_
   }
   return wait;
 }
-
-// ---- Local game clock -----------------------------------------------------------
-
-// "12:34" -> 754. -1 for anything that is not M:SS or MM:SS (an empty clock,
-// "45.2" tenths, "1:02:03").
-inline int clock_seconds(const std::string &clock) {
-  size_t colon = clock.find(':');
-  if (colon == std::string::npos || colon == 0 || colon > 2 || clock.size() != colon + 3)
-    return -1;
-  int m = 0;
-  for (size_t i = 0; i < colon; i++) {
-    if (clock[i] < '0' || clock[i] > '9')
-      return -1;
-    m = m * 10 + (clock[i] - '0');
-  }
-  char a = clock[colon + 1], b = clock[colon + 2];
-  if (a < '0' || a > '5' || b < '0' || b > '9')
-    return -1;
-  return m * 60 + (a - '0') * 10 + (b - '0');
-}
-
-inline std::string format_clock(int seconds) {
-  if (seconds < 0)
-    seconds = 0;
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%d:%02d", seconds / 60, seconds % 60);
-  return buf;
-}
-
-// The live poll runs every 15 s. Between polls the panel counts the game
-// clock down itself, so the board never sits on one time and then jumps.
-// ESPN has no "clock running" field, so the clock counts only when the last
-// two polls of the same period show it ran for at least half the time
-// between them. It never counts more than kMaxRunMs past the last poll: a
-// missed poll stops it instead of running it to 0:00. The next poll always
-// wins, even when that moves the clock back up (it stopped for an incomplete
-// pass a few seconds after the last poll).
-class LiveClock {
- public:
-  static constexpr uint32_t kMaxRunMs = 20 * 1000;
-
-  // A game poll landed at now_ms.
-  void on_poll(const GameSnapshot &g, uint32_t now_ms) {
-    int secs = g.valid && g.state == GameState::IN && clock_shows_time(g) ? clock_seconds(g.display_clock) : -1;
-    bool same = secs >= 0 && this->secs_ >= 0 && g.event_id == this->event_id_ && g.period == this->period_;
-    uint32_t gap = now_ms - this->at_ms_;
-    int ran = same ? this->secs_ - secs : 0;
-    this->running_ = same && ran > 0 && (uint64_t) ran * 2000 >= gap;
-    this->event_id_ = g.event_id;
-    this->period_ = g.period;
-    this->secs_ = secs;
-    this->at_ms_ = now_ms;
-  }
-
-  void reset() { *this = LiveClock{}; }
-
-  bool running() const { return this->running_; }
-
-  // clock_text(g), counted down from the last poll while the clock runs. Only
-  // for the exact snapshot that poll put on the board; anything else (a
-  // different game, a redraw after a team change) gets the feed's text.
-  std::string text(const GameSnapshot &g, uint32_t now_ms) const {
-    if (!this->running_ || g.event_id != this->event_id_ || g.period != this->period_ ||
-        clock_seconds(g.display_clock) != this->secs_ || g.state != GameState::IN || !clock_shows_time(g))
-      return clock_text(g);
-    uint32_t elapsed = now_ms - this->at_ms_;
-    if (elapsed > kMaxRunMs)
-      elapsed = kMaxRunMs;
-    return clock_text(g, format_clock(this->secs_ - (int) (elapsed / 1000)));
-  }
-
- private:
-  std::string event_id_;
-  int period_{0};
-  int secs_{-1};  // the clock in the last poll, -1 when it had none
-  uint32_t at_ms_{0};
-  bool running_{false};
-};
 
 }  // namespace espn
