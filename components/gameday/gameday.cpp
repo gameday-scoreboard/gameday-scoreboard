@@ -16,6 +16,9 @@
 #ifdef GAMEDAY_TZ_PARSED
 #include "esphome/components/time/posix_tz.h"
 #endif
+#ifdef USE_UPDATE
+#include "esphome/components/update/update_entity.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
@@ -42,6 +45,10 @@ static const uint32_t RETRY_INTERVAL = MINUTE;
 static const uint32_t NOT_READY_INTERVAL = 500;
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
+// Install updates automatically: how often loop() looks, and how long a
+// manifest read gets before its answer is used (the HTTP timeout is 20 s).
+static const uint32_t AUTO_UPDATE_TICK = 10 * 1000;
+static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
 // A college scan is ~750KB on a Saturday. With nothing live it waits for the
 // next kickoff instead of re-reading every 2 minutes, but never longer than
 // this, so a moved kickoff or the next day's slate is still picked up.
@@ -166,6 +173,9 @@ void GamedayComponent::setup() {
     this->prefs4_.release_seconds = 30;
     this->prefs4_.collide = 0;
   }
+  this->pref5_ = global_preferences->make_preference<Prefs5>(fnv1_hash("gameday_prefs5_v1"));
+  if (!this->pref5_.load(&this->prefs5_) || this->prefs5_.auto_update > 1)
+    this->prefs5_ = Prefs5{};
   this->team_cache_pref_ =
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
   this->rebuild_favorites_(false);
@@ -598,6 +608,10 @@ void GamedayComponent::dump_config() {
 void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
+  if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
+    this->auto_update_ms_ = millis();
+    this->auto_update_tick_();
+  }
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -777,6 +791,79 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
 }
 
 void GamedayComponent::save_prefs_() { this->pref_.save(&this->prefs_); }
+
+void GamedayComponent::set_auto_update(bool on) {
+  if (on == this->auto_update())
+    return;
+  this->prefs5_.auto_update = on ? 1 : 0;
+  this->pref5_.save(&this->prefs5_);
+  ESP_LOGI(TAG, "Install updates automatically: %s", on ? "on" : "off");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+// A game the panel follows is in progress: the one on the board, which
+// covers My team and the live modes, or any favorite's in Favorite teams.
+bool GamedayComponent::followed_game_live_() const {
+  if (this->game_.valid && this->game_.state == GameState::IN)
+    return true;
+  if (this->favorites_mode_())
+    for (const auto &e : this->fav_)
+      if (e.game.valid && e.game.state == GameState::IN)
+        return true;
+  return false;
+}
+
+void GamedayComponent::auto_update_tick_() {
+#ifdef USE_UPDATE
+  if (!this->auto_update() || this->time_ == nullptr || App.get_updates().empty())
+    return;
+  update::UpdateEntity *u = App.get_updates()[0];
+  ESPTime now = this->time_->now();
+  ::espn::AutoUpdateInputs in;
+  in.enabled = true;
+  in.clock_valid = now.is_valid();
+  in.hour = now.hour;
+  in.minute = now.minute;
+  in.today = ::espn::auto_update_day(now.year, now.day_of_year);
+  in.tried_day = this->prefs5_.tried_day;
+  in.checked_day = this->auto_update_checked_;
+  uint8_t mac[6];
+  get_mac_address_raw(mac);
+  in.slot = ::espn::auto_update_slot(mac[4], mac[5]);
+  in.check_done = millis() - this->auto_update_check_ms_ >= AUTO_UPDATE_CHECK_WAIT;
+  in.available = u->state == update::UPDATE_STATE_AVAILABLE;
+  in.newer = ::espn::version_newer(u->update_info.latest_version, u->update_info.current_version);
+  in.live = this->followed_game_live_();
+  switch (::espn::auto_update_step(in)) {
+    case ::espn::AutoUpdateStep::IDLE:
+      break;
+    case ::espn::AutoUpdateStep::CHECK:
+      ESP_LOGI(TAG, "Auto update: checking for a new release");
+      this->auto_update_checked_ = in.today;
+      this->auto_update_check_ms_ = millis();
+      this->auto_update_waiting_ = false;
+      u->check();
+      break;
+    case ::espn::AutoUpdateStep::WAIT_GAME:
+      if (!this->auto_update_waiting_)
+        ESP_LOGI(TAG, "Auto update: %s is out, waiting for the live game to end",
+                 u->update_info.latest_version.c_str());
+      this->auto_update_waiting_ = true;
+      break;
+    case ::espn::AutoUpdateStep::INSTALL:
+      // Saved, and written to flash now, before the install starts: a power
+      // cut partway through boots the old firmware, which must not try again
+      // until tomorrow night.
+      ESP_LOGI(TAG, "Auto update: installing %s (running %s)", u->update_info.latest_version.c_str(),
+               u->update_info.current_version.c_str());
+      this->prefs5_.tried_day = in.today;
+      this->pref5_.save(&this->prefs5_);
+      global_preferences->sync();
+      u->perform();
+      break;
+  }
+#endif
+}
 
 void GamedayComponent::apply_timezone_() {
 #ifdef GAMEDAY_TZ_PARSED
@@ -1454,6 +1541,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["odds"] = this->ticker_odds();
   doc["opp"] = this->opponent_splashes();
   doc["bootaddr"] = this->show_boot_address();
+#ifdef USE_UPDATE
+  // Left out where nothing can be installed (the demo build), so the page
+  // and the app hide the switch.
+  doc["autoupd"] = this->auto_update();
+#endif
   doc["misses"] = this->misses_;
   doc["stale_s"] = this->stale_seconds_();
   doc["fallback"] = this->live_fallback_;
@@ -1608,7 +1700,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 
 static const char *const SET_KEYS[] = {"team",     "mode",   "rotate",  "fav1",    "fav2", "fav3",
                                        "fav4",     "tz",     "tzauto",  "down",    "play", "odds",
-                                       "opp",      "panels", "bootaddr", "lockon", "release", "collide"};
+                                       "opp",      "panels", "bootaddr", "lockon", "release", "collide",
+                                       "autoupd"};
 
 void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
   std::vector<std::pair<std::string, std::string>> kv;
@@ -1688,6 +1781,8 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
       this->set_opponent_splashes(v == "1");
     } else if (k == "bootaddr") {
       this->set_show_boot_address(v == "1");
+    } else if (k == "autoupd") {
+      this->set_auto_update(v == "1");
     } else if (k == "panels") {
       if (this->panels_ != nullptr)
         this->panels_->set_cols((uint8_t) atoi(v.c_str()));

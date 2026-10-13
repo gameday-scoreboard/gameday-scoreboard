@@ -18,6 +18,7 @@
 #include "esphome/core/defines.h"
 #include "esphome/core/preferences.h"
 
+#include "auto_update.h"
 #include "espn_parse.h"
 #include "favorites.h"
 #include "startup.h"
@@ -90,6 +91,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    tz=<name, IANA name or index> tzauto=0/1
 //                                    down/play/odds/opp=0/1 panels=1/2
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
+//                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 // The demo build (firmware/gameday-demo.yaml) adds do=demo|demo_stop and
 // GET/POST /gameday/demo (demo.cpp).
@@ -170,6 +172,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_last_play(bool on) { this->set_flag_(FLAG_PLAY, on); }
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
+  // "Install updates automatically", off unless the owner turns it on.
+  bool auto_update() const { return this->prefs5_.auto_update != 0; }
+  void set_auto_update(bool on);
 
   void setup() override;
   void loop() override;
@@ -225,6 +230,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t lockon_minutes;
     uint16_t release_seconds;
     uint8_t collide;  // 0 = stick with the higher slot, 1 = alternate on the rotate timer
+  } __attribute__((packed));
+  struct Prefs5 {
+    uint8_t auto_update;  // 1 = install new releases on its own
+    int32_t tried_day;    // espn::auto_update_day() of the last install try, 0 = never
   } __attribute__((packed));
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
@@ -314,6 +323,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs3 prefs3_{};
   ESPPreferenceObject pref4_;
   Prefs4 prefs4_{};
+  ESPPreferenceObject pref5_;
+  Prefs5 prefs5_{};
+  // Install updates automatically (auto_update.h), run from loop().
+  uint32_t auto_update_ms_{0};      // last look
+  int32_t auto_update_checked_{0};  // the night the manifest was read for it
+  uint32_t auto_update_check_ms_{0};
+  bool auto_update_waiting_{false};  // logged "waiting for the game" tonight
+  void auto_update_tick_();
+  bool followed_game_live_() const;
   // The team endpoint's answer for the saved team (startup.h), so a boot can
   // skip that read and go straight to the scoreboard.
   ESPPreferenceObject team_cache_pref_;

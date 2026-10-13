@@ -169,6 +169,10 @@
           <div class="fwline"><span id="fwText">Firmware</span><button class="btn primary" id="fwInstall" hidden>Install</button></div>
           <div class="fwsub" id="fwSub"></div>
         </div>
+        <div class="ctl" id="autoupdRow" hidden>
+          <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
+          <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
+        </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
@@ -441,6 +445,8 @@
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => sw.classList.toggle("on", !!S[sw.dataset.set]));
+    // Firmware that can't install updates (older, or the demo build) leaves it out.
+    $("#autoupdRow").hidden = S.autoupd === undefined;
     favSelects.forEach((fs, i) => {
       if (document.activeElement === fs) return;
       fs.value = refKey((S.favs || [])[i]) || "none";
@@ -978,7 +984,7 @@
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
       $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = cur ? "You have " + cur + "." : "";
+      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "");
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {

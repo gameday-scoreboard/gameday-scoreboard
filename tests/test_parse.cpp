@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "auto_update.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -925,6 +926,88 @@ static void test_demo() {
   CHECK(wins == 1);
 }
 
+static void test_auto_update() {
+  CHECK(version_newer("2026.10.0", "1.5.5"));
+  CHECK(version_newer("1.5.6", "1.5.5"));
+  CHECK(version_newer("1.10.0", "1.9.9"));
+  CHECK(version_newer("2026.10.1", "2026.10.0"));
+  CHECK(!version_newer("1.5.5", "1.5.5"));
+  CHECK(!version_newer("1.5.5", "2026.10.0"));  // a test build ahead of the release
+  CHECK(!version_newer("", "1.5.5"));
+  CHECK(!version_newer("v1.5.6", "1.5.5"));
+  CHECK(version_newer("1.5.5.1", "1.5.5"));
+  CHECK(!version_newer("1.5.5-beta", "1.5.5"));
+
+  CHECK(auto_update_slot(0, 0) == 0);
+  CHECK(auto_update_slot(0xA9, 0x94) == (0xA994 % 60));
+  for (int i = 0; i < 256; i++)
+    CHECK(auto_update_slot(0x12, (uint8_t) i) < kAutoUpdateSpreadMinutes);
+  CHECK(auto_update_day(2026, 286) != auto_update_day(2026, 287));
+  CHECK(auto_update_day(2026, 365) != auto_update_day(2027, 1));
+
+  // 3:20 AM, slot minute 15, tonight's read done, a newer release out
+  AutoUpdateInputs in;
+  in.enabled = true;
+  in.clock_valid = true;
+  in.hour = 3;
+  in.minute = 20;
+  in.today = auto_update_day(2026, 286);
+  in.tried_day = auto_update_day(2026, 280);
+  in.checked_day = in.today;
+  in.slot = 15;
+  in.check_done = true;
+  in.available = true;
+  in.newer = true;
+  CHECK(auto_update_step(in) == AutoUpdateStep::INSTALL);
+
+  AutoUpdateInputs t = in;
+  t.enabled = false;  // off: nothing, ever
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.clock_valid = false;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.live = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::WAIT_GAME);
+  t.hour = 5;  // the game ran past the window: not tonight
+  t.minute = 0;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.tried_day = in.today;  // tried tonight already (failed, or cut off)
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t.today = auto_update_day(2026, 287);  // the next night it goes again
+  t.checked_day = t.today;
+  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL);
+  t = in;
+  t.minute = 14;  // before this panel's minute
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.hour = 2;
+  t.minute = 59;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t.hour = 4;  // the second hour still counts
+  t.minute = 59;
+  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL);
+  t.hour = 5;
+  t.minute = 0;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t.hour = 15;  // 3 PM is not 3 AM
+  t.minute = 30;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.checked_day = auto_update_day(2026, 285);  // not read tonight yet
+  CHECK(auto_update_step(t) == AutoUpdateStep::CHECK);
+  t = in;
+  t.check_done = false;  // read still out
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.available = false;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.newer = false;  // a different version, but not a newer one
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -952,6 +1035,7 @@ int main() {
   test_timezone_index();
   test_postseason();
   test_demo();
+  test_auto_update();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
