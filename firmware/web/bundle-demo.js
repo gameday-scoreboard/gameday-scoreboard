@@ -1084,7 +1084,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     <div class="sub">College football</div>
     <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
     <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
-    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
+    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
   $("#board").after(card);
 
   let D = null;

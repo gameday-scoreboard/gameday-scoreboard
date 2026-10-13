@@ -131,6 +131,11 @@ void GamedayComponent::demo_tick_() {
     this->generation_++;
     this->demo_step_ = 0;
     this->rebuild_demo_json_();
+  } else if (this->demo_step_ >= ::espn::kDemoStepCount && this->demo_prefs_.madeup) {
+    // Made-up teams are for filming: the live board between runs would put a
+    // real team and its logo in the middle of the take, so loop straight on.
+    ESP_LOGI(TAG, "Demo: run done, made-up teams on, starting the next run");
+    this->demo_step_ = 0;
   } else if (this->demo_step_ >= ::espn::kDemoStepCount) {
     ESP_LOGI(TAG, "Demo: run done, live board for %us", (unsigned) (::espn::kDemoGapMs / 1000));
     this->demo_gap_ = true;
@@ -329,6 +334,9 @@ void GamedayComponent::apply_demo_(const std::vector<std::pair<std::string, std:
       this->demo_show_step_(false);
       this->demo_step_++;
     }
+    // Turned on between runs: cut the live board short, the same as above.
+    if (this->demo_gap_ && this->demo_prefs_.madeup)
+      this->demo_next_ms_ = millis();
   }
   if (action == "start")
     this->start_demo(kind == "college" ? (uint8_t) DemoKind::COLLEGE : (uint8_t) DemoKind::PRO);
