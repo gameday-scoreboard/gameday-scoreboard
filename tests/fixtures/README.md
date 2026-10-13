@@ -113,3 +113,12 @@ endpoint had already moved on to the next game:
 | --- | --- |
 | `team_mlb_mil_live.json` | `.../baseball/mlb/teams/8`, nextEvent is 401908032 MIL @ LAD on 10/14 |
 | `day_mlb_20261012.json` | `.../baseball/mlb/scoreboard?dates=20261012`, 401908031 LAD @ MIL in progress, CLE @ TB pre |
+
+Soccer does the same. Recorded 2026-10-12 during CRU @ BRA in Brazil's Serie A
+(25', no MLS or Premier League game was on). The team's fixture list
+(`.../schedule?fixture=true`) still listed the game on now first:
+
+| File | Source |
+| --- | --- |
+| `team_bra_cru_live.json` | `.../soccer/bra.1/teams/2022`, nextEvent is 401841276 CRU @ GRE on 10/18 |
+| `day_bra_20261012.json` | `.../soccer/bra.1/scoreboard?dates=20261012`, 401841260 CRU @ BRA in progress, CAP @ CHA and BOT @ CFC full time |

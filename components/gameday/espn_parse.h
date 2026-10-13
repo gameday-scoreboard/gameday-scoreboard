@@ -169,6 +169,7 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch);
 // slug gives the league's own URL.
 std::string team_url(League league, uint32_t espn_id, const char *comp_slug);
 std::string event_url(League league, const std::string &event_id, const char *comp_slug);
+std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const char *comp_slug);
 std::string dark_logo(const std::string &url);
 std::string team_logo_url(League league, uint32_t espn_id, const char *abbr);  // for a team with no game loaded yet
 

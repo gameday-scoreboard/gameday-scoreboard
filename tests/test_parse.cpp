@@ -1902,10 +1902,26 @@ static void test_lookahead() {
   CHECK(parse_team_game_str(dh_live, 15, next));
   CHECK(today_game_first(game2, next));
 
+  // Soccer jumps the same way: CRU @ BRA at 25' (Brazil's Serie A, the same
+  // documents as MLS and the Premier League, 2026-10-12).
+  Schedule cru;
+  CHECK(parse_team_str(slurp("fixtures/team_bra_cru_live.json"), cru));
+  CHECK_EQ(cru.event_id, std::string("401841276"));  // CRU @ GRE, 10/18
+  Schedule cru_now;
+  CHECK(parse_team_game_str(slurp("fixtures/day_bra_20261012.json"), 2022, cru_now));
+  CHECK_EQ(cru_now.event_id, std::string("401841260"));
+  CHECK(today_game_first(cru, cru_now));
+  // CHA's game that day is over: nothing on now.
+  CHECK(!parse_team_game_str(slurp("fixtures/day_bra_20261012.json"), 9318, none));
+
   CHECK_EQ(team_day_url(League::NHL, 0, parse_iso8601_z("2026-10-09T15:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261009"));
   CHECK_EQ(team_day_url(League::MCBB, 8, parse_iso8601_z("2026-12-06T18:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=8&dates=20261206"));
+  CHECK_EQ(team_day_url(League::MLS, 0, parse_iso8601_z("2026-10-15T00:30Z")),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=20261014"));
+  CHECK_EQ(team_day_url(League::EPL, 0, parse_iso8601_z("2026-10-21T19:00Z"), "uefa.champions"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261021"));
 }
 
 int run_football_golden();  // golden_football.cpp

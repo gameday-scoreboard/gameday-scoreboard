@@ -340,7 +340,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool needs_lookahead_(League league) const;
   // 1 found the next game, 0 the team is off that day, -1 the read failed.
   int fetch_team_day_(const ::espn::Team *team, uint32_t group, int64_t day_epoch, const std::string &skip_event,
-                      Schedule &out);
+                      Schedule &out, const char *comp_slug = nullptr);
+  // A team read that names a game not started yet: swap in the team's game on
+  // now from today's scoreboard (the league's, or the cup's), if it has one.
+  void take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
+                         const char *comp_slug = nullptr);
   void emit_(const ::espn::Splash &splash);
   void reset_game_();
   // A game poll came back clean: clear the miss count and start the clock over.
