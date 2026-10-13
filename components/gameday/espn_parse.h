@@ -74,6 +74,24 @@ struct LiveGame {
   std::string away_abbr, home_abbr;
 };
 
+// A finished game from a day's scoreboard, for the finals rotation (recap.h).
+// Kept small, since a few dozen of them stay in RAM: short strings only,
+// and the logos are worked out from the ids when the card goes up.
+struct Final {
+  uint8_t league{0};
+  uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  int64_t kickoff_epoch{0};
+  std::string detail;  // "Final", "Final/OT"
+  uint32_t away_id{0}, home_id{0};
+  int away_score{0}, home_score{0};
+  std::string away_abbr, home_abbr;
+  std::string away_color, home_color;
+  std::string away_record, home_record;
+};
+
+// The scoreboard card for a final, the away side as "team" like a broadcast.
+GameSnapshot final_snapshot(const Final &f);
+
 struct TickerOptions {
   bool clock{true};
   bool down_distance{true};

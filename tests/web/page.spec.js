@@ -109,6 +109,12 @@ test("no game renders the empty board for my team and for live modes", async ({ 
   await page.reload();
   await expect(page.locator("#msg")).toHaveText("No live games right now");
   await expect(page.locator("#livebar")).toBeVisible();
+
+  // No team picked: My team runs the live board, so it says the same
+  await reset(request, { mode: 0, team: {}, game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("No live games right now");
+  await expect(page.locator("#curName")).toHaveText("No team chosen");
 });
 
 test("a device that never answers /gameday/state leaves the page waiting, not broken", async ({ page, request }) => {
