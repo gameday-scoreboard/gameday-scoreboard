@@ -933,9 +933,13 @@
   };
 
   // ---- up next + splash (from the state document) -------------------------------
-  const kickLabel = (epoch) => {
+  // tbd: ESPN has no kickoff time yet and "kick" is midnight Eastern of the
+  // game's day, so show that day in Eastern time and no clock.
+  const kickLabel = (epoch, tbd) => {
     const d = new Date(epoch * 1000);
-    const day = d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    const opts = { weekday: "short", month: "short", day: "numeric" };
+    if (tbd) return d.toLocaleDateString([], { ...opts, timeZone: "America/New_York" }) + " TBD";
+    const day = d.toLocaleDateString([], opts);
     const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return day + " " + time;
   };
@@ -958,7 +962,7 @@
       let when = "No game scheduled";
       if (n.s === "IN") when = n.ts + " - " + n.os + (n.detail ? " · " + n.detail : "");
       else if (n.s === "POST") when = endedAs(n) === "Final" ? "Final " + n.ts + " - " + n.os : endedAs(n);
-      else if (n.s === "PRE") when = kickLabel(n.kick) + (n.tv ? " · " + n.tv : "");
+      else if (n.s === "PRE") when = kickLabel(n.kick, n.tbd) + (n.tv ? " · " + n.tv : "");
       txt.appendChild(el("div", "w", when));
       row.appendChild(txt);
       host.appendChild(row);
@@ -983,7 +987,7 @@
       row.appendChild(img);
       const txt = el("div", "ut");
       txt.appendChild(el("div", "n", (u.neutral ? "vs " : u.home ? "vs " : "@ ") + (u.on || u.oa)));
-      txt.appendChild(el("div", "w", kickLabel(u.kick) + (u.tv ? " · " + u.tv : "")));
+      txt.appendChild(el("div", "w", kickLabel(u.kick, u.tbd) + (u.tv ? " · " + u.tv : "")));
       row.appendChild(txt);
       host.appendChild(row);
     }

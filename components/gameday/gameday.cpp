@@ -592,6 +592,7 @@ std::vector<::espn::FavGame> GamedayComponent::fav_games_() const {
     g.valid = e.game.valid;
     g.state = e.game.state;
     g.kickoff_epoch = e.game.kickoff_epoch;
+    g.time_tbd = e.game.time_tbd;
     g.final_epoch = e.final_epoch;
     // Out of season, a daily sport's next game is weeks away. Football has no
     // horizon: a bye week must not take a team out of the playlist.
@@ -1310,6 +1311,7 @@ void GamedayComponent::take_game_on_now_(const ::espn::Team *team, Schedule &s, 
     ESP_LOGI(TAG, "%s is playing now: event %s", team->abbr, today.event_id.c_str());
     s.event_id = today.event_id;
     s.kickoff_epoch = today.kickoff_epoch;
+    s.time_tbd = today.time_tbd;
     // The team endpoint's opponent belongs to the next game.
     s.opp_id = 0;
     s.opp_abbr.clear();
@@ -1367,7 +1369,8 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
   const ::espn::LeagueInfo *info = ::espn::league_info(league);
   bool per_event = info != nullptr && info->per_event;
   std::string url = per_event ? ::espn::event_url(league, schedule.event_id, schedule.comp_slug)
-                              : ::espn::scoreboard_url(league, schedule.group, schedule.kickoff_epoch);
+                              : ::espn::scoreboard_url(league, schedule.group, schedule.kickoff_epoch,
+                                                       schedule.time_tbd);
   ESP_LOGD(TAG, "Fetching game: %s", url.c_str());
   auto container = this->open_(url);
   if (container == nullptr)
@@ -1398,9 +1401,10 @@ uint32_t GamedayComponent::interval_for_phase_() const {
       ms = POST_INTERVAL;
       break;
     case GameState::PRE: {
+      // A TBD game's kickoff is a midnight placeholder: nothing to close in on.
       int64_t now = (int64_t) this->time_->timestamp_now();
       int64_t until = this->game_.kickoff_epoch - now;
-      ms = until <= PRE_NEAR_SECONDS ? PRE_NEAR_INTERVAL : PRE_FAR_INTERVAL;
+      ms = until <= PRE_NEAR_SECONDS && !this->game_.time_tbd ? PRE_NEAR_INTERVAL : PRE_FAR_INTERVAL;
       break;
     }
     default:
@@ -1553,6 +1557,7 @@ void GamedayComponent::start_job_() {
       // endpoint and stay valid; only the event moves.
       this->schedule_.event_id = next->event_id;
       this->schedule_.kickoff_epoch = next->kickoff_epoch;
+      this->schedule_.time_tbd = next->time_tbd;
       this->schedule_.comp_slug = nullptr;  // the list is the league's own
       if (!this->comps_.empty()) {
         // A cup game can come before the league's next fixture.
@@ -1670,6 +1675,7 @@ void GamedayComponent::run_job_() {
           ESP_LOGI(TAG, "Next game for %s: event %s", j.team->abbr, next.event_id.c_str());
           j.schedule.event_id = next.event_id;
           j.schedule.kickoff_epoch = next.kickoff_epoch;
+          j.schedule.time_tbd = next.time_tbd;
           j.schedule.next_final = false;
           j.schedule.opp_id = next.opp_id;
           j.schedule.opp_abbr = next.opp_abbr;
@@ -2034,9 +2040,10 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
     if (!s.valid || s.state != GameState::PRE || s.kickoff_epoch <= 0 || this->time_ == nullptr)
       return "";
-    struct tm kick = ESPTime::from_epoch_local((time_t) s.kickoff_epoch).to_c_tm();
+    int64_t at = s.time_tbd ? ::espn::tbd_day_epoch(s.kickoff_epoch) : s.kickoff_epoch;
+    struct tm kick = ESPTime::from_epoch_local((time_t) at).to_c_tm();
     struct tm now = this->time_->now().to_c_tm();
-    return ::espn::kickoff_label(kick, now);
+    return ::espn::kickoff_label(kick, now, s.time_tbd);
   };
   std::string kickoff = kickoff_of(g);
   f.kickoff = kickoff;
@@ -2479,6 +2486,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   game["detail"] = g.short_detail;
   game["done"] = g.completed;
   game["kick"] = g.kickoff_epoch;
+  if (g.time_tbd)
+    game["tbd"] = true;
   game["lp"] = g.last_play;
   game["dd"] = g.down_distance;
   if (f != nullptr) {
@@ -2519,6 +2528,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       o["id"] = e.game.event_id;
       o["s"] = ::espn::state_name(e.game.state);
       o["kick"] = e.game.kickoff_epoch;
+      if (e.game.time_tbd)
+        o["tbd"] = true;
       o["oi"] = e.game.opp_id;
       o["oa"] = e.game.opp_abbr;
       o["ts"] = e.game.team_score;
@@ -2532,6 +2543,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     JsonObject o = next.add<JsonObject>();
     o["id"] = u.event_id;
     o["kick"] = u.kickoff_epoch;
+    if (u.time_tbd)
+      o["tbd"] = true;
     o["oi"] = u.opp_id;
     o["oa"] = u.opp_abbr;
     o["on"] = u.opp_name;
