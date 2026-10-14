@@ -32,7 +32,10 @@ the same ground for people; this file is the short version.
   `esphome config` misses C++ errors.
 - Host tests: `make -C tests` (needs g++). CI also builds
   `make -C tests replay` and runs the `--selftest` of
-  `scripts/factory_flash.py`, `burnin_monitor.py` and `improv_scan.py`.
+  `scripts/factory_flash.py`, `burnin_monitor.py`, `improv_scan.py` and
+  `tests/web/mock_device.py`. The last checks the device page's mock
+  against `tests/fixtures/set_cases.json`, the same table the host tests
+  run through `components/gameday/set_request.h`.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run

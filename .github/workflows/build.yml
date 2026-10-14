@@ -215,6 +215,8 @@ jobs:
           python3 scripts/factory_flash.py --selftest
           python3 scripts/burnin_monitor.py --selftest
           python3 scripts/improv_scan.py --selftest
+      - name: Device page mock matches the firmware's set table
+        run: python3 tests/web/mock_device.py --selftest
 
   web-tests:
     # The device page (firmware/web/bundle.js) in Chromium against
