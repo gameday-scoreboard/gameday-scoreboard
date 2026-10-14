@@ -118,6 +118,9 @@ class GamedaySelect : public select::Select, public Component {
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
+//   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
+//                                    names only (components/saved_networks)
+//   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
 // The demo build (firmware/gameday-demo.yaml) adds do=demo|demo_stop and
 // GET/POST /gameday/demo (demo.cpp).
 // Requests arrive on the HTTP task; settings are applied on the main loop.
@@ -233,6 +236,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
   void put_fav_(uint8_t i, uint8_t league, uint32_t id);  // no save
   void handle_set_(AsyncWebServerRequest *request);
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+  void handle_wifi_(AsyncWebServerRequest *request);
+#endif
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();

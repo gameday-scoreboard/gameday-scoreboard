@@ -1,16 +1,22 @@
-# Host tests for the ESPN parser. Needs g++ and the ArduinoJson single header
-# next to this file (ArduinoJson.h, version 7.4.3 to match ESPHome).
+# Host tests for the ESPN parser and the saved Wi-Fi network list. Needs g++
+# and the ArduinoJson single header next to this file (ArduinoJson.h, version
+# 7.4.3 to match ESPHome).
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O1 -Wall -Wextra -I../components/gameday -I.
 
-all: build/test_parse
+all: build/test_parse build/test_networks
 	./build/test_parse
+	./build/test_networks
 
 SRCS = test_parse.cpp golden_football.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
 build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) $(SRCS) -o $@
+
+build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the

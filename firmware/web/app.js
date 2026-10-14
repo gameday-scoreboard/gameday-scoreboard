@@ -187,6 +187,12 @@
           <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
           <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
+        <div id="netsCard" hidden>
+          <div class="sub">Wi-Fi networks</div>
+          <p class="hint">The panel joins the first of these it can see, the last one that worked first. Set up another with the Game Day app and it is added here.</p>
+          <div id="nets"></div>
+          <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
+        </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
@@ -1179,6 +1185,48 @@
     }
   };
 
+  // ---- saved Wi-Fi networks ---------------------------------------------
+  // GET /gameday/wifi lists the networks the panel remembers, names only, in
+  // the order it tries them. Firmware without the list answers 404 and the
+  // section stays hidden.
+  const renderNetworks = (j) => {
+    const nets = j.networks || [];
+    const list = $("#nets");
+    list.innerHTML = "";
+    nets.forEach((n, i) => {
+      const row = el("div", "ctl");
+      const label = el("label", null, n.ssid);
+      if (n.connected) label.appendChild(el("small", null, "Connected"));
+      else if (i === 0) label.appendChild(el("small", null, "Tried first"));
+      row.appendChild(label);
+      const b = el("button", "btn danger", "Forget");
+      b.onclick = async () => {
+        if (!confirm("Forget " + n.ssid + "?")) return;
+        b.disabled = true;
+        try {
+          const r = await fetch("/gameday/wifi?forget=" + encodeURIComponent(n.ssid), { method: "POST" });
+          toast(r.ok ? "Forgot " + n.ssid + (n.connected ? "; it stays connected until the next restart" : "") : "Could not forget " + n.ssid);
+        } catch (_) {
+          toast("Could not forget " + n.ssid);
+        }
+        loadNetworks();
+      };
+      row.appendChild(b);
+      list.appendChild(row);
+    });
+    $("#netsEmpty").hidden = nets.length > 0;
+    $("#netsCard").hidden = false;
+  };
+  const loadNetworks = async () => {
+    try {
+      const r = await fetch("/gameday/wifi?_=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) { $("#netsCard").hidden = true; return; }
+      renderNetworks(await r.json());
+    } catch (_) {
+      $("#netsCard").hidden = true;
+    }
+  };
+
   // ---- event stream ------------------------------------------------------
   const onState = (e) => {
     ents[e.id] = Object.assign(ents[e.id] || {}, e);
@@ -1220,6 +1268,7 @@
   };
   connect();
   fetchState();
+  loadNetworks();
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   setInterval(fetchState, 15000);
 })();

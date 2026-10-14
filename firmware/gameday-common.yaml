@@ -134,8 +134,9 @@ external_components:
       path: ../components
     # improv_ble is ESPHome 2026.10's own, plus answering the app's "which
     # Wi-Fi networks can you see" request and going back to the saved network
-    # when a handover fails (components/improv_ble).
-    components: [gameday, panel_layout, improv_ble]
+    # when a handover fails (components/improv_ble). saved_networks keeps up
+    # to five Wi-Fi networks where ESPHome keeps one.
+    components: [gameday, panel_layout, improv_ble, saved_networks]
   - source: github://pavlov-net/lvgl-page-manager@v0.3.0
     components: [lvgl_page_manager]
   # Fireworks behind the touchdown and win splashes
@@ -197,6 +198,14 @@ ota:
   - platform: http_request
     id: gd_ota_http
 
+# The panel remembers up to five networks (home, a phone hotspot, a friend's
+# house) and tries the last one that worked first. Setup from the app or the
+# hotspot page adds to the list; "Reset Wi-Fi" and Factory Reset empty it.
+# GET /gameday/wifi lists them (names only) and POST /gameday/wifi?forget=
+# drops one.
+saved_networks:
+  id: gd_networks
+
 wifi:
   power_save_mode: none
   # Named per panel in on_boot.
@@ -222,6 +231,8 @@ wifi:
         id(gd_offline_seconds) = 0;
         if (improv_ble::global_improv_component != nullptr)
           improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
+        // The network that just worked is the first one tried next boot.
+        id(gd_networks).note_connected(wifi::global_wifi_component->get_sta());
         ESP_LOGI("wifi", "Connected. Internal heap free: %u bytes",
                  (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   # Wi-Fi is gone. Turn Bluetooth back on so the Game Day app can find the
@@ -675,6 +686,9 @@ button:
     entity_category: config
     on_press:
       - lambda: |-
+          // Every saved network, then ESPHome's own slot. The blank slot is
+          // what the panel reads as "reset" at boot (components/saved_networks).
+          id(gd_networks).forget_all();
           wifi::global_wifi_component->save_wifi_sta("", "");
       - delay: 500ms
       - lambda: |-

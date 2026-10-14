@@ -21,7 +21,10 @@ const test = base.test.extend({
   },
 });
 
-const reset = (request, state, fail) => request.post("/_reset", { data: { state, fail } });
+// wifi: the saved network list the mock answers with; undefined keeps the
+// mock's default, null is firmware without the list.
+const reset = (request, state, fail, wifi) =>
+  request.post("/_reset", { data: wifi === undefined ? { state, fail } : { state, fail, wifi } });
 const sets = async (request) =>
   (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/set").map((p) => p.q);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
@@ -553,6 +556,44 @@ test("the panel picker posts the new layout", async ({ page, request }) => {
   await expectSet(request, { panels: "1" });
   await expect(page.locator("#toast")).toHaveText("Restarting as 64x64");
   await expect(page.locator('#panels .panelpick[data-cols="2"]')).toBeDisabled();
+});
+
+test("saved Wi-Fi networks are listed in order and one can be forgotten", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const rows = page.locator("#nets .ctl");
+  await expect(page.locator("#netsCard")).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator("label")).toContainText("Home");
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+  await expect(rows.nth(1).locator("label")).toContainText("iPhone");
+  await expect(page.locator("#netsEmpty")).toBeHidden();
+
+  // Forget asks first; declining posts nothing.
+  page.once("dialog", (d) => d.dismiss());
+  await rows.nth(1).locator("button").click();
+  await sleep(300);
+  const forgets = async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi").map((p) => p.q);
+  expect(await forgets()).toEqual([]);
+
+  page.once("dialog", (d) => d.accept());
+  await rows.nth(1).locator("button").click();
+  await expect.poll(forgets).toEqual([{ forget: "iPhone" }]);
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0).locator("label")).toContainText("Home");
+
+  // Forgetting the last one leaves the empty line.
+  page.once("dialog", (d) => d.accept());
+  await rows.nth(0).locator("button").click();
+  await expect(rows).toHaveCount(0);
+  await expect(page.locator("#netsEmpty")).toBeVisible();
+
+  // Firmware without the list: the section stays hidden.
+  await reset(request, {}, [], null);
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#netsCard")).toBeHidden();
 });
 
 test("the stale tag follows the device's consecutive misses", async ({ page, request }) => {
