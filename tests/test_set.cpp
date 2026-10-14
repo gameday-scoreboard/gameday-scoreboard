@@ -18,15 +18,15 @@ namespace {
 int checks = 0;
 int failures = 0;
 
-#define SCHECK(cond, ...)    \
-  do {                       \
-    checks++;                \
-    if (!(cond)) {           \
-      failures++;            \
+#define SCHECK(cond, ...)                         \
+  do {                                            \
+    checks++;                                     \
+    if (!(cond)) {                                \
+      failures++;                                 \
       printf("FAIL %s:%d: ", __FILE__, __LINE__); \
-      printf(__VA_ARGS__);   \
-      printf("\n");          \
-    }                        \
+      printf(__VA_ARGS__);                        \
+      printf("\n");                               \
+    }                                             \
   } while (0)
 
 std::string slurp(const char *path) {
