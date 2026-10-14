@@ -189,10 +189,10 @@ scoreboard fixtures/scoreboard_nfl.json err=Ok
   play=
   odds=LAR -3.5 ou=48.5 tv=Netflix venue=Melbourne Cricket Ground
   clock_text=9/10 8:35 PM EDT
-  status[0,1,2,3,4,5,6,7]=9/10 - 8:35 PM EDT | Melbourne Cricket Ground
-  status[8,9,10,11,12,13,14,15]=9/10 - 8:35 PM EDT | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
-  status[16,17,18,19,20,21,22,23]=Sun 1:00 PM | Melbourne Cricket Ground
-  status[24,25,26,27,28,29,30,31]=Sun 1:00 PM | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
+  status[0,1,2,3,4,5,6,7]=NFL Melbourne Game | 9/10 - 8:35 PM EDT | Melbourne Cricket Ground
+  status[8,9,10,11,12,13,14,15]=NFL Melbourne Game | 9/10 - 8:35 PM EDT | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
+  status[16,17,18,19,20,21,22,23]=NFL Melbourne Game | Sun 1:00 PM | Melbourne Cricket Ground
+  status[24,25,26,27,28,29,30,31]=NFL Melbourne Game | Sun 1:00 PM | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
   splash n0 o0 d-1 us=/0 them=/0
   splash n0 o0 d0 us=/0 them=/0
   splash n0 o0 d1 us=EXTRA POINT!/13716 them=/0
@@ -258,10 +258,10 @@ scoreboard fixtures/scoreboard_nfl.json err=Ok
   play=
   odds=LAR -3.5 ou=48.5 tv=Netflix venue=Melbourne Cricket Ground
   clock_text=9/10 8:35 PM EDT
-  status[0,1,2,3,4,5,6,7]=9/10 - 8:35 PM EDT | Melbourne Cricket Ground
-  status[8,9,10,11,12,13,14,15]=9/10 - 8:35 PM EDT | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
-  status[16,17,18,19,20,21,22,23]=Sun 1:00 PM | Melbourne Cricket Ground
-  status[24,25,26,27,28,29,30,31]=Sun 1:00 PM | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
+  status[0,1,2,3,4,5,6,7]=NFL Melbourne Game | 9/10 - 8:35 PM EDT | Melbourne Cricket Ground
+  status[8,9,10,11,12,13,14,15]=NFL Melbourne Game | 9/10 - 8:35 PM EDT | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
+  status[16,17,18,19,20,21,22,23]=NFL Melbourne Game | Sun 1:00 PM | Melbourne Cricket Ground
+  status[24,25,26,27,28,29,30,31]=NFL Melbourne Game | Sun 1:00 PM | LAR -3.5 | O/U 48.5 | Netflix | Melbourne Cricket Ground
   splash n0 o0 d-1 us=/0 them=/0
   splash n0 o0 d0 us=/0 them=/0
   splash n0 o0 d1 us=EXTRA POINT!/11141120 them=/0
@@ -3225,10 +3225,10 @@ scoreboard fixtures/scoreboard_ncaa_live.json err=Ok
   play=
   odds=MISS -6.5 ou=54.5 tv=ABC venue=Nissan Stadium
   clock_text=9/6 7:30 PM EDT
-  status[0,1,2,3,4,5,6,7]=9/6 - 7:30 PM EDT | Nissan Stadium
-  status[8,9,10,11,12,13,14,15]=9/6 - 7:30 PM EDT | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
-  status[16,17,18,19,20,21,22,23]=Sun 1:00 PM | Nissan Stadium
-  status[24,25,26,27,28,29,30,31]=Sun 1:00 PM | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
+  status[0,1,2,3,4,5,6,7]=Liberty Mutual Music City Kickoff | 9/6 - 7:30 PM EDT | Nissan Stadium
+  status[8,9,10,11,12,13,14,15]=Liberty Mutual Music City Kickoff | 9/6 - 7:30 PM EDT | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
+  status[16,17,18,19,20,21,22,23]=Liberty Mutual Music City Kickoff | Sun 1:00 PM | Nissan Stadium
+  status[24,25,26,27,28,29,30,31]=Liberty Mutual Music City Kickoff | Sun 1:00 PM | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
  event 401856661 team 97 ok=1
   valid=1 state=PRE event=401856661 kick=1788737400 completed=0
   detail=9/6 - 7:30 PM EDT clock=0:00 period=0
@@ -3238,10 +3238,10 @@ scoreboard fixtures/scoreboard_ncaa_live.json err=Ok
   play=
   odds=MISS -6.5 ou=54.5 tv=ABC venue=Nissan Stadium
   clock_text=9/6 7:30 PM EDT
-  status[0,1,2,3,4,5,6,7]=9/6 - 7:30 PM EDT | Nissan Stadium
-  status[8,9,10,11,12,13,14,15]=9/6 - 7:30 PM EDT | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
-  status[16,17,18,19,20,21,22,23]=Sun 1:00 PM | Nissan Stadium
-  status[24,25,26,27,28,29,30,31]=Sun 1:00 PM | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
+  status[0,1,2,3,4,5,6,7]=Liberty Mutual Music City Kickoff | 9/6 - 7:30 PM EDT | Nissan Stadium
+  status[8,9,10,11,12,13,14,15]=Liberty Mutual Music City Kickoff | 9/6 - 7:30 PM EDT | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
+  status[16,17,18,19,20,21,22,23]=Liberty Mutual Music City Kickoff | Sun 1:00 PM | Nissan Stadium
+  status[24,25,26,27,28,29,30,31]=Liberty Mutual Music City Kickoff | Sun 1:00 PM | MISS -6.5 | O/U 54.5 | ABC | Nissan Stadium
  event 401858212 team 52 ok=1
   valid=1 state=PRE event=401858212 kick=1788823800 completed=0
   detail=9/7 - 7:30 PM EDT clock=0:00 period=0

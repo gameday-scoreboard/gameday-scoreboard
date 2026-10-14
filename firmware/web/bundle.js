@@ -8,7 +8,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   POST /gameday/action?do=name  refresh
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
-// "Game Status" event is the cue to re-read the state document.
+// "Game Status" event, sent on every board update, is the cue to re-read the
+// state document.
 // Bundled with the team table by scripts/build_web.py, which defines
 // TEAMS = [[league, espnId, abbr, name], ...] and TZS = [[name, iana], ...].
 
@@ -78,6 +79,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
       <div class="play" id="play"></div>
@@ -172,7 +174,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl" id="tzpick" hidden><label>Timezone</label><select id="tzsel"></select></div>
         <div class="sub">Startup</div>
         <div class="ctl">
-          <label>Show how to connect when the panel starts<small>For 3 seconds after it connects: the Game Day app, or the page address. Hold the boot button any time to show the address again.</small></label>
+          <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
         </div>
       </div>
@@ -182,6 +184,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="fw" id="fw" hidden>
           <div class="fwline"><span id="fwText">Firmware</span><button class="btn primary" id="fwInstall" hidden>Install</button></div>
           <div class="fwsub" id="fwSub"></div>
+        </div>
+        <div class="ctl" id="autoupdRow" hidden>
+          <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
+          <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
@@ -390,15 +396,22 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
     $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // Bowl or playoff name, when ESPN gives the game one
+    const gname = $("#gname");
+    gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
+    gname.hidden = !gname.textContent;
     if (!g || g.s === "NOT_FOUND") {
       b.classList.add("empty");
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
       const mode = S ? String(S.mode || 0) : "0";
+      const favMode = mode === "4" && S && (S.favs || []).some(refKey);
+      // With no team picked the panel runs the live board, unless Favorites has teams.
+      const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
       msg.textContent = !g ? "Waiting for the first fetch"
-        : mode === "4" ? "None of your favorites has a game coming up"
-          : mode !== "0" ? "No live games right now" : "No upcoming game for this team";
+        : favMode ? "None of your favorites has a game coming up"
+          : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
       return;
@@ -588,6 +601,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
+    // Firmware that can't install updates (older, or the demo build) leaves it out.
+    $("#autoupdRow").hidden = S.autoupd === undefined;
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
   };
@@ -1138,7 +1153,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
       $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = cur ? "You have " + cur + "." : "";
+      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "");
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {
@@ -1177,9 +1192,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       built[e.id].update(ents[e.id]);
     }
     switch (name) {
-      // A new ticker line means the device finished a poll: re-read the state document.
-      case "Game Status": $("#ticker").textContent = e.value || ""; scheduleState(150); break;
-      case "Last Play": $("#play").textContent = e.value ? "Last play: " + e.value : ""; break;
+      // Sent on every board update: re-read the state document. Its value is
+      // Home Assistant's shorter line, so the ticker and last play come from there.
+      case "Game Status": scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;

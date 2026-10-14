@@ -8,7 +8,7 @@
 namespace esphome::gameday {
 
 static const char *const TAG = "gameday.logo";
-static const char *const USER_AGENT = "curl/8.0 gameday-scoreboard";
+static const char *const USER_AGENT = "curl/8.0";
 // About four logos per team on screen at once in the busiest playlist, times
 // a full favorites list plus live games, with room to spare. Each is ~3 KB.
 static const size_t MAX_LOGOS = 48;

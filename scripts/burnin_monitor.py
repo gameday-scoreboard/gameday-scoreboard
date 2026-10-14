@@ -2,8 +2,10 @@
 """Watch panels through a burn-in and report which ones failed.
 
 Every --interval seconds it reads each panel's event stream (the one the
-device page uses) for uptime, free heap and Wi-Fi signal, and /gameday/state
-for ESPN fetch misses and how old the score is. Every request is a GET. Each
+device page uses) for uptime, free heap and Wi-Fi signal, /gameday/heap for
+the heap right now (the heap sensors only read every 5 minutes), and
+/gameday/state for ESPN fetch misses and how old the score is. Every request
+is a GET. Each
 reading is a row in burnin/<start time>.csv. When --hours runs out, or on
 Ctrl+C, it prints one line per panel: PASS, or FAIL and why.
 
@@ -90,6 +92,28 @@ def stream_lines(host, timeout):
         conn.close()
 
 
+def get_json(host, path, timeout):
+    """The JSON at path, or None when the panel answers anything but 200."""
+    conn = http.client.HTTPConnection(host, 80, timeout=timeout)
+    try:
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        body = resp.read()
+        return json.loads(body) if resp.status == 200 else None
+    finally:
+        conn.close()
+
+
+def parse_heap(doc):
+    """/gameday/heap's KiB figures under this script's column names."""
+    out = {}
+    if isinstance(doc.get("internal"), (int, float)):
+        out["heap_internal_kib"] = doc["internal"]
+    if isinstance(doc.get("psram"), (int, float)):
+        out["heap_psram_kib"] = doc["psram"]
+    return out
+
+
 def read_panel(host, timeout=6):
     wanted = {"uptime_s", *SENSORS.values()}
     lines = stream_lines(host, timeout)
@@ -99,6 +123,9 @@ def read_panel(host, timeout=6):
         lines.close()
     if "uptime_s" not in reading:
         raise OSError("no uptime in the event stream")
+    heap = get_json(host, "/gameday/heap", timeout)  # None on firmware from before the route
+    if heap is not None:
+        reading.update(parse_heap(heap))
     conn = http.client.HTTPConnection(host, 80, timeout=timeout)
     try:
         conn.request("GET", "/gameday/state")
@@ -169,6 +196,9 @@ def selftest():
     assert got == {"uptime_s": 1758, "version": "v1.5.4", "heap_psram_kib": 6131.73,
                    "heap_internal_kib": 78.51953, "rssi_dbm": -30}, got
     assert parse_events(iter(["event: ping\n", "data: not json\n", "\n"]), {"uptime_s"}) == {}
+    assert parse_heap({"internal": 81.2, "block": 30.0, "psram": 6100.5}) == {
+        "heap_internal_kib": 81.2, "heap_psram_kib": 6100.5}
+    assert parse_heap({"error": "x"}) == {}
 
     assert not restarted(None, 5, 100.0)
     assert not restarted((0.0, 1000), 1060, 60.0)

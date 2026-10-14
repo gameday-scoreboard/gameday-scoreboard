@@ -106,6 +106,29 @@ test("an upcoming game shows kickoff and network", async ({ page, request }) => 
   await expect(page.locator("#msg")).toBeHidden();
 });
 
+test("a bowl or playoff game shows its name, other games none", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#gname")).toBeHidden();
+
+  const g = (await (await request.get("/gameday/state")).json()).game;
+  await reset(request, { game: { ...g, gn: "Super Bowl LX" } });
+  await page.reload();
+  await expect(page.locator("#gname")).toBeVisible();
+  await expect(page.locator("#gname")).toHaveText("Super Bowl LX");
+
+  await reset(request, { game: { ...g, ...LIVE, gn: "Rose Bowl" } });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("LIVE");
+  await expect(page.locator("#gname")).toHaveText("Rose Bowl");
+
+  await reset(request, { game: { s: "NOT_FOUND", l: "nfl", gn: "Rose Bowl" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("NO GAME");
+  await expect(page.locator("#gname")).toBeHidden();
+});
+
 test("no game renders the empty board for my team and for live modes", async ({ page, request }) => {
   await reset(request, { game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
   await page.goto("/");
@@ -123,6 +146,12 @@ test("no game renders the empty board for my team and for live modes", async ({ 
   await page.reload();
   await expect(page.locator("#msg")).toHaveText("None of your favorites has a game coming up");
   await expect(page.locator("#favbar")).toBeVisible();
+
+  // No team picked: My team runs the live board, so it says the same
+  await reset(request, { mode: 0, team: {}, game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("No live games right now");
+  await expect(page.locator("#curName")).toHaveText("No team chosen");
 });
 
 test("a device that never answers /gameday/state leaves the page waiting, not broken", async ({ page, request }) => {
@@ -409,6 +438,24 @@ test("a chip tap the panel never got goes back to what the panel has", async ({ 
   await expect(chipsOn(page)).toHaveText(["NCAAF"]);
   await expect(page.locator("#modes button.on")).toHaveText("Live games");
   expect((await deviceState(request)).mode).toBe(2);
+});
+
+test("install updates automatically: off by default, posts 0 and 1, hidden when the firmware has no such setting", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="autoupd"]');
+  await expect(page.locator("#autoupdRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/on/);
+  await sw.click();
+  await expectSet(request, { autoupd: "1" });
+  await expect(sw).toHaveClass(/on/);
+  await sw.click();
+  await expectSet(request, { autoupd: "0" });
+
+  await reset(request, { autoupd: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
 test("a team picked in My team stays on the page through a slow re-read", async ({ page, request }) => {
