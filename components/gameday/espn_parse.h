@@ -275,6 +275,13 @@ namespace detail {
 // Ticker helpers shared by the sport files.
 void add_part(std::string &out, const std::string &part);
 std::string records_line(const GameSnapshot &s);
+// The pre-game betting parts when the ticker shows odds: the line, the
+// over/under and the TV listing. Soccer builds its own line.
+void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);
+void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds);
+// The last play, cut to 160 characters so one long description doesn't fill
+// the ticker.
+void add_last_play(std::string &out, std::string play);
 }  // namespace detail
 
 // Does this cycle need to re-read the team endpoint, or only re-poll the game

@@ -7,6 +7,7 @@
 
 namespace espn {
 
+using detail::add_odds;
 using detail::add_part;
 using detail::str_or_empty;
 
@@ -410,12 +411,7 @@ std::string soccer_status_text(const GameSnapshot &s, const TickerOptions &o, co
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, stage(f.note));
       add_part(out, pair_line("Form", s, f.team_form, f.opp_form));
-      if (o.odds) {
-        add_part(out, odds_line(s));
-        if (!s.over_under.empty())
-          add_part(out, "O/U " + s.over_under);
-        add_part(out, s.tv);
-      }
+      add_odds(out, s, o, odds_line(s));
       add_part(out, s.venue);
       return ascii_fold(out);
     case GameState::POST:
