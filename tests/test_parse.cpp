@@ -8,6 +8,7 @@
 
 #include "demo.h"
 #include "espn_parse.h"
+#include "espn_parse_impl.h"
 #include "favorites.h"
 #include "logo_lru.h"
 #include "recap.h"
@@ -64,6 +65,10 @@ static void test_urls() {
            std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=1&dates=20260905"));
   CHECK_EQ(scoreboard_url(League::NCAA, 9, parse_iso8601_z("2026-09-06T02:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=9&dates=20260905"));
+  CHECK_EQ(event_url(League::NFL, "401872999"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard/401872999"));
+  CHECK_EQ(event_url(League::NCAA, "401871053"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard/401871053"));
   CHECK_EQ(dark_logo("https://a.espncdn.com/i/teamlogos/ncaa/500/68.png"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/68.png&w=64&h=64"));
   CHECK_EQ(dark_logo("https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/sea.png&w=64&h=64"));
   CHECK_EQ(team_logo_url(League::NFL, 6, "DAL"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/dal.png&w=64&h=64"));
@@ -149,6 +154,97 @@ static void test_scoreboard_live() {
   CHECK(!parse_scoreboard_str(json, kLiveEvent, kSeahawks, x));
   // Event missing
   CHECK(!parse_scoreboard_str(json, "1", kBoise, x));
+}
+
+// The single-game document (event_url), recorded 2026-10-13 during FIU @ JXST.
+static void test_event_live() {
+  std::string json = slurp("fixtures/event_ncaa_live.json");
+  GameSnapshot s;
+  CHECK(parse_event_str(json, "401871053", 2229, s));  // FIU's side
+  CHECK(s.valid);
+  CHECK(s.state == GameState::IN);
+  CHECK_EQ(s.team_abbr, std::string("FIU"));
+  CHECK_EQ(s.opp_abbr, std::string("JXST"));
+  CHECK_EQ(s.team_score, 24);
+  CHECK_EQ(s.opp_score, 27);
+  CHECK_EQ(s.possession, 1);  // FIU has the ball
+  CHECK_EQ(s.team_timeouts, 0);
+  CHECK_EQ(s.opp_timeouts, 1);
+  CHECK_EQ(s.down_distance, std::string("3rd & 4 at FIU 31"));
+  CHECK_EQ(s.short_detail, std::string("0:33 - 4th"));
+  CHECK_EQ(s.team_record, std::string("3-2"));
+  CHECK_EQ(s.tv, std::string("ESPNU"));
+  CHECK_EQ(s.venue, std::string("AmFirst Stadium"));
+  CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-10-14T00:00Z"));
+  CHECK(s.last_play.find("J.Kohl pass complete") != std::string::npos);
+
+  GameSnapshot x;
+  CHECK(!parse_event_str(json, "401871053", kSeahawks, x));  // not our game
+  CHECK(!parse_event_str(json, "401871054", 2229, x));       // some other event
+  CHECK(!parse_event_str("{\"code\":404,\"message\":\"No event found\"}", "401871053", 2229, x));
+  CHECK(!parse_event_str("{not json", "401871053", 2229, x));
+
+  GameSnapshot chi;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre.json"), "401872999", 3, chi));
+  CHECK(chi.state == GameState::PRE);
+  CHECK_EQ(chi.opp_abbr, std::string("ATL"));
+  CHECK_EQ(chi.odds, std::string("CHI -3"));
+  CHECK_EQ(chi.over_under, std::string("49.5"));
+  CHECK_EQ(chi.tv, std::string("Fox"));
+
+  GameSnapshot sea;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_super_bowl.json"), "401772988", 26, sea));
+  CHECK(sea.completed);
+  CHECK(sea.team_winner);
+  CHECK_EQ(sea.game_name, std::string("Super Bowl LX"));
+}
+
+static bool same_snapshot(const GameSnapshot &a, const GameSnapshot &b) {
+  return a.valid == b.valid && a.state == b.state && a.event_id == b.event_id && a.kickoff_epoch == b.kickoff_epoch &&
+         a.completed == b.completed && a.short_detail == b.short_detail && a.display_clock == b.display_clock &&
+         a.period == b.period && a.team_abbr == b.team_abbr && a.opp_abbr == b.opp_abbr && a.team_id == b.team_id &&
+         a.opp_id == b.opp_id && a.team_score == b.team_score && a.opp_score == b.opp_score &&
+         a.team_record == b.team_record && a.opp_record == b.opp_record && a.team_color == b.team_color &&
+         a.opp_color == b.opp_color && a.team_logo == b.team_logo && a.opp_logo == b.opp_logo &&
+         a.team_winner == b.team_winner && a.possession == b.possession && a.team_timeouts == b.team_timeouts &&
+         a.opp_timeouts == b.opp_timeouts && a.last_play == b.last_play && a.down_distance == b.down_distance &&
+         a.short_down_distance == b.short_down_distance && a.is_red_zone == b.is_red_zone && a.odds == b.odds &&
+         a.over_under == b.over_under && a.tv == b.tv && a.venue == b.venue && a.game_name == b.game_name;
+}
+
+// ESPN's single-game document is the game's entry from the day's scoreboard on
+// its own (checked against 48 live, upcoming and final games on 2026-10-13).
+// So every game in every scoreboard fixture, cut out on its own, must read the
+// same through parse_event as through parse_scoreboard, from both sides.
+static void test_event_matches_scoreboard() {
+  const char *files[] = {"fixtures/scoreboard_ncaa_live.json",          "fixtures/scoreboard_nfl.json",
+                         "fixtures/scoreboard_ncaa_conf_titles.json",   "fixtures/scoreboard_ncaa_cfp_quarterfinals.json",
+                         "fixtures/scoreboard_ncaa_cfp_final.json",     "fixtures/scoreboard_nfl_wild_card.json",
+                         "fixtures/scoreboard_nfl_super_bowl.json"};
+  int compared = 0;
+  for (const char *file : files) {
+    std::string json = slurp(file);
+    JsonDocument doc;
+    CHECK(!deserializeJson(doc, json, DeserializationOption::NestingLimit(40)));
+    for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
+      std::string id = ev["id"] | "";
+      std::string one;
+      serializeJson(ev, one);
+      for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+        uint32_t team = (uint32_t) atol(c["id"] | "0");
+        GameSnapshot from_board, alone;
+        bool ok_board = parse_scoreboard_str(json, id, team, from_board);
+        bool ok_alone = parse_event_str(one, id, team, alone);
+        CHECK_EQ(ok_alone, ok_board);
+        if (!same_snapshot(alone, from_board)) {
+          failures++;
+          printf("FAIL %s: event %s team %u reads differently on its own\n", file, id.c_str(), (unsigned) team);
+        }
+        compared++;
+      }
+    }
+  }
+  CHECK(compared > 200);
 }
 
 static void test_scoreboard_post() {
@@ -1219,6 +1315,8 @@ int main() {
   test_team_parse();
   test_scoreboard_live();
   test_scoreboard_post();
+  test_event_live();
+  test_event_matches_scoreboard();
   test_scoreboard_pre_nfl();
   test_splash();
   test_status_text();

@@ -62,7 +62,7 @@ INITIAL = {
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
-    "misses": 0, "stale_s": 4, "fallback": False,
+    "misses": 0, "stale_s": 4, "fallback": False, "espn_kb": 412, "espn_reads": 23,
     "game": {"s": "PRE", "l": "nfl", "ta": "DAL", "ti": 6, "ts": 0, "oa": "PHI", "oi": 21, "os": 0,
              "tr": "1-0", "or": "0-1", "p": 0, "tt": 3, "ot": 3, "rz": False, "tv": "FOX",
              "venue": "AT&T Stadium", "odds": "DAL -3", "ou": "47.5", "detail": "Sun 3:25 PM",

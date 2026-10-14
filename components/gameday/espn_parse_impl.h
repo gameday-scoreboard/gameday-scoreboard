@@ -23,8 +23,9 @@ inline std::string str_or_empty(JsonVariantConst v) {
   return s ? std::string(s) : std::string();
 }
 
-inline void fill_scoreboard_filter(JsonDocument &f) {
-  JsonObject ev = f["events"].add<JsonObject>();
+// The fields of one event that the board reads. The day's scoreboard holds a
+// list of these; the single-event document (event_url) is one on its own.
+inline void fill_event_filter(JsonObject ev) {
   ev["id"] = true;
   ev["date"] = true;
   ev["status"]["displayClock"] = true;
@@ -55,6 +56,8 @@ inline void fill_scoreboard_filter(JsonDocument &f) {
   comp["venue"]["fullName"] = true;
   comp["notes"].add<JsonObject>()["headline"] = true;
 }
+
+inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>()); }
 
 inline void fill_upcoming_filter(JsonDocument &f) {
   JsonObject ev = f["events"].add<JsonObject>();
@@ -349,6 +352,25 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       out.push_back(g);
   }
   return true;
+}
+
+// Parses a single-event document (event_url), whose root object is the event.
+// ESPN serves it with the same fields as the event's entry in the day's
+// scoreboard, at a tenth of the size or less. Returns false on a JSON error or
+// when the document is some other event.
+template<typename TInput>
+bool parse_event(TInput &input, const std::string &event_id, uint32_t our_team_id, GameSnapshot &out) {
+  JsonDocument filter(detail::json_allocator());
+  detail::fill_event_filter(filter.to<JsonObject>());
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                              DeserializationOption::NestingLimit(40));
+  if (err)
+    return false;
+  JsonObjectConst ev = doc.as<JsonObjectConst>();
+  if (detail::str_or_empty(ev["id"]) != event_id)
+    return false;
+  return detail::snapshot_from_event(ev, our_team_id, out);
 }
 
 // Parses a scoreboard document and extracts the event with `event_id`.

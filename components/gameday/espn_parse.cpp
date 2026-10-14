@@ -64,6 +64,10 @@ std::string scan_url(League league, int64_t now_epoch) {
   return url;
 }
 
+std::string event_url(League league, const std::string &event_id) {
+  return std::string(kSite) + league_path(league) + "/scoreboard/" + event_id;
+}
+
 // Dark-background variant, shrunk to 64px by ESPN's image resizer. A 500px
 // logo PNG is up to 95KB and takes the ESP32 almost two seconds to decode;
 // the 64px one is about 3KB and decodes in a few milliseconds.
@@ -123,6 +127,10 @@ bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t ma
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out) {
   return parse_scoreboard(json, event_id, our_team_id, out);
+}
+
+bool parse_event_str(const std::string &json, const std::string &event_id, uint32_t our_team_id, GameSnapshot &out) {
+  return parse_event(json, event_id, our_team_id, out);
 }
 
 uint32_t parse_color(const std::string &hex) {

@@ -109,6 +109,9 @@ std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch);
 std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
+// One game on its own, 10 to 20 KB, where the day's scoreboard it sits in is
+// up to 260 KB (NFL) or 750 KB (college). The board polls this.
+std::string event_url(League league, const std::string &event_id);
 std::string dark_logo(const std::string &url);
 std::string team_logo_url(League league, uint32_t espn_id, const char *abbr);  // for a team with no game loaded yet
 
@@ -117,6 +120,8 @@ bool parse_team_str(const std::string &json, Schedule &out);
 bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out);
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);
+// The single-event document from event_url().
+bool parse_event_str(const std::string &json, const std::string &event_id, uint32_t our_team_id, GameSnapshot &out);
 
 // neutral = nobody is "our" team (live-game modes): both sides splash with their abbreviation.
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);

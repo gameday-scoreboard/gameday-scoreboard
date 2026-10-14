@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -169,6 +170,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
   bool board_ready() const { return this->board_ready_; }
+  // What the panel has downloaded from ESPN since boot: reply bodies and
+  // logos. Each request also spends about 6 KB on headers and the TLS
+  // handshake, which this does not see.
+  uint64_t espn_bytes() const { return this->espn_bytes_.load() + this->logos_.bytes_downloaded(); }
+  uint32_t espn_requests() const { return this->espn_requests_.load(); }
   // True while a boot screen hold that started at since_ms should go on
   // (startup.h). 0 means no hold is running.
   bool boot_hold(uint32_t since_ms) const { return ::espn::boot_hold(this->board_ready_, since_ms, millis()); }
@@ -525,6 +531,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool busy_{false};
   bool selects_published_{false};
   volatile bool job_done_{false};
+  // Written by the fetch task, read by the main loop.
+  std::atomic<uint64_t> espn_bytes_{0};
+  std::atomic<uint32_t> espn_requests_{0};
 };
 
 class UpdateTrigger : public Trigger<const UpdateFields &> {

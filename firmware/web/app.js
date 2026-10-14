@@ -174,6 +174,7 @@
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
+        <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
       </div>
     </div>
 
@@ -843,6 +844,15 @@
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderData();
+  };
+
+  const renderData = () => {
+    const kb = S && S.espn_kb;
+    if (kb == null) { $("#espnData").textContent = ""; return; }
+    const size = kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(kb < 100000 ? 1 : 0) + " MB";
+    const reads = S.espn_reads || 0;
+    $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
   };
 
   // After an install the device reboots. The event stream only retries every
