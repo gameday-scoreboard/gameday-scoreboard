@@ -82,6 +82,9 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator("#curName")).toHaveText("Dallas Cowboys");
   await expect(page.locator('.sw[data-set="down"]')).toHaveClass(/on/);
   await expect(page.locator('.sw[data-set="odds"]')).not.toHaveClass(/on/);
+  // The ticker switches are named for every sport, not football.
+  await expect(page.getByRole("button", { name: "Game situation", exact: true })).toHaveAttribute("data-set", "down");
+  await expect(page.locator("#tickerCtls")).not.toContainText("Down and distance");
   await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
     /^1\. Dallas Cowboys/, /^2\. Houston Texans/, /^3\. Ole Miss Rebels/,
   ]);

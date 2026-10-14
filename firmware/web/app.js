@@ -118,16 +118,16 @@
         <h2>Ticker</h2>
         <p class="hint">What scrolls along the bottom of the panel during a game.</p>
         <div id="tickerCtls">
-          <div class="ctl"><label>Down and distance</label><button class="sw" data-set="down" aria-label="Down and distance"></button></div>
-          <div class="ctl"><label>Last play</label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Pre-game odds and TV</label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Game situation<small>Football: down and distance. Baseball: the count, outs, pitcher and batter. Soccer: goals, cards, possession and shots. Nothing extra in hockey or basketball.</small></label><button class="sw" data-set="down" aria-label="Game situation"></button></div>
+          <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
+          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
         </div>
       </div>
       <div class="card">
         <h2>Celebrations</h2>
         <p class="hint">Full-screen splashes for scores. Yours always show.</p>
         <div id="celebCtls">
-          <div class="ctl"><label>Opponent scores too</label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
       <div class="card">
