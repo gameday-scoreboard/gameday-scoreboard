@@ -92,7 +92,7 @@ constexpr Team kTeams[] = {
     {League::NCAA, 84, "IU", "Indiana Hoosiers", 5},
     {League::NCAA, 2294, "IOWA", "Iowa Hawkeyes", 5},
     {League::NCAA, 66, "ISU", "Iowa State Cyclones", 4},
-    {League::NCAA, 55, "JVST", "Jacksonville State Gamecocks", 12},
+    {League::NCAA, 55, "JXST", "Jacksonville State Gamecocks", 12},
     {League::NCAA, 256, "JMU", "James Madison Dukes", 37},
     {League::NCAA, 2305, "KU", "Kansas Jayhawks", 4},
     {League::NCAA, 2306, "KSU", "Kansas State Wildcats", 4},
