@@ -83,7 +83,7 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator('.sw[data-set="down"]')).toHaveClass(/on/);
   await expect(page.locator('.sw[data-set="odds"]')).not.toHaveClass(/on/);
   // The ticker switches are named for every sport, not football.
-  await expect(page.getByRole("button", { name: "Game situation", exact: true })).toHaveAttribute("data-set", "down");
+  await expect(page.getByRole("switch", { name: "Game situation", exact: true })).toHaveAttribute("data-set", "down");
   await expect(page.locator("#tickerCtls")).not.toContainText("Down and distance");
   await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
     /^1\. Dallas Cowboys/, /^2\. Houston Texans/, /^3\. Ole Miss Rebels/,
@@ -284,6 +284,57 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
   await expectSet(request, { today: "1" });
   await expect(page.locator('.sw[data-set="down"]')).not.toHaveClass(/on/);
   await expect(page.locator('.sw[data-set="play"]')).toHaveClass(/on/);
+});
+
+test("a screen reader gets each control's name, role and state", async ({ page, request }) => {
+  await reset(request, { play: false });
+  await page.goto("/");
+  await expect(page.locator("#conn")).toHaveClass(/on/);
+  await expect(page.locator("#conn")).toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#toast")).toHaveAttribute("role", "status");
+
+  await expect(page.getByRole("switch", { name: "Game situation" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Last play" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Last play" }).click();
+  await expectSet(request, { play: "1" });
+  await expect(page.getByRole("switch", { name: "Last play" })).toBeChecked();
+  // The entity controls built from the event stream
+  await expect(page.getByRole("switch", { name: "Panel on" })).toBeChecked();
+  await expect(page.getByRole("slider", { name: "Brightness" })).toHaveValue("128");
+  await expect(page.getByRole("slider", { name: "Ticker speed" })).toHaveValue("5");
+  await expect(page.getByRole("combobox", { name: "Showing" })).toHaveValue("Scoreboard");
+
+  const modes = page.getByRole("group", { name: "Mode" });
+  await expect(modes.getByRole("button", { pressed: true })).toHaveText("My team");
+  await expect(modes.getByRole("button", { pressed: false })).toHaveText(["Live games", "Favorite teams"]);
+  await expect(page.getByRole("button", { name: /^One 128x64 panel/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "One 64x64 panel" })).toHaveAttribute("aria-pressed", "false");
+
+  // The picker's league tabs: one selected, in the Tab order, the arrow keys move between them.
+  await page.getByRole("button", { name: "Change team" }).click();
+  await expect(page.getByRole("searchbox", { name: "Search teams" })).toBeFocused();
+  const tabs = page.getByRole("tablist", { name: "Leagues" });
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NFL");
+  await expect(tabs.locator('[tabindex="0"]')).toHaveText("NFL");
+  await tabs.getByRole("tab", { name: "NFL" }).press("ArrowRight");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NCAAF");
+  await expect(tabs.getByRole("tab", { name: "NCAAF" })).toBeFocused();
+  await expect(page.getByRole("tabpanel").locator(".tile .a").first()).toContainText("NCAAF");
+  await page.keyboard.press("End");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NHL");
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("On now");
+  await expect(tabs.locator('[tabindex="0"]')).toHaveText("On now");
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await reset(request, { mode: 5, live: ["mlb", "nhl"], live_auto: false });
+  await page.reload();
+  await expect(modes.getByRole("button", { pressed: true })).toHaveText("Live games");
+  const chips = page.getByRole("group", { name: "Leagues" });
+  await expect(chips.getByRole("button", { pressed: true })).toHaveText(["MLB", "NHL"]);
+  await chips.getByRole("button", { name: "NBA", exact: true }).click();
+  await expectSet(request, { live: "mlb,nhl,nba" });
+  await expect(chips.getByRole("button", { pressed: true })).toHaveText(["MLB", "NBA", "NHL"]);
 });
 
 test("favorites post the whole list in order on add, move and remove", async ({ page, request }) => {
