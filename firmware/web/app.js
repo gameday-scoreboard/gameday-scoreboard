@@ -124,6 +124,7 @@
           <div class="ctl"><label>Game situation<small>Football: down and distance. Baseball: the count, outs, pitcher and batter. Soccer: goals, cards, possession and shots. Nothing extra in hockey or basketball.</small></label><button class="sw" data-set="down" aria-label="Game situation"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
           <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Pre-game season leaders<small>Before kickoff in football, each team's passing leader with his yards and touchdowns. Both teams' records show either way.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -260,7 +261,7 @@
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    down: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),

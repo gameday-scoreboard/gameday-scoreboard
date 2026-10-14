@@ -35,6 +35,7 @@ owns the panel, not for the code.
 - Built your own? The DIY installer at gamedayscoreboard.app asks whether you have one 64x64 panel or a 128x64 (or two 64x64 side by side) and installs the matching firmware, so a two-panel build starts on the whole board.
 - The hidden demo (do=demo) is gone from the regular firmware.
 - During a game the panel asks ESPN for just that game instead of the whole day's scoreboard, about a tenth of the data it downloaded before. The device page shows how much the panel has pulled from ESPN since it started, for anyone on a capped plan.
+- Before a game the ticker shows both teams' records, and in football each team's passing leader with his yards and touchdowns. A switch on the device page turns the leaders off.
 
 ## v1.5.5
 

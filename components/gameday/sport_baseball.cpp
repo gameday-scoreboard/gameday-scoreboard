@@ -6,6 +6,7 @@ namespace espn {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
 static std::string hits_line(const GameSnapshot &s) {
@@ -30,6 +31,7 @@ std::string baseball_status_text(const GameSnapshot &s, const TickerOptions &o, 
     case GameState::PRE:
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
+      add_part(out, pregame_records(s));
       if (!b.team_probable.empty() && !b.opp_probable.empty())
         add_part(out, s.team_abbr + " " + b.team_probable + " vs " + s.opp_abbr + " " + b.opp_probable);
       add_odds(out, s, o);

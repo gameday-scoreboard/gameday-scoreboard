@@ -49,7 +49,7 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 | Show | My team, Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every few minutes |
 | Team | All 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
-| Ticker: game situation, last play, odds and TV | Choose what scrolls along the bottom. Game situation is down and distance in football, the count and outs in baseball, and goals, cards and stats in soccer |
+| Ticker: game situation, last play, odds and TV, pre-game leaders | Choose what scrolls along the bottom. Game situation is down and distance in football, the count and outs in baseball, and goals, cards and stats in soccer. Before a game the ticker shows both records, and in football each team's passing leader |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
 | Favorites | Up to 16 teams in priority order. "Only today's games" keeps the playlist to the favorites playing today. The first four are the numbered buttons on a WizMote remote |
 | Remote | Pair a WizMote: turn discovery on, press any button on the remote. ON/OFF, brightness and NIGHT buttons control the panel |

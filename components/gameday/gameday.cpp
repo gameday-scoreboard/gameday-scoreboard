@@ -487,6 +487,18 @@ void GamedayComponent::set_today_only(bool on) {
   this->rebuild_state_(&this->last_fields_);
 }
 
+void GamedayComponent::set_ticker_leaders(bool on) {
+  if (on == this->ticker_leaders())
+    return;
+  this->prefs7_.flags = on ? (this->prefs7_.flags & ~FAV7_NOLEADERS) : (this->prefs7_.flags | FAV7_NOLEADERS);
+  this->pref7_.save(&this->prefs7_);
+  // The ticker text is built from the game on emit, like the other ticker switches.
+  if (this->game_.valid)
+    this->emit_({});
+  else
+    this->rebuild_state_(&this->last_fields_);
+}
+
 void GamedayComponent::set_live_leagues(const std::string &keys) {
   uint16_t mask = 0;
   size_t start = 0;
@@ -2036,6 +2048,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.down_distance = this->ticker_down_distance();
   opts.last_play = this->ticker_last_play();
   opts.odds = this->ticker_odds();
+  opts.leaders = this->ticker_leaders();
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
     if (!s.valid || s.state != GameState::PRE || s.kickoff_epoch <= 0 || this->time_ == nullptr)
@@ -2440,6 +2453,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["down"] = this->ticker_down_distance();
   doc["play"] = this->ticker_last_play();
   doc["odds"] = this->ticker_odds();
+  doc["leaders"] = this->ticker_leaders();
   doc["opp"] = this->opponent_splashes();
   doc["bootaddr"] = this->show_boot_address();
 #ifdef USE_UPDATE
@@ -2627,7 +2641,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 static const char *const SET_KEYS[] = {"team",     "mode",   "rotate",  "fav1",    "fav2", "fav3",
                                        "fav4",     "tz",     "tzauto",  "down",    "play", "odds",
                                        "opp",      "panels", "bootaddr", "lockon", "release", "collide",
-                                       "favs",     "today",  "live",     "autoupd"};
+                                       "favs",     "today",  "live",     "autoupd", "leaders"};
 
 void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
   std::vector<std::pair<std::string, std::string>> kv;
@@ -2736,6 +2750,8 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
       this->set_ticker_last_play(v == "1");
     } else if (k == "odds") {
       this->set_ticker_odds(v == "1");
+    } else if (k == "leaders") {
+      this->set_ticker_leaders(v == "1");
     } else if (k == "opp") {
       this->set_opponent_splashes(v == "1");
     } else if (k == "bootaddr") {

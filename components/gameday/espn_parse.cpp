@@ -290,6 +290,57 @@ std::string records_line(const GameSnapshot &s) {
   return out;
 }
 
+std::string pregame_records(const GameSnapshot &s) {
+  std::string out;
+  if (!s.team_record.empty())
+    out = s.team_abbr + " " + s.team_record;
+  if (!s.opp_record.empty())
+    out += (out.empty() ? "" : ", ") + s.opp_abbr + " " + s.opp_record;
+  return out;
+}
+
+// "1381" to "1,381"
+static std::string with_commas(const std::string &digits) {
+  std::string out;
+  size_t n = digits.size();
+  for (size_t i = 0; i < n; i++) {
+    if (i > 0 && (n - i) % 3 == 0)
+      out += ',';
+    out += digits[i];
+  }
+  return out;
+}
+
+std::string leader_line(const std::string &short_name, const std::string &display_value) {
+  // "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix.
+  std::string name = short_name;
+  while (name.size() > 3 && name[1] == '.' && name[2] == ' ')
+    name.erase(0, 3);
+  std::string yards, tds;
+  size_t start = 0;
+  while (start <= display_value.size()) {
+    size_t comma = display_value.find(", ", start);
+    std::string tok = display_value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    size_t sp = tok.find(' ');
+    if (sp != std::string::npos) {
+      std::string num = tok.substr(0, sp), unit = tok.substr(sp + 1);
+      if (unit == "YDS")
+        yards = num;
+      else if (unit == "TD")
+        tds = num;
+    }
+    if (comma == std::string::npos)
+      break;
+    start = comma + 2;
+  }
+  if (name.empty() || yards.empty())
+    return "";
+  std::string out = name + " " + with_commas(yards) + " yds";
+  if (!tds.empty())
+    out += " " + tds + " TD";
+  return out;
+}
+
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
   if (!o.odds)
     return;
@@ -312,6 +363,7 @@ void add_last_play(std::string &out, std::string play) {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local) {
@@ -330,7 +382,12 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     case GameState::PRE:
       add_part(out, s.game_name);
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
+      add_part(out, pregame_records(s));
       add_odds(out, s, o);
+      if (o.leaders) {
+        add_part(out, s.team_leader);
+        add_part(out, s.opp_leader);
+      }
       if (s.venue != s.game_name)  // "Rose Bowl | ... | Rose Bowl"
         add_part(out, s.venue);
       return out;

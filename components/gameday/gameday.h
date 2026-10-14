@@ -115,7 +115,7 @@ class GamedaySelect : public select::Select, public Component {
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
-//                                    down/play/odds/opp=0/1 panels=1/2
+//                                    down/play/odds/leaders/opp=0/1 panels=1/2
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
@@ -167,6 +167,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_live_leagues(const std::string &keys);
   std::vector<League> live_leagues_() const;  // the leagues Live mode scans
   bool today_only() const { return (this->prefs7_.flags & FAV7_TODAY) != 0; }
+  // The season leaders in the pre-game ticker (football). Stored as an
+  // "off" bit so panels from before the setting keep showing them.
+  bool ticker_leaders() const { return (this->prefs7_.flags & FAV7_NOLEADERS) == 0; }
+  void set_ticker_leaders(bool on);
   void refresh_now();
   // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
   // them to the demo (demo.cpp).
@@ -298,10 +302,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs7 {
     uint8_t fav_league[PREFS7_FAVS];
     uint32_t fav_id[PREFS7_FAVS];  // 0 = empty
-    uint8_t flags;                 // FAV7_TODAY
+    uint8_t flags;                 // FAV7_TODAY, FAV7_NOLEADERS
     uint16_t live_mask;            // Live mode: 1 << League per league, 0 = the leagues you follow
   } __attribute__((packed));
-  static constexpr uint8_t FAV7_TODAY = 1;  // idle playlist shows only today's games
+  static constexpr uint8_t FAV7_TODAY = 1;      // idle playlist shows only today's games
+  static constexpr uint8_t FAV7_NOLEADERS = 2;  // pre-game ticker without the season leaders
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
