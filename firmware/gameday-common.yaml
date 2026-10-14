@@ -50,6 +50,9 @@ esp32:
       CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y
       CONFIG_MBEDTLS_DYNAMIC_BUFFER: y
       CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA: y
+      # The first time request waits a random 0 to 5 s by default, all of it
+      # boot screen. One panel at a time doesn't need that much spread.
+      CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
 
 esphome:
   name: "${name}"
