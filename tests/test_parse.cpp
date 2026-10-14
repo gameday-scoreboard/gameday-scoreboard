@@ -10,6 +10,7 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "logo_lru.h"
+#include "panel_text.h"
 #include "recap.h"
 #include "poll_timing.h"
 #include "startup.h"
@@ -1213,6 +1214,93 @@ static void test_backoff() {
   CHECK(!is_throttle_status(503));
 }
 
+// Every byte of a panel_text() result is printable ASCII or part of a Latin-1
+// character, the only glyphs the panel's fonts carry.
+static bool panel_drawable(const std::string &s) {
+  for (size_t i = 0; i < s.size(); i++) {
+    const uint8_t c = (uint8_t) s[i];
+    if (c >= 0x20 && c < 0x7F)
+      continue;
+    if ((c == 0xC2 || c == 0xC3) && i + 1 < s.size() && ((uint8_t) s[i + 1] & 0xC0) == 0x80) {
+      if (c == 0xC2 && (uint8_t) s[i + 1] < 0xA1)
+        return false;
+      i++;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+static void test_panel_text() {
+  using esphome::gameday::panel_text;
+  // An iPhone hotspot name (backlog #144)
+  CHECK_EQ(panel_text("Brandon\xE2\x80\x99s iPhone"), std::string("Brandon's iPhone"));
+  CHECK_EQ(panel_text("\xE2\x80\x98Hi\xE2\x80\x99"), std::string("'Hi'"));
+  CHECK_EQ(panel_text("Hawai\xCA\xBBi"), std::string("Hawai'i"));
+  CHECK_EQ(panel_text("\xE2\x80\x9CHail Mary\xE2\x80\x9D"), std::string("\"Hail Mary\""));
+  CHECK_EQ(panel_text("10\xE2\x80\x93" "7 \xE2\x80\x94 run \xE2\x88\x92" "3"), std::string("10-7 - run -3"));
+  CHECK_EQ(panel_text("Wait\xE2\x80\xA6"), std::string("Wait..."));
+  CHECK_EQ(panel_text("a\xE2\x80\xA2" "b"), std::string("a\xC2\xB7" "b"));
+  // Latin-1 letters are in the fonts and pass through untouched.
+  CHECK_EQ(panel_text("S\xC3\xA3o Paulo"), std::string("S\xC3\xA3o Paulo"));
+  CHECK_EQ(panel_text("Atl\xC3\xA9tico"), std::string("Atl\xC3\xA9tico"));
+  CHECK_EQ(panel_text("San Jos\xC3\xA9 State, M\xC3\xBCnchen, Ni\xC3\xB1o, \xC3\x85" "s"),
+           std::string("San Jos\xC3\xA9 State, M\xC3\xBCnchen, Ni\xC3\xB1o, \xC3\x85" "s"));
+  // Letters past Latin-1 lose the accent.
+  CHECK_EQ(panel_text("Don\xC4\x8D" "i\xC4\x87"), std::string("Doncic"));
+  CHECK_EQ(panel_text("Be\xC5\x9Fikta\xC5\x9F"), std::string("Besiktas"));
+  CHECK_EQ(panel_text("\xC5\x81\xC3\xB3" "d\xC5\xBA"), std::string("L\xC3\xB3" "dz"));
+  CHECK_EQ(panel_text("Kad\xC4\xB1k\xC3\xB6y"), std::string("Kadik\xC3\xB6y"));
+  CHECK_EQ(panel_text("\xC5\x92uvre"), std::string("OEuvre"));
+  CHECK_EQ(panel_text("Ia\xC8\x99i"), std::string("Iasi"));
+  // An accent sent as its own character is dropped, keeping the letter.
+  CHECK_EQ(panel_text("Pe\xCC\x81rez"), std::string("Perez"));
+  // Spaces and invisible characters
+  CHECK_EQ(panel_text("a\xC2\xA0" "b\xE2\x80\x89" "c"), std::string("a b c"));
+  CHECK_EQ(panel_text("a\xE2\x80\x8B" "b\xC2\xAD" "c\xEF\xBB\xBF"), std::string("abc"));
+  CHECK_EQ(panel_text("line\none\ttwo"), std::string("line one two"));
+  // Anything else is a '?', never a box.
+  CHECK_EQ(panel_text("Home \xF0\x9F\x8F\x88"), std::string("Home ?"));
+  CHECK_EQ(panel_text("\xF0\x9F\x91\x8D\xF0\x9F\x8F\xBD"), std::string("?"));
+  CHECK_EQ(panel_text("\xD0\x9C\xD0\xB8\xD1\x80"), std::string("???"));
+  // Broken UTF-8 is one '?' per bad byte and doesn't swallow what follows.
+  CHECK_EQ(panel_text("a\x80" "b"), std::string("a?b"));
+  CHECK_EQ(panel_text("a\xC3"), std::string("a?"));
+  CHECK_EQ(panel_text("a\xE2\x80" "b"), std::string("a??b"));
+  CHECK_EQ(panel_text("\xC0\xAF"), std::string("??"));
+  CHECK_EQ(panel_text("\xED\xA0\x80"), std::string("???"));
+  CHECK_EQ(panel_text(""), std::string(""));
+  CHECK_EQ(panel_text("TOUCHDOWN!"), std::string("TOUCHDOWN!"));
+  // Every code point up to U+FFFF, and some past it, comes out drawable.
+  for (uint32_t cp = 0; cp < 0x20000; cp++) {
+    if (cp >= 0xD800 && cp <= 0xDFFF)
+      continue;
+    std::string s;
+    if (cp < 0x80) {
+      s += (char) cp;
+    } else if (cp < 0x800) {
+      s += (char) (0xC0 | (cp >> 6));
+      s += (char) (0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+      s += (char) (0xE0 | (cp >> 12));
+      s += (char) (0x80 | ((cp >> 6) & 0x3F));
+      s += (char) (0x80 | (cp & 0x3F));
+    } else {
+      s += (char) (0xF0 | (cp >> 18));
+      s += (char) (0x80 | ((cp >> 12) & 0x3F));
+      s += (char) (0x80 | ((cp >> 6) & 0x3F));
+      s += (char) (0x80 | (cp & 0x3F));
+    }
+    const std::string out = panel_text(s);
+    if (!panel_drawable(out)) {
+      CHECK(panel_drawable(out));
+      printf("  U+%04X\n", (unsigned) cp);
+      break;
+    }
+  }
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -1244,6 +1332,7 @@ int main() {
   test_demo();
   test_recap();
   test_backoff();
+  test_panel_text();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

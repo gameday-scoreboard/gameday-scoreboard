@@ -212,7 +212,9 @@ script:
       busy: bool
     then:
       - lambda: |-
-          auto put = [](lv_obj_t *l, const std::string &t) {
+          auto put = [](lv_obj_t *l, const std::string &text) {
+            // A network name can hold characters the fonts lack (backlog #144).
+            const std::string t = gameday::panel_text(text);
             const lv_font_t *font = lv_obj_get_style_text_font(l, LV_PART_MAIN);
             lv_point_t sz;
             lv_text_get_size(&sz, t.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
