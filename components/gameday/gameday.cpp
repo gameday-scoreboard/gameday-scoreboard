@@ -1101,9 +1101,10 @@ void GamedayComponent::save_prefs_() { this->pref_.save(&this->prefs_); }
 
 // ESPHome only writes saved preferences to flash from a 60 s timer or a
 // clean shutdown, so a panel unplugged within the minute of a change came
-// back without it. An owner's change is written now. sync() is one NVS
-// write per changed blob and nothing when nothing is pending, so the
-// setters that run together inside apply_set_ share one write at its end.
+// back without it. An owner's change is written now. sync() reads each
+// pending blob back and writes only the ones that changed, and returns at
+// once when nothing is pending, so the setters that run together inside
+// apply_set_ share one write at its end.
 void GamedayComponent::sync_prefs_() {
   if (this->sync_gate_.request())
     global_preferences->sync();

@@ -31,7 +31,7 @@ owns the panel, not for the code.
 - Live modes use much less data when nothing is on: the panel waits for the next kickoff instead of checking every 2 minutes. During a game it checks every 10 seconds, as often as ESPN updates, and when ESPN has trouble it waits longer between tries.
 - Home Assistant: Game Status changes when a game starts, scores or ends instead of every few seconds, and the free memory sensors read every 5 minutes instead of every 30 seconds and are off on a newly added panel, so your history grows much more slowly.
 - On the device page, quick taps on modes, leagues, favorites and switches no longer leave the page showing something the panel didn't save. In Favorite teams with no game ahead, the page says "None of your favorites has a game coming up".
-- A team, mode, favorites, timezone or device page change is saved to the panel the moment you make it. Before, a panel unplugged within a minute of a change could come back with its old settings.
+- A team, mode, favorites, timezone or device page switch change is saved to the panel the moment you make it, so pulling the plug right after no longer loses it. Before, the panel waited up to a minute to write it.
 - The device page's panel picker names the panel we ship: "One 128x64 panel", or two 64x64 side by side. Before, you had to pick "Two panels wide" for one panel.
 - Built your own? The DIY installer at gamedayscoreboard.app asks whether you have one 64x64 panel or a 128x64 (or two 64x64 side by side) and installs the matching firmware, so a two-panel build starts on the whole board.
 - The hidden demo (do=demo) is gone from the regular firmware.
