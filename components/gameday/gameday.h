@@ -24,6 +24,7 @@
 #include "favorites.h"
 #include "recap.h"
 #include "poll_timing.h"
+#include "set_request.h"
 #include "startup.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -89,11 +90,11 @@ static constexpr uint8_t FAV_MAX = 16;
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
 enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
+static_assert((int) Mode::LIVE + 1 == ::espn::kModeCount, "set_request.h takes modes 0 to kModeCount - 1");
 
 class GamedayComponent;
 
-// "nfl:6" -> league + id. False for "none"/"" (id 0) or garbage.
-bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id);
+using ::espn::parse_team_ref;
 
 class GamedaySelect : public select::Select, public Component {
  public:
@@ -167,6 +168,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_today_only(bool on);
   // Live mode's leagues as keys ("nfl,mlb"); "" = the leagues you follow.
   void set_live_leagues(const std::string &keys);
+  void set_live_mask_(uint16_t mask);
   std::vector<League> live_leagues_() const;  // the leagues Live mode scans
   bool today_only() const { return (this->prefs7_.flags & FAV7_TODAY) != 0; }
   void refresh_now();

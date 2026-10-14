@@ -26,9 +26,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -47,7 +44,7 @@ jobs:
             echo "::error::Site publishes only from main; this run is on $GITHUB_REF. Start it with --ref main."
             exit 1
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -68,11 +65,17 @@ jobs:
     needs: gate
     if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
+    # actions: read is for the Build artifact fallback (gh run download).
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Assemble site from docs/site and the latest release's firmware
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,8 +104,11 @@ jobs:
           bash scripts/check_site_firmware.sh site "$TAG"
           sed -i "s/__VERSION__/${TAG}/g" site/index.html
           ls -laR site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+          # docs/site/.well-known has to reach the site; v4 and later drop
+          # dotfiles unless asked.
+          include-hidden-files: true
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -14,7 +14,7 @@ all: build/test_parse build/test_networks
 	./build/test_parse
 	./build/test_networks
 
-SRCS = test_parse.cpp golden_football.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
+SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
 build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
@@ -30,9 +30,9 @@ build/test_networks: test_networks.cpp ../components/saved_networks/network_list
 #   make replay && ./build/replay <folder> <sport: 1 baseball, 2 basketball, 3 hockey, 4 soccer> [name prefix]
 replay: build/replay
 
-build/replay: replay.cpp $(filter-out test_parse.cpp golden_football.cpp,$(SRCS)) $(wildcard ../components/gameday/*.h)
+build/replay: replay.cpp $(filter-out test_parse.cpp golden_football.cpp test_set.cpp,$(SRCS)) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) replay.cpp $(filter-out test_parse.cpp golden_football.cpp,$(SRCS)) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) replay.cpp $(filter-out test_parse.cpp golden_football.cpp test_set.cpp,$(SRCS)) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf build
