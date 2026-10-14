@@ -1094,14 +1094,15 @@ void GamedayComponent::save_prefs_() { this->pref_.save(&this->prefs_); }
 
 void GamedayComponent::set_auto_update(bool on) {
 #ifdef GAMEDAY_BAR
-  return;
-#endif
+  (void) on;  // the bar build always installs; there is no setting
+#else
   if (on == this->auto_update())
     return;
   this->prefs6_.auto_update = on ? 1 : 0;
   this->pref6_.save(&this->prefs6_);
   ESP_LOGI(TAG, "Install updates automatically: %s", on ? "on" : "off");
   this->rebuild_state_(&this->last_fields_);
+#endif
 }
 
 // A game the panel follows is in progress: the one on the board, which

@@ -13,6 +13,13 @@ the same ground for people; this file is the short version.
   `firmware/controllers/`; everything else is in
   `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
   gameday.yaml booting two panels wide, offered by the DIY installer.
+- `firmware/gameday-bar.yaml` and `firmware/gameday-scoreboard75-bar.yaml`
+  are the bar builds, for the free panels in bars: the same firmware plus
+  `firmware/pages/bar.yaml`, which reads the beta channel
+  (`gamedayscoreboard.app/firmware/beta/<variant>/`) and installs from it
+  on its own at night. CI publishes them only from `beta`. Release
+  firmware never installs anything unless the owner turns on "Install
+  updates automatically".
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.
