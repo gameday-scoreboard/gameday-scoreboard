@@ -74,6 +74,7 @@ enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
 enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4 };
 
 class GamedayComponent;
+class EspnBody;
 
 // "nfl:6" -> league + id. False for "none"/"" (id 0) or garbage.
 bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id);
@@ -327,7 +328,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Mode 4 with at least one favorite set; with none it behaves like My Team.
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
   uint32_t our_id_() const;  // team id the snapshot is oriented around
-  std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
+  // Sends the request and, on a 200, hands the reply to body to read.
+  bool open_(const std::string &url, EspnBody &body);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
   void emit_(const ::espn::Splash &splash);

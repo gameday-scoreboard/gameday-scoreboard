@@ -1,6 +1,8 @@
 // Host tests for the ESPN parser and game logic. Build with `make` in tests/.
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -9,6 +11,7 @@
 #include "demo.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "gzip_stream.h"
 #include "logo_lru.h"
 #include "recap.h"
 #include "poll_timing.h"
@@ -1213,6 +1216,150 @@ static void test_backoff() {
   CHECK(!is_throttle_status(503));
 }
 
+// A response body handed out `chunk` bytes at a time, like the HTTP socket.
+struct ChunkSource {
+  const std::string &s;
+  size_t chunk;
+  size_t pos = 0;
+  int read(uint8_t *buf, size_t max) {
+    size_t n = std::min(std::min(max, chunk), s.size() - pos);
+    memcpy(buf, s.data() + pos, n);
+    pos += n;
+    return (int) n;
+  }
+};
+
+static gz::Work gz_work;  // 44 KB, too big for the stack
+
+// Inflates everything, but gives up past 4 MB: a bug that inflates forever
+// fails here instead of eating the machine's memory.
+static std::string inflate_all(const std::string &packed, size_t chunk, size_t out_chunk, bool &failed) {
+  ChunkSource src{packed, chunk};
+  gz::Inflate<ChunkSource> inf(src, &gz_work);
+  std::string out;
+  std::vector<uint8_t> buf(out_chunk);
+  int n;
+  while ((n = inf.read(buf.data(), buf.size())) > 0 && out.size() < (4u << 20))
+    out.append((const char *) buf.data(), (size_t) n);
+  failed = n < 0 || inf.failed() || out.size() >= (4u << 20);
+  return out;
+}
+
+static void test_gzip() {
+  CHECK(gz::is_gzip_encoding("gzip"));
+  CHECK(gz::is_gzip_encoding(" gzip"));
+  CHECK(!gz::is_gzip_encoding(""));
+  CHECK(!gz::is_gzip_encoding(nullptr));
+  CHECK(!gz::is_gzip_encoding("br"));
+  CHECK(!gz::is_gzip_encoding("gzipx"));
+
+  // 1.4 MB of JSON, so the 32 KB window wraps dozens of times. Written by
+  // Python's gzip with the file name in the header (FNAME).
+  std::string raw = slurp("fixtures/scoreboard_ncaa_live.json");
+  std::string packed = slurp("fixtures/scoreboard_ncaa_live.json.gz");
+  CHECK(packed.size() > 10 && packed.size() < raw.size() / 10);
+  for (size_t in_chunk : {(size_t) 1, (size_t) 7, (size_t) 1024, (size_t) 1 << 20}) {
+    for (size_t out_chunk : {(size_t) 1, (size_t) 333, (size_t) 1024}) {
+      if (in_chunk == 1 && out_chunk == 1)
+        continue;  // slow and adds nothing over the others
+      bool failed = true;
+      std::string out = inflate_all(packed, in_chunk, out_chunk, failed);
+      CHECK(!failed);
+      CHECK(out == raw);
+    }
+  }
+
+  // ArduinoJson reads the game straight out of the inflater, the way the
+  // firmware does, and the counts are the wire and the JSON sizes.
+  {
+    ChunkSource src{packed, 1024};
+    gz::Body<ChunkSource> body(src, &gz_work);
+    GameSnapshot g;
+    CHECK(body.gzip());
+    CHECK(parse_scoreboard(body, kLiveEvent, kBoise, g));
+    CHECK(g.state == GameState::IN);
+    CHECK_EQ(g.opp_abbr, std::string("ORE"));
+    CHECK_EQ(g.down_distance, std::string("3rd & 10 at BOIS 25"));
+    CHECK(body.wire_bytes() > 0 && body.wire_bytes() <= packed.size());
+    CHECK(body.json_bytes() > body.wire_bytes() * 5 && body.json_bytes() <= raw.size());
+  }
+
+  // A plain reply (no Content-Encoding) goes through the same reader as it is.
+  {
+    ChunkSource src{raw, 1024};
+    gz::Body<ChunkSource> body(src, nullptr);
+    GameSnapshot g;
+    CHECK(!body.gzip());
+    CHECK(parse_scoreboard(body, kLiveEvent, kBoise, g));
+    CHECK_EQ(g.down_distance, std::string("3rd & 10 at BOIS 25"));
+    CHECK_EQ(body.wire_bytes(), body.json_bytes());
+  }
+
+  // A reply recorded from ESPN itself with Accept-Encoding: gzip (2026-10-13).
+  {
+    std::string espn = slurp("fixtures/espn_team_nfl_dal.json.gz");
+    ChunkSource src{espn, 1460};
+    gz::Body<ChunkSource> body(src, &gz_work);
+    Schedule d;
+    CHECK(parse_team(body, d));
+    CHECK(d.valid);
+    CHECK_EQ(d.team_color, std::string("002a5c"));
+    CHECK_EQ(body.wire_bytes(), espn.size());
+  }
+
+  // Every optional header field (FEXTRA, FNAME, FCOMMENT, FHCRC) is skipped.
+  {
+    size_t name_end = packed.find('\0', 10);
+    CHECK((packed[3] & 0x08) != 0 && name_end != std::string::npos);
+    std::string h = packed.substr(0, 10);
+    h[3] = 0x04 | 0x08 | 0x10 | 0x02;
+    h += std::string("\x05\x00", 2) + "extra";
+    h += std::string("x.json", 7);
+    h += std::string("a comment", 10);
+    h += std::string("\x00\x00", 2);
+    bool failed = true;
+    CHECK(inflate_all(h + packed.substr(name_end + 1), 7, 1024, failed) == raw);
+    CHECK(!failed);
+  }
+
+  // Cut short anywhere (even one byte before the trailer), not gzip at all,
+  // or corrupt: an error, never a hang and never output past the real body.
+  {
+    for (size_t cut : {packed.size() / 2, packed.size() - 9, (size_t) 30, (size_t) 11}) {
+      bool failed = false;
+      std::string out = inflate_all(packed.substr(0, cut), 1024, 1024, failed);
+      CHECK(failed);
+      CHECK(out.size() <= raw.size());
+      CHECK(raw.compare(0, out.size(), out) == 0);
+    }
+    bool failed = false;
+    inflate_all(raw.substr(0, 5000), 1024, 1024, failed);
+    CHECK(failed);
+    failed = false;
+    inflate_all(packed.substr(0, 9), 1024, 1024, failed);
+    CHECK(failed);
+    std::string bad = packed;
+    for (size_t i = 200; i < 400; i++)
+      bad[i] = (char) 0xff;
+    failed = false;
+    std::string out = inflate_all(bad, 1024, 1024, failed);
+    CHECK(failed || out != raw);
+    CHECK(out.size() < (4u << 20));
+    failed = false;
+    CHECK(inflate_all(std::string(), 1024, 1024, failed).empty());
+    CHECK(failed);
+  }
+
+  // A cut-short body ends the JSON parse with an error, not a hang.
+  {
+    std::string half = packed.substr(0, packed.size() / 2);
+    ChunkSource src{half, 1024};
+    gz::Body<ChunkSource> body(src, &gz_work);
+    std::vector<LiveGame> live;
+    CHECK(!parse_live_games(body, live, nullptr, nullptr));
+  }
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -1244,6 +1391,7 @@ int main() {
   test_demo();
   test_recap();
   test_backoff();
+  test_gzip();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
