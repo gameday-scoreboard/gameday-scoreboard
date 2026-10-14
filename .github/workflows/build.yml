@@ -157,6 +157,12 @@ jobs:
             yaml: firmware/gameday-demo.yaml
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75-demo.yaml
+          # Names wall spike (backlog #152), throwaway: built here so a test
+          # panel can run it, never published.
+          - variant: moonhub75-names
+            yaml: firmware/gameday-names.yaml
+          - variant: scoreboard75-names
+            yaml: firmware/gameday-scoreboard75-names.yaml
     steps:
       - uses: actions/checkout@v4
       - name: Build firmware
