@@ -1947,6 +1947,15 @@ static void test_logo_lru() {
   CHECK(!espn::logo_retry_due(1000, 1000 + espn::LOGO_RETRY_MS - 1));
   CHECK(espn::logo_retry_due(1000, 1000 + espn::LOGO_RETRY_MS));
   CHECK(espn::logo_retry_due(0xFFFFF000u, 0xFFFFF000u + espn::LOGO_RETRY_MS));
+  // A dark logo that 404s falls back to the plain one, the URL dark_logo made it from.
+  std::string plain = "https://a.espncdn.com/i/teamlogos/soccer/500/436.png";
+  std::string dark = espn::dark_logo(plain);
+  CHECK_EQ(espn::plain_logo_url(dark),
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500/436.png&w=64&h=64"));
+  CHECK_EQ(espn::plain_logo_url(espn::dark_logo("https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png")),
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/scoreboard/dal.png&w=64&h=64"));
+  CHECK_EQ(espn::plain_logo_url("https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500/436.png&w=64&h=64"),
+           std::string());
 }
 
 // Counts what the parsers allocate through the hook the firmware points at PSRAM
