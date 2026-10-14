@@ -951,7 +951,8 @@ void GamedayComponent::auto_update_tick_() {
     case ::espn::AutoUpdateStep::INSTALL_NOW:
 #ifdef GAMEDAY_BAR
       // Same as above, but the try is for this version, not tonight: a
-      // failed one waits for the night, which tries once more.
+      // failed one is left to the nightly rule, which tries once in the
+      // next 3 to 5 AM window (the same night, if it failed inside one).
       ESP_LOGI(TAG, "Auto update: installing %s now, as the beta channel asks (running %s)",
                u->update_info.latest_version.c_str(), u->update_info.current_version.c_str());
       this->now_tried_ = fnv1_hash(u->update_info.latest_version);

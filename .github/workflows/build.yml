@@ -294,7 +294,12 @@ jobs:
           if [ "v$v" != "$tag" ]; then
             echo "::warning::main is at v$v and the latest release is $tag, so this beta reaches the site with the v$v release, not now."
           fi
-          gh workflow run site.yml --ref main -f from_beta=true
+          # Until this change reaches main, main's site.yml has no from_beta
+          # input and refuses the run. The files are stored either way, and
+          # the next release's deploy publishes them.
+          if ! gh workflow run site.yml --ref main -f from_beta=true; then
+            echo "::warning::main's Site workflow doesn't take beta publishes yet, so this beta goes live with the next release."
+          fi
 
   build-beta:
     # Early warning: the next ESPHome, allowed to fail. Nothing is published

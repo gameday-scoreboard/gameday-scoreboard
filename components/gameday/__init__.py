@@ -76,7 +76,13 @@ def _esphome_at_least(year, month):
     return bool(m) and (int(m.group(1)), int(m.group(2))) >= (year, month)
 
 
-CONFIG_SCHEMA = cv.Schema(
+def _not_demo_and_bar(config):
+    if config[CONF_DEMO] and CONF_BAR in config:
+        raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
+    return config
+
+
+CONFIG_SCHEMA = cv.All(cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(GamedayComponent),
         cv.GenerateID(CONF_HTTP_REQUEST_ID): cv.use_id(
@@ -98,7 +104,7 @@ CONFIG_SCHEMA = cv.Schema(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ActionTrigger)}
         ),
     }
-).extend(cv.COMPONENT_SCHEMA)
+).extend(cv.COMPONENT_SCHEMA), _not_demo_and_bar)
 
 
 async def to_code(config):
@@ -115,8 +121,6 @@ async def to_code(config):
     if config[CONF_DEMO]:
         cg.add_define("GAMEDAY_DEMO")
     if CONF_BAR in config:
-        if config[CONF_DEMO]:
-            raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
         cg.add_define("GAMEDAY_BAR")
         cg.add(var.set_report_email(config[CONF_BAR][CONF_REPORT_EMAIL]))
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
