@@ -14,8 +14,11 @@ GET/POST /gameday/demo answer as demo.cpp does.
 
 Test hooks: POST /_reset with an optional JSON body
 {"state": {...overrides...}, "fail": ["state", "set"]} puts the state back,
-merges the overrides and makes the named routes answer 500. GET /_log lists
-the /gameday/set and /gameday/action requests seen since the last reset.
+merges the overrides and makes the named routes answer 500. Two more fail
+names drop the connection with no answer, the way a panel that has gone does:
+"events" for the event stream (an open one ends within half a second), "down"
+for every route but the test hooks. GET /_log lists the /gameday/set and
+/gameday/action requests seen since the last reset.
 
 Started by playwright.config.js. Run by hand with `python mock_device.py 8765`
 and open http://127.0.0.1:8765/.
@@ -26,6 +29,7 @@ tests/fixtures/set_cases.json, the table the firmware's host tests also
 check, through apply_set, so the mock can't drift from the panel.
 """
 import copy
+import itertools
 import json
 import os
 import re
@@ -113,6 +117,8 @@ ENTITIES = [
     {"id": "text_sensor/IP", "domain": "text_sensor", "name": "IP", "state": "10.10.10.97", "value": "10.10.10.97"},
     {"id": "button/Refresh Now", "domain": "button", "name": "Refresh Now", "state": ""},
     {"id": "button/Reboot", "domain": "button", "name": "Reboot", "state": ""},
+    {"id": "button/Reset Wi-Fi", "domain": "button", "name": "Reset Wi-Fi", "state": ""},
+    {"id": "button/Factory Reset", "domain": "button", "name": "Factory Reset", "state": ""},
 ]
 FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
 
@@ -319,8 +325,19 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, code, doc):
         self._send(code, "application/json", json.dumps(doc))
 
+    def _gone(self, path):
+        """True when the panel is set to not answer this path; the connection closes unanswered."""
+        if path in ("/_reset", "/_log"):
+            return False
+        if "down" in FAIL or ("events" in FAIL and path == "/events"):
+            self.close_connection = True
+            return True
+        return False
+
     def do_GET(self):
         u = urlparse(self.path)
+        if self._gone(u.path):
+            return
         if u.path == "/":
             js = "/0.js?demo" if "demo" in parse_qs(u.query, keep_blank_values=True) else "/0.js"
             html = ("<!DOCTYPE html><html><head><meta charset=UTF-8><link rel=icon href=data:>"
@@ -356,15 +373,20 @@ class Handler(BaseHTTPRequestHandler):
             for e in ENTITIES:
                 self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
             self.wfile.flush()
-            while True:
-                time.sleep(5)
-                self.wfile.write(b"event: ping\ndata: \n\n")
-                self.wfile.flush()
+            for tick in itertools.count():
+                time.sleep(0.5)
+                if "down" in FAIL or "events" in FAIL:
+                    return
+                if tick % 10 == 9:
+                    self.wfile.write(b"event: ping\ndata: \n\n")
+                    self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
 
     def do_POST(self):
         u = urlparse(self.path)
+        if self._gone(u.path):
+            return
         pairs = parse_qs(u.query, keep_blank_values=True)
         if u.path == "/_reset":
             n = int(self.headers.get("Content-Length") or 0)

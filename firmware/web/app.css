@@ -90,6 +90,10 @@ button { font: inherit; color: inherit; }
 .gname { margin-top: 12px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .play { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .board.empty .row { opacity: .35; }
+/* The panel isn't answering, or is restarting: what's left on the board is old */
+.gone { margin-top: 10px; font-size: 13px; color: var(--gold); }
+.board.dim .row, .board.dim .state, .board.dim .stale, .board.dim .gname, .board.dim .msg,
+.board.dim .ticker, .board.dim .play { opacity: .35; filter: grayscale(1); }
 .board .msg { text-align: center; color: var(--muted); padding: 22px 0 8px; }
 
 /* Team chooser */
