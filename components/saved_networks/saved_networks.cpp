@@ -32,8 +32,8 @@ static void names_to(const NetworkList &list, char *buf, size_t size) {
 void SavedNetworks::setup() {
   global_saved_networks = this;
   this->pref_ = global_preferences->make_preference<NetworkList>(fnv1_hash("gameday_wifi_list_v1"), true);
-  if (!this->pref_.load(&this->list_) || !::saved_networks::valid(this->list_))
-    ::saved_networks::clear(this->list_);
+  if (!this->pref_.load(&this->list_) || !wifi_list::valid(this->list_))
+    wifi_list::clear(this->list_);
 
   auto *w = wifi::global_wifi_component;
   if (w == nullptr)
@@ -50,12 +50,12 @@ void SavedNetworks::setup() {
       // was written by other firmware, so a reset stays a reset.
       if (this->list_.count > 0) {
         ESP_LOGI(TAG, "Wi-Fi was reset; forgetting %u saved network(s)", this->list_.count);
-        ::saved_networks::clear(this->list_);
+        wifi_list::clear(this->list_);
         changed = true;
       }
-    } else if (::saved_networks::find(this->list_, ssid.c_str()) < 0) {
+    } else if (wifi_list::find(this->list_, ssid.c_str()) < 0) {
       ESP_LOGI(TAG, "Adding the network ESPHome kept, %s", ssid.c_str());
-      changed = ::saved_networks::put_front(this->list_, ssid.c_str(), slot.get_password().c_str());
+      changed = wifi_list::put_front(this->list_, ssid.c_str(), slot.get_password().c_str());
     }
   }
   if (changed)
@@ -83,7 +83,7 @@ void SavedNetworks::apply_() {
     ap.set_priority(i == 0 ? 1 : 0);
     w->add_sta(ap);
   }
-  char names[MAX_NETWORKS * ::saved_networks::SSID_SIZE];
+  char names[MAX_NETWORKS * wifi_list::SSID_SIZE];
   names_to(this->list_, names, sizeof(names));
   ESP_LOGI(TAG, "Saved networks (%u), in order: %s", this->list_.count, names);
 #ifdef USE_IMPROV_BLE
@@ -106,7 +106,7 @@ void SavedNetworks::note_connected(const wifi::WiFiAP &ap) {
   bool changed;
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
-    changed = ::saved_networks::put_front(this->list_, ssid.c_str(), ap.get_password().c_str());
+    changed = wifi_list::put_front(this->list_, ssid.c_str(), ap.get_password().c_str());
   }
   if (!changed)
     return;
@@ -118,7 +118,7 @@ bool SavedNetworks::forget(const std::string &ssid) {
   bool removed;
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
-    removed = ::saved_networks::remove(this->list_, ssid.c_str());
+    removed = wifi_list::remove(this->list_, ssid.c_str());
   }
   if (!removed)
     return false;
@@ -130,7 +130,7 @@ bool SavedNetworks::forget(const std::string &ssid) {
 void SavedNetworks::forget_all() {
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
-    ::saved_networks::clear(this->list_);
+    wifi_list::clear(this->list_);
   }
   ESP_LOGI(TAG, "Forgot every saved network");
   this->save_();
@@ -166,7 +166,7 @@ void SavedNetworks::save_() {
 
 void SavedNetworks::dump_config() {
   std::lock_guard<std::mutex> lock(this->mutex_);
-  char names[MAX_NETWORKS * ::saved_networks::SSID_SIZE];
+  char names[MAX_NETWORKS * wifi_list::SSID_SIZE];
   names_to(this->list_, names, sizeof(names));
   ESP_LOGCONFIG(TAG, "Saved networks: %u of %u: %s", this->list_.count, (unsigned) MAX_NETWORKS, names);
 }

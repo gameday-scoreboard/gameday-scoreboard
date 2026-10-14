@@ -6,7 +6,7 @@
 
 #include "network_list.h"
 
-using namespace saved_networks;
+using namespace wifi_list;
 
 static int failures = 0;
 static int checks = 0;

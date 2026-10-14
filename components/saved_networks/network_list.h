@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace saved_networks {
+namespace wifi_list {
 
 static constexpr size_t MAX_NETWORKS = 5;
 // IEEE 802.11 limits, plus the terminator; the same sizes ESPHome's own
@@ -92,4 +92,4 @@ inline bool remove(NetworkList &list, const char *ssid) {
   return true;
 }
 
-}  // namespace saved_networks
+}  // namespace wifi_list

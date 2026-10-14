@@ -38,8 +38,8 @@
 namespace esphome {
 namespace saved_networks {
 
-using ::saved_networks::MAX_NETWORKS;
-using ::saved_networks::NetworkList;
+using wifi_list::MAX_NETWORKS;
+using wifi_list::NetworkList;
 
 // One row of the list as the API and the device page see it: never a password.
 struct Entry {
