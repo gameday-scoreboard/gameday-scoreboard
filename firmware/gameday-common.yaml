@@ -634,7 +634,7 @@ text_sensor:
   - platform: template
     name: "Last Play"
     id: gd_last_play_sensor
-    icon: "mdi:football-helmet"
+    icon: "mdi:message-text-outline"
   - platform: wifi_info
     ip_address:
       name: "IP"
