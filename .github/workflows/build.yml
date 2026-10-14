@@ -6,6 +6,14 @@ on:
     branches: [main, beta, dev]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      install_now:
+        description: >-
+          Beta channel only (run on beta): panel names, like gameday-aba970,
+          or "all". Those bar panels install this beta within 15 minutes
+          instead of at night.
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -166,6 +174,128 @@ jobs:
           name: demo-${{ matrix.variant }}
           path: ${{ steps.esphome.outputs.name }}
 
+  build-bar:
+    # The bar build (firmware/pages/bar.yaml): real firmware that installs
+    # from the beta channel on its own, for the free panels in bars. Every run
+    # keeps it as a downloadable file (bar-<variant>, outside publish's
+    # firmware-* pattern) for flashing a new bar panel by hand. On the beta
+    # branch it is also the beta channel: its version gets "-beta.<run>" so
+    # each one is newer than the last, and publish-beta puts it on the site.
+    name: Build ${{ matrix.variant }} bar
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: branch-rules
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.beta.outputs.version }}
+    strategy:
+      matrix:
+        include:
+          - variant: moonhub75
+            yaml: firmware/gameday-bar.yaml
+          - variant: scoreboard75
+            yaml: firmware/gameday-scoreboard75-bar.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Beta version and summary
+        id: beta
+        env:
+          NOW: ${{ inputs.install_now }}
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
+          summary="Development build"
+          if [ "$GITHUB_REF" = refs/heads/beta ]; then
+            v="$v-beta.$GITHUB_RUN_NUMBER"
+            sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
+            summary="Bar beta $v from ${GITHUB_SHA::7}."
+            if [ -n "$NOW" ]; then
+              # Panel names only; the firmware reads this list (auto_update.h).
+              if ! [[ "$NOW" =~ ^[A-Za-z0-9_,\ -]+$ ]]; then
+                echo "::error::install_now takes panel names like gameday-aba970, or all"
+                exit 1
+              fi
+              summary="$summary Install now: $NOW"
+            fi
+          elif [ -n "$NOW" ]; then
+            echo "::warning::install_now only does something on the beta branch"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "$v: $summary"
+      - name: Build firmware
+        id: esphome
+        uses: esphome/build-action@v7
+        with:
+          yaml-file: ${{ matrix.yaml }}
+          version: "2026.10.0b3"
+          complete-manifest: true
+          release-summary: ${{ steps.beta.outputs.summary }}
+          release-url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+      - name: Stage output under a stable folder name
+        run: |
+          mkdir -p out
+          cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
+          ls -R out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bar-${{ matrix.variant }}
+          path: out
+
+  publish-beta:
+    # The beta channel, gamedayscoreboard.app/firmware/beta/<variant>/, read
+    # only by bar builds. Runs when someone pushes (promotes) to beta, or runs
+    # Build on beta by hand with install_now. Pages only deploys from main and
+    # release tags, so the files go on the rolling beta-firmware prerelease
+    # and the Site workflow on main republishes the site with them. The stable
+    # manifests and the flasher are left as they are.
+    name: Publish the beta channel
+    needs: [build-bar, host-tests, web-tests]
+    if: github.ref == 'refs/heads/beta' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bar-*
+          path: stage/firmware/beta
+          merge-multiple: true
+      - name: Check the files and store them on the beta-firmware prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA: ${{ needs.build-bar.outputs.version }}
+        run: |
+          set -euo pipefail
+          ls -R stage
+          bash scripts/check_site_firmware.sh --beta stage
+          mkdir -p release
+          for v in moonhub75 scoreboard75; do
+            (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
+          done
+          notes="Firmware for the bar panels' beta channel, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/; this prerelease only stores the files between site deploys."
+          if gh release view beta-firmware >/dev/null 2>&1; then
+            gh release upload beta-firmware release/*.zip --clobber
+            gh release edit beta-firmware --prerelease --title "Bar beta $BETA" --notes "$notes"
+          else
+            gh release create beta-firmware release/*.zip --prerelease --target "$GITHUB_SHA" --title "Bar beta $BETA" --notes "$notes"
+          fi
+      - name: Republish the site from main with the new beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # site.yml won't deploy main while its version waits for a tag (see
+          # its header); the beta then goes live with that release.
+          git fetch -q --depth=1 origin main
+          v=$(git show origin/main:firmware/gameday-common.yaml | sed -n 's/^  version: "\(.*\)"$/\1/p' | head -n1)
+          tag=$(gh release view --json tagName --jq .tagName)
+          if [ "v$v" != "$tag" ]; then
+            echo "::warning::main is at v$v and the latest release is $tag, so this beta reaches the site with the v$v release, not now."
+          fi
+          gh workflow run site.yml --ref main -f from_beta=true
+
   build-beta:
     # Early warning: the next ESPHome, allowed to fail. Nothing is published
     # from this job.
@@ -250,6 +380,11 @@ jobs:
           sed -i "s/__VERSION__/${GITHUB_REF_NAME}/g" site/index.html
           ls -R site
           bash scripts/check_site_firmware.sh site "$GITHUB_REF_NAME"
+      # Keep the bar panels' beta channel on the site through a release.
+      - name: Add the beta channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/add_beta_channel.sh site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -275,7 +410,7 @@ jobs:
             (cd artifacts && zip -r "../release/firmware-$v.zip" "$v")
             ASSETS="$ASSETS release/firmware-$v.zip"
           done
-          PREV=$(gh release list --exclude-drafts --limit 20 --json tagName --jq "[.[].tagName | select(. != \"${GITHUB_REF_NAME}\")][0]")
+          PREV=$(gh release list --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq "[.[].tagName | select(. != \"${GITHUB_REF_NAME}\")][0]")
           {
             cat notes/notes.md
             echo

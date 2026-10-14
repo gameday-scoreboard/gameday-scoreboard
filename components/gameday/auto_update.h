@@ -6,10 +6,15 @@
 // panel follows is live, and one try a night. A failed or interrupted
 // install leaves the old firmware running (the new image only boots once it
 // is fully written and checked), and the next try is the next night.
+//
+// The bar build (firmware/pages/bar.yaml) runs the same rules against the
+// beta channel with the setting always on, plus "Install now"
+// (install_now_listed) for pushing a fix to one bar without waiting.
 #pragma once
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 namespace espn {
@@ -31,10 +36,24 @@ inline int auto_update_slot(uint8_t mac4, uint8_t mac5) {
 // A number that changes once per local calendar day, for "tried tonight".
 inline int32_t auto_update_day(int year, int day_of_year) { return (int32_t) year * 1000 + day_of_year; }
 
+// The beta channel's versions are the release number plus "-beta.<build>"
+// ("2026.10.0-beta.812"), and the build number counts as the next part, so
+// each beta is newer than the one before and than the plain number.
+static const char kBetaTag[] = "-beta.";
+
+// Past the separator after a version part: a dot or the beta tag.
+inline const char *next_version_part(const char *p) {
+  if (*p == '.')
+    return p + 1;
+  if (strncmp(p, kBetaTag, sizeof(kBetaTag) - 1) == 0)
+    return p + sizeof(kBetaTag) - 1;
+  return p;
+}
+
 // True when `latest` is a higher version than `current`. Both are dotted
-// numbers ("1.5.5", "2026.10.0"); anything after the numbers ("-beta") is
-// ignored. A panel on a test build newer than the release never "updates"
-// down to it, and a malformed version never installs.
+// numbers ("1.5.5", "2026.10.0"); anything after the numbers other than the
+// beta tag ("-dev") is ignored. A panel on a test build newer than the
+// release never "updates" down to it, and a malformed version never installs.
 inline bool version_newer(const std::string &latest, const std::string &current) {
   const char *a = latest.c_str();
   const char *b = current.c_str();
@@ -51,8 +70,8 @@ inline bool version_newer(const std::string &latest, const std::string &current)
       y = 0;
     if (x != y)
       return x > y;
-    a = (*ea == '.') ? ea + 1 : ea;
-    b = (*eb == '.') ? eb + 1 : eb;
+    a = next_version_part(ea);
+    b = next_version_part(eb);
   }
   return false;
 }
@@ -62,7 +81,32 @@ enum class AutoUpdateStep : uint8_t {
   CHECK,      // read the manifest now, then come back
   WAIT_GAME,  // an update is waiting but a followed game is live
   INSTALL,    // record tonight's try, then install
+  INSTALL_NOW,  // record the try for this version, then install (install_now_listed)
 };
+
+// "Install now" for the beta channel: the publisher names panels in the
+// release summary ("... Install now: gameday-aba970 gameday-500ebc", or
+// "all"), and a listed bar panel installs at its next manifest read, any hour,
+// instead of waiting for the night. Names are separated by spaces or commas.
+static const char kInstallNowTag[] = "Install now:";
+
+inline bool install_now_listed(const std::string &summary, const std::string &name) {
+  size_t at = summary.find(kInstallNowTag);
+  if (at == std::string::npos || name.empty())
+    return false;
+  size_t i = at + sizeof(kInstallNowTag) - 1;
+  while (i < summary.size()) {
+    while (i < summary.size() && (summary[i] == ' ' || summary[i] == ','))
+      i++;
+    size_t start = i;
+    while (i < summary.size() && summary[i] != ' ' && summary[i] != ',')
+      i++;
+    std::string word = summary.substr(start, i - start);
+    if (word == name || word == "all")
+      return true;
+  }
+  return false;
+}
 
 struct AutoUpdateInputs {
   bool enabled{false};
@@ -77,9 +121,12 @@ struct AutoUpdateInputs {
   bool available{false};   // the update entity says a different version is out
   bool newer{false};       // and version_newer() agrees it is newer
   bool live{false};        // a game the panel follows is in progress
+  bool now{false};         // install_now_listed() and not tried for this version yet
 };
 
 inline AutoUpdateStep auto_update_step(const AutoUpdateInputs &in) {
+  if (in.enabled && in.now && in.available && in.newer)
+    return in.live ? AutoUpdateStep::WAIT_GAME : AutoUpdateStep::INSTALL_NOW;
   if (!in.enabled || !in.clock_valid || in.tried_day == in.today)
     return AutoUpdateStep::IDLE;
   if (in.hour < kAutoUpdateStartHour || in.hour >= kAutoUpdateEndHour)

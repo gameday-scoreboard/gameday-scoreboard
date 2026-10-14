@@ -187,7 +187,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
   // "Install updates automatically", off unless the owner turns it on.
+#ifdef GAMEDAY_BAR
+  // The bar build (firmware/pages/bar.yaml) always installs from the beta
+  // channel; there is no setting.
+  bool auto_update() const { return true; }
+  void set_report_email(const std::string &email) { this->report_email_ = email; }
+#else
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
+#endif
   void set_auto_update(bool on);
 
   void setup() override;
@@ -400,6 +407,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int32_t auto_update_checked_{0};  // the night the manifest was read for it
   uint32_t auto_update_check_ms_{0};
   bool auto_update_waiting_{false};  // logged "waiting for the game" tonight
+#ifdef GAMEDAY_BAR
+  // fnv1_hash() of the version last installed through "Install now"
+  // (auto_update.h), saved before the install so a crash or power cut
+  // partway through doesn't try the same version again until the night.
+  ESPPreferenceObject bar_pref_;
+  uint32_t now_tried_{0};
+  // Where the bar's "Something wrong?" link on the device page writes to.
+  std::string report_email_;
+#endif
   void auto_update_tick_();
   bool followed_game_live_() const;
   // The team endpoint's answer for the saved team (startup.h), so a boot can

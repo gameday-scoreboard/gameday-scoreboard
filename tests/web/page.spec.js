@@ -262,6 +262,22 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
+test("bar build: no switch, a bar beta note and an email with the panel's name", async ({ page, request }) => {
+  await reset(request, { autoupd: null, bar: { report: "support@gameday-scoreboard.com" } });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#autoupdRow")).toBeHidden();
+  await expect(page.locator("#barRow")).toBeVisible();
+  const href = await page.locator("#barReport").getAttribute("href");
+  expect(href).toMatch(/^mailto:support@gameday-scoreboard\.com\?subject=Bar%20panel%20gameday-2f6a70&body=/);
+  expect(decodeURIComponent(href.split("body=")[1])).toContain("Panel: gameday-2f6a70");
+
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#barRow")).toBeHidden();
+});
+
 test("favorites post one slot on change and all four on reorder", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
