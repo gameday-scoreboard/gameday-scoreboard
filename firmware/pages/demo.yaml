@@ -39,3 +39,5 @@ ota:
   - id: !remove gd_ota_http
 button:
   - id: !remove gd_check_update
+switch:
+  - id: !remove gd_auto_update
