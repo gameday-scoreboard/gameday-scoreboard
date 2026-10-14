@@ -53,6 +53,9 @@
   let S = null;          // D with the page's unconfirmed posts on top; every render reads this
   let game = null;       // S.game
   let connected = false;
+  let downSince = 0;     // page clock when the panel stopped answering, 0 while it answers
+  let restart = "";      // what the board says while a reboot or reset runs
+  let stopped = false;   // reset into setup: the panel won't be back on this network
 
   // ---- DOM -------------------------------------------------------------
   document.body.innerHTML = `
@@ -80,6 +83,7 @@
       <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
+      <div class="gone" id="gone" hidden></div>
       <div class="play" id="play"></div>
       <div class="splash" id="splash"></div>
     </section>
@@ -237,6 +241,7 @@
     try {
       const r = await fetch(`/${domain}/${encodeURIComponent(target)}/${action}${qs}`, { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
+      return true;
     } catch (e) {
       if (attempt < 1) {
         // The device only has a handful of sockets; a busy moment is normal.
@@ -244,6 +249,7 @@
         return post(id, action, params, attempt + 1);
       }
       toast("Device did not respond (" + (e.message || "network") + "). Try again.");
+      return false;
     }
   };
 
@@ -283,12 +289,22 @@
   let stateInflight = false;
   let stateAgain = false;
   const fetchState = async () => {
+    if (stopped) return;
     // A read asked for during another one runs after it, so it sees the latest post.
     if (stateInflight) { stateAgain = true; return; }
     stateInflight = true;
     const left = Date.now();
+    // A panel that lost power never closes the connection, so give up on it.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let reached = false;
     try {
-      const r = await fetch("/gameday/state?_=" + left, { cache: "no-store" });
+      const r = await fetch("/gameday/state?_=" + left, { cache: "no-store", signal: ctl.signal });
+      reached = true;
+      answered();
+      // The event stream retries every 30 seconds, and never after an HTTP
+      // error. The panel is back, so reopen it now.
+      if (!connected && !restart && Date.now() - streamAt > 10000) connect();
       if (r.ok) {
         D = await r.json();
         for (const k of Object.keys(held)) {
@@ -299,7 +315,11 @@
         renderAll();
         if (Object.values(held).some((h) => h.ack)) scheduleState(APPLY_MS + 100);
       }
-    } catch (_) { /* the poll comes back around */ }
+    } catch (_) {
+      // The poll comes back around.
+      if (!reached) unanswered();
+    }
+    clearTimeout(timer);
     stateInflight = false;
     if (stateAgain) { stateAgain = false; fetchState(); }
   };
@@ -356,6 +376,30 @@
     const c = $("#conn");
     c.classList.toggle("on", on);
     c.querySelector("span").textContent = on ? "live" : "offline";
+  };
+
+  // The panel's own miss count can't say it has gone, so the page keeps its
+  // own: a state read that gets no answer while the stream is down, or two in
+  // a row while the stream still looks open (a panel that lost power).
+  let readFails = 0;
+  let firstFailAt = 0;
+  const renderGone = () => {
+    const line = $("#gone");
+    line.textContent = restart
+      || (downSince ? "Panel not answering since " + new Date(downSince).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
+    line.hidden = !line.textContent;
+    $("#board").classList.toggle("dim", !line.hidden);
+  };
+  const answered = () => {
+    readFails = 0;
+    if (downSince) { downSince = 0; renderGone(); }
+  };
+  const unanswered = () => {
+    if (!readFails++) firstFailAt = Date.now();
+    if (downSince || (connected && readFails < 2)) return;
+    downSince = firstFailAt;
+    setConn(false);
+    renderGone();
   };
 
   // ---- board rendering ---------------------------------------------------
@@ -616,8 +660,10 @@
         if (b.dataset.cols === cur) return;
         document.querySelectorAll("#panels .panelpick").forEach((x) => (x.disabled = true));
         setGD({ panels: b.dataset.cols });
-        toast("Restarting as " + (b.dataset.cols === "2" ? "128x64" : "64x64"));
-        waitForReboot("");
+        const as = "Restarting as " + (b.dataset.cols === "2" ? "128x64" : "64x64");
+        toast(as);
+        waitForReboot("", as + ". This page reconnects when the panel is back.");
+        toBoard();
       };
     });
   };
@@ -632,9 +678,13 @@
     { name: "Clear WizMote Pairing", into: "#remoteActions", label: "Unpair remote", danger: true },
     { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
     { name: "Check for Updates", into: "#actions", label: "Check for updates" },
-    { name: "Reboot", into: "#actions", label: "Reboot", danger: true },
-    { name: "Reset Wi-Fi", into: "#actions", label: "Reset Wi-Fi", danger: true },
-    { name: "Factory Reset", into: "#actions", label: "Factory reset", danger: true },
+    // restart: "" waits for the panel to come back; otherwise the panel
+    // restarts into setup (both resets forget the Wi-Fi) and this says why.
+    { name: "Reboot", into: "#actions", label: "Reboot", danger: true, restart: "" },
+    { name: "Reset Wi-Fi", into: "#actions", label: "Reset Wi-Fi", danger: true,
+      restart: "The panel forgot its Wi-Fi and is restarting into setup, so this page won't reconnect. Its settings are kept." },
+    { name: "Factory Reset", into: "#actions", label: "Factory reset", danger: true,
+      restart: "The panel is restarting into setup with everything erased, so this page won't reconnect." },
   ];
   const built = {};
 
@@ -643,11 +693,15 @@
     const host = $(def.into);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
-      b.onclick = () => {
+      b.onclick = async () => {
         if (def.danger && !confirm(def.label + "?")) return;
-        post(e.id, "press");
+        const sent = post(e.id, "press");
         if (def.name === "Check for Updates") { checkForUpdates(b); return; }
         toast(def.label);
+        if (def.restart === undefined || !(await sent)) return;
+        if (def.restart === "") waitForReboot("", "Restarting. This page reconnects when the panel is back.");
+        else intoSetup(def.restart);
+        toBoard();
       };
       host.appendChild(b);
       return { update() {} };
@@ -1019,10 +1073,19 @@
   // After an install the device reboots. The event stream only retries every
   // 30 seconds, so poll the root page instead and reload as soon as it answers.
   let es = null;
-  const waitForReboot = (fromVersion) => {
+  let streamAt = 0;
+  const showRestart = (line) => {
+    restart = line;
+    renderGone();
+  };
+  // Reboot, the resets and the panel picker are far down the page; the line is on the board.
+  const toBoard = () => $("#board").scrollIntoView({ behavior: "smooth", block: "start" });
+  const waitForReboot = (fromVersion, line) => {
     const started = Date.now();
     let sawDown = false;
     if (es) { es.close(); es = null; }
+    setConn(false);
+    showRestart(line);
     // Ask the device which version it runs; reload as soon as that changes.
     // A connection to a rebooting device can hang, so each probe gets 1.5s.
     const tick = async () => {
@@ -1040,9 +1103,24 @@
         }
       } catch (_) { sawDown = true; }
       clearTimeout(timer);
-      if (Date.now() - started < 5 * 60 * 1000) setTimeout(tick, 2000);
+      if (Date.now() - started < 5 * 60 * 1000) { setTimeout(tick, 2000); return; }
+      // Not back in five minutes: stop saying it's restarting and listen again.
+      restart = "";
+      renderGone();
+      connect();
     };
     setTimeout(tick, 3000);
+  };
+  // Both resets blank the saved network, so the panel comes back as its own
+  // setup hotspot and never on this one. Stop asking it.
+  const intoSetup = (why) => {
+    stopped = true;
+    if (es) { es.close(); es = null; }
+    clearInterval(pollTimer);
+    clearTimeout(stateTimer);
+    setConn(false);
+    const tail = S && S.name && S.name.includes("-") ? S.name.slice(S.name.lastIndexOf("-") + 1) : "";
+    showRestart(why + " To set it up again, use the Game Day app or join its \"Game Day" + (tail ? " " + tail : "") + "\" Wi-Fi.");
   };
 
   // ---- check for updates -----------------------------------------------------
@@ -1160,7 +1238,7 @@
         renderUpdate(u);
         post(u.id, "install");
         toast("Installing " + latest);
-        waitForReboot(u.current_version);
+        waitForReboot(u.current_version, "Installing " + latest + ". This page reloads when the panel is back.");
       };
     } else if (st.includes("NO UPDATE")) {
       $("#fwText").textContent = "You're up to date, " + cur;
@@ -1202,9 +1280,12 @@
   };
 
   const connect = () => {
+    if (es) es.close();
+    streamAt = Date.now();
     es = new EventSource("/events");
     es.addEventListener("ping", (ev) => {
       setConn(true);
+      answered();
       if (!ev.data) return;
       try {
         const p = JSON.parse(ev.data);
@@ -1215,11 +1296,13 @@
     es.addEventListener("state", (ev) => {
       try { onState(JSON.parse(ev.data)); } catch (_) {}
     });
-    es.onopen = () => { setConn(true); fetchState(); };
-    es.onerror = () => setConn(false);
+    es.onopen = () => { setConn(true); answered(); fetchState(); };
+    // A dropped stream is often only a phone waking up; ask the panel before
+    // saying it's gone.
+    es.onerror = () => { setConn(false); fetchState(); };
   };
   connect();
   fetchState();
   // Fallback poll in case an event is missed; the ticker event is the fast path.
-  setInterval(fetchState, 15000);
+  const pollTimer = setInterval(fetchState, 15000);
 })();
