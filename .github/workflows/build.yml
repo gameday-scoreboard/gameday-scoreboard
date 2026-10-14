@@ -106,6 +106,8 @@ jobs:
     # One firmware for every panel count since v0.6.0, built once per
     # controller pinout. The variant names the manifest folder on the flasher
     # site, and the updater on a panel only ever looks in its own folder.
+    # moonhub75-2panel is the same firmware booting two panels wide, for the
+    # DIY installer only; it updates from moonhub75's folder.
     name: Build ${{ matrix.variant }}
     needs: [notes, branch-rules]
     runs-on: ubuntu-latest
@@ -114,6 +116,8 @@ jobs:
         include:
           - variant: moonhub75
             yaml: firmware/gameday.yaml
+          - variant: moonhub75-2panel
+            yaml: firmware/gameday-2panel.yaml
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75.yaml
     steps:
@@ -271,7 +275,7 @@ jobs:
           # resolve the same wherever the folder lands) so site.yml can
           # rebuild site/firmware/<variant>/ from a release asset instead of
           # a Build artifact, which expires after 90 days.
-          for v in moonhub75 scoreboard75; do
+          for v in moonhub75 moonhub75-2panel scoreboard75; do
             (cd artifacts && zip -r "../release/firmware-$v.zip" "$v")
             ASSETS="$ASSETS release/firmware-$v.zip"
           done
