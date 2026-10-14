@@ -50,7 +50,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   // ---- state -----------------------------------------------------------
   const ents = {};       // id -> last event payload ({id, name, state, value, option...})
   const byName = {};     // name -> id
-  let S = null;          // /gameday/state document
+  let D = null;          // /gameday/state document as the device last sent it
+  let S = null;          // D with the page's unconfirmed posts on top; every render reads this
   let game = null;       // S.game
   let connected = false;
 
@@ -244,33 +245,98 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   // ---- gameday routes ----------------------------------------------------
   const qs = (params) => Object.entries(params).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+  // A tap redraws from what it posted, not from the device's last answer: a
+  // state read that left before the device applied the post still carries
+  // the old value. Each posted setting is held here until a read shows it,
+  // or a read that left after the device answered the post (APPLY_MS for
+  // its main loop to apply it) comes back. Then the device's value wins.
+  const APPLY_MS = 300;
+  const held = {};       // key -> {v: the value as the state document has it, ack: when the post was answered}
+  const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
+  const stateForm = {
+    mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
+    down: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1",
+    live: (v) => v.split(",").filter(Boolean),
+    team: (v) => ref(v),
+    favs: (v) => v.split(",").filter(Boolean).map(ref),
+  };
+  const sameForm = {
+    mode: (a, b) => (a || 0) === (b || 0),
+    team: (a, b) => refKey(a) === refKey(b),
+    live: (a, b) => (a || []).slice().sort().join(",") === (b || []).slice().sort().join(","),
+    favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
+  };
+  const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
+  const overlay = () => {
+    if (!D) return;
+    S = Object.assign({}, D);
+    for (const k of Object.keys(held)) S[k] = held[k].v;
+    game = S.game || null;
+  };
+
   let stateTimer = null;
   let stateInflight = false;
+  let stateAgain = false;
   const fetchState = async () => {
-    if (stateInflight) return;
+    // A read asked for during another one runs after it, so it sees the latest post.
+    if (stateInflight) { stateAgain = true; return; }
     stateInflight = true;
+    const left = Date.now();
     try {
-      const r = await fetch("/gameday/state?_=" + Date.now(), { cache: "no-store" });
-      if (r.ok) { S = await r.json(); game = S.game || null; renderAll(); }
+      const r = await fetch("/gameday/state?_=" + left, { cache: "no-store" });
+      if (r.ok) {
+        D = await r.json();
+        for (const k of Object.keys(held)) {
+          const h = held[k];
+          if (h.ack && (same(k, D[k], h.v) || left > h.ack + APPLY_MS)) delete held[k];
+        }
+        overlay();
+        renderAll();
+        if (Object.values(held).some((h) => h.ack)) scheduleState(APPLY_MS + 100);
+      }
     } catch (_) { /* the poll comes back around */ }
     stateInflight = false;
+    if (stateAgain) { stateAgain = false; fetchState(); }
   };
   const scheduleState = (ms) => { clearTimeout(stateTimer); stateTimer = setTimeout(fetchState, ms); };
-  // Settings post; the device applies them on its main loop, so re-read shortly after.
-  const setGD = async (params, attempt = 0) => {
+  const postSet = async (params, attempt = 0) => {
     try {
       const r = await fetch("/gameday/set?" + qs(params), { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      scheduleState(400);
       return true;
     } catch (e) {
       if (attempt < 1) {
         await new Promise((res) => setTimeout(res, 500));
-        return setGD(params, attempt + 1);
+        return postSet(params, attempt + 1);
       }
       toast("Device did not respond (" + (e.message || "network") + "). Try again.");
       return false;
     }
+  };
+  // Settings post. Posts go one at a time, in tap order, so a slow one (or its
+  // retry) never lands after a later one. The device applies them on its main
+  // loop, so re-read shortly after.
+  let setQueue = Promise.resolve();
+  const setGD = (params) => {
+    const mine = {};
+    for (const k of Object.keys(params)) {
+      if (!stateForm[k]) continue;
+      mine[k] = held[k] = { v: stateForm[k](String(params[k])), ack: 0 };
+    }
+    if (Object.keys(mine).length) { overlay(); renderAll(); }
+    const run = setQueue.then(() => postSet(params)).then((ok) => {
+      for (const k of Object.keys(mine)) {
+        if (held[k] !== mine[k]) continue;  // a later tap posted this key again
+        if (ok) held[k].ack = Date.now();
+        else delete held[k];
+      }
+      if (!ok) { overlay(); renderAll(); }
+      scheduleState(APPLY_MS + 100);
+      return ok;
+    });
+    setQueue = run;
+    return run;
   };
   const doAction = async (name) => {
     try {
@@ -329,8 +395,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const liveMode = S && S.mode;
-      msg.textContent = !g ? "Waiting for the first fetch" : liveMode ? "No live games right now" : "No upcoming game for this team";
+      const mode = S ? String(S.mode || 0) : "0";
+      msg.textContent = !g ? "Waiting for the first fetch"
+        : mode === "4" ? "None of your favorites has a game coming up"
+          : mode !== "0" ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
       return;
@@ -363,7 +431,6 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     b.onclick = () => {
       const cur = S ? String(S.mode || 0) : "";
       if (cur === b.dataset.mode || (b.dataset.mode === "5" && isLive(cur))) return;
-      modeButtons.forEach((x) => x.classList.toggle("on", x === b));
       setGD({ mode: b.dataset.mode });
       toast(b.textContent);
     };
@@ -414,13 +481,15 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     for (const lg of Object.keys(LEAGUES)) {
       if (!TEAMS.some((t) => t[0] === lg)) continue;
       const b = el("button", "chip" + (on.includes(lg) ? " on" : ""), LEAGUES[lg].tab);
+      // From the list as it is now, not as it was when the chips were drawn:
+      // a second tap can come before the redraw.
       b.onclick = () => {
-        const next = on.includes(lg) ? on.filter((k) => k !== lg) : on.concat([lg]);
+        const cur = liveKeys();
+        const next = cur.includes(lg) ? cur.filter((k) => k !== lg) : cur.concat([lg]);
         if (!next.length) return toast("Pick at least one league");
         const params = { live: next.join(",") };
         if (String(S.mode || 0) !== "5") params.mode = 5;
         setGD(params);
-        b.classList.toggle("on");
       };
       host.appendChild(b);
     }
@@ -456,21 +525,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   // ---- toggles and favorites (static controls on the state document) --------
   document.querySelectorAll(".sw[data-set]").forEach((sw) => {
-    sw.onclick = () => {
-      const on = !sw.classList.contains("on");
-      sw.classList.toggle("on", on);
-      setGD({ [sw.dataset.set]: on ? 1 : 0 });
-    };
+    sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
   const favMax = () => (S && S.favmax) || 4;
-  const postFavs = (keys) => {
-    favKeys = keys;
-    renderFavs();
-    setGD({ favs: keys.join(",") });
-  };
+  // renderSettings() redraws the list from S, which already carries the post.
+  const postFavs = (keys) => setGD({ favs: keys.join(",") });
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
