@@ -598,6 +598,8 @@ switch:
     id: gd_auto_update
     icon: "mdi:update"
     entity_category: config
+    # The component keeps the setting; the switch must not set it at boot.
+    restore_mode: DISABLED
     lambda: 'return id(gameday_ctl).auto_update();'
     turn_on_action:
       - lambda: 'id(gameday_ctl).set_auto_update(true);'
