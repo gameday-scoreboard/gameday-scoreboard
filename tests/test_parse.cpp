@@ -1215,14 +1215,15 @@ static void test_backoff() {
 }
 
 // Every byte of a panel_text() result is printable ASCII or part of a Latin-1
-// character, the only glyphs the panel's fonts carry.
+// character the fonts list (U+00A1 to U+00FF without the soft hyphen), the
+// only glyphs the panel's fonts carry.
 static bool panel_drawable(const std::string &s) {
   for (size_t i = 0; i < s.size(); i++) {
     const uint8_t c = (uint8_t) s[i];
     if (c >= 0x20 && c < 0x7F)
       continue;
     if ((c == 0xC2 || c == 0xC3) && i + 1 < s.size() && ((uint8_t) s[i + 1] & 0xC0) == 0x80) {
-      if (c == 0xC2 && (uint8_t) s[i + 1] < 0xA1)
+      if (c == 0xC2 && ((uint8_t) s[i + 1] < 0xA1 || (uint8_t) s[i + 1] == 0xAD))
         return false;
       i++;
       continue;
@@ -1235,7 +1236,7 @@ static bool panel_drawable(const std::string &s) {
 static void test_panel_text() {
   using esphome::gameday::panel_text;
   // An iPhone hotspot name (backlog #144)
-  CHECK_EQ(panel_text("Brandon\xE2\x80\x99s iPhone"), std::string("Brandon's iPhone"));
+  CHECK_EQ(panel_text("Sam\xE2\x80\x99s iPhone"), std::string("Sam's iPhone"));
   CHECK_EQ(panel_text("\xE2\x80\x98Hi\xE2\x80\x99"), std::string("'Hi'"));
   CHECK_EQ(panel_text("Hawai\xCA\xBBi"), std::string("Hawai'i"));
   CHECK_EQ(panel_text("\xE2\x80\x9CHail Mary\xE2\x80\x9D"), std::string("\"Hail Mary\""));

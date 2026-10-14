@@ -2,8 +2,8 @@
 // (gameday-common.yaml lists both for each size), and a label draws an empty
 // box for any other character. Text from outside the panel (a network name,
 // ESPN's names and play text) goes through panel_text() on its way to a
-// label: lookalike punctuation becomes plain ASCII ("Brandon’s iPhone" to
-// "Brandon's iPhone"), a letter past Latin-1 loses its accent (Dončić to
+// label: lookalike punctuation becomes plain ASCII ("Sam’s iPhone" to
+// "Sam's iPhone"), a letter past Latin-1 loses its accent (Dončić to
 // Doncic) and anything else becomes '?'. Home Assistant and the device page
 // keep the original text. Pure, with no ESPHome includes, so the host tests
 // compile it directly.
