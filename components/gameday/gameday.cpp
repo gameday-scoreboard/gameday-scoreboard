@@ -1605,6 +1605,8 @@ void GamedayComponent::worker_(void *arg) {
   // was writing into belongs to a later cycle by now.
   if (self->worker_seq_ == mine)
     self->job_done_ = true;
+  // Bench only (backlog #141): the task is gone before the 30 s interval can see it.
+  ESP_LOGI("stack", "hwm bytes: gameday_fetch=%u (at exit)", (unsigned) uxTaskGetStackHighWaterMark(nullptr));
   vTaskDelete(nullptr);
 }
 

@@ -140,6 +140,8 @@ void LogoCache::start_task_() {
 
 void LogoCache::task_(void *arg) {
   static_cast<LogoCache *>(arg)->run_();
+  // Bench only (backlog #141): the task is gone before the 30 s interval can see it.
+  ESP_LOGI("stack", "hwm bytes: gameday_logo=%u (at exit)", (unsigned) uxTaskGetStackHighWaterMark(nullptr));
   vTaskDelete(nullptr);
 }
 
