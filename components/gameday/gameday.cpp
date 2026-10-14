@@ -1291,7 +1291,7 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
   auto container = this->open_(url);
   if (container == nullptr)
     return -1;
-  ContainerReader reader(container);
+  ContainerReader reader(container, this->espn_bytes_);
   int found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
   container->end();
   return found;
