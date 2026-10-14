@@ -785,12 +785,23 @@ static void test_rotate_minutes() {
   CHECK(espn::clamp_rotate_minutes(45) == 30);
 }
 
+// The root "id" of a recorded single-event document, so the event id check
+// runs on every sport's document, not only football's.
+static std::string root_id(const std::string &json) {
+  size_t at = json.find("\"id\":\"");
+  if (at == std::string::npos)
+    return "";
+  at += 6;
+  return json.substr(at, json.find('"', at) - at);
+}
+
 // MLB single-event documents recorded 2026-10-07 (see fixtures/README.md).
 static const uint32_t kBraves = 15, kDodgers = 19, kWhiteSox = 4, kBrewers = 8;
 
 static GameSnapshot mlb_event(const char *file, uint32_t team) {
   GameSnapshot s;
-  CHECK(parse_event_str(slurp(file), Sport::BASEBALL, team, s));
+  std::string json = slurp(file);
+  CHECK(parse_event_str(json, Sport::BASEBALL, team, s, root_id(json)));
   return s;
 }
 
@@ -926,6 +937,7 @@ static void test_mlb_pre_post() {
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_mlb_top.json"), Sport::BASEBALL, kWhiteSox, x));  // not in it
+  CHECK(!parse_event_str(slurp("fixtures/event_mlb_top.json"), Sport::BASEBALL, kBraves, x, "401908017"));  // some other event
   CHECK(!parse_event_str("{nope", Sport::BASEBALL, kBraves, x));
 }
 
@@ -1041,7 +1053,8 @@ static const uint32_t kArsenal = 359, kLeeds = 357, kSunderland = 366, kMiami = 
 
 static GameSnapshot soccer_event(const char *file, uint32_t team) {
   GameSnapshot s;
-  CHECK(parse_event_str(slurp(file), Sport::SOCCER, team, s));
+  std::string json = slurp(file);
+  CHECK(parse_event_str(json, Sport::SOCCER, team, s, root_id(json)));
   return s;
 }
 
@@ -1310,6 +1323,7 @@ static void test_soccer_finals() {
   CHECK_EQ(clock_text(et), std::string("ET HT"));
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_soccer_aet.json"), Sport::SOCCER, kArsenal, x));  // not in it
+  CHECK(!parse_event_str(slurp("fixtures/event_soccer_aet.json"), Sport::SOCCER, kArgentina, x, "760501"));  // some other event
 }
 
 static void test_soccer_splash() {
@@ -1432,7 +1446,8 @@ static const uint32_t kPacers = 11, kWolves = 16, kThunder = 25, kBlazers = 22, 
 
 static GameSnapshot hoops_event(const char *file, uint32_t team) {
   GameSnapshot s;
-  CHECK(parse_event_str(slurp(file), Sport::BASKETBALL, team, s));
+  std::string json = slurp(file);
+  CHECK(parse_event_str(json, Sport::BASKETBALL, team, s, root_id(json)));
   return s;
 }
 
@@ -1618,6 +1633,7 @@ static void test_nba_pre_post() {
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_nba_live.json"), Sport::BASKETBALL, kBlazers, x));  // not in it
+  CHECK(!parse_event_str(slurp("fixtures/event_nba_live.json"), Sport::BASKETBALL, kPacers, x, "401914124"));  // some other event
   CHECK(!parse_event_str("{nope", Sport::BASKETBALL, kPacers, x));
 }
 
@@ -1749,7 +1765,8 @@ static const uint32_t kJets = 28, kAvalanche = 17, kPenguins = 16, kCapitals = 2
 
 static GameSnapshot nhl_event(const char *file, uint32_t team) {
   GameSnapshot s;
-  CHECK(parse_event_str(slurp(file), Sport::HOCKEY, team, s));
+  std::string json = slurp(file);
+  CHECK(parse_event_str(json, Sport::HOCKEY, team, s, root_id(json)));
   return s;
 }
 
@@ -1912,6 +1929,7 @@ static void test_nhl_pre_post() {
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_nhl_live.json"), Sport::HOCKEY, kPenguins, x));  // not in it
+  CHECK(!parse_event_str(slurp("fixtures/event_nhl_live.json"), Sport::HOCKEY, kJets, x, "401892456"));  // some other event
   CHECK(!parse_event_str("{nope", Sport::HOCKEY, kJets, x));
 }
 
