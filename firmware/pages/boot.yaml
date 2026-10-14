@@ -59,11 +59,11 @@
 # change asks again (board_pending in gameday-common.yaml), so the new team's
 # scores load behind this screen instead of on a half-empty board.
 #
-# esp32_improv (Bluetooth setup, how the Game Day app provisions a panel)
+# improv_ble (Bluetooth setup, how the Game Day app provisions a panel)
 # also draws the setup or lost lines when it starts advertising, so they are
 # up before the next poll, and JOINING / <network> once the app hands over
 # credentials, which both off-Wi-Fi states keep up until the panel connects.
-# See the esp32_improv block below.
+# See the improv_ble block below.
 
 globals:
   - id: boot_ip_shown_ms
@@ -255,8 +255,8 @@ script:
           if (w == nullptr) return;
           // The app is mid-handover: no QR and no turns, just JOINING.
           const bool provisioning =
-              esp32_improv::global_improv_component != nullptr &&
-              esp32_improv::global_improv_component->get_improv_state() ==
+              improv_ble::global_improv_component != nullptr &&
+              improv_ble::global_improv_component->get_improv_state() ==
                   improv::STATE_PROVISIONING;
           // Lost means: there is a real saved network and the panel is not on
           // it. Derived from the live Wi-Fi state every time rather than
@@ -649,7 +649,7 @@ interval:
     then:
       - script.execute: boot_app_qr_turn
 
-# Bluetooth setup (esp32_improv, configured in gameday-common.yaml) starts
+# Bluetooth setup (improv_ble, configured in gameday-common.yaml) starts
 # advertising about a second after a boot with no saved network, and the
 # Game Day app finds the panel over Bluetooth rather than someone joining the
 # AP hotspot by hand. Say so on the overlay instead of leaving it on
@@ -657,7 +657,7 @@ interval:
 # waits. boot_check keeps polling the whole time, so once WiFi actually
 # connects it overwrites these lines with the normal app-hint/Ready flow on
 # its own; on_stop needs no action here for that reason.
-esp32_improv:
+improv_ble:
   on_start:
     # The overlay may already be hidden and boot_check/boot_anim suspended
     # (a panel that already had a team, or a fallback AP coming up mid-run
