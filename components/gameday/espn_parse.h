@@ -208,6 +208,16 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// The board and ticker with no game on the board, in place of the page's
+// "No upcoming game": "Getting ready" until the clock is set (nothing can
+// be read from ESPN before it), "Can't reach ESPN" while reads fail and
+// ESPN has never said this team has no game. Empty for the default, and in
+// a live mode, which has its own words.
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses);
+// Bench only. Every ESPN URL starts with this root; a bench build points
+// it at a host that does not exist to make ESPN unreachable without
+// touching the network.
+void set_site_root(const std::string &root);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.

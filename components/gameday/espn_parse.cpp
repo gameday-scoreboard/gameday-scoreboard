@@ -7,12 +7,14 @@
 
 namespace espn {
 
-static const char *kSiteRoot = "https://site.api.espn.com/apis/site/v2/sports/";
+static std::string site_root = "https://site.api.espn.com/apis/site/v2/sports/";
+
+void set_site_root(const std::string &root) { site_root = root; }
 
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
   const LeagueInfo *l = league_info(league);
-  return std::string(kSiteRoot) + (l != nullptr ? l->path : "football/nfl");
+  return site_root + (l != nullptr ? l->path : "football/nfl");
 }
 
 const char *league_path(League league) {
@@ -71,7 +73,7 @@ static std::string comp_base(League league, const char *comp_slug) {
     return site_base(league);
   const char *slash = strchr(l->path, '/');
   std::string sport = slash != nullptr ? std::string(l->path, slash - l->path + 1) : std::string();
-  return std::string(kSiteRoot) + sport + comp_slug;
+  return site_root + sport + comp_slug;
 }
 
 std::string team_url(League league, uint32_t espn_id, const char *comp_slug) {
@@ -312,6 +314,16 @@ using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
+
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+  if (!clock_set)
+    return "Getting ready";
+  if (live_mode)
+    return "";
+  if (!no_game_confirmed && misses > 0)
+    return "Can't reach ESPN";
+  return "";
+}
 
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local) {
   if (s.sport == Sport::BASEBALL)

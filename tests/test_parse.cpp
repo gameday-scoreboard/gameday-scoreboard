@@ -71,6 +71,11 @@ static void test_urls() {
   CHECK_EQ(team_logo_url(League::NFL, 6, "DAL"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/dal.png&w=64&h=64"));
   CHECK_EQ(team_logo_url(League::NCAA, 228, "CLEM"), std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/228.png&w=64&h=64"));
   CHECK_EQ(dark_logo(""), std::string(""));
+  // The bench's unreachable root reaches every URL, and the default comes back
+  set_site_root("https://bench.invalid/sports/");
+  CHECK_EQ(team_url(League::NFL, 6), std::string("https://bench.invalid/sports/football/nfl/teams/6"));
+  set_site_root("https://site.api.espn.com/apis/site/v2/sports/");
+  CHECK_EQ(team_url(League::NFL, 6), std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6"));
 }
 
 static void test_iso() {
@@ -304,6 +309,25 @@ static void test_status_text() {
   CHECK_EQ(status_text(pp, all, ""), std::string("Final | DAL 3-0 | PHI 2-1"));
   GameSnapshot nf;
   CHECK_EQ(status_text(nf, all, ""), std::string("No upcoming game"));
+}
+
+// The words for an empty board. "No upcoming game" (the empty answer) is only
+// right once ESPN said so; until then a failed read is ESPN out of reach.
+static void test_no_game_text() {
+  // No clock yet: nothing can have been read, whatever else is true
+  CHECK_EQ(no_game_text(false, false, false, 0), std::string("Getting ready"));
+  CHECK_EQ(no_game_text(false, true, true, 5), std::string("Getting ready"));
+  // Clock set, first read still out
+  CHECK_EQ(no_game_text(true, false, false, 0), std::string(""));
+  // Reads failing, ESPN never answered for this team: after boot or a team change
+  CHECK_EQ(no_game_text(true, false, false, 1), std::string("Can't reach ESPN"));
+  CHECK_EQ(no_game_text(true, false, false, 7), std::string("Can't reach ESPN"));
+  // ESPN said there is no game: stays so when later reads fail (the ticker adds the age)
+  CHECK_EQ(no_game_text(true, false, true, 0), std::string(""));
+  CHECK_EQ(no_game_text(true, false, true, 3), std::string(""));
+  // Live modes keep their own "Looking for a live game"
+  CHECK_EQ(no_game_text(true, true, false, 1), std::string(""));
+  CHECK_EQ(no_game_text(true, true, false, 3), std::string(""));
 }
 
 static struct tm mk(int year, int yday, int wday, int hour, int min, int mon = 8, int mday = 5) {
@@ -2668,6 +2692,7 @@ int main() {
   test_scoreboard_pre_nfl();
   test_splash();
   test_status_text();
+  test_no_game_text();
   test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();
