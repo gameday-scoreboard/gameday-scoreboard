@@ -56,6 +56,8 @@ esp32:
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
+      # Bench only (backlog #141): uxTaskGetSystemState needs the trace facility.
+      CONFIG_FREERTOS_USE_TRACE_FACILITY: y
 
 esphome:
   name: "${name}"
@@ -745,3 +747,33 @@ sensor:
     update_interval: 60s
     entity_category: "diagnostic"
     disabled_by_default: true
+
+# Bench only (backlog #141): every 30 s, log each FreeRTOS task's stack
+# high-water mark, the bytes of its stack that have never been touched (on
+# ESP-IDF the unit is bytes). The smallest number is the closest call.
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          #include "freertos/FreeRTOS.h"
+          #include "freertos/task.h"
+          UBaseType_t n = uxTaskGetNumberOfTasks();
+          TaskStatus_t *tasks = (TaskStatus_t *) malloc(n * sizeof(TaskStatus_t));
+          if (tasks == nullptr) {
+            ESP_LOGW("stack", "no memory for %u task records", (unsigned) n);
+            return;
+          }
+          UBaseType_t got = uxTaskGetSystemState(tasks, n, nullptr);
+          std::string line;
+          for (UBaseType_t i = 0; i < got; i++) {
+            char buf[48];
+            snprintf(buf, sizeof(buf), "%s=%u ", tasks[i].pcTaskName, (unsigned) tasks[i].usStackHighWaterMark);
+            line += buf;
+            if (line.size() > 160) {
+              ESP_LOGI("stack", "hwm bytes: %s", line.c_str());
+              line.clear();
+            }
+          }
+          if (!line.empty())
+            ESP_LOGI("stack", "hwm bytes: %s", line.c_str());
+          free(tasks);
