@@ -33,13 +33,16 @@
 # leads in setup; the hotspot keeps a turn because it is the only way in
 # without an iPhone.
 #
-# Connected: a fresh panel keeps this up for 45 seconds, or until a team is
-# picked. The address turn is what "Show address at boot" on the device page
-# controls, since it is how someone who set the panel up through the
-# hotspot finds it again; with the setting off a fresh panel shows only the
-# QR. A panel that already has a team shows just the address for 3 seconds
-# at boot (full width, no QR, on a chain too), or nothing with the setting
-# off. A boot button hold always shows the full address and IP, full
+# Connected: every panel shows the QR for the app once it joins Wi-Fi,
+# with or without a team. A fresh panel keeps it up for 45 seconds, or
+# until a team is picked. A panel that already has a team gets one run of
+# turns, 18 seconds, and then its board. The address turn is what "Show
+# address at boot" on the device page controls, since it is how someone who
+# set the panel up through the hotspot finds it again; with the setting off
+# a fresh panel shows only the QR, and a panel with a team skips the screen
+# and goes straight to its board. Coming back to the same network after a
+# drop is not a new join and shows nothing: the Wi-Fi lost screen already
+# carried the QR. A boot button hold always shows the full address and IP, full
 # width, with no QR, for 20 seconds. Off Wi-Fi the overlay never hides, so
 # the button cannot blank a panel that is in setup or has lost its network.
 # A panel with no team picked brings the QR back over the board for 13 s
@@ -122,6 +125,16 @@ globals:
     initial_value: '0'
   # True while boot_app_qr_turn has the overlay up.
   - id: boot_app_qr_on
+    type: bool
+    initial_value: 'false'
+  # The network the panel last joined this boot, empty before the first
+  # join. Coming back to the same one after a drop is not a new join.
+  - id: boot_joined_ssid
+    type: std::string
+    initial_value: ''
+  # Whether this join shows the app's QR code (see boot_refresh). Decided
+  # once per join, when boot_ip_shown_ms is still 0.
+  - id: boot_join_qr
     type: bool
     initial_value: 'false'
 
@@ -294,6 +307,19 @@ script:
             }
           }
           if (w->is_connected()) {
+            if (id(boot_ip_shown_ms) == 0) {
+              // A new join: every boot, and any network the panel was not on
+              // before this boot (the app handing over a new router's
+              // network mid-outage). Coming back to the same network after a
+              // drop is not one; the Wi-Fi lost screen already showed the QR.
+              char buf[wifi::SSID_BUFFER_SIZE];
+              const std::string ssid = w->wifi_ssid_to(buf);
+              const bool same = !id(boot_joined_ssid).empty() && ssid == id(boot_joined_ssid);
+              id(boot_joined_ssid) = ssid;
+              id(boot_join_qr) = !id(gameday_ctl).setup_done() || (!same && id(gameday_ctl).show_boot_address());
+              ESP_LOGI("boot", "On Wi-Fi (%s): %s", same ? "same network" : "new join",
+                       id(boot_join_qr) ? "showing the app's QR code" : "straight to the board");
+            }
             id(boot_last_connected_ms) = millis() == 0 ? 1 : millis();
             // boot_show_address keeps the button's address up for 20 s, and
             // boot_check's twice a second polls must not swap it back.
@@ -320,37 +346,35 @@ script:
             } else if (id(boot_hold_since_ms) != 0) {
               id(boot_hold_view).execute();
             } else {
-              // Normal connect. A fresh panel shows the QR for the app, with
-              // the address taking a turn when "Show address at boot" is on.
-              // A panel that already has a team only gets here with that
-              // setting on (see the hide timers below) and shows just the
-              // address, no QR: it has been set up, it needs no app link.
-              // boot_app_qr_turn borrows the fresh panel's view.
-              const bool fresh = !id(gameday_ctl).setup_done() || id(boot_app_qr_on);
-              bool addr = true;
-              if (fresh) {
+              // Normal connect: the QR for the app, with the address taking a
+              // turn when "Show address at boot" is on. Every panel, with or
+              // without a team: whoever just put it on Wi-Fi is the person
+              // who needs the app next. A panel with a team and the setting
+              // off, or back on its network after a drop, hides straight
+              // away (see the hide timers below) and only flashes the hold
+              // view here. boot_app_qr_turn borrows the same view.
+              if (id(boot_join_qr) || id(boot_app_qr_on)) {
                 id(boot_qr_cycle).execute(1, id(gameday_ctl).show_boot_address());
-                addr = id(boot_qr_frame) == 2;
+                const bool addr = id(boot_qr_frame) == 2;
+                id(boot_view).execute(wide, wide || !addr);
+                if (addr)
+                  id(boot_set_lines).execute("Open", h1, h2, "", false);
+                else if (wide)
+                  id(boot_set_lines).execute("Scan for", "Game Day", "app", "", false);
+                else
+                  id(boot_set_lines).execute("", "", "", "", false);
               } else {
-                id(boot_qr_cycle).execute(0, false);
+                id(boot_hold_view).execute();
               }
-              const bool side = wide && fresh;
-              id(boot_view).execute(side, side || !addr);
-              if (addr && wide && !side)
-                id(boot_set_lines).execute("Open", host, "", "", false);
-              else if (addr)
-                id(boot_set_lines).execute("Open", h1, h2, "", false);
-              else if (wide)
-                id(boot_set_lines).execute("Scan for", "Game Day", "app", "", false);
-              else
-                id(boot_set_lines).execute("", "", "", "", false);
             }
             if (id(boot_ip_shown_ms) == 0) {
               id(boot_ip_shown_ms) = millis() == 0 ? 1 : millis();
+              // A panel with a team gets one run of boot_qr_cycle's turns:
+              // 13 s of QR, then the address's 5 s.
               if (!id(gameday_ctl).setup_done())
                 id(boot_hide_later).execute(45000);
-              else if (id(gameday_ctl).show_boot_address())
-                id(boot_hide_later).execute(3000);
+              else if (id(boot_join_qr))
+                id(boot_hide_later).execute(18000);
               else
                 id(boot_hide).execute();
             }
