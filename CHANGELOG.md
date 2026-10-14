@@ -18,6 +18,7 @@ owns the panel, not for the code.
 - When two favorites play at once, a new panel alternates between them. A panel that was already set up keeps showing the higher one.
 - The ticker switches on the device page have names that fit every sport, with a line under each saying what it shows. "Down and distance" is now "Game situation".
 - Football works the same as before.
+- A team, mode, favorites, timezone or device page change is saved to the panel the moment you make it. Before, a panel unplugged within a minute of a change could come back with its old settings.
 
 ## v1.5.5
 

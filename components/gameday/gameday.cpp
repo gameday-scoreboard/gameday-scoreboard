@@ -307,6 +307,7 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   else
     this->pref7_.save(&this->prefs7_);
   bool first_pick = id != 0 && this->mark_setup_done_();
+  this->sync_prefs_();
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
   if (slot <= 4 && this->favorite_selects_[slot - 1] != nullptr)
     this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
@@ -323,6 +324,7 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   this->pref3_.save(&this->prefs3_);
   this->pref7_.save(&this->prefs7_);
   bool first_pick = any && this->mark_setup_done_();
+  this->sync_prefs_();
   ESP_LOGI(TAG, "Favorites: %u team(s)", (unsigned) list.size());
   for (uint8_t slot = 1; slot <= 4; slot++)
     if (this->favorite_selects_[slot - 1] != nullptr)
@@ -383,6 +385,7 @@ void GamedayComponent::press_favorite(uint8_t slot) {
   if (this->prefs2_.mode != (uint8_t) Mode::MY_TEAM) {
     this->prefs2_.mode = (uint8_t) Mode::MY_TEAM;
     this->pref2_.save(&this->prefs2_);
+    this->sync_prefs_();
     if (this->mode_select_ != nullptr)
       this->mode_select_->publish_state(MODE_OPTIONS[0]);
     this->reset_game_();
@@ -433,6 +436,7 @@ void GamedayComponent::select_mode(const std::string &option) {
     this->board_ready_ = false;
     this->board_pending_ms_ = millis() == 0 ? 1 : millis();
     this->mark_setup_done_();
+    this->sync_prefs_();
     if (this->mode_select_ != nullptr)
       this->mode_select_->publish_state(option);
     this->reset_game_();
@@ -454,6 +458,7 @@ void GamedayComponent::set_rotate_minutes(int minutes) {
     return;
   this->prefs2_.rotate_minutes = (uint8_t) minutes;
   this->pref2_.save(&this->prefs2_);
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -463,6 +468,7 @@ void GamedayComponent::set_lockon_minutes(int minutes) {
     return;
   this->prefs4_.lockon_minutes = (uint8_t) minutes;
   this->pref4_.save(&this->prefs4_);
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -472,6 +478,7 @@ void GamedayComponent::set_release_seconds(int seconds) {
     return;
   this->prefs4_.release_seconds = (uint16_t) seconds;
   this->pref4_.save(&this->prefs4_);
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -480,6 +487,7 @@ void GamedayComponent::set_today_only(bool on) {
     return;
   this->prefs7_.flags = on ? (this->prefs7_.flags | FAV7_TODAY) : (this->prefs7_.flags & ~FAV7_TODAY);
   this->pref7_.save(&this->prefs7_);
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -498,6 +506,7 @@ void GamedayComponent::set_live_leagues(const std::string &keys) {
     return;
   this->prefs7_.live_mask = mask;
   this->pref7_.save(&this->prefs7_);
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -524,6 +533,7 @@ void GamedayComponent::set_collision_alternate(bool alternate) {
     return;
   this->prefs4_.collide = alternate ? 1 : 0;
   this->pref4_.save(&this->prefs4_);
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -984,6 +994,7 @@ bool GamedayComponent::mark_setup_done_() {
     return false;
   this->prefs_.flags |= FLAG_SETUP;
   this->save_prefs_();
+  this->sync_prefs_();
   this->fire_action_("team_picked");  // the setup screen listens for this
   return true;
 }
@@ -1006,6 +1017,7 @@ void GamedayComponent::apply_team_(const ::espn::Team &t) {
   this->board_pending_ms_ = millis() == 0 ? 1 : millis();
   this->publish_team_select_(this->team_option_());
   this->mark_setup_done_();
+  this->sync_prefs_();
   // The select, the page and the app all land here, and only on a real
   // change, so this is the one place that knows a person picked a team.
   this->fire_action_("user_pick");
@@ -1032,6 +1044,7 @@ void GamedayComponent::clear_team_() {
     return;
   this->prefs_.team_id = 0;
   this->save_prefs_();
+  this->sync_prefs_();
   ESP_LOGI(TAG, "Team cleared");
   this->board_ready_ = false;
   this->board_pending_ms_ = millis() == 0 ? 1 : millis();
@@ -1048,6 +1061,7 @@ void GamedayComponent::select_timezone(const std::string &option) {
       continue;
     this->prefs_.tz_index = (uint8_t) i;
     this->save_prefs_();
+    this->sync_prefs_();
     this->apply_timezone_();
     if (this->timezone_select_ != nullptr)
       this->timezone_select_->publish_state(::espn::kTimezones[i].name);
@@ -1076,6 +1090,7 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
     return;
   this->prefs_.flags = next;
   this->save_prefs_();
+  this->sync_prefs_();
   if (this->game_.valid)
     this->emit_({});
   else
@@ -1084,11 +1099,22 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
 
 void GamedayComponent::save_prefs_() { this->pref_.save(&this->prefs_); }
 
+// ESPHome only writes saved preferences to flash from a 60 s timer or a
+// clean shutdown, so a panel unplugged within the minute of a change came
+// back without it. An owner's change is written now. sync() is one NVS
+// write per changed blob and nothing when nothing is pending, so the
+// setters that run together inside apply_set_ share one write at its end.
+void GamedayComponent::sync_prefs_() {
+  if (this->sync_gate_.request())
+    global_preferences->sync();
+}
+
 void GamedayComponent::set_auto_update(bool on) {
   if (on == this->auto_update())
     return;
   this->prefs6_.auto_update = on ? 1 : 0;
   this->pref6_.save(&this->prefs6_);
+  this->sync_prefs_();
   ESP_LOGI(TAG, "Install updates automatically: %s", on ? "on" : "off");
   this->rebuild_state_(&this->last_fields_);
 }
@@ -2658,6 +2684,7 @@ bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id) {
 
 void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::string>> &kv) {
   bool dirty = false;
+  this->sync_gate_.begin();  // the keys below share one flash write
   for (const auto &p : kv) {
     const std::string &k = p.first;
     const std::string &v = p.second;
@@ -2741,6 +2768,8 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   }
   if (dirty)
     this->rebuild_state_(&this->last_fields_);
+  if (this->sync_gate_.end())
+    global_preferences->sync();
 }
 
 }  // namespace gameday
