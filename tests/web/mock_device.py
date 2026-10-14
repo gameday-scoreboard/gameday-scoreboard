@@ -48,7 +48,7 @@ TZ_TEXT = "\n".join(ln for ln in (REPO / "components/gameday/timezones.h").read_
 TZS = [name for name, _posix, _iana in TZ_RE.findall(TZ_TEXT)]
 
 SET_KEYS = ("team", "mode", "rotate", "fav1", "fav2", "fav3", "fav4", "tz", "tzauto", "down", "play", "odds",
-            "opp", "panels", "bootaddr", "lockon", "release", "collide", "favs", "today", "live")
+            "opp", "panels", "bootaddr", "lockon", "release", "collide", "favs", "today", "live", "autoupd")
 
 
 def team(lg, tid):
@@ -67,6 +67,7 @@ INITIAL = {
     "favmax": FAV_MAX, "today": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
+    "autoupd": False,
     "misses": 0, "stale_s": 4, "fallback": False,
     "game": {"s": "PRE", "l": "nfl", "ta": "DAL", "ti": 6, "ts": 0, "oa": "PHI", "oi": 21, "os": 0,
              "tr": "1-0", "or": "0-1", "p": 0, "tt": 3, "ot": 3, "rz": False, "tv": "FOX",
@@ -133,6 +134,8 @@ def apply_set(kv):
             ref = parse_team_ref(v)
             if ref and ref in TEAMS:
                 STATE["team"] = team(*ref)
+            elif v == "none":
+                STATE["team"] = {}
         elif k == "mode":
             m = int(v) if v.lstrip("-").isdigit() else -1
             if 0 <= m <= 5:
@@ -170,7 +173,7 @@ def apply_set(kv):
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "play", "odds", "opp", "bootaddr"):
+        elif k in ("down", "play", "odds", "opp", "bootaddr", "autoupd"):
             STATE[k] = v == "1"
         elif k == "panels":
             STATE["panels"] = int(v)
@@ -283,6 +286,9 @@ class Handler(BaseHTTPRequestHandler):
             STATE.clear()
             STATE.update(copy.deepcopy(INITIAL))
             STATE.update(body.get("state") or {})
+            # A null override drops the key, like firmware that doesn't send it.
+            for k in [k for k, v in STATE.items() if v is None]:
+                del STATE[k]
             FAIL.clear()
             FAIL.update(body.get("fail") or [])
             DEMO.clear()

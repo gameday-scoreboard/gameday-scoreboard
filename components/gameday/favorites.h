@@ -143,4 +143,24 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
   return c;
 }
 
+// The favorite Home Assistant reports while the idle playlist rotates, so its
+// sensors don't change with every card: the next kickoff, else the first slot
+// with a card. -1 when no favorite has one.
+inline int followed_favorite(const std::vector<FavGame> &games) {
+  int best = -1;
+  for (int i = 0; i < (int) games.size(); i++) {
+    const FavGame &g = games[i];
+    if (!g.valid)
+      continue;
+    if (best < 0) {
+      best = i;
+      continue;
+    }
+    const FavGame &b = games[best];
+    if (g.state == GameState::PRE && (b.state != GameState::PRE || g.kickoff_epoch < b.kickoff_epoch))
+      best = i;
+  }
+  return best;
+}
+
 }  // namespace espn

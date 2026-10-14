@@ -119,6 +119,7 @@ struct GameSnapshot {
   Soccer soc;
   Basketball nba;  // every basketball league
   Hockey nhl;
+  std::string game_name;  // "Rose Bowl", "Super Bowl LX"; empty for most games
 };
 
 // One future game from the team's schedule endpoint, for the "Up next" list.
@@ -140,6 +141,24 @@ struct LiveGame {
   uint32_t away_id{0};      // shown on the left, like a broadcast
   std::string away_abbr, home_abbr;
 };
+
+// A finished game from a day's scoreboard, for the finals rotation (recap.h).
+// Kept small, since a few dozen of them stay in RAM: short strings only,
+// and the logos are worked out from the ids when the card goes up.
+struct Final {
+  uint8_t league{0};
+  uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  int64_t kickoff_epoch{0};
+  std::string detail;  // "Final", "Final/OT"
+  uint32_t away_id{0}, home_id{0};
+  int away_score{0}, home_score{0};
+  std::string away_abbr, home_abbr;
+  std::string away_color, home_color;
+  std::string away_record, home_record;
+};
+
+// The scoreboard card for a final, the away side as "team" like a broadcast.
+GameSnapshot final_snapshot(const Final &f);
 
 struct TickerOptions {
   bool clock{true};
@@ -189,6 +208,15 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// Home Assistant's Game Status: the matchup, the state and the score, and
+// nothing that changes every play, so the recorder logs a line when the game
+// starts, scores or ends rather than every poll.
+std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local);
+// ESPN's game headline ("College Football Playoff Quarterfinal at the Rose
+// Bowl Presented by Prudential") cut down to what people call the game
+// ("Rose Bowl"). ESPN has no short form of it. Empty for a note that is a
+// kickoff window, not a name.
+std::string short_game_name(const std::string &headline);
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local);
 int64_t parse_iso8601_z(const std::string &s);
 const char *state_name(GameState s);

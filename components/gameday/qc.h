@@ -17,7 +17,7 @@ inline uint32_t qc_psram_mb() { return esp_psram_get_size() / (1024 * 1024); }
 // The strongest network the last Wi-Fi scan found, in dBm, or 0 while there
 // is nothing to show. A connected panel has usually dropped its scan list, so
 // it reports the network it is on instead. One with
-// no saved network gets a scan started here, the way esp32_improv starts one.
+// no saved network gets a scan started here, the way improv_ble starts one.
 // One with a saved network it can't reach is left alone: the Wi-Fi component
 // scans for it on every retry, and a scan of our own could cut into a join.
 inline int qc_strongest_rssi() {

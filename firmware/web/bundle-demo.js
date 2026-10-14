@@ -8,7 +8,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   POST /gameday/action?do=name  refresh
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
-// "Game Status" event is the cue to re-read the state document.
+// "Game Status" event, sent on every board update, is the cue to re-read the
+// state document.
 // Bundled with the team table by scripts/build_web.py, which defines
 // TEAMS = [[league, espnId, abbr, name], ...] and TZS = [[name, iana], ...].
 
@@ -50,7 +51,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   // ---- state -----------------------------------------------------------
   const ents = {};       // id -> last event payload ({id, name, state, value, option...})
   const byName = {};     // name -> id
-  let S = null;          // /gameday/state document
+  let D = null;          // /gameday/state document as the device last sent it
+  let S = null;          // D with the page's unconfirmed posts on top; every render reads this
   let game = null;       // S.game
   let connected = false;
 
@@ -77,6 +79,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
       <div class="play" id="play"></div>
@@ -120,16 +123,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <h2>Ticker</h2>
         <p class="hint">What scrolls along the bottom of the panel during a game.</p>
         <div id="tickerCtls">
-          <div class="ctl"><label>Down and distance</label><button class="sw" data-set="down" aria-label="Down and distance"></button></div>
-          <div class="ctl"><label>Last play</label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Pre-game odds and TV</label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Game situation<small>Football: down and distance. Baseball: the count, outs, pitcher and batter. Soccer: goals, cards, possession and shots. Nothing extra in hockey or basketball.</small></label><button class="sw" data-set="down" aria-label="Game situation"></button></div>
+          <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
+          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
         </div>
       </div>
       <div class="card">
         <h2>Celebrations</h2>
         <p class="hint">Full-screen splashes for scores. Yours always show.</p>
         <div id="celebCtls">
-          <div class="ctl"><label>Opponent scores too</label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
       <div class="card">
@@ -171,7 +174,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl" id="tzpick" hidden><label>Timezone</label><select id="tzsel"></select></div>
         <div class="sub">Startup</div>
         <div class="ctl">
-          <label>Show how to connect when the panel starts<small>For 3 seconds after it connects: the Game Day app, or the page address. Hold the boot button any time to show the address again.</small></label>
+          <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
         </div>
       </div>
@@ -181,6 +184,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="fw" id="fw" hidden>
           <div class="fwline"><span id="fwText">Firmware</span><button class="btn primary" id="fwInstall" hidden>Install</button></div>
           <div class="fwsub" id="fwSub"></div>
+        </div>
+        <div class="ctl" id="autoupdRow" hidden>
+          <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
+          <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
@@ -244,33 +251,98 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   // ---- gameday routes ----------------------------------------------------
   const qs = (params) => Object.entries(params).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+  // A tap redraws from what it posted, not from the device's last answer: a
+  // state read that left before the device applied the post still carries
+  // the old value. Each posted setting is held here until a read shows it,
+  // or a read that left after the device answered the post (APPLY_MS for
+  // its main loop to apply it) comes back. Then the device's value wins.
+  const APPLY_MS = 300;
+  const held = {};       // key -> {v: the value as the state document has it, ack: when the post was answered}
+  const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
+  const stateForm = {
+    mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
+    down: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1",
+    live: (v) => v.split(",").filter(Boolean),
+    team: (v) => ref(v),
+    favs: (v) => v.split(",").filter(Boolean).map(ref),
+  };
+  const sameForm = {
+    mode: (a, b) => (a || 0) === (b || 0),
+    team: (a, b) => refKey(a) === refKey(b),
+    live: (a, b) => (a || []).slice().sort().join(",") === (b || []).slice().sort().join(","),
+    favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
+  };
+  const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
+  const overlay = () => {
+    if (!D) return;
+    S = Object.assign({}, D);
+    for (const k of Object.keys(held)) S[k] = held[k].v;
+    game = S.game || null;
+  };
+
   let stateTimer = null;
   let stateInflight = false;
+  let stateAgain = false;
   const fetchState = async () => {
-    if (stateInflight) return;
+    // A read asked for during another one runs after it, so it sees the latest post.
+    if (stateInflight) { stateAgain = true; return; }
     stateInflight = true;
+    const left = Date.now();
     try {
-      const r = await fetch("/gameday/state?_=" + Date.now(), { cache: "no-store" });
-      if (r.ok) { S = await r.json(); game = S.game || null; renderAll(); }
+      const r = await fetch("/gameday/state?_=" + left, { cache: "no-store" });
+      if (r.ok) {
+        D = await r.json();
+        for (const k of Object.keys(held)) {
+          const h = held[k];
+          if (h.ack && (same(k, D[k], h.v) || left > h.ack + APPLY_MS)) delete held[k];
+        }
+        overlay();
+        renderAll();
+        if (Object.values(held).some((h) => h.ack)) scheduleState(APPLY_MS + 100);
+      }
     } catch (_) { /* the poll comes back around */ }
     stateInflight = false;
+    if (stateAgain) { stateAgain = false; fetchState(); }
   };
   const scheduleState = (ms) => { clearTimeout(stateTimer); stateTimer = setTimeout(fetchState, ms); };
-  // Settings post; the device applies them on its main loop, so re-read shortly after.
-  const setGD = async (params, attempt = 0) => {
+  const postSet = async (params, attempt = 0) => {
     try {
       const r = await fetch("/gameday/set?" + qs(params), { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      scheduleState(400);
       return true;
     } catch (e) {
       if (attempt < 1) {
         await new Promise((res) => setTimeout(res, 500));
-        return setGD(params, attempt + 1);
+        return postSet(params, attempt + 1);
       }
       toast("Device did not respond (" + (e.message || "network") + "). Try again.");
       return false;
     }
+  };
+  // Settings post. Posts go one at a time, in tap order, so a slow one (or its
+  // retry) never lands after a later one. The device applies them on its main
+  // loop, so re-read shortly after.
+  let setQueue = Promise.resolve();
+  const setGD = (params) => {
+    const mine = {};
+    for (const k of Object.keys(params)) {
+      if (!stateForm[k]) continue;
+      mine[k] = held[k] = { v: stateForm[k](String(params[k])), ack: 0 };
+    }
+    if (Object.keys(mine).length) { overlay(); renderAll(); }
+    const run = setQueue.then(() => postSet(params)).then((ok) => {
+      for (const k of Object.keys(mine)) {
+        if (held[k] !== mine[k]) continue;  // a later tap posted this key again
+        if (ok) held[k].ack = Date.now();
+        else delete held[k];
+      }
+      if (!ok) { overlay(); renderAll(); }
+      scheduleState(APPLY_MS + 100);
+      return ok;
+    });
+    setQueue = run;
+    return run;
   };
   const doAction = async (name) => {
     try {
@@ -324,13 +396,22 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
     $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // Bowl or playoff name, when ESPN gives the game one
+    const gname = $("#gname");
+    gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
+    gname.hidden = !gname.textContent;
     if (!g || g.s === "NOT_FOUND") {
       b.classList.add("empty");
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const liveMode = S && S.mode;
-      msg.textContent = !g ? "Waiting for the first fetch" : liveMode ? "No live games right now" : "No upcoming game for this team";
+      const mode = S ? String(S.mode || 0) : "0";
+      const favMode = mode === "4" && S && (S.favs || []).some(refKey);
+      // With no team picked the panel runs the live board, unless Favorites has teams.
+      const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
+      msg.textContent = !g ? "Waiting for the first fetch"
+        : favMode ? "None of your favorites has a game coming up"
+          : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
       return;
@@ -363,7 +444,6 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     b.onclick = () => {
       const cur = S ? String(S.mode || 0) : "";
       if (cur === b.dataset.mode || (b.dataset.mode === "5" && isLive(cur))) return;
-      modeButtons.forEach((x) => x.classList.toggle("on", x === b));
       setGD({ mode: b.dataset.mode });
       toast(b.textContent);
     };
@@ -414,13 +494,15 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     for (const lg of Object.keys(LEAGUES)) {
       if (!TEAMS.some((t) => t[0] === lg)) continue;
       const b = el("button", "chip" + (on.includes(lg) ? " on" : ""), LEAGUES[lg].tab);
+      // From the list as it is now, not as it was when the chips were drawn:
+      // a second tap can come before the redraw.
       b.onclick = () => {
-        const next = on.includes(lg) ? on.filter((k) => k !== lg) : on.concat([lg]);
+        const cur = liveKeys();
+        const next = cur.includes(lg) ? cur.filter((k) => k !== lg) : cur.concat([lg]);
         if (!next.length) return toast("Pick at least one league");
         const params = { live: next.join(",") };
         if (String(S.mode || 0) !== "5") params.mode = 5;
         setGD(params);
-        b.classList.toggle("on");
       };
       host.appendChild(b);
     }
@@ -456,21 +538,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   // ---- toggles and favorites (static controls on the state document) --------
   document.querySelectorAll(".sw[data-set]").forEach((sw) => {
-    sw.onclick = () => {
-      const on = !sw.classList.contains("on");
-      sw.classList.toggle("on", on);
-      setGD({ [sw.dataset.set]: on ? 1 : 0 });
-    };
+    sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
   const favMax = () => (S && S.favmax) || 4;
-  const postFavs = (keys) => {
-    favKeys = keys;
-    renderFavs();
-    setGD({ favs: keys.join(",") });
-  };
+  // renderSettings() redraws the list from S, which already carries the post.
+  const postFavs = (keys) => setGD({ favs: keys.join(",") });
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
@@ -526,6 +601,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
+    // Firmware that can't install updates (older, or the demo build) leaves it out.
+    $("#autoupdRow").hidden = S.autoupd === undefined;
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
   };
@@ -1076,7 +1153,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
       $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = cur ? "You have " + cur + "." : "";
+      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "");
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {
@@ -1115,9 +1192,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       built[e.id].update(ents[e.id]);
     }
     switch (name) {
-      // A new ticker line means the device finished a poll: re-read the state document.
-      case "Game Status": $("#ticker").textContent = e.value || ""; scheduleState(150); break;
-      case "Last Play": $("#play").textContent = e.value ? "Last play: " + e.value : ""; break;
+      // Sent on every board update: re-read the state document. Its value is
+      // Home Assistant's shorter line, so the ticker and last play come from there.
+      case "Game Status": scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
@@ -1179,7 +1256,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     <div class="sub">College football</div>
     <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
     <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
-    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
+    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
   $("#board").after(card);
 
   let D = null;
