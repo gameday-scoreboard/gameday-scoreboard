@@ -99,7 +99,7 @@
       <button class="btn primary" id="pick">Change team</button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name">Following a random game in progress</div><div class="lg">Moves on when it ends, or after the time below. Leagues:</div><div class="chips" id="liveChips"></div></div></div>
+      <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after the time below. Leagues:</div><div class="chips" id="liveChips"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
       <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
@@ -328,6 +328,12 @@
       if (!stateForm[k]) continue;
       mine[k] = held[k] = { v: stateForm[k](String(params[k])), ack: 0 };
     }
+    // A league list turns automatic off and an empty one turns it back on.
+    // The automatic list itself is the device's to work out, so hold only the flag.
+    if (mine.live) {
+      mine.live_auto = held.live_auto = { v: !mine.live.v.length, ack: 0 };
+      if (!mine.live.v.length) { delete mine.live; delete held.live; }
+    }
     if (Object.keys(mine).length) { overlay(); renderAll(); }
     const run = setQueue.then(() => postSet(params)).then((ok) => {
       for (const k of Object.keys(mine)) {
@@ -485,6 +491,26 @@
     if (m === "3") return ["nfl", "ncaa"];
     return S.live || [];
   };
+  // No leagues picked: the device follows the leagues of the team and the
+  // favorites, and that list changes by itself when a favorite is added.
+  const liveAuto = () => String(S.mode || 0) === "5" && !!S.live_auto;
+  $("#liveAuto").onclick = () => {
+    setGD({ live: "" });
+    toast("Leagues follow your team and favorites");
+  };
+  const renderLiveBar = () => {
+    const auto = liveAuto();
+    // With nothing live the device shows the saved team's card, or with no
+    // team a rotation of recent finals, and keeps scanning.
+    $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
+      : S.recap ? "No live game right now, showing recent finals"
+        : "Following a random game in progress";
+    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after the time below. ")
+      + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
+    $("#liveChips").classList.toggle("auto", auto);
+    $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
+    renderLiveChips();
+  };
   const renderLiveChips = () => {
     const host = $("#liveChips");
     host.innerHTML = "";
@@ -510,7 +536,7 @@
     const mode = String(S.mode || 0);
     modeButtons.forEach((b) => b.classList.toggle("on", b.dataset.mode === mode || (b.dataset.mode === "5" && isLive(mode))));
     const live = isLive(mode);
-    if (live) renderLiveChips();
+    if (live) renderLiveBar();
     const favs = mode === "4";
     $("#teambar").hidden = live || favs;
     $("#livebar").hidden = !live;
