@@ -13,11 +13,14 @@
 // YAML: the first one gets priority 1 and the rest 0, so the last network
 // that worked is tried first and signal strength decides among the others.
 //
-// ESPHome's own slot is still what setup writes. It is read once at boot:
-// a network there that the list does not know goes to the front (a panel
-// updating from firmware that kept one network, or a hotspot-page setup
-// that restarted before it connected), and a blank slot, which only
-// "Reset Wi-Fi" writes, empties the list too.
+// ESPHome's own slot is still what setup writes. It is read once at boot,
+// and the list keeps a hash of what it last took from it: a slot that
+// changed since goes to the front (a panel updating from firmware that kept
+// one network, or a setup that restarted before it connected), and a blank
+// slot, which only "Reset Wi-Fi" writes, empties the list too. Forgetting a
+// network rewrites the slot to the new front one, so nothing forgotten comes
+// back from it and firmware rolled back to one network still has one.
+// Forgetting the last one leaves the slot alone (wifi_list::forget()).
 //
 // Within a boot the list is only saved, never re-applied: a setup from the
 // app narrows the live list to the new network the way ESPHome always did,

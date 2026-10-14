@@ -104,11 +104,13 @@ esphome:
     # After "Reset Wi-Fi" the saved network name is blank. ESPHome still counts it
     # as a configured network and would wait a minute before the hotspot and
     # Bluetooth setup appear. Cut both waits to a second in that one case.
+    # A saved network list (components/saved_networks) means a real network
+    # whatever get_sta() reads; it is empty after a reset.
     - priority: 240.0
       then:
         - lambda: |-
             auto *w = wifi::global_wifi_component;
-            if (w != nullptr && w->has_sta() && w->get_sta().get_ssid().empty()) {
+            if (w != nullptr && w->has_sta() && id(gd_networks).count() == 0 && w->get_sta().get_ssid().empty()) {
               w->set_ap_timeout(1000);
               if (improv_ble::global_improv_component != nullptr) {
                 improv_ble::global_improv_component->set_wifi_timeout(1000);
@@ -122,7 +124,8 @@ esphome:
             condition:
               lambda: |-
                 auto *w = wifi::global_wifi_component;
-                return w != nullptr && w->has_sta() && !w->get_sta().get_ssid().empty();
+                return w != nullptr && w->has_sta() &&
+                       (id(gd_networks).count() > 0 || !w->get_sta().get_ssid().empty());
             then:
               - script.execute: gd_ble_grace
             else:

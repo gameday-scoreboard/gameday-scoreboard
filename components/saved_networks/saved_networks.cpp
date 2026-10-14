@@ -22,6 +22,8 @@ SavedNetworks *global_saved_networks = nullptr;  // NOLINT(cppcoreguidelines-avo
 
 // The names only, for the log and dump_config. The device page streams the
 // log to anyone on the network, so passwords never go through here.
+// Five 32-character names, four ", " between them and the terminator.
+static constexpr size_t NAMES_SIZE = MAX_NETWORKS * (wifi_list::SSID_SIZE + 1);
 static void names_to(const NetworkList &list, char *buf, size_t size) {
   size_t n = 0;
   buf[0] = '\0';
@@ -31,35 +33,30 @@ static void names_to(const NetworkList &list, char *buf, size_t size) {
 
 void SavedNetworks::setup() {
   global_saved_networks = this;
-  this->pref_ = global_preferences->make_preference<NetworkList>(fnv1_hash("gameday_wifi_list_v1"), true);
+  // v2 added slot_hash. v1 only ever ran on bench panels before release; a
+  // panel coming from it starts over from ESPHome's slot like one from 1.5.5.
+  this->pref_ = global_preferences->make_preference<NetworkList>(fnv1_hash("gameday_wifi_list_v2"), true);
   if (!this->pref_.load(&this->list_) || !wifi_list::valid(this->list_))
     wifi_list::clear(this->list_);
 
   auto *w = wifi::global_wifi_component;
   if (w == nullptr)
     return;
-  bool changed = false;
   if (w->has_sta()) {
-    // ESPHome's own slot, loaded by WiFiComponent::start() a moment ago. On
-    // a panel updating from firmware that kept one network this is where its
-    // home network comes from.
+    // ESPHome's own slot, loaded by WiFiComponent::start() a moment ago with
+    // set_sta(), which leaves it selected. On a panel updating from firmware
+    // that kept one network this is where its home network comes from.
     const wifi::WiFiAP slot = w->get_sta();
     const std::string ssid = slot.get_ssid().str();
-    if (ssid.empty()) {
-      // Only "Reset Wi-Fi" writes a blank slot. Honor it even when the list
-      // was written by other firmware, so a reset stays a reset.
-      if (this->list_.count > 0) {
-        ESP_LOGI(TAG, "Wi-Fi was reset; forgetting %u saved network(s)", this->list_.count);
-        wifi_list::clear(this->list_);
-        changed = true;
-      }
-    } else if (wifi_list::find(this->list_, ssid.c_str()) < 0) {
-      ESP_LOGI(TAG, "Adding the network ESPHome kept, %s", ssid.c_str());
-      changed = wifi_list::put_front(this->list_, ssid.c_str(), slot.get_password().c_str());
+    const uint8_t before = this->list_.count;
+    if (wifi_list::merge_slot(this->list_, ssid.c_str(), slot.get_password().c_str())) {
+      if (ssid.empty())
+        ESP_LOGI(TAG, "Wi-Fi was reset; forgetting %u saved network(s)", before);
+      else
+        ESP_LOGI(TAG, "Network set up since the last boot: %s", ssid.c_str());
+      this->save_();
     }
   }
-  if (changed)
-    this->save_();
   this->apply_();
 }
 
@@ -70,9 +67,7 @@ void SavedNetworks::apply_() {
   // enter setup mode exactly as before.
   if (w == nullptr || this->list_.count == 0)
     return;
-  w->clear_sta();
-  w->init_sta(this->list_.count);
-  for (size_t i = 0; i < this->list_.count; i++) {
+  auto ap_at = [this](size_t i) {
     wifi::WiFiAP ap{};
     ap.set_ssid(this->list_.nets[i].ssid);
     ap.set_password(this->list_.nets[i].password);
@@ -81,9 +76,19 @@ void SavedNetworks::apply_() {
     // one per failed attempt, so a front network that is not answering
     // gives way after one try.
     ap.set_priority(i == 0 ? 1 : 0);
-    w->add_sta(ap);
-  }
-  char names[MAX_NETWORKS * wifi_list::SSID_SIZE];
+    return ap;
+  };
+  // set_sta() first, for the selected index: it leaves the front network
+  // selected, as start() left the slot's. clear_sta() alone leaves none,
+  // and get_sta() would read blank until the first scan finishes, which the
+  // on_boot checks in gameday-common.yaml take for a panel after Reset
+  // Wi-Fi. init_sta() then makes room for the whole list and keeps the
+  // index, and the front network goes back in at 0.
+  w->set_sta(ap_at(0));
+  w->init_sta(this->list_.count);
+  for (size_t i = 0; i < this->list_.count; i++)
+    w->add_sta(ap_at(i));
+  char names[NAMES_SIZE];
   names_to(this->list_, names, sizeof(names));
   ESP_LOGI(TAG, "Saved networks (%u), in order: %s", this->list_.count, names);
 #ifdef USE_IMPROV_BLE
@@ -116,14 +121,32 @@ void SavedNetworks::note_connected(const wifi::WiFiAP &ap) {
 
 bool SavedNetworks::forget(const std::string &ssid) {
   bool removed;
+  bool rewrite_slot;
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
-    removed = wifi_list::remove(this->list_, ssid.c_str());
+    rewrite_slot = wifi_list::forget(this->list_, ssid.c_str(), &removed) != nullptr;
   }
   if (!removed)
     return false;
   ESP_LOGI(TAG, "Forgot %s", ssid.c_str());
-  this->defer([this]() { this->save_(); });
+  this->defer([this, rewrite_slot]() {
+    if (rewrite_slot) {
+      // ESPHome's slot becomes the front network, so the one just forgotten
+      // is not read back from it at the next boot. Copied out under the lock
+      // because the HTTP task may change the list meanwhile.
+      wifi_list::Network front{};
+      {
+        std::lock_guard<std::mutex> lock(this->mutex_);
+        if (this->list_.count > 0) {
+          front = this->list_.nets[0];
+          this->list_.slot_hash = wifi_list::slot_hash(front.ssid, front.password);
+        }
+      }
+      if (front.ssid[0] != '\0' && wifi::global_wifi_component != nullptr)
+        wifi::global_wifi_component->save_wifi_sta(front.ssid, front.password);
+    }
+    this->save_();
+  });
   return true;
 }
 
@@ -166,7 +189,7 @@ void SavedNetworks::save_() {
 
 void SavedNetworks::dump_config() {
   std::lock_guard<std::mutex> lock(this->mutex_);
-  char names[MAX_NETWORKS * wifi_list::SSID_SIZE];
+  char names[NAMES_SIZE];
   names_to(this->list_, names, sizeof(names));
   ESP_LOGCONFIG(TAG, "Saved networks: %u of %u: %s", this->list_.count, (unsigned) MAX_NETWORKS, names);
 }
