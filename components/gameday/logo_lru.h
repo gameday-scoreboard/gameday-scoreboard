@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace espn {
@@ -29,5 +30,16 @@ inline int pick_evict(const std::vector<LogoSlot> &slots) {
 constexpr uint32_t LOGO_RETRY_MS = 15000;
 
 inline bool logo_retry_due(uint32_t failed_ms, uint32_t now) { return now - failed_ms >= LOGO_RETRY_MS; }
+
+// The plain logo for a dark one (espn::dark_logo), or "" for any other URL.
+// A few teams have no dark variant: Fenerbahce's answers 404 (2026-10-14).
+inline std::string plain_logo_url(const std::string &url) {
+  size_t pos = url.find("/500-dark/");
+  if (pos == std::string::npos)
+    return "";
+  std::string out = url;
+  out.replace(pos, 10, "/500/");
+  return out;
+}
 
 }  // namespace espn

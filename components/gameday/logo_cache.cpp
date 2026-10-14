@@ -196,8 +196,16 @@ bool LogoCache::download_(const std::string &url, Bytes &body) {
   if (container == nullptr)
     return false;
   if (container->status_code != 200) {
-    ESP_LOGW(TAG, "HTTP %d for %s", container->status_code, url.c_str());
+    int code = container->status_code;
     container->end();
+    // Kept under the dark URL, so the next lookup finds it and nothing asks
+    // for the missing one every 15 s.
+    std::string plain = ::espn::plain_logo_url(url);
+    if (code == 404 && !plain.empty()) {
+      ESP_LOGD(TAG, "No dark logo, using %s", plain.c_str());
+      return this->download_(plain, body);
+    }
+    ESP_LOGW(TAG, "HTTP %d for %s", code, url.c_str());
     return false;
   }
   if (container->content_length > 0 && container->content_length <= MAX_BODY)
