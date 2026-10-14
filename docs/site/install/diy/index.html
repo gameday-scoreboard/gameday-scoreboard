@@ -54,7 +54,7 @@
         <small>or two 64x64 side by side</small>
       </button>
     </div>
-    <p id="pickfirst" class="note">Pick your panel above, then plug the controller into this computer over USB and click Install.</p>
+    <p>Then plug the controller into this computer over USB and click Install.</p>
     <p id="install" hidden>
       <esp-web-install-button manifest="/firmware/moonhub75/manifest.json">
         <button slot="activate">Install for MoonHub75</button>
@@ -71,7 +71,6 @@
         picks.forEach((b) => b.addEventListener("click", () => {
           picks.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
           installer.setAttribute("manifest", b.dataset.manifest);
-          document.getElementById("pickfirst").hidden = true;
           document.getElementById("install").hidden = false;
         }));
       })();
