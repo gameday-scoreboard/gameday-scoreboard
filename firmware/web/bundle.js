@@ -162,7 +162,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl" id="tzpick" hidden><label>Timezone</label><select id="tzsel"></select></div>
         <div class="sub">Startup</div>
         <div class="ctl">
-          <label>Show how to connect when the panel starts<small>For 3 seconds after it connects: the Game Day app, or the page address. Hold the boot button any time to show the address again.</small></label>
+          <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
         </div>
       </div>
