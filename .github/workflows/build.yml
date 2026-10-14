@@ -208,6 +208,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make -C tests
+      - name: Replay tool builds
+        run: make -C tests replay
+      - name: Script selftests
+        run: |
+          python3 scripts/factory_flash.py --selftest
+          python3 scripts/burnin_monitor.py --selftest
+          python3 scripts/improv_scan.py --selftest
 
   web-tests:
     # The device page (firmware/web/bundle.js) in Chromium against
