@@ -23,6 +23,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (text !== undefined) n.textContent = text;
     return n;
   };
+  // A button whose state is a CSS class also says it to screen readers:
+  // switches with aria-checked, the other on/off buttons with aria-pressed.
+  const setOn = (n, on, attr) => {
+    n.classList.toggle("on", on);
+    n.setAttribute(attr, String(on));
+  };
 
   // The leagues the firmware knows (components/gameday/leagues.h), in tab
   // order. prefix: team list label; tab: picker tab; name: the long name;
@@ -65,7 +71,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="mark">🏈</div>
         <div><h1>Game Day Scoreboard<small id="devname">connecting</small></h1></div>
       </div>
-      <div class="conn" id="conn"><i></i><span>offline</span></div>
+      <div class="conn" id="conn" aria-live="polite"><i></i><span>offline</span></div>
     </header>
 
     <section class="board empty" id="board">
@@ -92,17 +98,17 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="ul" id="upnextList"></div>
     </section>
 
-    <div class="modes" id="modes">
-      <button data-mode="0">My team</button>
-      <button data-mode="5">Live games</button>
-      <button data-mode="4">Favorite teams</button>
+    <div class="modes" id="modes" role="group" aria-label="Mode">
+      <button data-mode="0" aria-pressed="false">My team</button>
+      <button data-mode="5" aria-pressed="false">Live games</button>
+      <button data-mode="4" aria-pressed="false">Favorite teams</button>
     </div>
     <div class="teambar" id="teambar">
       <div class="cur"><img id="curLogo" alt=""><div><div class="name" id="curName">No team chosen</div><div class="lg" id="curLg">Pick the team the panel should follow</div></div></div>
       <button class="btn primary" id="pick">Change team</button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name">Following a random game in progress</div><div class="lg">Moves on when it ends, or after the time below. Leagues:</div><div class="chips" id="liveChips"></div></div></div>
+      <div class="cur"><div><div class="name">Following a random game in progress</div><div class="lg">Moves on when it ends, or after the time below. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div></div></div>
       <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
@@ -115,7 +121,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </select></div>
         <div class="stepper"><label for="collide">Two games at once</label><select id="collide">
           <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
-        </select><input type="number" id="favrotate" min="1" max="30" step="1" hidden><span id="favrotateUnit" hidden>min</span></div>
+        </select><input type="number" id="favrotate" min="1" max="30" step="1" aria-label="Alternate every, in minutes" hidden><span id="favrotateUnit" hidden>min</span></div>
       </div>
     </div>
 
@@ -172,7 +178,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="sub">Time</div>
         <div class="tzline" id="tzline">Timezone not known yet</div>
-        <div class="ctl" id="tzpick" hidden><label>Timezone</label><select id="tzsel"></select></div>
+        <div class="ctl" id="tzpick" hidden><label for="tzsel">Timezone</label><select id="tzsel"></select></div>
         <div class="sub">Startup</div>
         <div class="ctl">
           <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
@@ -207,14 +213,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   <div class="modal" id="modal">
     <div class="sheet">
       <div class="head">
-        <input type="search" id="q" placeholder="Search teams" autocomplete="off">
-        <div class="tabs"><button data-lg="now" class="on">On now</button></div>
+        <input type="search" id="q" placeholder="Search teams" aria-label="Search teams" autocomplete="off">
+        <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
         <button class="btn" id="close">Close</button>
       </div>
-      <div class="tiles" id="tiles"></div>
+      <div class="tiles" id="tiles" role="tabpanel"></div>
     </div>
   </div>
-  <div class="toast" id="toast"></div>`;
+  <div class="toast" id="toast" role="status"></div>`;
 
   // ---- helpers ---------------------------------------------------------
   let toastTimer;
@@ -354,7 +360,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
   };
 
+  // Every ping calls this; #conn is a live region, so only a flip touches it.
   const setConn = (on) => {
+    if (on === connected) return;
     connected = on;
     const c = $("#conn");
     c.classList.toggle("on", on);
@@ -494,7 +502,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const on = liveKeys();
     for (const lg of Object.keys(LEAGUES)) {
       if (!TEAMS.some((t) => t[0] === lg)) continue;
-      const b = el("button", "chip" + (on.includes(lg) ? " on" : ""), LEAGUES[lg].tab);
+      const b = el("button", "chip", LEAGUES[lg].tab);
+      setOn(b, on.includes(lg), "aria-pressed");
       // From the list as it is now, not as it was when the chips were drawn:
       // a second tap can come before the redraw.
       b.onclick = () => {
@@ -511,7 +520,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const renderMode = () => {
     if (!S) return;
     const mode = String(S.mode || 0);
-    modeButtons.forEach((b) => b.classList.toggle("on", b.dataset.mode === mode || (b.dataset.mode === "5" && isLive(mode))));
+    modeButtons.forEach((b) => setOn(b, b.dataset.mode === mode || (b.dataset.mode === "5" && isLive(mode)), "aria-pressed"));
     const live = isLive(mode);
     if (live) renderLiveChips();
     const favs = mode === "4";
@@ -539,6 +548,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
   // ---- toggles and favorites (static controls on the state document) --------
   document.querySelectorAll(".sw[data-set]").forEach((sw) => {
+    sw.setAttribute("role", "switch");
+    setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
   // Favorites: one row per team in priority order. Every change posts the
@@ -594,7 +605,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
   const renderSettings = () => {
     if (!S) return;
-    document.querySelectorAll(".sw[data-set]").forEach((sw) => sw.classList.toggle("on", !!S[sw.dataset.set]));
+    document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
     const keys = (S.favs || []).map(refKey).filter(Boolean);
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
@@ -614,7 +625,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (!S || !S.panels) return;
     const cur = String(S.panels);
     document.querySelectorAll("#panels .panelpick").forEach((b) => {
-      b.classList.toggle("on", b.dataset.cols === cur);
+      setOn(b, b.dataset.cols === cur, "aria-pressed");
       b.onclick = () => {
         if (b.dataset.cols === cur) return;
         document.querySelectorAll("#panels .panelpick").forEach((x) => (x.disabled = true));
@@ -656,22 +667,28 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       return { update() {} };
     }
     const row = el("div", "ctl");
-    row.appendChild(el("label", null, def.label));
+    const label = el("label", null, def.label);
+    const id = "ctl-" + def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    row.appendChild(label);
     if (domain === "switch") {
       const sw = el("button", "sw");
+      sw.setAttribute("role", "switch");
       sw.setAttribute("aria-label", def.label);
+      setOn(sw, false, "aria-checked");
       sw.onclick = () => {
         const on = !sw.classList.contains("on");
-        sw.classList.toggle("on", on);
+        setOn(sw, on, "aria-checked");
         post(e.id, on ? "turn_on" : "turn_off");
       };
       row.appendChild(sw);
       host.appendChild(row);
-      return { update(ev) { sw.classList.toggle("on", ev.value === true || ev.state === "ON"); } };
+      return { update(ev) { setOn(sw, ev.value === true || ev.state === "ON", "aria-checked"); } };
     }
     if (domain === "number") {
       const val = el("span", "val");
+      val.setAttribute("aria-hidden", "true");
       const r = el("input");
+      r.id = label.htmlFor = id;
       r.type = "range";
       r.min = e.min_value ?? 0;
       r.max = e.max_value ?? 100;
@@ -685,6 +702,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     if (domain === "select") {
       const s = el("select");
+      s.id = label.htmlFor = id;
       (e.option || []).forEach((o) => s.appendChild(el("option", null, o)));
       s.onchange = () => post(e.id, "set", { option: s.value });
       row.appendChild(s);
@@ -849,10 +867,28 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (!TEAMS.some((t) => t[0] === lg)) continue;
     const b = el("button", null, LEAGUES[lg].tab);
     b.dataset.lg = lg;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-controls", "tiles");
     $(".tabs").appendChild(b);
   }
-  const $$tabs = (lg) => document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.lg === lg));
-  document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { league = b.dataset.lg; $$tabs(league); $("#q").value = ""; renderTiles(); }));
+  // Only the chosen tab is in the Tab order; the arrow keys move between tabs.
+  const tabButtons = Array.from(document.querySelectorAll(".tabs button"));
+  const $$tabs = (lg) => tabButtons.forEach((b) => {
+    setOn(b, b.dataset.lg === lg, "aria-selected");
+    b.tabIndex = b.dataset.lg === lg ? 0 : -1;
+  });
+  const showTab = (b) => { league = b.dataset.lg; $$tabs(league); $("#q").value = ""; renderTiles(); };
+  tabButtons.forEach((b, i) => {
+    b.onclick = () => showTab(b);
+    b.onkeydown = (ev) => {
+      const n = tabButtons.length;
+      const j = { ArrowRight: i + 1, ArrowLeft: i - 1 + n, Home: 0, End: n - 1 }[ev.key];
+      if (j === undefined) return;
+      ev.preventDefault();
+      tabButtons[j % n].focus();
+      showTab(tabButtons[j % n]);
+    };
+  });
   $("#q").oninput = renderTiles;
   $("#close").onclick = () => $("#modal").classList.remove("open");
   $("#modal").onclick = (ev) => { if (ev.target.id === "modal") $("#modal").classList.remove("open"); };
