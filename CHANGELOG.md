@@ -17,6 +17,7 @@ owns the panel, not for the code.
 - Live games replaces Live NFL, Live college and Live anything. Pick the leagues on the device page. A panel set to one of the old live modes keeps working.
 - When two favorites play at once, a new panel alternates between them. A panel that was already set up keeps showing the higher one.
 - The ticker switches on the device page have names that fit every sport, with a line under each saying what it shows. "Down and distance" is now "Game situation".
+- Jacksonville State is JXST, ESPN's current abbreviation, in the device page's team picker and on the panel while it loads a newly picked team. It was JVST. A panel already following them keeps its team.
 - Football works the same as before.
 - New "Install updates automatically" switch on the device page and in Home Assistant, off unless you turn it on. With it on, the panel installs a new release between 3 and 5 AM, never during a live game it is showing.
 - A panel nobody has picked a team for no longer quietly follows Dallas. It shows live games, and when nothing is on, the latest final scores and when the next game starts. A panel in My team or Favorites with Dallas picked keeps it. Until you pick a team, the app QR code comes back for 13 seconds every 3 minutes.
