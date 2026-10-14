@@ -14,13 +14,22 @@ GET/POST /gameday/demo answer as demo.cpp does.
 
 Test hooks: POST /_reset with an optional JSON body
 {"state": {...overrides...}, "fail": ["state", "set"]} puts the state back,
-merges the overrides and makes the named routes answer 500. GET /_log lists
-the /gameday/set and /gameday/action requests seen since the last reset.
+merges the overrides and makes the named routes answer 500. Two more fail
+names drop the connection with no answer, the way a panel that has gone does:
+"events" for the event stream (an open one ends within half a second), "down"
+for every route but the test hooks. GET /_log lists the /gameday/set and
+/gameday/action requests seen since the last reset.
 
 Started by playwright.config.js. Run by hand with `python mock_device.py 8765`
 and open http://127.0.0.1:8765/.
+
+The set keys, their limits and the Live auto pick come from
+components/gameday/set_request.h. `python mock_device.py --selftest` runs
+tests/fixtures/set_cases.json, the table the firmware's host tests also
+check, through apply_set, so the mock can't drift from the panel.
 """
 import copy
+import itertools
 import json
 import os
 import re
@@ -42,13 +51,21 @@ for lg, tid, abbr, name, _ in TEAM_RE.findall((REPO / "components/gameday/teams.
     TEAMS[(lg.lower(), int(tid))] = (abbr, name)
 # kLeagues order, which is the order the firmware lists live leagues in.
 LEAGUES = LEAGUE_RE.findall((REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"))
-FAV_MAX = 16
 TZ_TEXT = "\n".join(ln for ln in (REPO / "components/gameday/timezones.h").read_text(encoding="utf-8").splitlines()
                     if not ln.lstrip().startswith("//"))
-TZS = [name for name, _posix, _iana in TZ_RE.findall(TZ_TEXT)]
+TZ_ROWS = TZ_RE.findall(TZ_TEXT)
+TZS = [name for name, _posix, _iana in TZ_ROWS]
 
-SET_KEYS = ("team", "mode", "rotate", "fav1", "fav2", "fav3", "fav4", "tz", "tzauto", "down", "play", "odds",
-            "opp", "panels", "bootaddr", "lockon", "release", "collide", "favs", "today", "live", "autoupd")
+# /gameday/set's keys in the order the firmware applies them, and its limits.
+SET_H = (REPO / "components/gameday/set_request.h").read_text(encoding="utf-8")
+SET_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSetKeys\[\] = \{(.*?)\};", SET_H, re.S).group(1)))
+LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) int (k\w+) = (\d+);",
+                                             SET_H + (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
+FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
+# PanelLayout refuses a count past this (gameday-common.yaml).
+MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
+                         re.M)[1])
+FIXTURE = REPO / "tests/fixtures/set_cases.json"
 
 
 def team(lg, tid):
@@ -100,83 +117,159 @@ ENTITIES = [
     {"id": "text_sensor/IP", "domain": "text_sensor", "name": "IP", "state": "10.10.10.97", "value": "10.10.10.97"},
     {"id": "button/Refresh Now", "domain": "button", "name": "Refresh Now", "state": ""},
     {"id": "button/Reboot", "domain": "button", "name": "Reboot", "state": ""},
+    {"id": "button/Reset Wi-Fi", "domain": "button", "name": "Reset Wi-Fi", "state": ""},
+    {"id": "button/Factory Reset", "domain": "button", "name": "Factory Reset", "state": ""},
 ]
 FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
 
 STATE = copy.deepcopy(INITIAL)
 FAIL = set()
 LOG = []
+# The saved team's league byte, which outlives a cleared team and counts in
+# Live auto. A fresh panel's is NFL.
+TEAM_LEAGUE = ["nfl"]
+
+
+def reset_state(overrides):
+    STATE.clear()
+    STATE.update(copy.deepcopy(INITIAL))
+    STATE.update(overrides)
+    # A null override drops the key, like firmware that doesn't send it.
+    for k in [k for k, v in STATE.items() if v is None]:
+        del STATE[k]
+    TEAM_LEAGUE[0] = (STATE.get("team") or {}).get("l", "nfl")
+
+
+def atoi(v):
+    m = re.match(r"\s*[+-]?\d+", v)
+    return int(m.group()) if m else 0
+
+
+def clamp(v, lo, hi):
+    return min(LIMITS[hi], max(LIMITS[lo], v))
 
 
 def parse_team_ref(v):
-    lg, _, tid = v.partition(":")
-    if lg not in LEAGUES or not tid.isdigit() or int(tid) == 0:
-        return None
-    return lg, int(tid)
+    """parse_team_ref() plus known_team(): (league, id) of a team in teams.h, else None."""
+    lg, colon, tid = v.partition(":")
+    m = re.match(r"\s*\d+", tid)
+    ref = (lg, int(m.group())) if colon and lg in LEAGUES and m else None
+    return ref if ref in TEAMS else None
 
 
-def set_favs(refs):
-    """set_favorites_(): the list in order, then empty slots up to the four remote slots."""
-    favs = [team(*r) for r in refs[:FAV_MAX]]
-    STATE["favs"] = favs + [{}] * (4 - len(favs))
+def timezone_index(v):
+    if v.isdigit():
+        return int(v) if int(v) < len(TZ_ROWS) else -1
+    return next((i for i, (name, _posix, iana) in enumerate(TZ_ROWS) if v in (name, iana)), -1) if v else -1
 
 
 def live_auto_leagues():
-    """live_leagues_() with no mask: the saved team's league and the favorites'."""
-    used = {t["l"] for t in [STATE["team"]] + STATE["favs"] if t}
+    """live_leagues() with a mask of 0: the saved team's league and the favorites'."""
+    used = {TEAM_LEAGUE[0]} | {t["l"] for t in STATE["favs"] if t}
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
+def state_doc():
+    """rebuild_state_() works the auto leagues out each time from the team and favorites."""
+    if STATE.get("live_auto"):
+        STATE["live"] = live_auto_leagues()
+    return STATE
+
+
 def apply_set(kv):
-    """GamedayComponent::apply_set_ for the keys the page sends."""
+    """GamedayComponent::apply_set_ through set_request.h's parse_set."""
     for k, v in kv:
         if k == "team":
             ref = parse_team_ref(v)
-            if ref and ref in TEAMS:
+            if ref:
                 STATE["team"] = team(*ref)
+                TEAM_LEAGUE[0] = ref[0]
             elif v == "none":
                 STATE["team"] = {}
         elif k == "mode":
-            m = int(v) if v.lstrip("-").isdigit() else -1
-            if 0 <= m <= 5:
-                STATE["mode"] = m
+            if 0 <= atoi(v) < LIMITS["kModeCount"]:
+                STATE["mode"] = atoi(v)
         elif k == "rotate":
-            STATE["rotate"] = min(30, max(1, int(v or 0)))
+            STATE["rotate"] = clamp(atoi(v), "kRotateMinMinutes", "kRotateMaxMinutes")
         elif k == "lockon":
-            STATE["lockon"] = min(120, max(5, int(v or 0)))
+            STATE["lockon"] = clamp(atoi(v), "kLockonMinMinutes", "kLockonMaxMinutes")
         elif k == "release":
-            STATE["release"] = min(3600, max(30, int(v or 0)))
+            STATE["release"] = clamp(atoi(v), "kReleaseMinSeconds", "kReleaseMaxSeconds")
         elif k == "collide":
             STATE["collide"] = 1 if v == "1" else 0
         elif k == "favs":
             refs = []
             for part in v.split(",") if v else []:
+                if len(refs) >= FAV_MAX:
+                    break
                 ref = parse_team_ref(part)
-                if ref in TEAMS and ref not in refs:
+                if ref and ref not in refs:
                     refs.append(ref)
-            set_favs(refs)
-        elif k.startswith("fav"):
+            # set_favorites_(): the list in order, then empty slots up to the four remote slots.
+            STATE["favs"] = [team(*r) for r in refs] + [{}] * (4 - len(refs))
+        elif k in ("fav1", "fav2", "fav3", "fav4"):
             ref = parse_team_ref(v)
-            if (ref is None or ref not in TEAMS) and v not in ("none", ""):
+            if ref is None and v not in ("none", ""):
                 continue
-            favs = STATE["favs"]
-            favs[int(k[3]) - 1] = team(*ref) if ref else {}
+            STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
         elif k == "today":
             STATE["today"] = v == "1"
         elif k == "live":
             keys = [lg for lg in LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
-            STATE["live"] = keys or live_auto_leagues()
+            STATE["live"] = keys
         elif k == "tz":
-            i = int(v) if v.isdigit() else -1
-            if 0 <= i < len(TZS):
+            i = timezone_index(v)
+            if i >= 0:
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
         elif k in ("down", "play", "odds", "opp", "bootaddr", "autoupd"):
             STATE[k] = v == "1"
         elif k == "panels":
-            STATE["panels"] = int(v)
+            if 1 <= atoi(v) <= MAX_COLS:
+                STATE["panels"] = atoi(v)
+
+
+def selftest():
+    """Runs tests/fixtures/set_cases.json through apply_set and state_doc."""
+    fx = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    def to_team(ref):
+        return team(*parse_team_ref(ref)) if ref else {}
+
+    def compact(key, value):
+        if key == "team":
+            return f'{value["l"]}:{value["id"]}' if value else ""
+        if key == "favs":
+            return [compact("team", t) for t in value]
+        return value
+
+    bad = 0
+    for case in fx["cases"]:
+        start = {**fx["base"], **case.get("start", {})}
+        team_league = start.pop("team_league", "nfl")
+        start["team"] = to_team(start["team"])
+        start["favs"] = [to_team(r) for r in start["favs"]]
+        reset_state(start)
+        if not STATE["team"]:
+            TEAM_LEAGUE[0] = team_league
+        kv = [(k, v) for key in SET_KEYS for k, v in case["set"] if k == key]
+        status = 200 if kv else 400
+        if kv:
+            apply_set(kv)
+        got = state_doc()
+        if status != case.get("status", 200):
+            bad += 1
+            print(f"FAIL {case['name']}: status {status}")
+        for key, want in case["expect"].items():
+            have = compact(key, got.get(key))
+            if json.dumps(have) != json.dumps(want):
+                bad += 1
+                print(f"FAIL {case['name']}: {key} is {json.dumps(have)}, expected {json.dumps(want)}")
+    reset_state({})
+    print(f"{len(fx['cases'])} set cases, {bad} failures")
+    return bad == 0
 
 
 # The demo build's /gameday/demo (components/gameday/demo.cpp), with the
@@ -232,8 +325,19 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, code, doc):
         self._send(code, "application/json", json.dumps(doc))
 
+    def _gone(self, path):
+        """True when the panel is set to not answer this path; the connection closes unanswered."""
+        if path in ("/_reset", "/_log"):
+            return False
+        if "down" in FAIL or ("events" in FAIL and path == "/events"):
+            self.close_connection = True
+            return True
+        return False
+
     def do_GET(self):
         u = urlparse(self.path)
+        if self._gone(u.path):
+            return
         if u.path == "/":
             js = "/0.js?demo" if "demo" in parse_qs(u.query, keep_blank_values=True) else "/0.js"
             html = ("<!DOCTYPE html><html><head><meta charset=UTF-8><link rel=icon href=data:>"
@@ -249,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/gameday/state":
             if "state" in FAIL:
                 return self._send(500, "text/plain", "")
-            return self._json(200, STATE)
+            return self._json(200, state_doc())
         if u.path == "/update/Firmware":
             return self._json(200, FIRMWARE)
         if u.path == "/events":
@@ -269,26 +373,26 @@ class Handler(BaseHTTPRequestHandler):
             for e in ENTITIES:
                 self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
             self.wfile.flush()
-            while True:
-                time.sleep(5)
-                self.wfile.write(b"event: ping\ndata: \n\n")
-                self.wfile.flush()
+            for tick in itertools.count():
+                time.sleep(0.5)
+                if "down" in FAIL or "events" in FAIL:
+                    return
+                if tick % 10 == 9:
+                    self.wfile.write(b"event: ping\ndata: \n\n")
+                    self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
 
     def do_POST(self):
         u = urlparse(self.path)
+        if self._gone(u.path):
+            return
         pairs = parse_qs(u.query, keep_blank_values=True)
         if u.path == "/_reset":
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
             LOG.clear()
-            STATE.clear()
-            STATE.update(copy.deepcopy(INITIAL))
-            STATE.update(body.get("state") or {})
-            # A null override drops the key, like firmware that doesn't send it.
-            for k in [k for k, v in STATE.items() if v is None]:
-                del STATE[k]
+            reset_state(body.get("state") or {})
             FAIL.clear()
             FAIL.update(body.get("fail") or [])
             DEMO.clear()
@@ -327,5 +431,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--selftest"]:
+        sys.exit(0 if selftest() else 1)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
