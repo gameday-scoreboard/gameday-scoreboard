@@ -392,6 +392,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool upcoming_after_poll_{false};  // booted from the cache: season list after the first board
   bool load_team_cache_(const ::espn::Team *team);
   void save_team_cache_(const ::espn::Team *team);
+  // Boot, before the first fetch: Wi-Fi is up but the clock is not set yet.
+  void wait_for_clock_();
+  bool clock_set_() const { return this->time_ != nullptr && this->time_->now().is_valid(); }
+  uint32_t wifi_up_ms_{0};      // millis() when the loop first saw Wi-Fi this boot, 0 = not yet
+  uint32_t sntp_asked_ms_{0};   // millis() of the last nudge to the time server, 0 = none since Wi-Fi came up
+  bool clock_wait_shown_{false};
   bool board_ready_{false};
   uint32_t board_pending_ms_{0};  // millis() of the last team change, 0 = waiting since boot
   void mark_board_ready_();

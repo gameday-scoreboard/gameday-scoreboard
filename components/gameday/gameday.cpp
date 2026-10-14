@@ -18,6 +18,7 @@
 #endif
 
 #include <esp_heap_caps.h>
+#include <esp_sntp.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -46,6 +47,9 @@ static const uint32_t RETRY_INTERVAL = MINUTE;
 // Wi-Fi and the clock are re-checked this often at boot: every second waited
 // here is a second of boot screen.
 static const uint32_t NOT_READY_INTERVAL = 500;
+// With Wi-Fi up and the clock still unset, the time server is asked again this
+// often. lwIP's own wait for a reply is 15 s, so a slow answer is never cut off.
+static const uint32_t SNTP_ASK_INTERVAL = 15 * 1000;
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // A college scan is ~750KB on a Saturday. With nothing live it waits for the
@@ -682,16 +686,47 @@ void GamedayComponent::loop() {
   }
   if ((int32_t) (millis() - this->next_fetch_ms_) < 0)
     return;
-  if (!network::is_connected() || this->time_ == nullptr || !this->time_->now().is_valid()) {
+  if (!network::is_connected() || !this->clock_set_()) {
+    this->wait_for_clock_();
     this->schedule_next_(NOT_READY_INTERVAL);
     return;
   }
   if (!this->selects_published_) {
     this->selects_published_ = true;
-    ESP_LOGI(TAG, "Startup: Wi-Fi and clock ready at %u ms", (unsigned) millis());
+    const uint32_t now = millis();
+    ESP_LOGI(TAG, "Startup: Wi-Fi and clock ready at %u ms, clock set %u ms after Wi-Fi", (unsigned) now,
+             (unsigned) (this->wifi_up_ms_ != 0 ? now - this->wifi_up_ms_ : 0));
     this->publish_selects_();
   }
   this->start_job_();
+}
+
+// lwIP's SNTP doubles its wait after each failed try, up to 150 s, and every
+// try fails while Wi-Fi is down. A panel that spent minutes in Bluetooth
+// setup joined Wi-Fi and then waited over two minutes for the next try, with
+// no clock to ask ESPN for today's games. Ask as soon as Wi-Fi is up, and
+// again until the clock is set; a restart sends at once and resets the wait.
+void GamedayComponent::wait_for_clock_() {
+  if (this->clock_set_())
+    return;
+  if (!network::is_connected()) {
+    this->wifi_up_ms_ = 0;
+    this->sntp_asked_ms_ = 0;
+    return;
+  }
+  const uint32_t now = millis();
+  if (this->wifi_up_ms_ == 0)
+    this->wifi_up_ms_ = now == 0 ? 1 : now;
+  if (!this->clock_wait_shown_) {
+    // The board would say "no game" until the first fetch; say why instead.
+    this->clock_wait_shown_ = true;
+    this->emit_({});
+  }
+  if (this->sntp_asked_ms_ != 0 && now - this->sntp_asked_ms_ < SNTP_ASK_INTERVAL)
+    return;
+  this->sntp_asked_ms_ = now == 0 ? 1 : now;
+  if (esp_sntp_restart())
+    ESP_LOGI(TAG, "Clock not set yet: asking the time server now");
 }
 
 const ::espn::Team *GamedayComponent::current_team_() const {
@@ -1505,6 +1540,13 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_status_text = f.status_text;
       f.message = this->live_none_ ? "No live " + league_word + "games" : "Looking for a live " + league_word + "game";
     }
+  }
+  // Nothing can be read from ESPN before the clock is set, so "no game" here
+  // would only be a guess.
+  if (!g.valid && !this->clock_set_() && !this->demo_playing_()) {
+    f.status_text = "Getting ready";
+    f.ha_status_text = f.status_text;
+    f.message = f.status_text;
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
     f.status_text = "Favorites: add teams on the page | " + f.status_text;
