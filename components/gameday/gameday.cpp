@@ -920,6 +920,9 @@ void GamedayComponent::auto_update_tick_() {
 #endif
   switch (::espn::auto_update_step(in)) {
     case ::espn::AutoUpdateStep::IDLE:
+      // So the next wait for a game is logged too (an install-now one comes
+      // at any hour, not once a night).
+      this->auto_update_waiting_ = false;
       break;
     case ::espn::AutoUpdateStep::CHECK:
       ESP_LOGI(TAG, "Auto update: checking for a new release");
