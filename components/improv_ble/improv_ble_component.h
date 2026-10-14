@@ -1,8 +1,9 @@
 #pragma once
 
-// Local override of ESPHome 2026.8.2 esphome/components/esp32_improv
+// Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
-// Game Day change: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE.
+// Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
+// the password out of the log, and goes back to the saved network after a failed handover.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "esphome/core/component.h"
@@ -10,12 +11,10 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
 
-#include "esphome/components/esp32_ble_server/ble_characteristic.h"
-#include "esphome/components/esp32_ble_server/ble_server.h"
 #include "esphome/components/improv_base/improv_base.h"
 #include "esphome/components/wifi/wifi_component.h"
 
-#ifdef USE_ESP32_IMPROV_STATE_CALLBACK
+#ifdef USE_IMPROV_BLE_STATE_CALLBACK
 #include "esphome/core/automation.h"
 #endif
 
@@ -27,24 +26,31 @@
 #include "esphome/components/output/binary_output.h"
 #endif
 
+#include <span>
 #include <vector>
 
+// ESP-IDF is currently the only target platform with a BLE GATT server, so it is
+// the only backend this component has. The Python side keeps the platform table
+// (BLE_SERVER_BACKENDS in __init__.py); a second backend adds another arm here.
 #ifdef USE_ESP32
+
+#include "esphome/components/esp32_ble_server/ble_characteristic.h"
+#include "esphome/components/esp32_ble_server/ble_server.h"
 
 #include <improv.h>
 
-namespace esphome::esp32_improv {
+namespace esphome::improv_ble {
 
 using namespace esp32_ble_server;
 
 // GAMEDAY: begin (scan results listener base)
-class ESP32ImprovComponent final : public Component,
-                                   public improv_base::ImprovBase,
-                                   public wifi::WiFiScanResultsListener {
+class ImprovBLEComponent final : public Component,
+                                 public improv_base::ImprovBase,
+                                 public wifi::WiFiScanResultsListener {
  public:
   void on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) override;
   // GAMEDAY: end
-  ESP32ImprovComponent();
+  ImprovBLEComponent();
   void dump_config() override;
   void loop() override;
   void setup() override;
@@ -56,7 +62,7 @@ class ESP32ImprovComponent final : public Component,
   bool is_active() const { return this->state_ != improv::STATE_STOPPED; }
   bool should_start() const { return this->should_start_; }
 
-#ifdef USE_ESP32_IMPROV_STATE_CALLBACK
+#ifdef USE_IMPROV_BLE_STATE_CALLBACK
   template<typename F> void add_on_state_callback(F &&callback) {
     this->state_callback_.add(std::forward<F>(callback));
   }
@@ -70,6 +76,10 @@ class ESP32ImprovComponent final : public Component,
   void set_identify_duration(uint32_t identify_duration) { this->identify_duration_ = identify_duration; }
   void set_authorized_duration(uint32_t authorized_duration) { this->authorized_duration_ = authorized_duration; }
 
+  // GAMEDAY: begin
+  // The network to go back to after a failed handover. Set on every Wi-Fi connect.
+  void remember_sta(const wifi::WiFiAP &ap) { this->last_connected_sta_ = ap; }
+  // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }
 
@@ -77,9 +87,6 @@ class ESP32ImprovComponent final : public Component,
   improv::Error get_improv_error_state() const { return this->error_state_; }
 
  protected:
-  bool should_start_{false};
-  bool setup_complete_{false};
-
   uint32_t identify_start_{0};
   uint32_t identify_duration_;
   uint32_t authorized_start_{0};
@@ -89,6 +96,20 @@ class ESP32ImprovComponent final : public Component,
 
   std::vector<uint8_t> incoming_data_;
   wifi::WiFiAP connecting_sta_;
+  // Single byte fields here fill the alignment gap between connecting_sta_ and the next pointer
+  improv::State state_{improv::STATE_STOPPED};
+  improv::Error error_state_{improv::ERROR_NONE};
+  bool should_start_{false};
+  bool setup_complete_{false};
+  bool status_indicator_state_{false};
+  bool advertising_device_name_{false};
+  bool advertising_requested_{false};
+  // GAMEDAY: begin
+  // The network the panel was using before a handover, put back if the new
+  // one fails, so a wrong password does not leave the panel with none.
+  wifi::WiFiAP restore_sta_;
+  wifi::WiFiAP last_connected_sta_;  // see remember_sta()
+  // GAMEDAY: end
 
   BLEService *service_{nullptr};
   BLECharacteristic *status_{nullptr};
@@ -104,22 +125,20 @@ class ESP32ImprovComponent final : public Component,
   output::BinaryOutput *status_indicator_{nullptr};
 #endif
 
-  improv::State state_{improv::STATE_STOPPED};
-  improv::Error error_state_{improv::ERROR_NONE};
-#ifdef USE_ESP32_IMPROV_STATE_CALLBACK
+#ifdef USE_IMPROV_BLE_STATE_CALLBACK
   CallbackManager<void(improv::State, improv::Error)> state_callback_{};
 #endif
 
-  bool status_indicator_state_{false};
   uint32_t last_name_adv_time_{0};
-  bool advertising_device_name_{false};
   void set_status_indicator_state_(bool state);
   void update_advertising_type_();
+  void request_advertising_();
+  void release_advertising_();
 
   void set_state_(improv::State state, bool update_advertising = true);
   void set_error_(improv::Error error);
   improv::State get_initial_state_() const;
-  void send_response_(std::vector<uint8_t> &&response);
+  void send_response_(std::span<const uint8_t> response);
   void process_incoming_data_();
   void on_wifi_connect_timeout_();
   void check_wifi_connection_();
@@ -145,8 +164,8 @@ class ESP32ImprovComponent final : public Component,
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-extern ESP32ImprovComponent *global_improv_component;
+extern ImprovBLEComponent *global_improv_component;
 
-}  // namespace esphome::esp32_improv
+}  // namespace esphome::improv_ble
 
 #endif

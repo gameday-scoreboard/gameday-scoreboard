@@ -87,6 +87,7 @@ button { font: inherit; color: inherit; }
   margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1e242e;
   font-size: 13px; color: #c9d1dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.gname { margin-top: 12px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .play { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .board.empty .row { opacity: .35; }
 .board .msg { text-align: center; color: var(--muted); padding: 22px 0 8px; }
@@ -150,6 +151,7 @@ button { font: inherit; color: inherit; }
 .panelpick svg { width: 100%; max-width: 150px; height: auto; }
 .panelpick svg rect { fill: #1d2532; stroke: #5a6678; stroke-width: 2; }
 .panelpick.on svg rect { fill: #3a3210; stroke: var(--gold); }
+.panelpick small { color: var(--muted); font-size: 11px; margin-top: -4px; }
 
 .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 22px; }
 .foot span { margin: 0 6px; }
@@ -277,3 +279,12 @@ button { font: inherit; color: inherit; }
   .grid { column-gap: 18px; }
 }
 
+
+/* Favorites list rows: logo, name, move and remove */
+.ctl.fav img { width: 28px; height: 28px; object-fit: contain; flex: none; }
+#favAdd { margin-top: 10px; }
+
+/* Live mode league chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.chip.on { color: var(--text); border-color: var(--accent); }

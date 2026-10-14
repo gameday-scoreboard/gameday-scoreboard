@@ -1,0 +1,43 @@
+# The demo build: a looping scripted game for showing the panel in bars and
+# sending it to creators. Included only by the *-demo.yaml top-level files,
+# which CI builds as a downloadable file and never publishes to the flasher
+# or the update manifest. Otherwise it is a normal panel.
+#
+# WizMote 1 pro football demo, 2 college, 3 effects tour (once effects mode
+# is in), 4 back to live scores. The device page gets a Demo card
+# (firmware/web/demo.js) with Start, Stop and the teams.
+
+esphome:
+  comment: "v${version} demo"
+  # Its own build folder, so a demo compile never throws away the release cache.
+  build_path: build/gameday-${variant}-demo
+
+gameday:
+  demo: true
+
+web_server:
+  js_include: web/bundle-demo.js
+
+# Press a WizMote button from the API (1-4 are 16-19), so a bench can drive
+# the remote with nobody holding one. A real press takes the same path once
+# the radio has it (pages/wizmote.yaml).
+api:
+  actions:
+    - action: wizmote_button
+      variables:
+        code: int
+      then:
+        - script.execute:
+            id: process_wizmote_button
+            button: !lambda 'return code;'
+
+# A show panel never moves itself to release firmware: no update entity, so
+# nothing checks the release manifest and nothing offers to install it. New
+# demo builds go on by hand over the network.
+update: !remove
+ota:
+  - id: !remove gd_ota_http
+button:
+  - id: !remove gd_check_update
+switch:
+  - id: !remove gd_auto_update
