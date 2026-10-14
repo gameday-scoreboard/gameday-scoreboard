@@ -337,6 +337,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::vector<Schedule> comps;
     int comp{-1};
     bool need_game{false};   // the board has no game for the current schedule yet
+    bool cup_ok{false};      // the cup's team read answered
     bool polled{false};      // a cup read polled the game it picked
     std::string done_event;  // a game seen to finish, passed over by the pick
     bool no_lookahead{false};  // My team: a final is still lingering on the board
@@ -425,8 +426,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t back_off_();
   // ESPN answered: the next failure starts the backoff over.
   void clear_backoff_() {
-    this->fail_streak_ = 0;
-    this->throttled_ = false;
+    this->fail_run_.clear();
     this->backoff_ms_ = 0;
   }
   // Inside a wait back_off_ started. Only Favorite Teams mode needs to ask:
@@ -621,8 +621,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t post_since_ms_{0};
   uint32_t next_fetch_ms_{0};
   uint8_t misses_{0};
-  uint8_t fail_streak_{0};      // ESPN reads failed in a row, for the backoff
-  bool throttled_{false};       // ESPN said 403 or 429 since the last good read
+  ::espn::Backoff fail_run_;
   uint32_t backoff_since_ms_{0};
   uint32_t backoff_ms_{0};      // 0 = no wait running
   uint32_t last_good_ms_{0};  // millis() of the last successful game poll, 0 = never

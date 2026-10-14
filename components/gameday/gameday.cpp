@@ -768,6 +768,9 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.comps = j.comps;
     e.comp_next = j.comp + 1 < (int) j.comps.size() ? j.comp + 1 : -1;
     e.sched = j.schedule;
+    // A failed poll backs off below with the other failed polls
+    if (!j.polled && ::espn::cup_read_backs_off(j.cup_ok, false, false, j.throttled))
+      this->back_off_();  // start_fav_job_ waits it out
     if (j.no_event) {
       this->fav_no_event_(e, shown, tnow);
       return;
@@ -1241,13 +1244,9 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
 }
 
 uint32_t GamedayComponent::back_off_() {
-  if (this->job_.throttled)
-    this->throttled_ = true;
-  if (this->fail_streak_ < 255)
-    this->fail_streak_++;
-  uint32_t ms = ::espn::backoff_ms(this->fail_streak_, this->throttled_, this->job_.retry_after_ms, random_uint32());
-  ESP_LOGW(TAG, "%u failed read(s) in a row%s: next try in %us", (unsigned) this->fail_streak_,
-           this->throttled_ ? ", ESPN is refusing" : "", (unsigned) (ms / 1000));
+  uint32_t ms = this->fail_run_.fail(this->job_.throttled, this->job_.retry_after_ms, random_uint32());
+  ESP_LOGW(TAG, "%u failed read(s) in a row%s: next try in %us", (unsigned) this->fail_run_.streak,
+           this->fail_run_.throttled ? ", ESPN is refusing" : "", (unsigned) (ms / 1000));
   this->backoff_since_ms_ = millis();
   this->backoff_ms_ = ms;
   return ms;
@@ -1916,7 +1915,8 @@ void GamedayComponent::run_cup_job_() {
   Job &j = this->job_;
   const char *slug = ::espn::league_cup(j.team->league, (size_t) (j.comp - 1));
   Schedule s;
-  if (slug != nullptr && this->fetch_schedule_(j.team, s, slug)) {
+  j.cup_ok = slug != nullptr && this->fetch_schedule_(j.team, s, slug);
+  if (j.cup_ok) {
     ::espn::adopt_league(s, j.team->league);
     ::espn::adopt_comp(s, slug);
     this->take_game_on_now_(j.team, s, j.done_event, slug);
@@ -1960,8 +1960,6 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
   } else if (j.polled && !j.game_ok) {
     this->misses_++;
     this->emit_({});
-    this->schedule_next_(RETRY_INTERVAL);
-    return;
   } else if (j.polled) {
     this->prev_ = moved ? GameSnapshot{} : this->game_;
     this->game_ = j.game;
@@ -1974,6 +1972,10 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
     }
     this->emit_(::espn::decide_splash(this->prev_, this->game_, this->opponent_splashes(), false));
     this->mark_board_ready_();
+  }
+  if (::espn::cup_read_backs_off(j.cup_ok, j.polled, j.game_ok, j.throttled)) {
+    this->schedule_next_(this->back_off_());
+    return;
   }
   this->schedule_next_(this->comp_next_ > 0 || this->upcoming_due_ ? 0 : this->interval_for_phase_());
 }
