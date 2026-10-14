@@ -20,13 +20,34 @@ DEMO_BUNDLE = ROOT / "firmware" / "web" / "bundle-demo.js"
 
 TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
 LEAGUES_H = ROOT / "components" / "gameday" / "leagues.h"
-LEAGUE_RE = re.compile(r'\{League::(\w+),\s*"(\w+)",\s*"[^"]+",\s*"([^"]+)",')
+# One kLeagues row: enum, key, path, prefix, logo dir, then the sport and the
+# per_event, season_list and logo_by_id flags.
+LEAGUE_RE = re.compile(
+    r'\{League::(\w+),\s*"(\w+)",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)",\s*Sport::\w+,'
+    r"\s*(?:true|false),\s*(?:true|false),\s*(true|false),"
+)
+# One row of app.js's LEAGUES table, the fields it copies from leagues.h.
+JS_LEAGUE_RE = re.compile(r'^\s*(\w+): \{ prefix: "([^"]*)",.*?path: "([^"]*)", logo: "([^"]*)", byId: (true|false)', re.M)
 TZ_H = ROOT / "components" / "gameday" / "timezones.h"
 TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
 
 
+def check_leagues(leagues, app_js):
+    """app.js keeps its own copy of the leagues.h table. Stop the build when
+    they differ, because a mismatch otherwise only shows as a broken logo or
+    scoreboard URL on the device page."""
+    want = {key: (prefix, path, logo, by_id == "true") for _lg, key, path, prefix, logo, by_id in leagues}
+    have = {key: (prefix, path, logo, by_id == "true") for key, prefix, path, logo, by_id in JS_LEAGUE_RE.findall(app_js)}
+    for key in sorted(set(want) | set(have)):
+        if want.get(key) != have.get(key):
+            raise SystemExit(f"app.js LEAGUES.{key} is {have.get(key)}, leagues.h says {want.get(key)}")
+
+
 def main():
-    keys = {lg: key for lg, key, _prefix in LEAGUE_RE.findall(LEAGUES_H.read_text(encoding="utf-8"))}
+    leagues = LEAGUE_RE.findall(LEAGUES_H.read_text(encoding="utf-8"))
+    app_js = APP_JS.read_text(encoding="utf-8")
+    check_leagues(leagues, app_js)
+    keys = {lg: key for lg, key, *_rest in leagues}
     rows = []
     for league, tid, abbr, name, _group in TEAM_RE.findall(TEAMS_H.read_text(encoding="utf-8")):
         rows.append([keys[league], int(tid), abbr, name])
@@ -39,7 +60,7 @@ def main():
     if not tzs:
         raise SystemExit("timezones.h has no entries")
     tz = "const TZS=" + json.dumps(tzs, separators=(",", ":")) + ";\n"
-    page = header + teams + tz + APP_JS.read_text(encoding="utf-8")
+    page = header + teams + tz + app_js
     BUNDLE.write_text(page, encoding="utf-8", newline="\n")
     print(f"wrote {BUNDLE} ({BUNDLE.stat().st_size} bytes, {len(rows)} teams)")
     demo = page.replace("from teams.h and app.js", "from teams.h, app.js and demo.js", 1)

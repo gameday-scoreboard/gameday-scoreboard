@@ -719,6 +719,19 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
   this->start_worker_();
 }
 
+// A team read (the league's or a cup's) that named no game: forget the one
+// the card had and let another favorite take the board.
+void GamedayComponent::fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch) {
+  ESP_LOGI(TAG, "No upcoming game for %s", e.team->abbr);
+  e.game = GameSnapshot{};
+  e.final_epoch = 0;
+  if (shown)
+    this->game_ = GameSnapshot{};
+  if (!this->fav_choose_(now_epoch))
+    this->rebuild_state_(&this->last_fields_);
+  this->schedule_next_(0);
+}
+
 void GamedayComponent::apply_fav_job_(uint32_t now) {
   Job &j = this->job_;
   if (j.fav_index < 0 || j.fav_index >= (int) this->fav_.size() || this->fav_[j.fav_index].team != j.team) {
@@ -747,14 +760,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
       e.comp_next = 1;
     }
     if (j.no_event) {
-      ESP_LOGI(TAG, "No upcoming game for %s", e.team->abbr);
-      e.game = GameSnapshot{};
-      e.final_epoch = 0;
-      if (shown)
-        this->game_ = GameSnapshot{};
-      if (!this->fav_choose_(tnow))
-        this->rebuild_state_(&this->last_fields_);
-      this->schedule_next_(0);
+      this->fav_no_event_(e, shown, tnow);
       return;
     }
   }
@@ -763,14 +769,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.comp_next = j.comp + 1 < (int) j.comps.size() ? j.comp + 1 : -1;
     e.sched = j.schedule;
     if (j.no_event) {
-      ESP_LOGI(TAG, "No upcoming game for %s", e.team->abbr);
-      e.game = GameSnapshot{};
-      e.final_epoch = 0;
-      if (shown)
-        this->game_ = GameSnapshot{};
-      if (!this->fav_choose_(tnow))
-        this->rebuild_state_(&this->last_fields_);
-      this->schedule_next_(0);
+      this->fav_no_event_(e, shown, tnow);
       return;
     }
     if (!j.polled) {

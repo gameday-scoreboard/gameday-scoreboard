@@ -4,6 +4,8 @@
 
 namespace espn {
 
+using detail::add_last_play;
+using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
 
@@ -88,12 +90,7 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
     case GameState::PRE:
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
-      if (o.odds) {
-        add_part(out, s.odds);
-        if (!s.over_under.empty())
-          add_part(out, "O/U " + s.over_under);
-        add_part(out, s.tv);
-      }
+      add_odds(out, s, o);
       add_part(out, s.venue);
       return out;
     case GameState::POST:
@@ -114,12 +111,8 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
   }
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play) {
-    std::string play = s.last_play;
-    if (play.size() > 160)
-      play = play.substr(0, 157) + "...";
-    add_part(out, play);
-  }
+  if (o.last_play)
+    add_last_play(out, s.last_play);
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;

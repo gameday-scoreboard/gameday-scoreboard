@@ -24,7 +24,8 @@
   // The leagues the firmware knows (components/gameday/leagues.h), in tab
   // order. prefix: team list label; tab: picker tab; name: the long name;
   // path: ESPN's; byId: logo files named by team id; scan: extra query for
-  // today's scoreboard.
+  // today's scoreboard. scripts/build_web.py checks prefix, path, logo and
+  // byId against leagues.h and stops the build when they differ.
   const LEAGUES = {
     nfl: { prefix: "NFL", tab: "NFL", name: "NFL", path: "football/nfl", logo: "nfl", byId: false, scan: "" },
     ncaa: { prefix: "NCAAF", tab: "NCAAF", name: "College football", path: "football/college-football", logo: "ncaa", byId: true, scan: "groups=80&limit=300&" },

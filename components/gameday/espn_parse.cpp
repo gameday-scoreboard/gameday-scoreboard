@@ -289,8 +289,27 @@ std::string records_line(const GameSnapshot &s) {
   return out;
 }
 
+void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
+  if (!o.odds)
+    return;
+  add_part(out, odds);
+  if (!s.over_under.empty())
+    add_part(out, "O/U " + s.over_under);
+  add_part(out, s.tv);
+}
+
+void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o) { add_odds(out, s, o, s.odds); }
+
+void add_last_play(std::string &out, std::string play) {
+  if (play.size() > 160)
+    play = play.substr(0, 157) + "...";
+  add_part(out, play);
+}
+
 }  // namespace detail
 
+using detail::add_last_play;
+using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
 
@@ -310,12 +329,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     case GameState::PRE:
       add_part(out, s.game_name);
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
-      if (o.odds) {
-        add_part(out, s.odds);
-        if (!s.over_under.empty())
-          add_part(out, "O/U " + s.over_under);
-        add_part(out, s.tv);
-      }
+      add_odds(out, s, o);
       if (s.venue != s.game_name)  // "Rose Bowl | ... | Rose Bowl"
         add_part(out, s.venue);
       return out;
@@ -337,12 +351,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play) {
-    std::string play = s.last_play;
-    if (play.size() > 160)
-      play = play.substr(0, 157) + "...";
-    add_part(out, play);
-  }
+  if (o.last_play)
+    add_last_play(out, s.last_play);
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;

@@ -526,6 +526,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::FavRules fav_rules_() const;
   std::vector<::espn::FavGame> fav_games_() const;
   bool fav_choose_(int64_t now_epoch);  // true when the shown entry changed
+  void fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch);
   const GameSnapshot &ha_game_() const;  // the game Home Assistant's sensors follow
   void start_fav_job_(uint32_t now);
   void apply_fav_job_(uint32_t now);
