@@ -450,6 +450,63 @@ test("chip taps faster than the page re-reads each save the list on screen", asy
   expect((await deviceState(request)).live).toEqual(["nba", "nhl"]);
 });
 
+test("Live games bar says when the leagues are automatic, and goes back to automatic", async ({ page, request }) => {
+  const lg = page.locator("#liveLg");
+  const back = page.locator("#liveAuto");
+  // Nothing picked: the leagues of the team and favorites (NFL and NCAAF in the mock), drawn as a suggestion.
+  await reset(request, { mode: 5 });
+  await page.goto("/");
+  await expect(lg).toHaveText("Moves on when it ends, or after the time below. Leagues follow your team and favorites. Tap a league to choose by hand:");
+  await expect(page.locator("#liveChips")).toHaveClass(/auto/);
+  await expect(chipsOn(page)).toHaveText(["NFL", "NCAAF"]);
+  await expect(back).toBeHidden();
+
+  // The first tap posts the whole list with the tap applied, and the bar
+  // turns manual before the device answers.
+  await slowReads(page, 1000);
+  await chip(page, "MLB").click();
+  await expect(lg).toHaveText("Moves on when it ends, or after the time below. Leagues:");
+  await expect(page.locator("#liveChips")).not.toHaveClass(/auto/);
+  await expect(back).toBeVisible();
+  await expectSet(request, { live: "nfl,ncaa,mlb" });
+  await staysAs(lg, ["Moves on when it ends, or after the time below. Leagues:"], 1500);
+  expect((await deviceState(request)).live_auto).toBe(false);
+
+  // Back to automatic posts an empty list and the device works the leagues out again.
+  await back.click();
+  await expectSet(request, { live: "" });
+  await expect(lg).toContainText("Leagues follow your team and favorites.");
+  await expect(back).toBeHidden();
+  await staysAs(lg, ["Moves on when it ends, or after the time below. Leagues follow your team and favorites. Tap a league to choose by hand:"], 1500);
+  await expect(chipsOn(page)).toHaveText(["NFL", "NCAAF"]);
+  const st = await deviceState(request);
+  expect([st.live_auto, st.live]).toEqual([true, ["nfl", "ncaa"]]);
+  expect(await sets(request)).toEqual([{ live: "nfl,ncaa,mlb" }, { live: "" }]);
+
+  // An old football live mode has fixed leagues: no automatic wording, no link.
+  await reset(request, { mode: 2 });
+  await page.reload();
+  await expect(lg).toHaveText("Moves on when it ends, or after the time below. Leagues:");
+  await expect(back).toBeHidden();
+});
+
+test("Live games bar says when nothing is live and the panel shows your team or finals", async ({ page, request }) => {
+  const name = page.locator("#liveName");
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
+  await page.goto("/");
+  await expect(name).toHaveText("Following a random game in progress");
+
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false, fallback: true });
+  await page.reload();
+  await expect(name).toHaveText("No live game right now, showing your team until one starts");
+  await expect(page.locator("#liveLg")).toHaveText("Leagues:");
+
+  await reset(request, { mode: 5, team: {}, recap: true, game: { s: "POST", l: "mlb" } });
+  await page.reload();
+  await expect(name).toHaveText("No live game right now, showing recent finals");
+  await expect(page.locator("#liveLg")).toHaveText("Leagues follow your team and favorites. Tap a league to choose by hand:");
+});
+
 test("a slow settings post isn't overtaken by the next tap's", async ({ page, request }) => {
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
   await page.goto("/");

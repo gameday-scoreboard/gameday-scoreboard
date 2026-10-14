@@ -233,7 +233,7 @@ button { font: inherit; color: inherit; }
 .game .gm .at { color: #3a4150; font-size: 12px; }
 .game .gm .det { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.2; }
 .game.live .gm .det { color: var(--red); font-weight: 700; }
-@media (max-width: 560px) { .favbar { flex-direction: column; } .game { grid-template-columns: 1fr 58px 1fr; } .game .side { grid-template-columns: 28px 1fr auto; padding: 7px 8px; } .game .side img { width: 28px; height: 28px; } .game .side .n { font-size: 12px; } }
+@media (max-width: 560px) { .favbar, .livebar { flex-direction: column; } .livebar { align-items: flex-start; } .game { grid-template-columns: 1fr 58px 1fr; } .game .side { grid-template-columns: 28px 1fr auto; padding: 7px 8px; } .game .side img { width: 28px; height: 28px; } .game .side .n { font-size: 12px; } }
 
 /* Firmware update */
 .fw { margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
@@ -292,3 +292,7 @@ button { font: inherit; color: inherit; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; padding: 4px 10px; cursor: pointer; }
 .chip.on { color: var(--text); border-color: var(--accent); }
+/* Automatic leagues are the device's suggestion, not a pick */
+.chips.auto .chip.on { border-style: dashed; }
+.livebar .name { white-space: normal; }
+.linkbtn { background: none; border: 0; padding: 0; margin-top: 8px; color: var(--accent); font-size: 12px; cursor: pointer; }
