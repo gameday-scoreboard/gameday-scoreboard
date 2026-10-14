@@ -23,8 +23,8 @@ inline std::string str_or_empty(JsonVariantConst v) {
   return s ? std::string(s) : std::string();
 }
 
-// The fields of one event that the board reads. The day's scoreboard holds a
-// list of these; the single-event document (event_url) is one on its own.
+// The fields read from one event, whether it sits in a scoreboard's events
+// array or is a single-event document's root.
 inline void fill_event_filter(JsonObject ev) {
   ev["id"] = true;
   ev["date"] = true;
@@ -58,6 +58,25 @@ inline void fill_event_filter(JsonObject ev) {
 }
 
 inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>()); }
+
+inline void fill_baseball_filter(JsonObject ev) {
+  JsonObject comp = ev["competitions"][0];
+  JsonObject sit = comp["situation"];
+  sit["balls"] = true;
+  sit["strikes"] = true;
+  sit["outs"] = true;
+  sit["onFirst"] = true;
+  sit["onSecond"] = true;
+  sit["onThird"] = true;
+  sit["batter"]["athlete"]["shortName"] = true;
+  sit["pitcher"]["athlete"]["shortName"] = true;
+  sit["lastPlay"]["type"]["text"] = true;
+  JsonObject c = comp["competitors"][0];
+  c["hits"] = true;
+  c["errors"] = true;
+  c["probables"][0]["athlete"]["shortName"] = true;
+  comp["series"]["summary"] = true;
+}
 
 inline void fill_upcoming_filter(JsonDocument &f) {
   JsonObject ev = f["events"].add<JsonObject>();
@@ -107,9 +126,19 @@ inline void fill_team_filter(JsonDocument &f) {
   JsonObject ne = f["team"]["nextEvent"].add<JsonObject>();
   ne["id"] = true;
   ne["date"] = true;
-  JsonObject c = ne["competitions"].add<JsonObject>()["competitors"].add<JsonObject>();
+  JsonObject comp = ne["competitions"].add<JsonObject>();
+  comp["status"]["type"]["state"] = true;
+  JsonObject c = comp["competitors"].add<JsonObject>();
   c["id"] = true;
   c["team"]["abbreviation"] = true;
+}
+
+inline void fill_team_game_filter(JsonDocument &f) {
+  JsonObject ev = f["events"].add<JsonObject>();
+  ev["id"] = true;
+  ev["date"] = true;
+  ev["status"]["type"]["state"] = true;
+  ev["competitions"].add<JsonObject>()["competitors"].add<JsonObject>()["id"] = true;
 }
 
 inline std::string format_over_under(JsonVariantConst v) {
@@ -175,8 +204,10 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     (ours ? s.team_color : s.opp_color) = color;
     (ours ? s.team_logo : s.opp_logo) = logo;
     (ours ? s.team_timeouts : s.opp_timeouts) = timeouts;
-    if (ours)
+    if (ours) {
       s.team_winner = winner;
+      s.team_home = home;
+    }
     if (!possession.empty() && possession == str_or_empty(c["id"]))
       s.possession = ours ? 1 : 2;
   }
@@ -193,6 +224,63 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   out = s;
   return true;
 }
+
+inline Half half_from_detail(const std::string &detail) {
+  if (detail.rfind("Top", 0) == 0)
+    return Half::TOP;
+  if (detail.rfind("Bot", 0) == 0)
+    return Half::BOTTOM;
+  if (detail.rfind("Mid", 0) == 0)
+    return Half::MID;
+  if (detail.rfind("End", 0) == 0)
+    return Half::END;
+  return Half::NONE;
+}
+
+// Fills s.mlb from an event already read into s by snapshot_from_event.
+inline void baseball_from_event(JsonObjectConst ev, GameSnapshot &s) {
+  Baseball &b = s.mlb;
+  JsonObjectConst comp = ev["competitions"][0];
+  b.series = str_or_empty(comp["series"]["summary"]);
+  for (JsonObjectConst c : comp["competitors"].as<JsonArrayConst>()) {
+    bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+    (ours ? b.team_hits : b.opp_hits) = c["hits"] | 0;
+    (ours ? b.team_errors : b.opp_errors) = c["errors"] | 0;
+    (ours ? b.team_probable : b.opp_probable) = str_or_empty(c["probables"][0]["athlete"]["shortName"]);
+  }
+  if (s.state != GameState::IN)
+    return;
+  b.half = half_from_detail(s.short_detail);
+  JsonObjectConst sit = comp["situation"];
+  b.play_type = str_or_empty(sit["lastPlay"]["type"]["text"]);
+  if (b.half != Half::TOP && b.half != Half::BOTTOM)
+    return;  // between half innings ESPN keeps the last count; it means nothing
+  if (!sit["balls"].isNull())
+    b.balls = (int8_t) (sit["balls"] | 0);
+  if (!sit["strikes"].isNull())
+    b.strikes = (int8_t) (sit["strikes"] | 0);
+  if (!sit["outs"].isNull())
+    b.outs = (int8_t) (sit["outs"] | 0);
+  b.bases = ((sit["onFirst"] | false) ? Baseball::FIRST : 0) | ((sit["onSecond"] | false) ? Baseball::SECOND : 0) |
+            ((sit["onThird"] | false) ? Baseball::THIRD : 0);
+  b.batter = str_or_empty(sit["batter"]["athlete"]["shortName"]);
+  b.pitcher = str_or_empty(sit["pitcher"]["athlete"]["shortName"]);
+  // The visitors bat in the top half: that side gets the underline.
+  bool we_bat = (b.half == Half::TOP) != s.team_home;
+  s.possession = we_bat ? 1 : 2;
+}
+
+// Soccer (sport_soccer.cpp): the status name, details, form, stats and
+// moneyline on top of the shared event filter, read into s.soc.
+void fill_soccer_filter(JsonObject ev);
+void soccer_from_event(JsonObjectConst ev, GameSnapshot &s);
+// Basketball (sport_basketball.cpp): the extra fields to keep, and s.nba
+// filled from an event already read into s by snapshot_from_event.
+void fill_basketball_filter(JsonObject ev);
+void basketball_from_event(JsonObjectConst ev, GameSnapshot &s);
+// Hockey's extra filter fields and their parse (sport_hockey.cpp)
+void fill_hockey_filter(JsonObject ev);
+void hockey_from_event(JsonObjectConst ev, GameSnapshot &s);
 
 }  // namespace detail
 
@@ -222,6 +310,7 @@ template<typename TInput> bool parse_team(TInput &input, Schedule &out) {
   if (!ne.isNull()) {
     s.event_id = detail::str_or_empty(ne["id"]);
     s.kickoff_epoch = parse_iso8601_z(detail::str_or_empty(ne["date"]));
+    s.next_final = detail::str_or_empty(ne["competitions"][0]["status"]["type"]["state"]) == "post";
     std::string us = detail::str_or_empty(team["id"]);
     for (JsonObjectConst c : ne["competitions"][0]["competitors"].as<JsonArrayConst>()) {
       std::string id = detail::str_or_empty(c["id"]);
@@ -354,23 +443,75 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
   return true;
 }
 
-// Parses a single-event document (event_url), whose root object is the event.
-// ESPN serves it with the same fields as the event's entry in the day's
-// scoreboard, at a tenth of the size or less. Returns false on a JSON error or
-// when the document is some other event.
+// The first game in a day's scoreboard with our team that is not over yet
+// (game 2 of a doubleheader after game 1's final). skip_event is a game the
+// panel already saw finish, which the scoreboard may still list as live.
+// Returns 1 and fills event_id and kickoff_epoch, 0 when the team does not
+// play that day, -1 when the document does not parse.
 template<typename TInput>
-bool parse_event(TInput &input, const std::string &event_id, uint32_t our_team_id, GameSnapshot &out) {
+int parse_team_game(TInput &input, uint32_t our_team_id, const std::string &skip_event, Schedule &out) {
+  JsonDocument filter(detail::json_allocator());
+  detail::fill_team_game_filter(filter);
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                              DeserializationOption::NestingLimit(40));
+  if (err)
+    return -1;
+  for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
+    if (detail::str_or_empty(ev["status"]["type"]["state"]) == "post")
+      continue;
+    if (!skip_event.empty() && detail::str_or_empty(ev["id"]) == skip_event)
+      continue;
+    for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+      if ((uint32_t) atol(detail::str_or_empty(c["id"]).c_str()) != our_team_id)
+        continue;
+      out.event_id = detail::str_or_empty(ev["id"]);
+      out.kickoff_epoch = parse_iso8601_z(detail::str_or_empty(ev["date"]));
+      return out.event_id.empty() ? 0 : 1;
+    }
+  }
+  return 0;
+}
+
+// Parses a single-event document (event_url): the root object is the event.
+// ESPN serves it with the same fields as the event's entry in the day's
+// scoreboard, at a tenth of the size or less. Returns false on a JSON error,
+// when our team is not in it, or when event_id is given and the document is
+// some other game.
+template<typename TInput>
+bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot &out,
+                 const std::string &event_id = "") {
   JsonDocument filter(detail::json_allocator());
   detail::fill_event_filter(filter.to<JsonObject>());
+  if (sport == Sport::BASEBALL)
+    detail::fill_baseball_filter(filter.as<JsonObject>());
+  if (sport == Sport::SOCCER)
+    detail::fill_soccer_filter(filter.as<JsonObject>());
+  if (sport == Sport::BASKETBALL)
+    detail::fill_basketball_filter(filter.as<JsonObject>());
+  if (sport == Sport::HOCKEY)
+    detail::fill_hockey_filter(filter.as<JsonObject>());
   JsonDocument doc(detail::json_allocator());
   DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
                                               DeserializationOption::NestingLimit(40));
   if (err)
     return false;
-  JsonObjectConst ev = doc.as<JsonObjectConst>();
-  if (detail::str_or_empty(ev["id"]) != event_id)
+  if (!event_id.empty() && detail::str_or_empty(doc["id"]) != event_id)
     return false;
-  return detail::snapshot_from_event(ev, our_team_id, out);
+  GameSnapshot s;
+  if (!detail::snapshot_from_event(doc.as<JsonObjectConst>(), our_team_id, s))
+    return false;
+  s.sport = sport;
+  if (sport == Sport::BASEBALL)
+    detail::baseball_from_event(doc.as<JsonObjectConst>(), s);
+  if (sport == Sport::SOCCER)
+    detail::soccer_from_event(doc.as<JsonObjectConst>(), s);
+  if (sport == Sport::BASKETBALL)
+    detail::basketball_from_event(doc.as<JsonObjectConst>(), s);
+  if (sport == Sport::HOCKEY)
+    detail::hockey_from_event(doc.as<JsonObjectConst>(), s);
+  out = s;
+  return true;
 }
 
 // Parses a scoreboard document and extracts the event with `event_id`.

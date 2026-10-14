@@ -11,7 +11,8 @@ the same ground for people; this file is the short version.
   `firmware/gameday-scoreboard75.yaml` (our controller board) are the two
   builds. Each only names itself and picks a pin map from
   `firmware/controllers/`; everything else is in
-  `firmware/gameday-common.yaml`.
+  `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
+  gameday.yaml booting two panels wide, offered by the DIY installer.
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Regenerate components/gameday/team_colors.h from ESPN.
 
-Every team in teams.h gets ESPN's primary color, the same one a live game
-paints it in. Only the demo build reads the table (firmware/gameday-demo.yaml):
-a scripted game has no ESPN data to take colors from. Run it after
+Every football team in teams.h gets ESPN's primary color, the same one a
+live game paints it in. Only the demo build reads the table
+(firmware/gameday-demo.yaml), and its scripted game is football: it has no
+ESPN data to take colors from. Run it after
 scripts/build_teams.py and commit the header.
 """
 

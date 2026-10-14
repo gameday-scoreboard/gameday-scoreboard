@@ -8,6 +8,9 @@ substitutions:
   version: "1.5.5"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
+  # Where the panel looks for new releases. A bench build can point it at a
+  # test manifest with -s update_source <url>.
+  update_source: "https://gamedayscoreboard.app/firmware/${variant}/manifest.json"
 
   display_panel_width: "64"
   display_panel_height: "64"
@@ -155,6 +158,25 @@ packages:
   wizmote: !include pages/wizmote.yaml
   # Factory check (five quick boot button presses in the first 30 s)
   qc: !include pages/qc.yaml
+
+# The theme's Spleen fonts, with Latin-1 added to ESPHome's default ASCII so
+# accented names (São Paulo, Atlético) draw. Text from outside the panel goes
+# through panel_text() (components/gameday/panel_text.h), which only puts out
+# these characters, so all three sizes carry the same list. A glyph listed
+# here that a font lacks fails the build rather than drawing a box.
+font:
+  - id: !extend spleen_8
+    glyphs: &panel_glyphs
+      - ' !"#$%&''()*+,-./0123456789:;<=>?@'
+      - 'ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`'
+      - 'abcdefghijklmnopqrstuvwxyz{|}~'
+      - '¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿'
+      - 'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß'
+      - 'àáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
+  - id: !extend spleen_12
+    glyphs: *panel_glyphs
+  - id: !extend spleen_16
+    glyphs: *panel_glyphs
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -361,7 +383,7 @@ update:
   - platform: http_request
     id: gd_firmware_update
     name: "Firmware"
-    source: https://gamedayscoreboard.app/firmware/${variant}/manifest.json
+    source: ${update_source}
     update_interval: 6h
 
 time:
@@ -404,6 +426,12 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+  # The sport on the board (0 football), so the page layout can leave the
+  # timeout pips hidden for other sports until the next board update.
+  - id: gd_sport
+    type: int
+    restore_value: no
+    initial_value: '0'
   # The logos the board wants right now, from the latest board update.
   - id: gd_team_logo_url
     type: std::string
@@ -499,27 +527,36 @@ gameday:
     - text_sensor.template.publish:
         id: gd_last_play_sensor
         state: !lambda 'return x.ha_last_play;'
+    # The board gets the text through panel_text() so a character the fonts
+    # lack never draws as a box; Home Assistant keeps the original above.
     - script.execute:
         id: gd_update
         game_state: !lambda 'return x.game_state;'
-        team_abbr: !lambda 'return x.team_abbr;'
+        team_abbr: !lambda 'return gameday::panel_text(x.team_abbr);'
         team_score: !lambda 'return x.team_score;'
-        opponent_abbr: !lambda 'return x.opponent_abbr;'
+        opponent_abbr: !lambda 'return gameday::panel_text(x.opponent_abbr);'
         opponent_score: !lambda 'return x.opponent_score;'
-        status_text: !lambda 'return x.status_text;'
-        clock_text: !lambda 'return x.clock_text;'
-        down_distance: !lambda 'return x.down_distance;'
+        status_text: !lambda 'return gameday::panel_text(x.status_text);'
+        clock_text: !lambda 'return gameday::panel_text(x.clock_text);'
+        down_distance: !lambda 'return gameday::panel_text(x.down_distance);'
         is_red_zone: !lambda 'return x.is_red_zone;'
         team_color: !lambda 'return (int) x.team_color;'
         opponent_color: !lambda 'return (int) x.opponent_color;'
         possession: !lambda 'return x.possession;'
         team_timeouts: !lambda 'return x.team_timeouts;'
         opponent_timeouts: !lambda 'return x.opponent_timeouts;'
-        team_record: !lambda 'return x.team_record;'
-        opponent_record: !lambda 'return x.opponent_record;'
-        splash_text: !lambda 'return x.splash_text;'
+        team_record: !lambda 'return gameday::panel_text(x.team_record);'
+        opponent_record: !lambda 'return gameday::panel_text(x.opponent_record);'
+        splash_text: !lambda 'return gameday::panel_text(x.splash_text);'
         splash_color: !lambda 'return (int) x.splash_color;'
-        message: !lambda 'return x.message;'
+        sport: !lambda 'return (int) x.sport;'
+        situation: !lambda 'return x.situation;'
+        outs: !lambda 'return x.outs;'
+        bases: !lambda 'return (int) x.bases;'
+        highlight: !lambda 'return x.highlight;'
+        team_marks: !lambda 'return x.team_marks;'
+        opp_marks: !lambda 'return x.opp_marks;'
+        message: !lambda 'return gameday::panel_text(x.message);'
     - lambda: |-
         id(gd_team_logo_url) = x.team_logo;
         id(gd_opp_logo_url) = x.opponent_logo;
@@ -566,6 +603,21 @@ switch:
       - hub75.set_brightness:
           id: matrix
           brightness: 0
+  # Off unless the owner turns it on. The setting itself lives in the gameday
+  # component (auto_update.h) with the rest of the device page's settings;
+  # this switch is how Home Assistant sees and changes it.
+  - platform: template
+    name: "Install Updates Automatically"
+    id: gd_auto_update
+    icon: "mdi:update"
+    entity_category: config
+    # The component keeps the setting; the switch must not set it at boot.
+    restore_mode: DISABLED
+    lambda: 'return id(gameday_ctl).auto_update();'
+    turn_on_action:
+      - lambda: 'id(gameday_ctl).set_auto_update(true);'
+    turn_off_action:
+      - lambda: 'id(gameday_ctl).set_auto_update(false);'
 number:
   - platform: template
     name: "Brightness"
@@ -639,7 +691,7 @@ text_sensor:
   - platform: template
     name: "Last Play"
     id: gd_last_play_sensor
-    icon: "mdi:football-helmet"
+    icon: "mdi:message-text-outline"
   - platform: wifi_info
     ip_address:
       name: "IP"

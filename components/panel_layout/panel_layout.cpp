@@ -33,8 +33,16 @@ static void set_layout_cols(hub75::HUB75Display *display, uint16_t cols) {
 void PanelLayout::setup() {
   this->pref_ = global_preferences->make_preference<uint8_t>(fnv1_hash("panel_layout_cols_v1"));
   uint8_t saved = 0;
-  if (!this->pref_.load(&saved) || saved < 1 || saved > this->max_cols_)
+  if (!this->pref_.load(&saved) || saved < 1 || saved > this->max_cols_) {
+    // First boot (or after Factory Reset): keep the build's default as the
+    // choice, so an update from a build with another default can't change it.
+    // The DIY installer flashes a one-panel or a two-panel build and both
+    // update from the one-panel stream.
     saved = this->default_cols_;
+    ESP_LOGI(TAG, "No saved panel count, saving the default %u", saved);
+    this->pref_.save(&saved);
+    global_preferences->sync();
+  }
   this->cols_ = saved;
   if (this->display_ != nullptr)
     set_layout_cols(this->display_, this->cols_);
