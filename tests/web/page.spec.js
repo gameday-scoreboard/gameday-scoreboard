@@ -25,6 +25,33 @@ const reset = (request, state, fail) => request.post("/_reset", { data: { state,
 const sets = async (request) =>
   (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/set").map((p) => p.q);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
+const deviceState = async (request) => (await request.get("/gameday/state")).json();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A busy panel answers late. Each /gameday/state read is taken when it
+// arrives and handed to the page `ms` later, so a read that left before a tap
+// comes back with the settings from before it.
+const slowReads = (page, ms) =>
+  page.route("**/gameday/state*", async (route) => {
+    const res = await route.fetch();
+    await sleep(ms);
+    await route.fulfill({ response: res });
+  });
+// Holds the first /gameday/set for `ms` before it reaches the mock, so a later
+// post sent alongside it would land first.
+const slowFirstPost = (page, ms) => {
+  let first = true;
+  return page.route("**/gameday/set*", async (route) => {
+    if (first) { first = false; await sleep(ms); }
+    await route.continue();
+  });
+};
+// Checks the texts every 100 ms for `ms`, so a late read that redraws the old
+// value fails the test instead of slipping between two checks.
+const staysAs = async (locator, texts, ms) => {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(100))
+    expect(await locator.allTextContents()).toEqual(texts);
+};
 
 const LIVE = {
   s: "IN", ts: 14, os: 10, p: 1, tt: 2, ot: 3, rz: true,
@@ -55,8 +82,13 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator("#curName")).toHaveText("Dallas Cowboys");
   await expect(page.locator('.sw[data-set="down"]')).toHaveClass(/on/);
   await expect(page.locator('.sw[data-set="odds"]')).not.toHaveClass(/on/);
-  await expect(page.locator('select[data-fav="2"]')).toHaveValue("nfl:34");
-  await expect(page.locator('select[data-fav="4"]')).toHaveValue("none");
+  // The ticker switches are named for every sport, not football.
+  await expect(page.getByRole("button", { name: "Game situation", exact: true })).toHaveAttribute("data-set", "down");
+  await expect(page.locator("#tickerCtls")).not.toContainText("Down and distance");
+  await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
+    /^1\. Dallas Cowboys/, /^2\. Houston Texans/, /^3\. Ole Miss Rebels/,
+  ]);
+  await expect(page.locator('.sw[data-set="today"]')).not.toHaveClass(/on/);
   await expect(page.locator("#panels .panelpick.on")).toHaveAttribute("data-cols", "2");
   await expect(page.locator("#tzline")).toContainText("US Central");
   await expect(page.locator("#hostname")).toHaveText("gameday-2f6a70.local");
@@ -110,6 +142,11 @@ test("no game renders the empty board for my team and for live modes", async ({ 
   await expect(page.locator("#msg")).toHaveText("No live games right now");
   await expect(page.locator("#livebar")).toBeVisible();
 
+  await reset(request, { mode: 4, game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("None of your favorites has a game coming up");
+  await expect(page.locator("#favbar")).toBeVisible();
+
   // No team picked: My team runs the live board, so it says the same
   await reset(request, { mode: 0, team: {}, game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
   await page.reload();
@@ -124,7 +161,7 @@ test("a device that never answers /gameday/state leaves the page waiting, not br
   await expect(page.locator("#gstate")).toHaveText("WAITING");
   await expect(page.locator("#board")).toHaveClass(/empty/);
   await expect(page.locator("#curName")).toHaveText("No team chosen");
-  await expect(page.locator("#modes button")).toHaveCount(5);
+  await expect(page.locator("#modes button")).toHaveText(["My team", "Live games", "Favorite teams"]);
   // Entity controls still come from the event stream.
   await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
 });
@@ -136,14 +173,17 @@ test("a failed settings post is retried once, then reported", async ({ page, req
   await page.locator('.sw[data-set="opp"]').click();
   await expect(page.locator("#toast")).toHaveText("Device did not respond (HTTP 500). Try again.");
   expect(await sets(request)).toEqual([{ opp: "0" }, { opp: "0" }]);
+  // The switch shows what the panel still has.
+  await expect(page.locator('.sw[data-set="opp"]')).toHaveClass(/on/);
 });
 
 test("mode pills post the mode and swap the settings bar", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   await expect(page.locator("#modes button.on")).toHaveText("My team");
-  await page.locator('#modes button[data-mode="2"]').click();
-  await expectSet(request, { mode: "2" });
+  await page.locator('#modes button[data-mode="5"]').click();
+  await expectSet(request, { mode: "5" });
+  await expect(page.locator("#modes button.on")).toHaveText("Live games");
   await expect(page.locator("#livebar")).toBeVisible();
   await expect(page.locator("#teambar")).toBeHidden();
 
@@ -240,20 +280,254 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
   await expectSet(request, { play: "1" });
   await page.locator('.sw[data-set="bootaddr"]').click();
   await expectSet(request, { bootaddr: "0" });
+  await page.locator('.sw[data-set="today"]').click();
+  await expectSet(request, { today: "1" });
   await expect(page.locator('.sw[data-set="down"]')).not.toHaveClass(/on/);
   await expect(page.locator('.sw[data-set="play"]')).toHaveClass(/on/);
 });
 
-test("favorites post one slot on change and all four on reorder", async ({ page, request }) => {
+test("favorites post the whole list in order on add, move and remove", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  await expect(page.locator('select[data-fav="1"]')).toHaveValue("nfl:6");
-  await page.locator('select[data-fav="4"]').selectOption("nfl:21");
-  await expectSet(request, { fav4: "nfl:21" });
-  await page.locator('#favCtls button[data-move="1,1"]').click();
-  await expectSet(request, { fav1: "nfl:34", fav2: "nfl:6", fav3: "ncaa:145", fav4: "nfl:21" });
-  await expect(page.locator('select[data-fav="1"]')).toHaveValue("nfl:34");
-  await expect(page.locator('select[data-fav="2"]')).toHaveValue("nfl:6");
+  const rows = page.locator("#favCtls .ctl.fav");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0).locator("small")).toHaveText("NFL · remote button 1");
+
+  await page.locator("#favAdd").click();
+  await expect(page.locator("#modal")).toHaveClass(/open/);
+  await page.locator(".tabs button", { hasText: "MLB" }).click();
+  await page.locator("#tiles .tile", { hasText: "New York Yankees" }).click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,mlb:10" });
+  await expect(page.locator("#modal")).not.toHaveClass(/open/);
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(3).locator("label")).toHaveText(/^4\. New York Yankees/);
+
+  await rows.nth(0).getByRole("button", { name: "Move down" }).click();
+  await expectSet(request, { favs: "nfl:34,nfl:6,ncaa:145,mlb:10" });
+  await rows.nth(2).getByRole("button", { name: "Remove" }).click();
+  await expectSet(request, { favs: "nfl:34,nfl:6,mlb:10" });
+  await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
+    /^1\. Houston Texans/, /^2\. Dallas Cowboys/, /^3\. New York Yankees/,
+  ]);
+});
+
+test("the favorites list stops offering Add a favorite at the panel's limit", async ({ page, request }) => {
+  const mlb = (n) => Array.from({ length: n }, (_, i) => ({ l: "mlb", id: i + 1 }));
+  await reset(request, { favs: mlb(15) });
+  await page.goto("/");
+  await expect(page.locator("#favCtls .ctl.fav")).toHaveCount(15);
+  await expect(page.locator("#favAdd")).toBeVisible();
+
+  await reset(request, { favs: mlb(16) });
+  await page.reload();
+  await expect(page.locator("#favCtls .ctl.fav")).toHaveCount(16);
+  await expect(page.locator("#favAdd")).toBeHidden();
+  // Past the four remote slots a row has no remote button.
+  await expect(page.locator("#favCtls .ctl.fav").nth(4).locator("small")).toHaveText("MLB");
+});
+
+test("Live games chips post the leagues, and move an old live mode to mode 5", async ({ page, request }) => {
+  await reset(request, { mode: 5, live: ["mlb", "nhl"], live_auto: false });
+  await page.goto("/");
+  await expect(page.locator("#livebar")).toBeVisible();
+  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
+  await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NHL"]);
+  await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
+  await expectSet(request, { live: "mlb,nhl,nba" });
+  await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NBA", "NHL"]);
+
+  // The last league can't be switched off.
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
+  await page.reload();
+  await page.locator("#liveChips .chip", { hasText: /^MLB$/ }).click();
+  await expect(page.locator("#toast")).toHaveText("Pick at least one league");
+  expect(await sets(request)).toEqual([]);
+
+  // Mode 2 (live college football, from before) reads as Live games with NCAAF on.
+  await reset(request, { mode: 2 });
+  await page.reload();
+  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  await expect(page.locator("#liveChips .chip.on")).toHaveText(["NCAAF"]);
+  await page.locator("#liveChips .chip", { hasText: /^NFL$/ }).click();
+  await expectSet(request, { live: "ncaa,nfl", mode: "5" });
+});
+
+const chip = (page, tab) => page.locator("#liveChips .chip", { hasText: new RegExp("^" + tab + "$") });
+const chipsOn = (page) => page.locator("#liveChips .chip.on");
+
+test("Live games chips match the panel through taps, a slow re-read, mode switches and a reload", async ({ page, request }) => {
+  // The steps from backlog#148: an old Live college panel, MLB on, NCAAF off,
+  // Favorite teams and back. The re-read after each tap is still out when
+  // the next tap comes.
+  await reset(request, { mode: 2 });
+  await page.goto("/");
+  await expect(chipsOn(page)).toHaveText(["NCAAF"]);
+  await slowReads(page, 1000);
+  await chip(page, "MLB").click();
+  await expect(chipsOn(page)).toHaveText(["NCAAF", "MLB"]);
+  await sleep(600);
+  await chip(page, "NCAAF").click();
+  await expect(chipsOn(page)).toHaveText(["MLB"]);
+  await staysAs(chipsOn(page), ["MLB"], 2500);
+
+  await page.locator('#modes button[data-mode="4"]').click();
+  await expect(page.locator("#favbar")).toBeVisible();
+  await sleep(600);
+  await page.locator('#modes button[data-mode="5"]').click();
+  await expect(page.locator("#livebar")).toBeVisible();
+  await staysAs(chipsOn(page), ["MLB"], 2500);
+
+  expect(await sets(request)).toEqual([{ live: "ncaa,mlb", mode: "5" }, { live: "mlb" }, { mode: "4" }, { mode: "5" }]);
+  const st = await deviceState(request);
+  expect([st.mode, st.live]).toEqual([5, ["mlb"]]);
+  await page.reload();
+  await expect(chipsOn(page)).toHaveText(["MLB"]);
+});
+
+test("chip taps faster than the page re-reads each save the list on screen", async ({ page, request }) => {
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
+  await page.goto("/");
+  await expect(chipsOn(page)).toHaveText(["MLB"]);
+  await slowReads(page, 1000);
+  await chip(page, "NBA").click();
+  await chip(page, "NHL").click();
+  await chip(page, "MLB").click();
+  await expect(chipsOn(page)).toHaveText(["NBA", "NHL"]);
+  await expect.poll(() => sets(request)).toEqual([{ live: "mlb,nba" }, { live: "mlb,nba,nhl" }, { live: "nba,nhl" }]);
+  await staysAs(chipsOn(page), ["NBA", "NHL"], 2500);
+  expect((await deviceState(request)).live).toEqual(["nba", "nhl"]);
+});
+
+test("a slow settings post isn't overtaken by the next tap's", async ({ page, request }) => {
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
+  await page.goto("/");
+  await expect(chipsOn(page)).toHaveText(["MLB"]);
+  await slowFirstPost(page, 800);
+  await chip(page, "NBA").click();
+  await chip(page, "NHL").click();
+  await expect.poll(() => sets(request)).toEqual([{ live: "mlb,nba" }, { live: "mlb,nba,nhl" }]);
+  expect((await deviceState(request)).live).toEqual(["mlb", "nba", "nhl"]);
+  await expect(chipsOn(page)).toHaveText(["MLB", "NBA", "NHL"]);
+});
+
+test("switching modes away and back before the page re-reads saves the last mode", async ({ page, request }) => {
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
+  await page.goto("/");
+  await expect(page.locator("#livebar")).toBeVisible();
+  await slowReads(page, 1000);
+  // Straight through: each tap's bar shows at once, before any re-read.
+  await page.locator('#modes button[data-mode="4"]').click();
+  expect(await page.locator("#favbar").isVisible()).toBe(true);
+  await page.locator('#modes button[data-mode="0"]').click();
+  expect(await page.locator("#teambar").isVisible()).toBe(true);
+  await page.locator('#modes button[data-mode="5"]').click();
+  expect(await page.locator("#livebar").isVisible()).toBe(true);
+  await expect.poll(() => sets(request)).toEqual([{ mode: "4" }, { mode: "0" }, { mode: "5" }]);
+  await staysAs(page.locator("#modes button.on"), ["Live games"], 2500);
+  await expect(chipsOn(page)).toHaveText(["MLB"]);
+  expect((await deviceState(request)).mode).toBe(5);
+});
+
+test("a chip tap the panel never got goes back to what the panel has", async ({ page, request }) => {
+  await reset(request, { mode: 2 }, ["set"]);
+  await page.goto("/");
+  await expect(chipsOn(page)).toHaveText(["NCAAF"]);
+  await chip(page, "MLB").click();
+  await expect(page.locator("#toast")).toHaveText("Device did not respond (HTTP 500). Try again.");
+  await expect(chipsOn(page)).toHaveText(["NCAAF"]);
+  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  expect((await deviceState(request)).mode).toBe(2);
+});
+
+test("install updates automatically: off by default, posts 0 and 1, hidden when the firmware has no such setting", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="autoupd"]');
+  await expect(page.locator("#autoupdRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/on/);
+  await sw.click();
+  await expectSet(request, { autoupd: "1" });
+  await expect(sw).toHaveClass(/on/);
+  await sw.click();
+  await expectSet(request, { autoupd: "0" });
+
+  await reset(request, { autoupd: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#autoupdRow")).toBeHidden();
+});
+
+test("a team picked in My team stays on the page through a slow re-read", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#curName")).toHaveText("Dallas Cowboys");
+  await slowReads(page, 1000);
+  await page.locator("#pick").click();
+  await page.locator(".tabs button", { hasText: "NHL" }).click();
+  await page.locator("#tiles .tile", { hasText: "Anaheim Ducks" }).click();
+  await expect(page.locator("#curName")).toHaveText("Anaheim Ducks");
+  await staysAs(page.locator("#curName"), ["Anaheim Ducks"], 2500);
+  expect((await deviceState(request)).team.id).toBe(25);
+});
+
+test("favorites and switches keep each tap through a slow re-read", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const labels = page.locator("#favCtls .ctl.fav label");
+  await expect(labels).toHaveCount(3);
+  await slowReads(page, 1000);
+  await page.locator("#favCtls .ctl.fav").nth(0).getByRole("button", { name: "Remove" }).click();
+  await sleep(600);
+  await page.locator("#favCtls .ctl.fav").nth(0).getByRole("button", { name: "Move down" }).click();
+  await page.locator('.sw[data-set="opp"]').click();
+  await sleep(600);
+  await page.locator('.sw[data-set="down"]').click();
+  const want = ["1. Ole Miss RebelsCollege football · remote button 1", "2. Houston TexansNFL · remote button 2"];
+  await expect(labels).toHaveText(want);
+  await expect(page.locator('.sw[data-set="down"]')).not.toHaveClass(/on/);
+  await Promise.all([
+    staysAs(labels, want, 2500),
+    staysAs(page.locator('.sw.on[data-set="opp"], .sw.on[data-set="down"]'), [], 2500),
+  ]);
+  expect(await sets(request)).toEqual([
+    { favs: "nfl:34,ncaa:145" }, { favs: "ncaa:145,nfl:34" }, { opp: "0" }, { down: "0" },
+  ]);
+  const st = await deviceState(request);
+  expect([st.opp, st.down]).toEqual([false, false]);
+});
+
+test("the picker has a tab per league and follows a team from another sport", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#pick").click();
+  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
+  await page.locator(".tabs button", { hasText: "NHL" }).click();
+  await expect(page.locator(".tabs button.on")).toHaveText("NHL");
+  await expect(page.locator("#tiles .tile")).toHaveCount(32);
+  await page.locator("#tiles .tile", { hasText: "Anaheim Ducks" }).click();
+  await expectSet(request, { team: "nhl:25" });
+  await expect(page.locator("#curName")).toHaveText("Anaheim Ducks");
+  await expect(page.locator("#curLg")).toHaveText("NHL");
+});
+
+test("other sports show their situation line and no timeout pips", async ({ page, request }) => {
+  const mlb = {
+    s: "IN", l: "mlb", sport: 1, ta: "NYY", ti: 10, ts: 3, oa: "TOR", oi: 14, os: 2, p: 0, tt: 0, ot: 0,
+    c: "Bot 7th", sit: "2-1", outs: 2, bases: 5, d: "", k: "", tc: "0C2340", oc: "134A8E", id: "401800001",
+  };
+  await reset(request, { team: { l: "mlb", id: 10, abbr: "NYY", name: "New York Yankees" }, game: mlb, next: [] });
+  await page.goto("/");
+  await expect(page.locator("#gstate")).toHaveText("LIVE");
+  await expect(page.locator("#clock")).toHaveText("Bot 7th");
+  await expect(page.locator("#down")).toHaveText("2-1, 2 outs");
+  await expect(page.locator("#tA .pips")).toBeHidden();
+  await expect(page.locator("#tB .pips")).toBeHidden();
+
+  const nhl = { ...mlb, l: "nhl", sport: 3, ta: "ANA", ti: 25, oa: "LA", oi: 8, c: "12:04 - 2nd", sit: "Series tied 2-2", outs: -1 };
+  await reset(request, { game: nhl, next: [] });
+  await page.reload();
+  await expect(page.locator("#down")).toHaveText("Series tied 2-2");
 });
 
 test("timezone follows the browser, or a zone picked by hand", async ({ page, request }) => {

@@ -1,0 +1,14 @@
+# gameday.yaml for two 64x64 panels (or one 128x64) on the MoonHub75 pinout:
+# the same firmware, booting 128 wide until someone picks otherwise. The DIY
+# installer offers it next to the one-panel build. It updates from the
+# one-panel build's manifest: panel_layout saves the default on first boot,
+# so that update keeps two panels.
+substitutions:
+  default_panel_cols: "2"
+
+packages:
+  base: !include gameday.yaml
+
+esphome:
+  # Its own build folder, so switching builds never throws away the other's cache.
+  build_path: build/gameday-moonhub75-2panel
