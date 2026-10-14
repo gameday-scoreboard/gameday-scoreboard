@@ -159,6 +159,11 @@ struct Final {
 
 // The scoreboard card for a final, the away side as "team" like a broadcast.
 GameSnapshot final_snapshot(const Final &f);
+// What a team change puts on the board until the first read lands: the new
+// team's logo and name, no game. It is valid only so the page draws the
+// logo; a failed read drops it (is_team_placeholder) so the board says why.
+GameSnapshot team_placeholder(const Team &t);
+bool is_team_placeholder(const GameSnapshot &g);
 
 struct TickerOptions {
   bool clock{true};
@@ -216,8 +221,9 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses);
 // Bench only. Every ESPN URL starts with this root; a bench build points
 // it at a host that does not exist to make ESPN unreachable without
-// touching the network.
-void set_site_root(const std::string &root);
+// touching the network. Pass a string literal: only the pointer is kept,
+// and the worker task reads it while the main loop may set it.
+void set_site_root(const char *root);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.

@@ -339,6 +339,7 @@ void GamedayComponent::favorites_changed_(bool first_pick) {
     this->generation_++;
     this->game_ = GameSnapshot{};
     this->prev_ = GameSnapshot{};
+    this->no_game_confirmed_ = false;  // ESPN has not answered for the new list
     this->emit_({});
     this->end_backoff_wait_();
     this->schedule_next_(0);
@@ -1015,14 +1016,9 @@ void GamedayComponent::apply_team_(const ::espn::Team &t) {
   this->reset_game_();
   this->generation_++;  // a fetch already in flight belongs to the old team
   // Behind the boot screen: the new team's logo and name, with no "Loading"
-  // text. The game data follows in a second or two.
-  GameSnapshot g;
-  g.valid = true;
-  g.state = GameState::PRE;
-  g.team_abbr = t.abbr;
-  g.team_id = t.espn_id;
-  g.team_logo = ::espn::team_logo_url(t.league, t.espn_id, t.abbr);
-  this->game_ = g;
+  // text. The game data follows in a second or two; a failed read drops it
+  // (drop_team_placeholder_) so the board says why instead.
+  this->game_ = ::espn::team_placeholder(t);
   this->emit_({});
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
   this->schedule_next_(0);
@@ -1185,6 +1181,14 @@ void GamedayComponent::apply_timezone_() {
   if (this->time_ != nullptr)
     this->time_->set_timezone(::espn::kTimezones[this->prefs_.tz_index].posix);
 #endif
+}
+
+// A failed read with only the team change's logo on the board: drop it, so
+// emit_ draws an empty board and says why ("Can't reach ESPN") instead of a
+// game layout with no opponent.
+void GamedayComponent::drop_team_placeholder_() {
+  if (::espn::is_team_placeholder(this->game_))
+    this->game_ = GameSnapshot{};
 }
 
 void GamedayComponent::reset_game_() {
@@ -1726,6 +1730,7 @@ void GamedayComponent::apply_job_() {
       this->misses_++;
       if (this->recap_on_)
         this->live_started_ms_ = 0;  // retry the scan, not the long wait
+      this->drop_team_placeholder_();  // "Looking for a live game", not a bare logo
       this->emit_({});
       this->schedule_next_(this->back_off_());
       return;
@@ -1846,6 +1851,7 @@ void GamedayComponent::apply_job_() {
   if (j.need_schedule) {
     if (!j.schedule_ok) {
       this->misses_++;
+      this->drop_team_placeholder_();
       this->emit_({});
       this->schedule_next_(this->back_off_());
       return;
@@ -1888,6 +1894,7 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(0);
       return;
     }
+    this->drop_team_placeholder_();
     this->emit_({});
     this->schedule_next_(this->back_off_());
     return;
@@ -1965,6 +1972,7 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
     this->mark_board_ready_();
   } else if (j.polled && !j.game_ok) {
     this->misses_++;
+    this->drop_team_placeholder_();
     this->emit_({});
     this->schedule_next_(RETRY_INTERVAL);
     return;

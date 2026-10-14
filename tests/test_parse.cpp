@@ -722,6 +722,25 @@ static GameSnapshot mlb_event(const char *file, uint32_t team) {
   return s;
 }
 
+// A team change's placeholder is dropped on a failed read so the board says
+// "Can't reach ESPN"; a game read from ESPN or a final card never is.
+static void test_team_placeholder() {
+  Team dal{League::NFL, 6, "DAL", "Dallas Cowboys", 0};
+  GameSnapshot p = team_placeholder(dal);
+  CHECK(p.valid);
+  CHECK_EQ(p.team_abbr, std::string("DAL"));
+  CHECK_EQ(p.team_logo, team_logo_url(League::NFL, 6, "DAL"));
+  CHECK(is_team_placeholder(p));
+  CHECK(!is_team_placeholder(GameSnapshot{}));
+  GameSnapshot pre = mlb_event("fixtures/event_mlb_top.json", kBraves);
+  CHECK(!pre.event_id.empty());
+  CHECK(!is_team_placeholder(pre));
+  Final f;
+  f.away_abbr = "DAL";
+  f.home_abbr = "PHI";
+  CHECK(!is_team_placeholder(final_snapshot(f)));
+}
+
 static void test_mlb_urls() {
   CHECK_EQ(team_url(League::MLB, 15), std::string("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/15"));
   CHECK_EQ(event_url(League::MLB, "401908016"),
@@ -2709,6 +2728,7 @@ int main() {
   test_boot_hold();
   test_rotate_minutes();
   test_mlb_urls();
+  test_team_placeholder();
   test_mlb_team();
   test_mlb_live();
   test_mlb_pre_post();

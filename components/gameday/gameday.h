@@ -415,6 +415,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
                          const char *comp_slug = nullptr);
   void emit_(const ::espn::Splash &splash);
   void reset_game_();
+  void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
   void mark_good_poll_() {
     this->misses_ = 0;
