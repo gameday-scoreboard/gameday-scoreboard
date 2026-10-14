@@ -76,7 +76,7 @@ jobs:
           cp -r docs/site/. site/
           ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           RUN=""
-          for v in moonhub75 scoreboard75; do
+          for v in moonhub75 moonhub75-2panel scoreboard75; do
             if echo "$ASSETS" | grep -qx "firmware-$v.zip"; then
               echo "$v firmware from the $TAG release asset firmware-$v.zip"
               gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p "firmware-$v.zip" -O "/tmp/firmware-$v.zip"
