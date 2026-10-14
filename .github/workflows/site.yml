@@ -8,6 +8,8 @@ name: Site
 # days, so that fallback is only good for 90 days after such a release.
 #
 # Runs by itself on a push to main that touches docs/site, and by hand.
+# Only main publishes: a run by hand from dev or beta would put that
+# branch's unreleased pages on the live site, so the gate fails it.
 # Pages keys deployments by commit sha, so deploying a commit here and then
 # tagging that same commit makes the tag's deploy a silent no-op (v1.4.3,
 # 2026-09-23). A push therefore skips the deploy while a release is pending:
@@ -39,6 +41,12 @@ jobs:
     outputs:
       go: ${{ steps.check.outputs.go }}
     steps:
+      - name: Only main publishes
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Site publishes only from main; this run is on $GITHUB_REF. Start it with --ref main."
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - id: check
         env:
