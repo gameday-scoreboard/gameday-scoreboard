@@ -42,7 +42,13 @@ std::string schedule_url(League league, uint32_t espn_id) {
 static void civil_from_epoch(int64_t epoch, int &y, int &m, int &d);
 
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch) {
-  std::string url = site_base(league) + "/scoreboard?";
+  return team_day_url(league, group, day_epoch, nullptr);
+}
+
+static std::string comp_base(League league, const char *comp_slug);
+
+std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const char *comp_slug) {
+  std::string url = comp_base(league, comp_slug) + "/scoreboard?";
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];

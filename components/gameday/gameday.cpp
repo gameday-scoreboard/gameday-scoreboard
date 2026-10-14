@@ -864,9 +864,14 @@ void GamedayComponent::loop() {
       uint32_t deadline = WORKER_DEADLINE;
       if (this->job_.need_scan && this->job_.scan_leagues.size() > 2)
         deadline = WORKER_DEADLINE / 2 * (uint32_t) this->job_.scan_leagues.size();
-      // A team read can add the look-ahead's day reads (run_job_).
-      if (this->job_.need_schedule && this->job_.team != nullptr && this->needs_lookahead_(this->job_.team->league))
+      // A team read can add the look-ahead's day reads, and a soccer team or
+      // cup read today's scoreboard (run_job_).
+      const ::espn::Team *team = this->job_.team;
+      if (this->job_.need_schedule && team != nullptr && this->needs_lookahead_(team->league))
         deadline = WORKER_DEADLINE / 2 * (2 + LOOKAHEAD_DAYS);
+      else if ((this->job_.need_schedule || this->job_.comp > 0) && team != nullptr &&
+               ::espn::league_sport(team->league) == ::espn::Sport::SOCCER)
+        deadline = WORKER_DEADLINE / 2 * 3;
       if (this->busy_since_ms_ != 0 && (millis() - this->busy_since_ms_) >= deadline) {
         ESP_LOGW(TAG, "Fetch task did not finish in %us, giving up on it", (unsigned) (deadline / 1000));
         this->busy_ = false;
@@ -1276,8 +1281,8 @@ bool GamedayComponent::needs_lookahead_(League league) const {
 }
 
 int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, int64_t day_epoch,
-                                      const std::string &skip_event, Schedule &out) {
-  std::string url = ::espn::team_day_url(team->league, group, day_epoch);
+                                      const std::string &skip_event, Schedule &out, const char *comp_slug) {
+  std::string url = ::espn::team_day_url(team->league, group, day_epoch, comp_slug);
   ESP_LOGD(TAG, "Looking ahead: %s", url.c_str());
   auto container = this->open_(url);
   if (container == nullptr)
@@ -1286,6 +1291,30 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
   int found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
   container->end();
   return found;
+}
+
+// ESPN's team endpoint names a team's next game as soon as the current one
+// starts (MIL and LAD on 2026-10-12; soccer the same, CRU and BRA in Brazil's
+// Serie A that night, and a cup's team endpoint is the same endpoint). So a
+// read during a game (a boot, a team pick, the six-hour read, a cup read)
+// checks today's scoreboard for one on now. Its date is taken 9 hours back
+// (team_day_url's 5 plus 4 here), so a late West Coast game still finds its
+// own day after midnight Eastern.
+void GamedayComponent::take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
+                                         const char *comp_slug) {
+  int64_t now = (int64_t) this->time_->timestamp_now();
+  if (!s.event_id.empty() && s.kickoff_epoch <= now)
+    return;
+  Schedule today;
+  if (this->fetch_team_day_(team, s.group, now - 4 * 3600, done_event, today, comp_slug) > 0 &&
+      ::espn::today_game_first(s, today)) {
+    ESP_LOGI(TAG, "%s is playing now: event %s", team->abbr, today.event_id.c_str());
+    s.event_id = today.event_id;
+    s.kickoff_epoch = today.kickoff_epoch;
+    // The team endpoint's opponent belongs to the next game.
+    s.opp_id = 0;
+    s.opp_abbr.clear();
+  }
 }
 
 bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::espn::Upcoming> &out) {
@@ -1649,24 +1678,8 @@ void GamedayComponent::run_job_() {
           break;
         }
       }
-    } else if (this->needs_lookahead_(j.team->league) &&
-               (j.schedule.event_id.empty() || j.schedule.kickoff_epoch > (int64_t) this->time_->timestamp_now())) {
-      // A read during a game (a boot, a team pick, the six-hour read) gets
-      // the game after it from the team endpoint, so check today's scoreboard
-      // for one on now. Its date is taken 9 hours back (team_day_url's 5 plus
-      // 4 here), so a late West Coast game still finds its own day after
-      // midnight Eastern.
-      int64_t now = (int64_t) this->time_->timestamp_now();
-      Schedule today;
-      if (this->fetch_team_day_(j.team, j.schedule.group, now - 4 * 3600, j.done_event, today) > 0 &&
-          ::espn::today_game_first(j.schedule, today)) {
-        ESP_LOGI(TAG, "%s is playing now: event %s", j.team->abbr, today.event_id.c_str());
-        j.schedule.event_id = today.event_id;
-        j.schedule.kickoff_epoch = today.kickoff_epoch;
-        // The team endpoint's opponent belongs to the next game.
-        j.schedule.opp_id = 0;
-        j.schedule.opp_abbr.clear();
-      }
+    } else if (::espn::league_sport(j.team->league) != ::espn::Sport::FOOTBALL) {
+      this->take_game_on_now_(j.team, j.schedule, j.done_event);
     }
     if (!j.comps.empty()) {
       // Soccer: the cup reads from the last sweep still count.
@@ -1907,6 +1920,7 @@ void GamedayComponent::run_cup_job_() {
   if (slug != nullptr && this->fetch_schedule_(j.team, s, slug)) {
     ::espn::adopt_league(s, j.team->league);
     ::espn::adopt_comp(s, slug);
+    this->take_game_on_now_(j.team, s, j.done_event, slug);
     j.comps[j.comp] = s;
   }
   int pick = ::espn::pick_schedule(j.comps, (int64_t) this->time_->timestamp_now(), j.done_event);
