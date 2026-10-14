@@ -3,6 +3,12 @@
 # 7.4.3 to match ESPHome).
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O1 -Wall -Wextra -I../components/gameday -I.
+# Link the GCC runtime in on Windows. Git Bash puts its own older
+# libstdc++-6.dll ahead of the compiler's on PATH, and the mismatched
+# runtime faults on the first ifstream.
+ifeq ($(OS),Windows_NT)
+LDFLAGS += -static
+endif
 
 all: build/test_parse build/test_networks
 	./build/test_parse
@@ -12,7 +18,7 @@ SRCS = test_parse.cpp golden_football.cpp ../components/gameday/espn_parse.cpp .
 
 build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) $(SRCS) -o $@
+	$(CXX) $(CXXFLAGS) $(SRCS) -o $@ $(LDFLAGS)
 
 build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
 	@mkdir -p build
@@ -26,7 +32,7 @@ replay: build/replay
 
 build/replay: replay.cpp $(filter-out test_parse.cpp golden_football.cpp,$(SRCS)) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) replay.cpp $(filter-out test_parse.cpp golden_football.cpp,$(SRCS)) -o $@
+	$(CXX) $(CXXFLAGS) replay.cpp $(filter-out test_parse.cpp golden_football.cpp,$(SRCS)) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf build

@@ -32,7 +32,9 @@ the same ground for people; this file is the short version.
 - ESPHome 2026.10.0b3, the version CI pins. Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
-- Host tests: `make -C tests` (needs g++).
+- Host tests: `make -C tests` (needs g++). CI also builds
+  `make -C tests replay` and runs the `--selftest` of
+  `scripts/factory_flash.py`, `burnin_monitor.py` and `improv_scan.py`.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run
