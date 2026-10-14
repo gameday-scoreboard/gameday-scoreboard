@@ -2084,8 +2084,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.message = f.status_text;
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
-    f.status_text = "Favorites: add teams on the page | " + f.status_text;
-    f.ha_status_text = "Favorites: add teams on the page | " + f.ha_status_text;
+    f.status_text = "Favorites: add teams in the app or on the page | " + f.status_text;
+    f.ha_status_text = "Favorites: add teams in the app or on the page | " + f.ha_status_text;
   }
   if (this->misses_ >= 3 && !this->demo_playing_()) {
     if (!this->ever_polled_good_()) {
