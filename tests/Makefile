@@ -22,7 +22,7 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 
 build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@
+	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the
