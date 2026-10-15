@@ -61,6 +61,8 @@ class LogoCache {
   // Decodes finished downloads and retries failed logos that are on screen.
   // True when at least one logo became ready.
   bool loop();
+  // Logo bytes downloaded since boot, any task.
+  uint32_t bytes_downloaded() const { return this->bytes_downloaded_.load(); }
 
  protected:
   using Bytes = std::vector<uint8_t, PsramAllocator<uint8_t>>;
@@ -96,6 +98,7 @@ class LogoCache {
   uint32_t retry_check_ms_{0};
   bool task_running_{false};
   std::atomic<bool> downloaded_{false};
+  std::atomic<uint32_t> bytes_downloaded_{0};
 };
 
 }  // namespace esphome::gameday
