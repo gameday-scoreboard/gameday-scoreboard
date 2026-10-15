@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "poll_timing.h"
+
 namespace espn {
 
 struct LogoSlot {
@@ -26,10 +28,22 @@ inline int pick_evict(const std::vector<LogoSlot> &slots) {
   return best;
 }
 
-// A logo that failed is asked for again once this long has passed.
-constexpr uint32_t LOGO_RETRY_MS = 15000;
+// A logo that fails waits longer after each failure in a row, counted per
+// logo so one missing logo never holds back the others or the score reads:
+// the same 30 s doubling to 10 min the ESPN reads use, and the longer 5 min
+// to an hour after a 403 or 429. A logo that loads starts over.
+inline void logo_failed(uint8_t &fails, uint32_t &wait_ms, bool throttled, uint32_t retry_after_ms, uint32_t rnd) {
+  if (fails < 255)
+    fails++;
+  wait_ms = backoff_ms(fails, throttled, retry_after_ms, rnd);
+}
 
-inline bool logo_retry_due(uint32_t failed_ms, uint32_t now) { return now - failed_ms >= LOGO_RETRY_MS; }
+inline void logo_loaded(uint8_t &fails, uint32_t &wait_ms) {
+  fails = 0;
+  wait_ms = 0;
+}
+
+inline bool logo_retry_due(uint32_t failed_ms, uint32_t wait_ms, uint32_t now) { return now - failed_ms >= wait_ms; }
 
 // The plain logo for a dark one (espn::dark_logo), or "" for any other URL.
 // A few teams have no dark variant: Fenerbahce's answers 404 (2026-10-14).

@@ -77,13 +77,15 @@ class LogoCache {
     Bytes body;  // the PNG, from the task to the main loop
     std::optional<runtime_image::RuntimeImage> image;
     State state{State::QUEUED};
+    uint8_t fails{0};  // failures in a row, for the wait
     uint32_t used_ms{0};
     uint32_t failed_ms{0};
+    uint32_t wait_ms{0};  // how long after failed_ms to ask again
   };
 
   static void task_(void *arg);
   void run_();
-  bool download_(const std::string &url, Bytes &body);
+  bool download_(const std::string &url, Bytes &body, bool &throttled, uint32_t &retry_after_ms);
   bool decode_(std::optional<runtime_image::RuntimeImage> &image, const Bytes &body);
   void make_room_();
   void start_task_();

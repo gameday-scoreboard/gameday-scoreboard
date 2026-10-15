@@ -2122,10 +2122,11 @@ static void test_logo_lru() {
   // Nothing droppable.
   CHECK_EQ(espn::pick_evict({{100, true, false}, {200, false, true}}), -1);
   CHECK_EQ(espn::pick_evict({}), -1);
-  // Retry after 15 s, including across the millis() wrap.
-  CHECK(!espn::logo_retry_due(1000, 1000 + espn::LOGO_RETRY_MS - 1));
-  CHECK(espn::logo_retry_due(1000, 1000 + espn::LOGO_RETRY_MS));
-  CHECK(espn::logo_retry_due(0xFFFFF000u, 0xFFFFF000u + espn::LOGO_RETRY_MS));
+  // A failed logo is due once its wait has passed, including across the millis() wrap.
+  CHECK(!espn::logo_retry_due(1000, 30000, 1000 + 30000 - 1));
+  CHECK(espn::logo_retry_due(1000, 30000, 1000 + 30000));
+  CHECK(espn::logo_retry_due(0xFFFFF000u, 30000, 0xFFFFF000u + 30000));
+  CHECK(!espn::logo_retry_due(0xFFFFF000u, 30000, 0xFFFFF000u + 29999));
   // A dark logo that 404s falls back to the plain one, the URL dark_logo made it from.
   std::string plain = "https://a.espncdn.com/i/teamlogos/soccer/500/436.png";
   std::string dark = espn::dark_logo(plain);
@@ -2135,6 +2136,75 @@ static void test_logo_lru() {
            std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/scoreboard/dal.png&w=64&h=64"));
   CHECK_EQ(espn::plain_logo_url("https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500/436.png&w=64&h=64"),
            std::string());
+}
+
+// The wait before a failed logo is asked for again: per logo, growing with each
+// failure in a row, longer after a refusal, cleared when it loads.
+static void test_logo_backoff() {
+  uint8_t fails = 0;
+  uint32_t wait = 0;
+  // Ordinary failures: 30 s doubling to 10 min, jittered into the upper half.
+  espn::logo_failed(fails, wait, false, 0, 0);
+  CHECK_EQ(fails, 1);
+  CHECK_EQ(wait, 15000u);
+  espn::logo_failed(fails, wait, false, 0, 0);
+  CHECK_EQ(wait, 30000u);
+  espn::logo_failed(fails, wait, false, 0, 0);
+  CHECK_EQ(wait, 60000u);
+  espn::logo_failed(fails, wait, false, 0, 0);
+  CHECK_EQ(fails, 4);
+  CHECK_EQ(wait, 120000u);
+  for (int i = 0; i < 20; i++)
+    espn::logo_failed(fails, wait, false, 0, 300000);
+  CHECK_EQ(wait, 600000u);
+  // Each failure waits at least as long as the one before it, with no jitter.
+  uint8_t f = 0;
+  uint32_t w = 0, prev_floor = 0;
+  for (int i = 0; i < 12; i++) {
+    espn::logo_failed(f, w, false, 0, 0);
+    CHECK(w >= prev_floor);
+    prev_floor = w;
+  }
+  // A 403 or 429 starts at 5 min and stops at an hour.
+  fails = 0;
+  espn::logo_failed(fails, wait, true, 0, 0);
+  CHECK_EQ(wait, 150000u);
+  espn::logo_failed(fails, wait, true, 0, 300000);
+  CHECK_EQ(wait, 600000u);
+  for (int i = 0; i < 20; i++)
+    espn::logo_failed(fails, wait, true, 0, 1800000);
+  CHECK_EQ(wait, 3600000u);
+  // Retry-After longer than the schedule is honored, up to the hour.
+  fails = 0;
+  espn::logo_failed(fails, wait, true, 900000, 0);
+  CHECK_EQ(wait, 900000u);
+  fails = 0;
+  espn::logo_failed(fails, wait, true, 9000000, 0);
+  CHECK_EQ(wait, 3600000u);
+  // A refusal after plain failures lands on the refusal schedule for its place in the run.
+  fails = 2;
+  espn::logo_failed(fails, wait, true, 0, 300000);
+  CHECK_EQ(wait, 900000u);
+  // The count saturates instead of wrapping back to a short wait.
+  fails = 255;
+  wait = 0;
+  espn::logo_failed(fails, wait, false, 0, 0);
+  CHECK_EQ(fails, 255);
+  CHECK_EQ(wait, 300000u);
+  // A logo that loads clears its own wait and count, and the next failure starts over.
+  espn::logo_loaded(fails, wait);
+  CHECK_EQ(fails, 0);
+  CHECK_EQ(wait, 0u);
+  espn::logo_failed(fails, wait, false, 0, 0);
+  CHECK_EQ(fails, 1);
+  CHECK_EQ(wait, 15000u);
+  // Two logos keep separate runs: one failing for the fifth time does not slow the other's first retry.
+  uint8_t fails_a = 4, fails_b = 0;
+  uint32_t wait_a = 0, wait_b = 0;
+  espn::logo_failed(fails_a, wait_a, false, 0, 0);
+  espn::logo_failed(fails_b, wait_b, false, 0, 0);
+  CHECK_EQ(wait_a, 240000u);
+  CHECK_EQ(wait_b, 15000u);
 }
 
 // Counts what the parsers allocate through the hook the firmware points at PSRAM
@@ -3106,6 +3176,7 @@ int main() {
   checks++;
   failures += run_football_golden();
   test_logo_lru();
+  test_logo_backoff();
   test_json_allocator();
   test_timezone_index();
   test_postseason();
