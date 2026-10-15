@@ -29,6 +29,7 @@ owns the panel, not for the code.
 - Each panel's setup hotspot has its own name, like "Game Day 2f6a70", shown on the panel's setup screen, so two panels in one house are easy to tell apart.
 - Long Wi-Fi names, and names with a curly apostrophe like an iPhone hotspot's, show correctly while the panel joins. Accented letters in names show too, instead of a box.
 - A postponed, canceled or suspended game no longer shows as Final, and a suspended game no longer gets a WINS splash.
+- A game whose kickoff time isn't set yet, like a college game two weeks out, shows "Sat TBD" instead of a made-up time like "Fri 11:00 PM", and the panel finds that game's scoreboard on the right day.
 - Bowl and playoff games show their name, like "Rose Bowl" or "NFC Wild Card", at the start of the pre-game ticker and under the score on the device page.
 - After you change teams, both logos are there when the scoreboard shows up, instead of popping in one at a time.
 - The device page works better with a screen reader. Switches say whether they are on or off, the brightness and speed sliders, menus and team search have names, and the mode, league and picker tab buttons say which one is chosen.

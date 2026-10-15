@@ -19,6 +19,7 @@ struct Schedule {
   uint8_t league{0};  // League as uint8_t; set for live-mode games
   std::string event_id;
   int64_t kickoff_epoch{0};
+  bool time_tbd{false};  // no kickoff time yet: kickoff_epoch is ESPN's midnight Eastern placeholder
   uint32_t group{0};
   std::string team_color;
   std::string team_record;
@@ -95,6 +96,7 @@ struct GameSnapshot {
   GameState state{GameState::NOT_FOUND};
   std::string event_id;
   int64_t kickoff_epoch{0};
+  bool time_tbd{false};  // no kickoff time yet (see Schedule::time_tbd)
   bool completed{false};
   std::string short_detail;
   std::string display_clock;
@@ -126,6 +128,7 @@ struct GameSnapshot {
 struct Upcoming {
   std::string event_id;
   int64_t kickoff_epoch{0};
+  bool time_tbd{false};  // no kickoff time yet (see Schedule::time_tbd)
   uint32_t opp_id{0};
   std::string opp_abbr, opp_name;
   bool home{false};     // we are the home side
@@ -176,7 +179,8 @@ const char *league_path(League league);  // the last part of the ESPN path: "nfl
 std::string team_option(const Team &t);  // "NFL: Dallas Cowboys", the Home Assistant option
 std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
-std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch);
+// time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
+std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
 std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
 // One game on its own (8-18 KB). Leagues with LeagueInfo::per_event poll this
 // instead of the day's whole scoreboard; football does not use it.
@@ -198,7 +202,7 @@ bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t ma
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);
 // The team's next game that is not over yet in a day's scoreboard
-// (team_day_url), into out.event_id and out.kickoff_epoch.
+// (team_day_url), into out.event_id, out.kickoff_epoch and out.time_tbd.
 bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule &out,
                          const std::string &skip_event = "");
 // The single-event document from event_url().
@@ -217,7 +221,15 @@ std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_loc
 // ("Rose Bowl"). ESPN has no short form of it. Empty for a note that is a
 // kickoff window, not a name.
 std::string short_game_name(const std::string &headline);
-std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local);
+// "Sat 3:30 PM", or "Sat TBD" with time_tbd, when ESPN has no kickoff time
+// yet (then kick_local is from tbd_day_epoch).
+std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd = false);
+// ESPN lists a game with no kickoff time yet (timeValid false: college games
+// a week or two out, TBD playoff slots) at midnight Eastern of its day. That
+// instant is the evening before in Central and Pacific time, so anything that
+// needs the game's day uses noon Eastern instead: the same calendar day from
+// Hawaii to central Europe.
+inline int64_t tbd_day_epoch(int64_t placeholder) { return placeholder + 12 * 3600; }
 int64_t parse_iso8601_z(const std::string &s);
 const char *state_name(GameState s);
 // "0:42 2nd" from the raw clock and period. ESPN's pre-formatted shortDetail

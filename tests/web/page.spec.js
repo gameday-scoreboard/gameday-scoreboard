@@ -106,6 +106,32 @@ test("an upcoming game shows kickoff and network", async ({ page, request }) => 
   await expect(page.locator("#msg")).toBeHidden();
 });
 
+// ESPN lists a game with no kickoff time yet at midnight Eastern (Friday 11 PM
+// in the page's US Central) and the panel marks it tbd: its day and "TBD".
+test("a game with no kickoff time yet shows its day and TBD", async ({ page, request }) => {
+  const sat = 1792814400; // 2026-10-24T04:00Z
+  const g = (await deviceState(request)).game;
+  await reset(request, {
+    game: { ...g, id: "1", oa: "MINN", kick: sat, tbd: true, k: "Oct 24 TBD", detail: "TBD" },
+    next: [
+      { id: "1", kick: sat, tbd: true, oi: 135, oa: "MINN", on: "Minnesota", home: false, neutral: false, tv: "" },
+      { id: "2", kick: sat + 7 * 86400, tbd: true, oi: 356, oa: "ILL", on: "Illinois", home: true, neutral: false, tv: "" },
+      { id: "3", kick: 1795798800, oi: 2509, oa: "PUR", on: "Purdue", home: true, neutral: false, tv: "BTN" },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator("#clock")).toHaveText("Oct 24 TBD");
+  await expect(page.locator("#upnextList .un .w")).toHaveText(["Sat, Oct 31 TBD", /^Fri, Nov 27 11:00\sAM · BTN$/]);
+
+  const t = (abbr, name, id) => ({ l: "ncaa", id, abbr, name });
+  await reset(request, {
+    mode: 4,
+    next: [{ slot: 1, t: t("IOWA", "Iowa Hawkeyes", 2294), id: "1", s: "PRE", kick: sat, tbd: true, oi: 135, oa: "MINN", ts: 0, os: 0, tv: "", detail: "TBD" }],
+  });
+  await page.reload();
+  await expect(page.locator("#upnextList .un.fav .w")).toHaveText("Sat, Oct 24 TBD");
+});
+
 test("a bowl or playoff game shows its name, other games none", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

@@ -99,13 +99,16 @@ static void civil_from_epoch(int64_t epoch, int &y, int &m, int &d) {
   y = (int) (yy + (m <= 2 ? 1 : 0));
 }
 
-std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch) {
+std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
   // ESPN's date parameter is in US Eastern; shift the UTC kickoff by five
   // hours so late east-coast games stay on the right day. Being off by an
   // hour around a DST change only matters for a game kicking off between
-  // 11 PM and midnight Eastern, which does not happen in football.
+  // 11 PM and midnight Eastern, which does not happen in football. A TBD
+  // game's midnight placeholder is exactly that case, so it goes by noon.
+  if (time_tbd)
+    kickoff_epoch = tbd_day_epoch(kickoff_epoch);
   civil_from_epoch(kickoff_epoch - 5 * 3600, y, m, d);
   char buf[64];
   if (league == League::NCAA)
@@ -464,7 +467,7 @@ static std::string clock_12h(const struct tm &t) {
   return buf;
 }
 
-std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local) {
+std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd) {
   static const char *kDays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char *kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -483,7 +486,7 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
     snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon % 12], kick_local.tm_mday);
     when = buf;
   }
-  return when + " " + clock_12h(kick_local);
+  return when + " " + (time_tbd ? std::string("TBD") : clock_12h(kick_local));
 }
 
 // "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).

@@ -2665,6 +2665,138 @@ static void test_panel_text() {
   }
 }
 
+// A game with no kickoff time yet (fixtures recorded 2026-10-14): ESPN lists
+// it at midnight Eastern with timeValid false. Every parse carries the flag,
+// so the panel says "TBD" and never schedules off the placeholder.
+static struct tm utc_tm(int64_t epoch) {
+  time_t t = (time_t) epoch;
+  return *gmtime(&t);
+}
+
+static void test_tbd_kickoff() {
+  const uint32_t kIowa = 2294, kMichigan = 130;
+  const int64_t placeholder = parse_iso8601_z("2026-10-24T04:00Z");  // midnight Eastern, Sat 10/24
+
+  // The team endpoint: Iowa's next game has no time yet.
+  Schedule s;
+  CHECK(parse_team_str(slurp("fixtures/team_ncaa_iowa_tbd.json"), s));
+  CHECK_EQ(s.event_id, std::string("401858497"));
+  CHECK_EQ(s.kickoff_epoch, placeholder);
+  CHECK(s.time_tbd);
+  CHECK_EQ(s.group, (uint32_t) 5);
+  Schedule dal;
+  CHECK(parse_team_str(slurp("fixtures/team_nfl_dal.json"), dal));
+  CHECK(!dal.time_tbd);
+
+  // The game's scoreboard is the Eastern day of the game, not the day before
+  // (20261023 has no Big Ten games at all).
+  CHECK(scoreboard_url(League::NCAA, s.group, s.kickoff_epoch, s.time_tbd).find("dates=20261024") !=
+        std::string::npos);
+  CHECK(scoreboard_url(League::NCAA, s.group, s.kickoff_epoch).find("dates=20261023") != std::string::npos);
+  // Standard time: the placeholder is 05:00Z, still the same day.
+  CHECK(scoreboard_url(League::NCAA, 5, parse_iso8601_z("2026-11-07T05:00Z"), true).find("dates=20261107") !=
+        std::string::npos);
+
+  // The event in the day's scoreboard, and on its own.
+  std::string sb = slurp("fixtures/scoreboard_ncaa_tbd.json");
+  GameSnapshot g;
+  CHECK(parse_scoreboard_str(sb, "401858497", kIowa, g));
+  CHECK(g.valid);
+  CHECK(g.state == GameState::PRE);
+  CHECK(g.time_tbd);
+  CHECK_EQ(g.kickoff_epoch, placeholder);
+  CHECK_EQ(g.short_detail, std::string("TBD"));
+  CHECK_EQ(g.opp_abbr, std::string("MINN"));
+  GameSnapshot mich;
+  CHECK(parse_scoreboard_str(sb, "401858496", kMichigan, mich));
+  CHECK(!mich.time_tbd);
+  CHECK_EQ(mich.kickoff_epoch, parse_iso8601_z("2026-10-24T16:00Z"));
+  GameSnapshot ev;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_tbd.json"), Sport::FOOTBALL, kIowa, ev));
+  CHECK(ev.valid);
+  CHECK(ev.time_tbd);
+  CHECK_EQ(ev.event_id, std::string("401858497"));
+
+  // The day's scoreboard read for the team's game, and the live scan's wait.
+  Schedule day;
+  CHECK(parse_team_game_str(sb, kIowa, day));
+  CHECK_EQ(day.event_id, std::string("401858497"));
+  CHECK(day.time_tbd);
+  Schedule mday;
+  CHECK(parse_team_game_str(sb, kMichigan, mday));
+  CHECK(!mday.time_tbd);
+  std::vector<LiveGame> live;
+  int64_t next = -1;
+  CHECK(parse_live_games(sb, live, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-10-24T16:00Z"));
+
+  // The season schedule: five TBD games, then one with a time.
+  std::vector<Upcoming> up;
+  CHECK(parse_upcoming_str(slurp("fixtures/schedule_ncaa_iowa_tbd.json"), kIowa, 8, up));
+  CHECK_EQ(up.size(), (size_t) 6);
+  if (up.size() == 6) {
+    for (size_t i = 0; i < 5; i++)
+      CHECK(up[i].time_tbd);
+    CHECK_EQ(up[0].event_id, std::string("401858497"));
+    CHECK_EQ(up[0].opp_abbr, std::string("MINN"));
+    CHECK(!up[5].time_tbd);
+    CHECK_EQ(up[5].kickoff_epoch, parse_iso8601_z("2026-11-27T17:00Z"));
+  }
+
+  // The label: the game's day and "TBD". The panel takes the day from noon
+  // Eastern; in US Central (UTC-5 in October) the placeholder itself is
+  // Friday 11 PM, which is what the ticker used to say.
+  const int64_t central = -5 * 3600;
+  struct tm wed = utc_tm(parse_iso8601_z("2026-10-14T20:00Z") + central);
+  struct tm tue = utc_tm(parse_iso8601_z("2026-10-20T15:00Z") + central);
+  struct tm fri = utc_tm(parse_iso8601_z("2026-10-23T15:00Z") + central);
+  struct tm kick = utc_tm(tbd_day_epoch(placeholder) + central);
+  CHECK_EQ(kickoff_label(utc_tm(placeholder + central), tue), std::string("Fri 11:00 PM"));
+  CHECK_EQ(kickoff_label(kick, wed, true), std::string("Oct 24 TBD"));
+  CHECK_EQ(kickoff_label(kick, tue, true), std::string("Sat TBD"));
+  CHECK_EQ(kickoff_label(kick, fri, true), std::string("Tomorrow TBD"));
+  TickerOptions o;
+  std::string text = status_text(g, o, kickoff_label(kick, tue, true));
+  CHECK(text.find("Sat TBD") != std::string::npos);
+  CHECK(text.find(" PM") == std::string::npos);
+  CHECK(text.find(" AM") == std::string::npos);
+  CHECK_EQ(status_text(g, o, ""), status_text(g, o, "TBD"));  // ESPN's own text when there is no label
+
+  // Favorites: no lock-on 15 minutes before the placeholder, and the today
+  // filter goes by the game's day, not Friday night.
+  FavRules r;
+  r.lockon_s = 15 * 60;
+  FavGame f;
+  f.valid = true;
+  f.state = GameState::PRE;
+  f.kickoff_epoch = placeholder;
+  CHECK(fav_locked(f, placeholder - 10 * 60, r));
+  f.time_tbd = true;
+  CHECK(!fav_locked(f, placeholder - 10 * 60, r));
+  CHECK(!fav_locked(f, placeholder + 3600, r));
+  f.state = GameState::IN;
+  CHECK(fav_locked(f, placeholder + 16 * 3600, r));
+  f.state = GameState::PRE;
+  FavRules friday = r;  // Friday 10/23 in US Central
+  friday.day_start = parse_iso8601_z("2026-10-23T05:00Z");
+  friday.day_end = friday.day_start + 86400;
+  FavRules saturday = r;
+  saturday.day_start = friday.day_end;
+  saturday.day_end = saturday.day_start + 86400;
+  int64_t fri_night = parse_iso8601_z("2026-10-24T02:00Z");
+  CHECK(!fav_idle_ok(f, fri_night, friday, true));
+  CHECK(fav_idle_ok(f, fri_night, saturday, true));
+  f.time_tbd = false;
+  CHECK(fav_idle_ok(f, fri_night, friday, true));  // the old reading of the placeholder
+
+  // The boot cache has no room for the flag: a TBD game saves a blank record,
+  // so the next boot reads the team endpoint.
+  TeamCache c;
+  CHECK(team_cache_save(s, League::NCAA, kIowa, placeholder - 5 * 86400, c));
+  Schedule back;
+  CHECK(!team_cache_load(c, League::NCAA, kIowa, placeholder - 5 * 86400 + 60, back));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -2705,6 +2837,7 @@ int main() {
   test_soccer_text_helpers();
   test_soccer_cups();
   test_lookahead();
+  test_tbd_kickoff();
   test_nhl_urls();
   test_nhl_team();
   test_nhl_live();
