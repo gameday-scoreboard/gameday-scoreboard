@@ -10,6 +10,7 @@
 #include <cstring>
 #include <vector>
 
+#include "panel_text.h"
 #include "timezones.h"
 #include "timezones_parsed.h"
 
@@ -577,8 +578,7 @@ std::vector<::espn::FavGame> GamedayComponent::fav_games_() const {
     g.final_epoch = e.final_epoch;
     // Out of season, a daily sport's next game is weeks away. Football has no
     // horizon: a bye week must not take a team out of the playlist.
-    if (::espn::league_sport(e.team->league) != ::espn::Sport::FOOTBALL)
-      g.horizon_s = 10 * 24 * 3600;
+    g.horizon_s = ::espn::season_horizon(::espn::league_sport(e.team->league));
     out.push_back(g);
   }
   return out;
@@ -709,8 +709,16 @@ void GamedayComponent::fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch)
   e.final_epoch = 0;
   if (shown)
     this->game_ = GameSnapshot{};
-  if (!this->fav_choose_(now_epoch))
+  bool switched = this->fav_choose_(now_epoch);
+  if (!switched && this->fav_shown_ < 0) {
+    // No favorite has a card: once the last one is read, the off-season
+    // clock's turn, and the boot screen can stop waiting for a game.
+    this->emit_({});
+    if (this->last_fields_.clock)
+      this->mark_board_ready_();
+  } else if (!switched) {
     this->rebuild_state_(&this->last_fields_);
+  }
   this->schedule_next_(0);
 }
 
@@ -2046,6 +2054,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.message = this->live_none_ ? "No live " + league_word + "games" : "Looking for a live " + league_word + "game";
     }
   }
+  this->clock_fields_(f);
   // Nothing can be read from ESPN before the clock is set, so "no game" here
   // would only be a guess.
   if (!g.valid && !this->clock_set_() && !this->demo_playing_()) {
@@ -2099,6 +2108,53 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   this->rebuild_state_(&f);
   for (auto &cb : this->callbacks_)
     cb(f);
+}
+
+// The off-season clock (offseason.h): the saved team between seasons (in My
+// team, or as a Live mode's card when nothing is live), a Live mode whose
+// rotation has no cards, or Favorites with no card at all. Team colors, or
+// neutral gray with no team.
+void GamedayComponent::clock_fields_(UpdateFields &f) {
+  if (this->demo_playing_() || !this->clock_set_())
+    return;
+  const GameSnapshot &g = this->game_;
+  const ::espn::Team *team = this->current_team_();
+  std::string color;  // hex, from the team endpoint or the game
+  if (this->live_mode_() && !this->live_fallback_) {
+    // Nothing in the last week and no kickoff in the next (recap_show_).
+    if (!this->recap_on_ || !this->recap_cards_.empty())
+      return;
+  } else if (this->favorites_mode_()) {
+    // Every favorite has been read, and none has a game.
+    for (const auto &e : this->fav_)
+      if (!e.sched.valid || !e.sched.event_id.empty())
+        return;
+    team = this->fav_[0].team;
+    color = this->fav_[0].sched.team_color;
+  } else {
+    if (team == nullptr)
+      return;
+    // The team endpoint named no game, as opposed to a card still loading.
+    bool none = !g.valid && this->schedule_.valid && this->schedule_.event_id.empty();
+    if (!none && !g.valid)
+      return;
+    int64_t tnow = (int64_t) this->time_->timestamp_now();
+    if (!::espn::off_season(none ? GameState::NOT_FOUND : g.state, g.kickoff_epoch, tnow,
+                            ::espn::season_horizon(::espn::league_sport(team->league))))
+      return;
+    color = g.valid ? g.team_color : this->schedule_.team_color;
+    if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0) {
+      struct tm kick = ESPTime::from_epoch_local((time_t) g.kickoff_epoch).to_c_tm();
+      struct tm now = this->time_->now().to_c_tm();
+      std::string ours = panel_text(g.team_abbr), opp = panel_text(g.opp_abbr);
+      f.next_line = ::espn::next_line(ours, opp, g.team_home, kick, now, "\n");
+      // The ticker carries it on both layouts, since a single panel has no
+      // room for it under the time.
+      f.status_text = ::espn::next_line(ours, opp, g.team_home, kick, now);
+    }
+  }
+  f.clock = true;
+  f.team_color = ::espn::clock_color(team != nullptr, ::espn::parse_color(color));
 }
 
 // ---- finals rotation ------------------------------------------------------------
@@ -2508,6 +2564,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     snprintf(color, sizeof(color), "%06X", (unsigned) f->opponent_color);
     game["oc"] = color;
     doc["status"] = f->status_text;
+    doc["clock"] = f->clock;
     doc["splash"] = f->splash_text;
     snprintf(color, sizeof(color), "%06X", (unsigned) f->splash_color);
     doc["splash_color"] = color;

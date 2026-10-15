@@ -11,6 +11,7 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "logo_lru.h"
+#include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
 #include "poll_timing.h"
@@ -2961,6 +2962,65 @@ static bool panel_drawable(const std::string &s) {
   return true;
 }
 
+static void test_offseason() {
+  const int64_t now = 1792080000;  // any fixed instant
+  const int64_t day = 24 * 3600;
+  const int64_t football = season_horizon(Sport::FOOTBALL);
+  const int64_t hockey = season_horizon(Sport::HOCKEY);
+  CHECK_EQ(football, (int64_t) 0);
+  CHECK_EQ(hockey, kSeasonHorizon);
+  CHECK_EQ(season_horizon(Sport::BASEBALL), kSeasonHorizon);
+  // The team endpoint named no game: the clock, whatever the sport.
+  CHECK(off_season(GameState::NOT_FOUND, 0, now, football));
+  CHECK(off_season(GameState::NOT_FOUND, 0, now, hockey));
+  // Football has no horizon: a game 20 days out stays on its card, and so
+  // does an old final.
+  CHECK(!off_season(GameState::PRE, now + 20 * day, now, football));
+  CHECK(!off_season(GameState::POST, now - 60 * day, now, football));
+  // An NHL team 11 days out reaches the clock; 9 days, or exactly 10, does not.
+  CHECK(off_season(GameState::PRE, now + 11 * day, now, hockey));
+  CHECK(!off_season(GameState::PRE, now + 9 * day, now, hockey));
+  CHECK(!off_season(GameState::PRE, now + 10 * day, now, hockey));
+  // A final older than the horizon is the end of the season.
+  CHECK(off_season(GameState::POST, now - 11 * day, now, hockey));
+  CHECK(!off_season(GameState::POST, now - 2 * day, now, hockey));
+  CHECK(!off_season(GameState::IN, now - 11 * day, now, hockey));
+
+  // The Next line. Wed Sep 9 2026, 10:00 AM.
+  struct tm wed = mk(2026, 251, 3, 10, 0, 8, 9);
+  CHECK_EQ(next_line("DAL", "PHI", true, mk(2026, 255, 0, 15, 25, 8, 13), wed),
+           std::string("Next: DAL vs PHI Sun 3:25 PM"));
+  CHECK_EQ(next_line("DAL", "PHI", true, mk(2026, 251, 3, 19, 0, 8, 9), wed),
+           std::string("Next: DAL vs PHI Today 7:00 PM"));
+  CHECK_EQ(next_line("BOS", "NYR", false, mk(2026, 252, 4, 0, 5, 8, 10), wed),
+           std::string("Next: at NYR Tomorrow 12:05 AM"));
+  // Months out, the date: Thu Oct 15 2026 to Fri Mar 26 2027.
+  struct tm oct15 = mk(2026, 287, 4, 21, 30, 9, 15);
+  struct tm mar26 = mk(2027, 84, 5, 19, 5, 2, 26);
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15), std::string("Next: at PHI Mar 26 7:05 PM"));
+  // The board puts the kickoff on its own line.
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15, "\n"), std::string("Next: at PHI\nMar 26 7:05 PM"));
+  CHECK_EQ(next_line("COL", "LAD", true, mar26, oct15, "\n"), std::string("Next: COL vs LAD\nMar 26 7:05 PM"));
+  // An opponent ESPN has not named yet.
+  CHECK_EQ(next_line("COL", "", true, mar26, oct15), std::string("Next game Mar 26 7:05 PM"));
+
+  // The clock itself: 12-hour, no seconds, no leading zero.
+  CHECK_EQ(clock_time_text(mk(2026, 287, 4, 0, 5, 9, 15)), std::string("12:05 AM"));
+  CHECK_EQ(clock_time_text(mk(2026, 287, 4, 9, 7, 9, 15)), std::string("9:07 AM"));
+  CHECK_EQ(clock_time_text(mk(2026, 287, 4, 12, 0, 9, 15)), std::string("12:00 PM"));
+  CHECK_EQ(clock_time_text(oct15), std::string("9:30 PM"));
+  CHECK_EQ(clock_date_text(oct15), std::string("Thu, Oct 15"));
+  CHECK_EQ(clock_date_text(mar26), std::string("Fri, Mar 26"));
+
+  // Team colors, lifted when dark; neutral gray with no team.
+  CHECK_EQ(clock_color(false, 0xE31837), kClockNeutral);
+  CHECK_EQ(clock_color(false, 0xFFFFFF), kClockNeutral);
+  CHECK_EQ(clock_color(true, 0xE31837), (uint32_t) 0xE31837);
+  CHECK_EQ(clock_color(true, 0x002A5C), (uint32_t) 0x0057C0);
+  CHECK_EQ(clock_color(true, 0x000000), (uint32_t) 0xFFFFFF);
+  CHECK_EQ(clock_color(true, parse_color("")), (uint32_t) 0xFFFFFF);  // a team with no color from ESPN
+}
+
 static void test_panel_text() {
   using esphome::gameday::panel_text;
   // An iPhone hotspot name (backlog #144)
@@ -3094,6 +3154,7 @@ int main() {
   test_later_today();
   test_backoff();
   test_auto_update();
+  test_offseason();
   test_panel_text();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
