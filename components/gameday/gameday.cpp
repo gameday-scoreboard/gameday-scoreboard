@@ -1428,8 +1428,7 @@ void GamedayComponent::start_job_() {
   j.generation = this->generation_;
   j.team = this->current_team_();
   j.mode = this->effective_mode_();
-  if (j.mode == (uint8_t) Mode::LIVE)
-    j.scan_leagues = this->live_leagues_();
+  j.scan_leagues = this->scan_leagues_();
   if (this->favorites_mode_()) {
     this->start_fav_job_(now);
     return;
@@ -1609,14 +1608,9 @@ void GamedayComponent::run_job_() {
     return;
   }
   if (j.need_scan) {
-    uint8_t mode = j.mode;
     std::vector<::espn::Final> *finals = j.want_finals ? &j.finals : nullptr;
     std::vector<::espn::Pending> *pending = j.want_finals ? &j.pending : nullptr;
     j.scan_ok = true;
-    if (mode == (uint8_t) Mode::LIVE_NFL || mode == (uint8_t) Mode::LIVE_ANY)
-      j.scan_ok = this->fetch_live_games_(League::NFL, j.live, j.next_kickoff, finals, pending) && j.scan_ok;
-    if (mode == (uint8_t) Mode::LIVE_NCAA || mode == (uint8_t) Mode::LIVE_ANY)
-      j.scan_ok = this->fetch_live_games_(League::NCAA, j.live, j.next_kickoff, finals, pending) && j.scan_ok;
     for (League l : j.scan_leagues)
       j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending) && j.scan_ok;
     return;  // the main loop picks a game, then the next cycle polls it
@@ -2187,8 +2181,10 @@ void GamedayComponent::apply_recap_job_() {
       // games first, so the first kickoff may not be among them.
       this->recap_fwd_match_[i].clear();
       for (const auto &p : j.pending)
-        if (p.kickoff_epoch == j.next_kickoff)
+        if (p.kickoff_epoch == j.next_kickoff) {
           this->recap_fwd_match_[i] = ::espn::recap_matchup(p);
+          break;  // the first one kept at that time: best ranked, then ESPN's order
+        }
     } else if (++this->recap_fwd_[i] > ::espn::kRecapMaxDays) {
       ESP_LOGI(TAG, "No %s kickoff in the next week", ::espn::recap_league_word(i));
       this->recap_fwd_next_[i] = 0;

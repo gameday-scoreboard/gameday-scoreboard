@@ -36,6 +36,7 @@ namespace gameday {
 using ::espn::GameSnapshot;
 using ::espn::GameState;
 using ::espn::League;
+using ::espn::Mode;
 using ::espn::Schedule;
 using ::espn::Splash;
 using ::espn::TickerOptions;
@@ -86,11 +87,6 @@ enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
 // jump to the first four.
 static constexpr uint8_t FAV_MAX = 16;
-
-// LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
-// the football-only live modes from before, kept for panels that saved them.
-enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
-static_assert((int) Mode::LIVE + 1 == ::espn::kModeCount, "set_request.h takes modes 0 to kModeCount - 1");
 
 class GamedayComponent;
 
@@ -382,29 +378,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     return (m >= (uint8_t) Mode::LIVE_NFL && m <= (uint8_t) Mode::LIVE_ANY) || m == (uint8_t) Mode::LIVE;
   }
   bool live_mode_() const { return is_live_mode_(this->effective_mode_()); }
-  // The finals rotation covers every league the mode reads, as recap_bit()s.
+  // The leagues the scan reads (set_request.h). The finals rotation covers
+  // the same ones, as recap_bit()s, so it never walks a league the scan skips.
+  std::vector<League> scan_leagues_() const {
+    uint8_t m = this->effective_mode_();
+    return ::espn::scan_leagues(m, m == (uint8_t) Mode::LIVE ? this->live_leagues_() : std::vector<League>{});
+  }
   uint16_t recap_leagues_() const {
     uint16_t mask = 0;
-    if (this->effective_mode_() == (uint8_t) Mode::LIVE) {
-      for (League l : this->live_leagues_())
-        mask |= ::espn::recap_bit((uint8_t) l);
-      return mask;
-    }
-    for (const auto &l : ::espn::kLeagues)
-      if (this->mode_reads_(l.league))
-        mask |= ::espn::recap_bit((uint8_t) l.league);
+    for (League l : this->scan_leagues_())
+      mask |= ::espn::recap_bit((uint8_t) l);
     return mask;
-  }
-  bool mode_reads_(League league) const {
-    uint8_t m = this->effective_mode_();
-    if (m == (uint8_t) Mode::LIVE) {
-      for (League l : this->live_leagues_())
-        if (l == league)
-          return true;
-      return false;
-    }
-    return m == (uint8_t) Mode::LIVE_ANY || m == (league == League::NFL ? (uint8_t) Mode::LIVE_NFL
-                                                                         : (uint8_t) Mode::LIVE_NCAA);
   }
   // Mode 4 with at least one favorite set; with none it behaves like My Team.
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
@@ -562,6 +546,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t recap_step_ms_{0};  // when the card on the board went up, 0 = none yet
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
+  static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
   // Per league, indexed by League. walk: next day back (or ahead) to read,
   // 1 to kRecapMaxDays; 0 not started; kRecapMaxDays + 1 done. walk_day:
   // the league's ESPN day a walk finished, so a fruitless one is tried again
