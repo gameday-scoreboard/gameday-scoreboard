@@ -25,7 +25,7 @@ const demoPosts = async (request) =>
 test("release page has no Demo card", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/on/);
+  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
   await expect(page.locator("#demo")).toHaveCount(0);
 });
 
@@ -64,5 +64,5 @@ test("picks teams per league and switches to made-up teams", async ({ page, requ
   await expect.poll(() => demoPosts(request)).toContainEqual({ madeup: "1" });
   await page.locator("#demo").getByRole("button", { name: "Start pro" }).click();
   await expect(page.locator("#demoNow")).toHaveText("Pro: Harbor City Hawks vs Iron Valley Miners");
-  await expect(page.locator("#demoMadeup")).toHaveClass(/on/);
+  await expect(page.locator("#demoMadeup")).toHaveClass(/\bon\b/);
 });

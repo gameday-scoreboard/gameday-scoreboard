@@ -458,7 +458,7 @@ void GamedayComponent::set_rotate_minutes(int minutes) {
 }
 
 void GamedayComponent::set_lockon_minutes(int minutes) {
-  minutes = minutes < 5 ? 5 : minutes > 120 ? 120 : minutes;
+  minutes = ::espn::clamp_lockon_minutes(minutes);
   if (minutes == this->prefs4_.lockon_minutes)
     return;
   this->prefs4_.lockon_minutes = (uint8_t) minutes;
@@ -467,7 +467,7 @@ void GamedayComponent::set_lockon_minutes(int minutes) {
 }
 
 void GamedayComponent::set_release_seconds(int seconds) {
-  seconds = seconds < 30 ? 30 : seconds > 3600 ? 3600 : seconds;
+  seconds = ::espn::clamp_release_seconds(seconds);
   if (seconds == this->prefs4_.release_seconds)
     return;
   this->prefs4_.release_seconds = (uint16_t) seconds;
@@ -483,17 +483,9 @@ void GamedayComponent::set_today_only(bool on) {
   this->rebuild_state_(&this->last_fields_);
 }
 
-void GamedayComponent::set_live_leagues(const std::string &keys) {
-  uint16_t mask = 0;
-  size_t start = 0;
-  while (start < keys.size()) {
-    size_t comma = keys.find(',', start);
-    std::string key = keys.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
-    start = comma == std::string::npos ? keys.size() : comma + 1;
-    const ::espn::LeagueInfo *info = ::espn::league_by_key(key.c_str());
-    if (info != nullptr)
-      mask |= (uint16_t) (1u << (uint8_t) info->league);
-  }
+void GamedayComponent::set_live_leagues(const std::string &keys) { this->set_live_mask_(::espn::live_mask_from_keys(keys)); }
+
+void GamedayComponent::set_live_mask_(uint16_t mask) {
   if (mask == this->prefs7_.live_mask)
     return;
   this->prefs7_.live_mask = mask;
@@ -502,21 +494,11 @@ void GamedayComponent::set_live_leagues(const std::string &keys) {
 }
 
 std::vector<League> GamedayComponent::live_leagues_() const {
-  uint16_t mask = this->prefs7_.live_mask;
-  if (mask == 0) {
-    // Nothing picked: the leagues of the saved team and the favorites.
-    mask |= (uint16_t) (1u << this->prefs_.league);
-    for (uint8_t i = 0; i < FAV_MAX; i++)
-      if (this->fav_id_(i) != 0)
-        mask |= (uint16_t) (1u << this->fav_league_(i));
-  }
-  std::vector<League> out;
-  for (const auto &l : ::espn::kLeagues)
-    if (mask & (1u << (uint8_t) l.league))
-      out.push_back(l.league);
-  if (out.empty())
-    out.push_back(League::NFL);
-  return out;
+  std::vector<uint8_t> fav_leagues;
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    if (this->fav_id_(i) != 0)
+      fav_leagues.push_back(this->fav_league_(i));
+  return ::espn::live_leagues(this->prefs7_.live_mask, this->prefs_.league, fav_leagues);
 }
 
 void GamedayComponent::set_collision_alternate(bool alternate) {
@@ -2629,14 +2611,9 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   request->send(404, "application/json", "{\"error\":\"unknown route\"}");
 }
 
-static const char *const SET_KEYS[] = {"team",     "mode",   "rotate",  "fav1",    "fav2", "fav3",
-                                       "fav4",     "tz",     "tzauto",  "down",    "play", "odds",
-                                       "opp",      "panels", "bootaddr", "lockon", "release", "collide",
-                                       "favs",     "today",  "live",     "autoupd"};
-
 void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
   std::vector<std::pair<std::string, std::string>> kv;
-  for (const char *key : SET_KEYS)
+  for (const char *key : ::espn::kSetKeys)
     if (request->hasParam(key))
       kv.emplace_back(key, request->arg(key));
   if (kv.empty()) {
@@ -2647,109 +2624,83 @@ void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
   request->send(200, "application/json", "{\"ok\":true}");
 }
 
-static bool known_team(uint8_t league, uint32_t id) {
-  for (size_t t = 0; t < ::espn::kTeamCount; t++)
-    if ((uint8_t) ::espn::kTeams[t].league == league && ::espn::kTeams[t].espn_id == id)
-      return true;
-  return false;
-}
-
-bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id) {
-  league = 0;
-  id = 0;
-  size_t colon = v.find(':');
-  if (colon == std::string::npos)
-    return false;
-  std::string lg = v.substr(0, colon);
-  id = (uint32_t) strtoul(v.c_str() + colon + 1, nullptr, 10);
-  const ::espn::LeagueInfo *info = ::espn::league_by_key(lg.c_str());
-  if (info == nullptr)
-    return false;
-  league = (uint8_t) info->league;
-  return id != 0;
-}
-
 void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::string>> &kv) {
   bool dirty = false;
+  ::espn::SetOp op;
   for (const auto &p : kv) {
-    const std::string &k = p.first;
-    const std::string &v = p.second;
-    uint8_t league;
-    uint32_t id;
-    if (k == "team") {
-      if (parse_team_ref(v, league, id))
-        this->select_team_id((League) league, id);
-      else if (v == "none")
-        this->clear_team_();
-    } else if (k == "mode") {
-      int m = atoi(v.c_str());
-      if (m >= 0 && m <= (int) Mode::LIVE)
-        this->select_mode(MODE_OPTIONS[m]);
-    } else if (k == "rotate") {
-      this->set_rotate_minutes(atoi(v.c_str()));
-    } else if (k == "lockon") {
-      this->set_lockon_minutes(atoi(v.c_str()));
-    } else if (k == "release") {
-      this->set_release_seconds(atoi(v.c_str()));
-    } else if (k == "collide") {
-      this->set_collision_alternate(v == "1");
-    } else if (k == "today") {
-      this->set_today_only(v == "1");
-    } else if (k == "live") {
-      this->set_live_leagues(v);
-    } else if (k == "favs") {
-      // "mlb:15,nfl:6,..." in priority order; "" clears the list.
-      std::vector<std::pair<uint8_t, uint32_t>> list;
-      size_t start = 0;
-      while (start < v.size() && list.size() < FAV_MAX) {
-        size_t comma = v.find(',', start);
-        std::string ref = v.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
-        start = comma == std::string::npos ? v.size() : comma + 1;
-        if (!parse_team_ref(ref, league, id) || !known_team(league, id)) {
-          ESP_LOGW(TAG, "Bad favorite '%s'", ref.c_str());
-          continue;
-        }
-        bool dup = false;
-        for (const auto &f : list)
-          dup = dup || (f.first == league && f.second == id);
-        if (!dup)
-          list.emplace_back(league, id);
+    if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
+      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
+      continue;
+    }
+    switch (op.kind) {
+      case ::espn::SetKind::TEAM:
+        if (op.team.id != 0)
+          this->select_team_id((League) op.team.league, op.team.id);
+        else
+          this->clear_team_();
+        break;
+      case ::espn::SetKind::MODE:
+        this->select_mode(MODE_OPTIONS[op.value]);
+        break;
+      case ::espn::SetKind::ROTATE:
+        this->set_rotate_minutes(op.value);
+        break;
+      case ::espn::SetKind::LOCKON:
+        this->set_lockon_minutes(op.value);
+        break;
+      case ::espn::SetKind::RELEASE:
+        this->set_release_seconds(op.value);
+        break;
+      case ::espn::SetKind::COLLIDE:
+        this->set_collision_alternate(op.on);
+        break;
+      case ::espn::SetKind::TODAY:
+        this->set_today_only(op.on);
+        break;
+      case ::espn::SetKind::LIVE:
+        this->set_live_mask_(op.mask);
+        break;
+      case ::espn::SetKind::FAVS: {
+        for (const auto &bad : op.refused)
+          ESP_LOGW(TAG, "Bad favorite '%s'", bad.c_str());
+        std::vector<std::pair<uint8_t, uint32_t>> list;
+        for (const auto &t : op.teams)
+          list.emplace_back(t.league, t.id);
+        this->set_favorites_(list);
+        break;
       }
-      this->set_favorites_(list);
-    } else if (k.size() == 4 && k.compare(0, 3, "fav") == 0) {
-      uint8_t slot = (uint8_t) (k[3] - '0');
-      bool ok = parse_team_ref(v, league, id) && known_team(league, id);
-      if (!ok && v != "none" && !v.empty()) {
-        ESP_LOGW(TAG, "Bad favorite '%s'", v.c_str());
-        continue;
-      }
-      if (!ok)
-        league = 0, id = 0;  // "none" or "" clears the slot
-      this->set_favorite_(slot, league, id);
-    } else if (k == "tz") {
-      int i = ::espn::timezone_index(v.c_str());
-      if (i >= 0)
-        this->select_timezone(::espn::kTimezones[i].name);
-      else
-        ESP_LOGW(TAG, "Unknown timezone '%s'", v.c_str());
-    } else if (k == "tzauto") {
-      this->set_tz_auto(v == "1");
-      dirty = true;
-    } else if (k == "down") {
-      this->set_ticker_down_distance(v == "1");
-    } else if (k == "play") {
-      this->set_ticker_last_play(v == "1");
-    } else if (k == "odds") {
-      this->set_ticker_odds(v == "1");
-    } else if (k == "opp") {
-      this->set_opponent_splashes(v == "1");
-    } else if (k == "bootaddr") {
-      this->set_show_boot_address(v == "1");
-    } else if (k == "autoupd") {
-      this->set_auto_update(v == "1");
-    } else if (k == "panels") {
-      if (this->panels_ != nullptr)
-        this->panels_->set_cols((uint8_t) atoi(v.c_str()));
+      case ::espn::SetKind::FAV_SLOT:
+        this->set_favorite_(op.slot, op.team.league, op.team.id);
+        break;
+      case ::espn::SetKind::TZ:
+        this->select_timezone(::espn::kTimezones[op.value].name);
+        break;
+      case ::espn::SetKind::TZ_AUTO:
+        this->set_tz_auto(op.on);
+        dirty = true;
+        break;
+      case ::espn::SetKind::DOWN:
+        this->set_ticker_down_distance(op.on);
+        break;
+      case ::espn::SetKind::PLAY:
+        this->set_ticker_last_play(op.on);
+        break;
+      case ::espn::SetKind::ODDS:
+        this->set_ticker_odds(op.on);
+        break;
+      case ::espn::SetKind::OPP:
+        this->set_opponent_splashes(op.on);
+        break;
+      case ::espn::SetKind::BOOTADDR:
+        this->set_show_boot_address(op.on);
+        break;
+      case ::espn::SetKind::AUTOUPD:
+        this->set_auto_update(op.on);
+        break;
+      case ::espn::SetKind::PANELS:
+        if (this->panels_ != nullptr)
+          this->panels_->set_cols((uint8_t) op.value);
+        break;
     }
   }
   if (dirty)

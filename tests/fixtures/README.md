@@ -133,3 +133,9 @@ lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
 | `scoreboard_ncaa_tbd.json` | `.../college-football/scoreboard?groups=5&dates=20261024`, three TBD games and three with times (the day before, 20261023, has none) |
 | `event_ncaa_tbd.json` | `.../college-football/scoreboard/401858497`, the TBD game on its own |
 | `schedule_ncaa_iowa_tbd.json` | `.../college-football/teams/2294/schedule`, trimmed to events 6 to 12: the 10/9 final, five TBD games, then 11/27 at 12:00 PM EST |
+
+Not from ESPN: `set_cases.json` is a table of `POST /gameday/set` requests and
+the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
+`set_request.h`, and `tests/web/mock_device.py --selftest` through the device
+page's mock, so the two answer the same way. Add a case there when a set key
+or its limits change.
