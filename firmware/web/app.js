@@ -68,7 +68,7 @@
   <div class="wrap">
     <header class="top">
       <div class="brand">
-        <div class="mark">🏈</div>
+        <div class="mark">GD</div>
         <div><h1>Game Day Scoreboard<small id="devname">connecting</small></h1></div>
       </div>
       <div class="conn" id="conn" aria-live="polite"><i></i><span>offline</span></div>
@@ -109,11 +109,11 @@
       <button class="btn primary" id="pick">Change team</button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after the time below. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
+      <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
       <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
-      <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. Slot order decides who wins when two overlap.</div></div></div>
+      <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
       <div class="favctls">
         <div class="stepper"><label for="lockon">Take over</label><input type="number" id="lockon" min="5" max="120" step="1"><span>min before kickoff</span></div>
         <div class="stepper"><label for="release">After the final</label><select id="release">
@@ -557,7 +557,7 @@
     $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
       : S.recap ? "No live game right now, showing recent finals"
         : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after the time below. ")
+    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
