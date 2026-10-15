@@ -75,10 +75,10 @@ class LogoCache {
     Bytes body;  // the PNG, from the task to the main loop
     std::optional<runtime_image::RuntimeImage> image;
     State state{State::QUEUED};
+    uint8_t fails{0};  // failures in a row, for the wait
     uint32_t used_ms{0};
     uint32_t failed_ms{0};
     uint32_t wait_ms{0};  // how long after failed_ms to ask again
-    uint8_t fails{0};     // failures in a row, for the wait
   };
 
   static void task_(void *arg);
