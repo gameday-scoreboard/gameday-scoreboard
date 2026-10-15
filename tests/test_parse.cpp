@@ -1954,6 +1954,7 @@ static void test_lookahead() {
 }
 
 int run_football_golden();  // golden_football.cpp
+int run_set_tests(int &checks);  // test_set.cpp
 
 static void test_logo_lru() {
   using espn::LogoSlot;
@@ -2728,6 +2729,7 @@ int main() {
   test_backoff();
   test_auto_update();
   test_panel_text();
+  failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
