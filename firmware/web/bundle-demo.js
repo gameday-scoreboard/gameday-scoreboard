@@ -200,6 +200,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
           <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
+        <div class="ctl" id="barRow" hidden>
+          <label>Bar beta<small>This panel installs test versions on its own, between 3 and 5 AM and never during a live game.</small></label>
+          <a class="btn" id="barReport" href="#">Something wrong?</a>
+        </div>
         <div id="netsCard" hidden>
           <div class="sub">Wi-Fi networks</div>
           <p class="hint">The panel joins the first of these it can see, the last one that worked first. Set up another with the Game Day app and it is added here.</p>
@@ -692,6 +696,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
+    // The bar build: a note, and an email to us with the panel's name in it.
+    $("#barRow").hidden = !S.bar;
+    if (S.bar) {
+      const who = S.name || "this panel";
+      $("#barReport").href = "mailto:" + S.bar.report + "?subject=" + encodeURIComponent("Bar panel " + who) +
+        "&body=" + encodeURIComponent("Panel: " + who + "\nWhat's wrong:\n");
+    }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
   };
@@ -1314,7 +1325,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
       $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "");
+      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {

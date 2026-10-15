@@ -2776,6 +2776,53 @@ static void test_auto_update() {
   t = in;
   t.newer = false;  // a different version, but not a newer one
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+
+  // Beta channel versions: the build number after "-beta." is the next part.
+  CHECK(version_newer("2026.10.0-beta.813", "2026.10.0-beta.812"));
+  CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0-beta.812"));
+  CHECK(!version_newer("2026.10.0-beta.811", "2026.10.0-beta.812"));
+  CHECK(version_newer("2026.10.0-beta.812", "2026.10.0"));  // a hand-flashed bar panel takes the beta
+  CHECK(version_newer("2026.10.1-beta.900", "2026.10.0-beta.950"));
+  CHECK(version_newer("2026.10.0-beta.1000", "2026.10.0-beta.999"));
+  CHECK(!version_newer("2026.10.0-beta.", "2026.10.0"));
+  CHECK(!version_newer("2026.10.0-dev", "2026.10.0"));
+
+  // Install now: names in the release summary.
+  const std::string me = "gameday-aba970";
+  CHECK(install_now_listed("Beta 2026.10.0-beta.812. Install now: gameday-aba970", me));
+  CHECK(install_now_listed("Install now: gameday-500ebc, gameday-aba970", me));
+  CHECK(install_now_listed("Install now: gameday-500ebc,gameday-aba970 ", me));
+  CHECK(install_now_listed("Beta 2026.10.0-beta.812. Install now: all", me));
+  CHECK(!install_now_listed("Install now: gameday-500ebc", me));
+  CHECK(!install_now_listed("Install now: gameday-aba9700", me));
+  CHECK(!install_now_listed("Install now: gameday-aba97", me));
+  CHECK(!install_now_listed("Install now:", me));
+  CHECK(!install_now_listed("Beta 2026.10.0-beta.812", me));
+  CHECK(!install_now_listed("gameday-aba970", me));  // named, but not in the list
+  CHECK(!install_now_listed("Install now: all", ""));
+
+  // Listed: installs at any hour, even off, unless a game is live.
+  t = in;
+  t.hour = 15;
+  t.now = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
+  t.clock_valid = false;  // no clock needed
+  t.tried_day = in.today;  // and a night try doesn't block it
+  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
+  t.live = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::WAIT_GAME);
+  t.live = false;
+  t.newer = false;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t.newer = true;
+  t.available = false;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t.available = true;
+  t.enabled = false;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.now = true;  // in the window too, the try counts for this version, not the night
+  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
 }
 
 // Every byte of a panel_text() result is printable ASCII or part of a Latin-1

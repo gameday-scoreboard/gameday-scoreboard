@@ -231,6 +231,11 @@ void GamedayComponent::setup() {
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
+#ifdef GAMEDAY_BAR
+  this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
+  if (!this->bar_pref_.load(&this->now_tried_))
+    this->now_tried_ = 0;
+#endif
   this->team_cache_pref_ =
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
   this->rebuild_favorites_(false);
@@ -830,6 +835,9 @@ void GamedayComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Team: %s (%s id %u)", t ? t->name : "none", t ? t->abbr : "-", (unsigned) this->prefs_.team_id);
   ESP_LOGCONFIG(TAG, "  Timezone: %s", ::espn::kTimezones[this->prefs_.tz_index].name);
   ESP_LOGCONFIG(TAG, "  Flags: 0x%02X", this->prefs_.flags);
+#ifdef GAMEDAY_BAR
+  ESP_LOGCONFIG(TAG, "  Bar beta: installs from the beta channel");
+#endif
 }
 
 void GamedayComponent::loop() {
@@ -1077,12 +1085,16 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
 void GamedayComponent::save_prefs_() { this->pref_.save(&this->prefs_); }
 
 void GamedayComponent::set_auto_update(bool on) {
+#ifdef GAMEDAY_BAR
+  (void) on;  // the bar build always installs; there is no setting
+#else
   if (on == this->auto_update())
     return;
   this->prefs6_.auto_update = on ? 1 : 0;
   this->pref6_.save(&this->prefs6_);
   ESP_LOGI(TAG, "Install updates automatically: %s", on ? "on" : "off");
   this->rebuild_state_(&this->last_fields_);
+#endif
 }
 
 // A game the panel follows is in progress: the one on the board, which
@@ -1118,8 +1130,15 @@ void GamedayComponent::auto_update_tick_() {
   in.available = u->state == update::UPDATE_STATE_AVAILABLE;
   in.newer = ::espn::version_newer(u->update_info.latest_version, u->update_info.current_version);
   in.live = this->followed_game_live_();
+#ifdef GAMEDAY_BAR
+  in.now = in.available && ::espn::install_now_listed(u->update_info.summary, this->hostname()) &&
+           fnv1_hash(u->update_info.latest_version) != this->now_tried_;
+#endif
   switch (::espn::auto_update_step(in)) {
     case ::espn::AutoUpdateStep::IDLE:
+      // So the next wait for a game is logged too (an install-now one comes
+      // at any hour, not once a night).
+      this->auto_update_waiting_ = false;
       break;
     case ::espn::AutoUpdateStep::CHECK:
       ESP_LOGI(TAG, "Auto update: checking for a new release");
@@ -1144,6 +1163,19 @@ void GamedayComponent::auto_update_tick_() {
       this->pref6_.save(&this->prefs6_);
       global_preferences->sync();
       u->perform();
+      break;
+    case ::espn::AutoUpdateStep::INSTALL_NOW:
+#ifdef GAMEDAY_BAR
+      // Same as above, but the try is for this version, not tonight: a
+      // failed one is left to the nightly rule, which tries once in the
+      // next 3 to 5 AM window (the same night, if it failed inside one).
+      ESP_LOGI(TAG, "Auto update: installing %s now, as the beta channel asks (running %s)",
+               u->update_info.latest_version.c_str(), u->update_info.current_version.c_str());
+      this->now_tried_ = fnv1_hash(u->update_info.latest_version);
+      this->bar_pref_.save(&this->now_tried_);
+      global_preferences->sync();
+      u->perform();
+#endif
       break;
   }
 #endif
@@ -2455,10 +2487,14 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["odds"] = this->ticker_odds();
   doc["opp"] = this->opponent_splashes();
   doc["bootaddr"] = this->show_boot_address();
-#ifdef USE_UPDATE
-  // Left out where nothing can be installed (the demo build), so the page
-  // and the app hide the switch.
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+  // Left out where nothing can be installed (the demo build) or there is no
+  // choice (the bar build), so the page and the app hide the switch.
   doc["autoupd"] = this->auto_update();
+#endif
+#ifdef GAMEDAY_BAR
+  // The device page shows the bar beta note and a "Something wrong?" link.
+  doc["bar"]["report"] = this->report_email_;
 #endif
   doc["misses"] = this->misses_;
   doc["espn_kb"] = (uint32_t) (this->espn_bytes() / 1000);
