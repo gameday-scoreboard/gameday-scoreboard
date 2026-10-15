@@ -160,6 +160,35 @@ struct Final {
 // The scoreboard card for a final, the away side as "team" like a broadcast.
 GameSnapshot final_snapshot(const Final &f);
 
+// A game later today from a day's scoreboard, for the rotation's "Later
+// today" cards (recap.h). As small as a Final: short strings and ids, the
+// logos worked out from the ids when the card goes up.
+struct Pending {
+  uint8_t league{0};
+  uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  int64_t kickoff_epoch{0};
+  std::string event_id;
+  uint32_t away_id{0}, home_id{0};
+  std::string away_abbr, home_abbr;
+  std::string away_color, home_color;
+  std::string away_record, home_record;
+  std::string tv;  // the first network ESPN lists, "" when it lists none
+};
+
+// One scan keeps at most this many of a league's games later today: the
+// most a loop of the rotation shows.
+static const size_t kPendingKeep = 8;
+
+// Ranked games first (best rank on either side), then by kickoff.
+inline bool pending_before(const Pending &a, const Pending &b) {
+  if (a.rank != b.rank)
+    return a.rank < b.rank;
+  return a.kickoff_epoch < b.kickoff_epoch;
+}
+
+// The pregame scoreboard card for a game later today, away side as "team".
+GameSnapshot pending_snapshot(const Pending &p);
+
 struct TickerOptions {
   bool clock{true};
   bool down_distance{true};
@@ -178,6 +207,14 @@ std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch);
 std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
+// How far behind UTC the day scan_url() reads turns over. Football uses the
+// Eastern date. The other leagues play past midnight Eastern on the West
+// Coast (ESPN lists those games under the day they started, and rejects date
+// ranges), and none start between midnight and 6 AM Eastern: their day turns
+// over at 4 AM Eastern instead.
+inline int64_t scan_day_shift(League league) {
+  return league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
+}
 // One game on its own (8-18 KB). Leagues with LeagueInfo::per_event poll this
 // instead of the day's whole scoreboard; football does not use it.
 std::string event_url(League league, const std::string &event_id);

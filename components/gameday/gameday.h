@@ -343,10 +343,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::string done_event;  // a game seen to finish, passed over by the pick
     bool no_lookahead{false};  // My team: a final is still lingering on the board
     int8_t lookahead{0};       // 0 not run, 1 found the next game, 2 nothing ahead, -1 a read failed
-    // The finals rotation. A scan keeps the day's finals too when asked, and
-    // a recap job reads one other day's scoreboard for one league.
+    // The finals rotation. A scan keeps the day's finals and the games still
+    // to come too when asked, and a recap job reads one other day's
+    // scoreboard for one league.
     bool want_finals{false};
     std::vector<::espn::Final> finals;
+    std::vector<::espn::Pending> pending;
     bool need_recap{false};
     bool recap_forward{false};  // looking for the next kickoff, not for finals
     uint8_t recap_league{0};
@@ -366,10 +368,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_cup_job_(uint32_t now);
   bool fetch_upcoming_(const ::espn::Team *team, std::vector<::espn::Upcoming> &out);
   bool fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out);
-  // epoch picks the day (now when 0); finals, when given, also gets that
-  // day's finished games.
+  // epoch picks the day (now when 0); finals and pending, when given, also
+  // get that day's finished games and the ones not started yet.
   bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
-                         std::vector<::espn::Final> *finals = nullptr, int64_t epoch = 0);
+                         std::vector<::espn::Final> *finals = nullptr,
+                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0);
   // The mode the panel runs: the saved one, except that with no team picked
   // My team (and Favorites with none set) runs as Live anything.
   uint8_t effective_mode_() const {
@@ -379,11 +382,18 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     return (m >= (uint8_t) Mode::LIVE_NFL && m <= (uint8_t) Mode::LIVE_ANY) || m == (uint8_t) Mode::LIVE;
   }
   bool live_mode_() const { return is_live_mode_(this->effective_mode_()); }
-  // The finals rotation covers the football leagues the mode reads; Live
-  // games with no football league in it has no rotation.
-  uint8_t recap_leagues_() const {
-    return (this->mode_reads_(League::NFL) ? ::espn::kRecapNfl : 0) |
-           (this->mode_reads_(League::NCAA) ? ::espn::kRecapCollege : 0);
+  // The finals rotation covers every league the mode reads, as recap_bit()s.
+  uint16_t recap_leagues_() const {
+    uint16_t mask = 0;
+    if (this->effective_mode_() == (uint8_t) Mode::LIVE) {
+      for (League l : this->live_leagues_())
+        mask |= ::espn::recap_bit((uint8_t) l);
+      return mask;
+    }
+    for (const auto &l : ::espn::kLeagues)
+      if (this->mode_reads_(l.league))
+        mask |= ::espn::recap_bit((uint8_t) l.league);
+    return mask;
   }
   bool mode_reads_(League league) const {
     uint8_t m = this->effective_mode_();
@@ -552,19 +562,25 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t recap_step_ms_{0};  // when the card on the board went up, 0 = none yet
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
-  // Per league (0 NFL, 1 college). walk: next day back (or ahead) to read,
+  // Per league, indexed by League. walk: next day back (or ahead) to read,
   // 1 to kRecapMaxDays; 0 not started; kRecapMaxDays + 1 done. walk_day:
-  // the ESPN day a walk finished, so a fruitless one is tried again
-  // the next day rather than every scan.
-  uint8_t recap_back_[2]{0, 0};
-  int32_t recap_back_day_[2]{0, 0};
-  uint8_t recap_fwd_[2]{0, 0};
-  int32_t recap_fwd_day_[2]{0, 0};
-  int64_t recap_fwd_next_[2]{0, 0};
-  bool recap_job_(Job &j, int32_t today);  // fills j with the next walk step, if any
+  // the league's ESPN day a walk finished, so a fruitless one is tried again
+  // the next day rather than every scan. fwd_match: "BOS at NYR", the first
+  // game on the day the forward walk found.
+  uint8_t recap_back_[::espn::kLeagueCount]{};
+  int32_t recap_back_day_[::espn::kLeagueCount]{};
+  uint8_t recap_fwd_[::espn::kLeagueCount]{};
+  int32_t recap_fwd_day_[::espn::kLeagueCount]{};
+  int64_t recap_fwd_next_[::espn::kLeagueCount]{};
+  std::string recap_fwd_match_[::espn::kLeagueCount];
+  bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
   void apply_recap_job_();
-  void recap_absorb_(const Job &j, int32_t today);  // a scan's finals and next kickoff
-  int64_t recap_next_kickoff_() const;
+  void recap_absorb_(const Job &j, int64_t tnow);  // a scan's finals, games to come and next kickoff
+  // The next kickoff after today's games, and its matchup when known.
+  int64_t recap_next_kickoff_(std::string *matchup = nullptr) const;
+  // "college ", "NHL ", or "" when the mode reads several leagues: the word
+  // in "No live NHL games".
+  std::string live_word_() const;
   void recap_rebuild_();
   void recap_tick_();
   void recap_show_();

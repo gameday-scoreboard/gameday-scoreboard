@@ -123,6 +123,13 @@ Soccer does the same. Recorded 2026-10-12 during CRU @ BRA in Brazil's Serie A
 | `team_bra_cru_live.json` | `.../soccer/bra.1/teams/2022`, nextEvent is 401841276 CRU @ GRE on 10/18 |
 | `day_bra_20261012.json` | `.../soccer/bra.1/scoreboard?dates=20261012`, 401841260 CRU @ BRA in progress, CAP @ CHA and BOT @ CFC full time |
 
+Recorded 2026-10-15 at 9:41 AM Central (NBA preseason), for the rotation's
+later-today cards:
+
+| File | Source |
+| --- | --- |
+| `day_nba_20261015.json` | `.../basketball/nba/scoreboard?dates=20261015`, two games to come: TOR @ NY (no TV listed) and OKC @ HOU (NBA TV) |
+
 Not from ESPN: `set_cases.json` is a table of `POST /gameday/set` requests and
 the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
 `set_request.h`, and `tests/web/mock_device.py --selftest` through the device
