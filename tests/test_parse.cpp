@@ -2768,6 +2768,7 @@ static void test_prefs_sync() {
   g.begin();
   CHECK(!g.end());  // a request that changed nothing writes nothing
   CHECK(g.request());  // and the gate is open again
+}
 
 // A game with no kickoff time yet (fixtures recorded 2026-10-14): ESPN lists
 // it at midnight Eastern with timeValid false. Every parse carries the flag,
