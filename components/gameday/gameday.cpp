@@ -19,6 +19,9 @@
 #ifdef USE_UPDATE
 #include "esphome/components/update/update_entity.h"
 #endif
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+#include "esphome/components/saved_networks/saved_networks.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <esp_sntp.h>
@@ -2627,8 +2630,54 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     return;
   }
 #endif
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+  if (url == StringRef("/gameday/wifi")) {
+    this->handle_wifi_(request);
+    return;
+  }
+#endif
   request->send(404, "application/json", "{\"error\":\"unknown route\"}");
 }
+
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+// The saved networks, names only: a password never leaves the panel. The
+// list is in the order the panel tries them, the last one that worked first.
+void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
+  auto *nets = saved_networks::global_saved_networks;
+  if (nets == nullptr) {
+    request->send(404, "application/json", "{\"error\":\"unknown route\"}");
+    return;
+  }
+  if (request->method() == HTTP_POST) {
+    std::string ssid = request->arg("forget");
+    if (ssid.empty()) {
+      request->send(400, "application/json", "{\"error\":\"forget is required\"}");
+      return;
+    }
+    if (!nets->forget(ssid)) {
+      request->send(404, "application/json", "{\"error\":\"not a saved network\"}");
+      return;
+    }
+    request->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+  if (request->method() != HTTP_GET) {
+    request->send(405, "application/json", "{\"error\":\"GET or POST\"}");
+    return;
+  }
+  JsonDocument doc;
+  JsonArray list = doc["networks"].to<JsonArray>();
+  for (const auto &e : nets->list()) {
+    JsonObject o = list.add<JsonObject>();
+    o["ssid"] = e.ssid;
+    o["connected"] = e.connected;
+  }
+  doc["max"] = (int) saved_networks::SavedNetworks::max();
+  std::string body;
+  serializeJson(doc, body);
+  request->send(200, "application/json", body.c_str());
+}
+#endif
 
 void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
   std::vector<std::pair<std::string, std::string>> kv;

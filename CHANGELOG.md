@@ -27,6 +27,7 @@ owns the panel, not for the code.
 - After you set up Wi-Fi, the panel sets its clock within a second or two instead of up to a few minutes, and says "Getting ready" until then instead of "No upcoming game".
 - A panel that cannot reach ESPN says "Can't reach ESPN" instead of "No upcoming game", after a restart and after a team change. Favorites no longer sits on a blank board while reads fail.
 - A panel that can't get back on Wi-Fi restarts itself after a minute instead of ten, and never while you are setting it up from the app. If the app hands it a wrong password during an outage, it goes back to the network it had.
+- The panel remembers up to five Wi-Fi networks. Set it up on a phone hotspot for a tailgate or a bar and it still knows your home network when it gets back; it joins whichever saved network it can see, trying the last one that worked first. The device page lists them and can forget one. Reset Wi-Fi and Factory Reset still clear them all.
 - Each panel's setup hotspot has its own name, like "Game Day 2f6a70", shown on the panel's setup screen, so two panels in one house are easy to tell apart.
 - Long Wi-Fi names, and names with a curly apostrophe like an iPhone hotspot's, show correctly while the panel joins. Accented letters in names show too, instead of a box.
 - A postponed, canceled or suspended game no longer shows as Final, and a suspended game no longer gets a WINS splash.
