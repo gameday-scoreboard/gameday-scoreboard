@@ -8,17 +8,21 @@ routes with the response shapes from components/gameday/gameday.cpp:
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS; 400 when none match
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know
+  GET  /gameday/wifi     the saved networks (components/saved_networks), names only
+  POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
 
 /?demo loads bundle-demo.js instead, the demo build's page, and
 GET/POST /gameday/demo answer as demo.cpp does.
 
 Test hooks: POST /_reset with an optional JSON body
-{"state": {...overrides...}, "fail": ["state", "set"]} puts the state back,
-merges the overrides and makes the named routes answer 500. Two more fail
-names drop the connection with no answer, the way a panel that has gone does:
-"events" for the event stream (an open one ends within half a second), "down"
-for every route but the test hooks. GET /_log lists the /gameday/set and
-/gameday/action requests seen since the last reset.
+{"state": {...overrides...}, "fail": ["state", "set"], "wifi": [...]} puts the
+state back, merges the overrides and makes the named routes answer 500. Two
+more fail names drop the connection with no answer, the way a panel that has
+gone does: "events" for the event stream (an open one ends within half a
+second), "down" for every route but the test hooks. "wifi" replaces the saved
+network list; null stands for firmware without the list, whose /gameday/wifi
+answers 404. GET /_log lists the /gameday/set, /gameday/action and
+/gameday/wifi requests seen since the last reset.
 
 Started by playwright.config.js. Run by hand with `python mock_device.py 8765`
 and open http://127.0.0.1:8765/.
@@ -125,6 +129,10 @@ FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
 STATE = copy.deepcopy(INITIAL)
 FAIL = set()
 LOG = []
+# The saved Wi-Fi networks as GET /gameday/wifi lists them, the one tried first
+# first. None: firmware without the list.
+WIFI_INITIAL = [{"ssid": "Home", "connected": True}, {"ssid": "iPhone", "connected": False}]
+WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
 # The saved team's league byte, which outlives a cleared team and counts in
 # Live auto. A fresh panel's is NFL.
 TEAM_LEAGUE = ["nfl"]
@@ -356,6 +364,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, state_doc())
         if u.path == "/update/Firmware":
             return self._json(200, FIRMWARE)
+        if u.path == "/gameday/wifi":
+            if WIFI["list"] is None:
+                return self._json(404, {"error": "unknown route"})
+            return self._json(200, {"networks": WIFI["list"], "max": 5})
         if u.path == "/events":
             return self._events()
         if u.path == "/_log":
@@ -397,6 +409,19 @@ class Handler(BaseHTTPRequestHandler):
             FAIL.update(body.get("fail") or [])
             DEMO.clear()
             DEMO.update(copy.deepcopy(DEMO_INITIAL))
+            WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
+            return self._json(200, {"ok": True})
+        if u.path == "/gameday/wifi":
+            q = {k: v[0] for k, v in pairs.items()}
+            LOG.append({"path": u.path, "q": q})
+            if WIFI["list"] is None:
+                return self._json(404, {"error": "unknown route"})
+            if not q.get("forget"):
+                return self._json(400, {"error": "forget is required"})
+            keep = [n for n in WIFI["list"] if n["ssid"] != q["forget"]]
+            if len(keep) == len(WIFI["list"]):
+                return self._json(404, {"error": "not a saved network"})
+            WIFI["list"] = keep
             return self._json(200, {"ok": True})
         if u.path == "/gameday/set":
             q = {k: v[0] for k, v in pairs.items()}
