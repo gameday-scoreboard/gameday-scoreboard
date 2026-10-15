@@ -43,7 +43,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     epl: { prefix: "EPL", tab: "EPL", name: "Premier League", path: "soccer/eng.1", logo: "soccer", byId: true, scan: "" },
     nba: { prefix: "NBA", tab: "NBA", name: "NBA", path: "basketball/nba", logo: "nba", byId: false, scan: "" },
     wnba: { prefix: "WNBA", tab: "WNBA", name: "WNBA", path: "basketball/wnba", logo: "wnba", byId: false, scan: "" },
-    mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "" },
+    mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
@@ -71,7 +71,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   <div class="wrap">
     <header class="top">
       <div class="brand">
-        <div class="mark">🏈</div>
+        <div class="mark">GD</div>
         <div><h1>Game Day Scoreboard<small id="devname">connecting</small></h1></div>
       </div>
       <div class="conn" id="conn" aria-live="polite"><i></i><span>offline</span></div>
@@ -112,11 +112,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <button class="btn primary" id="pick">Change team</button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after the time below. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
+      <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
       <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
-      <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. Slot order decides who wins when two overlap.</div></div></div>
+      <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
       <div class="favctls">
         <div class="stepper"><label for="lockon">Take over</label><input type="number" id="lockon" min="5" max="120" step="1"><span>min before kickoff</span></div>
         <div class="stepper"><label for="release">After the final</label><select id="release">
@@ -200,10 +200,21 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
           <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
+        <div class="ctl" id="barRow" hidden>
+          <label>Bar beta<small>This panel installs test versions on its own, between 3 and 5 AM and never during a live game.</small></label>
+          <a class="btn" id="barReport" href="#">Something wrong?</a>
+        </div>
+        <div id="netsCard" hidden>
+          <div class="sub">Wi-Fi networks</div>
+          <p class="hint">The panel joins the first of these it can see, the last one that worked first. Set up another with the Game Day app and it is added here.</p>
+          <div id="nets"></div>
+          <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
+        </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
+        <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
       </div>
     </div>
 
@@ -560,7 +571,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
       : S.recap ? "No live game right now, showing recent finals"
         : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after the time below. ")
+    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
@@ -685,6 +696,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
+    // The bar build: a note, and an email to us with the panel's name in it.
+    $("#barRow").hidden = !S.bar;
+    if (S.bar) {
+      const who = S.name || "this panel";
+      $("#barReport").href = "mailto:" + S.bar.report + "?subject=" + encodeURIComponent("Bar panel " + who) +
+        "&body=" + encodeURIComponent("Panel: " + who + "\nWhat's wrong:\n");
+    }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
   };
@@ -1052,9 +1070,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
 
   // ---- up next + splash (from the state document) -------------------------------
-  const kickLabel = (epoch) => {
+  // tbd: ESPN has no kickoff time yet and "kick" is midnight Eastern of the
+  // game's day, so show that day in Eastern time and no clock.
+  const kickLabel = (epoch, tbd) => {
     const d = new Date(epoch * 1000);
-    const day = d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    const opts = { weekday: "short", month: "short", day: "numeric" };
+    if (tbd) return d.toLocaleDateString([], { ...opts, timeZone: "America/New_York" }) + " TBD";
+    const day = d.toLocaleDateString([], opts);
     const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return day + " " + time;
   };
@@ -1077,7 +1099,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       let when = "No game scheduled";
       if (n.s === "IN") when = n.ts + " - " + n.os + (n.detail ? " · " + n.detail : "");
       else if (n.s === "POST") when = endedAs(n) === "Final" ? "Final " + n.ts + " - " + n.os : endedAs(n);
-      else if (n.s === "PRE") when = kickLabel(n.kick) + (n.tv ? " · " + n.tv : "");
+      else if (n.s === "PRE") when = kickLabel(n.kick, n.tbd) + (n.tv ? " · " + n.tv : "");
       txt.appendChild(el("div", "w", when));
       row.appendChild(txt);
       host.appendChild(row);
@@ -1102,7 +1124,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       row.appendChild(img);
       const txt = el("div", "ut");
       txt.appendChild(el("div", "n", (u.neutral ? "vs " : u.home ? "vs " : "@ ") + (u.on || u.oa)));
-      txt.appendChild(el("div", "w", kickLabel(u.kick) + (u.tv ? " · " + u.tv : "")));
+      txt.appendChild(el("div", "w", kickLabel(u.kick, u.tbd) + (u.tv ? " · " + u.tv : "")));
       row.appendChild(txt);
       host.appendChild(row);
     }
@@ -1133,6 +1155,15 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderData();
+  };
+
+  const renderData = () => {
+    const kb = S && S.espn_kb;
+    if (kb == null) { $("#espnData").textContent = ""; return; }
+    const size = kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(kb < 100000 ? 1 : 0) + " MB";
+    const reads = S.espn_reads || 0;
+    $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
   };
 
   // After an install the device reboots. The event stream only retries every
@@ -1294,7 +1325,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
       $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "");
+      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {
@@ -1319,6 +1350,48 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       a.rel = "noopener";
       sub.appendChild(document.createTextNode(sub.textContent ? " " : ""));
       sub.appendChild(a);
+    }
+  };
+
+  // ---- saved Wi-Fi networks ---------------------------------------------
+  // GET /gameday/wifi lists the networks the panel remembers, names only, in
+  // the order it tries them. Firmware without the list answers 404 and the
+  // section stays hidden.
+  const renderNetworks = (j) => {
+    const nets = j.networks || [];
+    const list = $("#nets");
+    list.innerHTML = "";
+    nets.forEach((n, i) => {
+      const row = el("div", "ctl");
+      const label = el("label", null, n.ssid);
+      if (n.connected) label.appendChild(el("small", null, "Connected"));
+      else if (i === 0) label.appendChild(el("small", null, "Tried first"));
+      row.appendChild(label);
+      const b = el("button", "btn danger", "Forget");
+      b.onclick = async () => {
+        if (!confirm("Forget " + n.ssid + "?")) return;
+        b.disabled = true;
+        try {
+          const r = await fetch("/gameday/wifi?forget=" + encodeURIComponent(n.ssid), { method: "POST" });
+          toast(r.ok ? "Forgot " + n.ssid + (n.connected ? "; it stays connected until the next restart" : "") : "Could not forget " + n.ssid);
+        } catch (_) {
+          toast("Could not forget " + n.ssid);
+        }
+        loadNetworks();
+      };
+      row.appendChild(b);
+      list.appendChild(row);
+    });
+    $("#netsEmpty").hidden = nets.length > 0;
+    $("#netsCard").hidden = false;
+  };
+  const loadNetworks = async () => {
+    try {
+      const r = await fetch("/gameday/wifi?_=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) { $("#netsCard").hidden = true; return; }
+      renderNetworks(await r.json());
+    } catch (_) {
+      $("#netsCard").hidden = true;
     }
   };
 
@@ -1368,6 +1441,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
   connect();
   fetchState();
+  loadNetworks();
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();

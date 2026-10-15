@@ -1,5 +1,6 @@
 #include "espn_parse.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
@@ -7,12 +8,16 @@
 
 namespace espn {
 
-static const char *kSiteRoot = "https://site.api.espn.com/apis/site/v2/sports/";
+// A pointer to a literal: no copy in RAM, and one atomic store when a bench
+// build swaps it under a read on the worker task.
+static std::atomic<const char *> site_root{"https://site.api.espn.com/apis/site/v2/sports/"};
+
+void set_site_root(const char *root) { site_root.store(root, std::memory_order_relaxed); }
 
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
   const LeagueInfo *l = league_info(league);
-  return std::string(kSiteRoot) + (l != nullptr ? l->path : "football/nfl");
+  return std::string(site_root.load(std::memory_order_relaxed)) + (l != nullptr ? l->path : "football/nfl");
 }
 
 const char *league_path(League league) {
@@ -71,7 +76,7 @@ static std::string comp_base(League league, const char *comp_slug) {
     return site_base(league);
   const char *slash = strchr(l->path, '/');
   std::string sport = slash != nullptr ? std::string(l->path, slash - l->path + 1) : std::string();
-  return std::string(kSiteRoot) + sport + comp_slug;
+  return site_root.load(std::memory_order_relaxed) + sport + comp_slug;
 }
 
 std::string team_url(League league, uint32_t espn_id, const char *comp_slug) {
@@ -99,13 +104,16 @@ static void civil_from_epoch(int64_t epoch, int &y, int &m, int &d) {
   y = (int) (yy + (m <= 2 ? 1 : 0));
 }
 
-std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch) {
+std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
   // ESPN's date parameter is in US Eastern; shift the UTC kickoff by five
   // hours so late east-coast games stay on the right day. Being off by an
   // hour around a DST change only matters for a game kicking off between
-  // 11 PM and midnight Eastern, which does not happen in football.
+  // 11 PM and midnight Eastern, which does not happen in football. A TBD
+  // game's midnight placeholder is exactly that case, so it goes by noon.
+  if (time_tbd)
+    kickoff_epoch = tbd_day_epoch(kickoff_epoch);
   civil_from_epoch(kickoff_epoch - 5 * 3600, y, m, d);
   char buf[64];
   if (league == League::NCAA)
@@ -126,8 +134,12 @@ std::string scan_url(League league, int64_t now_epoch) {
   int64_t shift = league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
   civil_from_epoch(now_epoch - shift, y, m, d);
   char buf[64];
+  // 80 is every FBS game. College basketball without a group lists only the
+  // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
+  else if (league == League::MCBB)
+    snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
   url += buf;
@@ -164,6 +176,21 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   bool scoreboard = league == League::NFL || league == League::MLB || league == League::NBA || league == League::NHL;
   return dark_logo(std::string("https://a.espncdn.com/i/teamlogos/") + l->logo_dir +
                    (scoreboard ? "/500/scoreboard/" : "/500/") + file + ".png");
+}
+
+GameSnapshot team_placeholder(const Team &t) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::PRE;
+  g.team_abbr = t.abbr;
+  g.team_id = t.espn_id;
+  g.team_logo = team_logo_url(t.league, t.espn_id, t.abbr);
+  return g;
+}
+
+// Every game read from ESPN has an event id; a final card is POST.
+bool is_team_placeholder(const GameSnapshot &g) {
+  return g.valid && g.state == GameState::PRE && g.event_id.empty();
 }
 
 GameSnapshot final_snapshot(const Final &f) {
@@ -203,8 +230,9 @@ bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule
   return parse_team_game(json, our_team_id, skip_event, out) == 1;
 }
 
-bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out) {
-  return parse_event(json, sport, our_team_id, out);
+bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out,
+                     const std::string &event_id) {
+  return parse_event(json, sport, our_team_id, out, event_id);
 }
 
 uint32_t parse_color(const std::string &hex) {
@@ -312,6 +340,16 @@ using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
+
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+  if (!clock_set)
+    return "Getting ready";
+  if (live_mode)
+    return "";
+  if (!no_game_confirmed && misses > 0)
+    return "Can't reach ESPN";
+  return "";
+}
 
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local) {
   if (s.sport == Sport::BASEBALL)
@@ -460,7 +498,7 @@ static std::string clock_12h(const struct tm &t) {
   return buf;
 }
 
-std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local) {
+std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd) {
   static const char *kDays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char *kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -479,7 +517,7 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
     snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon % 12], kick_local.tm_mday);
     when = buf;
   }
-  return when + " " + clock_12h(kick_local);
+  return when + " " + (time_tbd ? std::string("TBD") : clock_12h(kick_local));
 }
 
 // "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).

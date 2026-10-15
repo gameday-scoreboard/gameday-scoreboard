@@ -15,6 +15,7 @@ struct FavGame {
   bool valid{false};  // a card has been fetched for this slot
   GameState state{GameState::NOT_FOUND};
   int64_t kickoff_epoch{0};
+  bool time_tbd{false};    // no kickoff time yet: kickoff_epoch is a midnight Eastern placeholder
   int64_t final_epoch{0};  // when the panel first saw it go final; 0 = fetched already final
   // How far ahead (or back, for a final) a card may be and still cycle while
   // idle; 0 = no limit. Football has none, so a bye week never hides a team;
@@ -46,7 +47,8 @@ inline bool fav_locked(const FavGame &g, int64_t now, const FavRules &r) {
       return true;
     case GameState::PRE:
       // Includes kickoffs already past: ESPN can report PRE a poll or two late.
-      return g.kickoff_epoch - now <= r.lockon_s;
+      // A TBD game has no kickoff to count down to; it locks once it starts.
+      return !g.time_tbd && g.kickoff_epoch - now <= r.lockon_s;
     case GameState::POST:
       return g.final_epoch != 0 && now - g.final_epoch < r.release_s;
     default:
@@ -68,7 +70,8 @@ inline bool fav_idle_ok(const FavGame &g, int64_t now, const FavRules &r, bool t
   }
   if (!today)
     return true;
-  return g.kickoff_epoch >= r.day_start && g.kickoff_epoch < r.day_end;
+  int64_t day = g.time_tbd ? tbd_day_epoch(g.kickoff_epoch) : g.kickoff_epoch;
+  return day >= r.day_start && day < r.day_end;
 }
 
 // Next entry after `from` that satisfies `ok`, wrapping; -1 if none.
