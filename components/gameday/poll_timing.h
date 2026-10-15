@@ -57,4 +57,32 @@ inline uint32_t backoff_ms(uint32_t fails, bool throttled, uint32_t retry_after_
   return wait;
 }
 
+// The run of failed reads since ESPN last answered. Every fetch path shares
+// the component's one run, so a failure anywhere lengthens the next wait.
+struct Backoff {
+  uint8_t streak{0};
+  bool throttled{false};  // ESPN said 403 or 429 since the last good read
+
+  // A read failed: start the next, longer wait and return it. A refusal keeps
+  // the longer schedule until a good read clears it.
+  uint32_t fail(bool refused, uint32_t retry_after_ms, uint32_t rnd) {
+    if (refused)
+      this->throttled = true;
+    if (this->streak < 255)
+      this->streak++;
+    return backoff_ms(this->streak, this->throttled, retry_after_ms, rnd);
+  }
+  void clear() {
+    this->streak = 0;
+    this->throttled = false;
+  }
+};
+
+// Whether a soccer cup job (one cup's team read, then the game poll when the
+// pick moved) must back off. A poll is the job's last read, so its result
+// decides. Without one, a failed or refused cup read backs off.
+inline bool cup_read_backs_off(bool cup_ok, bool polled, bool game_ok, bool throttled) {
+  return polled ? !game_ok : (!cup_ok || throttled);
+}
+
 }  // namespace espn
