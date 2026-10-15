@@ -218,6 +218,7 @@ bool LogoCache::download_(const std::string &url, Bytes &body) {
     body.insert(body.end(), buf, buf + n);
   }
   container->end();
+  this->bytes_downloaded_ += body.size();
   if (body.empty() || (container->content_length > 0 && body.size() < container->content_length))
     return false;
   return true;

@@ -16,6 +16,9 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `scoreboard_ncaa_cfp_final.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20260119`, CFP national championship (recorded 2026-10-08) |
 | `scoreboard_nfl_wild_card.json` | `.../football/nfl/scoreboard?dates=20260110`, two wild card games (recorded 2026-10-08) |
 | `scoreboard_nfl_super_bowl.json` | `.../football/nfl/scoreboard?dates=20260208`, Super Bowl LX (recorded 2026-10-08) |
+| `event_ncaa_live.json` | `.../college-football/scoreboard/401871053`, one game on its own: FIU @ JXST, 0:33 left in the 4th (recorded 2026-10-13) |
+| `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
+| `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 
@@ -122,6 +125,17 @@ Soccer does the same. Recorded 2026-10-12 during CRU @ BRA in Brazil's Serie A
 | --- | --- |
 | `team_bra_cru_live.json` | `.../soccer/bra.1/teams/2022`, nextEvent is 401841276 CRU @ GRE on 10/18 |
 | `day_bra_20261012.json` | `.../soccer/bra.1/scoreboard?dates=20261012`, 401841260 CRU @ BRA in progress, CAP @ CHA and BOT @ CFC full time |
+
+College football games with no kickoff time yet, recorded 2026-10-14. ESPN
+lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
+"TBD" (Iowa, team 2294, is off on 10/17, so its next game is one of them):
+
+| File | Source |
+| --- | --- |
+| `team_ncaa_iowa_tbd.json` | `.../football/college-football/teams/2294`, nextEvent is 401858497 IOWA @ MINN on 10/24, time TBD |
+| `scoreboard_ncaa_tbd.json` | `.../college-football/scoreboard?groups=5&dates=20261024`, three TBD games and three with times (the day before, 20261023, has none) |
+| `event_ncaa_tbd.json` | `.../college-football/scoreboard/401858497`, the TBD game on its own |
+| `schedule_ncaa_iowa_tbd.json` | `.../college-football/teams/2294/schedule`, trimmed to events 6 to 12: the 10/9 final, five TBD games, then 11/27 at 12:00 PM EST |
 
 Recorded 2026-10-15 at 9:41 AM Central (NBA preseason), for the rotation's
 later-today cards:
