@@ -16,6 +16,9 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `scoreboard_ncaa_cfp_final.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20260119`, CFP national championship (recorded 2026-10-08) |
 | `scoreboard_nfl_wild_card.json` | `.../football/nfl/scoreboard?dates=20260110`, two wild card games (recorded 2026-10-08) |
 | `scoreboard_nfl_super_bowl.json` | `.../football/nfl/scoreboard?dates=20260208`, Super Bowl LX (recorded 2026-10-08) |
+| `event_ncaa_live.json` | `.../college-football/scoreboard/401871053`, one game on its own: FIU @ JXST, 0:33 left in the 4th (recorded 2026-10-13) |
+| `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
+| `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 

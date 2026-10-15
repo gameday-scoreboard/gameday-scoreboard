@@ -187,8 +187,9 @@ std::string schedule_url(League league, uint32_t espn_id);  // the season's game
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
 std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
-// One game on its own (8-18 KB). Leagues with LeagueInfo::per_event poll this
-// instead of the day's whole scoreboard; football does not use it.
+// One game on its own, 8 to 20 KB, where the day's scoreboard it sits in is
+// up to 260 KB (NFL) or 750 KB (college). A LeagueInfo::per_event league
+// polls this.
 std::string event_url(League league, const std::string &event_id);
 // One day's scoreboard for finding a team's next game (Eastern date of
 // day_epoch). Men's college basketball reads the team's conference only.
@@ -210,8 +211,10 @@ bool parse_scoreboard_str(const std::string &json, const std::string &event_id, 
 // (team_day_url), into out.event_id, out.kickoff_epoch and out.time_tbd.
 bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule &out,
                          const std::string &skip_event = "");
-// The single-event document from event_url().
-bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out);
+// The single-event document from event_url(). With event_id, a document for
+// some other game reads as a failure.
+bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out,
+                     const std::string &event_id = "");
 
 // neutral = nobody is "our" team (live-game modes): both sides splash with their abbreviation.
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);

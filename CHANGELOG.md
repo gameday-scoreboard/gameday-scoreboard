@@ -42,6 +42,7 @@ owns the panel, not for the code.
 - The device page's panel picker names the panel we ship: "One 128x64 panel", or two 64x64 side by side. Before, you had to pick "Two panels wide" for one panel.
 - Built your own? The DIY installer at gamedayscoreboard.app asks whether you have one 64x64 panel or a 128x64 (or two 64x64 side by side) and installs the matching firmware, so a two-panel build starts on the whole board.
 - The hidden demo (do=demo) is gone from the regular firmware.
+- During a game the panel asks ESPN for just that game instead of the whole day's scoreboard, about a tenth of the data it downloaded before. The device page shows how much the panel has pulled from ESPN since it started, for anyone on a capped plan.
 - The device page's header shows a GD mark instead of a football. The lines under the Live games and Favorite teams bars now name the settings that decide the behavior: Switch every, the favorites' slot order, and Alternate.
 
 ## v1.5.5

@@ -230,8 +230,9 @@ bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule
   return parse_team_game(json, our_team_id, skip_event, out) == 1;
 }
 
-bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out) {
-  return parse_event(json, sport, our_team_id, out);
+bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out,
+                     const std::string &event_id) {
+  return parse_event(json, sport, our_team_id, out, event_id);
 }
 
 uint32_t parse_color(const std::string &hex) {

@@ -719,6 +719,22 @@ test("the panel picker posts the new layout", async ({ page, request }) => {
   await expect(page.locator('#panels .panelpick[data-cols="2"]')).toBeDisabled();
 });
 
+test("the device box shows what the panel downloaded from ESPN", async ({ page, request }) => {
+  await reset(request, { espn_kb: 850, espn_reads: 1 });
+  await page.goto("/");
+  await expect(page.locator("#espnData")).toHaveText("850 KB in 1 read");
+
+  await reset(request, { espn_kb: 14321, espn_reads: 1260 });
+  await page.reload();
+  await expect(page.locator("#espnData")).toHaveText("14.3 MB in 1260 reads");
+
+  // Firmware from before the counter sends neither field.
+  await reset(request, { espn_kb: null, espn_reads: null });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#espnData")).toHaveText("");
+});
+
 test("saved Wi-Fi networks are listed in order and one can be forgotten", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

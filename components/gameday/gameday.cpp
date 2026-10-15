@@ -41,9 +41,9 @@ static const uint32_t MINUTE = 60 * 1000;
 static const uint32_t SCHEDULE_INTERVAL = 6 * 60 * MINUTE;
 static const uint32_t PRE_FAR_INTERVAL = 15 * MINUTE;
 static const uint32_t PRE_NEAR_INTERVAL = MINUTE;
-// ESPN's scoreboard copy changes about every 10 s (its cache-control
-// max-age counts down from 10), so reading it any faster mostly fetches
-// the same 256 KB again.
+// ESPN's day scoreboard changes about every 10 s (its cache-control max-age
+// counts down from 10) and its clock once a play, so the single-game read
+// (max-age 1) gains little from going faster.
 static const uint32_t IN_INTERVAL = 10 * 1000;
 static const uint32_t POST_INTERVAL = MINUTE;
 static const uint32_t POST_LINGER = 30 * MINUTE;
@@ -84,11 +84,14 @@ static const char *const MODE_OPTIONS[] = {"My team",       "Live NFL",       "L
 static const uint32_t FAV_TICK = 1000;  // playlist / lock decisions re-run this often
 
 // Feeds ArduinoJson straight from the HTTP socket so a scoreboard document
-// never has to sit in RAM as a whole.
+// never has to sit in RAM as a whole. Adds what it read to `counter` when done.
 class ContainerReader {
  public:
-  explicit ContainerReader(std::shared_ptr<http_request::HttpContainer> container)
-      : container_(std::move(container)) {}
+  ContainerReader(std::shared_ptr<http_request::HttpContainer> container, std::atomic<uint64_t> &counter)
+      : container_(std::move(container)), counter_(counter) {}
+  ~ContainerReader() { this->counter_ += this->total_; }
+  ContainerReader(const ContainerReader &) = delete;
+  ContainerReader &operator=(const ContainerReader &) = delete;
 
   int read() {
     if (!this->fill_())
@@ -129,6 +132,7 @@ class ContainerReader {
   }
 
   std::shared_ptr<http_request::HttpContainer> container_;
+  std::atomic<uint64_t> &counter_;
   uint8_t buf_[1024];
   size_t pos_{0};
   size_t len_{0};
@@ -1217,6 +1221,7 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
       {"User-Agent", USER_AGENT},
       {"Accept", "application/json"},
   };
+  this->espn_requests_++;
   auto container = this->http_->get(url, headers, {"retry-after"});
   if (container == nullptr) {
     ESP_LOGW(TAG, "Request failed: %s", url.c_str());
@@ -1253,7 +1258,7 @@ bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out, 
   auto container = this->open_(url);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container);
+  ContainerReader reader(container, this->espn_bytes_);
   Schedule s;
   bool ok = ::espn::parse_team(reader, s);
   container->end();
@@ -1279,7 +1284,7 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
   auto container = this->open_(url);
   if (container == nullptr)
     return -1;
-  ContainerReader reader(container);
+  ContainerReader reader(container, this->espn_bytes_);
   int found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
   container->end();
   return found;
@@ -1321,7 +1326,7 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
   auto container = this->open_(url);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container);
+  ContainerReader reader(container, this->espn_bytes_);
   // Four: the game on the board plus the three after it.
   bool ok = ::espn::parse_upcoming(reader, team->espn_id, 4, out);
   container->end();
@@ -1336,7 +1341,7 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
   auto container = this->open_(url);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container);
+  ContainerReader reader(container, this->espn_bytes_);
   size_t before = out.size();
   size_t finals_before = finals != nullptr ? finals->size() : 0;
   int64_t next = 0;
@@ -1357,7 +1362,8 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
 bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out) {
   bool live = is_live_mode_(this->job_.mode);
   League league = live || this->job_.fav_index >= 0 ? (League) schedule.league : team->league;
-  // Football reads the day's scoreboard; the other leagues read the one game.
+  // A per_event league reads the one game, 8 to 20 KB a poll. The others read
+  // the day's scoreboard it sits in, up to 750 KB for college football.
   const ::espn::LeagueInfo *info = ::espn::league_info(league);
   bool per_event = info != nullptr && info->per_event;
   std::string url = per_event ? ::espn::event_url(league, schedule.event_id, schedule.comp_slug)
@@ -1367,13 +1373,13 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
   auto container = this->open_(url);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container);
+  ContainerReader reader(container, this->espn_bytes_);
   GameSnapshot g;
-  bool ok = per_event ? ::espn::parse_event(reader, info->sport, this->our_id_(), g)
+  bool ok = per_event ? ::espn::parse_event(reader, info->sport, this->our_id_(), g, schedule.event_id)
                       : ::espn::parse_scoreboard(reader, schedule.event_id, this->our_id_(), g);
   container->end();
   if (!ok) {
-    ESP_LOGW(TAG, "Game %s not parsed from scoreboard (%u bytes)", schedule.event_id.c_str(),
+    ESP_LOGW(TAG, "Game %s not parsed (%u bytes)", schedule.event_id.c_str(),
              (unsigned) reader.total());
     return false;
   }
@@ -1876,8 +1882,8 @@ void GamedayComponent::apply_job_() {
   if (!j.game_ok) {
     this->misses_++;
     if (this->cache_unconfirmed_ && !j.throttled) {
-      // The cached game is not on that day's scoreboard (moved, or the cache
-      // is simply wrong): read the team endpoint now, not in six hours.
+      // ESPN has no such game any more, or the read failed: the cache may be
+      // wrong, so read the team endpoint now, not in six hours.
       ESP_LOGI(TAG, "Cached game not found: reading the team again");
       this->cache_unconfirmed_ = false;
       this->force_schedule_ = true;
@@ -2455,6 +2461,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["autoupd"] = this->auto_update();
 #endif
   doc["misses"] = this->misses_;
+  doc["espn_kb"] = (uint32_t) (this->espn_bytes() / 1000);
+  doc["espn_reads"] = this->espn_requests();
   doc["stale_s"] = this->stale_seconds_();
   doc["fallback"] = this->live_fallback_;
   doc["recap"] = this->recap_on_;

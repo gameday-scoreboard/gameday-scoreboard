@@ -489,7 +489,13 @@ int parse_team_game(TInput &input, uint32_t our_team_id, const std::string &skip
 }
 
 // Parses a single-event document (event_url): the root object is the event.
-template<typename TInput> bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot &out) {
+// ESPN serves it with the same fields as the event's entry in the day's
+// scoreboard, at a tenth of the size or less. Returns false on a JSON error,
+// when our team is not in it, or when event_id is given and the document is
+// some other game.
+template<typename TInput>
+bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot &out,
+                 const std::string &event_id = "") {
   JsonDocument filter(detail::json_allocator());
   detail::fill_event_filter(filter.to<JsonObject>());
   if (sport == Sport::BASEBALL)
@@ -504,6 +510,8 @@ template<typename TInput> bool parse_event(TInput &input, Sport sport, uint32_t 
   DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
                                               DeserializationOption::NestingLimit(40));
   if (err)
+    return false;
+  if (!event_id.empty() && detail::str_or_empty(doc["id"]) != event_id)
     return false;
   GameSnapshot s;
   if (!detail::snapshot_from_event(doc.as<JsonObjectConst>(), our_team_id, s))
