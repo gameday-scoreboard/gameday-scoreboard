@@ -417,6 +417,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
                          const char *comp_slug = nullptr);
   void emit_(const ::espn::Splash &splash);
   void reset_game_();
+  void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
   void mark_good_poll_() {
     this->misses_ = 0;
@@ -628,6 +629,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t backoff_since_ms_{0};
   uint32_t backoff_ms_{0};      // 0 = no wait running
   uint32_t last_good_ms_{0};  // millis() of the last successful game poll, 0 = never
+  // ESPN itself answered that the team on the board has no game. Until it
+  // has, an empty board after a failed read means ESPN could not be reached.
+  bool no_game_confirmed_{false};
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;

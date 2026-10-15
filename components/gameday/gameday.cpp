@@ -339,6 +339,7 @@ void GamedayComponent::favorites_changed_(bool first_pick) {
     this->generation_++;
     this->game_ = GameSnapshot{};
     this->prev_ = GameSnapshot{};
+    this->no_game_confirmed_ = false;  // ESPN has not answered for the new list
     this->emit_({});
     this->end_backoff_wait_();
     this->schedule_next_(0);
@@ -706,6 +707,7 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
 // the card had and let another favorite take the board.
 void GamedayComponent::fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch) {
   ESP_LOGI(TAG, "No upcoming game for %s", e.team->abbr);
+  this->no_game_confirmed_ = true;
   e.game = GameSnapshot{};
   e.final_epoch = 0;
   if (shown)
@@ -730,6 +732,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   if (j.need_schedule) {
     if (!j.schedule_ok) {
       this->misses_++;
+      this->emit_({});  // the miss shows on the ticker and the page, as in My team
       this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
       this->schedule_next_(0);
       return;
@@ -762,6 +765,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   }
   if (!j.game_ok) {
     this->misses_++;
+    this->emit_({});
     this->back_off_();
     this->schedule_next_(0);
     return;
@@ -995,14 +999,9 @@ void GamedayComponent::apply_team_(const ::espn::Team &t) {
   this->reset_game_();
   this->generation_++;  // a fetch already in flight belongs to the old team
   // Behind the boot screen: the new team's logo and name, with no "Loading"
-  // text. The game data follows in a second or two.
-  GameSnapshot g;
-  g.valid = true;
-  g.state = GameState::PRE;
-  g.team_abbr = t.abbr;
-  g.team_id = t.espn_id;
-  g.team_logo = ::espn::team_logo_url(t.league, t.espn_id, t.abbr);
-  this->game_ = g;
+  // text. The game data follows in a second or two; a failed read drops it
+  // (drop_team_placeholder_) so the board says why instead.
+  this->game_ = ::espn::team_placeholder(t);
   this->emit_({});
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
   this->schedule_next_(0);
@@ -1167,6 +1166,14 @@ void GamedayComponent::apply_timezone_() {
 #endif
 }
 
+// A failed read with only the team change's logo on the board: drop it, so
+// emit_ draws an empty board and says why ("Can't reach ESPN") instead of a
+// game layout with no opponent.
+void GamedayComponent::drop_team_placeholder_() {
+  if (::espn::is_team_placeholder(this->game_))
+    this->game_ = GameSnapshot{};
+}
+
 void GamedayComponent::reset_game_() {
   this->rebuild_favorites_(true);
   this->lingered_event_.clear();
@@ -1196,6 +1203,7 @@ void GamedayComponent::reset_game_() {
   this->prev_ = GameSnapshot{};
   this->post_since_ms_ = 0;
   this->misses_ = 0;
+  this->no_game_confirmed_ = false;
 }
 
 std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::string &url) {
@@ -1710,6 +1718,7 @@ void GamedayComponent::apply_job_() {
       this->misses_++;
       if (this->recap_on_)
         this->live_started_ms_ = 0;  // retry the scan, not the long wait
+      this->drop_team_placeholder_();  // "Looking for a live game", not a bare logo
       this->emit_({});
       this->schedule_next_(this->back_off_());
       return;
@@ -1830,6 +1839,7 @@ void GamedayComponent::apply_job_() {
   if (j.need_schedule) {
     if (!j.schedule_ok) {
       this->misses_++;
+      this->drop_team_placeholder_();
       this->emit_({});
       this->schedule_next_(this->back_off_());
       return;
@@ -1849,6 +1859,7 @@ void GamedayComponent::apply_job_() {
     }
     if (j.no_event) {
       ESP_LOGI(TAG, "No upcoming game for this team");
+      this->no_game_confirmed_ = true;
       this->game_ = GameSnapshot{};
       // Same as the no-live-games case: the schedule fetch succeeded, so the
       // failure run is over, but no GameSnapshot was applied and the board
@@ -1871,6 +1882,7 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(0);
       return;
     }
+    this->drop_team_placeholder_();
     this->emit_({});
     this->schedule_next_(this->back_off_());
     return;
@@ -1940,6 +1952,7 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
   }
   if (j.no_event) {
     ESP_LOGI(TAG, "No upcoming game for this team");
+    this->no_game_confirmed_ = true;
     this->game_ = GameSnapshot{};
     this->prev_ = GameSnapshot{};
     this->misses_ = 0;
@@ -1947,6 +1960,7 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
     this->mark_board_ready_();
   } else if (j.polled && !j.game_ok) {
     this->misses_++;
+    this->drop_team_placeholder_();
     this->emit_({});
     this->schedule_next_(RETRY_INTERVAL);
     return;
@@ -2059,12 +2073,17 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.message = this->live_none_ ? "No live " + league_word + "games" : "Looking for a live " + league_word + "game";
     }
   }
-  // Nothing can be read from ESPN before the clock is set, so "no game" here
-  // would only be a guess.
-  if (!g.valid && !this->clock_set_() && !this->demo_playing_()) {
-    f.status_text = "Getting ready";
-    f.ha_status_text = f.status_text;
-    f.message = f.status_text;
+  // An empty board says why (espn_parse.h, no_game_text): the clock is not
+  // set yet, or ESPN cannot be reached. "No upcoming game" is only right
+  // once ESPN itself has said so; before that it would be a guess.
+  if (!g.valid && !this->demo_playing_()) {
+    std::string why =
+        ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_);
+    if (!why.empty()) {
+      f.status_text = why;
+      f.ha_status_text = why;
+      f.message = why;
+    }
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
     f.status_text = "Favorites: add teams in the app or on the page | " + f.status_text;

@@ -1,5 +1,6 @@
 #include "espn_parse.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
@@ -7,12 +8,16 @@
 
 namespace espn {
 
-static const char *kSiteRoot = "https://site.api.espn.com/apis/site/v2/sports/";
+// A pointer to a literal: no copy in RAM, and one atomic store when a bench
+// build swaps it under a read on the worker task.
+static std::atomic<const char *> site_root{"https://site.api.espn.com/apis/site/v2/sports/"};
+
+void set_site_root(const char *root) { site_root.store(root, std::memory_order_relaxed); }
 
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
   const LeagueInfo *l = league_info(league);
-  return std::string(kSiteRoot) + (l != nullptr ? l->path : "football/nfl");
+  return std::string(site_root.load(std::memory_order_relaxed)) + (l != nullptr ? l->path : "football/nfl");
 }
 
 const char *league_path(League league) {
@@ -71,7 +76,7 @@ static std::string comp_base(League league, const char *comp_slug) {
     return site_base(league);
   const char *slash = strchr(l->path, '/');
   std::string sport = slash != nullptr ? std::string(l->path, slash - l->path + 1) : std::string();
-  return std::string(kSiteRoot) + sport + comp_slug;
+  return site_root.load(std::memory_order_relaxed) + sport + comp_slug;
 }
 
 std::string team_url(League league, uint32_t espn_id, const char *comp_slug) {
@@ -171,6 +176,21 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   bool scoreboard = league == League::NFL || league == League::MLB || league == League::NBA || league == League::NHL;
   return dark_logo(std::string("https://a.espncdn.com/i/teamlogos/") + l->logo_dir +
                    (scoreboard ? "/500/scoreboard/" : "/500/") + file + ".png");
+}
+
+GameSnapshot team_placeholder(const Team &t) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::PRE;
+  g.team_abbr = t.abbr;
+  g.team_id = t.espn_id;
+  g.team_logo = team_logo_url(t.league, t.espn_id, t.abbr);
+  return g;
+}
+
+// Every game read from ESPN has an event id; a final card is POST.
+bool is_team_placeholder(const GameSnapshot &g) {
+  return g.valid && g.state == GameState::PRE && g.event_id.empty();
 }
 
 GameSnapshot final_snapshot(const Final &f) {
@@ -319,6 +339,16 @@ using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
+
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+  if (!clock_set)
+    return "Getting ready";
+  if (live_mode)
+    return "";
+  if (!no_game_confirmed && misses > 0)
+    return "Can't reach ESPN";
+  return "";
+}
 
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local) {
   if (s.sport == Sport::BASEBALL)
