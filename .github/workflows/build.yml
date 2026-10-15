@@ -15,11 +15,17 @@ on:
         type: string
         default: ""
 
+# Read-only by default. Only publish writes (the release and Pages), and it
+# asks for that itself.
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
+# A newer push to the same ref cancels the older run. That stays on for dev
+# too: a merge that lands within a few minutes of the last one leaves the
+# earlier merge commit with a cancelled run and no artifacts, but dev's newest
+# commit always builds in full, and every PR had its own green run before it
+# merged. To get firmware for a cancelled commit, rerun it with
+# `gh run rerun <run id>`. Tags are their own refs, so a release never cancels.
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -32,7 +38,7 @@ jobs:
     outputs:
       summary: ${{ steps.notes.outputs.summary }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The manifest takes its version from the YAML, not the tag, so a tag
       # whose bump was forgotten would publish the old number. Fail before
       # anything builds.
@@ -54,7 +60,7 @@ jobs:
             echo "summary=Development build" >> "$GITHUB_OUTPUT"
           fi
           cat notes.md
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: notes.md
@@ -88,16 +94,26 @@ jobs:
             echo "::error::main only takes PRs from beta (this one is from $HEAD_REPO:$HEAD_REF). Target beta instead."
             exit 1
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Tags need history for the main check. The quotes matter: a bare 0
           # is falsy and would fall through to 1.
           fetch-depth: ${{ startsWith(github.ref, 'refs/tags/v') && '0' || '1' }}
-      # The repo is public. Handoffs, session notes, plans and specs are kept
-      # privately and must never land here, even by accident.
+      # The repo is public. Handoffs, session notes, plans, reviews and specs
+      # are kept privately and must never land here, even by accident.
       - name: No private notes
         run: |
-          found=$(git ls-files | grep -E '(^|/)(HANDOFF[^/]*|SESSION[^/]*|CLAUDE\.local)\.md$|^docs/superpowers/' || true)
+          pattern='(^|/)([^/]*HANDOFF[^/]*|[^/]*SESSION[^/]*|CLAUDE\.local)\.md$|(^|/)(plans|reviews|specs|notes)/|^docs/superpowers/'
+          # Check the pattern itself first, so an edit can't quietly weaken it.
+          for f in firmware-HANDOFF.md HANDOFF.md SESSION-2026-10-14.md CLAUDE.local.md \
+                   firmware/CLAUDE.local.md plans/x.md reviews/x.md specs/x.md notes/x.md \
+                   docs/plans/x.md docs/superpowers/x.md; do
+            grep -qE "$pattern" <<< "$f" || { echo "::error::The private-notes pattern misses $f"; exit 1; }
+          done
+          for f in CLAUDE.md README.md docs/release-notes.md firmware/plans.yaml specs.md; do
+            grep -qE "$pattern" <<< "$f" && { echo "::error::The private-notes pattern wrongly catches $f"; exit 1; }
+          done
+          found=$(git ls-files | grep -E "$pattern" || true)
           if [ -n "$found" ]; then
             echo "$found" | while read -r f; do echo "::error file=$f::Private notes don't belong in this public repo. Remove the file."; done
             exit 1
@@ -129,7 +145,7 @@ jobs:
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build firmware
         id: esphome
         uses: esphome/build-action@v7
@@ -144,7 +160,7 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.variant }}
           path: out
@@ -166,14 +182,14 @@ jobs:
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75-demo.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build firmware
         id: esphome
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
           version: "2026.10.0b3"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: demo-${{ matrix.variant }}
           path: ${{ steps.esphome.outputs.name }}
@@ -199,7 +215,7 @@ jobs:
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75-bar.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Beta version and summary
         id: beta
         env:
@@ -240,7 +256,7 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bar-${{ matrix.variant }}
           path: out
@@ -260,8 +276,8 @@ jobs:
       contents: write
       actions: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: bar-*
           path: stage/firmware/beta
@@ -321,7 +337,7 @@ jobs:
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
@@ -331,8 +347,17 @@ jobs:
     name: Parser tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: make -C tests
+      - name: Replay tool builds
+        run: make -C tests replay
+      - name: Script selftests
+        run: |
+          python3 scripts/factory_flash.py --selftest
+          python3 scripts/burnin_monitor.py --selftest
+          python3 scripts/improv_scan.py --selftest
+      - name: Device page mock matches the firmware's set table
+        run: python3 tests/web/mock_device.py --selftest
 
   web-tests:
     # The device page (firmware/web/bundle.js) in Chromium against
@@ -343,7 +368,7 @@ jobs:
       run:
         working-directory: tests/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: bundle.js and bundle-demo.js are built from the current sources
         run: |
           python3 ../../scripts/build_web.py
@@ -351,7 +376,7 @@ jobs:
             echo "::error::firmware/web/bundle.js or bundle-demo.js is out of date. Run python scripts/build_web.py and commit both."
             exit 1
           }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -365,17 +390,21 @@ jobs:
     needs: [build, host-tests, web-tests, notes]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: firmware-*
           path: artifacts
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: notes
@@ -394,11 +423,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/add_beta_channel.sh site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+          # docs/site/.well-known has to reach the site; v4 and later drop
+          # dotfiles unless asked.
+          include-hidden-files: true
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
       - name: Create the release with notes and binaries
         env:
           GH_TOKEN: ${{ github.token }}
