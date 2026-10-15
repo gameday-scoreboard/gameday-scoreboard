@@ -125,3 +125,9 @@ Soccer does the same. Recorded 2026-10-12 during CRU @ BRA in Brazil's Serie A
 | --- | --- |
 | `team_bra_cru_live.json` | `.../soccer/bra.1/teams/2022`, nextEvent is 401841276 CRU @ GRE on 10/18 |
 | `day_bra_20261012.json` | `.../soccer/bra.1/scoreboard?dates=20261012`, 401841260 CRU @ BRA in progress, CAP @ CHA and BOT @ CFC full time |
+
+Not from ESPN: `set_cases.json` is a table of `POST /gameday/set` requests and
+the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
+`set_request.h`, and `tests/web/mock_device.py --selftest` through the device
+page's mock, so the two answer the same way. Add a case there when a set key
+or its limits change.
