@@ -147,7 +147,7 @@ std::string dark_logo(const std::string &url) {
   size_t path = out.find("/i/teamlogos/");
   if (path == std::string::npos)
     return out;
-  return "https://a.espncdn.com/combiner/i?img=" + out.substr(path) + "&w=64&h=64";
+  return "http://192.168.1.103:8188/combiner/i?img=" + out.substr(path) + "&w=64&h=64";  // bench-188 only
 }
 
 // The same URL the scoreboard gives this team, so the logo cache downloads it
