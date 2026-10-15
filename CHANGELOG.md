@@ -15,6 +15,7 @@ owns the panel, not for the code.
 - Baseball celebrates runs and home runs, and hockey and soccer celebrate goals. Basketball only celebrates the win, since a basket every few seconds would keep the screen covered.
 - Favorites hold up to 16 teams from any league, in priority order. Turn on "Only today's games" to cycle through just the favorites playing today; a new panel starts with it on. Buttons 1 to 4 on a WizMote still jump to the first four.
 - Live games replaces Live NFL, Live college and Live anything. Pick the leagues on the device page. A panel set to one of the old live modes keeps working.
+- Live games and the On now list on the device page include every Division I men's basketball game, not only the Top 25.
 - Until you pick leagues, Live games follows the leagues of your team and favorites, and the device page now says so. After you pick by hand, "Back to automatic" returns to that. When nothing is live, the page says whether the panel is showing your team or recent final scores until a game starts.
 - When two favorites play at once, a new panel alternates between them. A panel that was already set up keeps showing the higher one.
 - The ticker switches on the device page have names that fit every sport, with a line under each saying what it shows. "Down and distance" is now "Game situation".

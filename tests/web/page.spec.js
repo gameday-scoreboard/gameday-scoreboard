@@ -270,6 +270,33 @@ test("the picker opens on today's live games and follows a side", async ({ page,
   await expect(page.locator("#modal")).not.toHaveClass(/open/);
 });
 
+test("the On now tab asks ESPN for every college game, not the Top 25", async ({ page, request }) => {
+  // Without groups= the college basketball scoreboard lists only ranked teams' games.
+  const side = (homeAway, id, abbr, name) => ({ homeAway, score: "40", team: { id, abbreviation: abbr, shortDisplayName: name } });
+  const asked = {};
+  for (const [lg, path] of [["mcbb", "basketball/mens-college-basketball"], ["ncaa", "football/college-football"]]) {
+    await page.route(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard*`, (route) => {
+      asked[lg] = new URL(route.request().url()).searchParams;
+      const events = lg !== "mcbb" ? [] : [{
+        id: "401820001",
+        date: "2026-02-14T19:00Z",
+        status: { type: { state: "in", shortDetail: "12:30 - 2nd Half" } },
+        competitions: [{ competitors: [side("home", "2006", "AKR", "Akron"), side("away", "2000", "ACU", "Abilene Chrstn")] }],
+      }];
+      return route.fulfill({ json: { events } });
+    });
+  }
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#pick").click();
+  await expect(page.locator(".tabs button.on")).toHaveText("On now");
+  await expect(page.locator("#tiles .side .n")).toHaveText(["Abilene Chrstn", "Akron"]);
+  expect(asked.mcbb.get("groups")).toBe("50");
+  expect(asked.mcbb.get("limit")).toBe("300");
+  expect(asked.mcbb.get("dates")).toMatch(/^\d{8}$/);
+  expect(asked.ncaa.get("groups")).toBe("80");
+});
+
 test("ticker, celebration and startup switches post 0 and 1", async ({ page, request }) => {
   await reset(request, { play: false });
   await page.goto("/");

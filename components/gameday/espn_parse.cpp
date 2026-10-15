@@ -126,8 +126,12 @@ std::string scan_url(League league, int64_t now_epoch) {
   int64_t shift = league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
   civil_from_epoch(now_epoch - shift, y, m, d);
   char buf[64];
+  // 80 is every FBS game. College basketball without a group lists only the
+  // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
+  else if (league == League::MCBB)
+    snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
   url += buf;
