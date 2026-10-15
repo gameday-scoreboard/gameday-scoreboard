@@ -2538,6 +2538,50 @@ static void test_backoff() {
   CHECK(!is_throttle_status(503));
 }
 
+static void test_cup_backoff() {
+  // A cup job backs off when its last read failed or was refused.
+  CHECK(cup_read_backs_off(true, true, false, false));   // the poll failed
+  CHECK(cup_read_backs_off(true, true, false, true));    // the poll was refused
+  CHECK(!cup_read_backs_off(true, true, true, false));   // the poll landed
+  CHECK(!cup_read_backs_off(false, true, true, false));  // a good poll after a failed cup read
+  CHECK(cup_read_backs_off(false, false, false, false)); // the cup read failed, no poll
+  CHECK(cup_read_backs_off(true, false, false, true));   // today's scoreboard refused, no poll
+  CHECK(!cup_read_backs_off(true, false, false, false)); // a clean cup read with no poll
+
+  // A run of failed cup polls doubles from 30 s to the 10 minute cap.
+  // rnd 0 is the low end of each window, half the doubled delay.
+  Backoff b;
+  const uint32_t plain[] = {15000, 30000, 60000, 120000, 240000, 300000, 300000};
+  for (uint32_t want : plain) {
+    CHECK(cup_read_backs_off(true, true, false, false));
+    CHECK_EQ(b.fail(false, 0, 0), want);
+  }
+  CHECK_EQ(b.streak, (uint8_t) 7);
+  CHECK(!b.throttled);
+  // A 403 mid-run moves the rest of the run to the refusal schedule and keeps
+  // it there while later reads fail plainly.
+  CHECK_EQ(b.fail(true, 0, 0), 1800000u);
+  CHECK(b.throttled);
+  CHECK_EQ(b.fail(false, 0, 0), 1800000u);
+  // A good poll starts the next run over.
+  b.clear();
+  CHECK_EQ(b.fail(false, 0, 0), 15000u);
+  // A refused cup read with no poll starts at 5 minutes and honors
+  // Retry-After.
+  b.clear();
+  CHECK(cup_read_backs_off(true, false, false, true));
+  CHECK_EQ(b.fail(true, 0, 0), 150000u);
+  CHECK_EQ(b.fail(true, 0, 0), 300000u);
+  b.clear();
+  CHECK_EQ(b.fail(true, 900000, 0), 900000u);
+  // The streak stops counting at 255 and the wait stays at the cap.
+  b.clear();
+  for (int i = 0; i < 300; i++)
+    b.fail(false, 0, 300000);
+  CHECK_EQ(b.streak, (uint8_t) 255);
+  CHECK_EQ(b.fail(false, 0, 300000), 600000u);
+}
+
 static void test_auto_update() {
   CHECK(version_newer("2026.10.0", "1.5.5"));
   CHECK(version_newer("1.5.6", "1.5.5"));
@@ -2905,6 +2949,7 @@ int main() {
   test_demo();
   test_recap();
   test_backoff();
+  test_cup_backoff();
   test_auto_update();
   test_panel_text();
   failures += run_set_tests(checks);
