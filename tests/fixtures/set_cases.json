@@ -1,0 +1,102 @@
+{
+  "about": [
+    "POST /gameday/set requests and the settings they leave in /gameday/state.",
+    "Checked against the firmware's parser (components/gameday/set_request.h) by test_set.cpp",
+    "and against tests/web/mock_device.py by its --selftest, so the page's mock can't drift.",
+    "Each case starts from base plus its own start, sends set (key, value pairs, applied in",
+    "kSetKeys order) and compares the keys in expect. Teams are written league:id, \"\" for none.",
+    "status 400: no key in the request is one the firmware takes, so nothing changes.",
+    "The panel keeps the saved team's league byte after the team is cleared, and a fresh panel's",
+    "is NFL, so Live auto counts that league too (team_league in start sets it)."
+  ],
+  "base": {
+    "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
+    "favs": ["", "", "", ""], "today": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
+    "down": true, "play": true, "odds": true, "opp": true, "bootaddr": true, "autoupd": false, "panels": 1
+  },
+  "cases": [
+    {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
+    {"name": "mode past Live games is refused", "set": [["mode", "6"]], "expect": {"mode": 0}},
+    {"name": "negative mode is refused", "start": {"mode": 4}, "set": [["mode", "-1"]], "expect": {"mode": 4}},
+    {"name": "mode reads like atoi, so text is My team", "start": {"mode": 4}, "set": [["mode", "abc"]], "expect": {"mode": 0}},
+
+    {"name": "rotate in range", "set": [["rotate", "15"]], "expect": {"rotate": 15}},
+    {"name": "rotate below 1 clamps up", "start": {"rotate": 10}, "set": [["rotate", "0"]], "expect": {"rotate": 1}},
+    {"name": "rotate above 30 clamps down", "set": [["rotate", "31"]], "expect": {"rotate": 30}},
+    {"name": "empty rotate is the minimum", "start": {"rotate": 10}, "set": [["rotate", ""]], "expect": {"rotate": 1}},
+
+    {"name": "lockon in range", "set": [["lockon", "60"]], "expect": {"lockon": 60}},
+    {"name": "lockon below 5 clamps up", "set": [["lockon", "4"]], "expect": {"lockon": 5}},
+    {"name": "lockon above 120 clamps down", "set": [["lockon", "121"]], "expect": {"lockon": 120}},
+
+    {"name": "release in range", "set": [["release", "600"]], "expect": {"release": 600}},
+    {"name": "release below 30 clamps up", "start": {"release": 600}, "set": [["release", "29"]], "expect": {"release": 30}},
+    {"name": "release above 3600 clamps down", "set": [["release", "3601"]], "expect": {"release": 3600}},
+
+    {"name": "collide on", "set": [["collide", "1"]], "expect": {"collide": 1}},
+    {"name": "switches are on for 1 only", "start": {"collide": 1, "today": true}, "set": [["collide", "true"], ["today", "yes"]], "expect": {"collide": 0, "today": false}},
+    {"name": "today on", "set": [["today", "1"]], "expect": {"today": true}},
+    {"name": "ticker and boot switches off", "set": [["down", "0"], ["play", "0"], ["odds", "0"], ["opp", "0"], ["bootaddr", "0"], ["tzauto", "0"]],
+     "expect": {"down": false, "play": false, "odds": false, "opp": false, "bootaddr": false, "tz_auto": false}},
+    {"name": "automatic updates on", "set": [["autoupd", "1"]], "expect": {"autoupd": true}},
+
+    {"name": "tz by index", "set": [["tz", "3"]], "expect": {"tz": 3}},
+    {"name": "tz by name", "set": [["tz", "US Eastern"]], "expect": {"tz": 0}},
+    {"name": "tz by IANA zone", "set": [["tz", "America/Denver"]], "expect": {"tz": 2}},
+    {"name": "tz index past the list is refused", "set": [["tz", "999"]], "expect": {"tz": 1}},
+    {"name": "unknown tz is refused", "set": [["tz", "Mars/Olympus"]], "expect": {"tz": 1}},
+    {"name": "empty tz is refused", "set": [["tz", ""]], "expect": {"tz": 1}},
+
+    {"name": "team in another league", "set": [["team", "mlb:15"]], "expect": {"team": "mlb:15"}},
+    {"name": "team none clears it", "set": [["team", "none"]], "expect": {"team": ""}},
+    {"name": "unknown team id is refused", "set": [["team", "nfl:99999"]], "expect": {"team": "nfl:6"}},
+    {"name": "unknown league is refused", "set": [["team", "xfl:6"]], "expect": {"team": "nfl:6"}},
+    {"name": "team id 0 is refused", "set": [["team", "nfl:0"]], "expect": {"team": "nfl:6"}},
+    {"name": "empty team is refused", "set": [["team", ""]], "expect": {"team": "nfl:6"}},
+
+    {"name": "fav slot 1", "set": [["fav1", "mlb:15"]], "expect": {"favs": ["mlb:15", "", "", ""]}},
+    {"name": "fav slot 4", "set": [["fav4", "nhl:25"]], "expect": {"favs": ["", "", "", "nhl:25"]}},
+    {"name": "fav slot none clears it", "start": {"favs": ["mlb:15", "nfl:6", "", ""]}, "set": [["fav2", "none"]], "expect": {"favs": ["mlb:15", "", "", ""]}},
+    {"name": "empty fav slot clears it", "start": {"favs": ["mlb:15", "nfl:6", "nhl:25", ""]}, "set": [["fav3", ""]], "expect": {"favs": ["mlb:15", "nfl:6", "", ""]}},
+    {"name": "unknown fav team is refused", "start": {"favs": ["mlb:15", "nfl:6", "", ""]}, "set": [["fav2", "nfl:99999"]], "expect": {"favs": ["mlb:15", "nfl:6", "", ""]}},
+    {"name": "garbage fav is refused", "start": {"favs": ["mlb:15", "nfl:6", "", ""]}, "set": [["fav2", "cowboys"]], "expect": {"favs": ["mlb:15", "nfl:6", "", ""]}},
+    {"name": "fav slot 5 is not a key", "set": [["fav5", "mlb:15"]], "status": 400, "expect": {"favs": ["", "", "", ""]}},
+    {"name": "fav slot 0 is not a key", "set": [["fav0", "mlb:15"]], "status": 400, "expect": {"favs": ["", "", "", ""]}},
+
+    {"name": "favs list keeps order, drops repeats and unknowns",
+     "set": [["favs", "mlb:15,nfl:6,mlb:15,bogus,nfl:99999,nhl:25"]], "expect": {"favs": ["mlb:15", "nfl:6", "nhl:25", ""]}},
+    {"name": "empty favs clears the list", "start": {"favs": ["mlb:15", "nfl:6", "", "", "nhl:25"]}, "set": [["favs", ""]], "expect": {"favs": ["", "", "", ""]}},
+    {"name": "favs past four show in full", "set": [["favs", "nfl:1,nfl:2,nfl:3,nfl:4,nfl:5,nfl:6"]],
+     "expect": {"favs": ["nfl:1", "nfl:2", "nfl:3", "nfl:4", "nfl:5", "nfl:6"]}},
+    {"name": "favs stop at sixteen",
+     "set": [["favs", "nfl:1,nfl:2,nfl:3,nfl:4,nfl:5,nfl:6,nfl:7,nfl:8,nfl:9,nfl:10,nfl:11,nfl:12,nfl:13,nfl:14,nfl:15,nfl:16,nfl:17"]],
+     "expect": {"favs": ["nfl:1", "nfl:2", "nfl:3", "nfl:4", "nfl:5", "nfl:6", "nfl:7", "nfl:8", "nfl:9", "nfl:10", "nfl:11", "nfl:12", "nfl:13", "nfl:14", "nfl:15", "nfl:16"]}},
+    {"name": "favs applies after a fav slot in the same request", "set": [["favs", "nhl:25"], ["fav1", "mlb:15"]], "expect": {"favs": ["nhl:25", "", "", ""]}},
+
+    {"name": "live list", "set": [["live", "mlb,nhl"]], "expect": {"live": ["mlb", "nhl"], "live_auto": false}},
+    {"name": "live list comes back in league order", "set": [["live", "nhl,epl,mlb"]], "expect": {"live": ["mlb", "epl", "nhl"], "live_auto": false}},
+    {"name": "live list skips unknown keys", "set": [["live", "nhl,xfl"]], "expect": {"live": ["nhl"], "live_auto": false}},
+    {"name": "empty live puts auto back", "start": {"live": ["mlb"], "live_auto": false}, "set": [["live", ""]], "expect": {"live": ["nfl"], "live_auto": true}},
+    {"name": "live of only unknown keys is auto", "start": {"live": ["mlb"], "live_auto": false}, "set": [["live", "MLB"]], "expect": {"live": ["nfl"], "live_auto": true}},
+
+    {"name": "auto with no team and no favorites is NFL", "start": {"team": "", "team_league": "nfl"}, "set": [["live", ""]], "expect": {"live": ["nfl"], "live_auto": true}},
+    {"name": "auto with the team only", "start": {"team": "mlb:15", "team_league": "mlb"}, "set": [["live", ""]], "expect": {"live": ["mlb"], "live_auto": true}},
+    {"name": "auto adds favorites in other leagues", "start": {"favs": ["mlb:15", "nhl:25", "epl:359", ""]}, "set": [["live", ""]],
+     "expect": {"live": ["nfl", "mlb", "epl", "nhl"], "live_auto": true}},
+    {"name": "auto counts favorites past the fourth", "start": {"favs": ["nfl:1", "", "", "", "mcbb:2000"]}, "set": [["live", ""]], "expect": {"live": ["nfl", "mcbb"], "live_auto": true}},
+    {"name": "auto follows a favorites change", "set": [["favs", "nhl:25"]], "expect": {"live": ["nfl", "nhl"], "live_auto": true}},
+    {"name": "an explicit list ignores the team and favorites", "start": {"favs": ["mlb:15", "", "", ""]}, "set": [["live", "nhl"]], "expect": {"live": ["nhl"], "live_auto": false}},
+    {"name": "a cleared team's league stays in auto", "start": {"team": "mlb:15", "team_league": "mlb", "favs": ["nhl:25", "", "", ""]}, "set": [["team", "none"]],
+     "expect": {"team": "", "live": ["mlb", "nhl"], "live_auto": true}},
+    {"name": "a fresh panel's NFL counts with no team", "start": {"team": "", "team_league": "nfl", "favs": ["mlb:15", "", "", ""]}, "set": [["live", ""]],
+     "expect": {"live": ["nfl", "mlb"], "live_auto": true}},
+
+    {"name": "two panels", "set": [["panels", "2"]], "expect": {"panels": 2}},
+    {"name": "zero panels is refused", "start": {"panels": 2}, "set": [["panels", "0"]], "expect": {"panels": 2}},
+    {"name": "more panels than the build drives is refused", "set": [["panels", "3"]], "expect": {"panels": 1}},
+
+    {"name": "no known key answers 400", "start": {"rotate": 5}, "set": [["bogus", "1"]], "status": 400, "expect": {"rotate": 5}},
+    {"name": "unknown keys next to known ones are skipped", "set": [["bogus", "1"], ["rotate", "5"]], "expect": {"rotate": 5}},
+    {"name": "one refused key doesn't stop the rest", "set": [["mode", "9"], ["rotate", "5"], ["tz", "Mars"]], "expect": {"mode": 0, "rotate": 5, "tz": 1}}
+  ]
+}

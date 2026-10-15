@@ -87,8 +87,13 @@ button { font: inherit; color: inherit; }
   margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1e242e;
   font-size: 13px; color: #c9d1dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.gname { margin-top: 12px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .play { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .board.empty .row { opacity: .35; }
+/* The panel isn't answering, or is restarting: what's left on the board is old */
+.gone { margin-top: 10px; font-size: 13px; color: var(--gold); }
+.board.dim .row, .board.dim .state, .board.dim .stale, .board.dim .gname, .board.dim .msg,
+.board.dim .ticker, .board.dim .play { opacity: .35; filter: grayscale(1); }
 .board .msg { text-align: center; color: var(--muted); padding: 22px 0 8px; }
 
 /* Team chooser */
@@ -150,6 +155,7 @@ button { font: inherit; color: inherit; }
 .panelpick svg { width: 100%; max-width: 150px; height: auto; }
 .panelpick svg rect { fill: #1d2532; stroke: #5a6678; stroke-width: 2; }
 .panelpick.on svg rect { fill: #3a3210; stroke: var(--gold); }
+.panelpick small { color: var(--muted); font-size: 11px; margin-top: -4px; }
 
 .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 22px; }
 .foot span { margin: 0 6px; }
@@ -227,7 +233,7 @@ button { font: inherit; color: inherit; }
 .game .gm .at { color: #3a4150; font-size: 12px; }
 .game .gm .det { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.2; }
 .game.live .gm .det { color: var(--red); font-weight: 700; }
-@media (max-width: 560px) { .favbar { flex-direction: column; } .game { grid-template-columns: 1fr 58px 1fr; } .game .side { grid-template-columns: 28px 1fr auto; padding: 7px 8px; } .game .side img { width: 28px; height: 28px; } .game .side .n { font-size: 12px; } }
+@media (max-width: 560px) { .favbar, .livebar { flex-direction: column; } .livebar { align-items: flex-start; } .game { grid-template-columns: 1fr 58px 1fr; } .game .side { grid-template-columns: 28px 1fr auto; padding: 7px 8px; } .game .side img { width: 28px; height: 28px; } .game .side .n { font-size: 12px; } }
 
 /* Firmware update */
 .fw { margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
@@ -277,3 +283,16 @@ button { font: inherit; color: inherit; }
   .grid { column-gap: 18px; }
 }
 
+
+/* Favorites list rows: logo, name, move and remove */
+.ctl.fav img { width: 28px; height: 28px; object-fit: contain; flex: none; }
+#favAdd { margin-top: 10px; }
+
+/* Live mode league chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.chip.on { color: var(--text); border-color: var(--accent); }
+/* Automatic leagues are the device's suggestion, not a pick */
+.chips.auto .chip.on { border-style: dashed; }
+.livebar .name { white-space: normal; }
+.linkbtn { background: none; border: 0; padding: 0; margin-top: 8px; color: var(--accent); font-size: 12px; cursor: pointer; }

@@ -1,17 +1,45 @@
 from esphome import automation
 import esphome.codegen as cg
-# Local override of ESPHome 2026.8.2 esphome/components/esp32_improv (MIT for
+# Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble (MIT for
 # Python). Game Day change: answers Improv RPC 0x04 (Get Wi-Fi Networks) over
 # BLE. Every change from upstream is marked GAMEDAY.
-from esphome.components import binary_sensor, esp32_ble, improv_base, output
+from esphome.components import binary_sensor, improv_base, output
 from esphome.components import wifi  # GAMEDAY
-from esphome.components.esp32_ble import BTLoggers
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_ON_START, CONF_ON_STATE, CONF_TRIGGER_ID
+from esphome.const import (
+    CONF_ID,
+    CONF_ON_START,
+    CONF_ON_STATE,
+    CONF_TRIGGER_ID,
+    PLATFORM_ESP32,
+)
+from esphome.core import CORE
+from esphome.types import ConfigType
 
-AUTO_LOAD = ["esp32_ble_server", "improv_base"]
+# The BLE GATT server component that hosts the Improv service, per target
+# platform. improv_ble itself is platform neutral; supporting another chip
+# means adding its BLE server component here and the matching backend in
+# improv_ble_component.cpp. Doubles as the platform gate below, so an
+# unsupported chip is rejected in validation rather than at link time.
+BLE_SERVER_BACKENDS: dict[str, str] = {
+    PLATFORM_ESP32: "esp32_ble_server",
+}
+
+
+def AUTO_LOAD() -> list[str]:
+    auto_load = ["improv_base"]
+    if backend := BLE_SERVER_BACKENDS.get(CORE.target_platform):
+        auto_load.append(backend)
+    return auto_load
+
+
 CODEOWNERS = ["@jesserockz"]
-DEPENDENCIES = ["wifi", "esp32"]
+DEPENDENCIES = ["wifi"]
+
+# Legacy top-level YAML key that routes here; esphome/loader.py and
+# esphome/config.py handle the warning and the key rename.
+ALIASES = ["esp32_improv"]
+ALIAS_REMOVAL_VERSION = "2027.4.0"
 
 CONF_AUTHORIZED_DURATION = "authorized_duration"
 CONF_AUTHORIZER = "authorizer"
@@ -32,29 +60,29 @@ improv_ns = cg.esphome_ns.namespace("improv")
 Error = improv_ns.enum("Error")
 State = improv_ns.enum("State")
 
-esp32_improv_ns = cg.esphome_ns.namespace("esp32_improv")
-ESP32ImprovComponent = esp32_improv_ns.class_("ESP32ImprovComponent", cg.Component)
-ESP32ImprovProvisionedTrigger = esp32_improv_ns.class_(
-    "ESP32ImprovProvisionedTrigger", automation.Trigger.template()
+improv_ble_ns = cg.esphome_ns.namespace("improv_ble")
+ImprovBLEComponent = improv_ble_ns.class_("ImprovBLEComponent", cg.Component)
+ImprovBLEProvisionedTrigger = improv_ble_ns.class_(
+    "ImprovBLEProvisionedTrigger", automation.Trigger.template()
 )
-ESP32ImprovProvisioningTrigger = esp32_improv_ns.class_(
-    "ESP32ImprovProvisioningTrigger", automation.Trigger.template()
+ImprovBLEProvisioningTrigger = improv_ble_ns.class_(
+    "ImprovBLEProvisioningTrigger", automation.Trigger.template()
 )
-ESP32ImprovStartTrigger = esp32_improv_ns.class_(
-    "ESP32ImprovStartTrigger", automation.Trigger.template()
+ImprovBLEStartTrigger = improv_ble_ns.class_(
+    "ImprovBLEStartTrigger", automation.Trigger.template()
 )
-ESP32ImprovStateTrigger = esp32_improv_ns.class_(
-    "ESP32ImprovStateTrigger", automation.Trigger.template()
+ImprovBLEStateTrigger = improv_ble_ns.class_(
+    "ImprovBLEStateTrigger", automation.Trigger.template()
 )
-ESP32ImprovStoppedTrigger = esp32_improv_ns.class_(
-    "ESP32ImprovStoppedTrigger", automation.Trigger.template()
+ImprovBLEStoppedTrigger = improv_ble_ns.class_(
+    "ImprovBLEStoppedTrigger", automation.Trigger.template()
 )
 
 
-CONFIG_SCHEMA = (
+CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.GenerateID(): cv.declare_id(ESP32ImprovComponent),
+            cv.GenerateID(): cv.declare_id(ImprovBLEComponent),
             cv.Required(CONF_AUTHORIZER): cv.Any(
                 cv.none, cv.use_id(binary_sensor.BinarySensor)
             ),
@@ -71,57 +99,62 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_ON_PROVISIONED): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        ESP32ImprovProvisionedTrigger
+                        ImprovBLEProvisionedTrigger
                     ),
                 }
             ),
             cv.Optional(CONF_ON_PROVISIONING): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        ESP32ImprovProvisioningTrigger
+                        ImprovBLEProvisioningTrigger
                     ),
                 }
             ),
             cv.Optional(CONF_ON_START): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        ESP32ImprovStartTrigger
+                        ImprovBLEStartTrigger
                     ),
                 }
             ),
             cv.Optional(CONF_ON_STATE): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        ESP32ImprovStateTrigger
+                        ImprovBLEStateTrigger
                     ),
                 }
             ),
             cv.Optional(CONF_ON_STOP): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        ESP32ImprovStoppedTrigger
+                        ImprovBLEStoppedTrigger
                     ),
                 }
             ),
         }
     )
     .extend(improv_base.IMPROV_SCHEMA)
-    .extend(cv.COMPONENT_SCHEMA)
+    .extend(cv.COMPONENT_SCHEMA),
+    cv.only_on(list(BLE_SERVER_BACKENDS)),
 )
 
 
-async def to_code(config):
+async def to_code(config: ConfigType) -> None:
+    # ESP32 backend setup: the platform gate above means this is the only backend
+    # that can reach to_code. Make it conditional when a second one is added.
+    from esphome.components import esp32_ble
+
     # Register the loggers this component needs
-    esp32_ble.register_bt_logger(BTLoggers.GATT, BTLoggers.SMP)
+    esp32_ble.register_bt_logger(esp32_ble.BTLoggers.GATT, esp32_ble.BTLoggers.SMP)
 
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
-    cg.add_define("USE_IMPROV")
+    cg.add_define("USE_IMPROV_BLE")
     # GAMEDAY: told when a Wi-Fi scan finishes, to answer RPC 0x04
     wifi.request_wifi_scan_results_listener()
 
-    await improv_base.setup_improv_core(var, config, "esp32_improv")
+    await improv_base.setup_improv_core(var, config)
 
     cg.add(var.set_identify_duration(config[CONF_IDENTIFY_DURATION]))
     cg.add(var.set_authorized_duration(config[CONF_AUTHORIZED_DURATION]))
@@ -160,4 +193,4 @@ async def to_code(config):
         await automation.build_automation(trigger, [], conf)
         use_state_callback = True
     if use_state_callback:
-        cg.add_define("USE_ESP32_IMPROV_STATE_CALLBACK")
+        cg.add_define("USE_IMPROV_BLE_STATE_CALLBACK")
