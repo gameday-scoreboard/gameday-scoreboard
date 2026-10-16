@@ -1,0 +1,5 @@
+# Demo build for the MoonHub75 pinout: gameday.yaml plus the demo
+# (pages/demo.yaml). Test firmware only, never released.
+packages:
+  base: !include gameday.yaml
+  demo: !include pages/demo.yaml

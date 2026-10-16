@@ -2,7 +2,7 @@
 
 ![Touchdown fireworks on the panel](docs/site/media/touchdown.gif)
 
-A standalone football scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your NFL or college team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run.
+A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League.
 
 Watch the [full demo](https://gamedayscoreboard.app/) on the installer page.
 
@@ -13,17 +13,18 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 - Next-game card while you wait: both logos, season records, kickoff day and time in your timezone, and a ticker with the betting line, over/under, TV network and venue
 - Live scoreboard at kickoff: scores, the game clock and quarter in large type under them, down and distance beneath that (red in the red zone), abbreviations in team colors with the team holding the ball in gold, records under the logos, timeout pips, and a scrolling ticker with the last play (clock and down and distance can be added to the ticker too)
 - Full-screen splashes in your team's color for touchdowns, field goals, extra points and two-point conversions, the opponent's scores acknowledged in theirs, and a victory splash on a win
-- Lingers on the final for half an hour, then looks up the next game
-- Live modes that follow a random game in progress (NFL, college, or either) and move on when it ends
-- A device page that mirrors the panel, celebrates with it, lists the next three games, and holds every setting
-- Four favorite teams on a WizMote remote's numbered buttons
-- Updates itself over WiFi from the device page when a new release is out
-- Adapts to one 64x64 panel (logos side by side, stacked scores) or two panels wide (logos at the edges, big scores, records and pips in the middle); one firmware, the count is a setting
+- Each sport has its own board: the inning, count, outs and a small diamond of the runners in baseball; the minute, stoppage time, latest goal and red cards in soccer; the period and clock in hockey and basketball, with the playoff series when there is one. Home runs and goals get the fireworks too
+- Lingers on the final (half an hour, ten minutes for baseball), then looks up the next game
+- Live games: follows a random game in progress in the leagues you choose and moves on when it ends
+- A device page that mirrors the panel, celebrates with it, lists the next three games in football and soccer, and holds every setting
+- Up to 16 favorite teams from any league, cycling through the ones playing today, with the first four on a WizMote remote's numbered buttons
+- Updates itself over WiFi from the device page when a new release is out, or on its own between 3 and 5 AM if you turn on Install updates automatically
+- Adapts to one 64x64 panel (logos side by side, stacked scores) or one 128x64 panel or two 64x64 side by side (logos at the edges, big scores, records and pips in the middle); one firmware, the count is a setting
 
 ## Hardware
 
 - The Game Day Scoreboard controller (build `gameday-scoreboard75.yaml`), or an ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
-- One 64x64 HUB75 panel, or two side by side for a 128x64 display (one firmware; pick the count on the device page)
+- One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
 
 The MoonHub75 pinout, under the names ESPHome uses (that board's README calls the upper half R0/G0/B0):
 
@@ -33,33 +34,34 @@ The MoonHub75 pinout, under the names ESPHome uses (that board's README calls th
 
 ## Install
 
-1. Open the [installer page](https://gamedayscoreboard.app/), plug the controller in over USB, and click Install.
-2. Enter your WiFi details in the dialog that follows the install.
-3. Once it's on WiFi the panel says where to go: open the `gameday-xxxxxx.local` name it shows on your phone, or the address underneath if your phone can't resolve `.local` names. Pick your team on that page. Until you pick a team or a mode, from that page, the Game Day app or Home Assistant, the ticker asks you to and repeats the address, and holding the controller's boot button for 1.5 seconds shows it again any time.
+1. Open the [installer page](https://gamedayscoreboard.app/), plug the controller in over USB, and click Install. That page is for the Game Day Scoreboard controller, which starts on a 128x64 display. Built your own on the MoonHub75 pinout? Use the [DIY installer](https://gamedayscoreboard.app/install/diy/) instead: it asks whether yours drives one 64x64 panel or a 128x64 display before you click Install, so the first boot uses the right layout.
+2. Enter your WiFi details in the dialog that follows the install. If you skip it, the panel shows a QR code for the Game Day app and starts a hotspot named Game Day plus six letters and numbers, like Game Day 2f6a70; join it and a setup page opens.
+3. Once it's on WiFi the panel shows a QR code for the Game Day app, then the `gameday-xxxxxx.local` name of its own page. Pick your team in the app, or open that name on your phone and pick it there. Until you pick a team or a mode, from that page, the Game Day app or Home Assistant, the ticker asks you to and gives the panel's IP address for phones that can't resolve `.local` names. Holding the controller's boot button for 1.5 seconds shows the name and the IP address again any time.
 
-Team changes take effect immediately and survive reboots. Two panels side by side? Click the two-panel picture in the Setup card. Nothing needs reflashing to change teams or layouts.
+Team changes take effect immediately and survive reboots. Wrong panel size? Click the matching picture in the Setup card. Nothing needs reflashing to change teams or layouts.
 
 ## The device page
 
-The device serves its own page: a live board that mirrors the panel (logos, score, clock, down and distance, timeout pips, last play), a team chooser with logos and search plus an "On now" tab listing today's NFL and FBS games straight from ESPN (tap the side you want to follow), and the settings grouped in plain language. It is plain HTML and JavaScript embedded in the firmware, so it works with no internet beyond the logos. The page reads one JSON document from the device (`GET /gameday/state`) and writes settings back to `POST /gameday/set`, so it is not limited to what an ESPHome entity can carry.
+The device serves its own page: a live board that mirrors the panel (logos, score, clock, down and distance or the count and outs, timeout pips, last play), a team chooser with logos, search and a tab per league plus an "On now" tab listing today's games straight from ESPN (tap the side you want to follow), and the settings grouped in plain language. It is plain HTML and JavaScript embedded in the firmware, so it works with no internet beyond the logos and the "On now" tab, which your browser reads from ESPN. The page reads one JSON document from the device (`GET /gameday/state`) and writes settings back to `POST /gameday/set`, so it is not limited to what an ESPHome entity can carry.
 
 | Setting | What it does |
 | --- | --- |
-| Show | My team, or a live game picked at random from the NFL, college, or both, switching every few minutes |
-| Team | One list of all 32 NFL teams and every FBS college team, plus an "On now" tab |
+| Show | My team, Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every few minutes |
+| Team | All 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
-| Ticker: down and distance, last play, odds and TV | Choose what scrolls along the bottom |
+| Ticker: game situation, last play, odds and TV | Choose what scrolls along the bottom. Game situation is down and distance in football, the count and outs in baseball, and goals, cards and stats in soccer |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
-| Favorites 1 to 4 | Teams for the numbered buttons on a WizMote remote |
+| Favorites | Up to 16 teams in priority order. "Only today's games" keeps the playlist to the favorites playing today. The first four are the numbered buttons on a WizMote remote |
 | Remote | Pair a WizMote: turn discovery on, press any button on the remote. ON/OFF, brightness and NIGHT buttons control the panel |
-| Panels | One 64x64 panel or two side by side. Changing it restarts the device |
+| Panels | One 64x64 panel, or one 128x64 panel or two 64x64 side by side. Changing it restarts the device |
 | Firmware / Check for updates | The device checks this project's releases every 6 hours; an Install button appears on the page when a newer version exists and updates over WiFi |
+| Install updates automatically | Off unless you turn it on. Installs a new release between 3 and 5 AM, never during a game the panel follows |
 | Brightness, Panel on, Ticker speed, Showing | Panel brightness, panel on or off, ticker speed, scoreboard or clock page |
 | Refresh scores, Reboot | Re-fetch right away, restart |
 
 ## Home Assistant is optional
 
-The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Team, Mode, Power, Brightness, Scroll Speed, Select Page, Game Status, Last Play, Firmware, Refresh Now, Reboot and the WizMote pairing switches. Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
+The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Team, Mode, Power, Brightness, Scroll Speed, Select Page, Game Status, Last Play, Firmware, Install Updates Automatically, Refresh Now, Reboot and the WizMote pairing switches. Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. Men's college basketball teams aren't in Home Assistant's Team list (it would be too long for an entity); pick them on the device page. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
 
 ## Build it yourself
 
@@ -73,7 +75,7 @@ esphome run gameday.yaml
 
 ## How it works
 
-The `gameday` component asks ESPN's public site API for the team's next event, then polls that day's scoreboard: every 15 minutes while the game is far off, every minute inside the last hour, every 5 seconds during the game, and every minute for half an hour after the final. The JSON is streamed through a filter on the device so a 200KB scoreboard never has to fit in memory at once. Score deltas between polls decide the splashes, the same rules the blueprint uses. Logos are ESPN's dark-background PNGs, decoded and shrunk to 32x32 on the ESP32.
+The `gameday` component asks ESPN's public site API for the team's next event, then polls that game, from the day's scoreboard in football and from the game's own scoreboard entry in the other leagues: every 15 minutes while the game is far off, every minute inside the last hour, every 10 seconds during the game, showing ESPN's clock as it arrives, and every minute for half an hour after the final (ten minutes for baseball). After a failed read it waits longer before trying again. The JSON is streamed through a filter on the device so a scoreboard of several hundred kilobytes never has to fit in memory at once. Score deltas between polls decide the splashes, the same rules the blueprint uses. Logos are ESPN's dark-background PNGs (the plain one when a team has no dark version), decoded and shrunk to 32x32 on the ESP32.
 
 The parser and game logic have host tests: `make -C tests` (needs g++). The device page has browser tests against a mock of the panel's web server: in `tests/web`, run `npm ci` and `npx playwright install chromium` once, then `npm test` (needs Node and Python 3). To refresh the team list at the start of a season, run `python scripts/build_teams.py` and commit the regenerated header.
 

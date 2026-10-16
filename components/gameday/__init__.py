@@ -20,6 +20,13 @@ CONF_HTTP_REQUEST_ID = "http_request_id"
 CONF_PANEL_LAYOUT_ID = "panel_layout_id"
 CONF_ON_UPDATE = "on_update"
 CONF_ON_ACTION = "on_action"
+# The demo build (firmware/gameday-demo.yaml): a looping scripted game the
+# remote and the device page start and stop. Off in release firmware.
+CONF_DEMO = "demo"
+# The bar build (firmware/gameday-bar.yaml): real firmware that installs from
+# the beta channel on its own. Off in release firmware.
+CONF_BAR = "bar"
+CONF_REPORT_EMAIL = "report_email"
 
 gameday_ns = cg.esphome_ns.namespace("gameday")
 GamedayComponent = gameday_ns.class_("GamedayComponent", cg.Component)
@@ -34,17 +41,30 @@ ActionTrigger = gameday_ns.class_(
 
 COMPONENT_DIR = Path(__file__).resolve().parent
 
-_TEAM_RE = re.compile(r'\{League::(NFL|NCAA),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
+_TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
+# kLeagues rows in leagues.h: {League::NFL, "nfl", "football/nfl", "NFL", ...
+_LEAGUE_RE = re.compile(r'\{League::(\w+),\s*"(\w+)",\s*"[^"]+",\s*"([^"]+)",')
 _TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
+# Leagues left out of Home Assistant's team select. Men's college
+# basketball's ~365 teams would push the options past Home Assistant's 16 KB
+# attribute limit; the device page lists them.
+_HA_SKIP_LEAGUES = {"MCBB"}
 
 
 def team_options():
-    """Select options in the same order as kTeams so indexes line up."""
+    """Select options in kTeams order, without _HA_SKIP_LEAGUES."""
+    prefixes = {
+        lg: prefix
+        for lg, _key, prefix in _LEAGUE_RE.findall(
+            (COMPONENT_DIR / "leagues.h").read_text(encoding="utf-8")
+        )
+    }
     text = (COMPONENT_DIR / "teams.h").read_text(encoding="utf-8")
     opts = []
     for league, _tid, _abbr, name, _group in _TEAM_RE.findall(text):
-        prefix = "NFL" if league == "NFL" else "NCAAF"
-        opts.append(f"{prefix}: {name}")
+        if league in _HA_SKIP_LEAGUES:
+            continue
+        opts.append(f"{prefixes[league]}: {name}")
     if len(opts) < 100:
         raise cv.Invalid("teams.h looks truncated; run scripts/build_teams.py")
     return opts
@@ -69,7 +89,13 @@ def _esphome_at_least(year, month):
     return bool(m) and (int(m.group(1)), int(m.group(2))) >= (year, month)
 
 
-CONFIG_SCHEMA = cv.Schema(
+def _not_demo_and_bar(config):
+    if config[CONF_DEMO] and CONF_BAR in config:
+        raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
+    return config
+
+
+CONFIG_SCHEMA = cv.All(cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(GamedayComponent),
         cv.GenerateID(CONF_HTTP_REQUEST_ID): cv.use_id(
@@ -80,6 +106,10 @@ CONFIG_SCHEMA = cv.Schema(
             web_server_base.WebServerBase
         ),
         cv.Optional(CONF_PANEL_LAYOUT_ID): cv.use_id(PanelLayout),
+        cv.Optional(CONF_DEMO, default=False): cv.boolean,
+        cv.Optional(CONF_BAR): cv.Schema(
+            {cv.Required(CONF_REPORT_EMAIL): cv.string_strict}
+        ),
         cv.Optional(CONF_ON_UPDATE): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(UpdateTrigger)}
         ),
@@ -87,7 +117,7 @@ CONFIG_SCHEMA = cv.Schema(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ActionTrigger)}
         ),
     }
-).extend(cv.COMPONENT_SCHEMA)
+).extend(cv.COMPONENT_SCHEMA), _not_demo_and_bar)
 
 
 async def to_code(config):
@@ -101,6 +131,11 @@ async def to_code(config):
         # 2026.9 removed RealTimeClock::set_timezone and the on-device POSIX
         # parser; the clock takes a pre-parsed struct instead.
         cg.add_define("GAMEDAY_TZ_PARSED")
+    if config[CONF_DEMO]:
+        cg.add_define("GAMEDAY_DEMO")
+    if CONF_BAR in config:
+        cg.add_define("GAMEDAY_BAR")
+        cg.add(var.set_report_email(config[CONF_BAR][CONF_REPORT_EMAIL]))
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))
