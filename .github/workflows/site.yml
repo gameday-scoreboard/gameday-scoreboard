@@ -109,6 +109,8 @@ jobs:
           done
           bash scripts/check_site_firmware.sh site "$TAG"
           bash scripts/add_beta_channel.sh site
+          # Releases up to v2026.10.0 carry the ESPHome project name.
+          ./scripts/set_manifest_name.sh site/firmware
           sed -i "s/__VERSION__/${TAG}/g" site/index.html
           ls -laR site
       - uses: actions/upload-pages-artifact@v5
