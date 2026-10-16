@@ -21,7 +21,7 @@ namespace espn {
 constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "fav2",    "fav3",
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
-                                    "favs",   "today",    "live",   "autoupd"};
+                                    "favs",   "today",    "live",   "autoupd", "count",   "match"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -130,7 +130,7 @@ enum class SetKind : uint8_t {
   FAV_SLOT,  // slot (1-4), team (id 0 clears the slot)
   TZ,        // value, index into kTimezones
   TZ_AUTO,   // on
-  DOWN,      // on
+  DOWN,      // on, football
   PLAY,      // on
   ODDS,      // on
   OPP,       // on
@@ -143,6 +143,8 @@ enum class SetKind : uint8_t {
   TODAY,     // on
   LIVE,      // mask, 0 = auto
   AUTOUPD,   // on
+  COUNT,     // on, baseball
+  MATCH,     // on, soccer
 };
 
 struct TeamRef {
@@ -248,6 +250,10 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TZ_AUTO);
   if (k == "down")
     return on(SetKind::DOWN);
+  if (k == "count")
+    return on(SetKind::COUNT);
+  if (k == "match")
+    return on(SetKind::MATCH);
   if (k == "play")
     return on(SetKind::PLAY);
   if (k == "odds")

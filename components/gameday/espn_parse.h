@@ -199,7 +199,9 @@ GameSnapshot pending_snapshot(const Pending &p);
 
 struct TickerOptions {
   bool clock{true};
-  bool down_distance{true};
+  bool down_distance{true};   // football
+  bool baseball_count{true};  // count, outs, pitcher and batter
+  bool soccer_stats{true};    // goals, cards, possession and shots
   bool last_play{true};
   bool odds{true};
 };

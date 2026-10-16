@@ -229,6 +229,15 @@ void GamedayComponent::setup() {
       this->prefs7_.flags |= FAV7_TODAY;
     this->pref7_.save(&this->prefs7_);  // same reason as Prefs4 above
   }
+  this->pref8_ = global_preferences->make_preference<Prefs8>(fnv1_hash("gameday_prefs8_v1"));
+  if (!this->pref8_.load(&this->prefs8_)) {
+    // Firmware before this had one switch for every sport: start baseball
+    // and soccer where football's is, so an update changes nothing.
+    this->prefs8_ = Prefs8{};
+    if (this->flag_(FLAG_DOWN))
+      this->prefs8_.ticker = TICK8_COUNT | TICK8_MATCH;
+    this->pref8_.save(&this->prefs8_);
+  }
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -1084,6 +1093,18 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
     return;
   this->prefs_.flags = next;
   this->save_prefs_();
+  if (this->game_.valid)
+    this->emit_({});
+  else
+    this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::set_ticker8_(uint8_t f, bool on) {
+  uint8_t next = on ? (this->prefs8_.ticker | f) : (this->prefs8_.ticker & ~f);
+  if (next == this->prefs8_.ticker)
+    return;
+  this->prefs8_.ticker = next;
+  this->pref8_.save(&this->prefs8_);
   if (this->game_.valid)
     this->emit_({});
   else
@@ -2080,6 +2101,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   TickerOptions opts;
   opts.clock = false;  // the clock has its own row on the panel; never in the ticker
   opts.down_distance = this->ticker_down_distance();
+  opts.baseball_count = this->ticker_baseball_count();
+  opts.soccer_stats = this->ticker_soccer_stats();
   opts.last_play = this->ticker_last_play();
   opts.odds = this->ticker_odds();
 
@@ -2576,6 +2599,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["tz_iana"] = ::espn::kTimezones[this->prefs_.tz_index].iana;
   doc["tz_auto"] = this->tz_auto();
   doc["down"] = this->ticker_down_distance();
+  doc["count"] = this->ticker_baseball_count();
+  doc["match"] = this->ticker_soccer_stats();
   doc["play"] = this->ticker_last_play();
   doc["odds"] = this->ticker_odds();
   doc["opp"] = this->opponent_splashes();
@@ -2890,6 +2915,12 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::DOWN:
         this->set_ticker_down_distance(op.on);
+        break;
+      case ::espn::SetKind::COUNT:
+        this->set_ticker_baseball_count(op.on);
+        break;
+      case ::espn::SetKind::MATCH:
+        this->set_ticker_soccer_stats(op.on);
         break;
       case ::espn::SetKind::PLAY:
         this->set_ticker_last_play(op.on);

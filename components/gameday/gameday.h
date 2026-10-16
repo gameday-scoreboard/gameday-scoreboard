@@ -118,7 +118,8 @@ class GamedaySelect : public select::Select, public Component {
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
-//                                    down/play/odds/opp=0/1 panels=1/2
+//                                    down/count/match/play/odds/opp=0/1 panels=1/2
+//                                    (down: football, count: baseball, match: soccer)
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
@@ -193,6 +194,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 
   bool ticker_clock() const { return this->flag_(FLAG_CLOCK); }
   bool ticker_down_distance() const { return this->flag_(FLAG_DOWN); }
+  bool ticker_baseball_count() const { return (this->prefs8_.ticker & TICK8_COUNT) != 0; }
+  bool ticker_soccer_stats() const { return (this->prefs8_.ticker & TICK8_MATCH) != 0; }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
@@ -217,6 +220,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_tz_auto(bool on) { this->set_flag_(FLAG_TZMANUAL, !on); }
   void set_ticker_clock(bool on) { this->set_flag_(FLAG_CLOCK, on); }
   void set_ticker_down_distance(bool on) { this->set_flag_(FLAG_DOWN, on); }
+  void set_ticker_baseball_count(bool on) { this->set_ticker8_(TICK8_COUNT, on); }
+  void set_ticker_soccer_stats(bool on) { this->set_ticker8_(TICK8_MATCH, on); }
   void set_ticker_last_play(bool on) { this->set_flag_(FLAG_PLAY, on); }
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
@@ -319,6 +324,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint16_t live_mask;            // Live mode: 1 << League per league, 0 = the leagues you follow
   } __attribute__((packed));
   static constexpr uint8_t FAV7_TODAY = 1;  // idle playlist shows only today's games
+  // The ticker's situation line per sport. Football's stays FLAG_DOWN in
+  // Prefs; Prefs::flags is full. The spare bits are for later settings,
+  // since a blob that changes size fails to load and resets.
+  struct Prefs8 {
+    uint8_t ticker;  // TICK8_*
+    uint8_t spare[3];
+  } __attribute__((packed));
+  static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
+  static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
+  void set_ticker8_(uint8_t f, bool on);
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
@@ -512,6 +527,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool followed_game_live_() const;
   ESPPreferenceObject pref7_;
   Prefs7 prefs7_{};
+  ESPPreferenceObject pref8_;
+  Prefs8 prefs8_{};
   // The team endpoint's answer for the saved team (startup.h), so a boot can
   // skip that read and go straight to the scoreboard.
   ESPPreferenceObject team_cache_pref_;

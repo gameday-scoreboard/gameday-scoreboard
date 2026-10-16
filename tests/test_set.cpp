@@ -50,7 +50,7 @@ struct Settings {
   TeamRef team;
   uint8_t team_league{0};
   int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
-  bool collide{false}, today{false}, tz_auto{true}, down{true}, play{true}, odds{true}, opp{true};
+  bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true};
   bool bootaddr{true}, autoupd{false};
   TeamRef favs[16];
   uint16_t live_mask{0};
@@ -112,6 +112,8 @@ void load(Settings &s, JsonObjectConst o) {
   flag("today", s.today);
   flag("tz_auto", s.tz_auto);
   flag("down", s.down);
+  flag("count", s.count);
+  flag("match", s.match);
   flag("play", s.play);
   flag("odds", s.odds);
   flag("opp", s.opp);
@@ -141,6 +143,8 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::TZ: s.tz = op.value; break;
     case SetKind::TZ_AUTO: s.tz_auto = op.on; break;
     case SetKind::DOWN: s.down = op.on; break;
+    case SetKind::COUNT: s.count = op.on; break;
+    case SetKind::MATCH: s.match = op.on; break;
     case SetKind::PLAY: s.play = op.on; break;
     case SetKind::ODDS: s.odds = op.on; break;
     case SetKind::OPP: s.opp = op.on; break;
@@ -180,6 +184,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["tz"] = s.tz;
   doc["tz_auto"] = s.tz_auto;
   doc["down"] = s.down;
+  doc["count"] = s.count;
+  doc["match"] = s.match;
   doc["play"] = s.play;
   doc["odds"] = s.odds;
   doc["opp"] = s.opp;
