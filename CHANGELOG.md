@@ -23,6 +23,8 @@ owns the panel, not for the code.
 - Football works the same as before.
 - New "Install updates automatically" switch on the device page and in Home Assistant, off unless you turn it on. With it on, the panel installs a new release between 3 and 5 AM, never during a live game it is showing.
 - A panel nobody has picked a team for no longer quietly follows Dallas. It shows live games, and when nothing is on, the latest final scores and when the next game starts. A panel in My team or Favorites with Dallas picked keeps it. Until you pick a team, the app QR code comes back for 13 seconds every 3 minutes.
+- When nothing is live on a panel with no team picked, the board shows the games still to come today under "Later today", each with both logos, the start time and the TV channel, and then the latest final scores for every league it follows, not only football ("Yesterday's NHL scores"). A game drops off the list once it starts.
+- When no game is left today, the "Next" card names the matchup as well as the time, like "Next: BOS at NYR Thu 6:00 PM".
 - When it starts up and joins Wi-Fi, every panel shows the QR code for the Game Day app, then its address, then your game. Turn off "Show how to connect when the panel starts" to go straight to the game.
 - After you set up Wi-Fi, the panel sets its clock within a second or two instead of up to a few minutes, and says "Getting ready" until then instead of "No upcoming game".
 - A panel that cannot reach ESPN says "Can't reach ESPN" instead of "No upcoming game", after a restart and after a team change. Favorites no longer sits on a blank board while reads fail.

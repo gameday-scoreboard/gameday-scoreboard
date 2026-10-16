@@ -1,5 +1,6 @@
 // The device page's POST /gameday/set: which keys it takes, what each value
-// means and where it is clamped or refused, and the leagues Live mode scans.
+// means and where it is clamped or refused, and the leagues each live mode
+// scans.
 // Pure, no ESPHome includes, so the host tests cover it and check the same
 // table as tests/web/mock_device.py (tests/fixtures/set_cases.json).
 #pragma once
@@ -22,8 +23,13 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd"};
 
-// Mode 0 (My team) to 5 (Live games); see Mode in gameday.h.
+// LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
+// the football-only live modes from before, kept for panels that saved them.
+enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
+
+// Mode 0 (My team) to 5 (Live games).
 constexpr int kModeCount = 6;
+static_assert((int) Mode::LIVE + 1 == kModeCount, "parse_set takes modes 0 to kModeCount - 1");
 
 constexpr int kLockonMinMinutes = 5;
 constexpr int kLockonMaxMinutes = 120;
@@ -96,6 +102,25 @@ inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, cons
   if (out.empty())
     out.push_back(League::NFL);
   return out;
+}
+
+// The leagues a mode's scan reads, in the order it reads them, and so the
+// leagues its finals rotation covers. live is Live games' own list
+// (live_leagues above). Live anything is also the no-team default. A mode
+// that follows a team scans none.
+inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
+  switch ((Mode) mode) {
+    case Mode::LIVE_NFL:
+      return {League::NFL};
+    case Mode::LIVE_NCAA:
+      return {League::NCAA};
+    case Mode::LIVE_ANY:
+      return {League::NFL, League::NCAA};
+    case Mode::LIVE:
+      return live;
+    default:
+      return {};
+  }
 }
 
 enum class SetKind : uint8_t {

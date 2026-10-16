@@ -137,6 +137,13 @@ lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
 | `event_ncaa_tbd.json` | `.../college-football/scoreboard/401858497`, the TBD game on its own |
 | `schedule_ncaa_iowa_tbd.json` | `.../college-football/teams/2294/schedule`, trimmed to events 6 to 12: the 10/9 final, five TBD games, then 11/27 at 12:00 PM EST |
 
+Recorded 2026-10-15 at 9:41 AM Central (NBA preseason), for the rotation's
+later-today cards:
+
+| File | Source |
+| --- | --- |
+| `day_nba_20261015.json` | `.../basketball/nba/scoreboard?dates=20261015`, two games to come: TOR @ NY (no TV listed) and OKC @ HOU (NBA TV) |
+
 Not from ESPN: `set_cases.json` is a table of `POST /gameday/set` requests and
 the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
 `set_request.h`, and `tests/web/mock_device.py --selftest` through the device
