@@ -23,6 +23,7 @@
 #include "auto_update.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "offseason.h"
 #include "recap.h"
 #include "poll_timing.h"
 #include "set_request.h"
@@ -81,6 +82,11 @@ struct UpdateFields {
   // recorder isn't writing a row every poll or every playlist card.
   std::string ha_status_text;
   std::string ha_last_play;
+  // The off-season clock (offseason.h) on the no-game screen, in team_color.
+  // next_line is the next game for a wide board, its kickoff on a second
+  // line; empty when none is known, and the page shows the date instead.
+  bool clock{false};
+  std::string next_line;
 };
 
 enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
@@ -430,6 +436,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
                          const char *comp_slug = nullptr);
   void emit_(const ::espn::Splash &splash);
+  // Turns f into the off-season clock card when the board has nothing to
+  // show for months (offseason.h); leaves it alone otherwise.
+  void clock_fields_(UpdateFields &f);
   void reset_game_();
   void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
