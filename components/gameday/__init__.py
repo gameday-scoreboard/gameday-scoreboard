@@ -23,6 +23,10 @@ CONF_ON_ACTION = "on_action"
 # The demo build (firmware/gameday-demo.yaml): a looping scripted game the
 # remote and the device page start and stop. Off in release firmware.
 CONF_DEMO = "demo"
+# The bar build (firmware/gameday-bar.yaml): real firmware that installs from
+# the beta channel on its own. Off in release firmware.
+CONF_BAR = "bar"
+CONF_REPORT_EMAIL = "report_email"
 
 gameday_ns = cg.esphome_ns.namespace("gameday")
 GamedayComponent = gameday_ns.class_("GamedayComponent", cg.Component)
@@ -85,7 +89,13 @@ def _esphome_at_least(year, month):
     return bool(m) and (int(m.group(1)), int(m.group(2))) >= (year, month)
 
 
-CONFIG_SCHEMA = cv.Schema(
+def _not_demo_and_bar(config):
+    if config[CONF_DEMO] and CONF_BAR in config:
+        raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
+    return config
+
+
+CONFIG_SCHEMA = cv.All(cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(GamedayComponent),
         cv.GenerateID(CONF_HTTP_REQUEST_ID): cv.use_id(
@@ -97,6 +107,9 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_PANEL_LAYOUT_ID): cv.use_id(PanelLayout),
         cv.Optional(CONF_DEMO, default=False): cv.boolean,
+        cv.Optional(CONF_BAR): cv.Schema(
+            {cv.Required(CONF_REPORT_EMAIL): cv.string_strict}
+        ),
         cv.Optional(CONF_ON_UPDATE): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(UpdateTrigger)}
         ),
@@ -104,7 +117,7 @@ CONFIG_SCHEMA = cv.Schema(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ActionTrigger)}
         ),
     }
-).extend(cv.COMPONENT_SCHEMA)
+).extend(cv.COMPONENT_SCHEMA), _not_demo_and_bar)
 
 
 async def to_code(config):
@@ -120,6 +133,9 @@ async def to_code(config):
         cg.add_define("GAMEDAY_TZ_PARSED")
     if config[CONF_DEMO]:
         cg.add_define("GAMEDAY_DEMO")
+    if CONF_BAR in config:
+        cg.add_define("GAMEDAY_BAR")
+        cg.add(var.set_report_email(config[CONF_BAR][CONF_REPORT_EMAIL]))
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))

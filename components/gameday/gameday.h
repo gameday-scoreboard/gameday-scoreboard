@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,7 @@
 #include "favorites.h"
 #include "recap.h"
 #include "poll_timing.h"
+#include "set_request.h"
 #include "startup.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -89,12 +91,12 @@ static constexpr uint8_t FAV_MAX = 16;
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
 enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
+static_assert((int) Mode::LIVE + 1 == ::espn::kModeCount, "set_request.h takes modes 0 to kModeCount - 1");
 
 class GamedayComponent;
 class EspnBody;
 
-// "nfl:6" -> league + id. False for "none"/"" (id 0) or garbage.
-bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id);
+using ::espn::parse_team_ref;
 
 class GamedaySelect : public select::Select, public Component {
  public:
@@ -119,6 +121,9 @@ class GamedaySelect : public select::Select, public Component {
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
+//   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
+//                                    names only (components/saved_networks)
+//   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
 // The demo build (firmware/gameday-demo.yaml) adds do=demo|demo_stop and
 // GET/POST /gameday/demo (demo.cpp).
 // Requests arrive on the HTTP task; settings are applied on the main loop.
@@ -165,6 +170,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_today_only(bool on);
   // Live mode's leagues as keys ("nfl,mlb"); "" = the leagues you follow.
   void set_live_leagues(const std::string &keys);
+  void set_live_mask_(uint16_t mask);
   std::vector<League> live_leagues_() const;  // the leagues Live mode scans
   bool today_only() const { return (this->prefs7_.flags & FAV7_TODAY) != 0; }
   void refresh_now();
@@ -193,6 +199,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
   bool board_ready() const { return this->board_ready_; }
+  // What the panel has downloaded from ESPN since boot: reply bodies and
+  // logos. Each request also spends about 6 KB on headers and the TLS
+  // handshake, which this does not see.
+  uint64_t espn_bytes() const { return this->espn_bytes_.load() + this->logos_.bytes_downloaded(); }
+  uint32_t espn_requests() const { return this->espn_requests_.load(); }
   // True while a boot screen hold that started at since_ms should go on
   // (startup.h). 0 means no hold is running.
   bool boot_hold(uint32_t since_ms) const { return ::espn::boot_hold(this->board_ready_, since_ms, millis()); }
@@ -209,7 +220,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
   // "Install updates automatically", off unless the owner turns it on.
+#ifdef GAMEDAY_BAR
+  // The bar build (firmware/pages/bar.yaml) always installs from the beta
+  // channel; there is no setting.
+  bool auto_update() const { return true; }
+  void set_report_email(const std::string &email) { this->report_email_ = email; }
+#else
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
+#endif
   void set_auto_update(bool on);
 
   void setup() override;
@@ -234,6 +252,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
   void put_fav_(uint8_t i, uint8_t league, uint32_t id);  // no save
   void handle_set_(AsyncWebServerRequest *request);
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+  void handle_wifi_(AsyncWebServerRequest *request);
+#endif
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();
@@ -338,6 +359,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::vector<Schedule> comps;
     int comp{-1};
     bool need_game{false};   // the board has no game for the current schedule yet
+    bool cup_ok{false};      // the cup's team read answered
     bool polled{false};      // a cup read polled the game it picked
     std::string done_event;  // a game seen to finish, passed over by the pick
     bool no_lookahead{false};  // My team: a final is still lingering on the board
@@ -417,6 +439,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
                          const char *comp_slug = nullptr);
   void emit_(const ::espn::Splash &splash);
   void reset_game_();
+  void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
   void mark_good_poll_() {
     this->misses_ = 0;
@@ -427,8 +450,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t back_off_();
   // ESPN answered: the next failure starts the backoff over.
   void clear_backoff_() {
-    this->fail_streak_ = 0;
-    this->throttled_ = false;
+    this->fail_run_.clear();
     this->backoff_ms_ = 0;
   }
   // Inside a wait back_off_ started. Only Favorite Teams mode needs to ask:
@@ -476,6 +498,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int32_t auto_update_checked_{0};  // the night the manifest was read for it
   uint32_t auto_update_check_ms_{0};
   bool auto_update_waiting_{false};  // logged "waiting for the game" tonight
+#ifdef GAMEDAY_BAR
+  // fnv1_hash() of the version last installed through "Install now"
+  // (auto_update.h), saved before the install so a crash or power cut
+  // partway through doesn't try the same version again until the night.
+  ESPPreferenceObject bar_pref_;
+  uint32_t now_tried_{0};
+  // Where the bar's "Something wrong?" link on the device page writes to.
+  std::string report_email_;
+#endif
   void auto_update_tick_();
   bool followed_game_live_() const;
   ESPPreferenceObject pref7_;
@@ -623,11 +654,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t post_since_ms_{0};
   uint32_t next_fetch_ms_{0};
   uint8_t misses_{0};
-  uint8_t fail_streak_{0};      // ESPN reads failed in a row, for the backoff
-  bool throttled_{false};       // ESPN said 403 or 429 since the last good read
+  ::espn::Backoff fail_run_;
   uint32_t backoff_since_ms_{0};
   uint32_t backoff_ms_{0};      // 0 = no wait running
   uint32_t last_good_ms_{0};  // millis() of the last successful game poll, 0 = never
+  // ESPN itself answered that the team on the board has no game. Until it
+  // has, an empty board after a failed read means ESPN could not be reached.
+  bool no_game_confirmed_{false};
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;
@@ -635,6 +668,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool busy_{false};
   bool selects_published_{false};
   volatile bool job_done_{false};
+  // Written by the fetch task, read by the main loop.
+  std::atomic<uint64_t> espn_bytes_{0};
+  std::atomic<uint32_t> espn_requests_{0};
 };
 
 class UpdateTrigger : public Trigger<const UpdateFields &> {
