@@ -104,11 +104,13 @@ esphome:
     # After "Reset Wi-Fi" the saved network name is blank. ESPHome still counts it
     # as a configured network and would wait a minute before the hotspot and
     # Bluetooth setup appear. Cut both waits to a second in that one case.
+    # A saved network list (components/saved_networks) means a real network
+    # whatever get_sta() reads; it is empty after a reset.
     - priority: 240.0
       then:
         - lambda: |-
             auto *w = wifi::global_wifi_component;
-            if (w != nullptr && w->has_sta() && w->get_sta().get_ssid().empty()) {
+            if (w != nullptr && w->has_sta() && id(gd_networks).count() == 0 && w->get_sta().get_ssid().empty()) {
               w->set_ap_timeout(1000);
               if (improv_ble::global_improv_component != nullptr) {
                 improv_ble::global_improv_component->set_wifi_timeout(1000);
@@ -122,7 +124,8 @@ esphome:
             condition:
               lambda: |-
                 auto *w = wifi::global_wifi_component;
-                return w != nullptr && w->has_sta() && !w->get_sta().get_ssid().empty();
+                return w != nullptr && w->has_sta() &&
+                       (id(gd_networks).count() > 0 || !w->get_sta().get_ssid().empty());
             then:
               - script.execute: gd_ble_grace
             else:
@@ -134,8 +137,9 @@ external_components:
       path: ../components
     # improv_ble is ESPHome 2026.10's own, plus answering the app's "which
     # Wi-Fi networks can you see" request and going back to the saved network
-    # when a handover fails (components/improv_ble).
-    components: [gameday, panel_layout, improv_ble]
+    # when a handover fails (components/improv_ble). saved_networks keeps up
+    # to five Wi-Fi networks where ESPHome keeps one.
+    components: [gameday, panel_layout, improv_ble, saved_networks]
   - source: github://pavlov-net/lvgl-page-manager@v0.3.0
     components: [lvgl_page_manager]
   # Fireworks behind the touchdown and win splashes
@@ -197,6 +201,14 @@ ota:
   - platform: http_request
     id: gd_ota_http
 
+# The panel remembers up to five networks (home, a phone hotspot, a friend's
+# house) and tries the last one that worked first. Setup from the app or the
+# hotspot page adds to the list; "Reset Wi-Fi" and Factory Reset empty it.
+# GET /gameday/wifi lists them (names only) and POST /gameday/wifi?forget=
+# drops one.
+saved_networks:
+  id: gd_networks
+
 wifi:
   power_save_mode: none
   # Named per panel in on_boot.
@@ -222,6 +234,8 @@ wifi:
         id(gd_offline_seconds) = 0;
         if (improv_ble::global_improv_component != nullptr)
           improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
+        // The network that just worked is the first one tried next boot.
+        id(gd_networks).note_connected(wifi::global_wifi_component->get_sta());
         ESP_LOGI("wifi", "Connected. Internal heap free: %u bytes",
                  (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   # Wi-Fi is gone. Turn Bluetooth back on so the Game Day app can find the
@@ -685,6 +699,9 @@ button:
     entity_category: config
     on_press:
       - lambda: |-
+          // Every saved network, then ESPHome's own slot. The blank slot is
+          // what the panel reads as "reset" at boot (components/saved_networks).
+          id(gd_networks).forget_all();
           wifi::global_wifi_component->save_wifi_sta("", "");
       - delay: 500ms
       - lambda: |-
@@ -750,6 +767,18 @@ sensor:
       #include "esp_heap_caps.h"
       return (float) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024;
     disabled_by_default: true
+  # Scores and logos downloaded from ESPN since the panel started, for owners
+  # on a capped plan. It leaves out about 6 KB a read of connection overhead.
+  - platform: template
+    name: "ESPN Data"
+    icon: "mdi:download-network"
+    device_class: data_size
+    state_class: total_increasing
+    entity_category: diagnostic
+    unit_of_measurement: "MB"
+    accuracy_decimals: 1
+    update_interval: 5min
+    lambda: 'return (float) id(gameday_ctl).espn_bytes() / 1e6;'
   - platform: wifi_signal
     name: RSSI
     update_interval: 60s

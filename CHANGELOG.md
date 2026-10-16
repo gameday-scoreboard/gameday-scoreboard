@@ -15,6 +15,7 @@ owns the panel, not for the code.
 - Baseball celebrates runs and home runs, and hockey and soccer celebrate goals. Basketball only celebrates the win, since a basket every few seconds would keep the screen covered.
 - Favorites hold up to 16 teams from any league, in priority order. Turn on "Only today's games" to cycle through just the favorites playing today; a new panel starts with it on. Buttons 1 to 4 on a WizMote still jump to the first four.
 - Live games replaces Live NFL, Live college and Live anything. Pick the leagues on the device page. A panel set to one of the old live modes keeps working.
+- Live games and the On now list on the device page include every Division I men's basketball game, not only the Top 25.
 - Until you pick leagues, Live games follows the leagues of your team and favorites, and the device page now says so. After you pick by hand, "Back to automatic" returns to that. When nothing is live, the page says whether the panel is showing your team or recent final scores until a game starts.
 - When two favorites play at once, a new panel alternates between them. A panel that was already set up keeps showing the higher one.
 - The ticker switches on the device page have names that fit every sport, with a line under each saying what it shows. "Down and distance" is now "Game situation".
@@ -27,10 +28,13 @@ owns the panel, not for the code.
 - Between seasons the board shows a clock in your team's colors instead of "No upcoming game" or "No live games" for months. Under the time is the next game once it's on the schedule, like "Next: at PHI Mar 26 7:05 PM" (in the ticker on a single 64x64 panel), or else the date. Outside football, the clock comes up once the next game is more than 10 days away, so a football bye week never shows it. A panel with no team picked shows the clock in gray.
 - When it starts up and joins Wi-Fi, every panel shows the QR code for the Game Day app, then its address, then your game. Turn off "Show how to connect when the panel starts" to go straight to the game.
 - After you set up Wi-Fi, the panel sets its clock within a second or two instead of up to a few minutes, and says "Getting ready" until then instead of "No upcoming game".
+- A panel that cannot reach ESPN says "Can't reach ESPN" instead of "No upcoming game", after a restart and after a team change. Favorites no longer sits on a blank board while reads fail.
 - A panel that can't get back on Wi-Fi restarts itself after a minute instead of ten, and never while you are setting it up from the app. If the app hands it a wrong password during an outage, it goes back to the network it had.
+- The panel remembers up to five Wi-Fi networks. Set it up on a phone hotspot for a tailgate or a bar and it still knows your home network when it gets back; it joins whichever saved network it can see, trying the last one that worked first. The device page lists them and can forget one. Reset Wi-Fi and Factory Reset still clear them all.
 - Each panel's setup hotspot has its own name, like "Game Day 2f6a70", shown on the panel's setup screen, so two panels in one house are easy to tell apart.
 - Long Wi-Fi names, and names with a curly apostrophe like an iPhone hotspot's, show correctly while the panel joins. Accented letters in names show too, instead of a box.
 - A postponed, canceled or suspended game no longer shows as Final, and a suspended game no longer gets a WINS splash.
+- A game whose kickoff time isn't set yet, like a college game two weeks out, shows "Sat TBD" instead of a made-up time like "Fri 11:00 PM", and the panel finds that game's scoreboard on the right day.
 - Bowl and playoff games show their name, like "Rose Bowl" or "NFC Wild Card", at the start of the pre-game ticker and under the score on the device page.
 - After you change teams, both logos are there when the scoreboard shows up, instead of popping in one at a time.
 - The device page works better with a screen reader. Switches say whether they are on or off, the brightness and speed sliders, menus and team search have names, and the mode, league and picker tab buttons say which one is chosen.
@@ -41,6 +45,9 @@ owns the panel, not for the code.
 - The device page's panel picker names the panel we ship: "One 128x64 panel", or two 64x64 side by side. Before, you had to pick "Two panels wide" for one panel.
 - Built your own? The DIY installer at gamedayscoreboard.app asks whether you have one 64x64 panel or a 128x64 (or two 64x64 side by side) and installs the matching firmware, so a two-panel build starts on the whole board.
 - The hidden demo (do=demo) is gone from the regular firmware.
+- During a game the panel asks ESPN for just that game instead of the whole day's scoreboard, about a tenth of the data it downloaded before. The device page shows how much the panel has pulled from ESPN since it started, for anyone on a capped plan.
+- The device page's header shows a GD mark instead of a football. The lines under the Live games and Favorite teams bars now name the settings that decide the behavior: Switch every, the favorites' slot order, and Alternate.
+- A team logo that will not download is asked for less and less often, instead of every 15 seconds, and a logo that ESPN refuses waits much longer. The score keeps updating as before, and the logo shows up once a request goes through.
 
 ## v1.5.5
 

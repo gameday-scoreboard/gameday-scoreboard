@@ -28,8 +28,8 @@ struct LeagueInfo {
 };
 
 constexpr LeagueInfo kLeagues[] = {
-    {League::NFL, "nfl", "football/nfl", "NFL", "nfl", Sport::FOOTBALL, false, true, false, 30},
-    {League::NCAA, "ncaa", "football/college-football", "NCAAF", "ncaa", Sport::FOOTBALL, false, true, true, 30},
+    {League::NFL, "nfl", "football/nfl", "NFL", "nfl", Sport::FOOTBALL, true, true, false, 30},
+    {League::NCAA, "ncaa", "football/college-football", "NCAAF", "ncaa", Sport::FOOTBALL, true, true, true, 30},
     // A regular-season team schedule is ~2.7 MB, so no Up next list. Game 2
     // of a doubleheader can start half an hour after game 1: short linger.
     {League::MLB, "mlb", "baseball/mlb", "MLB", "mlb", Sport::BASEBALL, true, false, false, 10},

@@ -1,0 +1,11 @@
+# Bar build for the MoonHub75 pinout: gameday.yaml plus the beta channel
+# (pages/bar.yaml). For the free panels in bars only; CI publishes it to the
+# beta channel from the beta branch, never to the flasher or the release
+# manifest.
+substitutions:
+  update_source: "https://gamedayscoreboard.app/firmware/beta/${variant}/manifest.json"
+  bar_report_email: "support@gameday-scoreboard.com"
+
+packages:
+  base: !include gameday.yaml
+  bar: !include pages/bar.yaml
