@@ -134,7 +134,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <h2>Ticker</h2>
         <p class="hint">What scrolls along the bottom of the panel during a game.</p>
         <div id="tickerCtls">
-          <div class="ctl"><label>Game situation<small>Football: down and distance. Baseball: the count, outs, pitcher and batter. Soccer: goals, cards, possession and shots. Nothing extra in hockey or basketball.</small></label><button class="sw" data-set="down" aria-label="Game situation"></button></div>
+          <div class="ctl" data-sport="football"><label>Down and distance<small>Football: the down, yards to go and where the ball is.</small></label><button class="sw" data-set="down" aria-label="Down and distance"></button></div>
+          <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
+          <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
           <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
         </div>
@@ -285,7 +287,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
@@ -694,6 +696,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
+    // A situation switch for each sport the panel follows (team, favorites,
+    // Live games leagues picked by hand), all of them before anything is
+    // picked. The automatic Live list is no help here: it never comes back
+    // empty (NFL on a new panel). Hockey and basketball have no situation
+    // line, so no switch.
+    const sports = new Set([S.team].concat(S.favs || []).filter((t) => t && t.id).map((t) => t.l)
+      .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
+    document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
+      row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
+    });
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // The bar build: a note, and an email to us with the panel's name in it.

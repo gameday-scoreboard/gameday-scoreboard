@@ -358,6 +358,10 @@ static void test_status_text() {
   TickerOptions none;
   none.clock = none.down_distance = none.last_play = false;
   CHECK_EQ(status_text(s, none, ""), std::string("15:00 - 4th"));
+  // Baseball's and soccer's switches don't touch football's.
+  TickerOptions others_off = all;
+  others_off.baseball_count = others_off.soccer_stats = false;
+  CHECK_EQ(status_text(s, others_off, ""), status_text(s, all, ""));
   // Long play is truncated
   s.last_play = std::string(200, 'x');
   TickerOptions only_play;
@@ -923,8 +927,12 @@ static void test_mlb_live() {
   o.clock = false;
   CHECK_EQ(status_text(t, o, ""), std::string("2-1, 2 outs | P D. Fuentes, AB M. Muncy | Pitch 3 : Ball 2"));
   TickerOptions quiet = o;
-  quiet.down_distance = quiet.last_play = false;
+  quiet.baseball_count = quiet.last_play = false;
   CHECK_EQ(status_text(t, quiet, ""), std::string("Top 7th"));
+  // Football's switch doesn't touch the count.
+  TickerOptions no_football = o;
+  no_football.down_distance = false;
+  CHECK_EQ(status_text(t, no_football, ""), status_text(t, o, ""));
 
   // The same game from the Dodgers' side: they bat.
   GameSnapshot d = mlb_event("fixtures/event_mlb_top.json", kDodgers);
@@ -1224,8 +1232,12 @@ static void test_soccer_live() {
            std::string("Cards CRU 1Y, SAO 1Y | Possession CRU 64.1%, SAO 35.9% | Shots (on target) CRU 4 (0), SAO 4 (1) | "
                        "24' Yellow Card: G. Rojas (CRU)"));
   TickerOptions with_clock;
-  with_clock.down_distance = with_clock.last_play = false;
+  with_clock.soccer_stats = with_clock.last_play = false;
   CHECK_EQ(status_text(fh, with_clock, ""), std::string("25'"));
+  // Football's and baseball's switches don't touch soccer's.
+  TickerOptions others_off = o;
+  others_off.down_distance = others_off.baseball_count = false;
+  CHECK_EQ(status_text(fh, others_off, ""), status_text(fh, o, ""));
 
   // Half time, Vasco (away) lead 1-0.
   GameSnapshot h = soccer_event("fixtures/event_soccer_halftime.json", kVasco);
@@ -1259,7 +1271,7 @@ static void test_soccer_live() {
                        "Possession INT 28%, COR 72% | Shots (on target) INT 17 (7), COR 21 (6) | "
                        "85' Yellow Card: R. Garro (COR)"));
   TickerOptions quiet = o;
-  quiet.down_distance = quiet.last_play = false;
+  quiet.soccer_stats = quiet.last_play = false;
   CHECK_EQ(status_text(s, quiet, ""), std::string("90'+2'"));
 
   // Second half with a red card: Mirassol (away) down to ten.
