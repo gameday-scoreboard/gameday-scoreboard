@@ -2,6 +2,7 @@
 
 #include "esphome/components/runtime_image/image_decoder.h"
 #include "esphome/core/hal.h"
+#include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 #include "logo_lru.h"
 
@@ -41,7 +42,7 @@ image::Image *LogoCache::get(const std::string &url) {
     e->used_ms = now;
     if (e->state == State::READY)
       return &*e->image;
-    if (e->state == State::FAILED && ::espn::logo_retry_due(e->failed_ms, now)) {
+    if (e->state == State::FAILED && ::espn::logo_retry_due(e->failed_ms, e->wait_ms, now)) {
       e->state = State::QUEUED;
       this->start_task_();
     }
@@ -101,7 +102,8 @@ void LogoCache::retry_pinned_(uint32_t now) {
   this->retry_check_ms_ = now;
   Locked guard(this->lock_);
   for (auto &e : this->entries_) {
-    if (e->state == State::FAILED && this->pinned_url_(e->url) && ::espn::logo_retry_due(e->failed_ms, now)) {
+    if (e->state == State::FAILED && this->pinned_url_(e->url) &&
+        ::espn::logo_retry_due(e->failed_ms, e->wait_ms, now)) {
       e->state = State::QUEUED;
       this->start_task_();
     }
@@ -165,8 +167,10 @@ void LogoCache::run_() {
       url.assign(job->url.data(), job->url.size());
     }
     Bytes body;
+    bool throttled = false;
+    uint32_t retry_after_ms = 0;
     uint32_t start = millis();
-    bool ok = this->download_(url, body);
+    bool ok = this->download_(url, body, throttled, retry_after_ms);
     size_t bytes = body.size();
     {
       Locked guard(this->lock_);
@@ -176,6 +180,7 @@ void LogoCache::run_() {
       } else {
         job->state = State::FAILED;
         job->failed_ms = millis();
+        ::espn::logo_failed(job->fails, job->wait_ms, throttled, retry_after_ms, random_uint32());
       }
     }
     if (ok) {
@@ -187,23 +192,28 @@ void LogoCache::run_() {
   }
 }
 
-bool LogoCache::download_(const std::string &url, Bytes &body) {
+// On a refusal (403 or 429) sets throttled, and retry_after_ms when the reply
+// carried a plain Retry-After.
+bool LogoCache::download_(const std::string &url, Bytes &body, bool &throttled, uint32_t &retry_after_ms) {
   std::vector<http_request::Header> headers = {
       {"User-Agent", USER_AGENT},
       {"Accept", "image/png,*/*;q=0.8"},
   };
-  auto container = this->http_->get(url, headers);
+  auto container = this->http_->get(url, headers, {"retry-after"});
   if (container == nullptr)
     return false;
   if (container->status_code != 200) {
     int code = container->status_code;
+    throttled = ::espn::is_throttle_status(code);
+    if (throttled)
+      retry_after_ms = ::espn::parse_retry_after_ms(container->get_response_header("retry-after"));
     container->end();
     // Kept under the dark URL, so the next lookup finds it and nothing asks
-    // for the missing one every 15 s.
+    // for the missing one again and again.
     std::string plain = ::espn::plain_logo_url(url);
     if (code == 404 && !plain.empty()) {
       ESP_LOGD(TAG, "No dark logo, using %s", plain.c_str());
-      return this->download_(plain, body);
+      return this->download_(plain, body, throttled, retry_after_ms);
     }
     ESP_LOGW(TAG, "HTTP %d for %s", code, url.c_str());
     return false;
@@ -218,6 +228,7 @@ bool LogoCache::download_(const std::string &url, Bytes &body) {
     body.insert(body.end(), buf, buf + n);
   }
   container->end();
+  this->bytes_downloaded_ += body.size();
   if (body.empty() || (container->content_length > 0 && body.size() < container->content_length))
     return false;
   return true;
@@ -277,10 +288,12 @@ bool LogoCache::loop() {
     Locked guard(this->lock_);
     if (ok) {
       job->state = State::READY;
+      ::espn::logo_loaded(job->fails, job->wait_ms);
       ready = true;
     } else {
       job->state = State::FAILED;
       job->failed_ms = millis();
+      ::espn::logo_failed(job->fails, job->wait_ms, false, 0, random_uint32());
     }
   }
 }

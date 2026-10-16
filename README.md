@@ -19,7 +19,7 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 - A device page that mirrors the panel, celebrates with it, lists the next three games in football and soccer, and holds every setting
 - Up to 16 favorite teams from any league, cycling through the ones playing today, with the first four on a WizMote remote's numbered buttons
 - Updates itself over WiFi from the device page when a new release is out, or on its own between 3 and 5 AM if you turn on Install updates automatically
-- Adapts to one 64x64 panel (logos side by side, stacked scores) or two panels wide (logos at the edges, big scores, records and pips in the middle); one firmware, the count is a setting
+- Adapts to one 64x64 panel (logos side by side, stacked scores) or one 128x64 panel or two 64x64 side by side (logos at the edges, big scores, records and pips in the middle); one firmware, the count is a setting
 
 ## Hardware
 
