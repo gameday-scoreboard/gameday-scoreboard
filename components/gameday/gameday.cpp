@@ -2097,6 +2097,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   const GameSnapshot &ha = this->ha_game_();
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;
+  // Before the Live mode prefixes, so a fallback team's Next line keeps "No
+  // live X games, showing CHI |" in front of it.
+  this->clock_fields_(f);
   if (this->live_mode_() && !this->demo_playing_()) {
     std::string league_word = this->live_word_();
     const ::espn::Team *saved = this->current_team_();
@@ -2118,7 +2121,6 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.message = this->live_none_ ? "No live " + league_word + "games" : "Looking for a live " + league_word + "game";
     }
   }
-  this->clock_fields_(f);
   // An empty board says why (espn_parse.h, no_game_text): the clock is not
   // set yet, or ESPN cannot be reached. "No upcoming game" is only right
   // once ESPN itself has said so; before that it would be a guess.
@@ -2213,13 +2215,14 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
       return;
     color = g.valid ? g.team_color : this->schedule_.team_color;
     if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0) {
-      struct tm kick = ESPTime::from_epoch_local((time_t) g.kickoff_epoch).to_c_tm();
+      int64_t at = g.time_tbd ? ::espn::tbd_day_epoch(g.kickoff_epoch) : g.kickoff_epoch;
+      struct tm kick = ESPTime::from_epoch_local((time_t) at).to_c_tm();
       struct tm now = this->time_->now().to_c_tm();
       std::string ours = panel_text(g.team_abbr), opp = panel_text(g.opp_abbr);
-      f.next_line = ::espn::next_line(ours, opp, g.team_home, kick, now, "\n");
+      f.next_line = ::espn::next_line(ours, opp, g.team_home, kick, now, "\n", g.time_tbd);
       // The ticker carries it on both layouts, since a single panel has no
       // room for it under the time.
-      f.status_text = ::espn::next_line(ours, opp, g.team_home, kick, now);
+      f.status_text = ::espn::next_line(ours, opp, g.team_home, kick, now, " ", g.time_tbd);
     }
   }
   f.clock = true;

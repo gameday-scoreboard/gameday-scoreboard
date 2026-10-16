@@ -37,10 +37,12 @@ inline bool off_season(GameState state, int64_t kickoff_epoch, int64_t now, int6
 }
 
 // "Next: DAL vs PHI" at home, "Next: at PHI" away, then sep and the kickoff
-// ("Mar 26 7:05 PM"). The board puts the kickoff on its own line; the ticker
+// ("Mar 26 7:05 PM", or "Mar 26 TBD" with no time yet, when kick_local is
+// from tbd_day_epoch). The board puts the kickoff on its own line; the ticker
 // takes it as one line.
 inline std::string next_line(const std::string &our_abbr, const std::string &opp_abbr, bool home,
-                             const struct tm &kick_local, const struct tm &now_local, const char *sep = " ") {
+                             const struct tm &kick_local, const struct tm &now_local, const char *sep = " ",
+                             bool time_tbd = false) {
   std::string out = "Next:";
   if (opp_abbr.empty())
     out = "Next game";
@@ -50,7 +52,7 @@ inline std::string next_line(const std::string &our_abbr, const std::string &opp
     out += " vs " + opp_abbr;
   else
     out += " " + our_abbr + " vs " + opp_abbr;
-  return out + sep + kickoff_label(kick_local, now_local);
+  return out + sep + kickoff_label(kick_local, now_local, time_tbd);
 }
 
 // "3:25 PM": 12-hour, no seconds.

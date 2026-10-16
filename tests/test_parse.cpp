@@ -3326,6 +3326,9 @@ static void test_offseason() {
   CHECK_EQ(next_line("COL", "LAD", true, mar26, oct15, "\n"), std::string("Next: COL vs LAD\nMar 26 7:05 PM"));
   // An opponent ESPN has not named yet.
   CHECK_EQ(next_line("COL", "", true, mar26, oct15), std::string("Next game Mar 26 7:05 PM"));
+  // A game with no time yet shows TBD, not ESPN's midnight placeholder.
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15, " ", true), std::string("Next: at PHI Mar 26 TBD"));
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15, "\n", true), std::string("Next: at PHI\nMar 26 TBD"));
 
   // The clock itself: 12-hour, no seconds, no leading zero.
   CHECK_EQ(clock_time_text(mk(2026, 287, 4, 0, 5, 9, 15)), std::string("12:05 AM"));
