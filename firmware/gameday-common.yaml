@@ -147,8 +147,9 @@ external_components:
     # improv_ble is ESPHome 2026.10's own, plus answering the app's "which
     # Wi-Fi networks can you see" request and going back to the saved network
     # when a handover fails (components/improv_ble). saved_networks keeps up
-    # to five Wi-Fi networks where ESPHome keeps one.
-    components: [gameday, panel_layout, improv_ble, saved_networks]
+    # to five Wi-Fi networks where ESPHome keeps one. crash_report keeps the
+    # last crash's backtrace in flash.
+    components: [gameday, panel_layout, improv_ble, saved_networks, crash_report]
   - source: github://pavlov-net/lvgl-page-manager@v0.3.0
     components: [lvgl_page_manager]
   # Fireworks behind the touchdown and win splashes
@@ -219,6 +220,13 @@ ota:
 # drops one.
 saved_networks:
   id: gd_networks
+
+# The last crash, watchdog or brownout restart, with the backtrace ESPHome's
+# crash handler saved, kept in flash until cleared: GET /gameday/crash, and
+# scripts/crash_report.py decodes it against the release's ELF.
+crash_report:
+  id: gd_crash
+  variant: "${variant}"
 
 wifi:
   power_save_mode: none
