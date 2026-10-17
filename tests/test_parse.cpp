@@ -90,6 +90,18 @@ static void test_iso() {
   CHECK_EQ(parse_iso8601_z("2026-09-05T19:30Z"), (int64_t) 1788636600);
   CHECK_EQ(parse_iso8601_z("2026-09-10T00:20:00Z"), (int64_t) 1788999600);
   CHECK_EQ(parse_iso8601_z("garbage"), (int64_t) 0);
+  // Fields too long or out of range read as no date instead of overflowing
+  // (found by fuzz_espn).
+  CHECK_EQ(parse_iso8601_z("2026-10-17T999999999:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-999999999-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-2147483647T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T19:999999999Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2147483647-10-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-13-01T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T24:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T-1:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("1969-12-31T23:59Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("9999-12-31T23:59:59Z"), (int64_t) 253402300799);
 }
 
 static void test_team_parse() {
