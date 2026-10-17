@@ -85,9 +85,11 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator("#curName")).toHaveText("Dallas Cowboys");
   await expect(page.locator('.sw[data-set="down"]')).toHaveClass(/\bon\b/);
   await expect(page.locator('.sw[data-set="odds"]')).not.toHaveClass(/\bon\b/);
-  // The ticker switches are named for every sport, not football.
-  await expect(page.getByRole("switch", { name: "Game situation", exact: true })).toHaveAttribute("data-set", "down");
-  await expect(page.locator("#tickerCtls")).not.toContainText("Down and distance");
+  // One situation switch per sport, shown for the sports the panel follows:
+  // this one follows only football.
+  await expect(page.getByRole("switch", { name: "Down and distance", exact: true })).toHaveAttribute("data-set", "down");
+  await expect(page.getByRole("switch", { name: "Count and at-bat" })).toBeHidden();
+  await expect(page.getByRole("switch", { name: "Match stats" })).toBeHidden();
   await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
     /^1\. Dallas Cowboys/, /^2\. Houston Texans/, /^3\. Ole Miss Rebels/,
   ]);
@@ -349,7 +351,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(page.locator("#conn")).toHaveAttribute("aria-live", "polite");
   await expect(page.locator("#toast")).toHaveAttribute("role", "status");
 
-  await expect(page.getByRole("switch", { name: "Game situation" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Down and distance" })).toBeChecked();
   await expect(page.getByRole("switch", { name: "Last play" })).not.toBeChecked();
   await page.getByRole("switch", { name: "Last play" }).click();
   await expectSet(request, { play: "1" });
@@ -480,7 +482,7 @@ const chip = (page, tab) => page.locator("#liveChips .chip", { hasText: new RegE
 const chipsOn = (page) => page.locator("#liveChips .chip.on");
 
 test("Live games chips match the panel through taps, a slow re-read, mode switches and a reload", async ({ page, request }) => {
-  // The steps from backlog#148: an old Live college panel, MLB on, NCAAF off,
+  // The steps from the reported bug: an old Live college panel, MLB on, NCAAF off,
   // Favorite teams and back. The re-read after each tap is still out when
   // the next tap comes.
   await reset(request, { mode: 2 });
@@ -675,6 +677,47 @@ test("favorites and switches keep each tap through a slow re-read", async ({ pag
   ]);
   const st = await deviceState(request);
   expect([st.opp, st.down]).toEqual([false, false]);
+});
+
+test("situation switches: one per sport the panel follows, each posting its own key", async ({ page, request }) => {
+  const sw = (name) => page.getByRole("switch", { name, exact: true });
+  // Nothing picked yet: every sport's switch.
+  await reset(request, { team: {}, favs: [{}, {}, {}, {}] });
+  await page.goto("/");
+  await expect(sw("Down and distance")).toBeVisible();
+  await expect(sw("Count and at-bat")).toBeVisible();
+  await expect(sw("Match stats")).toBeVisible();
+
+  // A Yankees panel with an Arsenal favorite: baseball and soccer, no football.
+  await reset(request, {
+    team: { l: "mlb", id: 10, abbr: "NYY", name: "New York Yankees" },
+    favs: [{ l: "epl", id: 359, abbr: "ARS", name: "Arsenal" }, {}, {}, {}],
+  });
+  await page.reload();
+  await expect(sw("Down and distance")).toBeHidden();
+  await expect(sw("Count and at-bat")).toBeVisible();
+  await expect(sw("Match stats")).toBeVisible();
+  await sw("Count and at-bat").click();
+  await expectSet(request, { count: "0" });
+  await expect(sw("Count and at-bat")).not.toBeChecked();
+  await expect(sw("Match stats")).toBeChecked();
+  await sw("Match stats").click();
+  await expectSet(request, { match: "0" });
+  const st = await deviceState(request);
+  expect([st.down, st.count, st.match]).toEqual([true, false, false]);
+
+  // Hockey only: no situation line, so no switch.
+  await reset(request, { team: { l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, favs: [{}, {}, {}, {}] });
+  await page.reload();
+  await expect(page.locator("#tickerCtls .ctl[data-sport]:visible")).toHaveCount(0);
+  await expect(sw("Last play")).toBeVisible();
+
+  // Live games leagues picked by hand count too.
+  await reset(request, { team: { l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, favs: [{}, {}, {}, {}],
+    live_auto: false, live: ["nhl", "mls"] });
+  await page.reload();
+  await expect(sw("Match stats")).toBeVisible();
+  await expect(sw("Down and distance")).toBeHidden();
 });
 
 test("the picker has a tab per league and follows a team from another sport", async ({ page, request }) => {

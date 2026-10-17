@@ -61,14 +61,25 @@ script:
           // single panel ("Saturday's / college / scores") still fits.
           lv_obj_set_style_text_font(id(tt_no_game_msg_lbl), wide ? id(spleen_12) : id(spleen_8), 0);
           lv_obj_align(id(tt_no_game_msg_lbl), LV_ALIGN_CENTER, 0, 0);
+          // The off-season clock: the time, and under it the next game (two
+          // lines) on a wide display or the date on a single panel.
+          lv_obj_set_width(id(gd_clock_time_lbl), W);
+          lv_obj_set_width(id(gd_clock_sub_lbl), W);
+          lv_obj_set_style_text_font(id(gd_clock_time_lbl), id(spleen_16), 0);
+          lv_obj_set_style_text_font(id(gd_clock_sub_lbl), wide ? id(spleen_12) : id(spleen_8), 0);
+          lv_obj_set_pos(id(gd_clock_time_lbl), 0, wide ? 6 : 14);
+          lv_obj_set_pos(id(gd_clock_sub_lbl), 0, wide ? 26 : 34);
           lv_obj_set_width(id(tt_game_status_lbl), W);
           lv_obj_t *abars[3] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3)};
           lv_obj_t *hbars[3] = {id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
           if (wide) {
-            // Logos at the far edges, score columns in the middle
+            // Logos at the far edges, score columns in the middle. A badge
+            // (the abbreviation standing in for a logo) takes the logo's place.
             const int colw = W / 2 - 36;
             lv_obj_set_pos(id(gd_team_logo_img), 2, 4);
             lv_obj_set_pos(id(gd_opp_logo_img), W - 34, 4);
+            lv_obj_set_pos(id(gd_team_badge), 2, 4);
+            lv_obj_set_pos(id(gd_opp_badge), W - 34, 4);
             lv_obj_set_style_text_font(id(tt_away_team_lbl), id(spleen_12), 0);
             lv_obj_set_style_text_font(id(tt_home_team_lbl), id(spleen_12), 0);
             lv_obj_set_style_text_font(id(tt_away_score_lbl), id(spleen_16), 0);
@@ -116,6 +127,8 @@ script:
             // Single panel: logos side by side, everything stacked beneath
             lv_obj_set_pos(id(gd_team_logo_img), 0, 0);
             lv_obj_set_pos(id(gd_opp_logo_img), W - 32, 0);
+            lv_obj_set_pos(id(gd_team_badge), 0, 0);
+            lv_obj_set_pos(id(gd_opp_badge), W - 32, 0);
             lv_obj_set_style_text_font(id(tt_away_team_lbl), id(spleen_8), 0);
             lv_obj_set_style_text_font(id(tt_home_team_lbl), id(spleen_8), 0);
             lv_obj_set_style_text_font(id(tt_away_score_lbl), id(spleen_12), 0);
@@ -190,6 +203,10 @@ script:
       is_red_zone: bool
       team_color: int
       opponent_color: int
+      team_badge: bool
+      opponent_badge: bool
+      team_ring: int
+      opponent_ring: int
       possession: int
       team_timeouts: int
       opponent_timeouts: int
@@ -205,14 +222,37 @@ script:
       team_marks: int
       opp_marks: int
       message: string
+      clock_card: bool
+      next_line: string
     then:
       - lambda: |-
           id(gd_sport) = sport;
-          // A side with no team yet (just after a team change) shows no logo
-          if (team_abbr.empty()) lv_obj_add_flag(id(gd_team_logo_img), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_clear_flag(id(gd_team_logo_img), LV_OBJ_FLAG_HIDDEN);
-          if (opponent_abbr.empty()) lv_obj_add_flag(id(gd_opp_logo_img), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_clear_flag(id(gd_opp_logo_img), LV_OBJ_FLAG_HIDDEN);
+          // A side with no team yet (just after a team change) shows no logo.
+          // A side with no logo to fetch (the demo build's made-up teams)
+          // shows its abbreviation badge in the logo's place, drawn by the
+          // app's rules (badge.h) so the panel and the phone match.
+          auto slot = [](lv_obj_t *img, lv_obj_t *box, lv_obj_t *lbl, const std::string &abbr, bool badge,
+                         uint32_t fill, uint32_t ring) {
+            if (abbr.empty() || badge) lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
+            if (abbr.empty() || !badge) {
+              lv_obj_add_flag(box, LV_OBJ_FLAG_HIDDEN);
+              return;
+            }
+            ::espn::BadgeStyle st = ::espn::badge_style(fill, ring);
+            lv_obj_set_style_bg_color(box, lv_color_hex(st.fill), 0);
+            lv_obj_set_style_border_width(box, st.has_ring ? 2 : 0, 0);
+            lv_obj_set_style_border_color(box, lv_color_hex(st.has_ring ? st.ring : st.fill), 0);
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || abbr != cur)
+              lv_label_set_text(lbl, abbr.c_str());
+            lv_obj_set_style_text_color(lbl, lv_color_hex(st.dark_text ? 0x000000 : 0xFFFFFF), 0);
+            lv_obj_clear_flag(box, LV_OBJ_FLAG_HIDDEN);
+          };
+          slot(id(gd_team_logo_img), id(gd_team_badge), id(gd_team_badge_lbl), team_abbr, team_badge,
+               (uint32_t) team_color, (uint32_t) team_ring);
+          slot(id(gd_opp_logo_img), id(gd_opp_badge), id(gd_opp_badge_lbl), opponent_abbr, opponent_badge,
+               (uint32_t) opponent_color, (uint32_t) opponent_ring);
       - lvgl.label.update:
           id: tt_away_team_lbl
           text: !lambda 'return team_abbr;'
@@ -298,7 +338,8 @@ script:
           underline(under_scores ? id(tt_home_score_lbl) : id(tt_home_team_lbl), id(tt_home_poss), live && possession == 2);
       - lambda: |-
           // Toggle between the game layout and the "no game" layout
-          if (game_state == "NOT_FOUND" || game_state == "BYE" || game_state == "") {
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          if (clock_card || game_state == "NOT_FOUND" || game_state == "BYE" || game_state == "") {
             // The component's words for this screen (the finals rotation's
             // headers and next kickoff, "No live games"), else the default.
             const char *msg = message.empty() ? "No upcoming game" : message.c_str();
@@ -311,9 +352,30 @@ script:
             lv_obj_clear_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(tt_no_game_container), LV_OBJ_FLAG_HIDDEN);
           }
+          // The off-season clock takes the message's place, and borrows the
+          // ticker from the hidden game layout so it keeps running under it.
+          lv_obj_t *ticker_parent = clock_card ? id(tt_no_game_container) : id(tt_game_container);
+          if (lv_obj_get_parent(id(tt_game_status_lbl)) != ticker_parent)
+            lv_obj_set_parent(id(tt_game_status_lbl), ticker_parent);
+          if (clock_card) {
+            lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_color(id(gd_clock_time_lbl), lv_color_hex((uint32_t) team_color), 0);
+            id(gd_clock_date) = W < 128 || next_line.empty();
+            if (!id(gd_clock_date)) {
+              const char *cur = lv_label_get_text(id(gd_clock_sub_lbl));
+              if (cur == nullptr || next_line != cur)
+                lv_label_set_text(id(gd_clock_sub_lbl), next_line.c_str());
+            }
+            lv_obj_clear_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+            id(gd_clock_tick).execute();
+          } else {
+            lv_obj_clear_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+          }
           // Records are pre/post-game info; hide them while the game is live
           // (the layout also hides them entirely on narrow displays).
-          const int W = lv_disp_get_hor_res(lv_disp_get_default());
           if (W < 128) {
             lv_obj_add_flag(id(tt_away_rec_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(tt_home_rec_lbl), LV_OBJ_FLAG_HIDDEN);
@@ -444,6 +506,32 @@ script:
                 lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
             - script.execute: tt_hide_splash
 
+  # The off-season clock's time, and the date when that line has no next
+  # game, in the panel's time zone. A label is only rewritten when its text
+  # changes, so once a minute.
+  - id: gd_clock_tick
+    then:
+      - lambda: |-
+          if (lv_obj_has_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN))
+            return;
+          ESPTime now = id(ha_time).now();
+          if (!now.is_valid())
+            return;
+          struct tm t = now.to_c_tm();
+          auto put = [](lv_obj_t *lbl, const std::string &text) {
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || text != cur)
+              lv_label_set_text(lbl, text.c_str());
+          };
+          put(id(gd_clock_time_lbl), ::espn::clock_time_text(t));
+          if (id(gd_clock_date))
+            put(id(gd_clock_sub_lbl), ::espn::clock_date_text(t));
+
+interval:
+  - interval: 1s
+    then:
+      - script.execute: gd_clock_tick
+
 lvgl:
   style_definitions:
     - id: tt_st_team_text
@@ -482,6 +570,53 @@ lvgl:
                   src: gd_logo_blank
                   x: 32
                   y: 0
+
+              # Abbreviation badges, each in its logo's place when that side
+              # has no logo: a rounded square in the team's color with a ring
+              # in its second color and the abbreviation on it (badge.h).
+              # Shown by gd_update; the fill, ring and letters are set there.
+              - obj:
+                  id: gd_team_badge
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 32
+                  height: 32
+                  radius: 8
+                  pad_all: 0
+                  border_width: 2
+                  border_color: 0xFFFFFF
+                  bg_opa: COVER
+                  bg_color: 0x808080
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_team_badge_lbl
+                        align: CENTER
+                        text_font: spleen_12
+                        text_color: 0xFFFFFF
+                        text: ""
+              - obj:
+                  id: gd_opp_badge
+                  scrollbar_mode: "OFF"
+                  x: 32
+                  y: 0
+                  width: 32
+                  height: 32
+                  radius: 8
+                  pad_all: 0
+                  border_width: 2
+                  border_color: 0xFFFFFF
+                  bg_opa: COVER
+                  bg_color: 0x808080
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_opp_badge_lbl
+                        align: CENTER
+                        text_font: spleen_12
+                        text_color: 0xFFFFFF
+                        text: ""
 
               - label:
                   id: tt_away_team_lbl
@@ -784,6 +919,26 @@ lvgl:
                   long_mode: WRAP
                   text: "No upcoming game"
                   styles: ["tt_st_team_text"]
+              # The off-season clock, shown by gd_update in the message's place
+              - label:
+                  id: gd_clock_time_lbl
+                  x: 0
+                  y: 14
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_score_text"]
+              - label:
+                  id: gd_clock_sub_lbl
+                  x: 0
+                  y: 34
+                  width: 64
+                  text_align: CENTER
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_status_text"]
 
       on_load:
         then:

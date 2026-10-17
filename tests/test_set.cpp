@@ -50,7 +50,7 @@ struct Settings {
   TeamRef team;
   uint8_t team_league{0};
   int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
-  bool collide{false}, today{false}, tz_auto{true}, down{true}, play{true}, odds{true}, opp{true};
+  bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true};
   bool bootaddr{true}, autoupd{false};
   TeamRef favs[16];
   uint16_t live_mask{0};
@@ -112,6 +112,8 @@ void load(Settings &s, JsonObjectConst o) {
   flag("today", s.today);
   flag("tz_auto", s.tz_auto);
   flag("down", s.down);
+  flag("count", s.count);
+  flag("match", s.match);
   flag("play", s.play);
   flag("odds", s.odds);
   flag("opp", s.opp);
@@ -141,6 +143,8 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::TZ: s.tz = op.value; break;
     case SetKind::TZ_AUTO: s.tz_auto = op.on; break;
     case SetKind::DOWN: s.down = op.on; break;
+    case SetKind::COUNT: s.count = op.on; break;
+    case SetKind::MATCH: s.match = op.on; break;
     case SetKind::PLAY: s.play = op.on; break;
     case SetKind::ODDS: s.odds = op.on; break;
     case SetKind::OPP: s.opp = op.on; break;
@@ -180,6 +184,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["tz"] = s.tz;
   doc["tz_auto"] = s.tz_auto;
   doc["down"] = s.down;
+  doc["count"] = s.count;
+  doc["match"] = s.match;
   doc["play"] = s.play;
   doc["odds"] = s.odds;
   doc["opp"] = s.opp;
@@ -279,11 +285,26 @@ void test_live_leagues() {
   SCHECK(live_mask_from_keys("nhl,") == (1u << (uint8_t) League::NHL), "trailing comma");
 }
 
+// What each mode's scan reads is what its finals rotation walks.
+void test_scan_leagues() {
+  std::vector<League> live = {League::MLB, League::NBA, League::NHL};
+  SCHECK(keys(scan_leagues((uint8_t) Mode::MY_TEAM, live)) == "", "My team scans none");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NFL, live)) == "nfl", "Live NFL");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NCAA, live)) == "ncaa", "Live college");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything and the no-team default");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::FAVORITES, live)) == "", "Favorites scans none");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live)) == "mlb,nba,nhl", "Live games, its own leagues");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, (uint8_t) League::EPL, {}))) == "epl",
+         "Live games, auto from the team's league");
+  SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
+}
+
 }  // namespace
 
 int run_set_tests(int &total_checks) {
   test_parse_set();
   test_live_leagues();
+  test_scan_leagues();
   test_fixture_cases();
   total_checks += checks;
   return failures;

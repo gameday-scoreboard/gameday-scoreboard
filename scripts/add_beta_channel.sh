@@ -19,6 +19,8 @@ if ! gh release view beta-firmware --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; 
   exit 0
 fi
 ok=1
+# unzip -d makes only the last directory, not firmware/ above it.
+mkdir -p "$tmp/firmware/beta"
 for v in moonhub75 scoreboard75; do
   if ! gh release download beta-firmware --repo "$GITHUB_REPOSITORY" -p "firmware-beta-$v.zip" -D "$tmp" ||
      ! unzip -q -o "$tmp/firmware-beta-$v.zip" -d "$tmp/firmware/beta"; then

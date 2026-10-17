@@ -12,7 +12,8 @@
   "base": {
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "today": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
-    "down": true, "play": true, "odds": true, "opp": true, "bootaddr": true, "autoupd": false, "panels": 1
+    "down": true, "count": true, "match": true, "play": true, "odds": true, "opp": true, "bootaddr": true,
+    "autoupd": false, "panels": 1
   },
   "cases": [
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
@@ -38,6 +39,9 @@
     {"name": "today on", "set": [["today", "1"]], "expect": {"today": true}},
     {"name": "ticker and boot switches off", "set": [["down", "0"], ["play", "0"], ["odds", "0"], ["opp", "0"], ["bootaddr", "0"], ["tzauto", "0"]],
      "expect": {"down": false, "play": false, "odds": false, "opp": false, "bootaddr": false, "tz_auto": false}},
+    {"name": "each sport's situation switch is its own", "set": [["count", "0"]], "expect": {"down": true, "count": false, "match": true}},
+    {"name": "soccer stats off, football and baseball stay on", "set": [["match", "0"]], "expect": {"down": true, "count": true, "match": false}},
+    {"name": "football off leaves the others", "set": [["down", "0"]], "expect": {"down": false, "count": true, "match": true}},
     {"name": "automatic updates on", "set": [["autoupd", "1"]], "expect": {"autoupd": true}},
 
     {"name": "tz by index", "set": [["tz", "3"]], "expect": {"tz": 3}},

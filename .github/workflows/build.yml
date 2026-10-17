@@ -160,6 +160,9 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
+      # The installer would say "Installing bharvey88.gameday-scoreboard".
+      - name: Product name in the manifest
+        run: ./scripts/set_manifest_name.sh out
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.variant }}
@@ -256,6 +259,8 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
+      - name: Product name in the manifest
+        run: ./scripts/set_manifest_name.sh out
       - uses: actions/upload-artifact@v7
         with:
           name: bar-${{ matrix.variant }}

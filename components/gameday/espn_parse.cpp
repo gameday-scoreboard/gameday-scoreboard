@@ -57,7 +57,7 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if (league == League::MCBB && group != 0) {
+  if ((league == League::MCBB || league == League::NCAA) && group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }
@@ -127,12 +127,7 @@ std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch,
 std::string scan_url(League league, int64_t now_epoch) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
-  // Football uses the Eastern date. The other leagues play past midnight
-  // Eastern on the West Coast (ESPN lists those games under the day they
-  // started, and rejects date ranges), and none start between midnight and
-  // 6 AM Eastern: their day turns over at 4 AM Eastern instead.
-  int64_t shift = league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
-  civil_from_epoch(now_epoch - shift, y, m, d);
+  civil_from_epoch(now_epoch - scan_day_shift(league), y, m, d);
   char buf[64];
   // 80 is every FBS game. College basketball without a group lists only the
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
@@ -212,6 +207,28 @@ GameSnapshot final_snapshot(const Final &f) {
   g.opp_record = f.home_record;
   g.team_logo = team_logo_url((League) f.league, f.away_id, f.away_abbr.c_str());
   g.opp_logo = team_logo_url((League) f.league, f.home_id, f.home_abbr.c_str());
+  g.sport = league_sport((League) f.league);
+  return g;
+}
+
+GameSnapshot pending_snapshot(const Pending &p) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::PRE;
+  g.event_id = p.event_id;
+  g.kickoff_epoch = p.kickoff_epoch;
+  g.team_id = p.away_id;
+  g.opp_id = p.home_id;
+  g.team_abbr = p.away_abbr;
+  g.opp_abbr = p.home_abbr;
+  g.team_color = p.away_color;
+  g.opp_color = p.home_color;
+  g.team_record = p.away_record;
+  g.opp_record = p.home_record;
+  g.tv = p.tv;
+  g.team_logo = team_logo_url((League) p.league, p.away_id, p.away_abbr.c_str());
+  g.opp_logo = team_logo_url((League) p.league, p.home_id, p.home_abbr.c_str());
+  g.sport = league_sport((League) p.league);
   return g;
 }
 
