@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "auto_update.h"
+#include "badge.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
@@ -2425,6 +2426,34 @@ static void test_short_game_name() {
   CHECK_EQ(short_game_name("Kickoff 7 PM ET"), std::string(""));
 }
 
+// The abbreviation badge's colors (badge.h), the app's rules.
+static void test_badge() {
+  // Luminance: black, white, and the app's 0.6 text threshold.
+  CHECK_EQ(badge_luminance(0x000000), 0);
+  CHECK_EQ(badge_luminance(0xFFFFFF), 1000);
+  CHECK(badge_luminance(0xF2A900) > kBadgeDarkTextLum);   // gold: black text
+  CHECK(badge_luminance(0x1E5AA8) < kBadgeDarkTextLum);   // blue: white text
+  CHECK(badge_luminance(0xC8102E) < kBadgeDarkTextLum);   // red: white text
+  // A second color that differs from the fill is the ring.
+  BadgeStyle b = badge_style(0x1E5AA8, 0xF4F6F8);
+  CHECK(b.fill == 0x1E5AA8 && b.has_ring && b.ring == 0xF4F6F8 && !b.dark_text);
+  // The same color twice is no ring, and a mid-tone fill needs none.
+  b = badge_style(0x1E5AA8, 0x1E5AA8);
+  CHECK(!b.has_ring);
+  // A near-black fill would vanish on the panel: a gray ring stands in when
+  // it has no ring or its ring is as dark.
+  b = badge_style(0x000000, 0x000000);
+  CHECK(b.has_ring && b.ring == kBadgeNeutralRing);
+  b = badge_style(0x101010, 0x080808);
+  CHECK(b.has_ring && b.ring == kBadgeNeutralRing);
+  // A near-black fill with a visible ring keeps that ring.
+  b = badge_style(0x000000, 0xC8102E);
+  CHECK(b.has_ring && b.ring == 0xC8102E && !b.dark_text);
+  // A light fill takes black text and keeps its own ring.
+  b = badge_style(0xF4F6F8, 0x1E5AA8);
+  CHECK(b.dark_text && b.has_ring && b.ring == 0x1E5AA8);
+}
+
 // The demo build's matchups, made-up teams and script (demo.h).
 static void test_demo() {
   auto abbrs = [](DemoMatchup m) { return std::string(m.home->abbr) + "-" + m.away->abbr; };
@@ -2451,6 +2480,26 @@ static void test_demo() {
       CHECK(std::string(kMadeUpTeams[i].abbr) != kTeams[t].abbr);
   }
   CHECK(std::string(demo_made_up(DemoKind::PRO, true).abbr) != demo_made_up(DemoKind::COLLEGE, true).abbr);
+  // Nothing real anywhere in the demo's teams: no real team's name, and a
+  // second color that gives every badge a ring (badge.h never needs the gray
+  // fallback for them).
+  for (size_t i = 0; i < kMadeUpTeamCount; i++) {
+    for (size_t t = 0; t < kTeamCount; t++)
+      CHECK(std::string(kMadeUpTeams[i].name) != kTeams[t].name);
+    CHECK(kMadeUpTeams[i].alt != kMadeUpTeams[i].rgb);
+    BadgeStyle b = badge_style(kMadeUpTeams[i].rgb, kMadeUpTeams[i].alt);
+    CHECK(b.has_ring && b.ring == kMadeUpTeams[i].alt && b.fill == kMadeUpTeams[i].rgb);
+  }
+  // White letters on the blue, red and green fills; black on the gold one.
+  CHECK(!badge_style(demo_made_up(DemoKind::PRO, true).rgb, 0).dark_text);
+  CHECK(!badge_style(demo_made_up(DemoKind::PRO, false).rgb, 0).dark_text);
+  CHECK(!badge_style(demo_made_up(DemoKind::COLLEGE, true).rgb, 0).dark_text);
+  CHECK(badge_style(demo_made_up(DemoKind::COLLEGE, false).rgb, 0).dark_text);
+  // One pass of the script is what the shot list is timed against.
+  uint32_t total_ms = 0;
+  for (size_t i = 0; i < kDemoStepCount; i++)
+    total_ms += kDemoSteps[i].hold_ms;
+  CHECK(total_ms == 52500);
 
   // Every football team has its color (the demo is football only), and the
   // color table matches teams.h, where football comes first.
@@ -3637,6 +3686,7 @@ int main() {
   test_json_allocator();
   test_timezone_index();
   test_postseason();
+  test_badge();
   test_demo();
   test_recap();
   test_later_today();

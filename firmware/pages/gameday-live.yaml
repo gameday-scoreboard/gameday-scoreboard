@@ -73,10 +73,13 @@ script:
           lv_obj_t *abars[3] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3)};
           lv_obj_t *hbars[3] = {id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
           if (wide) {
-            // Logos at the far edges, score columns in the middle
+            // Logos at the far edges, score columns in the middle. A badge
+            // (the abbreviation standing in for a logo) takes the logo's place.
             const int colw = W / 2 - 36;
             lv_obj_set_pos(id(gd_team_logo_img), 2, 4);
             lv_obj_set_pos(id(gd_opp_logo_img), W - 34, 4);
+            lv_obj_set_pos(id(gd_team_badge), 2, 4);
+            lv_obj_set_pos(id(gd_opp_badge), W - 34, 4);
             lv_obj_set_style_text_font(id(tt_away_team_lbl), id(spleen_12), 0);
             lv_obj_set_style_text_font(id(tt_home_team_lbl), id(spleen_12), 0);
             lv_obj_set_style_text_font(id(tt_away_score_lbl), id(spleen_16), 0);
@@ -124,6 +127,8 @@ script:
             // Single panel: logos side by side, everything stacked beneath
             lv_obj_set_pos(id(gd_team_logo_img), 0, 0);
             lv_obj_set_pos(id(gd_opp_logo_img), W - 32, 0);
+            lv_obj_set_pos(id(gd_team_badge), 0, 0);
+            lv_obj_set_pos(id(gd_opp_badge), W - 32, 0);
             lv_obj_set_style_text_font(id(tt_away_team_lbl), id(spleen_8), 0);
             lv_obj_set_style_text_font(id(tt_home_team_lbl), id(spleen_8), 0);
             lv_obj_set_style_text_font(id(tt_away_score_lbl), id(spleen_12), 0);
@@ -198,6 +203,10 @@ script:
       is_red_zone: bool
       team_color: int
       opponent_color: int
+      team_badge: bool
+      opponent_badge: bool
+      team_ring: int
+      opponent_ring: int
       possession: int
       team_timeouts: int
       opponent_timeouts: int
@@ -218,11 +227,32 @@ script:
     then:
       - lambda: |-
           id(gd_sport) = sport;
-          // A side with no team yet (just after a team change) shows no logo
-          if (team_abbr.empty()) lv_obj_add_flag(id(gd_team_logo_img), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_clear_flag(id(gd_team_logo_img), LV_OBJ_FLAG_HIDDEN);
-          if (opponent_abbr.empty()) lv_obj_add_flag(id(gd_opp_logo_img), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_clear_flag(id(gd_opp_logo_img), LV_OBJ_FLAG_HIDDEN);
+          // A side with no team yet (just after a team change) shows no logo.
+          // A side with no logo to fetch (the demo build's made-up teams)
+          // shows its abbreviation badge in the logo's place, drawn by the
+          // app's rules (badge.h) so the panel and the phone match.
+          auto slot = [](lv_obj_t *img, lv_obj_t *box, lv_obj_t *lbl, const std::string &abbr, bool badge,
+                         uint32_t fill, uint32_t ring) {
+            if (abbr.empty() || badge) lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
+            if (abbr.empty() || !badge) {
+              lv_obj_add_flag(box, LV_OBJ_FLAG_HIDDEN);
+              return;
+            }
+            ::espn::BadgeStyle st = ::espn::badge_style(fill, ring);
+            lv_obj_set_style_bg_color(box, lv_color_hex(st.fill), 0);
+            lv_obj_set_style_border_width(box, st.has_ring ? 2 : 0, 0);
+            lv_obj_set_style_border_color(box, lv_color_hex(st.has_ring ? st.ring : st.fill), 0);
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || abbr != cur)
+              lv_label_set_text(lbl, abbr.c_str());
+            lv_obj_set_style_text_color(lbl, lv_color_hex(st.dark_text ? 0x000000 : 0xFFFFFF), 0);
+            lv_obj_clear_flag(box, LV_OBJ_FLAG_HIDDEN);
+          };
+          slot(id(gd_team_logo_img), id(gd_team_badge), id(gd_team_badge_lbl), team_abbr, team_badge,
+               (uint32_t) team_color, (uint32_t) team_ring);
+          slot(id(gd_opp_logo_img), id(gd_opp_badge), id(gd_opp_badge_lbl), opponent_abbr, opponent_badge,
+               (uint32_t) opponent_color, (uint32_t) opponent_ring);
       - lvgl.label.update:
           id: tt_away_team_lbl
           text: !lambda 'return team_abbr;'
@@ -540,6 +570,53 @@ lvgl:
                   src: gd_logo_blank
                   x: 32
                   y: 0
+
+              # Abbreviation badges, each in its logo's place when that side
+              # has no logo: a rounded square in the team's color with a ring
+              # in its second color and the abbreviation on it (badge.h).
+              # Shown by gd_update; the fill, ring and letters are set there.
+              - obj:
+                  id: gd_team_badge
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 32
+                  height: 32
+                  radius: 8
+                  pad_all: 0
+                  border_width: 2
+                  border_color: 0xFFFFFF
+                  bg_opa: COVER
+                  bg_color: 0x808080
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_team_badge_lbl
+                        align: CENTER
+                        text_font: spleen_12
+                        text_color: 0xFFFFFF
+                        text: ""
+              - obj:
+                  id: gd_opp_badge
+                  scrollbar_mode: "OFF"
+                  x: 32
+                  y: 0
+                  width: 32
+                  height: 32
+                  radius: 8
+                  pad_all: 0
+                  border_width: 2
+                  border_color: 0xFFFFFF
+                  bg_opa: COVER
+                  bg_color: 0x808080
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_opp_badge_lbl
+                        align: CENTER
+                        text_font: spleen_12
+                        text_color: 0xFFFFFF
+                        text: ""
 
               - label:
                   id: tt_away_team_lbl
