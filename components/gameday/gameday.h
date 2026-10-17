@@ -134,6 +134,9 @@ class GamedaySelect : public select::Select, public Component {
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
 //   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
+//   GET  /gameday/crash              the last crash, watchdog or brownout restart and its
+//                                    backtrace, kept in flash (components/crash_report)
+//   POST /gameday/crash?clear=1      empties it
 // The demo build (firmware/gameday-demo.yaml) adds do=demo|demo_stop and
 // GET/POST /gameday/demo (demo.cpp).
 // Requests arrive on the HTTP task; settings are applied on the main loop.

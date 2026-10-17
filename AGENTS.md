@@ -47,10 +47,14 @@ is the short version.
   `esphome config` misses C++ errors.
 - Host tests: `make -C tests` (needs g++). CI also builds
   `make -C tests replay` and runs the `--selftest` of
-  `scripts/factory_flash.py`, `burnin_monitor.py`, `improv_scan.py` and
-  `tests/web/mock_device.py`. The last checks the device page's mock
+  `scripts/factory_flash.py`, `burnin_monitor.py`, `improv_scan.py`,
+  `crash_report.py` and `tests/web/mock_device.py`. The last checks the device page's mock
   against `tests/fixtures/set_cases.json`, the same table the host tests
   run through `components/gameday/set_request.h`.
+- A panel that restarted from a crash, a watchdog or a brownout keeps the
+  report in flash (`components/crash_report`, `GET /gameday/crash`).
+  `python3 scripts/crash_report.py <panel>` prints it and decodes the
+  backtrace with the release's ELF.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run
