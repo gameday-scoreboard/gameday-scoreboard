@@ -19,6 +19,8 @@
 #endif
 #ifdef USE_UPDATE
 #include "esphome/components/update/update_entity.h"
+#include <esp_ota_ops.h>
+#include <esp_system.h>
 #endif
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
 #include "esphome/components/saved_networks/saved_networks.h"
@@ -63,6 +65,10 @@ static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // manifest read gets before its answer is used (the HTTP timeout is 20 s).
 static const uint32_t AUTO_UPDATE_TICK = 10 * 1000;
 static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
+// After an install, how long the new firmware runs before the update counts
+// as taken: past safe_mode's one minute, when the bootloader can no longer
+// roll it back.
+static const uint32_t UPDATE_GOOD_BOOT = 2 * MINUTE;
 // A college scan is ~750KB on a Saturday. With nothing live it waits for the
 // next kickoff instead of re-reading every 2 minutes, but never longer than
 // this, so a moved kickoff or the next day's slate is still picked up.
@@ -241,6 +247,7 @@ void GamedayComponent::setup() {
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
+  this->settle_update_mark_();
 #ifdef GAMEDAY_BAR
   this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
   if (!this->bar_pref_.load(&this->now_tried_))
@@ -1126,6 +1133,73 @@ void GamedayComponent::set_auto_update(bool on) {
 #endif
 }
 
+// At boot, what became of the last install (auto_update.h, UpdateMark), and
+// from now on, note every install as it starts.
+void GamedayComponent::settle_update_mark_() {
+#if defined(USE_UPDATE) && defined(ESPHOME_PROJECT_VERSION)
+  if (App.get_updates().empty())
+    return;
+  this->update_mark_pref_ = global_preferences->make_preference<::espn::UpdateMark>(fnv1_hash("gameday_update_mark_v1"));
+  if (!this->update_mark_pref_.load(&this->update_mark_))
+    this->update_mark_ = ::espn::UpdateMark{};
+  const ::espn::UpdateMark before = this->update_mark_;
+  const std::string running = ESPHOME_PROJECT_VERSION;
+  // A power cut in the new firmware's first minute rolls it back too, but
+  // says nothing against the release, so that one is tried again.
+  const bool rolled_back = esp_ota_get_last_invalid_partition() != nullptr && esp_reset_reason() != ESP_RST_POWERON;
+  switch (::espn::update_mark_boot(this->update_mark_, running, rolled_back)) {
+    case ::espn::UpdateOutcome::NONE:
+      break;
+    case ::espn::UpdateOutcome::PENDING:
+      // Cleared only once this boot is past the point of rolling back; a
+      // crash before then and the old firmware sees the mark instead.
+      this->set_timeout("update_mark", UPDATE_GOOD_BOOT, [this]() {
+        if (strncmp(this->update_mark_.installing, ESPHOME_PROJECT_VERSION, ::espn::kUpdateVersionLen) != 0)
+          return;
+        ESP_LOGI(TAG, "Update to %s took", ESPHOME_PROJECT_VERSION);
+        this->update_mark_.installing[0] = '\0';
+        this->update_mark_pref_.save(&this->update_mark_);
+      });
+      break;
+    case ::espn::UpdateOutcome::ROLLED_BACK:
+      ESP_LOGW(TAG, "Update to %s rolled back to %s; automatic installs will skip it", before.installing,
+               running.c_str());
+      break;
+    case ::espn::UpdateOutcome::NOT_INSTALLED:
+      ESP_LOGI(TAG, "Update to %s didn't finish; still on %s", before.installing, running.c_str());
+      break;
+  }
+  if (memcmp(&before, &this->update_mark_, sizeof(before)) != 0)
+    this->update_mark_pref_.save(&this->update_mark_);
+  if (this->update_mark_.failed[0] != '\0')
+    ESP_LOGW(TAG, "Update %s rolled back on this panel before", this->update_mark_.failed);
+  App.get_updates()[0]->add_on_state_callback([this]() { this->update_state_changed_(); });
+#endif
+}
+
+void GamedayComponent::update_state_changed_() {
+#if defined(USE_UPDATE) && defined(ESPHOME_PROJECT_VERSION)
+  update::UpdateEntity *u = App.get_updates()[0];
+  if (u->state == update::UPDATE_STATE_INSTALLING) {
+    if (this->update_installing_)
+      return;  // a progress update
+    // Written to flash before the download starts, since the next thing
+    // this firmware may do is restart into the new one.
+    this->update_installing_ = true;
+    ::espn::update_mark_set(this->update_mark_.installing, u->update_info.latest_version);
+    this->update_mark_pref_.save(&this->update_mark_);
+    global_preferences->sync();
+  } else if (this->update_installing_) {
+    // Back from installing with no restart: it failed before the new image
+    // was in place, and this firmware runs on. Not a rollback.
+    ESP_LOGI(TAG, "Update to %s didn't install; still on %s", this->update_mark_.installing, ESPHOME_PROJECT_VERSION);
+    this->update_installing_ = false;
+    this->update_mark_.installing[0] = '\0';
+    this->update_mark_pref_.save(&this->update_mark_);
+  }
+#endif
+}
+
 // A game the panel follows is in progress: the one on the board, which
 // covers My team and the live modes, or any favorite's in Favorite teams.
 bool GamedayComponent::followed_game_live_() const {
@@ -1159,6 +1233,7 @@ void GamedayComponent::auto_update_tick_() {
   in.available = u->state == update::UPDATE_STATE_AVAILABLE;
   in.newer = ::espn::version_newer(u->update_info.latest_version, u->update_info.current_version);
   in.live = this->followed_game_live_();
+  in.failed = ::espn::update_failed_here(this->update_mark_, u->update_info.latest_version);
 #ifdef GAMEDAY_BAR
   in.now = in.available && ::espn::install_now_listed(u->update_info.summary, this->hostname()) &&
            fnv1_hash(u->update_info.latest_version) != this->now_tried_;
@@ -1181,6 +1256,12 @@ void GamedayComponent::auto_update_tick_() {
         ESP_LOGI(TAG, "Auto update: %s is out, waiting for the live game to end",
                  u->update_info.latest_version.c_str());
       this->auto_update_waiting_ = true;
+      break;
+    case ::espn::AutoUpdateStep::SKIP_FAILED:
+      if (this->auto_update_skipped_ != in.today)
+        ESP_LOGI(TAG, "Auto update: %s rolled back on this panel, not installing it on its own",
+                 u->update_info.latest_version.c_str());
+      this->auto_update_skipped_ = in.today;
       break;
     case ::espn::AutoUpdateStep::INSTALL:
       // Saved, and written to flash now, before the install starts: a power
@@ -2612,6 +2693,12 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // Left out where nothing can be installed (the demo build) or there is no
   // choice (the bar build), so the page and the app hide the switch.
   doc["autoupd"] = this->auto_update();
+#endif
+#ifdef USE_UPDATE
+  // A release that rolled back here, after a manual install or an automatic
+  // one; left out when there is none.
+  if (this->update_mark_.failed[0] != '\0')
+    doc["update_failed"] = (const char *) this->update_mark_.failed;
 #endif
 #ifdef GAMEDAY_BAR
   // The device page shows the bar beta note and a "Something wrong?" link.

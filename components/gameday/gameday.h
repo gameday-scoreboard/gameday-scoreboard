@@ -522,6 +522,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int32_t auto_update_checked_{0};  // the night the manifest was read for it
   uint32_t auto_update_check_ms_{0};
   bool auto_update_waiting_{false};  // logged "waiting for the game" tonight
+  int32_t auto_update_skipped_{0};   // the night it last logged skipping a rolled-back release
+  // The install under way and the release that rolled back here, in its own
+  // blob so Prefs6 keeps its size (auto_update.h, UpdateMark).
+  ESPPreferenceObject update_mark_pref_;
+  ::espn::UpdateMark update_mark_{};
+  bool update_installing_{false};  // the update entity is installing, mark written
+  void settle_update_mark_();
+  void update_state_changed_();
 #ifdef GAMEDAY_BAR
   // fnv1_hash() of the version last installed through "Install now"
   // (auto_update.h), saved before the install so a crash or power cut
