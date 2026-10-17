@@ -16,6 +16,7 @@
 #include "panel_text.h"
 #include "recap.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
 
@@ -3440,6 +3441,23 @@ static void test_panel_text() {
   }
 }
 
+// A settings change writes flash at once, except while a /gameday/set request
+// applies its keys: those fold into one write when the request ends.
+static void test_prefs_sync() {
+  PrefsSyncGate g;
+  CHECK(g.request());  // a lone change writes now
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(g.batching());
+  CHECK(!g.request());  // inside a request: owed, not written yet
+  CHECK(!g.request());
+  CHECK(g.end());  // one write for the whole request
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(!g.end());  // a request that changed nothing writes nothing
+  CHECK(g.request());  // and the gate is open again
+}
+
 // A game with no kickoff time yet (fixtures recorded 2026-10-14): ESPN lists
 // it at midnight Eastern with timeValid false. Every parse carries the flag,
 // so the panel says "TBD" and never schedules off the placeholder.
@@ -3645,6 +3663,7 @@ int main() {
   test_auto_update();
   test_offseason();
   test_panel_text();
+  test_prefs_sync();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

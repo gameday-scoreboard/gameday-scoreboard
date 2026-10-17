@@ -26,6 +26,7 @@
 #include "offseason.h"
 #include "recap.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "set_request.h"
 #include "startup.h"
 #ifdef GAMEDAY_DEMO
@@ -338,6 +339,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
   void save_prefs_();
+  // Writes every saved setting to flash now, unless apply_set_ is still
+  // applying a request (prefs_sync.h). Call after an owner's change.
+  void sync_prefs_();
+  ::espn::PrefsSyncGate sync_gate_;
   void publish_selects_();
   void publish_team_select_(const std::string &option);
   void apply_timezone_();
