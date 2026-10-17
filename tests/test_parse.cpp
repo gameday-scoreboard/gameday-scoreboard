@@ -3276,6 +3276,97 @@ static void test_auto_update() {
   t = in;
   t.now = true;  // in the window too, the try counts for this version, not the night
   CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
+
+  // A release that rolled back here: skipped every night, live game or not,
+  // and Install now doesn't override it.
+  t = in;
+  t.failed = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.live = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.live = false;
+  t.today = auto_update_day(2026, 293);  // a week later, still skipped
+  t.checked_day = t.today;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.check_done = false;  // nothing to say before tonight's read is back
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.failed = true;
+  t.now = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.hour = 15;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+}
+
+static void test_update_mark() {
+  UpdateMark m{};
+  CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
+  CHECK(!update_failed_here(m, "2026.10.0"));
+  CHECK(!update_failed_here(m, ""));
+
+  // Installed and running it: settled only once the boot is good.
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.1", false) == UpdateOutcome::PENDING);
+  CHECK_EQ(std::string(m.installing), std::string("2026.10.1"));
+  CHECK(m.failed[0] == '\0');
+  // The bootloader's flag can be left over from an older rollback; running
+  // the new version still means it took.
+  CHECK(update_mark_boot(m, "2026.10.1", true) == UpdateOutcome::PENDING);
+
+  // Rolled back: the old firmware boots and remembers the version.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.installing[0] == '\0');
+  CHECK_EQ(std::string(m.failed), std::string("2026.10.1"));
+  CHECK(update_failed_here(m, "2026.10.1"));
+  CHECK(!update_failed_here(m, "2026.10.2"));  // a later release still installs
+  CHECK(!update_failed_here(m, "2026.10.1.1"));
+  // Later boots keep it while the panel stays behind it.
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::NONE);
+  CHECK(update_failed_here(m, "2026.10.1"));
+
+  // A manual install of it that takes, or anything newer, drops it.
+  UpdateMark k = m;
+  CHECK(update_mark_boot(k, "2026.10.1", false) == UpdateOutcome::NONE);
+  CHECK(k.failed[0] == '\0');
+  k = m;
+  update_mark_set(k.installing, "2026.10.2");
+  CHECK(update_mark_boot(k, "2026.10.2", false) == UpdateOutcome::PENDING);
+  CHECK(k.failed[0] == '\0');
+  // A later release that rolls back too replaces it.
+  k = m;
+  update_mark_set(k.installing, "2026.10.2");
+  CHECK(update_mark_boot(k, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK_EQ(std::string(k.failed), std::string("2026.10.2"));
+
+  // Still on the old firmware with no rollback (power cut mid-download): not a failure.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NOT_INSTALLED);
+  CHECK(m.installing[0] == '\0');
+  CHECK(m.failed[0] == '\0');
+
+  // A rollback from a version that isn't newer (a manual downgrade) is
+  // nothing automatic installs anyway.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "1.5.5");
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.failed[0] == '\0');
+
+  // Beta versions fit, a longer string is cut and still ends.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.0-beta.812");
+  CHECK(update_mark_boot(m, "2026.10.0-beta.811", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(update_failed_here(m, "2026.10.0-beta.812"));
+  CHECK(!update_failed_here(m, "2026.10.0-beta.813"));
+  update_mark_set(m.installing, std::string(40, '9'));
+  CHECK_EQ(strlen(m.installing), kUpdateVersionLen - 1);
+  // Flash that holds garbage with no end still reads as a string.
+  memset(m.failed, '7', sizeof(m.failed));
+  m.installing[0] = '\0';
+  update_mark_boot(m, "1.0", false);
+  CHECK(strlen(m.failed) < kUpdateVersionLen);
 }
 
 // Every byte of a panel_text() result is printable ASCII or part of a Latin-1
@@ -3631,6 +3722,7 @@ int main() {
   test_backoff();
   test_cup_backoff();
   test_auto_update();
+  test_update_mark();
   test_offseason();
   test_panel_text();
   failures += run_set_tests(checks);
