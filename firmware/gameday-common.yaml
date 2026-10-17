@@ -101,30 +101,39 @@ esphome:
             wifi::WiFiAP ap = w->get_ap();
             ap.set_ssid("Game Day " + name.substr(dash + 1));
             w->set_ap(ap);
-    # After "Reset Wi-Fi" the saved network name is blank. ESPHome still counts it
-    # as a configured network and would wait a minute before the hotspot and
+    # After "Reset Wi-Fi" the network in memory is blank (components/saved_networks
+    # keeps the saved ones for the next boot). ESPHome still counts it as a
+    # configured network and would wait a minute before the hotspot and
     # Bluetooth setup appear. Cut both waits to a second in that one case.
-    # A saved network list (components/saved_networks) means a real network
-    # whatever get_sta() reads; it is empty after a reset.
+    # Otherwise a saved network list means a real network whatever get_sta()
+    # reads. A blank network with no list is a reset from older firmware,
+    # which blanked ESPHome's slot.
     - priority: 240.0
       then:
         - lambda: |-
             auto *w = wifi::global_wifi_component;
-            if (w != nullptr && w->has_sta() && id(gd_networks).count() == 0 && w->get_sta().get_ssid().empty()) {
+            if (w != nullptr && w->has_sta() && w->get_sta().get_ssid().empty() &&
+                (id(gd_networks).in_setup() || id(gd_networks).count() == 0)) {
               w->set_ap_timeout(1000);
               if (improv_ble::global_improv_component != nullptr) {
                 improv_ble::global_improv_component->set_wifi_timeout(1000);
               }
             }
+        - if:
+            condition:
+              lambda: 'return id(gd_networks).in_setup();'
+            then:
+              - script.execute: gd_setup_window
         # Keep Bluetooth off at boot because it shares the radio with the Wi-Fi
         # scan. With it on, Wi-Fi was ready 12 s after boot instead of 5.
-        # A panel with no saved network turns it on now for setup.
-        # A panel with a saved network gets the dropout grace, which on_connect cancels.
+        # A panel with no saved network, or in setup after a reset, turns it on
+        # now for setup. A panel with a saved network gets the dropout grace,
+        # which on_connect cancels.
         - if:
             condition:
               lambda: |-
                 auto *w = wifi::global_wifi_component;
-                return w != nullptr && w->has_sta() &&
+                return w != nullptr && w->has_sta() && !id(gd_networks).in_setup() &&
                        (id(gd_networks).count() > 0 || !w->get_sta().get_ssid().empty());
             then:
               - script.execute: gd_ble_grace
@@ -203,7 +212,9 @@ ota:
 
 # The panel remembers up to five networks (home, a phone hotspot, a friend's
 # house) and tries the last one that worked first. Setup from the app or the
-# hotspot page adds to the list; "Reset Wi-Fi" and Factory Reset empty it.
+# hotspot page adds to the list; Factory Reset empties it. "Reset Wi-Fi"
+# keeps it: the panel restarts into setup for 15 minutes (gd_setup_window),
+# and an unplug or the end of the 15 minutes brings it back.
 # GET /gameday/wifi lists them (names only) and POST /gameday/wifi?forget=
 # drops one.
 saved_networks:
@@ -219,11 +230,12 @@ wifi:
   # causing mbedtls_ssl_setup to fail and the panel to reboot. Once Wi-Fi is
   # up there's nothing left for Bluetooth to do, so tear the BLE stack down
   # and give that memory back. on_boot turns Bluetooth on for a panel with no
-  # saved network, and "Reset Wi-Fi" blanks the saved network, so the panel
-  # re-enters setup mode with BLE on next boot.
+  # saved network, and for the boot after "Reset Wi-Fi", which starts in setup
+  # mode with BLE on.
   on_connect:
     - script.stop: gd_ble_grace
     - script.stop: gd_offline_count
+    - script.stop: gd_setup_window
     - script.stop: boot_wifi_lost_later
     - ble.disable:
     - lambda: |-
@@ -300,9 +312,9 @@ script:
   # way nothing else recovers from. ESPHome's own reboot_timeout is disabled
   # while an ap: block is present (wifi_component.cpp guards it with
   # !has_ap()), so restart from here one minute into an outage. Not armed on a
-  # panel with no network to fail to reach: a fresh unit, or one whose
-  # credentials the "Reset Wi-Fi" button blanked, is legitimately sitting in
-  # setup mode.
+  # panel with no network to fail to reach: a fresh unit, or one in setup
+  # after "Reset Wi-Fi", is legitimately sitting in setup mode
+  # (gd_setup_window below ends that one).
   #
   # Nor on a panel that has not been on its network yet this boot. Whole-house
   # power restoration is the common case: the ESP32 is up in seconds and the
@@ -330,7 +342,7 @@ script:
                 auto *w = wifi::global_wifi_component;
                 if (w == nullptr) return;
                 // A panel that has connected this boot has a real saved network,
-                // and "Reset Wi-Fi" reboots. get_sta() must not be checked here:
+                // and "Reset Wi-Fi" restarts. get_sta() must not be checked here:
                 // it is blank while ESPHome rescans between reconnect attempts.
                 if (w->is_connected() || !w->has_sta()) {
                   id(gd_offline_seconds) = 0;
@@ -362,6 +374,33 @@ script:
                   id(gd_offline_seconds) = 0;
                   App.safe_reboot();
                 }
+
+  # "Reset Wi-Fi" restarts the panel into setup mode with its saved networks
+  # kept (components/saved_networks). Fifteen minutes is time to find the app
+  # or the hotspot and finish; then restart, and the next boot is a normal one
+  # back on the saved networks, the same as unplugging it, which the setup
+  # screen offers. on_connect stops this, so finishing setup on a network ends
+  # it. Someone still at it over Bluetooth or on the hotspot at 15 minutes
+  # gets up to 10 more.
+  - id: gd_setup_window
+    then:
+      - delay: 15min
+      - while:
+          condition:
+            lambda: |-
+              const bool app =
+                  (esp32_ble_server::global_ble_server != nullptr &&
+                   esp32_ble_server::global_ble_server->get_connected_client_count() > 0) ||
+                  (improv_ble::global_improv_component != nullptr &&
+                   improv_ble::global_improv_component->get_improv_state() == improv::STATE_PROVISIONING);
+              wifi_sta_list_t hotspot{};
+              const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
+              return (app || on_hotspot) && millis() < 25 * 60 * 1000;
+          then:
+            - delay: 10s
+      - lambda: |-
+          ESP_LOGW("wifi", "Setup not finished in 15 minutes, restarting onto the saved networks");
+          App.safe_reboot();
 
 captive_portal:
 
@@ -703,10 +742,9 @@ button:
     entity_category: config
     on_press:
       - lambda: |-
-          // Every saved network, then ESPHome's own slot. The blank slot is
-          // what the panel reads as "reset" at boot (components/saved_networks).
-          id(gd_networks).forget_all();
-          wifi::global_wifi_component->save_wifi_sta("", "");
+          // The next boot starts in setup mode and keeps the saved networks
+          // for the one after (components/saved_networks).
+          id(gd_networks).start_setup();
       - delay: 500ms
       - lambda: |-
           App.safe_reboot();

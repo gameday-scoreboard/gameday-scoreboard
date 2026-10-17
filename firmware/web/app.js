@@ -749,10 +749,10 @@
     { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
     { name: "Check for Updates", into: "#actions", label: "Check for updates" },
     // restart: "" waits for the panel to come back; otherwise the panel
-    // restarts into setup (both resets forget the Wi-Fi) and this says why.
+    // restarts into setup and this says why.
     { name: "Reboot", into: "#actions", label: "Reboot", danger: true, restart: "" },
     { name: "Reset Wi-Fi", into: "#actions", label: "Reset Wi-Fi", danger: true,
-      restart: "The panel forgot its Wi-Fi and is restarting into setup, so this page won't reconnect. Its settings are kept." },
+      restart: "The panel is restarting into Wi-Fi setup for 15 minutes, so this page won't reconnect. Its settings are kept, and unplugging it and plugging it back in takes it back to the Wi-Fi it already knows." },
     { name: "Factory Reset", into: "#actions", label: "Factory reset", danger: true,
       restart: "The panel is restarting into setup with everything erased, so this page won't reconnect." },
   ];

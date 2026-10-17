@@ -235,9 +235,10 @@ script:
           else lv_obj_add_flag(id(boot_bar), LV_OBJ_FLAG_HIDDEN);
 
   # The timing for states that take turns. Sets boot_qr_frame: 0 for the
-  # first 5 s, 1 for the next 8 s, then 2 for 5 s when extra is true, round
-  # and round. boot_refresh decides what each frame shows. owner says whose
-  # run it is (1 connected, 2 wifi lost, 3 setup, 0 none): a new owner, or
+  # first 5 s, 1 for the next 8 s, then 2 for 5 s when extra is true, and for
+  # owner 4 a last 5 s as 3, round and round. boot_refresh decides what each
+  # frame shows. owner says whose run it is (1 connected, 2 wifi lost, 3
+  # setup, 4 setup after "Reset Wi-Fi", 0 none): a new owner, or
   # the same one gaining or losing its extra turn, starts again at frame 0,
   # so a run never opens partway through. 0 stops the turns.
   - id: boot_qr_cycle
@@ -246,7 +247,7 @@ script:
       extra: bool
     then:
       - lambda: |-
-          static const uint32_t TEXT_MS = 5000, QR_MS = 8000, EXTRA_MS = 5000;
+          static const uint32_t TEXT_MS = 5000, QR_MS = 8000, EXTRA_MS = 5000, UNPLUG_MS = 5000;
           int frame = 0;
           const int key = owner == 0 ? 0 : owner * 2 + (extra ? 1 : 0);
           if (key == 0) {
@@ -254,9 +255,10 @@ script:
           } else {
             if (key != id(boot_qr_key) || id(boot_qr_since_ms) == 0)
               id(boot_qr_since_ms) = millis() == 0 ? 1 : millis();
-            const uint32_t period = TEXT_MS + QR_MS + (extra ? EXTRA_MS : 0);
+            const uint32_t extra_ms = extra ? EXTRA_MS : 0;
+            const uint32_t period = TEXT_MS + QR_MS + extra_ms + (owner == 4 ? UNPLUG_MS : 0);
             const uint32_t t = (millis() - id(boot_qr_since_ms)) % period;
-            frame = t < TEXT_MS ? 0 : t < TEXT_MS + QR_MS ? 1 : 2;
+            frame = t < TEXT_MS ? 0 : t < TEXT_MS + QR_MS ? 1 : t < TEXT_MS + QR_MS + extra_ms ? 2 : 3;
           }
           id(boot_qr_key) = key;
           id(boot_qr_frame) = frame;
@@ -288,8 +290,8 @@ script:
           // so the message is up long before the hotspot text could appear.
           //
           // The blank-SSID half of have_creds is what keeps a panel out of
-          // here after "Reset Wi-Fi": that button saves an empty network, which
-          // still counts as has_sta(), and that panel is in setup, not in
+          // here after "Reset Wi-Fi": that panel boots with an empty network in
+          // memory, which still counts as has_sta(), and is in setup, not in
           // trouble. boot_had_creds carries a real network through a failed
           // handover from the app, which clears the one in memory.
           const bool have_creds = w->has_sta() && !w->get_sta().get_ssid().empty();
@@ -408,14 +410,18 @@ script:
             // Lead with the app, then the hotspot for anyone without an
             // iPhone. The hotspot turn waits until the AP is really up, so it
             // never points at a network that is not there yet. On a 128 px
-            // chain the QR stays up throughout; on 64 it is frame 1.
-            id(boot_qr_cycle).execute(provisioning ? 0 : 3, w->is_ap_active());
+            // chain the QR stays up throughout; on 64 it is frame 1. After
+            // "Reset Wi-Fi" (owner 4) a last turn says that unplugging the
+            // panel takes it back to the networks it already knows.
+            id(boot_qr_cycle).execute(provisioning ? 0 : id(gd_networks).in_setup() ? 4 : 3, w->is_ap_active());
             const int frame = id(boot_qr_frame);
             id(boot_view).execute(wide && !provisioning,
                                   !provisioning && (wide || frame == 1));
             if (provisioning) {
               const std::string joining = w->get_sta().get_ssid().str();
               id(boot_set_lines).execute("JOINING", joining.empty() ? std::string("Wi-Fi") : joining, "", "", true);
+            } else if (frame == 3) {
+              id(boot_set_lines).execute("Unplug it to", "rejoin", "saved Wi-Fi", "", true);
             } else if (frame == 2) {
               // The hotspot is "Game Day <suffix>", named in on_boot.
               const std::string &name = App.get_name();
