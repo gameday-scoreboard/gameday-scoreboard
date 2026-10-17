@@ -482,7 +482,7 @@ const chip = (page, tab) => page.locator("#liveChips .chip", { hasText: new RegE
 const chipsOn = (page) => page.locator("#liveChips .chip.on");
 
 test("Live games chips match the panel through taps, a slow re-read, mode switches and a reload", async ({ page, request }) => {
-  // The steps from backlog#148: an old Live college panel, MLB on, NCAAF off,
+  // The steps from the reported bug: an old Live college panel, MLB on, NCAAF off,
   // Favorite teams and back. The re-read after each tap is still out when
   // the next tap comes.
   await reset(request, { mode: 2 });
