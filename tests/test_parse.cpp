@@ -90,6 +90,19 @@ static void test_iso() {
   CHECK_EQ(parse_iso8601_z("2026-09-05T19:30Z"), (int64_t) 1788636600);
   CHECK_EQ(parse_iso8601_z("2026-09-10T00:20:00Z"), (int64_t) 1788999600);
   CHECK_EQ(parse_iso8601_z("garbage"), (int64_t) 0);
+  // HTTP Date headers, as ESPN sends them.
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 GMT"), (int64_t) 1792280369);
+  CHECK_EQ(parse_http_date("Sat, 05 Sep 2026 19:30:00 GMT"), (int64_t) 1788636600);
+  CHECK_EQ(parse_http_date("Sun, 01 Mar 2048 00:00:00 GMT"), (int64_t) 2466633600);
+  CHECK_EQ(parse_http_date(""), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 UTC"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Okt 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 7 Oct 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 24:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2O26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), (int64_t) 0);  // outside 2020 to 2099
+  CHECK_EQ(parse_http_date("Saturday, 17-Oct-26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat Oct 17 23:39:29 2026"), (int64_t) 0);
 }
 
 static void test_team_parse() {
