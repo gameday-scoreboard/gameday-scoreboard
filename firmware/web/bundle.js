@@ -481,7 +481,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       const favMode = mode === "4" && S && (S.favs || []).some(refKey);
       // With no team picked the panel runs the live board, unless Favorites has teams.
       const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
+      // why is the panel's own reason ("Can't reach ESPN", "Getting ready"),
+      // sent only when its board says something other than its default.
       msg.textContent = !g ? "Waiting for the first fetch"
+        : g.why ? g.why
         : favMode ? "None of your favorites has a game coming up"
           : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";

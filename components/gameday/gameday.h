@@ -711,6 +711,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // ESPN itself answered that the team on the board has no game. Until it
   // has, an empty board after a failed read means ESPN could not be reached.
   bool no_game_confirmed_{false};
+  // What an empty board says in place of "No upcoming game" (no_game_text),
+  // for the board and for the page and the app. Empty when the board shows
+  // a game, or its default or a live mode's words.
+  std::string no_game_why_() const;
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;

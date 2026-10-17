@@ -2138,6 +2138,12 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
   this->schedule_next_(this->comp_next_ > 0 || this->upcoming_due_ ? 0 : this->interval_for_phase_());
 }
 
+std::string GamedayComponent::no_game_why_() const {
+  if (this->game_.valid || this->demo_playing_())
+    return "";
+  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_);
+}
+
 void GamedayComponent::emit_(const ::espn::Splash &splash) {
   const GameSnapshot &g = this->game_;
   UpdateFields f;
@@ -2237,14 +2243,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // An empty board says why (espn_parse.h, no_game_text): the clock is not
   // set yet, or ESPN cannot be reached. "No upcoming game" is only right
   // once ESPN itself has said so; before that it would be a guess.
-  if (!g.valid && !this->demo_playing_()) {
-    std::string why =
-        ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_);
-    if (!why.empty()) {
-      f.status_text = why;
-      f.ha_status_text = why;
-      f.message = why;
-    }
+  std::string why = this->no_game_why_();
+  if (!why.empty()) {
+    f.status_text = why;
+    f.ha_status_text = why;
+    f.message = why;
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
     f.status_text = "Favorites: add teams in the app or on the page | " + f.status_text;
@@ -2753,6 +2756,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
 
   JsonObject game = doc["game"].to<JsonObject>();
   game["s"] = g.valid ? ::espn::state_name(g.state) : "NOT_FOUND";
+  // The board's reason for being empty ("Can't reach ESPN"), so the page and
+  // the app say what the panel says. Left out when the board has its default.
+  std::string why = this->no_game_why_();
+  if (!why.empty())
+    game["why"] = why;
   uint8_t league = this->live_mode_() && this->schedule_.valid ? this->schedule_.league : this->prefs_.league;
   if (this->favorites_mode_() && this->fav_shown_ >= 0)
     league = (uint8_t) this->fav_[this->fav_shown_].team->league;
