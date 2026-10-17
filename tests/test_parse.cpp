@@ -2803,6 +2803,18 @@ static void test_later_today() {
     CHECK_EQ(nba[1].tv, std::string("NBA TV"));
     CHECK_EQ(nba[1].kickoff_epoch, parse_iso8601_z("2026-10-16T00:30Z"));
     CHECK_EQ(next, nba[0].kickoff_epoch);
+    // Before TOR at NY the walk forward waits for it
+    int64_t six_pm = parse_iso8601_z("2026-10-15T23:00Z");
+    CHECK_EQ(recap_scan_next(next, nba, six_pm), nba[0].kickoff_epoch);
+    // 6:35 PM Central, ESPN still showing TOR at NY to come: OKC at HOU is
+    // still ahead, so no read for tomorrow (bench, 10/15). The rescan's
+    // floor while ESPN lags is unchanged.
+    int64_t lagging = parse_iso8601_z("2026-10-15T23:35Z");
+    CHECK_EQ(recap_scan_next(next, nba, lagging), nba[1].kickoff_epoch);
+    CHECK_EQ(no_live_rescan_ms(lagging, next, lo, hi), lo);
+    // Both kickoffs past: nothing left today, so the walk may look ahead
+    CHECK_EQ(recap_scan_next(next, nba, parse_iso8601_z("2026-10-16T00:35Z")), (int64_t) 0);
+    CHECK_EQ(recap_scan_next(0, {}, lagging), (int64_t) 0);
   }
 
   // NFL week 1, sixteen to come: only the first eight are kept, ties in
