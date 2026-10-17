@@ -462,6 +462,11 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(2026, 248, 0, 12, 0), now), std::string("Tomorrow 12:00 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 251, 3, 19, 20), now), std::string("Wed 7:20 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 256, 1, 0, 5, 8, 14), now), std::string("Sep 14 12:05 AM"));
+  // ESPTime{}.to_c_tm(), what the panel gets for an epoch it can't convert:
+  // no label rather than a read before the month table (found by fuzz_espn).
+  CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
+  // A year far enough out to overflow the day count in int.
+  CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
 }
 
 static void test_upcoming() {
