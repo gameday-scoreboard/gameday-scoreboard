@@ -160,6 +160,7 @@ packages:
   boot: !include pages/boot.yaml
   scoreboard: !include pages/gameday-live.yaml
   wizmote: !include pages/wizmote.yaml
+  effects: !include effects.yaml
   # Factory check (five quick boot button presses in the first 30 s)
   qc: !include pages/qc.yaml
 
@@ -627,6 +628,9 @@ switch:
       - hub75.set_brightness:
           id: matrix
           brightness: 0
+      # Park the effects too, so the loop is not spent on a dark panel and the
+      # scoreboard is what comes back.
+      - switch.turn_off: gd_effects
   # Off unless the owner turns it on. The setting itself lives in the gameday
   # component (auto_update.h) with the rest of the device page's settings;
   # this switch is how Home Assistant sees and changes it.
@@ -642,6 +646,7 @@ switch:
       - lambda: 'id(gameday_ctl).set_auto_update(true);'
     turn_off_action:
       - lambda: 'id(gameday_ctl).set_auto_update(false);'
+
 number:
   - platform: template
     name: "Brightness"
