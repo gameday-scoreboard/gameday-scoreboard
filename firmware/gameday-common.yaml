@@ -446,6 +446,12 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  # The off-season clock's second line shows the date (true) rather than the
+  # next game, so the minute refresh keeps it current (gameday-live.yaml).
+  - id: gd_clock_date
+    type: bool
+    restore_value: no
+    initial_value: 'true'
   # The logos the board wants right now, from the latest board update.
   - id: gd_team_logo_url
     type: std::string
@@ -556,6 +562,10 @@ gameday:
         is_red_zone: !lambda 'return x.is_red_zone;'
         team_color: !lambda 'return (int) x.team_color;'
         opponent_color: !lambda 'return (int) x.opponent_color;'
+        team_badge: !lambda 'return x.team_badge;'
+        opponent_badge: !lambda 'return x.opponent_badge;'
+        team_ring: !lambda 'return (int) x.team_ring;'
+        opponent_ring: !lambda 'return (int) x.opponent_ring;'
         possession: !lambda 'return x.possession;'
         team_timeouts: !lambda 'return x.team_timeouts;'
         opponent_timeouts: !lambda 'return x.opponent_timeouts;'
@@ -571,6 +581,10 @@ gameday:
         team_marks: !lambda 'return x.team_marks;'
         opp_marks: !lambda 'return x.opp_marks;'
         message: !lambda 'return gameday::panel_text(x.message);'
+        clock_card: !lambda 'return x.clock;'
+        # Built from panel_text() pieces with a line break that panel_text()
+        # would turn into a space, so it goes to the board as it is.
+        next_line: !lambda 'return x.next_line;'
     - lambda: |-
         id(gd_team_logo_url) = x.team_logo;
         id(gd_opp_logo_url) = x.opponent_logo;

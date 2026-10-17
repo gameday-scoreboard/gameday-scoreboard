@@ -64,6 +64,10 @@ is the short version.
 
 - Branch from `dev` and open PRs against `dev`. `beta` and `main` only take
   promotion PRs, and CI enforces that.
+- A PR description says what changed and how it was tested. No links to
+  private repos or trackers, no ticket numbers from them, and no AI
+  attribution in PR text or comments. Maintainers keep reviews and
+  progress notes privately.
 - Commit messages are one plain sentence about the behavior that changed
   ("Name each panel's hotspot after its suffix"), not "fix bug" or a
   conventional-commit prefix.

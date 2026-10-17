@@ -55,6 +55,9 @@ class LogoCache {
 
   // The decoded logo, or nullptr while it is still missing; a miss starts a download.
   image::Image *get(const std::string &url);
+  // True while the logo is still on its way. A miss starts it, as get() does;
+  // a failed logo is not on its way.
+  bool waiting(const std::string &url);
   // The two URLs about to be shown. They and the two before them are never
   // dropped, so nothing LVGL may still point at is freed.
   void pin(const std::string &team, const std::string &opponent);

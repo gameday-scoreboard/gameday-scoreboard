@@ -126,6 +126,14 @@ Soccer does the same. Recorded 2026-10-12 during CRU @ BRA in Brazil's Serie A
 | `team_bra_cru_live.json` | `.../soccer/bra.1/teams/2022`, nextEvent is 401841276 CRU @ GRE on 10/18 |
 | `day_bra_20261012.json` | `.../soccer/bra.1/scoreboard?dates=20261012`, 401841260 CRU @ BRA in progress, CAP @ CHA and BOT @ CFC full time |
 
+College football does the same. Recorded 2026-10-17 at 12:40 PM Central
+during FLA @ TEX (halftime):
+
+| File | Source |
+| --- | --- |
+| `team_ncaa_tex_live.json` | `.../football/college-football/teams/251`, nextEvent is 401856732 MISS @ TEX on 10/24, group 8 (SEC) |
+| `day_ncaa_20261017.json` | `.../college-football/scoreboard?groups=8&dates=20261017`, 401856724 FLA @ TEX and MSST @ LSU in progress, five SEC games to come |
+
 College football games with no kickoff time yet, recorded 2026-10-14. ESPN
 lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
 "TBD" (Iowa, team 2294, is off on 10/17, so its next game is one of them):
@@ -136,6 +144,13 @@ lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
 | `scoreboard_ncaa_tbd.json` | `.../college-football/scoreboard?groups=5&dates=20261024`, three TBD games and three with times (the day before, 20261023, has none) |
 | `event_ncaa_tbd.json` | `.../college-football/scoreboard/401858497`, the TBD game on its own |
 | `schedule_ncaa_iowa_tbd.json` | `.../college-football/teams/2294/schedule`, trimmed to events 6 to 12: the 10/9 final, five TBD games, then 11/27 at 12:00 PM EST |
+
+Recorded 2026-10-15 at 9:41 AM Central (NBA preseason), for the rotation's
+later-today cards:
+
+| File | Source |
+| --- | --- |
+| `day_nba_20261015.json` | `.../basketball/nba/scoreboard?dates=20261015`, two games to come: TOR @ NY (no TV listed) and OKC @ HOU (NBA TV) |
 
 Not from ESPN: `set_cases.json` is a table of `POST /gameday/set` requests and
 the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
