@@ -2305,11 +2305,10 @@ bool GamedayComponent::hold_for_logos_(const UpdateFields &f) {
     this->logo_held_ = false;
     return false;
   }
-  if (!this->logo_held_) {
-    this->logo_held_ = true;
+  if (!this->logo_held_)
     this->logo_hold_ms_ = millis();
-  }
-  return !this->logo_hold_done_();
+  this->logo_held_ = !this->logo_hold_done_();
+  return this->logo_held_;
 }
 
 bool GamedayComponent::logo_hold_done_() {
