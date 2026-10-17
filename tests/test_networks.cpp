@@ -151,7 +151,7 @@ static void test_valid_rejects_bad_flash() {
 }
 
 // ESPHome's one slot, as the app's setup, the hotspot page and Reset Wi-Fi
-// write it and as the component rewrites it after a forget.
+// in older firmware write it and as the component rewrites it after a forget.
 struct Slot {
   std::string ssid, password;
 };
@@ -241,8 +241,8 @@ static void test_reset_empties_the_list() {
   Slot slot{"Home", "pw-home"};
   boot(l, slot);
   put_front(l, "iPhone", "pw-phone");
-  // Reset Wi-Fi blanks the slot. Even a list this firmware did not clear
-  // itself goes, so a reset stays a reset.
+  // Reset Wi-Fi in older firmware blanked the slot. Even a list that firmware
+  // did not clear itself goes, so a reset stays a reset.
   slot = Slot{"", ""};
   CHECK(boot(l, slot));
   CHECK(l.count == 0);

@@ -941,7 +941,8 @@ test("both resets say the panel restarts into setup and the page won't reconnect
   await expect(page.locator("#gstate")).toHaveText("UPCOMING");
   await page.locator("#actions button", { hasText: "Reset Wi-Fi" }).click();
   await expect(page.locator("#gone")).toHaveText(
-    "The panel forgot its Wi-Fi and is restarting into setup, so this page won't reconnect. Its settings are kept."
+    "The panel is restarting into Wi-Fi setup for 15 minutes, so this page won't reconnect. Its settings are kept,"
+    + " and unplugging it and plugging it back in takes it back to the Wi-Fi it already knows."
     + " To set it up again, use the Game Day app or join its \"Game Day 2f6a70\" Wi-Fi.");
   await expect(page.locator("#board")).toHaveClass(/dim/);
   await expect(page.locator("#conn")).not.toHaveClass(/\bon\b/);

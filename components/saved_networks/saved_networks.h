@@ -17,10 +17,16 @@
 // and the list keeps a hash of what it last took from it: a slot that
 // changed since goes to the front (a panel updating from firmware that kept
 // one network, or a setup that restarted before it connected), and a blank
-// slot, which only "Reset Wi-Fi" writes, empties the list too. Forgetting a
-// network rewrites the slot to the new front one, so nothing forgotten comes
-// back from it and firmware rolled back to one network still has one.
-// Forgetting the last one leaves the slot alone (wifi_list::forget()).
+// slot, which "Reset Wi-Fi" wrote in older firmware, empties the list too.
+// Forgetting a network rewrites the slot to the new front one, so nothing
+// forgotten comes back from it and firmware rolled back to one network still
+// has one. Forgetting the last one leaves the slot alone (wifi_list::forget()).
+//
+// "Reset Wi-Fi" keeps the list and the slot. It saves a flag instead, and the
+// next boot reads and clears it and starts in setup mode with a blank network
+// in memory, the state the rest of the firmware already reads as "reset". So
+// that one boot is in setup and any later one, after an unplug or after the
+// 15 minutes in gameday-common.yaml run out, is back on the saved networks.
 //
 // Within a boot the list is only saved, never re-applied: a setup from the
 // app narrows the live list to the new network the way ESPHome always did,
@@ -66,8 +72,12 @@ class SavedNetworks : public Component {
   // Takes one network out of the saved list. Returns false when it was not
   // there. Safe from the HTTP task; the flash write runs on the main loop.
   bool forget(const std::string &ssid);
-  // Empties the list. "Reset Wi-Fi" calls this before blanking ESPHome's slot.
-  void forget_all();
+  // "Reset Wi-Fi": the next boot starts in setup mode. Call it right before
+  // restarting; the flag is in flash when this returns.
+  void start_setup();
+  // This boot started in setup mode after "Reset Wi-Fi" and has networks to
+  // go back to. Only false for a panel that never had one.
+  bool in_setup() const { return this->in_setup_; }
   // The saved networks in the order they are tried. Safe from the HTTP task.
   std::vector<Entry> list();
   size_t count();
@@ -80,6 +90,8 @@ class SavedNetworks : public Component {
   NetworkList list_{};
   std::mutex mutex_;
   ESPPreferenceObject pref_;
+  ESPPreferenceObject setup_pref_;
+  bool in_setup_{false};
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)

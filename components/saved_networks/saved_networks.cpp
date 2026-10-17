@@ -17,6 +17,8 @@ namespace esphome {
 namespace saved_networks {
 
 static const char *const TAG = "saved_networks";
+// What start_setup() saves. Any other value, or none, is a normal boot.
+static constexpr uint32_t SETUP_PENDING = 0x53455455;
 
 SavedNetworks *global_saved_networks = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -38,6 +40,16 @@ void SavedNetworks::setup() {
   this->pref_ = global_preferences->make_preference<NetworkList>(fnv1_hash("gameday_wifi_list_v2"), true);
   if (!this->pref_.load(&this->list_) || !wifi_list::valid(this->list_))
     wifi_list::clear(this->list_);
+  // Set by "Reset Wi-Fi" (start_setup()) and cleared here, so only the first
+  // boot after the reset is in setup mode.
+  this->setup_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_wifi_setup_v1"), true);
+  uint32_t setup = 0;
+  const bool reset = this->setup_pref_.load(&setup) && setup == SETUP_PENDING;
+  if (reset) {
+    setup = 0;
+    this->setup_pref_.save(&setup);
+    global_preferences->sync();
+  }
 
   auto *w = wifi::global_wifi_component;
   if (w == nullptr)
@@ -56,6 +68,17 @@ void SavedNetworks::setup() {
         ESP_LOGI(TAG, "Network set up since the last boot: %s", ssid.c_str());
       this->save_();
     }
+  }
+  // A blank network that still counts as has_sta() is what the on_boot
+  // checks in gameday-common.yaml and the setup screen read as "reset": the
+  // hotspot and Bluetooth setup come up at once and nothing is joined. The
+  // saved networks stay in flash for the next boot. A panel with none to go
+  // back to is just a panel in setup, as before.
+  if (reset && (this->list_.count > 0 || !w->get_sta().get_ssid().empty())) {
+    this->in_setup_ = true;
+    w->set_sta(wifi::WiFiAP{});
+    ESP_LOGI(TAG, "Wi-Fi was reset: in setup mode, %u saved network(s) kept for the next boot", this->list_.count);
+    return;
   }
   this->apply_();
 }
@@ -150,13 +173,11 @@ bool SavedNetworks::forget(const std::string &ssid) {
   return true;
 }
 
-void SavedNetworks::forget_all() {
-  {
-    std::lock_guard<std::mutex> lock(this->mutex_);
-    wifi_list::clear(this->list_);
-  }
-  ESP_LOGI(TAG, "Forgot every saved network");
-  this->save_();
+void SavedNetworks::start_setup() {
+  uint32_t setup = SETUP_PENDING;
+  this->setup_pref_.save(&setup);
+  global_preferences->sync();
+  ESP_LOGI(TAG, "Wi-Fi reset: the next boot starts in setup mode");
 }
 
 std::vector<Entry> SavedNetworks::list() {
