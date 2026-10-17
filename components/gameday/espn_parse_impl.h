@@ -490,6 +490,7 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       std::string abbr = detail::str_or_empty(c["team"]["abbreviation"]);
       if (home) {
         g.home_abbr = abbr;
+        g.home_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
         g.group = (uint32_t) atol(detail::str_or_empty(c["team"]["conferenceId"]).c_str());
       } else {
         g.away_abbr = abbr;

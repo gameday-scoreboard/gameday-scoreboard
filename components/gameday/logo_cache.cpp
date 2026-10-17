@@ -57,6 +57,17 @@ image::Image *LogoCache::get(const std::string &url) {
   return nullptr;
 }
 
+bool LogoCache::waiting(const std::string &url) {
+  if (url.empty() || this->lock_ == nullptr || this->get(url) != nullptr)
+    return false;
+  Locked guard(this->lock_);
+  for (auto &e : this->entries_) {
+    if (std::string_view(e->url) == url)
+      return e->state != State::FAILED;
+  }
+  return false;
+}
+
 // Never drops a logo to make room, since only the main loop knows what LVGL
 // is drawing; a full cache skips the head start and get() fetches it later.
 void LogoCache::prefetch(const std::string &url) {

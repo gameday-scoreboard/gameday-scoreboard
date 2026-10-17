@@ -10,6 +10,7 @@
 #include <cstring>
 #include <vector>
 
+#include "logo_lru.h"
 #include "panel_text.h"
 #include "timezones.h"
 #include "timezones_parsed.h"
@@ -867,6 +868,8 @@ void GamedayComponent::dump_config() {
 void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
+  if (this->logo_held_ && this->logo_hold_done_())
+    this->draw_(this->last_fields_);
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
@@ -1952,6 +1955,9 @@ void GamedayComponent::apply_job_() {
     }
     const ::espn::LiveGame &g = j.live[pick[random_uint32() % pick.size()]];
     ESP_LOGI(TAG, "Following %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+    // Both logos download while the game is read, so its board can go up whole.
+    this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.away_id, g.away_abbr.c_str()));
+    this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.home_id, g.home_abbr.c_str()));
     this->live_none_ = false;
     this->live_fallback_ = false;
     this->recap_on_ = false;
@@ -2284,6 +2290,40 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     ESP_LOGI(TAG, "Splash: %s", f.splash_text.c_str());
   this->last_fields_ = f;
   this->rebuild_state_(&f);
+  if (this->hold_for_logos_(f))
+    return;
+  this->draw_(f);
+}
+
+// A board with different logos from the one up now waits for them, so it goes
+// up whole instead of one logo and then the other a second later. loop() draws
+// it from last_fields_, which later updates keep current, once both are in or
+// the wait runs out (logo_lru.h, logo_hold_over). A splash goes up at once.
+bool GamedayComponent::hold_for_logos_(const UpdateFields &f) {
+  bool same = f.team_logo == this->shown_team_logo_ && f.opponent_logo == this->shown_opp_logo_;
+  if (same || !f.splash_text.empty() || this->demo_playing_()) {
+    this->logo_held_ = false;
+    return false;
+  }
+  if (!this->logo_held_)
+    this->logo_hold_ms_ = millis();
+  this->logo_held_ = !this->logo_hold_done_();
+  return this->logo_held_;
+}
+
+bool GamedayComponent::logo_hold_done_() {
+  const UpdateFields &f = this->last_fields_;
+  return ::espn::logo_hold_over(this->logos_.waiting(f.team_logo), this->logos_.waiting(f.opponent_logo),
+                                this->logo_hold_ms_, millis());
+}
+
+void GamedayComponent::draw_(const UpdateFields &f) {
+  if (this->logo_held_) {
+    ESP_LOGD(TAG, "Board held %u ms for its logos", (unsigned) (millis() - this->logo_hold_ms_));
+    this->logo_held_ = false;
+  }
+  this->shown_team_logo_ = f.team_logo;
+  this->shown_opp_logo_ = f.opponent_logo;
   for (auto &cb : this->callbacks_)
     cb(f);
 }
