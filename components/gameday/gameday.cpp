@@ -338,6 +338,7 @@ void GamedayComponent::select_favorite(uint8_t slot, const std::string &option) 
 void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) {
   if (slot < 1 || slot > FAV_MAX)
     return;
+  std::vector<League> live_before = this->live_leagues_();
   this->put_fav_(slot - 1, league, id);
   if (slot <= 4)
     this->pref3_.save(&this->prefs3_);
@@ -347,10 +348,11 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
   if (slot <= 4 && this->favorite_selects_[slot - 1] != nullptr)
     this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
-  this->favorites_changed_(first_pick);
+  this->favorites_changed_(first_pick, live_before);
 }
 
 void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint32_t>> &list) {
+  std::vector<League> live_before = this->live_leagues_();
   bool any = false;
   for (uint8_t i = 0; i < FAV_MAX; i++) {
     bool set = i < list.size();
@@ -364,10 +366,10 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   for (uint8_t slot = 1; slot <= 4; slot++)
     if (this->favorite_selects_[slot - 1] != nullptr)
       this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
-  this->favorites_changed_(first_pick);
+  this->favorites_changed_(first_pick, live_before);
 }
 
-void GamedayComponent::favorites_changed_(bool first_pick) {
+void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<League> &live_before) {
   bool was_fav_mode = this->favorites_mode_();
   this->rebuild_favorites_(true);
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && (was_fav_mode || this->favorites_mode_())) {
@@ -382,6 +384,9 @@ void GamedayComponent::favorites_changed_(bool first_pick) {
     this->schedule_next_(0);
     return;
   }
+  // Live games on auto reads the favorites' leagues too.
+  if (this->live_leagues_changed_(live_before))
+    return;
   if (first_pick)
     this->emit_({});  // redraw the ticker without the setup prompt
   else
@@ -473,14 +478,7 @@ void GamedayComponent::select_mode(const std::string &option) {
     this->mark_setup_done_();
     if (this->mode_select_ != nullptr)
       this->mode_select_->publish_state(option);
-    this->reset_game_();
-    this->generation_++;
-    this->emit_({});  // clear the board while the next fetch runs
-    this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
-    this->end_backoff_wait_();
-    this->schedule_next_(0);
-    // Somebody asked for a different mode, so they are looking at the panel.
-    this->fire_action_("user_pick");
+    this->restart_board_();
     return;
   }
   ESP_LOGW(TAG, "Unknown mode '%s'", option.c_str());
@@ -526,9 +524,11 @@ void GamedayComponent::set_live_leagues(const std::string &keys) { this->set_liv
 void GamedayComponent::set_live_mask_(uint16_t mask) {
   if (mask == this->prefs7_.live_mask)
     return;
+  std::vector<League> before = this->live_leagues_();
   this->prefs7_.live_mask = mask;
   this->pref7_.save(&this->prefs7_);
-  this->rebuild_state_(&this->last_fields_);
+  if (!this->live_leagues_changed_(before))
+    this->rebuild_state_(&this->last_fields_);
 }
 
 std::vector<League> GamedayComponent::live_leagues_() const {
@@ -1392,6 +1392,29 @@ void GamedayComponent::reset_game_() {
   this->post_since_ms_ = 0;
   this->misses_ = 0;
   this->no_game_confirmed_ = false;
+}
+
+void GamedayComponent::restart_board_() {
+  this->reset_game_();
+  this->generation_++;  // a scan in flight read what the board followed before
+  this->emit_({});      // clear the board while the next fetch runs
+  this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
+  this->end_backoff_wait_();
+  this->schedule_next_(0);
+  // Somebody changed what the panel follows, so they are looking at it.
+  this->fire_action_("user_pick");
+}
+
+// Without this the finals and the "No live ... games" wait from the old
+// leagues stayed up until the next scheduled scan, up to three hours.
+bool GamedayComponent::live_leagues_changed_(const std::vector<League> &before) {
+  if (!::espn::live_scan_changed(this->effective_mode_(), before, this->live_leagues_()))
+    return false;
+  ESP_LOGI(TAG, "Live games leagues changed: scanning again");
+  this->board_ready_ = false;
+  this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+  this->restart_board_();
+  return true;
 }
 
 std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::string &url) {
