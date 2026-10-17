@@ -265,8 +265,11 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
 // be read from ESPN before it), "Can't reach ESPN" while reads fail and
 // ESPN has never said this team has no game. Empty for the default, and in
-// a live mode, which has its own words.
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses);
+// a live mode, which has its own words. captive (captive.h: the Wi-Fi answered
+// with a sign-in page and ESPN has not answered since) wins over all of it,
+// live modes included, since nothing can be read until it ends.
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses,
+                         bool captive = false);
 // Bench only. Every ESPN URL starts with this root; a bench build points
 // it at a host that does not exist to make ESPN unreachable without
 // touching the network. Pass a string literal: only the pointer is kept,

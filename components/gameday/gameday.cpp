@@ -8,6 +8,7 @@
 #include "esphome/core/log.h"
 
 #include <cstring>
+#include <strings.h>
 #include <vector>
 
 #include "logo_lru.h"
@@ -28,6 +29,7 @@
 #endif
 
 #include <esp_heap_caps.h>
+#include <esp_http_client.h>
 #include <esp_sntp.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -884,6 +886,7 @@ void GamedayComponent::loop() {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
   }
+  this->captive_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -1440,7 +1443,129 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
     container->end();
     return nullptr;
   }
+  this->espn_ok_reads_++;
   return container;
+}
+
+// ---- Sign-in Wi-Fi (captive.h) ---------------------------------------------
+
+struct ProbeHeaders {
+  std::string location;
+  std::string content_type;
+};
+
+static esp_err_t probe_event(esp_http_client_event_t *evt) {
+  if (evt->event_id != HTTP_EVENT_ON_HEADER || evt->user_data == nullptr || evt->header_key == nullptr ||
+      evt->header_value == nullptr)
+    return ESP_OK;
+  auto *h = static_cast<ProbeHeaders *>(evt->user_data);
+  // Only the host matters, and a portal's link can carry a long query.
+  if (strcasecmp(evt->header_key, "Location") == 0)
+    h->location.assign(evt->header_value, strnlen(evt->header_value, 256));
+  else if (strcasecmp(evt->header_key, "Content-Type") == 0)
+    h->content_type.assign(evt->header_value, strnlen(evt->header_value, 64));
+  return ESP_OK;
+}
+
+// Probe task. Its own esp_http_client rather than http_request, which follows
+// redirects: a portal's redirect is the answer, and following it to an HTTPS
+// sign-in page with its own certificate would only fail.
+void GamedayComponent::probe_task_(void *arg) {
+  auto *self = static_cast<GamedayComponent *>(arg);
+  ProbeHeaders h;
+  esp_http_client_config_t cfg = {};
+  cfg.url = self->probe_url_.load();
+  cfg.timeout_ms = 10000;
+  cfg.disable_auto_redirect = true;
+  cfg.event_handler = &probe_event;
+  cfg.user_data = &h;
+  cfg.user_agent = USER_AGENT;
+  int status = 0;
+  std::string body;
+  esp_http_client_handle_t client = esp_http_client_init(&cfg);
+  if (client != nullptr) {
+    esp_http_client_set_header(client, "Accept", "application/json");
+    if (esp_http_client_open(client, 0) == ESP_OK && esp_http_client_fetch_headers(client) >= 0) {
+      status = esp_http_client_get_status_code(client);
+      char buf[256];
+      int n = esp_http_client_read(client, buf, sizeof(buf));
+      if (n > 0)
+        body.assign(buf, n);
+    }
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+  }
+  ::espn::Probe r = ::espn::classify_probe(status, h.location, h.content_type, body);
+  ESP_LOGI(TAG, "Wi-Fi check: %s (HTTP %d%s%s)", ::espn::probe_name(r), status, h.location.empty() ? "" : ", to ",
+           ::espn::detail::url_host(h.location).c_str());
+  self->probe_result_ = (uint8_t) r;
+  self->probe_done_ = true;
+  vTaskDelete(nullptr);
+}
+
+void GamedayComponent::start_probe_() {
+  this->probe_join_done_ = true;
+  this->probe_ms_ = millis();
+  this->probe_ok_mark_ = this->espn_ok_reads_.load();
+  this->probe_done_ = false;
+  this->probe_running_ = true;
+  // Plain HTTP and a 256 byte read, no TLS: a small stack is plenty.
+  if (xTaskCreate(&GamedayComponent::probe_task_, "gameday_probe", 6144, this, 1, nullptr) != pdPASS) {
+    ESP_LOGW(TAG, "Could not start the Wi-Fi check (largest free internal block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    this->probe_running_ = false;
+  }
+}
+
+void GamedayComponent::set_captive_(bool on) {
+  if (on == this->captive_)
+    return;
+  this->captive_ = on;
+  if (on)
+    ESP_LOGW(TAG, "This Wi-Fi needs a sign-in: a sign-in page answered in ESPN's place");
+  else
+    ESP_LOGI(TAG, "Wi-Fi sign-in state cleared");
+  this->emit_({});
+  this->fire_action_(on ? "captive" : "captive_clear");  // boot.yaml shows or hides the screen
+}
+
+// Once per join, then again while on a sign-in network or while ESPN reads
+// fail (captive.h, probe_due). Any ESPN answer over HTTPS ends the state, so
+// a network that only looks like a portal to the probe never covers a board
+// that is working.
+void GamedayComponent::captive_tick_() {
+  const uint32_t now = millis();
+  if (this->probe_running_) {
+    if (!this->probe_done_.load())
+      return;
+    this->probe_running_ = false;
+    const auto r = (::espn::Probe) this->probe_result_.load();
+    if (r == ::espn::Probe::OPEN || this->espn_ok_reads_.load() != this->probe_ok_mark_)
+      this->set_captive_(false);
+    else if (r == ::espn::Probe::CAPTIVE && network::is_connected() && !this->demo_playing_())
+      this->set_captive_(true);
+  }
+  if (!network::is_connected() || this->demo_playing_()) {
+    this->probe_join_ms_ = 0;
+    this->probe_join_done_ = false;
+    this->set_captive_(false);
+    return;
+  }
+  if (this->probe_join_ms_ == 0)
+    this->probe_join_ms_ = now == 0 ? 1 : now;
+  if (this->captive_ && this->espn_ok_reads_.load() != this->probe_ok_mark_) {
+    ESP_LOGI(TAG, "ESPN answered: this Wi-Fi no longer needs a sign-in");
+    this->set_captive_(false);
+  }
+  // Nothing is due inside the shortest recheck wait.
+  if (this->probe_join_done_ && now - this->probe_ms_ < ::espn::kProbeCaptiveRecheckMs)
+    return;
+  // A sign-in network usually blocks the time server too, and with no clock
+  // nothing is read from ESPN, so a clock still unset 30 s after joining
+  // counts as reads failing.
+  const bool failing = this->misses_ > 0 || (!this->clock_set_() && now - this->probe_join_ms_ >= 30000);
+  if (::espn::probe_due(this->probe_join_done_, this->captive_, failing, now - this->probe_ms_))
+    this->start_probe_();
 }
 
 uint32_t GamedayComponent::back_off_() {
@@ -2198,7 +2323,8 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
 std::string GamedayComponent::no_game_why_() const {
   if (this->game_.valid || this->demo_playing_())
     return "";
-  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_);
+  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_,
+                              this->captive_);
 }
 
 void GamedayComponent::emit_(const ::espn::Splash &splash) {
@@ -2809,6 +2935,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["bar"]["report"] = this->report_email_;
 #endif
   doc["misses"] = this->misses_;
+  // The Wi-Fi wants a sign-in (captive.h); the page and the app say how to
+  // get the panel onto a network that works.
+  doc["captive"] = this->captive_;
   doc["espn_kb"] = (uint32_t) (this->espn_bytes() / 1000);
   doc["espn_reads"] = this->espn_requests();
   doc["stale_s"] = this->stale_seconds_();

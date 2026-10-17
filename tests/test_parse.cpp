@@ -8,6 +8,7 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "captive.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
@@ -430,6 +431,64 @@ static void test_no_game_text() {
   // Live modes keep their own "Looking for a live game"
   CHECK_EQ(no_game_text(true, true, false, 1), std::string(""));
   CHECK_EQ(no_game_text(true, true, false, 3), std::string(""));
+  // A sign-in Wi-Fi says so in place of all of them, live modes too
+  CHECK_EQ(no_game_text(false, false, false, 0, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, true, false, 1, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, false), std::string("Can't reach ESPN"));
+}
+
+// The plain HTTP read of ESPN after joining Wi-Fi (captive.h). Only a clear
+// portal answer is a sign-in network; anything ESPN could have sent is not.
+static void test_captive() {
+  // ESPN today: 200, JSON, "{}"
+  CHECK(classify_probe(200, "", "application/json;charset=UTF-8", "{}") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "  \r\n[1]") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "application/json", "") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "\xEF\xBB\xBF{\"a\":1}") == Probe::OPEN);
+  // ESPN's JSON error for a URL it no longer knows still means ESPN answered
+  CHECK(classify_probe(404, "", "application/json", "{\"code\":404}") == Probe::OPEN);
+  // Portals: a redirect to their sign-in page, over HTTP or HTTPS
+  CHECK(classify_probe(302, "http://192.168.10.1:8002/index.php?zone=guest", "text/html", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "https://login.hotelwifi.example/portal?mac=aa:bb", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(307, "HTTPS://Splash.Example.NET/", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(301, "http://user@portal.example/x", "", "") == Probe::CAPTIVE);
+  // or their page in ESPN's place, or the status made for it
+  CHECK(classify_probe(200, "", "text/html", "<!DOCTYPE html><html><head><title>Sign in") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "", "\n  <html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "text/html; charset=utf-8", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "text/html", "<html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "", "") == Probe::CAPTIVE);
+  // ESPN sending plain HTTP on to HTTPS one day is still ESPN
+  CHECK(classify_probe(301, "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/record", "", "") ==
+        Probe::OPEN);
+  CHECK(classify_probe(302, "https://secure.espn.com:443/x", "", "") == Probe::OPEN);
+  CHECK(classify_probe(302, "https://espn.com", "", "") == Probe::OPEN);
+  // but a host that only ends in the same letters is not
+  CHECK(classify_probe(302, "http://notespn.com/login", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "http://espn.com.portal.example/login", "", "") == Probe::CAPTIVE);
+  // Proves nothing: no answer, a relative or missing redirect, an error page
+  // (ESPN's own Akamai "Access Denied" is HTML), an empty or odd body
+  CHECK(classify_probe(0, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(-1, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "/login", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(403, "", "text/html", "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>") == Probe::UNKNOWN);
+  CHECK(classify_probe(503, "", "text/html", "<html>") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "text/plain", "OK") == Probe::UNKNOWN);
+  CHECK(classify_probe(204, "", "", "") == Probe::UNKNOWN);
+
+  // When to probe: once per join
+  CHECK(probe_due(false, false, false, 0));
+  CHECK(probe_due(false, true, true, 0));
+  CHECK(!probe_due(true, false, false, 10 * 60 * 1000));
+  // again every minute on a sign-in network
+  CHECK(!probe_due(true, true, false, kProbeCaptiveRecheckMs - 1));
+  CHECK(probe_due(true, true, false, kProbeCaptiveRecheckMs));
+  // every two while reads fail on one that looked open
+  CHECK(!probe_due(true, false, true, kProbeFailingRecheckMs - 1));
+  CHECK(probe_due(true, false, true, kProbeFailingRecheckMs));
 }
 
 static struct tm mk(int year, int yday, int wday, int hour, int min, int mon = 8, int mday = 5) {
@@ -3757,6 +3816,7 @@ int main() {
   test_splash();
   test_status_text();
   test_no_game_text();
+  test_captive();
   test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();
