@@ -2365,7 +2365,7 @@ void GamedayComponent::apply_recap_job_() {
 // A scan's finals and games to come go in as today's (recap.h).
 void GamedayComponent::recap_absorb_(const Job &j, int64_t tnow) {
   ::espn::recap_absorb(this->recap_days_, j.finals, j.pending, tnow);
-  this->recap_scan_next_ = j.next_kickoff > tnow ? j.next_kickoff : 0;
+  this->recap_scan_next_ = ::espn::recap_scan_next(j.next_kickoff, j.pending, tnow);
   this->recap_rebuild_();
 }
 

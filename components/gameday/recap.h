@@ -203,6 +203,21 @@ inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &
   recap_trim(days, now);
 }
 
+// A scan's next kickoff still ahead, 0 for none: the walk forward waits
+// while there is one. ESPN can list a game as not started for a few minutes
+// past its kickoff, and the scan's first kickoff is then behind us with
+// other games still to come today, so fall back on the first kept game
+// ahead.
+inline int64_t recap_scan_next(int64_t next_kickoff, const std::vector<Pending> &pending, int64_t now) {
+  if (next_kickoff > now)
+    return next_kickoff;
+  int64_t best = 0;
+  for (const auto &p : pending)
+    if (p.kickoff_epoch > now && (best == 0 || p.kickoff_epoch < best))
+      best = p.kickoff_epoch;
+  return best;
+}
+
 inline size_t recap_count(const std::vector<RecapDay> &days, uint8_t league) {
   size_t n = 0;
   for (const auto &d : days)
