@@ -2095,6 +2095,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.situation = ::espn::basketball_series(g);
   f.team_color = ::espn::parse_color(g.team_color);
   f.opponent_color = ::espn::parse_color(g.opp_color);
+#ifdef GAMEDAY_DEMO
+  this->demo_badges_(f);
+#endif
   f.splash_text = splash.text;
   f.splash_color = splash.color;
 

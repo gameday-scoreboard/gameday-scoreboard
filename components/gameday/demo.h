@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "badge.h"
 #include "espn_parse.h"
 #include "team_colors.h"
 #include "teams.h"
@@ -52,16 +53,19 @@ constexpr uint32_t kDemoGapMs = 10000;
 
 // Invented teams for filming and for any footage that gets posted: no logos,
 // and abbreviations no real team in teams.h uses (the host tests check).
+// Each side's logo slot shows its abbreviation badge instead (badge.h): rgb
+// is the fill and the splash color, alt the badge's ring.
 struct MadeUpTeam {
   const char *abbr;
   const char *name;
   uint32_t rgb;
+  uint32_t alt;
 };
 constexpr MadeUpTeam kMadeUpTeams[] = {
-    {"HBR", "Harbor City Hawks", 0x1E5AA8},
-    {"IRN", "Iron Valley Miners", 0xC8102E},
-    {"SUM", "Summit State Peaks", 0x1F8A3B},
-    {"CPT", "Capitol Tech Comets", 0xF2A900},
+    {"HBR", "Harbor City Hawks", 0x1E5AA8, 0xF4F6F8},
+    {"IRN", "Iron Valley Miners", 0xC8102E, 0x9AA3AD},
+    {"SUM", "Summit State Peaks", 0x1F8A3B, 0xE9D27A},
+    {"CPT", "Capitol Tech Comets", 0xF2A900, 0xFFFFFF},
 };
 constexpr size_t kMadeUpTeamCount = sizeof(kMadeUpTeams) / sizeof(kMadeUpTeams[0]);
 

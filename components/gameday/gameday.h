@@ -21,6 +21,7 @@
 #include "esphome/core/preferences.h"
 
 #include "auto_update.h"
+#include "badge.h"
 #include "espn_parse.h"
 #include "favorites.h"
 #include "offseason.h"
@@ -66,6 +67,13 @@ struct UpdateFields {
   bool is_red_zone{false};
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
+  // A side with no logo shows its abbreviation badge in the logo slot (badge.h):
+  // the fill is its color above, the ring this second color. Only the demo
+  // build's made-up teams set these; release firmware leaves them false.
+  bool team_badge{false};
+  bool opponent_badge{false};
+  uint32_t team_ring{0};
+  uint32_t opponent_ring{0};
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty
   // Other sports (football leaves these at their defaults).
   uint8_t sport{0};        // ::espn::Sport
@@ -668,6 +676,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool demo_loop_();  // true while the scripted game owns the board
   void demo_tick_();
   void demo_show_step_(bool splash);
+  void demo_badges_(UpdateFields &f) const;  // made-up teams: badges in the logo slots
   ::espn::DemoMatchup demo_matchup_(uint8_t kind) const;
   uint8_t demo_league_() const;
   void rebuild_demo_json_();

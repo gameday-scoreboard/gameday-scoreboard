@@ -209,6 +209,18 @@ void GamedayComponent::demo_show_step_(bool splash) {
   this->emit_(s);
 }
 
+// With made-up teams there is no logo to fetch, so each logo slot shows the
+// side's abbreviation on its colors instead, the way the app shows every team.
+void GamedayComponent::demo_badges_(UpdateFields &f) const {
+  if (!this->demo_playing_() || !this->demo_prefs_.madeup)
+    return;
+  DemoKind kind = (DemoKind) this->demo_kind_;
+  f.team_badge = true;
+  f.opponent_badge = true;
+  f.team_ring = ::espn::demo_made_up(kind, true).alt;
+  f.opponent_ring = ::espn::demo_made_up(kind, false).alt;
+}
+
 ::espn::DemoMatchup GamedayComponent::demo_matchup_(uint8_t kind) const {
   bool college = kind == (uint8_t) DemoKind::COLLEGE;
   return ::espn::demo_matchup((DemoKind) kind, college ? this->demo_prefs_.college_home : this->demo_prefs_.pro_home,
@@ -326,8 +338,13 @@ void GamedayComponent::apply_demo_(const std::vector<std::pair<std::string, std:
   }
   if (teams_changed) {
     this->demo_pref_.save(&this->demo_prefs_);
-    ESP_LOGI(TAG, "Demo: teams now pro %s, college %s%s", this->demo_matchup_(1).home->abbr,
-             this->demo_matchup_(2).home->abbr, this->demo_prefs_.madeup ? " (made-up teams on)" : "");
+    if (this->demo_prefs_.madeup)
+      ESP_LOGI(TAG, "Demo: teams now pro %s vs %s, college %s vs %s (made-up teams, no logos)",
+               ::espn::demo_made_up(DemoKind::PRO, true).abbr, ::espn::demo_made_up(DemoKind::PRO, false).abbr,
+               ::espn::demo_made_up(DemoKind::COLLEGE, true).abbr, ::espn::demo_made_up(DemoKind::COLLEGE, false).abbr);
+    else
+      ESP_LOGI(TAG, "Demo: teams now pro %s, college %s", this->demo_matchup_(1).home->abbr,
+               this->demo_matchup_(2).home->abbr);
     // Mid-game, put the new teams on the board now rather than at the next play.
     if (this->demo_playing_() && this->demo_step_ > 0) {
       this->demo_step_--;

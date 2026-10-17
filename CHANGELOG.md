@@ -38,6 +38,7 @@ owns the panel, not for the code.
 - A game whose kickoff time isn't set yet, like a college game two weeks out, shows "Sat TBD" instead of a made-up time like "Fri 11:00 PM", and the panel finds that game's scoreboard on the right day.
 - Bowl and playoff games show their name, like "Rose Bowl" or "NFC Wild Card", at the start of the pre-game ticker and under the score on the device page.
 - After you change teams, both logos are there when the scoreboard shows up, instead of popping in one at a time.
+- The demo build's made-up teams show each team's abbreviation on a badge in its colors where a logo would be, the same badge the app shows, so the demo never fetches a logo.
 - The device page works better with a screen reader. Switches say whether they are on or off, the brightness and speed sliders, menus and team search have names, and the mode, league and picker tab buttons say which one is chosen.
 - Live modes use much less data when nothing is on: the panel waits for the next kickoff instead of checking every 2 minutes. During a game it checks every 10 seconds, as often as ESPN updates, and when ESPN has trouble it waits longer between tries.
 - Home Assistant: Game Status changes when a game starts, scores or ends instead of every few seconds, and the free memory sensors read every 5 minutes instead of every 30 seconds and are off on a newly added panel, so your history grows much more slowly.
