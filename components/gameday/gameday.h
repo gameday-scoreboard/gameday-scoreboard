@@ -279,7 +279,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_favorite_(uint8_t slot, uint8_t league, uint32_t id);
   // The whole list at once, in priority order (the page's favs= key).
   void set_favorites_(const std::vector<std::pair<uint8_t, uint32_t>> &list);
-  void favorites_changed_(bool first_pick);
+  // live_before: live_leagues_() from before the change.
+  void favorites_changed_(bool first_pick, const std::vector<League> &live_before);
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
   void put_fav_(uint8_t i, uint8_t league, uint32_t id);  // no save
@@ -489,6 +490,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // show for months (offseason.h); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
   void reset_game_();
+  // Clears the board and scans again now, for a change in what the mode
+  // follows. The caller starts the boot screen hold first.
+  void restart_board_();
+  // Restarts the board when Live games now scans other leagues than before.
+  bool live_leagues_changed_(const std::vector<League> &before);
   void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
   void mark_good_poll_() {
