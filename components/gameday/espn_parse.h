@@ -142,6 +142,7 @@ struct LiveGame {
   std::string event_id;
   uint32_t group{0};        // home team's conference, for the follow-up polls
   uint32_t away_id{0};      // shown on the left, like a broadcast
+  uint32_t home_id{0};      // for its logo, fetched as soon as the game is picked
   std::string away_abbr, home_abbr;
 };
 

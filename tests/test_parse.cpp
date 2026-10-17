@@ -494,6 +494,7 @@ static void test_live_games() {
       CHECK_EQ(g.away_abbr, std::string("BOIS"));
       CHECK_EQ(g.home_abbr, std::string("ORE"));
       CHECK_EQ(g.away_id, kBoise);
+      CHECK_EQ(g.home_id, kOregon);
       CHECK(g.group != 0);
     }
   }
@@ -2165,6 +2166,14 @@ static void test_logo_lru() {
   CHECK(espn::logo_retry_due(1000, 30000, 1000 + 30000));
   CHECK(espn::logo_retry_due(0xFFFFF000u, 30000, 0xFFFFF000u + 30000));
   CHECK(!espn::logo_retry_due(0xFFFFF000u, 30000, 0xFFFFF000u + 29999));
+  // A board with new logos waits for both, then goes up; a cap ends the wait
+  // for a logo that is slow, and one that failed is not waited for at all.
+  CHECK(espn::logo_hold_over(false, false, 1000, 1000));
+  CHECK(!espn::logo_hold_over(true, false, 1000, 1000));
+  CHECK(!espn::logo_hold_over(false, true, 1000, 1000 + espn::LOGO_HOLD_MS - 1));
+  CHECK(espn::logo_hold_over(true, true, 1000, 1000 + espn::LOGO_HOLD_MS));
+  CHECK(espn::logo_hold_over(true, false, 0xFFFFF000u, 0xFFFFF000u + espn::LOGO_HOLD_MS));
+  CHECK(!espn::logo_hold_over(true, false, 0xFFFFF000u, 0xFFFFF000u + espn::LOGO_HOLD_MS - 1));
   // A dark logo that 404s falls back to the plain one, the URL dark_logo made it from.
   std::string plain = "https://a.espncdn.com/i/teamlogos/soccer/500/436.png";
   std::string dark = espn::dark_logo(plain);

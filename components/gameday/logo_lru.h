@@ -45,6 +45,18 @@ inline void logo_loaded(uint8_t &fails, uint32_t &wait_ms) {
 
 inline bool logo_retry_due(uint32_t failed_ms, uint32_t wait_ms, uint32_t now) { return now - failed_ms >= wait_ms; }
 
+// How long a board with new logos waits for them before it goes up anyway,
+// with a blank where a logo is still missing. ESPN's logos usually take well
+// under a second each, one at a time.
+static const uint32_t LOGO_HOLD_MS = 3500;
+
+// True once a held board can go up: neither logo is still on its way, or it
+// has waited LOGO_HOLD_MS. A failed or refused logo is not on its way, so it
+// never holds a board.
+inline bool logo_hold_over(bool team_waiting, bool opp_waiting, uint32_t since_ms, uint32_t now) {
+  return (!team_waiting && !opp_waiting) || now - since_ms >= LOGO_HOLD_MS;
+}
+
 // The plain logo for a dark one (espn::dark_logo), or "" for any other URL.
 // A few teams have no dark variant: Fenerbahce's answers 404 (2026-10-14).
 inline std::string plain_logo_url(const std::string &url) {

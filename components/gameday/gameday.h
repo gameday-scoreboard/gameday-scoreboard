@@ -459,6 +459,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
                          const char *comp_slug = nullptr);
   void emit_(const ::espn::Splash &splash);
+  bool hold_for_logos_(const UpdateFields &f);
+  bool logo_hold_done_();
+  void draw_(const UpdateFields &f);
+  // The logos on the board, and an update with new ones waiting for them
+  // (hold_for_logos_) since logo_hold_ms_.
+  std::string shown_team_logo_, shown_opp_logo_;
+  uint32_t logo_hold_ms_{0};
+  bool logo_held_{false};
   // Turns f into the off-season clock card when the board has nothing to
   // show for months (offseason.h); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
