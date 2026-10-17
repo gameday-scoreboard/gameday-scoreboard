@@ -146,6 +146,26 @@ jobs:
             yaml: firmware/gameday-scoreboard75.yaml
     steps:
       - uses: actions/checkout@v7
+      # On the beta branch this is also the beta channel for panels with
+      # "Follow beta" on: the same "-beta.<run>" version as the bar build of
+      # this run, and publish-beta puts it on the site.
+      - name: Beta version and summary
+        id: beta
+        env:
+          NOTES: ${{ needs.notes.outputs.summary }}
+        run: |
+          set -euo pipefail
+          summary=$NOTES
+          url="https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          if [ "$GITHUB_REF" = refs/heads/beta ]; then
+            v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
+            v="$v-beta.$GITHUB_RUN_NUMBER"
+            sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
+            summary="Beta $v from ${GITHUB_SHA::7}."
+            url="https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+          fi
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Build firmware
         id: esphome
         uses: esphome/build-action@v7
@@ -153,8 +173,8 @@ jobs:
           yaml-file: ${{ matrix.yaml }}
           version: "2026.10.0b3"
           complete-manifest: true
-          release-summary: ${{ needs.notes.outputs.summary }}
-          release-url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+          release-summary: ${{ steps.beta.outputs.summary }}
+          release-url: ${{ steps.beta.outputs.url }}
       - name: Stage output under a stable folder name
         run: |
           mkdir -p out
@@ -267,14 +287,19 @@ jobs:
           path: out
 
   publish-beta:
-    # The beta channel, gamedayscoreboard.app/firmware/beta/<variant>/, read
-    # only by bar builds. Runs when someone pushes (promotes) to beta, or runs
-    # Build on beta by hand with install_now. Pages only deploys from main and
-    # release tags, so the files go on the rolling beta-firmware prerelease
-    # and the Site workflow on main republishes the site with them. The stable
-    # manifests and the flasher are left as they are.
+    # The beta channels, from one build of the beta branch:
+    # - gamedayscoreboard.app/firmware/beta/<variant>/, the bar builds, read
+    #   only by bar panels.
+    # - gamedayscoreboard.app/firmware/<variant>-beta/, the release builds,
+    #   read by panels with "Follow beta" on (the two-panel build follows
+    #   moonhub75's, as it does for releases).
+    # Runs when someone pushes (promotes) to beta, or runs Build on beta by
+    # hand with install_now. Pages only deploys from main and release tags,
+    # so the files go on the rolling beta-firmware prerelease and the Site
+    # workflow on main republishes the site with them. The stable manifests
+    # and the flasher are left as they are.
     name: Publish the beta channel
-    needs: [build-bar, host-tests, web-tests]
+    needs: [build, build-bar, host-tests, web-tests]
     if: github.ref == 'refs/heads/beta' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
@@ -287,24 +312,37 @@ jobs:
           pattern: bar-*
           path: stage/firmware/beta
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-moonhub75
+          path: stage/release
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-scoreboard75
+          path: stage/release
       - name: Check the files and store them on the beta-firmware prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           BETA: ${{ needs.build-bar.outputs.version }}
         run: |
           set -euo pipefail
+          for v in moonhub75 scoreboard75; do
+            mv "stage/release/$v" "stage/firmware/$v-beta"
+          done
           ls -R stage
           bash scripts/check_site_firmware.sh --beta stage
+          bash scripts/check_site_firmware.sh --follow-beta stage "$BETA"
           mkdir -p release
           for v in moonhub75 scoreboard75; do
             (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
+            (cd stage/firmware && zip -r "../../release/firmware-$v-beta.zip" "$v-beta")
           done
-          notes="Firmware for the bar panels' beta channel, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/; this prerelease only stores the files between site deploys."
+          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/, and panels with Follow beta on from gamedayscoreboard.app/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
           if gh release view beta-firmware >/dev/null 2>&1; then
             gh release upload beta-firmware release/*.zip --clobber
-            gh release edit beta-firmware --prerelease --title "Bar beta $BETA" --notes "$notes"
+            gh release edit beta-firmware --prerelease --title "Beta $BETA" --notes "$notes"
           else
-            gh release create beta-firmware release/*.zip --prerelease --target "$GITHUB_SHA" --title "Bar beta $BETA" --notes "$notes"
+            gh release create beta-firmware release/*.zip --prerelease --target "$GITHUB_SHA" --title "Beta $BETA" --notes "$notes"
           fi
       - name: Republish the site from main with the new beta
         env:

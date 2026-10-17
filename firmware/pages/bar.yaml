@@ -18,6 +18,8 @@ esphome:
 gameday:
   bar:
     report_email: "${bar_report_email}"
+  # Always on the bar channel; there is no "Follow beta".
+  beta_channel: !remove
 
 # Read the beta manifest every 15 minutes instead of every 6 hours, so an
 # "Install now" reaches the bar within a quarter hour.

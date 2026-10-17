@@ -661,6 +661,45 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
+test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="beta"]');
+  await expect(page.locator("#betaRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { beta: "1" });
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { beta: "0" });
+
+  await reset(request, { beta: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#betaRow")).toBeHidden();
+});
+
+test("a beta is newer than its release number, and a release is behind the beta before it", async ({ page, request }) => {
+  await reset(request, { beta: true });
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "1.5.5-beta.812", current_version: "1.5.5" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.5-beta.812");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+
+  // Beta turned off on a beta build: the release it was built from is not an update.
+  entity = { ...fw, value: "1.5.5", current_version: "1.5.5-beta.812" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.5-beta.812");
+  await expect(page.locator("#fwInstall")).toBeHidden();
+
+  // The next beta is newer than the last.
+  entity = { ...fw, value: "1.5.6-beta.3", current_version: "1.5.5-beta.812" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
+});
+
 test("a team picked in My team stays on the page through a slow re-read", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

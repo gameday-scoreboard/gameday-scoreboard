@@ -51,7 +51,7 @@ struct Settings {
   uint8_t team_league{0};
   int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true};
-  bool bootaddr{true}, autoupd{false};
+  bool bootaddr{true}, autoupd{false}, beta{false};
   TeamRef favs[16];
   uint16_t live_mask{0};
 };
@@ -119,6 +119,7 @@ void load(Settings &s, JsonObjectConst o) {
   flag("opp", s.opp);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
+  flag("beta", s.beta);
 }
 
 void apply(Settings &s, const SetOp &op) {
@@ -150,6 +151,7 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::OPP: s.opp = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
+    case SetKind::BETA: s.beta = op.on; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -191,6 +193,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["opp"] = s.opp;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
+  doc["beta"] = s.beta;
   doc["panels"] = s.panels;
 }
 
