@@ -2114,6 +2114,30 @@ static void test_lookahead() {
   // CHA's game that day is over: nothing on now.
   CHECK(!parse_team_game_str(slurp("fixtures/day_bra_20261012.json"), 9318, none));
 
+  // College football too: FLA @ TEX at halftime, 2026-10-17. Texas's team
+  // endpoint names next week's game; its conference's scoreboard (the group
+  // the team endpoint gives) has the one on now.
+  Schedule tex;
+  CHECK(parse_team_str(slurp("fixtures/team_ncaa_tex_live.json"), tex));
+  CHECK_EQ(tex.event_id, std::string("401856732"));  // MISS @ TEX, 10/24
+  CHECK_EQ(tex.group, 8u);
+  CHECK_EQ(team_day_url(League::NCAA, tex.group, parse_iso8601_z("2026-10-17T17:40Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20261017"));
+  Schedule tex_now;
+  CHECK(parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, tex_now));
+  CHECK_EQ(tex_now.event_id, std::string("401856724"));
+  CHECK(today_game_first(tex, tex_now));
+  // Ole Miss plays later that day: both name the same game, nothing changes.
+  Schedule miss, miss_today;
+  CHECK(parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 145, miss_today));
+  miss.event_id = miss_today.event_id;
+  miss.kickoff_epoch = miss_today.kickoff_epoch;
+  CHECK(!today_game_first(miss, miss_today));
+  // A game the panel saw finish is passed over even while ESPN lists it live,
+  // and a team that is off that day (Iowa) has nothing on now.
+  CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, none, "401856724"));
+  CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 2294, none));
+
   CHECK_EQ(team_day_url(League::NHL, 0, parse_iso8601_z("2026-10-09T15:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261009"));
   CHECK_EQ(team_day_url(League::MCBB, 8, parse_iso8601_z("2026-12-06T18:00Z")),
