@@ -231,7 +231,8 @@ inline int64_t scan_day_shift(League league) {
 // polls this.
 std::string event_url(League league, const std::string &event_id);
 // One day's scoreboard for finding a team's next game (Eastern date of
-// day_epoch). Men's college basketball reads the team's conference only.
+// day_epoch). College football and men's college basketball read the team's
+// conference only (130 KB for the SEC's Saturday, 835 KB for every FBS game).
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch);
 // The same in a cup of the league (kCups): soccer/uefa.champions/... A null
 // slug gives the league's own URL.

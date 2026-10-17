@@ -57,7 +57,7 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if (league == League::MCBB && group != 0) {
+  if ((league == League::MCBB || league == League::NCAA) && group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }

@@ -892,13 +892,12 @@ void GamedayComponent::loop() {
       uint32_t deadline = WORKER_DEADLINE;
       if (this->job_.need_scan && this->job_.scan_leagues.size() > 2)
         deadline = WORKER_DEADLINE / 2 * (uint32_t) this->job_.scan_leagues.size();
-      // A team read can add the look-ahead's day reads, and a soccer team or
-      // cup read today's scoreboard (run_job_).
+      // A team read can add the look-ahead's day reads, and any other team
+      // or cup read today's scoreboard (run_job_).
       const ::espn::Team *team = this->job_.team;
       if (this->job_.need_schedule && team != nullptr && this->needs_lookahead_(team->league))
         deadline = WORKER_DEADLINE / 2 * (2 + LOOKAHEAD_DAYS);
-      else if ((this->job_.need_schedule || this->job_.comp > 0) && team != nullptr &&
-               ::espn::league_sport(team->league) == ::espn::Sport::SOCCER)
+      else if ((this->job_.need_schedule || this->job_.comp > 0) && team != nullptr)
         deadline = WORKER_DEADLINE / 2 * 3;
       if (this->busy_since_ms_ != 0 && (millis() - this->busy_since_ms_) >= deadline) {
         ESP_LOGW(TAG, "Fetch task did not finish in %us, giving up on it", (unsigned) (deadline / 1000));
@@ -1434,7 +1433,8 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
 
 // ESPN's team endpoint names a team's next game as soon as the current one
 // starts (MIL and LAD on 2026-10-12; soccer the same, CRU and BRA in Brazil's
-// Serie A that night, and a cup's team endpoint is the same endpoint). So a
+// Serie A that night, and a cup's team endpoint is the same endpoint; college
+// football too, FLA @ TEX on 2026-10-17). So a
 // read during a game (a boot, a team pick, the six-hour read, a cup read)
 // checks today's scoreboard for one on now. Its date is taken 9 hours back
 // (team_day_url's 5 plus 4 here), so a late West Coast game still finds its
@@ -1822,7 +1822,7 @@ void GamedayComponent::run_job_() {
           break;
         }
       }
-    } else if (::espn::league_sport(j.team->league) != ::espn::Sport::FOOTBALL) {
+    } else {
       this->take_game_on_now_(j.team, j.schedule, j.done_event);
     }
     if (!j.comps.empty()) {
