@@ -1,0 +1,50 @@
+# BENCH BUILD ONLY (silent reboot hunt): the v2026.10.0 release (scoreboard75) plus the reset reason,
+# the stack overflow task name and the last log lines kept across a restart
+# (bench_reset.h). Never merges.
+substitutions:
+  variant: "scoreboard75"
+  default_panel_cols: "2"
+
+packages:
+  controller: !include controllers/scoreboard75.yaml
+  common: !include gameday-common.yaml
+
+esphome:
+  includes:
+    - bench_reset.h
+  on_boot:
+    - priority: 800.0
+      then:
+        - lambda: bench_setup();
+
+logger:
+  on_message:
+    level: DEBUG
+    then:
+      - lambda: bench_log(level, tag, message);
+
+debug:
+  update_interval: 30s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Reset Reason"
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: bench_heartbeat();
+  # Network logs miss boot lines, so say it again once the API log is back.
+  - interval: 60s
+    startup_delay: 45s
+    then:
+      - lambda: |-
+          static uint8_t n = 0;
+          if (n < 3) { n++; bench_report("repeat after boot"); }
+
+button:
+  - platform: template
+    name: "Bench Report Reset"
+    on_press:
+      - lambda: bench_report("button");
