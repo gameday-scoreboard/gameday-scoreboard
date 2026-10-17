@@ -124,6 +124,14 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
   }
 }
 
+// Live games' leagues went from before to after (its list, or with the list
+// on auto the team or favorites it follows). True when the scan now reads
+// other leagues, so the board has to drop what the old ones put up and scan
+// again; a mode that doesn't read the list never does.
+inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, const std::vector<League> &after) {
+  return scan_leagues(mode, before) != scan_leagues(mode, after);
+}
+
 enum class SetKind : uint8_t {
   TEAM,      // team, id 0 clears it
   MODE,      // value
