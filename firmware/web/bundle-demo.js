@@ -202,6 +202,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
           <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
+        <div class="ctl" id="betaRow" hidden>
+          <label>Follow beta<small>Get test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.</small></label>
+          <button class="sw" data-set="beta" aria-label="Follow beta"></button>
+        </div>
         <div class="ctl" id="barRow" hidden>
           <label>Bar beta<small>This panel installs test versions on its own, between 3 and 5 AM and never during a live game.</small></label>
           <a class="btn" id="barReport" href="#">Something wrong?</a>
@@ -711,6 +715,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     });
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
+    // Older firmware and the bar and demo builds have no beta to follow.
+    $("#betaRow").hidden = S.beta === undefined;
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -1287,12 +1293,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     fwDetailInflight = false;
   };
 
-  // true if a is newer than b, false if older, null if either is unreadable
+  // true if a is newer than b, false if older, null if either is unreadable.
+  // A beta's build number ("2026.10.0-beta.812") counts as a fourth part, as
+  // in the firmware (auto_update.h), so a beta is newer than its plain number.
   const isNewer = (a, b) => {
-    const parse = (v) => String(v || "").replace(/^v/, "").split(".").map((n) => parseInt(n, 10));
+    const parse = (v) => String(v || "").replace(/^v/, "").replace("-beta.", ".").split(".").map((n) => parseInt(n, 10));
     const pa = parse(a), pb = parse(b);
     if (pa.length < 3 || pb.length < 3 || pa.some(isNaN) || pb.some(isNaN)) return null;
-    for (let i = 0; i < 3; i++) { if (pa[i] !== pb[i]) return pa[i] > pb[i]; }
+    for (let i = 0; i < 4; i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x > y; }
     return false;
   };
 

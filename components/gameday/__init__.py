@@ -7,6 +7,7 @@ from pathlib import Path
 from esphome import automation
 import esphome.codegen as cg
 from esphome.components import http_request, runtime_image, time, web_server_base
+from esphome.components.http_request.update import HttpRequestUpdate
 from esphome.components.panel_layout import PanelLayout
 from esphome.components.web_server_base import CONF_WEB_SERVER_BASE_ID
 import esphome.config_validation as cv
@@ -27,6 +28,13 @@ CONF_DEMO = "demo"
 # the beta channel on its own. Off in release firmware.
 CONF_BAR = "bar"
 CONF_REPORT_EMAIL = "report_email"
+# "Follow beta" on the device page (release builds): points the update entity
+# at the beta manifest instead of the release one. The bar build is always on
+# the bar channel and the demo build never updates, so neither has it.
+CONF_BETA_CHANNEL = "beta_channel"
+CONF_UPDATE_ID = "update_id"
+CONF_STABLE = "stable"
+CONF_BETA = "beta"
 
 gameday_ns = cg.esphome_ns.namespace("gameday")
 GamedayComponent = gameday_ns.class_("GamedayComponent", cg.Component)
@@ -92,6 +100,8 @@ def _esphome_at_least(year, month):
 def _not_demo_and_bar(config):
     if config[CONF_DEMO] and CONF_BAR in config:
         raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
+    if CONF_BETA_CHANNEL in config and (config[CONF_DEMO] or CONF_BAR in config):
+        raise cv.Invalid("beta_channel is for release builds; remove it in the demo and bar builds")
     return config
 
 
@@ -109,6 +119,13 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
         cv.Optional(CONF_DEMO, default=False): cv.boolean,
         cv.Optional(CONF_BAR): cv.Schema(
             {cv.Required(CONF_REPORT_EMAIL): cv.string_strict}
+        ),
+        cv.Optional(CONF_BETA_CHANNEL): cv.Schema(
+            {
+                cv.Required(CONF_UPDATE_ID): cv.use_id(HttpRequestUpdate),
+                cv.Required(CONF_STABLE): cv.url,
+                cv.Required(CONF_BETA): cv.url,
+            }
         ),
         cv.Optional(CONF_ON_UPDATE): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(UpdateTrigger)}
@@ -136,6 +153,16 @@ async def to_code(config):
     if CONF_BAR in config:
         cg.add_define("GAMEDAY_BAR")
         cg.add(var.set_report_email(config[CONF_BAR][CONF_REPORT_EMAIL]))
+    if CONF_BETA_CHANNEL in config:
+        conf = config[CONF_BETA_CHANNEL]
+        cg.add_define("GAMEDAY_BETA_CHANNEL")
+        cg.add(
+            var.set_beta_channel(
+                await cg.get_variable(conf[CONF_UPDATE_ID]),
+                conf[CONF_STABLE],
+                conf[CONF_BETA],
+            )
+        )
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))

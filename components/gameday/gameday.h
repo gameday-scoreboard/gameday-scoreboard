@@ -32,6 +32,9 @@
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
 #endif
+#ifdef GAMEDAY_BETA_CHANNEL
+#include "esphome/components/http_request/update/http_request_update.h"
+#endif
 
 namespace esphome {
 namespace gameday {
@@ -130,6 +133,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    (down: football, count: baseball, match: soccer)
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
+//                                    beta=0/1 (follow the beta channel; release builds only)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
@@ -243,6 +247,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
 #endif
   void set_auto_update(bool on);
+  // "Follow beta": the update entity reads the beta manifest instead of the
+  // release one. Off unless the owner turns it on; only in builds with
+  // beta_channel (the release builds, gameday-common.yaml).
+#ifdef GAMEDAY_BETA_CHANNEL
+  void set_beta_channel(http_request::HttpRequestUpdate *update, const char *stable, const char *beta) {
+    this->beta_update_ = update;
+    this->stable_source_ = stable;
+    this->beta_source_ = beta;
+  }
+  bool follow_beta() const { return this->follow_beta_ != 0; }
+#else
+  bool follow_beta() const { return false; }
+#endif
+  void set_follow_beta(bool on);
 
   void setup() override;
   void loop() override;
@@ -546,6 +564,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t now_tried_{0};
   // Where the bar's "Something wrong?" link on the device page writes to.
   std::string report_email_;
+#endif
+#ifdef GAMEDAY_BETA_CHANNEL
+  http_request::HttpRequestUpdate *beta_update_{nullptr};
+  const char *stable_source_{nullptr};
+  const char *beta_source_{nullptr};
+  ESPPreferenceObject beta_pref_;
+  uint8_t follow_beta_{0};  // 1 = read the beta manifest
+  void apply_channel_();
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;

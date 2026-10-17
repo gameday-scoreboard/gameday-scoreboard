@@ -248,6 +248,13 @@ void GamedayComponent::setup() {
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
+#ifdef GAMEDAY_BETA_CHANNEL
+  // Before the update entity's first check, which waits for the main loop.
+  this->beta_pref_ = global_preferences->make_preference<uint8_t>(fnv1_hash("gameday_beta_v1"));
+  if (!this->beta_pref_.load(&this->follow_beta_) || this->follow_beta_ > 1)
+    this->follow_beta_ = 0;
+  this->apply_channel_();
+#endif
   this->settle_update_mark_();
 #ifdef GAMEDAY_BAR
   this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
@@ -863,6 +870,9 @@ void GamedayComponent::dump_config() {
 #ifdef GAMEDAY_BAR
   ESP_LOGCONFIG(TAG, "  Bar beta: installs from the beta channel");
 #endif
+#ifdef GAMEDAY_BETA_CHANNEL
+  ESP_LOGCONFIG(TAG, "  Follow beta: %s", this->follow_beta() ? "on" : "off");
+#endif
 }
 
 void GamedayComponent::loop() {
@@ -1134,6 +1144,30 @@ void GamedayComponent::set_auto_update(bool on) {
   this->rebuild_state_(&this->last_fields_);
 #endif
 }
+
+void GamedayComponent::set_follow_beta(bool on) {
+#ifdef GAMEDAY_BETA_CHANNEL
+  if (on == this->follow_beta())
+    return;
+  this->follow_beta_ = on ? 1 : 0;
+  this->beta_pref_.save(&this->follow_beta_);
+  ESP_LOGI(TAG, "Follow beta: %s", on ? "on" : "off");
+  this->apply_channel_();
+  // Read the new manifest now, so the page shows what this channel offers.
+  if (this->beta_update_ != nullptr)
+    this->beta_update_->update();
+  this->rebuild_state_(&this->last_fields_);
+#else
+  (void) on;  // no beta channel in this build
+#endif
+}
+
+#ifdef GAMEDAY_BETA_CHANNEL
+void GamedayComponent::apply_channel_() {
+  if (this->beta_update_ != nullptr)
+    this->beta_update_->set_source_url(this->follow_beta() ? this->beta_source_ : this->stable_source_);
+}
+#endif
 
 // At boot, what became of the last install (auto_update.h, UpdateMark), and
 // from now on, note every install as it starts.
@@ -2737,6 +2771,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // choice (the bar build), so the page and the app hide the switch.
   doc["autoupd"] = this->auto_update();
 #endif
+#ifdef GAMEDAY_BETA_CHANNEL
+  // Left out in builds with no beta channel (bar, demo), which hides the switch.
+  doc["beta"] = this->follow_beta();
+#endif
 #ifdef USE_UPDATE
   // A release that rolled back here, after a manual install or an automatic
   // one; left out when there is none.
@@ -3074,6 +3112,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::AUTOUPD:
         this->set_auto_update(op.on);
+        break;
+      case ::espn::SetKind::BETA:
+        this->set_follow_beta(op.on);
         break;
       case ::espn::SetKind::PANELS:
         if (this->panels_ != nullptr)
