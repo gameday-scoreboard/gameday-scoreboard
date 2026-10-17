@@ -185,6 +185,27 @@ test("no game renders the empty board for my team and for live modes", async ({ 
   await expect(page.locator("#curName")).toHaveText("No team chosen");
 });
 
+test("an empty board shows the panel's reason, and the default only when the panel has none", async ({ page, request }) => {
+  await reset(request, { game: { s: "NOT_FOUND", l: "nfl", why: "Can't reach ESPN" }, next: [] });
+  await page.goto("/");
+  await expect(page.locator("#board")).toHaveClass(/empty/);
+  await expect(page.locator("#gstate")).toHaveText("NO GAME");
+  await expect(page.locator("#msg")).toHaveText("Can't reach ESPN");
+
+  await reset(request, { game: { s: "NOT_FOUND", l: "nfl", why: "Getting ready" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("Getting ready");
+
+  // Favorites with teams has its own default, but the panel's reason wins
+  await reset(request, { mode: 4, game: { s: "NOT_FOUND", l: "nfl", why: "Can't reach ESPN" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("Can't reach ESPN");
+
+  await reset(request, { game: { s: "NOT_FOUND", l: "nfl" }, next: [] });
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("No upcoming game for this team");
+});
+
 test("a device that never answers /gameday/state leaves the page waiting, not broken", async ({ page, request }) => {
   await reset(request, {}, ["state"]);
   await page.goto("/");
