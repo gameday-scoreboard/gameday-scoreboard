@@ -4,7 +4,7 @@
 
 A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League.
 
-Watch the [full demo](https://gamedayscoreboard.app/) on the installer page.
+Watch the [full demo](https://gamedayscoreboard.app/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
 
 If you already use Home Assistant and want room lighting to celebrate too, [gameday-matrix](https://github.com/bharvey88/gameday-matrix) does the same thing through a blueprint.
 
@@ -103,7 +103,7 @@ Built on hub75-studio's LVGL pages and controller packages, and on the attribute
 
 ## Contributing
 
-Contributions are welcome: bug reports from game days, test fixtures from odd games, builds for new boards and fixes to the device page. [CONTRIBUTING.md](CONTRIBUTING.md#where-help-is-wanted) says where help is wanted and how to build and test.
+Contributions are welcome: bug reports from game days, test fixtures from odd games, builds for new boards and fixes to the device page. [CONTRIBUTING.md](CONTRIBUTING.md#where-help-is-wanted) says where help is wanted and how to build and test. Docs changes go in `docs/wiki` alongside the code they describe.
 
 ## License
 
