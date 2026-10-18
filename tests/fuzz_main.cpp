@@ -7,7 +7,8 @@
 //   fuzz_x -max_total_time=60 [-seed=N] [-max_len=N] [-dict=F] [-artifact_prefix=P] <seed file or folder>...
 //   fuzz_x <file>...   runs each file once (a crash file, to reproduce it)
 //
-// A crash leaves the input that caused it in crash-<hash>, like libFuzzer.
+// A crash leaves the input that caused it in <artifact_prefix>crash-<hash>,
+// like libFuzzer.
 #include <sanitizer/common_interface_defs.h>
 
 #include <chrono>
@@ -41,7 +42,7 @@ uint64_t fnv1a(const std::vector<uint8_t> &d) {
   return h;
 }
 
-// Called from a sanitizer report or the timeout alarm.
+// Called from a sanitizer report, abort() or the timeout alarm.
 void save_current() {
   char name[512];
   snprintf(name, sizeof(name), "%scrash-%016llx", artifact_prefix.c_str(), (unsigned long long) fnv1a(current));
