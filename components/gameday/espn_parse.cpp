@@ -358,7 +358,9 @@ using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+  if (captive)
+    return "Wi-Fi needs a sign-in";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)
@@ -541,6 +543,17 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
   return when + " " + (time_tbd ? std::string("TBD") : clock_12h(kick_local));
 }
 
+static int64_t epoch_from_civil(int y, int mo, int d, int h, int mi, int sec) {
+  // days from civil (Howard Hinnant's algorithm)
+  int yy = y - (mo <= 2 ? 1 : 0);
+  int64_t era = (yy >= 0 ? yy : yy - 399) / 400;
+  int64_t yoe = yy - era * 400;
+  int64_t doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  int64_t days = era * 146097 + doe - 719468;
+  return days * 86400 + h * 3600 + mi * 60 + sec;
+}
+
 // "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).
 // The field widths keep a run of digits from overflowing an int, and a date
 // out of range reads as no date, like garbage does.
@@ -550,14 +563,34 @@ int64_t parse_iso8601_z(const std::string &s) {
   if (n < 5 || y < 1970 || mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59 ||
       sec < 0 || sec > 60)
     return 0;
-  // days from civil (Howard Hinnant's algorithm)
-  int yy = y - (mo <= 2 ? 1 : 0);
-  int64_t era = (yy >= 0 ? yy : yy - 399) / 400;
-  int64_t yoe = yy - era * 400;
-  int64_t doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
-  int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-  int64_t days = era * 146097 + doe - 719468;
-  return days * 86400 + h * 3600 + mi * 60 + sec;
+  return epoch_from_civil(y, mo, d, h, mi, sec);
+}
+
+int64_t parse_http_date(const std::string &s) {
+  static const char *const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  // "Sat, 17 Oct 2026 23:39:29 GMT": fixed width, so check it by position.
+  if (s.size() != 29 || s[3] != ',' || s[4] != ' ' || s[7] != ' ' || s[11] != ' ' || s[16] != ' ' ||
+      s[19] != ':' || s[22] != ':' || s.compare(25, 4, " GMT") != 0)
+    return 0;
+  auto num = [&s](size_t at, size_t len) {
+    int v = 0;
+    for (size_t i = at; i < at + len; i++) {
+      if (s[i] < '0' || s[i] > '9')
+        return -1;
+      v = v * 10 + (s[i] - '0');
+    }
+    return v;
+  };
+  int mo = 0;
+  for (int i = 0; i < 12; i++)
+    if (s.compare(8, 3, kMonths[i]) == 0)
+      mo = i + 1;
+  int d = num(5, 2), y = num(12, 4), h = num(17, 2), mi = num(20, 2), sec = num(23, 2);
+  if (mo == 0 || d < 1 || d > 31 || y < 2020 || y > 2099 || h < 0 || h > 23 || mi < 0 || mi > 59 || sec < 0 ||
+      sec > 60)
+    return 0;
+  return epoch_from_civil(y, mo, d, h, mi, sec);
 }
 
 static std::string period_name(int period) {
