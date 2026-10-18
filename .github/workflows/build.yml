@@ -401,6 +401,15 @@ jobs:
           python3 scripts/improv_scan.py --selftest
       - name: Device page mock matches the firmware's set table
         run: python3 tests/web/mock_device.py --selftest
+      - name: Fuzz the parsers (30 s a target)
+        run: make -C tests fuzz
+      - name: Keep the input a fuzz crash left
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crashes
+          path: tests/build/crash-*
+          if-no-files-found: ignore
 
   web-tests:
     # The device page (firmware/web/bundle.js) in Chromium against

@@ -51,6 +51,14 @@ is the short version.
   `tests/web/mock_device.py`. The last checks the device page's mock
   against `tests/fixtures/set_cases.json`, the same table the host tests
   run through `components/gameday/set_request.h`.
+- Fuzzing: `make -C tests fuzz` runs mutated ESPN documents and set
+  requests through the parsers under the address and undefined behavior
+  sanitizers for about a minute, as CI does on every PR;
+  `make -C tests fuzz-long` runs 30 minutes a target. clang with libFuzzer
+  makes it coverage guided; other compilers get a random mutator. A crash
+  leaves its input in `tests/build/crash-*`; pass that file to
+  `tests/build/fuzz_espn` (or `fuzz_set`) to replay it, and add a host test
+  with the fix.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run
