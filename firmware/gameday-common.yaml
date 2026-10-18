@@ -791,6 +791,7 @@ button:
           App.safe_reboot();
   - platform: factory_reset
     name: "Factory Reset"
+    id: factory_reset_btn
     entity_category: config
 
 text_sensor:
