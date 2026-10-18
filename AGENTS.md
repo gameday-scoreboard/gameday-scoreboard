@@ -39,8 +39,9 @@ is the short version.
   `docs/site/diy` is the page for DIY owners (boards, panels, wiring);
   keep it in step with `firmware/controllers/` and the README's Hardware
   section.
-- `docs/wiki`: the documentation site (Astro + Starlight), published to
-  docs.gameday-scoreboard.com from `main`. Pages are markdown under
+- `docs/wiki`: the documentation site (Astro + Starlight). The
+  gameday-scoreboard/docs repo publishes this repo's `main` to
+  docs.gameday-scoreboard.com on GitHub Pages. Pages are markdown under
   `docs/wiki/src/content/docs/`; `docs/wiki/README.md` has the
   conventions.
 - `scripts`: generators (`build_web.py`, `build_teams.py`,

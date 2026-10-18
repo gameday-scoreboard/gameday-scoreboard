@@ -127,8 +127,8 @@ what you tested on: controller, layout, how long, what it showed.
 ### Docs
 
 The docs at [docs.gameday-scoreboard.com](https://docs.gameday-scoreboard.com/)
-are built from `docs/wiki` (Astro + Starlight) and publish from `main`,
-so they always describe what customers run. If your change alters what
+are built from `docs/wiki` (Astro + Starlight). GitHub Pages publishes
+this repo's `main`, so they always describe what customers run. If your change alters what
 the panel shows, a setting, a button hold or anything else an owner or
 DIY builder would notice, update or add the page for it under
 `docs/wiki/src/content/docs/` in the same pull request. CI fails a PR
