@@ -261,7 +261,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // display gets for the owner's Brightness; it runs from on_boot before
   // setup(), so it loads the power log itself the first time.
   uint8_t guard_brightness(uint8_t want);
-  // The chip temperature sensor's readings (gameday-common.yaml).
+  // The chip temperature sensor's readings (firmware/pages/guard.yaml).
   void set_chip_temp(float c);
   // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
   uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.step, this->power_log_.capped != 0); }

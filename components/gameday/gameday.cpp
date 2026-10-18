@@ -1287,7 +1287,7 @@ void GamedayComponent::set_chip_temp(float c) {
   else
     ESP_LOGI(TAG, "Chip at %.1f C: back to %u%% of the brightness setting", c,
              (unsigned) ::espn::kHeatPercent[this->heat_.step]);
-  this->fire_action_("guard");  // gameday-common.yaml applies the brightness and the corner mark
+  this->fire_action_("guard");  // pages/guard.yaml applies the brightness and the corner mark
 }
 
 void GamedayComponent::clear_power_cap() {
