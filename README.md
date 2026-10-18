@@ -101,6 +101,10 @@ to the internet, so do not forward a port to it.
 
 Built on hub75-studio's LVGL pages and controller packages, and on the attribute model of the ha-teamtracker integration. Thanks to both projects.
 
+## Contributing
+
+Contributions are welcome: bug reports from game days, test fixtures from odd games, builds for new boards and fixes to the device page. [CONTRIBUTING.md](CONTRIBUTING.md#where-help-is-wanted) says where help is wanted and how to build and test.
+
 ## License
 
 MIT.
