@@ -27,6 +27,9 @@
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
 #include "esphome/components/saved_networks/saved_networks.h"
 #endif
+#ifdef USE_GAMEDAY_CRASH_REPORT
+#include "esphome/components/crash_report/crash_report.h"
+#endif
 #ifdef USE_WIFI
 #include "esphome/components/wifi/wifi_component.h"
 #include <esp_event.h>
@@ -3553,6 +3556,23 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
   if (url == StringRef("/gameday/wifi")) {
     this->handle_wifi_(request);
+    return;
+  }
+#endif
+#ifdef USE_GAMEDAY_CRASH_REPORT
+  auto *crash = crash_report::global_crash_report;
+  if (url == StringRef("/gameday/crash") && crash != nullptr) {
+    if (request->method() == HTTP_POST) {
+      if (request->arg("clear") != "1") {
+        request->send(400, "application/json", "{\"error\":\"clear=1 is required\"}");
+        return;
+      }
+      crash->clear();
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+    std::string body = crash->json();
+    request->send(200, "application/json", body.c_str());
     return;
   }
 #endif

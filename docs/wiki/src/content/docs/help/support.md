@@ -26,6 +26,12 @@ Email support is for Game Day Scoreboards we sold. For a panel you built on a Mo
 
 Include the same details as above: what happened, the firmware version, the board and the panel layout.
 
+:::note[Coming in the next release]
+If the panel restarted by itself, it keeps a crash report until it's cleared, even across an unplug. Open `http://<your panel's address>/gameday/crash` in a browser, like `http://gameday-2f6a70.local/gameday/crash`, and paste what it shows into your email or issue. A `count` of 0 means it hasn't restarted unexpectedly.
+
+Built from source? `python3 scripts/crash_report.py <panel address>` in the firmware repo prints the same report and turns its addresses into file and line numbers, using the matching release's firmware or `--elf` for your own build.
+:::
+
 ## Orders and returns
 
 For orders, shipping and returns, go to the store at [gameday-scoreboard.com](https://gameday-scoreboard.com).
