@@ -49,6 +49,19 @@ constexpr LeagueInfo kLeagues[] = {
 
 constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);
 
+// Arrays indexed by League are kLeagueCount long: each row's value is below
+// it and no two rows share one.
+constexpr bool leagues_fill_indexes() {
+  for (size_t i = 0; i < kLeagueCount; i++) {
+    if ((size_t) kLeagues[i].league >= kLeagueCount)
+      return false;
+    for (size_t k = 0; k < i; k++)
+      if (kLeagues[k].league == kLeagues[i].league)
+        return false;
+  }
+  return true;
+}
+
 inline const LeagueInfo *league_info(League league) {
   for (const auto &l : kLeagues)
     if (l.league == league)

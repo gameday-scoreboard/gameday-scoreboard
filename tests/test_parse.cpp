@@ -9,17 +9,21 @@
 #include <vector>
 
 #include "auto_update.h"
+#include "badge.h"
+#include "captive.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
 #include "gzip_stream.h"
 #include "logo_lru.h"
+#include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
+#include "wifi_history.h"
 
 using namespace espn;
 
@@ -91,6 +95,31 @@ static void test_iso() {
   CHECK_EQ(parse_iso8601_z("2026-09-05T19:30Z"), (int64_t) 1788636600);
   CHECK_EQ(parse_iso8601_z("2026-09-10T00:20:00Z"), (int64_t) 1788999600);
   CHECK_EQ(parse_iso8601_z("garbage"), (int64_t) 0);
+  // HTTP Date headers, as ESPN sends them.
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 GMT"), (int64_t) 1792280369);
+  CHECK_EQ(parse_http_date("Sat, 05 Sep 2026 19:30:00 GMT"), (int64_t) 1788636600);
+  CHECK_EQ(parse_http_date("Sun, 01 Mar 2048 00:00:00 GMT"), (int64_t) 2466633600);
+  CHECK_EQ(parse_http_date(""), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 UTC"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Okt 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 7 Oct 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 24:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2O26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), (int64_t) 0);  // outside 2020 to 2099
+  CHECK_EQ(parse_http_date("Saturday, 17-Oct-26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat Oct 17 23:39:29 2026"), (int64_t) 0);
+  // Fields too long or out of range read as no date instead of overflowing
+  // (found by fuzz_espn).
+  CHECK_EQ(parse_iso8601_z("2026-10-17T999999999:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-999999999-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-2147483647T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T19:999999999Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2147483647-10-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-13-01T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T24:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T-1:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("1969-12-31T23:59Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("9999-12-31T23:59:59Z"), (int64_t) 253402300799);
 }
 
 static void test_team_parse() {
@@ -360,6 +389,10 @@ static void test_status_text() {
   TickerOptions none;
   none.clock = none.down_distance = none.last_play = false;
   CHECK_EQ(status_text(s, none, ""), std::string("15:00 - 4th"));
+  // Baseball's and soccer's switches don't touch football's.
+  TickerOptions others_off = all;
+  others_off.baseball_count = others_off.soccer_stats = false;
+  CHECK_EQ(status_text(s, others_off, ""), status_text(s, all, ""));
   // Long play is truncated
   s.last_play = std::string(200, 'x');
   TickerOptions only_play;
@@ -427,6 +460,64 @@ static void test_no_game_text() {
   // Live modes keep their own "Looking for a live game"
   CHECK_EQ(no_game_text(true, true, false, 1), std::string(""));
   CHECK_EQ(no_game_text(true, true, false, 3), std::string(""));
+  // A sign-in Wi-Fi says so in place of all of them, live modes too
+  CHECK_EQ(no_game_text(false, false, false, 0, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, true, false, 1, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, false), std::string("Can't reach ESPN"));
+}
+
+// The plain HTTP read of ESPN after joining Wi-Fi (captive.h). Only a clear
+// portal answer is a sign-in network; anything ESPN could have sent is not.
+static void test_captive() {
+  // ESPN today: 200, JSON, "{}"
+  CHECK(classify_probe(200, "", "application/json;charset=UTF-8", "{}") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "  \r\n[1]") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "application/json", "") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "\xEF\xBB\xBF{\"a\":1}") == Probe::OPEN);
+  // ESPN's JSON error for a URL it no longer knows still means ESPN answered
+  CHECK(classify_probe(404, "", "application/json", "{\"code\":404}") == Probe::OPEN);
+  // Portals: a redirect to their sign-in page, over HTTP or HTTPS
+  CHECK(classify_probe(302, "http://192.168.10.1:8002/index.php?zone=guest", "text/html", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "https://login.hotelwifi.example/portal?mac=aa:bb", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(307, "HTTPS://Splash.Example.NET/", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(301, "http://user@portal.example/x", "", "") == Probe::CAPTIVE);
+  // or their page in ESPN's place, or the status made for it
+  CHECK(classify_probe(200, "", "text/html", "<!DOCTYPE html><html><head><title>Sign in") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "", "\n  <html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "text/html; charset=utf-8", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "text/html", "<html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "", "") == Probe::CAPTIVE);
+  // ESPN sending plain HTTP on to HTTPS one day is still ESPN
+  CHECK(classify_probe(301, "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/record", "", "") ==
+        Probe::OPEN);
+  CHECK(classify_probe(302, "https://secure.espn.com:443/x", "", "") == Probe::OPEN);
+  CHECK(classify_probe(302, "https://espn.com", "", "") == Probe::OPEN);
+  // but a host that only ends in the same letters is not
+  CHECK(classify_probe(302, "http://notespn.com/login", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "http://espn.com.portal.example/login", "", "") == Probe::CAPTIVE);
+  // Proves nothing: no answer, a relative or missing redirect, an error page
+  // (ESPN's own Akamai "Access Denied" is HTML), an empty or odd body
+  CHECK(classify_probe(0, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(-1, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "/login", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(403, "", "text/html", "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>") == Probe::UNKNOWN);
+  CHECK(classify_probe(503, "", "text/html", "<html>") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "text/plain", "OK") == Probe::UNKNOWN);
+  CHECK(classify_probe(204, "", "", "") == Probe::UNKNOWN);
+
+  // When to probe: once per join
+  CHECK(probe_due(false, false, false, 0));
+  CHECK(probe_due(false, true, true, 0));
+  CHECK(!probe_due(true, false, false, 10 * 60 * 1000));
+  // again every minute on a sign-in network
+  CHECK(!probe_due(true, true, false, kProbeCaptiveRecheckMs - 1));
+  CHECK(probe_due(true, true, false, kProbeCaptiveRecheckMs));
+  // every two while reads fail on one that looked open
+  CHECK(!probe_due(true, false, true, kProbeFailingRecheckMs - 1));
+  CHECK(probe_due(true, false, true, kProbeFailingRecheckMs));
 }
 
 static struct tm mk(int year, int yday, int wday, int hour, int min, int mon = 8, int mday = 5) {
@@ -447,6 +538,11 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(2026, 248, 0, 12, 0), now), std::string("Tomorrow 12:00 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 251, 3, 19, 20), now), std::string("Wed 7:20 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 256, 1, 0, 5, 8, 14), now), std::string("Sep 14 12:05 AM"));
+  // ESPTime{}.to_c_tm(), what the panel gets for an epoch it can't convert:
+  // no label rather than a read before the month table (found by fuzz_espn).
+  CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
+  // A year far enough out to overflow the day count in int.
+  CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
 }
 
 static void test_upcoming() {
@@ -491,6 +587,7 @@ static void test_live_games() {
       CHECK_EQ(g.away_abbr, std::string("BOIS"));
       CHECK_EQ(g.home_abbr, std::string("ORE"));
       CHECK_EQ(g.away_id, kBoise);
+      CHECK_EQ(g.home_id, kOregon);
       CHECK(g.group != 0);
     }
   }
@@ -925,8 +1022,12 @@ static void test_mlb_live() {
   o.clock = false;
   CHECK_EQ(status_text(t, o, ""), std::string("2-1, 2 outs | P D. Fuentes, AB M. Muncy | Pitch 3 : Ball 2"));
   TickerOptions quiet = o;
-  quiet.down_distance = quiet.last_play = false;
+  quiet.baseball_count = quiet.last_play = false;
   CHECK_EQ(status_text(t, quiet, ""), std::string("Top 7th"));
+  // Football's switch doesn't touch the count.
+  TickerOptions no_football = o;
+  no_football.down_distance = false;
+  CHECK_EQ(status_text(t, no_football, ""), status_text(t, o, ""));
 
   // The same game from the Dodgers' side: they bat.
   GameSnapshot d = mlb_event("fixtures/event_mlb_top.json", kDodgers);
@@ -1226,8 +1327,12 @@ static void test_soccer_live() {
            std::string("Cards CRU 1Y, SAO 1Y | Possession CRU 64.1%, SAO 35.9% | Shots (on target) CRU 4 (0), SAO 4 (1) | "
                        "24' Yellow Card: G. Rojas (CRU)"));
   TickerOptions with_clock;
-  with_clock.down_distance = with_clock.last_play = false;
+  with_clock.soccer_stats = with_clock.last_play = false;
   CHECK_EQ(status_text(fh, with_clock, ""), std::string("25'"));
+  // Football's and baseball's switches don't touch soccer's.
+  TickerOptions others_off = o;
+  others_off.down_distance = others_off.baseball_count = false;
+  CHECK_EQ(status_text(fh, others_off, ""), status_text(fh, o, ""));
 
   // Half time, Vasco (away) lead 1-0.
   GameSnapshot h = soccer_event("fixtures/event_soccer_halftime.json", kVasco);
@@ -1261,7 +1366,7 @@ static void test_soccer_live() {
                        "Possession INT 28%, COR 72% | Shots (on target) INT 17 (7), COR 21 (6) | "
                        "85' Yellow Card: R. Garro (COR)"));
   TickerOptions quiet = o;
-  quiet.down_distance = quiet.last_play = false;
+  quiet.soccer_stats = quiet.last_play = false;
   CHECK_EQ(status_text(s, quiet, ""), std::string("90'+2'"));
 
   // Second half with a red card: Mirassol (away) down to ten.
@@ -2103,6 +2208,30 @@ static void test_lookahead() {
   // CHA's game that day is over: nothing on now.
   CHECK(!parse_team_game_str(slurp("fixtures/day_bra_20261012.json"), 9318, none));
 
+  // College football too: FLA @ TEX at halftime, 2026-10-17. Texas's team
+  // endpoint names next week's game; its conference's scoreboard (the group
+  // the team endpoint gives) has the one on now.
+  Schedule tex;
+  CHECK(parse_team_str(slurp("fixtures/team_ncaa_tex_live.json"), tex));
+  CHECK_EQ(tex.event_id, std::string("401856732"));  // MISS @ TEX, 10/24
+  CHECK_EQ(tex.group, 8u);
+  CHECK_EQ(team_day_url(League::NCAA, tex.group, parse_iso8601_z("2026-10-17T17:40Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20261017"));
+  Schedule tex_now;
+  CHECK(parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, tex_now));
+  CHECK_EQ(tex_now.event_id, std::string("401856724"));
+  CHECK(today_game_first(tex, tex_now));
+  // Ole Miss plays later that day: both name the same game, nothing changes.
+  Schedule miss, miss_today;
+  CHECK(parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 145, miss_today));
+  miss.event_id = miss_today.event_id;
+  miss.kickoff_epoch = miss_today.kickoff_epoch;
+  CHECK(!today_game_first(miss, miss_today));
+  // A game the panel saw finish is passed over even while ESPN lists it live,
+  // and a team that is off that day (Iowa) has nothing on now.
+  CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, none, "401856724"));
+  CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 2294, none));
+
   CHECK_EQ(team_day_url(League::NHL, 0, parse_iso8601_z("2026-10-09T15:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261009"));
   CHECK_EQ(team_day_url(League::MCBB, 8, parse_iso8601_z("2026-12-06T18:00Z")),
@@ -2130,6 +2259,14 @@ static void test_logo_lru() {
   CHECK(espn::logo_retry_due(1000, 30000, 1000 + 30000));
   CHECK(espn::logo_retry_due(0xFFFFF000u, 30000, 0xFFFFF000u + 30000));
   CHECK(!espn::logo_retry_due(0xFFFFF000u, 30000, 0xFFFFF000u + 29999));
+  // A board with new logos waits for both, then goes up; a cap ends the wait
+  // for a logo that is slow, and one that failed is not waited for at all.
+  CHECK(espn::logo_hold_over(false, false, 1000, 1000));
+  CHECK(!espn::logo_hold_over(true, false, 1000, 1000));
+  CHECK(!espn::logo_hold_over(false, true, 1000, 1000 + espn::LOGO_HOLD_MS - 1));
+  CHECK(espn::logo_hold_over(true, true, 1000, 1000 + espn::LOGO_HOLD_MS));
+  CHECK(espn::logo_hold_over(true, false, 0xFFFFF000u, 0xFFFFF000u + espn::LOGO_HOLD_MS));
+  CHECK(!espn::logo_hold_over(true, false, 0xFFFFF000u, 0xFFFFF000u + espn::LOGO_HOLD_MS - 1));
   // A dark logo that 404s falls back to the plain one, the URL dark_logo made it from.
   std::string plain = "https://a.espncdn.com/i/teamlogos/soccer/500/436.png";
   std::string dark = espn::dark_logo(plain);
@@ -2415,6 +2552,34 @@ static void test_short_game_name() {
   CHECK_EQ(short_game_name("Kickoff 7 PM ET"), std::string(""));
 }
 
+// The abbreviation badge's colors (badge.h), the app's rules.
+static void test_badge() {
+  // Luminance: black, white, and the app's 0.6 text threshold.
+  CHECK_EQ(badge_luminance(0x000000), 0);
+  CHECK_EQ(badge_luminance(0xFFFFFF), 1000);
+  CHECK(badge_luminance(0xF2A900) > kBadgeDarkTextLum);   // gold: black text
+  CHECK(badge_luminance(0x1E5AA8) < kBadgeDarkTextLum);   // blue: white text
+  CHECK(badge_luminance(0xC8102E) < kBadgeDarkTextLum);   // red: white text
+  // A second color that differs from the fill is the ring.
+  BadgeStyle b = badge_style(0x1E5AA8, 0xF4F6F8);
+  CHECK(b.fill == 0x1E5AA8 && b.has_ring && b.ring == 0xF4F6F8 && !b.dark_text);
+  // The same color twice is no ring, and a mid-tone fill needs none.
+  b = badge_style(0x1E5AA8, 0x1E5AA8);
+  CHECK(!b.has_ring);
+  // A near-black fill would vanish on the panel: a gray ring stands in when
+  // it has no ring or its ring is as dark.
+  b = badge_style(0x000000, 0x000000);
+  CHECK(b.has_ring && b.ring == kBadgeNeutralRing);
+  b = badge_style(0x101010, 0x080808);
+  CHECK(b.has_ring && b.ring == kBadgeNeutralRing);
+  // A near-black fill with a visible ring keeps that ring.
+  b = badge_style(0x000000, 0xC8102E);
+  CHECK(b.has_ring && b.ring == 0xC8102E && !b.dark_text);
+  // A light fill takes black text and keeps its own ring.
+  b = badge_style(0xF4F6F8, 0x1E5AA8);
+  CHECK(b.dark_text && b.has_ring && b.ring == 0x1E5AA8);
+}
+
 // The demo build's matchups, made-up teams and script (demo.h).
 static void test_demo() {
   auto abbrs = [](DemoMatchup m) { return std::string(m.home->abbr) + "-" + m.away->abbr; };
@@ -2441,6 +2606,26 @@ static void test_demo() {
       CHECK(std::string(kMadeUpTeams[i].abbr) != kTeams[t].abbr);
   }
   CHECK(std::string(demo_made_up(DemoKind::PRO, true).abbr) != demo_made_up(DemoKind::COLLEGE, true).abbr);
+  // Nothing real anywhere in the demo's teams: no real team's name, and a
+  // second color that gives every badge a ring (badge.h never needs the gray
+  // fallback for them).
+  for (size_t i = 0; i < kMadeUpTeamCount; i++) {
+    for (size_t t = 0; t < kTeamCount; t++)
+      CHECK(std::string(kMadeUpTeams[i].name) != kTeams[t].name);
+    CHECK(kMadeUpTeams[i].alt != kMadeUpTeams[i].rgb);
+    BadgeStyle b = badge_style(kMadeUpTeams[i].rgb, kMadeUpTeams[i].alt);
+    CHECK(b.has_ring && b.ring == kMadeUpTeams[i].alt && b.fill == kMadeUpTeams[i].rgb);
+  }
+  // White letters on the blue, red and green fills; black on the gold one.
+  CHECK(!badge_style(demo_made_up(DemoKind::PRO, true).rgb, 0).dark_text);
+  CHECK(!badge_style(demo_made_up(DemoKind::PRO, false).rgb, 0).dark_text);
+  CHECK(!badge_style(demo_made_up(DemoKind::COLLEGE, true).rgb, 0).dark_text);
+  CHECK(badge_style(demo_made_up(DemoKind::COLLEGE, false).rgb, 0).dark_text);
+  // One pass of the script is what the shot list is timed against.
+  uint32_t total_ms = 0;
+  for (size_t i = 0; i < kDemoStepCount; i++)
+    total_ms += kDemoSteps[i].hold_ms;
+  CHECK(total_ms == 52500);
 
   // Every football team has its color (the demo is football only), and the
   // color table matches teams.h, where football comes first.
@@ -2551,9 +2736,9 @@ static void test_recap() {
   CHECK_EQ(live.size(), (size_t) 0);
 
   // Days, Eastern like scan_url()
-  int32_t sat = espn_day(parse_iso8601_z("2025-12-06T21:00Z"));
-  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T01:00Z")), sat);  // 8 PM Eastern Saturday
-  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T06:00Z")), sat + 1);
+  int32_t sat = espn_day(parse_iso8601_z("2025-12-06T21:00Z"), NCAA);
+  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T01:00Z"), NCAA), sat);  // 8 PM Eastern Saturday
+  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T06:00Z"), NCAA), sat + 1);
   CHECK(scan_url(League::NCAA, espn_day_epoch(sat)).find("dates=20251206") != std::string::npos);
   CHECK_EQ(recap_day_word(sat, sat), std::string("Today's"));
   CHECK_EQ(recap_day_word(sat, sat + 1), std::string("Yesterday's"));
@@ -2562,9 +2747,9 @@ static void test_recap() {
   RecapDay hd;
   hd.league = NCAA;
   hd.day = sat;
-  CHECK_EQ(recap_header(hd, sat + 2), std::string("Saturday's college scores"));
+  CHECK_EQ(recap_header(hd, espn_day_epoch(sat + 2)), std::string("Saturday's college scores"));
   hd.league = NFL;
-  CHECK_EQ(recap_header(hd, sat), std::string("Today's NFL scores"));
+  CHECK_EQ(recap_header(hd, espn_day_epoch(sat)), std::string("Today's NFL scores"));
 
   // Merge: newest day first, ranked games first, a rescan replaces the day
   std::vector<RecapDay> days;
@@ -2613,7 +2798,7 @@ static void test_recap() {
 
   // Trim: Monday's 2 are short of 4, so Sunday stays; a new NFL day with 4
   // pushes both out. Anything a week old goes.
-  recap_trim(days, sat + 3);
+  recap_trim(days, espn_day_epoch(sat + 3));
   CHECK_EQ(days.size(), (size_t) 3);
   RecapDay thu;
   thu.league = NFL;
@@ -2621,10 +2806,10 @@ static void test_recap() {
   for (int i = 0; i < 4; i++)
     thu.finals.push_back(mkfinal(NFL, 99, 600 + i, "THU"));
   recap_merge(days, thu);
-  recap_trim(days, sat + 5);
+  recap_trim(days, espn_day_epoch(sat + 5));
   CHECK_EQ(recap_count(days, NFL), (size_t) 4);
   CHECK_EQ(recap_count(days, NCAA), (size_t) 4);
-  recap_trim(days, sat + 7);
+  recap_trim(days, espn_day_epoch(sat + 7));
   CHECK_EQ(recap_count(days, NCAA), (size_t) 0);
   CHECK_EQ(recap_count(days, NFL), (size_t) 4);
 
@@ -2684,6 +2869,388 @@ static void test_recap() {
   CHECK(!legacy_team_unpicked(NFL, 6, true, false));
   CHECK(!legacy_team_unpicked(NFL, 17, false, true));
   CHECK(!legacy_team_unpicked(NCAA, 6, false, false));
+}
+
+static Pending mkpending(uint8_t league, int rank, int64_t kick, const char *abbr) {
+  Pending p;
+  p.league = league;
+  p.rank = (uint8_t) rank;
+  p.kickoff_epoch = kick;
+  p.away_abbr = abbr;
+  p.home_abbr = "HOM";
+  return p;
+}
+
+static bool sorted_by_kickoff(const std::vector<Pending> &v) {
+  for (size_t i = 1; i < v.size(); i++)
+    if (v[i - 1].kickoff_epoch > v[i].kickoff_epoch)
+      return false;
+  return true;
+}
+
+// The rotation's later-today cards (card 160) and finals for every league.
+static void test_later_today() {
+  const uint8_t NFL = (uint8_t) League::NFL, NCAA = (uint8_t) League::NCAA, NBA = (uint8_t) League::NBA,
+                NHL = (uint8_t) League::NHL, MLB = (uint8_t) League::MLB, MCBB = (uint8_t) League::MCBB;
+  const uint32_t lo = 2 * 60 * 1000, hi = 3 * 3600 * 1000;
+
+  // NHL, 10/9: four games to come, in kickoff order, with what a card needs
+  std::string nhl_day = slurp("fixtures/day_nhl_20261009.json");
+  std::vector<LiveGame> live;
+  std::vector<Final> finals;
+  std::vector<Pending> nhl;
+  int64_t next = -1;
+  CHECK(parse_live_games(nhl_day, live, &next, &finals, &nhl));
+  CHECK_EQ(live.size(), (size_t) 0);
+  CHECK_EQ(finals.size(), (size_t) 0);
+  CHECK_EQ(nhl.size(), (size_t) 4);
+  CHECK(sorted_by_kickoff(nhl));
+  if (nhl.size() == 4) {
+    CHECK_EQ(nhl[0].event_id, std::string("401892465"));
+    CHECK_EQ(nhl[0].away_abbr, std::string("SEA"));
+    CHECK_EQ(nhl[0].home_abbr, std::string("DET"));
+    CHECK_EQ(nhl[0].away_id, (uint32_t) 124292);
+    CHECK(nhl[0].home_id != 0);
+    CHECK_EQ(nhl[0].away_record, std::string("2-2-0"));
+    CHECK(!nhl[0].home_record.empty());
+    CHECK_EQ(nhl[0].away_color, std::string("000d33"));
+    CHECK(!nhl[0].home_color.empty());
+    CHECK_EQ(nhl[0].tv, std::string("ESPN+"));
+    CHECK_EQ((int) nhl[0].rank, 99);
+    CHECK_EQ(nhl[0].kickoff_epoch, parse_iso8601_z("2026-10-09T23:00Z"));
+    CHECK_EQ(nhl[1].away_abbr, std::string("NYR"));
+    CHECK_EQ(nhl[1].tv, std::string("NHL Net"));
+    CHECK_EQ(nhl[3].away_abbr, std::string("ANA"));
+    CHECK_EQ(nhl[3].kickoff_epoch, parse_iso8601_z("2026-10-10T00:00Z"));
+    // The rescan is unchanged: it still waits for the first of them
+    CHECK_EQ(next, nhl[0].kickoff_epoch);
+    int64_t five_pm = parse_iso8601_z("2026-10-09T21:00Z");
+    CHECK_EQ(no_live_rescan_ms(five_pm, next, lo, hi), (uint32_t) ((nhl[0].kickoff_epoch - five_pm) * 1000));
+    CHECK_EQ(no_live_rescan_ms(five_pm, next, lo, hi), (uint32_t) 2 * 3600 * 1000);
+    // The card: away side first, logos from the ids, the league's sport
+    Pending p = nhl[0];
+    p.league = NHL;
+    GameSnapshot g = pending_snapshot(p);
+    CHECK(g.valid);
+    CHECK(g.state == GameState::PRE);
+    CHECK(g.sport == Sport::HOCKEY);
+    CHECK_EQ(g.team_abbr, std::string("SEA"));
+    CHECK_EQ(g.opp_abbr, std::string("DET"));
+    CHECK_EQ(g.kickoff_epoch, p.kickoff_epoch);
+    CHECK_EQ(g.tv, std::string("ESPN+"));
+    CHECK_EQ(g.team_logo, team_logo_url(League::NHL, 124292, "SEA"));
+    CHECK_EQ(g.opp_logo, team_logo_url(League::NHL, p.home_id, "DET"));
+  }
+  // Without the list the scan's wait is the same
+  next = -1;
+  CHECK(parse_live_games(nhl_day, live, &next));
+  CHECK_EQ(next, parse_iso8601_z("2026-10-09T23:00Z"));
+
+  // MLB, 10/12: the live game is not one to come; the one after it is
+  std::string mlb_day = slurp("fixtures/day_mlb_20261012.json");
+  std::vector<Pending> mlb;
+  live.clear();
+  CHECK(parse_live_games(mlb_day, live, &next, &finals, &mlb));
+  CHECK_EQ(live.size(), (size_t) 1);
+  CHECK_EQ(mlb.size(), (size_t) 1);
+  if (mlb.size() == 1 && live.size() == 1) {
+    CHECK_EQ(live[0].event_id, std::string("401908031"));
+    CHECK_EQ(mlb[0].event_id, std::string("401908023"));
+    CHECK_EQ(mlb[0].away_abbr, std::string("CLE"));
+    CHECK_EQ(mlb[0].home_abbr, std::string("TB"));
+    CHECK_EQ(mlb[0].tv, std::string("TBS"));
+    CHECK_EQ(next, mlb[0].kickoff_epoch);
+    int64_t two_pm = parse_iso8601_z("2026-10-12T18:00Z");
+    CHECK_EQ(no_live_rescan_ms(two_pm, next, lo, hi), hi);  // six hours out: the cap
+  }
+
+  // NBA, 10/15: two to come, one with no TV listed
+  std::string nba_day = slurp("fixtures/day_nba_20261015.json");
+  std::vector<Pending> nba;
+  live.clear();
+  CHECK(parse_live_games(nba_day, live, &next, nullptr, &nba));
+  CHECK_EQ(nba.size(), (size_t) 2);
+  if (nba.size() == 2) {
+    CHECK_EQ(nba[0].away_abbr, std::string("TOR"));
+    CHECK_EQ(nba[0].home_abbr, std::string("NY"));
+    CHECK_EQ(nba[0].tv, std::string(""));
+    CHECK_EQ(nba[1].away_abbr, std::string("OKC"));
+    CHECK_EQ(nba[1].tv, std::string("NBA TV"));
+    CHECK_EQ(nba[1].kickoff_epoch, parse_iso8601_z("2026-10-16T00:30Z"));
+    CHECK_EQ(next, nba[0].kickoff_epoch);
+    // Before TOR at NY the walk forward waits for it
+    int64_t six_pm = parse_iso8601_z("2026-10-15T23:00Z");
+    CHECK_EQ(recap_scan_next(next, nba, six_pm), nba[0].kickoff_epoch);
+    // 6:35 PM Central, ESPN still showing TOR at NY to come: OKC at HOU is
+    // still ahead, so no read for tomorrow (bench, 10/15). The rescan's
+    // floor while ESPN lags is unchanged.
+    int64_t lagging = parse_iso8601_z("2026-10-15T23:35Z");
+    CHECK_EQ(recap_scan_next(next, nba, lagging), nba[1].kickoff_epoch);
+    CHECK_EQ(no_live_rescan_ms(lagging, next, lo, hi), lo);
+    // Both kickoffs past: nothing left today, so the walk may look ahead
+    CHECK_EQ(recap_scan_next(next, nba, parse_iso8601_z("2026-10-16T00:35Z")), (int64_t) 0);
+    CHECK_EQ(recap_scan_next(0, {}, lagging), (int64_t) 0);
+  }
+
+  // NFL week 1, sixteen to come: only the first eight are kept, ties in
+  // ESPN's order
+  std::string nfl_week = slurp("fixtures/scoreboard_nfl.json");
+  std::vector<Pending> nfl;
+  CHECK(parse_live_games(nfl_week, live, &next, nullptr, &nfl));
+  CHECK_EQ(nfl.size(), kPendingKeep);
+  CHECK(sorted_by_kickoff(nfl));
+  if (nfl.size() == kPendingKeep) {
+    CHECK_EQ(nfl[0].away_abbr, std::string("NE"));
+    CHECK_EQ(nfl[1].away_abbr, std::string("SF"));
+    CHECK_EQ(nfl[2].away_abbr, std::string("TB"));
+    CHECK_EQ(nfl[7].away_abbr, std::string("CHI"));
+    CHECK_EQ(nfl[7].kickoff_epoch, parse_iso8601_z("2026-09-13T17:00Z"));
+    CHECK_EQ(next, nfl[0].kickoff_epoch);
+  }
+
+  // College, a Saturday with 36 to come: the ranked ones are kept first,
+  // and none of them is a game on now or a final. The rescan still waits
+  // for the earliest kickoff, ranked or not.
+  std::string ncaa = slurp("fixtures/scoreboard_ncaa_live.json");
+  std::vector<Pending> college;
+  live.clear();
+  finals.clear();
+  CHECK(parse_live_games(ncaa, live, &next, &finals, &college));
+  CHECK_EQ(college.size(), kPendingKeep);
+  CHECK_EQ(next, parse_iso8601_z("2026-09-05T23:00Z"));
+  for (size_t i = 0; i < college.size(); i++) {
+    CHECK(college[i].rank < 99);
+    if (i > 0)
+      CHECK(!pending_before(college[i], college[i - 1]));
+    for (const auto &l : live)
+      CHECK(l.event_id != college[i].event_id);
+    CHECK(college[i].event_id != kPostEvent);
+  }
+  if (college.size() == kPendingKeep) {
+    CHECK_EQ(college[0].away_abbr, std::string("WIS"));
+    CHECK_EQ((int) college[0].rank, 4);
+    CHECK_EQ((int) college[7].rank, 17);
+  }
+
+  // TBD, postponed and canceled games are not to come; a live game and a
+  // final are not either
+  std::string mixed = R"({"events":[)"
+                      R"({"id":"1","date":"2026-10-24T04:00Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":false,"competitors":[{"id":"1","homeAway":"home","team":{"abbreviation":"AAA"}},{"id":"2","homeAway":"away","team":{"abbreviation":"BBB"}}]}]},)"
+                      R"({"id":"2","date":"2026-10-24T16:00Z","status":{"type":{"state":"post","completed":false,"shortDetail":"Postponed"}},"competitions":[{"timeValid":true,"competitors":[{"id":"3","homeAway":"home","team":{"abbreviation":"CCC"}},{"id":"4","homeAway":"away","team":{"abbreviation":"DDD"}}]}]},)"
+                      R"({"id":"3","date":"2026-10-24T17:00Z","status":{"type":{"state":"post","completed":false,"shortDetail":"Canceled"}},"competitions":[{"timeValid":true,"competitors":[{"id":"5","homeAway":"home","team":{"abbreviation":"EEE"}},{"id":"6","homeAway":"away","team":{"abbreviation":"FFF"}}]}]},)"
+                      R"({"id":"4","date":"2026-10-24T19:30Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":true,"competitors":[{"id":"7","homeAway":"home","team":{"abbreviation":"GGG"}},{"id":"8","homeAway":"away","team":{"abbreviation":"HHH"}}],"broadcasts":[{"names":["ESPN","ABC"]}]}]},)"
+                      R"({"id":"5","date":"2026-10-24T18:00Z","status":{"type":{"state":"in"}},"competitions":[{"timeValid":true,"competitors":[{"id":"9","homeAway":"home","team":{"abbreviation":"III"}},{"id":"10","homeAway":"away","team":{"abbreviation":"JJJ"}}]}]},)"
+                      R"({"id":"6","date":"2026-10-24T15:00Z","status":{"type":{"state":"post","completed":true,"shortDetail":"Final"}},"competitions":[{"timeValid":true,"competitors":[{"id":"11","homeAway":"home","score":"3","team":{"abbreviation":"KKK"}},{"id":"12","homeAway":"away","score":"1","team":{"abbreviation":"LLL"}}]}]}]})";
+  std::vector<Pending> one;
+  live.clear();
+  finals.clear();
+  CHECK(parse_live_games(mixed, live, &next, &finals, &one));
+  CHECK_EQ(one.size(), (size_t) 1);
+  CHECK_EQ(live.size(), (size_t) 1);
+  CHECK_EQ(finals.size(), (size_t) 1);
+  if (one.size() == 1) {
+    CHECK_EQ(one[0].event_id, std::string("4"));
+    CHECK_EQ(one[0].away_abbr, std::string("HHH"));
+    CHECK_EQ(one[0].away_id, (uint32_t) 8);
+    CHECK_EQ(one[0].tv, std::string("ESPN"));
+    CHECK_EQ(next, one[0].kickoff_epoch);
+  }
+
+  // Days per sport. Thursday 10/15 2026, Eastern daylight time: at 1 AM
+  // Friday football has turned over and the other leagues have not (a West
+  // Coast game ending then is still Thursday's); by 5 AM all of them have.
+  int64_t noon = parse_iso8601_z("2026-10-15T16:00Z");
+  int64_t one_am = parse_iso8601_z("2026-10-16T05:00Z");
+  int64_t four_am = parse_iso8601_z("2026-10-16T08:00Z");
+  int64_t five_am = parse_iso8601_z("2026-10-16T09:00Z");
+  for (const auto &info : kLeagues) {
+    uint8_t l = (uint8_t) info.league;
+    bool football = info.sport == Sport::FOOTBALL;
+    int32_t thu = espn_day(noon, l);
+    CHECK_EQ(espn_day(espn_day_epoch(thu), l), thu);
+    CHECK_EQ(espn_day(one_am, l), football ? thu + 1 : thu);
+    CHECK_EQ(espn_day(four_am, l), football ? thu + 1 : thu);
+    CHECK_EQ(espn_day(five_am, l), thu + 1);
+    // The same day the scan reads at that moment
+    CHECK(scan_url(info.league, one_am).find(football ? "dates=20261016" : "dates=20261015") != std::string::npos);
+    CHECK(scan_url(info.league, five_am).find("dates=20261016") != std::string::npos);
+  }
+  const int32_t thu = espn_day(noon, NBA);
+  CHECK_EQ(espn_day(noon, NFL), thu);
+
+  // Header words per league, each in its own day
+  CHECK_EQ(std::string(recap_league_word(NFL)), std::string("NFL"));
+  CHECK_EQ(std::string(recap_league_word(NCAA)), std::string("college"));
+  CHECK_EQ(std::string(recap_league_word(NBA)), std::string("NBA"));
+  CHECK_EQ(std::string(recap_league_word(NHL)), std::string("NHL"));
+  CHECK_EQ(std::string(recap_league_word(MLB)), std::string("MLB"));
+  CHECK_EQ(std::string(recap_league_word((uint8_t) League::WNBA)), std::string("WNBA"));
+  CHECK_EQ(std::string(recap_league_word((uint8_t) League::MLS)), std::string("MLS"));
+  CHECK_EQ(std::string(recap_league_word((uint8_t) League::EPL)), std::string("EPL"));
+  CHECK_EQ(std::string(recap_league_word(MCBB)), std::string("NCAAM"));
+  RecapDay hd;
+  hd.league = NHL;
+  hd.day = thu - 1;
+  CHECK_EQ(recap_header(hd, noon), std::string("Yesterday's NHL scores"));
+  hd.league = MLB;
+  hd.day = thu - 5;
+  CHECK_EQ(recap_header(hd, noon), std::string("Saturday's MLB scores"));
+  // At 1 AM Friday a late NBA final is still today's; Thursday's college
+  // game is yesterday's
+  hd.league = NBA;
+  hd.day = thu;
+  CHECK_EQ(recap_header(hd, one_am), std::string("Today's NBA scores"));
+  hd.league = NCAA;
+  CHECK_EQ(recap_header(hd, one_am), std::string("Yesterday's college scores"));
+  Pending tv = mkpending(NHL, 99, 0, "BOS");
+  tv.tv = "ESPN+";
+  CHECK_EQ(recap_later_ticker(tv, "Today 7:00 PM"), std::string("Later today's NHL games | Today 7:00 PM | ESPN+"));
+  tv.tv.clear();
+  CHECK_EQ(recap_later_ticker(tv, "Today 7:00 PM"), std::string("Later today's NHL games | Today 7:00 PM"));
+  tv.home_abbr = "NYR";
+  CHECK_EQ(recap_matchup(tv), std::string("BOS at NYR"));
+  CHECK_EQ(recap_next_text(recap_matchup(tv), "Thu 6:00 PM"), std::string("Next: BOS at NYR Thu 6:00 PM"));
+  CHECK_EQ(recap_next_text("", "Thu 6:00 PM"), std::string("Next: Thu 6:00 PM"));
+  Final hockey = mkfinal(NHL, 99, 0, "BOS");
+  CHECK(final_snapshot(hockey).sport == Sport::HOCKEY);
+  CHECK(final_snapshot(mkfinal(NCAA, 99, 0, "OSU")).sport == Sport::FOOTBALL);
+
+  // Three leagues at noon Thursday: seven games to come and yesterday's
+  // finals.
+  const int64_t h = 3600;
+  std::vector<RecapDay> days;
+  auto finals_day = [](uint8_t league, int32_t day, int n) {
+    RecapDay d;
+    d.league = league;
+    d.day = day;
+    for (int i = 0; i < n; i++)
+      d.finals.push_back(mkfinal(league, 99, i, "F"));
+    return d;
+  };
+  recap_merge(days, finals_day(NBA, thu - 1, 3));
+  recap_merge(days, finals_day(NHL, thu - 1, 13));
+  recap_merge(days, finals_day(MLB, thu - 1, 5));
+  std::vector<Pending> later = {
+      mkpending(NBA, 99, noon + 7 * h + 1800, "N1"), mkpending(NBA, 99, noon + 8 * h + 1800, "N2"),
+      mkpending(NHL, 99, noon + 7 * h, "H1"),        mkpending(NHL, 99, noon + 7 * h, "H2"),
+      mkpending(NHL, 99, noon + 7 * h, "H3"),        mkpending(NHL, 99, noon + 8 * h, "H4"),
+      mkpending(MLB, 99, noon + 4 * h, "B1"),
+  };
+  recap_absorb(days, {}, later, noon);
+  const uint16_t three = recap_bit(NBA) | recap_bit(NHL) | recap_bit(MLB);
+  std::vector<RecapCard> cards = recap_cards(days, three, true, noon);
+  // "Later today" and the seven in kickoff order, then the finals: the
+  // other 15 of the 22 shared out one by one (NBA has only 3), no Next card
+  CHECK_EQ(cards.size(), (size_t) (1 + 7 + 3 + 15));
+  size_t later_n = 0, finals_n[kLeagueCount] = {}, headers = 0, first_header = cards.size();
+  int64_t last_kick = 0;
+  bool ordered = true;
+  for (size_t i = 0; i < cards.size(); i++) {
+    const RecapCard &k = cards[i];
+    if (k.kind == RecapKind::LATER) {
+      later_n++;
+      int64_t kick = days[k.day].later[k.final].kickoff_epoch;
+      if (kick < last_kick || i > first_header)
+        ordered = false;
+      last_kick = kick;
+    } else if (k.kind == RecapKind::HEADER) {
+      headers++;
+      if (first_header == cards.size())
+        first_header = i;
+    } else if (k.kind == RecapKind::FINAL) {
+      finals_n[days[k.day].league]++;
+    }
+    CHECK(k.kind != RecapKind::NEXT);
+  }
+  CHECK(cards[0].kind == RecapKind::LATER_HEADER);
+  CHECK_EQ(later_n, (size_t) 7);
+  CHECK(ordered);
+  CHECK_EQ(first_header, (size_t) 8);
+  CHECK_EQ(headers, (size_t) 3);
+  CHECK_EQ(finals_n[NBA], (size_t) 3);
+  CHECK_EQ(finals_n[NHL], (size_t) 7);
+  CHECK_EQ(finals_n[MLB], (size_t) 5);
+  CHECK_EQ(recap_card_ms(RecapKind::LATER_HEADER), (uint32_t) 4000);
+  CHECK_EQ(recap_card_ms(RecapKind::LATER), (uint32_t) 7000);
+  if (cards.size() > 1)
+    CHECK_EQ(days[cards[1].day].later[cards[1].final].away_abbr, std::string("B1"));
+  // A league the mode does not read has no cards
+  cards = recap_cards(days, recap_bit(NHL), false, noon);
+  for (const auto &k : cards)
+    if (k.kind == RecapKind::LATER || k.kind == RecapKind::FINAL || k.kind == RecapKind::HEADER)
+      CHECK_EQ((int) days[k.day].league, (int) NHL);
+  CHECK_EQ(cards.size(), (size_t) (1 + 4 + 1 + 13));
+
+  // A game that has kicked off is gone the next time the cards are made
+  cards = recap_cards(days, three, true, noon + 7 * h);
+  later_n = 0;
+  for (const auto &k : cards)
+    if (k.kind == RecapKind::LATER)
+      later_n++;
+  CHECK_EQ(later_n, (size_t) 3);  // N1, N2 and H4 (B1 and H1-H3 have started)
+  // With nothing left today the Next card comes back, after the finals
+  cards = recap_cards(days, three, true, noon + 9 * h);
+  CHECK(cards.front().kind == RecapKind::HEADER);
+  CHECK(cards.back().kind == RecapKind::NEXT);
+  CHECK_EQ(cards.size(), (size_t) (3 + 21 + 1));
+  // A cap that leaves a league out gives it no header
+  cards = recap_cards(days, three, false, noon + 9 * h, 2);
+  CHECK_EQ(cards.size(), (size_t) 4);
+  for (const auto &k : cards)
+    CHECK((int) days[k.day].league != (int) MLB);
+
+  // A later scan at 7:01 PM: B1 is final and H1 and H2 are under way. ESPN
+  // still lists H3 as not started, but its time has passed, so it is not
+  // kept; N1, N2 and H4 are. Today's MLB day now holds the final.
+  std::vector<Final> today_finals = {mkfinal(MLB, 99, noon + 4 * h, "B1")};
+  std::vector<Pending> still = {later[0], later[1], later[4], later[5]};
+  recap_absorb(days, today_finals, still, noon + 7 * h + 60);
+  CHECK_EQ(recap_count(days, MLB), (size_t) 6);
+  size_t stored = 0;
+  for (const auto &d : days)
+    stored += d.later.size();
+  CHECK_EQ(stored, (size_t) 3);
+  // The next day the games to come are gone; the finals stay
+  recap_trim(days, noon + 24 * h);
+  stored = 0;
+  for (const auto &d : days)
+    stored += d.later.size();
+  CHECK_EQ(stored, (size_t) 0);
+  CHECK_EQ(recap_count(days, NHL), (size_t) 13);
+  CHECK_EQ(recap_count(days, NBA), (size_t) 3);
+
+  // Every league with two to come and a full NFL day of finals: eight
+  // games to come, one from each of the first eight leagues, and the
+  // finals come down to the 14 left of the 22
+  std::vector<RecapDay> all;
+  std::vector<Pending> two_each;
+  uint16_t every = 0;
+  for (const auto &info : kLeagues) {
+    uint8_t l = (uint8_t) info.league;
+    every |= recap_bit(l);
+    two_each.push_back(mkpending(l, 99, noon + 2 * h, "A"));
+    two_each.push_back(mkpending(l, 99, noon + 3 * h, "B"));
+  }
+  recap_merge(all, finals_day(NFL, espn_day(noon, NFL) - 4, 20));
+  recap_absorb(all, {}, two_each, noon);
+  stored = 0;
+  for (const auto &d : all) {
+    stored += d.later.size();
+    CHECK(d.league != MCBB);  // the one the eight left out is not kept
+  }
+  CHECK_EQ(stored, kRecapLaterCap);
+  cards = recap_cards(all, every, true, noon);
+  later_n = 0;
+  size_t nfl_finals = 0;
+  for (const auto &k : cards) {
+    if (k.kind == RecapKind::LATER)
+      later_n++;
+    else if (k.kind == RecapKind::FINAL)
+      nfl_finals++;
+  }
+  CHECK_EQ(later_n, kRecapLaterCap);
+  CHECK_EQ(nfl_finals, kRecapCap - kRecapLaterCap);
+  CHECK_EQ(nfl_finals, (size_t) 14);
 }
 
 static void test_backoff() {
@@ -3040,6 +3607,97 @@ static void test_auto_update() {
   t = in;
   t.now = true;  // in the window too, the try counts for this version, not the night
   CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
+
+  // A release that rolled back here: skipped every night, live game or not,
+  // and Install now doesn't override it.
+  t = in;
+  t.failed = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.live = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.live = false;
+  t.today = auto_update_day(2026, 293);  // a week later, still skipped
+  t.checked_day = t.today;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.check_done = false;  // nothing to say before tonight's read is back
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+  t = in;
+  t.failed = true;
+  t.now = true;
+  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
+  t.hour = 15;
+  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
+}
+
+static void test_update_mark() {
+  UpdateMark m{};
+  CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
+  CHECK(!update_failed_here(m, "2026.10.0"));
+  CHECK(!update_failed_here(m, ""));
+
+  // Installed and running it: settled only once the boot is good.
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.1", false) == UpdateOutcome::PENDING);
+  CHECK_EQ(std::string(m.installing), std::string("2026.10.1"));
+  CHECK(m.failed[0] == '\0');
+  // The bootloader's flag can be left over from an older rollback; running
+  // the new version still means it took.
+  CHECK(update_mark_boot(m, "2026.10.1", true) == UpdateOutcome::PENDING);
+
+  // Rolled back: the old firmware boots and remembers the version.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.installing[0] == '\0');
+  CHECK_EQ(std::string(m.failed), std::string("2026.10.1"));
+  CHECK(update_failed_here(m, "2026.10.1"));
+  CHECK(!update_failed_here(m, "2026.10.2"));  // a later release still installs
+  CHECK(!update_failed_here(m, "2026.10.1.1"));
+  // Later boots keep it while the panel stays behind it.
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::NONE);
+  CHECK(update_failed_here(m, "2026.10.1"));
+
+  // A manual install of it that takes, or anything newer, drops it.
+  UpdateMark k = m;
+  CHECK(update_mark_boot(k, "2026.10.1", false) == UpdateOutcome::NONE);
+  CHECK(k.failed[0] == '\0');
+  k = m;
+  update_mark_set(k.installing, "2026.10.2");
+  CHECK(update_mark_boot(k, "2026.10.2", false) == UpdateOutcome::PENDING);
+  CHECK(k.failed[0] == '\0');
+  // A later release that rolls back too replaces it.
+  k = m;
+  update_mark_set(k.installing, "2026.10.2");
+  CHECK(update_mark_boot(k, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK_EQ(std::string(k.failed), std::string("2026.10.2"));
+
+  // Still on the old firmware with no rollback (power cut mid-download): not a failure.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NOT_INSTALLED);
+  CHECK(m.installing[0] == '\0');
+  CHECK(m.failed[0] == '\0');
+
+  // A rollback from a version that isn't newer (a manual downgrade) is
+  // nothing automatic installs anyway.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "1.5.5");
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.failed[0] == '\0');
+
+  // Beta versions fit, a longer string is cut and still ends.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.0-beta.812");
+  CHECK(update_mark_boot(m, "2026.10.0-beta.811", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(update_failed_here(m, "2026.10.0-beta.812"));
+  CHECK(!update_failed_here(m, "2026.10.0-beta.813"));
+  update_mark_set(m.installing, std::string(40, '9'));
+  CHECK_EQ(strlen(m.installing), kUpdateVersionLen - 1);
+  // Flash that holds garbage with no end still reads as a string.
+  memset(m.failed, '7', sizeof(m.failed));
+  m.installing[0] = '\0';
+  update_mark_boot(m, "1.0", false);
+  CHECK(strlen(m.failed) < kUpdateVersionLen);
 }
 
 // Every byte of a panel_text() result is printable ASCII or part of a Latin-1
@@ -3059,6 +3717,68 @@ static bool panel_drawable(const std::string &s) {
     return false;
   }
   return true;
+}
+
+static void test_offseason() {
+  const int64_t now = 1792080000;  // any fixed instant
+  const int64_t day = 24 * 3600;
+  const int64_t football = season_horizon(Sport::FOOTBALL);
+  const int64_t hockey = season_horizon(Sport::HOCKEY);
+  CHECK_EQ(football, (int64_t) 0);
+  CHECK_EQ(hockey, kSeasonHorizon);
+  CHECK_EQ(season_horizon(Sport::BASEBALL), kSeasonHorizon);
+  // The team endpoint named no game: the clock, whatever the sport.
+  CHECK(off_season(GameState::NOT_FOUND, 0, now, football));
+  CHECK(off_season(GameState::NOT_FOUND, 0, now, hockey));
+  // Football has no horizon: a game 20 days out stays on its card, and so
+  // does an old final.
+  CHECK(!off_season(GameState::PRE, now + 20 * day, now, football));
+  CHECK(!off_season(GameState::POST, now - 60 * day, now, football));
+  // An NHL team 11 days out reaches the clock; 9 days, or exactly 10, does not.
+  CHECK(off_season(GameState::PRE, now + 11 * day, now, hockey));
+  CHECK(!off_season(GameState::PRE, now + 9 * day, now, hockey));
+  CHECK(!off_season(GameState::PRE, now + 10 * day, now, hockey));
+  // A final older than the horizon is the end of the season.
+  CHECK(off_season(GameState::POST, now - 11 * day, now, hockey));
+  CHECK(!off_season(GameState::POST, now - 2 * day, now, hockey));
+  CHECK(!off_season(GameState::IN, now - 11 * day, now, hockey));
+
+  // The Next line. Wed Sep 9 2026, 10:00 AM.
+  struct tm wed = mk(2026, 251, 3, 10, 0, 8, 9);
+  CHECK_EQ(next_line("DAL", "PHI", true, mk(2026, 255, 0, 15, 25, 8, 13), wed),
+           std::string("Next: DAL vs PHI Sun 3:25 PM"));
+  CHECK_EQ(next_line("DAL", "PHI", true, mk(2026, 251, 3, 19, 0, 8, 9), wed),
+           std::string("Next: DAL vs PHI Today 7:00 PM"));
+  CHECK_EQ(next_line("BOS", "NYR", false, mk(2026, 252, 4, 0, 5, 8, 10), wed),
+           std::string("Next: at NYR Tomorrow 12:05 AM"));
+  // Months out, the date: Thu Oct 15 2026 to Fri Mar 26 2027.
+  struct tm oct15 = mk(2026, 287, 4, 21, 30, 9, 15);
+  struct tm mar26 = mk(2027, 84, 5, 19, 5, 2, 26);
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15), std::string("Next: at PHI Mar 26 7:05 PM"));
+  // The board puts the kickoff on its own line.
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15, "\n"), std::string("Next: at PHI\nMar 26 7:05 PM"));
+  CHECK_EQ(next_line("COL", "LAD", true, mar26, oct15, "\n"), std::string("Next: COL vs LAD\nMar 26 7:05 PM"));
+  // An opponent ESPN has not named yet.
+  CHECK_EQ(next_line("COL", "", true, mar26, oct15), std::string("Next game Mar 26 7:05 PM"));
+  // A game with no time yet shows TBD, not ESPN's midnight placeholder.
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15, " ", true), std::string("Next: at PHI Mar 26 TBD"));
+  CHECK_EQ(next_line("COL", "PHI", false, mar26, oct15, "\n", true), std::string("Next: at PHI\nMar 26 TBD"));
+
+  // The clock itself: 12-hour, no seconds, no leading zero.
+  CHECK_EQ(clock_time_text(mk(2026, 287, 4, 0, 5, 9, 15)), std::string("12:05 AM"));
+  CHECK_EQ(clock_time_text(mk(2026, 287, 4, 9, 7, 9, 15)), std::string("9:07 AM"));
+  CHECK_EQ(clock_time_text(mk(2026, 287, 4, 12, 0, 9, 15)), std::string("12:00 PM"));
+  CHECK_EQ(clock_time_text(oct15), std::string("9:30 PM"));
+  CHECK_EQ(clock_date_text(oct15), std::string("Thu, Oct 15"));
+  CHECK_EQ(clock_date_text(mar26), std::string("Fri, Mar 26"));
+
+  // Team colors, lifted when dark; neutral gray with no team.
+  CHECK_EQ(clock_color(false, 0xE31837), kClockNeutral);
+  CHECK_EQ(clock_color(false, 0xFFFFFF), kClockNeutral);
+  CHECK_EQ(clock_color(true, 0xE31837), (uint32_t) 0xE31837);
+  CHECK_EQ(clock_color(true, 0x002A5C), (uint32_t) 0x0057C0);
+  CHECK_EQ(clock_color(true, 0x000000), (uint32_t) 0xFFFFFF);
+  CHECK_EQ(clock_color(true, parse_color("")), (uint32_t) 0xFFFFFF);  // a team with no color from ESPN
 }
 
 static void test_panel_text() {
@@ -3262,6 +3982,138 @@ static void test_tbd_kickoff() {
   CHECK(!team_cache_load(c, League::NCAA, kIowa, placeholder - 5 * 86400 + 60, back));
 }
 
+static void test_wifi_history() {
+  CHECK(wifi_cause(200) == WifiCause::SIGNAL);  // beacon timeout
+  CHECK(wifi_cause(3) == WifiCause::ROUTER);    // deauth from the router
+  CHECK(wifi_cause(206) == WifiCause::ROUTER);  // the router restarted
+  CHECK(wifi_cause(15) == WifiCause::PASSWORD);
+  CHECK(wifi_cause(207) == WifiCause::ROAM);
+  CHECK(wifi_cause(8) == WifiCause::PANEL);
+  CHECK(wifi_cause(1) == WifiCause::OTHER);
+  CHECK_EQ(std::string(wifi_cause_key(WifiCause::PASSWORD)), std::string("password"));
+
+  static int8_t rssi[kWifiMinutes];
+  static WifiDrop drops[kWifiDrops];
+
+  // No buffers (no PSRAM): no history, only the total.
+  WifiHistory none;
+  none.sample(0, true, -60);
+  none.up(0);
+  none.down(10, WifiCause::SIGNAL);
+  none.up(15);
+  CHECK_EQ(none.json(20, true, -60), std::string("{\"rssi\":-60,\"step\":300,\"hist\":[],\"weak\":false,"
+                                                 "\"drops\":1,\"day\":0,\"causes\":{}}"));
+
+  // A panel that drops all the time still answers whole JSON.
+  {
+    static int8_t r2[kWifiMinutes];
+    static WifiDrop d2[kWifiDrops];
+    WifiHistory flap;
+    flap.attach(r2, d2);
+    for (uint32_t i = 0; i < 1000000; i++) {
+      flap.up(i * 2);
+      flap.down(i * 2 + 1, WifiCause::OTHER);
+    }
+    std::string fj = flap.json(2000000, false, -127);
+    CHECK(fj.find("\"weak\":false,\"drops\":1000000,\"day\":64,\"causes\":{\"other\":64},\"last\":\"other\",\"last_ago\":1}") !=
+          std::string::npos);
+    CHECK(fj.back() == '}');
+  }
+
+  // A minute keeps the mean of its readings; a minute off Wi-Fi keeps 0.
+  WifiHistory h;
+  h.attach(rssi, drops);
+  h.up(0);
+  h.sample(0, true, -60);
+  h.sample(10, true, -62);
+  h.sample(20, true, -65);
+  CHECK_EQ(h.minutes(), 0u);
+  h.sample(60, false, -127);
+  CHECK_EQ(h.minutes(), 1u);
+  CHECK_EQ((int) rssi[0], -62);
+  h.sample(120, true, -70);
+  CHECK_EQ((int) rssi[1], 0);
+  CHECK_EQ(h.json(130, false, -127), std::string("{\"step\":300,\"hist\":[-62],\"weak\":false,"
+                                                  "\"drops\":0,\"day\":0,\"causes\":{}}"));
+
+  // A loop that stalled past several minutes fills them in as off Wi-Fi.
+  h.sample(400, true, -70);
+  CHECK_EQ(h.minutes(), 6u);
+  CHECK_EQ((int) rssi[2], -70);
+  CHECK_EQ((int) rssi[3], 0);
+  // Points end at the newest minute: [-62] then [off, -70, off, off, off]
+  CHECK(h.json(400, true, -70).find("\"hist\":[-62,-70]") != std::string::npos);
+
+  // Drops: the cause, how long it lasted, and the panel leaving on purpose
+  // or a roam not counted as trouble.
+  h.down(1000, WifiCause::SIGNAL);
+  std::string j = h.json(1010, false, -127);
+  CHECK(j.find("\"drops\":1,\"day\":1,\"causes\":{\"signal\":1},\"last\":\"signal\",\"last_ago\":10}") !=
+        std::string::npos);
+  h.up(1042);
+  CHECK(h.json(1100, true, -60).find("\"last_ago\":100,\"last_down\":42}") != std::string::npos);
+  h.up(1050);  // already up
+  CHECK(h.json(1100, true, -60).find("\"last_down\":42}") != std::string::npos);
+  h.down(1200, WifiCause::PANEL);
+  h.up(1210);
+  h.down(1300, WifiCause::ROAM);
+  h.up(1301);
+  h.down(1400, WifiCause::ROUTER);
+  h.down(1401, WifiCause::SIGNAL);  // already down: the first cause stands
+  h.up(1460);
+  CHECK_EQ(h.total(), 2u);
+  j = h.json(1500, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":2,\"causes\":{\"signal\":1,\"router\":1,\"roam\":1},"
+               "\"last\":\"router\",\"last_ago\":100,\"last_down\":60}") != std::string::npos);
+  // A day later the drops are history: still in the total, out of the day.
+  j = h.json(1400 + 24 * 3600, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":0,\"causes\":{},\"last\":\"router\"") != std::string::npos);
+
+  // The weak-signal hint: a median under -75 dBm over the last half hour,
+  // from at least ten minutes on Wi-Fi.
+  WifiHistory w;
+  w.attach(rssi, drops);
+  uint32_t t = 0;
+  // n minutes of one reading each, then a reading-less sample that closes
+  // the last of them
+  auto run = [&](int n, bool on, int8_t v) {
+    for (int m = 0; m < n; m++, t += 60)
+      w.sample(t, on, v);
+    w.sample(t, false, -127);
+  };
+  run(9, true, -80);
+  CHECK(!w.weak());  // nine minutes so far
+  run(1, true, -80);
+  CHECK(w.weak());
+  run(9, true, -60);
+  CHECK(w.weak());  // 10 weak of 19
+  run(2, true, -60);
+  CHECK(!w.weak());  // 10 weak of 21
+  run(30, true, -60);
+  CHECK(!w.weak());
+  run(25, false, -127);
+  run(5, true, -80);
+  CHECK(!w.weak());  // five readings in the last half hour: too few to say
+  run(30, false, -127);
+  CHECK(!w.weak());  // off Wi-Fi: no readings, no hint
+  CHECK(w.json(t, false, -127).find("-80,null,null,null,null,null,null]") != std::string::npos);
+
+  // The ring holds a day: after 25 hours the JSON has 288 points.
+  WifiHistory d;
+  d.attach(rssi, drops);
+  for (uint32_t m = 0; m <= 25 * 60; m++)
+    d.sample(m * 60, true, (int8_t) (m < 24 * 60 ? -50 : -77));
+  CHECK_EQ(d.minutes(), 25u * 60);
+  j = d.json(25 * 3600, true, -77);
+  size_t points = 1;
+  for (char c : j.substr(j.find("\"hist\":["), j.find(']') - j.find("\"hist\":[")))
+    if (c == ',')
+      points++;
+  CHECK_EQ(points, (size_t) (kWifiMinutes / kWifiStep));
+  CHECK(j.find(",-77]") != std::string::npos);
+  CHECK(d.weak());
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -3274,6 +4126,7 @@ int main() {
   test_splash();
   test_status_text();
   test_no_game_text();
+  test_captive();
   test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();
@@ -3327,13 +4180,18 @@ int main() {
   test_json_allocator();
   test_timezone_index();
   test_postseason();
+  test_badge();
   test_demo();
   test_recap();
+  test_later_today();
   test_backoff();
   test_gzip();
   test_cup_backoff();
   test_auto_update();
+  test_update_mark();
+  test_offseason();
   test_panel_text();
+  test_wifi_history();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

@@ -130,6 +130,13 @@ button { font: inherit; color: inherit; }
 .card .sub { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
 .card .sub:first-of-type { margin-top: 4px; }
 .ctl .val { color: var(--muted); font-size: 12px; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+.card p.weak { color: var(--gold); font-size: 13px; margin: 4px 0 8px; }
+.spark { padding: 6px 0 9px; border-top: 1px solid #1a2029; }
+.spark svg { display: block; width: 100%; height: 48px; background: var(--panel-2); border-radius: 6px; }
+.spark .ln { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark .th { fill: none; stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 3; opacity: .6; }
+.spark .gap { fill: none; stroke: var(--red); stroke-width: 1.5; }
+.sparklbl { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 3px; }
 .ctl input[type=range] { width: 46%; accent-color: var(--accent); }
 .ctl select {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 55%;

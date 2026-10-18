@@ -146,6 +146,26 @@ jobs:
             yaml: firmware/gameday-scoreboard75.yaml
     steps:
       - uses: actions/checkout@v7
+      # On the beta branch this is also the beta channel for panels with
+      # "Follow beta" on: the same "-beta.<run>" version as the bar build of
+      # this run, and publish-beta puts it on the site.
+      - name: Beta version and summary
+        id: beta
+        env:
+          NOTES: ${{ needs.notes.outputs.summary }}
+        run: |
+          set -euo pipefail
+          summary=$NOTES
+          url="https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          if [ "$GITHUB_REF" = refs/heads/beta ]; then
+            v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
+            v="$v-beta.$GITHUB_RUN_NUMBER"
+            sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
+            summary="Beta $v from ${GITHUB_SHA::7}."
+            url="https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+          fi
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Build firmware
         id: esphome
         uses: esphome/build-action@v7
@@ -153,17 +173,78 @@ jobs:
           yaml-file: ${{ matrix.yaml }}
           version: "2026.10.0b3"
           complete-manifest: true
-          release-summary: ${{ needs.notes.outputs.summary }}
-          release-url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+          release-summary: ${{ steps.beta.outputs.summary }}
+          release-url: ${{ steps.beta.outputs.url }}
       - name: Stage output under a stable folder name
         run: |
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
+      # The installer would say "Installing bharvey88.gameday-scoreboard".
+      - name: Product name in the manifest
+        run: ./scripts/set_manifest_name.sh out
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.variant }}
           path: out
+      # For the budget job: the OTA image's size and the ELF's static
+      # internal RAM. The name stays outside publish's firmware-* pattern.
+      - name: Measure flash and static RAM
+        run: python3 scripts/size_budget.py firmware out/${{ matrix.variant }} ${{ matrix.variant }} sizes/${{ matrix.variant }}.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sizes-${{ matrix.variant }}
+          path: sizes
+
+  budget:
+    # Flash, static internal RAM and the memory each ESPN read takes, against
+    # firmware/budget.json. A pull request into dev also fails when one figure
+    # grows more than the file's max_growth against dev's last build. A
+    # promotion carries many changes at once, so it only gets the budget.
+    # The job summary has the table.
+    name: Size budget
+    needs: [build, host-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sizes-*
+          path: sizes
+      - name: Figures from the base branch
+        id: base
+        if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -uo pipefail
+          # The base commit's own run first, then the base branch's newest
+          # runs: a push that lands while dev builds cancels the older run,
+          # sometimes before it uploaded its figures.
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?head_sha=$BASE_SHA&event=push&per_page=5" \
+                   --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' || true)
+          runs="$runs
+          $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$BASE_REF&event=push&per_page=10" \
+              --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' || true)"
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            rm -rf base
+            if gh run download "$id" -p 'sizes-*' -D base 2>/dev/null && [ -n "$(ls -A base 2>/dev/null)" ]; then
+              echo "label=$BASE_REF ${sha::7} (run $id)" >> "$GITHUB_OUTPUT"
+              echo "Base figures from run $id ($sha)"
+              exit 0
+            fi
+          done <<< "$runs"
+          echo "::warning::No figures from a $BASE_REF build found, so only the budget is checked, not the growth."
+      - name: Check the budget
+        env:
+          BASE_LABEL: ${{ steps.base.outputs.label }}
+        run: python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL"
 
   build-demo:
     # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
@@ -256,20 +337,27 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
+      - name: Product name in the manifest
+        run: ./scripts/set_manifest_name.sh out
       - uses: actions/upload-artifact@v7
         with:
           name: bar-${{ matrix.variant }}
           path: out
 
   publish-beta:
-    # The beta channel, gamedayscoreboard.app/firmware/beta/<variant>/, read
-    # only by bar builds. Runs when someone pushes (promotes) to beta, or runs
-    # Build on beta by hand with install_now. Pages only deploys from main and
-    # release tags, so the files go on the rolling beta-firmware prerelease
-    # and the Site workflow on main republishes the site with them. The stable
-    # manifests and the flasher are left as they are.
+    # The beta channels, from one build of the beta branch:
+    # - gamedayscoreboard.app/firmware/beta/<variant>/, the bar builds, read
+    #   only by bar panels.
+    # - gamedayscoreboard.app/firmware/<variant>-beta/, the release builds,
+    #   read by panels with "Follow beta" on (the two-panel build follows
+    #   moonhub75's, as it does for releases).
+    # Runs when someone pushes (promotes) to beta, or runs Build on beta by
+    # hand with install_now. Pages only deploys from main and release tags,
+    # so the files go on the rolling beta-firmware prerelease and the Site
+    # workflow on main republishes the site with them. The stable manifests
+    # and the flasher are left as they are.
     name: Publish the beta channel
-    needs: [build-bar, host-tests, web-tests]
+    needs: [build, build-bar, host-tests, web-tests]
     if: github.ref == 'refs/heads/beta' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
@@ -282,24 +370,37 @@ jobs:
           pattern: bar-*
           path: stage/firmware/beta
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-moonhub75
+          path: stage/release
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-scoreboard75
+          path: stage/release
       - name: Check the files and store them on the beta-firmware prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           BETA: ${{ needs.build-bar.outputs.version }}
         run: |
           set -euo pipefail
+          for v in moonhub75 scoreboard75; do
+            mv "stage/release/$v" "stage/firmware/$v-beta"
+          done
           ls -R stage
           bash scripts/check_site_firmware.sh --beta stage
+          bash scripts/check_site_firmware.sh --follow-beta stage "$BETA"
           mkdir -p release
           for v in moonhub75 scoreboard75; do
             (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
+            (cd stage/firmware && zip -r "../../release/firmware-$v-beta.zip" "$v-beta")
           done
-          notes="Firmware for the bar panels' beta channel, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/; this prerelease only stores the files between site deploys."
+          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/, and panels with Follow beta on from gamedayscoreboard.app/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
           if gh release view beta-firmware >/dev/null 2>&1; then
             gh release upload beta-firmware release/*.zip --clobber
-            gh release edit beta-firmware --prerelease --title "Bar beta $BETA" --notes "$notes"
+            gh release edit beta-firmware --prerelease --title "Beta $BETA" --notes "$notes"
           else
-            gh release create beta-firmware release/*.zip --prerelease --target "$GITHUB_SHA" --title "Bar beta $BETA" --notes "$notes"
+            gh release create beta-firmware release/*.zip --prerelease --target "$GITHUB_SHA" --title "Beta $BETA" --notes "$notes"
           fi
       - name: Republish the site from main with the new beta
         env:
@@ -351,13 +452,31 @@ jobs:
       - run: make -C tests
       - name: Replay tool builds
         run: make -C tests replay
+      - name: Memory each ESPN read takes
+        run: |
+          make -C tests heap
+          python3 scripts/size_budget.py host tests/build/heap.json sizes/host.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sizes-host
+          path: sizes
       - name: Script selftests
         run: |
+          python3 scripts/size_budget.py --selftest
           python3 scripts/factory_flash.py --selftest
           python3 scripts/burnin_monitor.py --selftest
           python3 scripts/improv_scan.py --selftest
       - name: Device page mock matches the firmware's set table
         run: python3 tests/web/mock_device.py --selftest
+      - name: Fuzz the parsers (30 s a target)
+        run: make -C tests fuzz
+      - name: Keep the input a fuzz crash left
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crashes
+          path: tests/build/crash-*
+          if-no-files-found: ignore
 
   web-tests:
     # The device page (firmware/web/bundle.js) in Chromium against

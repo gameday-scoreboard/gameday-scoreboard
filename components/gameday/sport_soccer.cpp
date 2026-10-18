@@ -433,7 +433,7 @@ std::string soccer_status_text(const GameSnapshot &s, const TickerOptions &o, co
     add_part(out, records_part(s));
     return ascii_fold(out);
   }
-  if (o.down_distance) {
+  if (o.soccer_stats) {
     add_part(out, goals_line(s));
     add_part(out, pair_line("Cards", s, cards(f.team_yellows, f.team_reds), cards(f.opp_yellows, f.opp_reds)));
     add_part(out, stats_line(s));

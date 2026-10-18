@@ -53,7 +53,7 @@ std::string baseball_status_text(const GameSnapshot &s, const TickerOptions &o, 
     add_part(out, b.series);
     return out;
   }
-  if (o.down_distance) {
+  if (o.baseball_count) {
     std::string count = baseball_count(s);
     if (b.outs >= 0)
       count += (count.empty() ? "" : ", ") + std::to_string(b.outs) + (b.outs == 1 ? " out" : " outs");

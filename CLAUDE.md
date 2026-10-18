@@ -19,6 +19,11 @@ contributors; read it too.
   notes, specs, plans or reviews here: only product code, CHANGELOG, README
   and the site. Maintainer notes are kept privately and loaded through a
   gitignored CLAUDE.local.md.
+- PR descriptions say what changed and how it was tested, nothing else: no
+  links to private repos or trackers, no card numbers or `Closes` lines
+  for them, no private notes. No AI attribution or Claude-headed
+  comments in PR text, comments or reviews. Reviews and progress notes go
+  on the private card.
 - Every parallel agent works in its own git worktree.
 - Branch from `dev` and open PRs against `dev` (the default branch), never
   `beta` or `main`. Changes move `dev` to `beta` to `main` by promotion PRs

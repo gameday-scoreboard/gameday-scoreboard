@@ -87,9 +87,13 @@ INITIAL = {
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
     "favmax": FAV_MAX, "today": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
-    "autoupd": False,
-    "misses": 0, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
+    "autoupd": False, "beta": False,
+    "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
+    # Spliced in live by the firmware (wifi_history.h): an hour up, one drop.
+    "wifi": {"rssi": -61, "step": 300, "hist": [-58, -59, -60, None, -64, -62, -61, -61, -60, -62, -61, -61],
+             "weak": False, "drops": 1, "day": 1, "causes": {"signal": 1}, "last": "signal", "last_ago": 2400,
+             "last_down": 42},
     "game": {"s": "PRE", "l": "nfl", "ta": "DAL", "ti": 6, "ts": 0, "oa": "PHI", "oi": 21, "os": 0,
              "tr": "1-0", "or": "0-1", "p": 0, "tt": 3, "ot": 3, "rz": False, "tv": "FOX",
              "venue": "AT&T Stadium", "odds": "DAL -3", "ou": "47.5", "detail": "Sun 3:25 PM",
@@ -232,7 +236,7 @@ def apply_set(kv):
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "play", "odds", "opp", "bootaddr", "autoupd"):
+        elif k in ("down", "count", "match", "play", "odds", "opp", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:

@@ -142,6 +142,7 @@ struct LiveGame {
   std::string event_id;
   uint32_t group{0};        // home team's conference, for the follow-up polls
   uint32_t away_id{0};      // shown on the left, like a broadcast
+  uint32_t home_id{0};      // for its logo, fetched as soon as the game is picked
   std::string away_abbr, home_abbr;
 };
 
@@ -168,9 +169,40 @@ GameSnapshot final_snapshot(const Final &f);
 GameSnapshot team_placeholder(const Team &t);
 bool is_team_placeholder(const GameSnapshot &g);
 
+// A game later today from a day's scoreboard, for the rotation's "Later
+// today" cards (recap.h). As small as a Final: short strings and ids, the
+// logos worked out from the ids when the card goes up.
+struct Pending {
+  uint8_t league{0};
+  uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  int64_t kickoff_epoch{0};
+  std::string event_id;
+  uint32_t away_id{0}, home_id{0};
+  std::string away_abbr, home_abbr;
+  std::string away_color, home_color;
+  std::string away_record, home_record;
+  std::string tv;  // the first network ESPN lists, "" when it lists none
+};
+
+// One scan keeps at most this many of a league's games later today: the
+// most a loop of the rotation shows.
+static const size_t kPendingKeep = 8;
+
+// Ranked games first (best rank on either side), then by kickoff.
+inline bool pending_before(const Pending &a, const Pending &b) {
+  if (a.rank != b.rank)
+    return a.rank < b.rank;
+  return a.kickoff_epoch < b.kickoff_epoch;
+}
+
+// The pregame scoreboard card for a game later today, away side as "team".
+GameSnapshot pending_snapshot(const Pending &p);
+
 struct TickerOptions {
   bool clock{true};
-  bool down_distance{true};
+  bool down_distance{true};   // football
+  bool baseball_count{true};  // count, outs, pitcher and batter
+  bool soccer_stats{true};    // goals, cards, possession and shots
   bool last_play{true};
   bool odds{true};
 };
@@ -187,12 +219,21 @@ std::string schedule_url(League league, uint32_t espn_id);  // the season's game
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
 std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
+// How far behind UTC the day scan_url() reads turns over. Football uses the
+// Eastern date. The other leagues play past midnight Eastern on the West
+// Coast (ESPN lists those games under the day they started, and rejects date
+// ranges), and none start between midnight and 6 AM Eastern: their day turns
+// over at 4 AM Eastern instead.
+inline int64_t scan_day_shift(League league) {
+  return league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
+}
 // One game on its own, 8 to 20 KB, where the day's scoreboard it sits in is
 // up to 260 KB (NFL) or 750 KB (college). A LeagueInfo::per_event league
 // polls this.
 std::string event_url(League league, const std::string &event_id);
 // One day's scoreboard for finding a team's next game (Eastern date of
-// day_epoch). Men's college basketball reads the team's conference only.
+// day_epoch). College football and men's college basketball read the team's
+// conference only (130 KB for the SEC's Saturday, 835 KB for every FBS game).
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch);
 // The same in a cup of the league (kCups): soccer/uefa.champions/... A null
 // slug gives the league's own URL.
@@ -224,8 +265,11 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
 // be read from ESPN before it), "Can't reach ESPN" while reads fail and
 // ESPN has never said this team has no game. Empty for the default, and in
-// a live mode, which has its own words.
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses);
+// a live mode, which has its own words. captive (captive.h: the Wi-Fi answered
+// with a sign-in page and ESPN has not answered since) wins over all of it,
+// live modes included, since nothing can be read until it ends.
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses,
+                         bool captive = false);
 // Bench only. Every ESPN URL starts with this root; a bench build points
 // it at a host that does not exist to make ESPN unreachable without
 // touching the network. Pass a string literal: only the pointer is kept,
@@ -250,6 +294,10 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
 // Hawaii to central Europe.
 inline int64_t tbd_day_epoch(int64_t placeholder) { return placeholder + 12 * 3600; }
 int64_t parse_iso8601_z(const std::string &s);
+// An HTTP Date header, "Sat, 17 Oct 2026 23:39:29 GMT" (the only form a
+// server may send), as a UTC epoch. 0 when it is anything else or outside
+// 2020 to 2099.
+int64_t parse_http_date(const std::string &s);
 const char *state_name(GameState s);
 // "0:42 2nd" from the raw clock and period. ESPN's pre-formatted shortDetail
 // lags those fields by a poll or two, so it is only used for the states that

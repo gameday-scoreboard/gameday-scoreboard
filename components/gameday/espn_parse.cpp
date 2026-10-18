@@ -57,7 +57,7 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if (league == League::MCBB && group != 0) {
+  if ((league == League::MCBB || league == League::NCAA) && group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }
@@ -127,12 +127,7 @@ std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch,
 std::string scan_url(League league, int64_t now_epoch) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
-  // Football uses the Eastern date. The other leagues play past midnight
-  // Eastern on the West Coast (ESPN lists those games under the day they
-  // started, and rejects date ranges), and none start between midnight and
-  // 6 AM Eastern: their day turns over at 4 AM Eastern instead.
-  int64_t shift = league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
-  civil_from_epoch(now_epoch - shift, y, m, d);
+  civil_from_epoch(now_epoch - scan_day_shift(league), y, m, d);
   char buf[64];
   // 80 is every FBS game. College basketball without a group lists only the
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
@@ -212,6 +207,28 @@ GameSnapshot final_snapshot(const Final &f) {
   g.opp_record = f.home_record;
   g.team_logo = team_logo_url((League) f.league, f.away_id, f.away_abbr.c_str());
   g.opp_logo = team_logo_url((League) f.league, f.home_id, f.home_abbr.c_str());
+  g.sport = league_sport((League) f.league);
+  return g;
+}
+
+GameSnapshot pending_snapshot(const Pending &p) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::PRE;
+  g.event_id = p.event_id;
+  g.kickoff_epoch = p.kickoff_epoch;
+  g.team_id = p.away_id;
+  g.opp_id = p.home_id;
+  g.team_abbr = p.away_abbr;
+  g.opp_abbr = p.home_abbr;
+  g.team_color = p.away_color;
+  g.opp_color = p.home_color;
+  g.team_record = p.away_record;
+  g.opp_record = p.home_record;
+  g.tv = p.tv;
+  g.team_logo = team_logo_url((League) p.league, p.away_id, p.away_abbr.c_str());
+  g.opp_logo = team_logo_url((League) p.league, p.home_id, p.home_abbr.c_str());
+  g.sport = league_sport((League) p.league);
   return g;
 }
 
@@ -341,7 +358,9 @@ using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+  if (captive)
+    return "Wi-Fi needs a sign-in";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)
@@ -502,30 +521,29 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
   static const char *kDays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char *kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-  int now_day = now_local.tm_year * 366 + now_local.tm_yday;
-  int kick_day = kick_local.tm_year * 366 + kick_local.tm_yday;
-  int diff = kick_day - now_day;
+  // An ESPTime the panel couldn't convert comes out with month and weekday
+  // -1: no kickoff time to show.
+  if (kick_local.tm_mon < 0 || kick_local.tm_mon > 11 || kick_local.tm_wday < 0 || kick_local.tm_wday > 6)
+    return "";
+  int64_t now_day = (int64_t) now_local.tm_year * 366 + now_local.tm_yday;
+  int64_t kick_day = (int64_t) kick_local.tm_year * 366 + kick_local.tm_yday;
+  int64_t diff = kick_day - now_day;
   std::string when;
   if (diff == 0)
     when = "Today";
   else if (diff == 1)
     when = "Tomorrow";
   else if (diff > 1 && diff < 7)
-    when = kDays[kick_local.tm_wday % 7];
+    when = kDays[kick_local.tm_wday];
   else {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon % 12], kick_local.tm_mday);
+    snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon], kick_local.tm_mday);
     when = buf;
   }
   return when + " " + (time_tbd ? std::string("TBD") : clock_12h(kick_local));
 }
 
-// "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).
-int64_t parse_iso8601_z(const std::string &s) {
-  int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
-  int n = sscanf(s.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &sec);
-  if (n < 5)
-    return 0;
+static int64_t epoch_from_civil(int y, int mo, int d, int h, int mi, int sec) {
   // days from civil (Howard Hinnant's algorithm)
   int yy = y - (mo <= 2 ? 1 : 0);
   int64_t era = (yy >= 0 ? yy : yy - 399) / 400;
@@ -534,6 +552,45 @@ int64_t parse_iso8601_z(const std::string &s) {
   int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
   int64_t days = era * 146097 + doe - 719468;
   return days * 86400 + h * 3600 + mi * 60 + sec;
+}
+
+// "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).
+// The field widths keep a run of digits from overflowing an int, and a date
+// out of range reads as no date, like garbage does.
+int64_t parse_iso8601_z(const std::string &s) {
+  int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
+  int n = sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &sec);
+  if (n < 5 || y < 1970 || mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59 ||
+      sec < 0 || sec > 60)
+    return 0;
+  return epoch_from_civil(y, mo, d, h, mi, sec);
+}
+
+int64_t parse_http_date(const std::string &s) {
+  static const char *const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  // "Sat, 17 Oct 2026 23:39:29 GMT": fixed width, so check it by position.
+  if (s.size() != 29 || s[3] != ',' || s[4] != ' ' || s[7] != ' ' || s[11] != ' ' || s[16] != ' ' ||
+      s[19] != ':' || s[22] != ':' || s.compare(25, 4, " GMT") != 0)
+    return 0;
+  auto num = [&s](size_t at, size_t len) {
+    int v = 0;
+    for (size_t i = at; i < at + len; i++) {
+      if (s[i] < '0' || s[i] > '9')
+        return -1;
+      v = v * 10 + (s[i] - '0');
+    }
+    return v;
+  };
+  int mo = 0;
+  for (int i = 0; i < 12; i++)
+    if (s.compare(8, 3, kMonths[i]) == 0)
+      mo = i + 1;
+  int d = num(5, 2), y = num(12, 4), h = num(17, 2), mi = num(20, 2), sec = num(23, 2);
+  if (mo == 0 || d < 1 || d > 31 || y < 2020 || y > 2099 || h < 0 || h > 23 || mi < 0 || mi > 59 || sec < 0 ||
+      sec > 60)
+    return 0;
+  return epoch_from_civil(y, mo, d, h, mi, sec);
 }
 
 static std::string period_name(int period) {

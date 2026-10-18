@@ -51,6 +51,23 @@ is the short version.
   `tests/web/mock_device.py`. The last checks the device page's mock
   against `tests/fixtures/set_cases.json`, the same table the host tests
   run through `components/gameday/set_request.h`.
+- Fuzzing: `make -C tests fuzz` runs mutated ESPN documents and set
+  requests through the parsers under the address and undefined behavior
+  sanitizers for about a minute, as CI does on every PR;
+  `make -C tests fuzz-long` runs 30 minutes a target. clang with libFuzzer
+  makes it coverage guided; other compilers get a random mutator. A crash
+  leaves its input in `tests/build/crash-*`; pass that file to
+  `tests/build/fuzz_espn` (or `fuzz_set`) to replay it, and add a host test
+  with the fix.
+- Size budget: CI's "Size budget" job checks each build's flash (the OTA
+  image) and static internal RAM (from the ELF), and the memory each ESPN
+  read takes on the host (`make -C tests heap`, `tests/heap_budget.cpp`),
+  against `firmware/budget.json`. A PR fails when a figure goes over its
+  budget, or (into `dev`) grows more than the file's `max_growth` against
+  dev's last build; the job summary has the table. A change that needs
+  more raises that one entry in the same PR and says why.
+  `python3 scripts/size_budget.py seed <sizes folder>` prints figures with
+  10% headroom (at least 1 KB).
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run
@@ -64,6 +81,10 @@ is the short version.
 
 - Branch from `dev` and open PRs against `dev`. `beta` and `main` only take
   promotion PRs, and CI enforces that.
+- A PR description says what changed and how it was tested. No links to
+  private repos or trackers, no ticket numbers from them, and no AI
+  attribution in PR text or comments. Maintainers keep reviews and
+  progress notes privately.
 - Commit messages are one plain sentence about the behavior that changed
   ("Name each panel's hotspot after its suffix"), not "fix bug" or a
   conventional-commit prefix.

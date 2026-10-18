@@ -131,7 +131,9 @@
         <h2>Ticker</h2>
         <p class="hint">What scrolls along the bottom of the panel during a game.</p>
         <div id="tickerCtls">
-          <div class="ctl"><label>Game situation<small>Football: down and distance. Baseball: the count, outs, pitcher and batter. Soccer: goals, cards, possession and shots. Nothing extra in hockey or basketball.</small></label><button class="sw" data-set="down" aria-label="Game situation"></button></div>
+          <div class="ctl" data-sport="football"><label>Down and distance<small>Football: the down, yards to go and where the ball is.</small></label><button class="sw" data-set="down" aria-label="Down and distance"></button></div>
+          <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
+          <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
           <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
         </div>
@@ -197,6 +199,10 @@
           <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
           <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
         </div>
+        <div class="ctl" id="betaRow" hidden>
+          <label>Follow beta<small>Get test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.</small></label>
+          <button class="sw" data-set="beta" aria-label="Follow beta"></button>
+        </div>
         <div class="ctl" id="barRow" hidden>
           <label>Bar beta<small>This panel installs test versions on its own, between 3 and 5 AM and never during a live game.</small></label>
           <a class="btn" id="barReport" href="#">Something wrong?</a>
@@ -209,7 +215,16 @@
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+        <div class="sub">Diagnostics</div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+        <div id="wifiDiag" hidden>
+          <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+          <div class="spark" id="wifiSparkBox" hidden>
+            <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+            <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+          </div>
+          <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+        </div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
         <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
       </div>
@@ -282,7 +297,7 @@
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
@@ -462,7 +477,12 @@
     const msg = $("#msg");
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
-    $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // captive: the panel's Wi-Fi answered with a sign-in page, which the
+    // panel can't get past, so say how to fix it rather than "data stale".
+    const captive = !!(S && S.captive);
+    const stale = $("#stale");
+    stale.textContent = captive ? "Wi-Fi needs a sign-in" : "data stale";
+    stale.classList.toggle("on", captive || ((S && S.misses) || 0) >= 3);
     // Bowl or playoff name, when ESPN gives the game one
     const gname = $("#gname");
     gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
@@ -476,7 +496,11 @@
       const favMode = mode === "4" && S && (S.favs || []).some(refKey);
       // With no team picked the panel runs the live board, unless Favorites has teams.
       const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
+      // why is the panel's own reason ("Can't reach ESPN", "Getting ready"),
+      // sent only when its board says something other than its default.
       msg.textContent = !g ? "Waiting for the first fetch"
+        : captive ? "This Wi-Fi needs a sign-in. Use a home network or a hotspot."
+        : g.why ? g.why
         : favMode ? "None of your favorites has a game coming up"
           : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
@@ -691,8 +715,20 @@
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
+    // A situation switch for each sport the panel follows (team, favorites,
+    // Live games leagues picked by hand), all of them before anything is
+    // picked. The automatic Live list is no help here: it never comes back
+    // empty (NFL on a new panel). Hockey and basketball have no situation
+    // line, so no switch.
+    const sports = new Set([S.team].concat(S.favs || []).filter((t) => t && t.id).map((t) => t.l)
+      .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
+    document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
+      row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
+    });
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
+    // Older firmware and the bar and demo builds have no beta to follow.
+    $("#betaRow").hidden = S.beta === undefined;
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -734,10 +770,10 @@
     { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
     { name: "Check for Updates", into: "#actions", label: "Check for updates" },
     // restart: "" waits for the panel to come back; otherwise the panel
-    // restarts into setup (both resets forget the Wi-Fi) and this says why.
+    // restarts into setup and this says why.
     { name: "Reboot", into: "#actions", label: "Reboot", danger: true, restart: "" },
     { name: "Reset Wi-Fi", into: "#actions", label: "Reset Wi-Fi", danger: true,
-      restart: "The panel forgot its Wi-Fi and is restarting into setup, so this page won't reconnect. Its settings are kept." },
+      restart: "The panel is restarting into Wi-Fi setup for 15 minutes, so this page won't reconnect. Its settings are kept, and unplugging it and plugging it back in takes it back to the Wi-Fi it already knows." },
     { name: "Factory Reset", into: "#actions", label: "Factory reset", danger: true,
       restart: "The panel is restarting into setup with everything erased, so this page won't reconnect." },
   ];
@@ -1153,6 +1189,7 @@
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
     renderData();
+    renderWifi();
   };
 
   const renderData = () => {
@@ -1161,6 +1198,75 @@
     const size = kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(kb < 100000 ? 1 : 0) + " MB";
     const reads = S.espn_reads || 0;
     $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
+  };
+
+  // The Wi-Fi history (components/gameday/wifi_history.h). Firmware before it
+  // sends none, and the rows stay hidden.
+  const WIFI_CAUSES = {
+    signal: "signal lost", router: "dropped by the router", password: "sign-in refused",
+    roam: "moved to another access point", other: "other",
+  };
+  const span = (s) => {
+    if (s < 60) return s + " s";
+    const m = Math.round(s / 60);
+    if (m < 60) return m + " min";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+    return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
+  };
+  // The history across the full width (a day at most), newest at the right,
+  // gaps where the panel was off Wi-Fi (a red tick along the bottom). -95 to
+  // -35 dBm bottom to top.
+  const drawSpark = (svg, hist, step) => {
+    const W = hist.length, H = 48, NS = "http://www.w3.org/2000/svg";
+    const y = (v) => (H - 2 - (Math.min(-35, Math.max(-95, v)) + 95) / 60 * (H - 4)).toFixed(1);
+    let d = "", gaps = "", lo = 0, hi = -127, weak = 0, n = 0;
+    hist.forEach((v, i) => {
+      const x = i;
+      if (v == null) { gaps += "M" + x + " " + (H - 3) + "V" + H; return; }
+      d += (i > 0 && hist[i - 1] != null ? "L" : "M") + x + " " + y(v);
+      if (i === hist.length - 1 || hist[i + 1] == null) d += "h0.01";  // a lone point still shows
+      lo = Math.min(lo, v); hi = Math.max(hi, v); n++;
+      if (v < -75) weak++;
+    });
+    const path = (cls, p) => {
+      const e = document.createElementNS(NS, "path");
+      e.setAttribute("class", cls);
+      e.setAttribute("d", p);
+      e.setAttribute("vector-effect", "non-scaling-stroke");
+      return e;
+    };
+    svg.setAttribute("viewBox", "0 0 " + (W - 1) + " " + H);
+    svg.replaceChildren(path("th", "M0 " + y(-75) + "H" + W));
+    if (gaps) svg.appendChild(path("gap", gaps));
+    if (d) svg.appendChild(path("ln", d));
+    svg.setAttribute("aria-label", n ? "Signal over the last " + span(W * step) + ": " + lo + " to " + hi
+      + " dBm" + (weak ? ", weak for " + span(weak * step) : "") : "No signal readings yet");
+  };
+  const renderWifi = () => {
+    const w = S && S.wifi;
+    $("#wifiDiag").hidden = !w;
+    if (!w) return;
+    $("#rssi").textContent = w.rssi != null ? w.rssi + " dBm" : "Not connected";
+    $("#wifiWeak").hidden = !w.weak;
+    const hist = w.hist || [], step = w.step || 300;
+    $("#wifiSparkBox").hidden = hist.length < 2;
+    if (hist.length >= 2) {
+      drawSpark($("#wifiSpark"), hist, step);
+      $("#wifiFrom").textContent = (hist.length * step >= 86400 ? "24 h" : span(hist.length * step)) + " ago";
+    }
+    // Up less than a day (by the history), every drop since start is in the day.
+    const day = hist.length > 0 && hist.length * step < 86400;
+    const count = day ? w.drops : w.day;
+    $("#wifiDrops").textContent = (count || "None") + (count ? (day ? " since start" : " in 24 h") : "");
+    const causes = Object.entries(w.causes || {}).filter(([k]) => k !== "roam");
+    let line = "";
+    if (w.last) {
+      line = "Last: " + (WIFI_CAUSES[w.last] || "other") + ", " + span(w.last_ago) + " ago"
+        + (w.last_down != null ? ", back in " + span(w.last_down) : "");
+      if (causes.length > 1) line += ". " + causes.map(([k, c]) => c + " " + (WIFI_CAUSES[k] || k)).join(", ");
+    }
+    $("#wifiLast").textContent = line;
   };
 
   // After an install the device reboots. The event stream only retries every
@@ -1269,12 +1375,14 @@
     fwDetailInflight = false;
   };
 
-  // true if a is newer than b, false if older, null if either is unreadable
+  // true if a is newer than b, false if older, null if either is unreadable.
+  // A beta's build number ("2026.10.0-beta.812") counts as a fourth part, as
+  // in the firmware (auto_update.h), so a beta is newer than its plain number.
   const isNewer = (a, b) => {
-    const parse = (v) => String(v || "").replace(/^v/, "").split(".").map((n) => parseInt(n, 10));
+    const parse = (v) => String(v || "").replace(/^v/, "").replace("-beta.", ".").split(".").map((n) => parseInt(n, 10));
     const pa = parse(a), pb = parse(b);
     if (pa.length < 3 || pb.length < 3 || pa.some(isNaN) || pb.some(isNaN)) return null;
-    for (let i = 0; i < 3; i++) { if (pa[i] !== pb[i]) return pa[i] > pb[i]; }
+    for (let i = 0; i < 4; i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x > y; }
     return false;
   };
 
@@ -1409,7 +1517,7 @@
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "RSSI": if (!(S && S.wifi)) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
       case "Free Heap (PSRAM)": $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };
