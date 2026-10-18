@@ -3670,7 +3670,7 @@ static void test_health_json() {
   h.espn_status = 200;
   h.espn_ago = 9;
   h.version = "2026.10.0";
-  h.built = "2026-10-17 20:01:00 -0500";
+  h.built = 1792285260;  // 2026-10-18 1:01 AM UTC
   h.channel = "beta";
   char buf[512];
   int n = health_json(buf, sizeof(buf), h);
@@ -3678,7 +3678,7 @@ static void test_health_json() {
   CHECK_EQ(std::string(buf),
            std::string("{\"up\":7260,\"start\":\"restart\",\"boots\":3,\"fault\":\"brownout\",\"fault_ago\":9000,"
                        "\"heap_kb\":143.2,\"block_kb\":40.0,\"psram_kb\":4100.5,\"rssi\":-58,\"espn\":200,"
-                       "\"espn_ago\":9,\"version\":\"2026.10.0\",\"built\":\"2026-10-17 20:01:00 -0500\","
+                       "\"espn_ago\":9,\"version\":\"2026.10.0\",\"built\":1792285260,"
                        "\"channel\":\"beta\"}"));
   // Parses, and the optional keys go when they mean nothing.
   JsonDocument doc;

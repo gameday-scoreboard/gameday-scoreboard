@@ -1226,11 +1226,15 @@
     $("#hEspn").textContent = h.espn == null ? "None yet"
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + ago(h.espn_ago) + " ago";
     const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
-    $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (h.built ? ", built " + h.built : "");
+    // The build time comes in Unix seconds; shown in the browser's own time
+    const b = h.built ? new Date(h.built * 1000) : null;
+    const builtText = b ? b.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
+      b.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
     // Live here, so they no longer wait on the RSSI and heap sensors, which
     // are off until someone turns them on in Home Assistant.
     $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
-    $("#psram").textContent = Math.round(h.psram_kb) + " KiB";
+    $("#psram").textContent = h.psram_kb ? Math.round(h.psram_kb) + " KiB" : "";
   };
 
   // After an install the device reboots. The event stream only retries every
