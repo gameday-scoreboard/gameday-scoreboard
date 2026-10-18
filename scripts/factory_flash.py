@@ -363,7 +363,12 @@ def flash_one(args, image, image_sha, version, out, qc_flag):
                 row["result"] = "wrong version"
                 save(log_path, lambda: append_log(log_path, row))
                 raise RuntimeError(f"{name} runs firmware {seen}, expected {version}. No label printed.")
-        if press_wait and qc:
+        if press_wait and not qc:
+            row["result"] = "no QC"
+            save(log_path, lambda: append_log(log_path, row))
+            raise RuntimeError(f"QC never started on {name}, so it wasn't checked. Run it again, or pass "
+                               "--qc-wait 0 to label without the check. No label printed.")
+        if press_wait:
             if not pressed:
                 row["result"] = "no QC press"
                 save(log_path, lambda: append_log(log_path, row))
@@ -455,7 +460,10 @@ def selftest():
             return False
 
         def read(self, n):
-            return FakeSerial.script.pop(0).encode() if FakeSerial.script else b""
+            if FakeSerial.script:
+                return FakeSerial.script.pop(0).encode()
+            time.sleep(0.01)
+            return b""
 
     fake = types.ModuleType("serial")
     fake.Serial = FakeSerial
