@@ -39,6 +39,10 @@ is the short version.
   `docs/site/diy` is the page for DIY owners (boards, panels, wiring);
   keep it in step with `firmware/controllers/` and the README's Hardware
   section.
+- `docs/wiki`: the documentation site (Astro + Starlight), published to
+  docs.gameday-scoreboard.com from `main`. Pages are markdown under
+  `docs/wiki/src/content/docs/`; `docs/wiki/README.md` has the
+  conventions.
 - `scripts`: generators (`build_web.py`, `build_teams.py`,
   `build_team_colors.py`, `build_timezones.py`), release notes and
   factory tools.
@@ -103,3 +107,10 @@ is the short version.
 - Team logos come from ESPN at runtime. Don't commit league or team logos.
 - Version bumps and CHANGELOG sections are written by maintainers at
   release time. Leave both alone in a feature PR.
+- A change an owner or DIY builder can see or do comes with its docs
+  page, updated or added under `docs/wiki/src/content/docs/` in the same
+  PR. CI's "Docs updated" job fails a PR into `dev` that touches
+  `firmware/` or `components/` without one, unless the PR carries the
+  label `docs: not needed`. Describe behavior `main` doesn't have yet in a
+  `:::note[Coming in the next release]` aside. `npm run build` in
+  `docs/wiki` must pass.

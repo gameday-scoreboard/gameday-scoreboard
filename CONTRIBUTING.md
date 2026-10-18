@@ -46,8 +46,10 @@ more than anything.
 Issues are public. Leave out Wi-Fi passwords and anything else private.
 
 Bought a scoreboard and need help with it? The
-[support page](https://gamedayscoreboard.app/support/) has the common
-fixes and the support email, which answers faster than an issue.
+[docs](https://docs.gameday-scoreboard.com/) cover setup, every setting
+and the common fixes, and the
+[support page](https://gamedayscoreboard.app/support/) has the support
+email, which answers faster than an issue.
 
 ## Changing the code
 
@@ -121,6 +123,19 @@ fails the PR if it is stale.
 If you change what the panel does, run it on a panel for a while
 (during a game if the change touches live scoring) and say in the PR
 what you tested on: controller, layout, how long, what it showed.
+
+### Docs
+
+The docs at [docs.gameday-scoreboard.com](https://docs.gameday-scoreboard.com/)
+are built from `docs/wiki` (Astro + Starlight) and publish from `main`,
+so they always describe what customers run. If your change alters what
+the panel shows, a setting, a button hold or anything else an owner or
+DIY builder would notice, update or add the page for it under
+`docs/wiki/src/content/docs/` in the same pull request. CI fails a PR
+into `dev` that changes `firmware/` or `components/` without a docs
+change; a maintainer adds the label `docs: not needed` when nothing
+visible changed. `docs/wiki/README.md` has the page conventions, and
+`npm install` then `npm run dev` in `docs/wiki` previews the site.
 
 ### Style
 

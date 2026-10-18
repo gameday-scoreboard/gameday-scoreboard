@@ -1,0 +1,113 @@
+name: Docs
+
+# Build the documentation site (docs/wiki, Astro + Starlight) and publish it
+# to docs.gameday-scoreboard.com, a Cloudflare Pages project named
+# gameday-docs. The changelog page is generated from CHANGELOG.md at build
+# time, so a change to either one rebuilds the site.
+#
+# A pull request builds the site and stops there, so a broken page or link
+# fails the PR instead of the deploy. Only main publishes: a push to main
+# deploys, and a run by hand deploys whatever ref it runs on, with a warning
+# when that isn't main because the live docs then describe that branch.
+#
+# Needs two repository secrets, the same ones the update mirror uses:
+# CLOUDFLARE_MIRROR_TOKEN (Account, Cloudflare Pages, Edit) and
+# CLOUDFLARE_ACCOUNT_ID. Without them the deploy warns and stops, like
+# scripts/publish_mirror.sh does. The custom domain is added to the Pages
+# project once by hand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/wiki/**"
+      - "CHANGELOG.md"
+  pull_request:
+    paths:
+      - "docs/wiki/**"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warn when a run by hand is not on main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: echo "::warning::This run is on $GITHUB_REF, not main, so the live docs will now describe that branch."
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/wiki/package-lock.json
+      - name: Install
+        working-directory: docs/wiki
+        run: npm ci
+      - name: Build
+        working-directory: docs/wiki
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: docs/wiki/dist
+          retention-days: 7
+
+  deploy:
+    name: Publish docs
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_MIRROR_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: docs-site
+          path: dist
+      - name: Publish to Cloudflare Pages
+        id: publish
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::warning::No Cloudflare token for the docs, so this build was not published"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          project=gameday-docs
+          wrangler() { npx --yes wrangler@4 "$@"; }
+          # Listed first, not piped: grep -q quitting early under pipefail
+          # would read as "no project" and try to create it again.
+          projects=$(wrangler pages project list)
+          if ! grep -qw -- "$project" <<<"$projects"; then
+            wrangler pages project create "$project" --production-branch main
+          fi
+          wrangler pages deploy dist --project-name "$project" --branch main --commit-dirty=true
+          echo "published=true" >> "$GITHUB_OUTPUT"
+      - name: The docs are live
+        env:
+          PUBLISHED: ${{ steps.publish.outputs.published }}
+        run: |
+          set -uo pipefail
+          if [ "$PUBLISHED" != true ]; then
+            echo "::notice::Deploy skipped, so there is nothing to check on docs.gameday-scoreboard.com"
+            exit 0
+          fi
+          code=000
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://docs.gameday-scoreboard.com/?run=$GITHUB_RUN_ID-$i" || true)
+            if [ "$code" = 200 ]; then echo "Live: docs.gameday-scoreboard.com"; exit 0; fi
+            echo "try $i: got $code"
+            sleep 15
+          done
+          echo "::error::docs.gameday-scoreboard.com still returns $code 150 seconds after deploying"
+          exit 1

@@ -19,6 +19,17 @@ contributors; read it too.
   notes, specs, plans or reviews here: only product code, CHANGELOG, README
   and the site. Maintainer notes are kept privately and loaded through a
   gitignored CLAUDE.local.md.
+- The docs site (docs/wiki, Astro + Starlight, live at
+  docs.gameday-scoreboard.com from `main`) is part of every change. A PR
+  that changes what an owner or DIY builder sees or does updates or adds
+  the page for it under docs/wiki/src/content/docs/ in the same PR; CI
+  ("Docs updated") fails a PR into `dev` that touches firmware/ or
+  components/ without a docs change unless it carries the label
+  `docs: not needed`. Behavior that `main` doesn't have yet goes in a
+  `:::note[Coming in the next release]` aside, removed at release time.
+  Docs describe the firmware on the branch they sit on, written for the
+  owner, no internal names, cards or notes. `cd docs/wiki && npm run
+  build` must pass.
 - PR descriptions say what changed and how it was tested, nothing else: no
   links to private repos or trackers, no card numbers or `Closes` lines
   for them, no private notes. No AI attribution or Claude-headed
