@@ -181,13 +181,19 @@ static json::SpiRamAllocator json_psram;  // NOLINT(cppcoreguidelines-avoid-non-
 #endif
 
 #ifdef USE_WIFI
-// The reason of the newest STA disconnect, set on the event task. ESPHome's
-// own handler logs it but keeps nothing; wifi_tick_() reads it when the link
-// goes down, and the sequence says whether one came since the link was up.
+// The reason the connection ended, set on the event task. ESPHome's own
+// handler logs it but keeps nothing; wifi_tick_() reads it when the link goes
+// down, and the sequence says whether one came since the link was up.
 static std::atomic<int> wifi_reason{0};           // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static std::atomic<uint32_t> wifi_reason_seq{0};  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 static void on_wifi_disconnected(void *, esp_event_base_t, int32_t, void *data) {
+  // ESPHome marks the link down when its main loop handles this same event,
+  // so the one that ended a connection still finds it up. The retries after
+  // it (no AP found, a failed sign-in) don't, and keep the first reason.
+  auto *w = wifi::global_wifi_component;
+  if (w != nullptr && !w->is_connected())
+    return;
   wifi_reason.store(((wifi_event_sta_disconnected_t *) data)->reason);
   wifi_reason_seq.fetch_add(1);
 }
