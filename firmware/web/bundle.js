@@ -1132,7 +1132,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       const txt = el("div", "ut");
       const name = n.t.abbr + (n.oa ? " vs " + n.oa : "");
       txt.appendChild(el("div", "n", name));
-      let when = "No game scheduled";
+      let when = n.none ? "No game scheduled" : "Not checked yet";
       if (n.s === "IN") when = n.ts + " - " + n.os + (n.detail ? " · " + n.detail : "");
       else if (n.s === "POST") when = endedAs(n) === "Final" ? "Final " + n.ts + " - " + n.os : endedAs(n);
       else if (n.s === "PRE") when = kickLabel(n.kick, n.tbd) + (n.tv ? " · " + n.tv : "");
