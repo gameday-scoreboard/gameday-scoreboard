@@ -743,6 +743,26 @@ test("a beta is newer than its release number, and a release is behind the beta 
   await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
 });
 
+test("release notes link to the release's section of the site changelog, a beta to its commit", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "" };
+  const commit = "https://github.com/gameday-scoreboard/gameday-scoreboard/commit/abc1234";
+  let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0", release_url: "https://github.com/gameday-scoreboard/gameday-scoreboard/releases/tag/v2026.10.1" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  const link = page.locator("#fwSub a", { hasText: "Release notes" });
+  await page.goto("/");
+  await expect(link).toHaveAttribute("href", "https://gamedayscoreboard.app/changelog/#v2026.10.1");
+
+  // Up to date: the running release's section.
+  entity = { ...fw, state: "NO UPDATE", value: "2026.10.0", current_version: "2026.10.0", release_url: "" };
+  await page.reload();
+  await expect(link).toHaveAttribute("href", "https://gamedayscoreboard.app/changelog/#v2026.10.0");
+
+  entity = { ...fw, value: "2026.10.1-beta.9", current_version: "2026.10.0", release_url: commit };
+  await page.reload();
+  await expect(link).toHaveAttribute("href", commit);
+});
+
 test("a team picked in My team stays on the page through a slow re-read", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

@@ -92,6 +92,8 @@ jobs:
           echo "release $TAG"
           mkdir -p site/firmware
           cp -r docs/site/. site/
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-pre-releases --json tagName,publishedAt > /tmp/releases.json
+          python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json
           ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           RUN=""
           for v in moonhub75 moonhub75-2panel scoreboard75; do

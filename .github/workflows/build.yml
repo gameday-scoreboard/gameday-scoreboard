@@ -60,6 +60,11 @@ jobs:
             echo "summary=Development build" >> "$GITHUB_OUTPUT"
           fi
           cat notes.md
+      # The site's /changelog page is rendered at deploy; fail here first.
+      - name: Changelog page renders
+        run: |
+          cp docs/site/changelog/index.html /tmp/changelog.html
+          python3 scripts/release_notes.py --page /tmp/changelog.html
       - uses: actions/upload-artifact@v7
         with:
           name: release-notes
@@ -156,7 +161,8 @@ jobs:
         run: |
           set -euo pipefail
           summary=$NOTES
-          url="https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          # The release's section of the site's changelog, which this tag's deploy renders.
+          url="https://gamedayscoreboard.app/changelog/#$GITHUB_REF_NAME"
           if [ "$GITHUB_REF" = refs/heads/beta ]; then
             v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
             v="$v-beta.$GITHUB_RUN_NUMBER"
@@ -528,11 +534,16 @@ jobs:
           name: release-notes
           path: notes
       - name: Assemble site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p site/firmware
           # docs/site/. (not docs/site/*) so .well-known/ is copied too.
           cp -r docs/site/. site/
+          # This tag's release is created after the deploy, so its date comes from --date.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-pre-releases --json tagName,publishedAt > /tmp/releases.json
+          python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json --date "$GITHUB_REF_NAME=$(TZ=America/Chicago date +%F)"
           cp -r artifacts/* site/firmware/
           sed -i "s/__VERSION__/${GITHUB_REF_NAME}/g" site/index.html
           ls -R site
