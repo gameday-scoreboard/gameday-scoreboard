@@ -519,19 +519,23 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
   static const char *kDays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char *kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-  int now_day = now_local.tm_year * 366 + now_local.tm_yday;
-  int kick_day = kick_local.tm_year * 366 + kick_local.tm_yday;
-  int diff = kick_day - now_day;
+  // An ESPTime the panel couldn't convert comes out with month and weekday
+  // -1: no kickoff time to show.
+  if (kick_local.tm_mon < 0 || kick_local.tm_mon > 11 || kick_local.tm_wday < 0 || kick_local.tm_wday > 6)
+    return "";
+  int64_t now_day = (int64_t) now_local.tm_year * 366 + now_local.tm_yday;
+  int64_t kick_day = (int64_t) kick_local.tm_year * 366 + kick_local.tm_yday;
+  int64_t diff = kick_day - now_day;
   std::string when;
   if (diff == 0)
     when = "Today";
   else if (diff == 1)
     when = "Tomorrow";
   else if (diff > 1 && diff < 7)
-    when = kDays[kick_local.tm_wday % 7];
+    when = kDays[kick_local.tm_wday];
   else {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon % 12], kick_local.tm_mday);
+    snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon], kick_local.tm_mday);
     when = buf;
   }
   return when + " " + (time_tbd ? std::string("TBD") : clock_12h(kick_local));
@@ -549,10 +553,13 @@ static int64_t epoch_from_civil(int y, int mo, int d, int h, int mi, int sec) {
 }
 
 // "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).
+// The field widths keep a run of digits from overflowing an int, and a date
+// out of range reads as no date, like garbage does.
 int64_t parse_iso8601_z(const std::string &s) {
   int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
-  int n = sscanf(s.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &sec);
-  if (n < 5)
+  int n = sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &sec);
+  if (n < 5 || y < 1970 || mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59 ||
+      sec < 0 || sec > 60)
     return 0;
   return epoch_from_civil(y, mo, d, h, mi, sec);
 }
