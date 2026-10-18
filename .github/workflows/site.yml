@@ -1,6 +1,7 @@
 name: Site
 
-# Republish gamedayscoreboard.app when only docs/site changed, without a
+# Republish gamedayscoreboard.app, and the update mirror
+# (scripts/publish_mirror.sh), when only docs/site changed, without a
 # firmware release. The firmware files come from the latest release tag's
 # firmware-moonhub75.zip asset, so panels see the same manifest and binaries
 # they saw before. Falls back to the tag's Build artifact for a release that
@@ -126,6 +127,7 @@ jobs:
       # so check the beta really went live instead of leaving the bars on the
       # old one without a word. The query string gets past the CDN's cache.
       - name: The beta channel is live
+        id: beta_live
         run: |
           set -uo pipefail
           m=site/firmware/beta/scoreboard75/manifest.json
@@ -139,3 +141,12 @@ jobs:
           done
           echo "::error::gamedayscoreboard.app still serves beta '$got' 10 minutes after deploying $want"
           exit 1
+      # The same update feed on updates.gameday-scoreboard.com, which panels
+      # read when gamedayscoreboard.app fails. Goes even if the check above
+      # gave up on GitHub Pages.
+      - name: Publish the update mirror
+        if: success() || steps.beta_live.outcome == 'failure'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_MIRROR_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/publish_mirror.sh site

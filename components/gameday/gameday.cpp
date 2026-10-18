@@ -79,9 +79,10 @@ static const char *const HTTP_CLOCK_URL = "https://site.api.espn.com/apis/site/v
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // Install updates automatically: how often loop() looks, and how long a
-// manifest read gets before its answer is used (the HTTP timeout is 20 s).
+// manifest read gets before its answer is used (the HTTP timeout is 20 s,
+// and a failed read is followed by one from the mirror, update_mirror.h).
 static const uint32_t AUTO_UPDATE_TICK = 10 * 1000;
-static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
+static const uint32_t AUTO_UPDATE_CHECK_WAIT = 2 * MINUTE;
 // After an install, how long the new firmware runs before the update counts
 // as taken: past safe_mode's one minute, when the bootloader can no longer
 // roll it back.
@@ -308,6 +309,15 @@ void GamedayComponent::setup() {
   this->apply_channel_();
 #endif
   this->settle_update_mark_();
+#ifdef GAMEDAY_UPDATE_MIRROR
+  // Any state the update entity publishes while it points at the mirror is
+  // the mirror's answer (a failed read publishes nothing; mirror_tick_).
+  if (this->mirror_update_ != nullptr)
+    this->mirror_update_->add_on_state_callback([this]() {
+      if (this->on_mirror_)
+        this->mirror_answered_ = true;
+    });
+#endif
 #ifdef GAMEDAY_BAR
   this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
   if (!this->bar_pref_.load(&this->now_tried_))
@@ -944,6 +954,9 @@ void GamedayComponent::loop() {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
   }
+#ifdef GAMEDAY_UPDATE_MIRROR
+  this->mirror_tick_();
+#endif
   this->captive_tick_();
   this->wifi_tick_();
 #ifdef GAMEDAY_DEMO
@@ -1270,8 +1283,70 @@ void GamedayComponent::set_follow_beta(bool on) {
 
 #ifdef GAMEDAY_BETA_CHANNEL
 void GamedayComponent::apply_channel_() {
+#ifdef GAMEDAY_UPDATE_MIRROR
+  this->on_mirror_ = false;
+#endif
   if (this->beta_update_ != nullptr)
     this->beta_update_->set_source_url(this->follow_beta() ? this->beta_source_ : this->stable_source_);
+}
+#endif
+
+#ifdef GAMEDAY_UPDATE_MIRROR
+// Points the update entity back at the primary host for its channel.
+void GamedayComponent::use_primary_() {
+#ifdef GAMEDAY_BETA_CHANNEL
+  this->apply_channel_();
+#else
+  this->on_mirror_ = false;
+  this->mirror_update_->set_source_url(this->primary_source_);
+#endif
+}
+
+// A failed manifest read or install on the primary gets one read from the
+// mirror right away (update_mirror.h). Runs every loop: a refused connection
+// fails in well under a second.
+void GamedayComponent::mirror_tick_() {
+  http_request::HttpRequestUpdate *u = this->mirror_update_;
+  if (u == nullptr)
+    return;
+  ::espn::MirrorInputs in;
+  in.on_mirror = this->on_mirror_;
+  in.error = u->status_has_error();
+  in.answered = this->mirror_answered_;
+  in.waited_ms = millis() - this->mirror_since_ms_;
+  switch (::espn::mirror_step(in)) {
+    case ::espn::MirrorStep::NONE:
+      break;
+    case ::espn::MirrorStep::TRY_MIRROR: {
+      const char *mirror = this->follow_beta() ? this->beta_mirror_source_ : this->mirror_source_;
+      ESP_LOGW(TAG, "Update feed failed; reading the mirror %s", mirror);
+      this->on_mirror_ = true;
+      this->mirror_answered_ = false;
+      this->mirror_since_ms_ = millis();
+      u->set_source_url(mirror);
+      // So the mirror's own failure shows (FAILED below).
+      u->status_clear_error();
+      u->update();
+      break;
+    }
+    case ::espn::MirrorStep::ANSWERED:
+      // update_info keeps the mirror's firmware URL, so an install of this
+      // update downloads from the mirror.
+      ESP_LOGI(TAG, "Update mirror answered: %s at %s", u->update_info.latest_version.c_str(),
+               u->update_info.firmware_url.c_str());
+      this->use_primary_();
+      break;
+    case ::espn::MirrorStep::FAILED:
+      // Cleared, or the next failure on the primary would look like this one.
+      ESP_LOGW(TAG, "Update mirror failed too; the next check starts with the primary");
+      u->status_clear_error();
+      this->use_primary_();
+      break;
+    case ::espn::MirrorStep::TIMED_OUT:
+      ESP_LOGW(TAG, "Update mirror didn't answer; the next check starts with the primary");
+      this->use_primary_();
+      break;
+  }
 }
 #endif
 
