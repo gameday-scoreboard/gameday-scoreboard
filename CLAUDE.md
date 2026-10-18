@@ -32,10 +32,13 @@ contributors; read it too.
   `beta`. Release tags go on `main`. CI fails a PR into `beta` or `main`
   from any other branch and refuses to publish a tag that isn't on `main`.
 - ESPHome versions by channel: `dev` and `beta` may pin an ESPHome beta;
-  `main` and release tags build only on a final release. A fix that is only
-  in a beta: copy the component into `components/` and stay on the final,
-  wait for the final or ask for a patch-release backport, or Brandon's
-  override label on the promotion PR. Diagram in CONTRIBUTING.md.
+  `main` and release tags build only on a final release. The pin is
+  `ESPHOME_VERSION` at the top of build.yml, and CI (Branch rules) fails a
+  PR into `main` or a `v*` tag when it isn't a final like `2026.10.0`. A fix
+  that is only in a beta: copy the component into `components/` and stay
+  on the final, wait for the final or ask for a patch-release backport, or
+  Brandon's `esphome-beta-ok` label on the promotion PR (then re-run the
+  job). Diagram in CONTRIBUTING.md.
 - Product is not part of Apollo Automation. Brand is "Game Day Scoreboard".
 - Decisions not to reopen without Brandon: OTA with no password, `api:` with
   no key, the device web page open ("panel trusts the home network"). Do not

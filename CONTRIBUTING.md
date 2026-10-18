@@ -64,7 +64,10 @@ the shape before you spend the time.
 Work lands in `dev`, moves to `beta` (the test channel that the bar
 panels install from), and then to `main`, which customers run. `dev` and
 `beta` may build on an ESPHome beta. `main`, and so every release tag and
-the update feed, builds only on a final ESPHome release.
+the update feed, builds only on a final ESPHome release. CI checks it: the
+pin is `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, and
+the Branch rules job fails a PR into `main` or a release tag when that pin
+isn't a final release like `2026.10.0`.
 
 ```mermaid
 flowchart LR
@@ -88,8 +91,9 @@ A fix we want that is only in an ESPHome beta, in order:
    The Bluetooth setup component is carried this way today.
 2. Wait for the final, or ask upstream for a backport to a patch release.
    An ESPHome beta runs about two weeks.
-3. The maintainer's override label on the promotion PR, for a fix
-   customers can't wait for.
+3. The maintainer's `esphome-beta-ok` label on the promotion PR, for a
+   fix customers can't wait for. Add it, then re-run the Branch rules job;
+   the release tag on that PR's merge passes too.
 
 ### Setup
 

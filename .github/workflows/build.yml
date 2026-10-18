@@ -20,6 +20,12 @@ on:
 permissions:
   contents: read
 
+# The ESPHome every build job uses (the ESPHome beta job aside). dev and beta
+# may pin an ESPHome beta; main and release tags need a final release, which
+# Branch rules checks.
+env:
+  ESPHOME_VERSION: "2026.10.0b3"
+
 # A newer push to the same ref cancels the older run. That stays on for dev
 # too: a merge that lands within a few minutes of the last one leaves the
 # earlier merge commit with a cancelled run and no artifacts, but dev's newest
@@ -73,11 +79,15 @@ jobs:
   branch-rules:
     # Work lands in dev. beta only takes changes promoted from dev, and main
     # (what customers run) only takes changes promoted from beta; only a tag
-    # on main publishes to the flasher and the panels. The
-    # checks are steps, not job conditions, so the job passes (rather than
+    # on main publishes to the flasher and the panels, and main builds only on
+    # a final ESPHome release. The checks are steps, not job conditions, so the job passes (rather than
     # skips) when they don't apply and build still runs.
     name: Branch rules
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The override label on a promotion PR.
+      pull-requests: read
     steps:
       - name: PRs into beta come from dev
         if: github.event_name == 'pull_request' && github.base_ref == 'beta'
@@ -99,6 +109,46 @@ jobs:
             echo "::error::main only takes PRs from beta (this one is from $HEAD_REPO:$HEAD_REF). Target beta instead."
             exit 1
           fi
+      # Customers run main, so main and release tags build only on a final
+      # ESPHome release, like 2026.10.0. The maintainer's esphome-beta-ok
+      # label lets one promotion PR through, and the tag on its merge. Labels
+      # come from the API, not the event, so re-running this job after adding
+      # the label sees it.
+      - name: main builds on a final ESPHome
+        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          final='^[0-9]+\.[0-9]+\.[0-9]+$'
+          # Check the pattern itself first, so an edit can't quietly weaken it.
+          for v in 2026.10.0 2026.9.12; do
+            grep -qE "$final" <<< "$v" || { echo "::error::The final-release pattern misses $v"; exit 1; }
+          done
+          for v in 2026.10.0b3 2026.10.0-dev beta latest dev; do
+            grep -qE "$final" <<< "$v" && { echo "::error::The final-release pattern wrongly takes $v"; exit 1; }
+          done
+          if grep -qE "$final" <<< "$ESPHOME_VERSION"; then
+            echo "ESPHome $ESPHOME_VERSION is a final release."
+            exit 0
+          fi
+          if [ -n "$PR" ]; then
+            prs=$PR
+          else
+            # A tag: the promotion PR that merged this commit into main.
+            prs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+                    --jq '.[] | select(.base.ref == "main" and .merged_at != null) | .number')
+          fi
+          for n in $prs; do
+            ok=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$n" --jq '.labels[] | select(.name == "esphome-beta-ok") | .name')
+            if [ -n "$ok" ]; then
+              echo "::warning::ESPHome $ESPHOME_VERSION is a beta. Building it for main anyway: PR #$n has the esphome-beta-ok label."
+              exit 0
+            fi
+          done
+          echo "::error file=.github/workflows/build.yml::ESPHOME_VERSION is $ESPHOME_VERSION, a beta. main and release tags build only on a final ESPHome release: move the pin to a final release on dev, then promote again. To ship this beta anyway, the maintainer adds the esphome-beta-ok label to the promotion PR and re-runs this job."
+          exit 1
       - uses: actions/checkout@v7
         with:
           # Tags need history for the main check. The quotes matter: a bare 0
@@ -177,7 +227,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: ${{ steps.beta.outputs.url }}
@@ -275,7 +325,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
       - uses: actions/upload-artifact@v7
         with:
           name: demo-${{ matrix.variant }}
@@ -334,7 +384,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}

@@ -47,7 +47,8 @@ is the short version.
 
 ## Build and test
 
-- ESPHome 2026.10.0b3, the version CI pins. Use `esphome compile
+- ESPHome 2026.10.0b3, the version CI pins (`ESPHOME_VERSION` in
+  `.github/workflows/build.yml`). Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
 - Host tests: `make -C tests` (needs g++). CI also builds
