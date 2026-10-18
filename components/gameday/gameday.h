@@ -24,6 +24,7 @@
 #include "badge.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "health.h"
 #include "offseason.h"
 #include "recap.h"
 #include "poll_timing.h"
@@ -265,6 +266,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void setup() override;
   void loop() override;
   void dump_config() override;
+  // Marks the restart as asked for, in the boot log (health.h).
+  void on_shutdown() override;
   float get_setup_priority() const override { return setup_priority::LATE; }
 
   // AsyncWebHandler (HTTP task)
@@ -291,6 +294,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();
+  // The "health" object, read live on each GET /gameday/state (HTTP task).
+  std::string health_json_();
+  ::espn::Restart start_reason_{::espn::Restart::NONE};
+  bool boot_clock_noted_{false};  // boot_log_clock() ran
   std::mutex state_mutex_;
   std::string state_json_{"{}"};
   UpdateFields last_fields_;
@@ -757,6 +764,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};
+  // The last scoreboard or schedule read: its HTTP status (0 for no answer)
+  // and millis() when it came, 0 before the first. Fetch task, HTTP task.
+  std::atomic<int> espn_status_{0};
+  std::atomic<uint32_t> espn_answer_ms_{0};
 };
 
 class UpdateTrigger : public Trigger<const UpdateFields &> {

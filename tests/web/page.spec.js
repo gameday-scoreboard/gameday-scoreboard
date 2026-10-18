@@ -854,6 +854,50 @@ test("the device box shows what the panel downloaded from ESPN", async ({ page, 
   await expect(page.locator("#espnData")).toHaveText("");
 });
 
+test("diagnostics say why the panel restarted and how it is doing", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#health")).toBeVisible();
+  await expect(page.locator("#hStart")).toHaveText("Restart, 2 h 1 min ago");
+  await expect(page.locator("#hBoots")).toHaveText("Start 2 since the power came on");
+  await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
+  await expect(page.locator("#hHeap")).toHaveText("143 KiB, largest piece 40 KiB");
+  await expect(page.locator("#hEspn")).toHaveText("OK, 9 s ago");
+  await expect(page.locator("#hFw")).toHaveText("1.5.4 stable, built 2026-10-17 20:01:00 -0500");
+  await expect(page.locator("#rssi")).toHaveText("-58 dBm");
+  await expect(page.locator("#psram")).toHaveText("4101 KiB");
+
+  // Pulled power: this start is the power coming on, nothing went wrong
+  // since, and ESPN didn't answer the last read.
+  const h = (await deviceState(request)).health;
+  await reset(request, {
+    health: { ...h, start: "power", boots: 1, up: 45, fault: undefined, fault_ago: undefined, rssi: undefined,
+              espn: 0, espn_ago: 130, channel: "beta" },
+  });
+  await page.reload();
+  await expect(page.locator("#hStart")).toHaveText("Power on, 45 s ago");
+  await expect(page.locator("#hBoots")).toHaveText("");
+  await expect(page.locator("#hFault")).toHaveText("None");
+  await expect(page.locator("#hEspn")).toHaveText("No answer, 2 min ago");
+  await expect(page.locator("#hFw")).toHaveText("1.5.4 beta, built 2026-10-17 20:01:00 -0500");
+  await expect(page.locator("#rssi")).toHaveText("Not connected");
+
+  // A brownout whose time isn't known, before the first ESPN read.
+  await reset(request, {
+    health: { ...h, start: "brownout", fault: "brownout", fault_ago: undefined, espn: undefined, espn_ago: undefined },
+  });
+  await page.reload();
+  await expect(page.locator("#hStart")).toHaveText("Power dip (brownout), 2 h 1 min ago");
+  await expect(page.locator("#hFault")).toHaveText("Power dip (brownout)");
+  await expect(page.locator("#hEspn")).toHaveText("None yet");
+
+  // Firmware from before the health block.
+  await reset(request, { health: null });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#health")).toBeHidden();
+});
+
 test("saved Wi-Fi networks are listed in order and one can be forgotten", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

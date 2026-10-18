@@ -218,6 +218,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+        <div class="sub">Diagnostics</div>
+        <div id="health" hidden>
+          <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+          <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+          <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+          <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+          <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+        </div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
         <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
@@ -1177,6 +1185,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
     renderData();
+    renderHealth();
   };
 
   const renderData = () => {
@@ -1185,6 +1194,40 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const size = kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(kb < 100000 ? 1 : 0) + " MB";
     const reads = S.espn_reads || 0;
     $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
+  };
+
+  // The health block (components/gameday/health.h). Firmware before it sends
+  // none, and the rows stay hidden.
+  const RESTARTS = {
+    power: "Power on", restart: "Restart", update: "Update", crash: "Crash", watchdog: "Froze (watchdog)",
+    brownout: "Power dip (brownout)", usb: "USB reset",
+  };
+  const restartName = (k) => RESTARTS[k] || "Other";
+  const ago = (s) => {
+    if (s < 60) return s + " s";
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + " min";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+    return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
+  };
+  const renderHealth = () => {
+    const h = S && S.health;
+    $("#health").hidden = !h;
+    if (!h) return;
+    $("#hStart").textContent = restartName(h.start) + ", " + ago(h.up) + " ago";
+    $("#hBoots").textContent = h.boots > 1 ? "Start " + h.boots + " since the power came on" : "";
+    $("#hFault").textContent = !h.fault ? "None"
+      : restartName(h.fault) + (h.fault_ago != null ? ", " + ago(h.fault_ago) + " ago" : "");
+    $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
+    $("#hEspn").textContent = h.espn == null ? "None yet"
+      : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + ago(h.espn_ago) + " ago";
+    const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
+    $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (h.built ? ", built " + h.built : "");
+    // Live here, so they no longer wait on the RSSI and heap sensors, which
+    // are off until someone turns them on in Home Assistant.
+    $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
+    $("#psram").textContent = Math.round(h.psram_kb) + " KiB";
   };
 
   // After an install the device reboots. The event stream only retries every
@@ -1435,8 +1478,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
-      case "Free Heap (PSRAM)": $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
+      case "RSSI": if (!(S && S.health)) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "Free Heap (PSRAM)": if (!(S && S.health)) $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };
 
