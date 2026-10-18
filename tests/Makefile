@@ -34,6 +34,17 @@ build/replay: replay.cpp $(filter-out test_parse.cpp golden_football.cpp test_se
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) replay.cpp $(filter-out test_parse.cpp golden_football.cpp test_set.cpp,$(SRCS)) -o $@ $(LDFLAGS)
 
+# Not part of `all`: the memory each ESPN read takes, as JSON for
+# scripts/size_budget.py (CI's budget check, firmware/budget.json).
+#   make heap              writes build/heap.json and prints it
+heap: build/heap_budget
+	./build/heap_budget > build/heap.json
+	cat build/heap.json
+
+build/heap_budget: heap_budget.cpp $(filter-out test_parse.cpp golden_football.cpp test_set.cpp,$(SRCS)) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) heap_budget.cpp $(filter-out test_parse.cpp golden_football.cpp test_set.cpp,$(SRCS)) -o $@ $(LDFLAGS)
+
 # Not part of `all`: fuzzing. fuzz_espn runs mutated ESPN documents through
 # every parser, the text code and the finals rotation; fuzz_set runs mutated
 # set requests through the device page's parser. Both build with the address
@@ -88,4 +99,4 @@ fuzz-long:
 
 clean:
 	rm -rf build
-.PHONY: all clean replay fuzz fuzz-long
+.PHONY: all clean replay heap fuzz fuzz-long
