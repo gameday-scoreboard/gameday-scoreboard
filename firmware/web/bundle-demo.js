@@ -1414,6 +1414,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       })
       .catch(() => {});
   };
+  // A release has its own section on the site's changelog, in owner words; a
+  // beta has none, so it keeps the manifest's link to its commit.
+  const notesLink = (u) =>
+    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://gamedayscoreboard.app/changelog/#v" + u.value : u.release_url;
   let installing = false;
   const renderUpdate = (u) => {
     const box = $("#fw");
@@ -1451,9 +1455,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       $("#fwText").textContent = "Firmware " + cur;
       sub.textContent = "Not checked yet. It checks a few seconds after the clock syncs, or tap Check for updates.";
     }
-    if (u.release_url && !st.includes("INSTALLING")) {
+    const notesUrl = notesLink(u);
+    if (notesUrl && !st.includes("INSTALLING")) {
       const a = el("a", null, "Release notes");
-      a.href = u.release_url;
+      a.href = notesUrl;
       a.target = "_blank";
       a.rel = "noopener";
       sub.appendChild(document.createTextNode(sub.textContent ? " " : ""));

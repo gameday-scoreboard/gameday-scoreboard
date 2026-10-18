@@ -33,9 +33,12 @@ is the short version.
 - `firmware/pages`: the LVGL pages drawn on the panel.
 - `firmware/web`: the device page. `bundle.js` is generated from `app.js`
   and `app.css`.
-- `docs/site`: the installer and support site. `docs/site/diy` is the
-  page for DIY owners (boards, panels, wiring); keep it in step with
-  `firmware/controllers/` and the README's Hardware section.
+- `docs/site`: the installer and support site. Every page needs its own
+  title, description, canonical link and share tags;
+  `python3 scripts/site_seo.py check docs/site` lists what's missing.
+  `docs/site/diy` is the page for DIY owners (boards, panels, wiring);
+  keep it in step with `firmware/controllers/` and the README's Hardware
+  section.
 - `scripts`: generators (`build_web.py`, `build_teams.py`,
   `build_team_colors.py`, `build_timezones.py`), release notes and
   factory tools.

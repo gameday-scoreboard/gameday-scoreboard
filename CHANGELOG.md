@@ -8,6 +8,11 @@ matching section fails the build.
 Format: `## vX.Y.Z` heading, then short bullets written for the person who
 owns the panel, not for the code.
 
+The site renders this file to gamedayscoreboard.app/changelog, newest first,
+with a one-line summary for each release: the first sentence of the first
+bullet, or a plain line between the heading and the bullets when a release
+needs a better one. Panels link to their release's section there.
+
 ## v2026.10.0
 
 - Pick a team from MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS or the Premier League on the device page, and the panel follows it the way it follows football.
