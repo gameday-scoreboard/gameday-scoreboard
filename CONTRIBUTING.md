@@ -15,11 +15,13 @@ furthest right now:
   ESPN takes back a play later. An issue with the league, the time and a
   photo of the panel is enough to go on.
 - Record the ESPN response for a game we have no test for. The host tests
-  run against real ESPN documents in `tests/fixtures`, and its README
-  says how each one was recorded. A suspended game, a shootout or a
-  neutral-site bowl, saved as a fixture with a test for what the panel
-  should show, stays covered from then on. This one needs only g++ and
-  some C++.
+  run against real ESPN documents in `tests/fixtures`. Its README lists
+  the ones we have and how each was recorded: `curl` with the User-Agent
+  ESPN accepts, while the game is in the state you want. A rain delay, a
+  suspended baseball game, an NFL game in overtime or a college
+  basketball game in progress, saved as a fixture with a test for what
+  the panel should show, stays covered from then on. This one needs only
+  curl, g++ and some C++.
 - Get it running on a board we haven't tested, like the Waveshare
   ESP32-S3 RGB Matrix. A pin map in `firmware/controllers/` and a line on
   the [DIY page](docs/site/diy/index.html) make a good first pull
