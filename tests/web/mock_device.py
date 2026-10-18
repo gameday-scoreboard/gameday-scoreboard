@@ -89,7 +89,7 @@ INITIAL = {
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
     "autoupd": False, "beta": False,
-    "misses": 0, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
+    "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
                "heap_kb": 143.2, "block_kb": 40.0, "psram_kb": 4100.5, "rssi": -58, "espn": 200,
