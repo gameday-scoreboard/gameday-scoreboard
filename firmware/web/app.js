@@ -1222,7 +1222,7 @@
     const y = (v) => (H - 2 - (Math.min(-35, Math.max(-95, v)) + 95) / 60 * (H - 4)).toFixed(1);
     let d = "", gaps = "", lo = 0, hi = -127, weak = 0, n = 0;
     hist.forEach((v, i) => {
-      const x = i + 0.5;
+      const x = i;
       if (v == null) { gaps += "M" + x + " " + (H - 3) + "V" + H; return; }
       d += (i > 0 && hist[i - 1] != null ? "L" : "M") + x + " " + y(v);
       if (i === hist.length - 1 || hist[i + 1] == null) d += "h0.01";  // a lone point still shows
@@ -1236,7 +1236,7 @@
       e.setAttribute("vector-effect", "non-scaling-stroke");
       return e;
     };
-    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("viewBox", "0 0 " + (W - 1) + " " + H);
     svg.replaceChildren(path("th", "M0 " + y(-75) + "H" + W));
     if (gaps) svg.appendChild(path("gap", gaps));
     if (d) svg.appendChild(path("ln", d));
