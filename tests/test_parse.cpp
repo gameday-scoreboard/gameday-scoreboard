@@ -13,6 +13,7 @@
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "health.h"
 #include "logo_lru.h"
 #include "offseason.h"
 #include "panel_text.h"
@@ -3615,6 +3616,139 @@ static bool panel_drawable(const std::string &s) {
   return true;
 }
 
+static void test_boot_log() {
+  const int64_t now = 1792000000;  // 2026-10-16
+  const uint32_t build_a = 111, build_b = 222;
+  // RTC memory after a power cut is noise; the log starts over.
+  BootLog log;
+  memset(&log, 0xA5, sizeof(log));
+  CHECK(!boot_log_valid(log));
+  CHECK(boot_log_start(log, kResetPowerOn, build_a, 0) == Restart::POWER);
+  CHECK(boot_log_valid(log));
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  CHECK_EQ(boot_log_fault_ago(log, now, 50), (int64_t) -1);
+
+  // A crash: kept, and as old as the uptime while it's this start.
+  CHECK(boot_log_start(log, kResetPanic, build_a, now) == Restart::CRASH);
+  CHECK_EQ(log.boots, 2u);
+  CHECK(log.fault == (uint8_t) Restart::CRASH);
+  CHECK_EQ(boot_log_fault_ago(log, now + 600, 600), (int64_t) 600);
+  // The owner presses Reboot: the start says restart, the crash stays.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetSoftware, build_a, now + 3600) == Restart::RESTART);
+  CHECK(log.fault == (uint8_t) Restart::CRASH);
+  CHECK_EQ(boot_log_fault_ago(log, now + 7200, 3600), (int64_t) 7200);
+  // Without a clock, an earlier fault's age isn't known.
+  CHECK_EQ(boot_log_fault_ago(log, 0, 3600), (int64_t) -1);
+
+  // The S3 sometimes reports esp_restart() as a watchdog; the mark says not.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::RESTART);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::WATCHDOG);  // unmarked
+  CHECK(log.fault == (uint8_t) Restart::WATCHDOG);
+
+  // A planned restart into a different build is an update, either way.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::UPDATE);
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::UPDATE);
+  // An unmarked software reset is still a restart, and the mark is used once.
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::RESTART);
+  CHECK_EQ((int) log.planned, 0);
+
+  // A brownout at a start with no clock yet gets its time once it's set.
+  CHECK(boot_log_start(log, kResetBrownout, build_b, 0) == Restart::BROWNOUT);
+  CHECK_EQ(log.fault_at, (int64_t) 0);
+  boot_log_clock(log, 1000);  // not a real time
+  CHECK_EQ(log.fault_at, (int64_t) 0);
+  boot_log_clock(log, now);
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  boot_log_clock(log, now + 5);  // only the first
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now + 60) == Restart::RESTART);
+  boot_log_clock(log, now + 60);  // not this start's fault
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  CHECK_EQ(boot_log_fault_ago(log, now + 90, 30), (int64_t) 90);
+  CHECK(boot_log_start(log, kResetPowerGlitch, build_b, now) == Restart::BROWNOUT);
+
+  // Power: a log that survived it is cleared anyway, faults and all.
+  CHECK(boot_log_start(log, kResetPowerOn, build_b, now) == Restart::POWER);
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  // A flipped bit and the log starts over.
+  CHECK(boot_log_start(log, kResetPanic, build_b, now) == Restart::CRASH);
+  log.boots ^= 4;
+  CHECK(!boot_log_valid(log));
+  CHECK_EQ(boot_log_fault_ago(log, now, 10), (int64_t) -1);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::RESTART);
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  memset(&log, 0, sizeof(log));
+  boot_log_planned(log);  // no effect on an invalid log
+  CHECK(!boot_log_valid(log));
+
+  CHECK(classify_restart(kResetTaskWdt, true, false) == Restart::WATCHDOG);
+  CHECK(classify_restart(kResetIntWdt, false, false) == Restart::WATCHDOG);
+  CHECK(classify_restart(kResetCpuLockup, false, false) == Restart::CRASH);
+  CHECK(classify_restart(kResetUsb, false, false) == Restart::USB);
+  CHECK(classify_restart(kResetExternal, false, false) == Restart::POWER);
+  CHECK(classify_restart(kResetDeepSleep, false, false) == Restart::OTHER);
+  CHECK(classify_restart(99, false, false) == Restart::OTHER);
+  CHECK_EQ(std::string(restart_key(Restart::BROWNOUT)), std::string("brownout"));
+  CHECK_EQ(std::string(restart_key(Restart::OTHER)), std::string("other"));
+}
+
+static void test_health_json() {
+  Health h{};
+  h.uptime_s = 7260;
+  h.start = Restart::RESTART;
+  h.boots = 3;
+  h.fault = Restart::BROWNOUT;
+  h.fault_ago = 9000;
+  h.heap_kb = 143.24f;
+  h.block_kb = 40.0f;
+  h.psram_kb = 4100.5f;
+  h.wifi = true;
+  h.rssi = -58;
+  h.espn_status = 200;
+  h.espn_ago = 9;
+  h.version = "2026.10.0";
+  h.built = 1792285260;  // 2026-10-18 1:01 AM UTC
+  h.channel = "beta";
+  char buf[512];
+  int n = health_json(buf, sizeof(buf), h);
+  CHECK(n > 0 && n < (int) sizeof(buf));
+  CHECK_EQ(std::string(buf),
+           std::string("{\"up\":7260,\"start\":\"restart\",\"boots\":3,\"fault\":\"brownout\",\"fault_ago\":9000,"
+                       "\"heap_kb\":143.2,\"block_kb\":40.0,\"psram_kb\":4100.5,\"rssi\":-58,\"espn\":200,"
+                       "\"espn_ago\":9,\"version\":\"2026.10.0\",\"built\":1792285260,"
+                       "\"channel\":\"beta\"}"));
+  // Parses, and the optional keys go when they mean nothing.
+  JsonDocument doc;
+  CHECK(!deserializeJson(doc, buf));
+  CHECK_EQ(doc["rssi"].as<int>(), -58);
+  h.fault_ago = -1;
+  h.wifi = false;
+  h.espn_ago = -1;
+  health_json(buf, sizeof(buf), h);
+  doc.clear();
+  CHECK(!deserializeJson(doc, buf));
+  CHECK_EQ(std::string(doc["fault"].as<const char *>()), std::string("brownout"));
+  CHECK(doc["fault_ago"].isNull());
+  CHECK(doc["rssi"].isNull());
+  CHECK(doc["espn"].isNull());
+  h.fault = Restart::NONE;
+  h.espn_status = 0;  // no answer
+  h.espn_ago = 30;
+  health_json(buf, sizeof(buf), h);
+  doc.clear();
+  CHECK(!deserializeJson(doc, buf));
+  CHECK(doc["fault"].isNull());
+  CHECK_EQ(doc["espn"].as<int>(), 0);
+  CHECK_EQ(doc["espn_ago"].as<int>(), 30);
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -4085,6 +4219,8 @@ int main() {
   test_auto_update();
   test_update_mirror();
   test_update_mark();
+  test_boot_log();
+  test_health_json();
   test_offseason();
   test_panel_text();
   test_wifi_history();

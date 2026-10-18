@@ -219,6 +219,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
         <div class="sub">Diagnostics</div>
+        <div id="health" hidden>
+          <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+          <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+          <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+          <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+          <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+        </div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
         <div id="wifiDiag" hidden>
           <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
@@ -1195,6 +1202,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
     renderData();
+    renderHealth();
     renderWifi();
   };
 
@@ -1206,6 +1214,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
   };
 
+  // The health block (components/gameday/health.h). Firmware before it sends
+  // none, and the rows stay hidden.
+  const RESTARTS = {
+    power: "Power on", restart: "Restart", update: "Update", crash: "Crash", watchdog: "Froze (watchdog)",
+    brownout: "Power dip (brownout)", usb: "USB reset",
+  };
+  const restartName = (k) => RESTARTS[k] || "Other";
   // The Wi-Fi history (components/gameday/wifi_history.h). Firmware before it
   // sends none, and the rows stay hidden.
   const WIFI_CAUSES = {
@@ -1219,6 +1234,29 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const h = Math.floor(m / 60);
     if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
     return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
+  };
+  const renderHealth = () => {
+    const h = S && S.health;
+    $("#health").hidden = !h;
+    if (!h) return;
+    $("#hStart").textContent = restartName(h.start) + ", " + span(h.up) + " ago";
+    $("#hBoots").textContent = h.boots > 1 ? "Start " + h.boots + " since the power came on" : "";
+    $("#hFault").textContent = !h.fault ? "None"
+      : restartName(h.fault) + (h.fault_ago != null ? ", " + span(h.fault_ago) + " ago" : "");
+    $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
+    $("#hEspn").textContent = h.espn == null ? "None yet"
+      : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
+    const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
+    // The build time comes in Unix seconds; shown in the browser's own time
+    const b = h.built ? new Date(h.built * 1000) : null;
+    const builtText = b ? b.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
+      b.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
+    // Live here, so they no longer wait on the RSSI and heap sensors, which
+    // are off until someone turns them on in Home Assistant. The Wi-Fi
+    // object, when there is one, fills in the signal.
+    if (!S.wifi) $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
+    $("#psram").textContent = h.psram_kb ? Math.round(h.psram_kb) + " KiB" : "";
   };
   // The history across the full width (a day at most), newest at the right,
   // gaps where the panel was off Wi-Fi (a red tick along the bottom). -95 to
@@ -1539,8 +1577,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": if (!(S && S.wifi)) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
-      case "Free Heap (PSRAM)": $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
+      case "RSSI": if (!(S && (S.wifi || S.health))) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "Free Heap (PSRAM)": if (!(S && S.health)) $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };
 

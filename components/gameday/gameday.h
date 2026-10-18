@@ -25,6 +25,7 @@
 #include "captive.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "health.h"
 #include "offseason.h"
 #include "recap.h"
 #include "poll_timing.h"
@@ -286,6 +287,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void setup() override;
   void loop() override;
   void dump_config() override;
+  // Marks the restart as asked for, in the boot log (health.h).
+  void on_shutdown() override;
   float get_setup_priority() const override { return setup_priority::LATE; }
 
   // AsyncWebHandler (HTTP task)
@@ -312,6 +315,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();
+  // The "health" object, read live on each GET /gameday/state (HTTP task).
+  std::string health_json_();
+  ::espn::Restart start_reason_{::espn::Restart::NONE};
+  bool boot_clock_noted_{false};  // boot_log_clock() ran
   // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
   void wifi_tick_();
@@ -807,6 +814,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};
+  // The last ESPN read through open_() (every read but logos and the probe):
+  // its HTTP status (0 for no answer)
+  // and millis() when it came, 0 before the first. Fetch task, HTTP task.
+  std::atomic<int> espn_status_{0};
+  std::atomic<uint32_t> espn_answer_ms_{0};
 
   // Sign-in Wi-Fi (captive.h). The probe runs on its own short task, since
   // it is needed before the clock is set, when no fetch job runs.

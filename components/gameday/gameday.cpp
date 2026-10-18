@@ -33,9 +33,11 @@
 #include <esp_wifi.h>
 #endif
 
+#include <esp_attr.h>
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
 #include <esp_sntp.h>
+#include <esp_system.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -45,6 +47,15 @@ namespace esphome {
 namespace gameday {
 
 static const char *const TAG = "gameday";
+
+static_assert(::espn::kResetPowerOn == ESP_RST_POWERON && ::espn::kResetSoftware == ESP_RST_SW &&
+                  ::espn::kResetPanic == ESP_RST_PANIC && ::espn::kResetWdt == ESP_RST_WDT &&
+                  ::espn::kResetBrownout == ESP_RST_BROWNOUT && ::espn::kResetUsb == ESP_RST_USB &&
+                  ::espn::kResetPowerGlitch == ESP_RST_PWR_GLITCH && ::espn::kResetCpuLockup == ESP_RST_CPU_LOCKUP,
+              "health.h reset reasons no longer match esp_reset_reason_t");
+
+// Survives a restart, a crash and a watchdog (health.h)
+RTC_NOINIT_ATTR static ::espn::BootLog boot_log;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
 // them, but accepts curl.
@@ -214,6 +225,14 @@ void GamedayComponent::setup() {
 #ifdef USE_PSRAM
   ::espn::set_json_allocator(&json_psram);
 #endif
+  // A restart keeps the wall clock, so a crash a moment ago has its time now.
+  this->start_reason_ = ::espn::boot_log_start(boot_log, (int) esp_reset_reason(), (uint32_t) App.get_build_time(),
+                                               (int64_t) ::time(nullptr));
+  ESP_LOGI(TAG, "Started by %s, start %u since the power came on", ::espn::restart_key(this->start_reason_),
+           (unsigned) boot_log.boots);
+  if (boot_log.fault != 0 && boot_log.fault_boot != boot_log.boots)
+    ESP_LOGW(TAG, "Last trouble: %s, %u start(s) ago", ::espn::restart_key((::espn::Restart) boot_log.fault),
+             (unsigned) (boot_log.boots - boot_log.fault_boot));
 #ifdef USE_WIFI
   // About 2 KB: a day of minutes and the last drops. Without PSRAM (or with
   // it full) there is no history and the "wifi" object only has the total.
@@ -945,6 +964,8 @@ void GamedayComponent::dump_config() {
 #endif
 }
 
+void GamedayComponent::on_shutdown() { ::espn::boot_log_planned(boot_log); }
+
 void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
@@ -953,6 +974,11 @@ void GamedayComponent::loop() {
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
+    if (!this->boot_clock_noted_ && this->time_ != nullptr && this->time_->now().is_valid()) {
+      // A fault at a start with no clock yet: when it happened
+      this->boot_clock_noted_ = true;
+      ::espn::boot_log_clock(boot_log, (int64_t) this->time_->now().timestamp - esp_timer_get_time() / 1000000);
+    }
   }
 #ifdef GAMEDAY_UPDATE_MIRROR
   this->mirror_tick_();
@@ -1610,6 +1636,8 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
   };
   this->espn_requests_++;
   auto container = this->http_->get(url, headers, {"retry-after"});
+  this->espn_status_ = container == nullptr ? 0 : container->status_code;
+  this->espn_answer_ms_ = millis() == 0 ? 1 : millis();
   if (container == nullptr) {
     ESP_LOGW(TAG, "Request failed: %s", url.c_str());
     return nullptr;
@@ -3294,6 +3322,47 @@ std::string GamedayComponent::current_state_json_() {
   return this->state_json_;
 }
 
+std::string GamedayComponent::health_json_() {
+  ::espn::Health h{};
+  h.uptime_s = esp_timer_get_time() / 1000000;
+  h.start = this->start_reason_;
+  h.boots = boot_log.boots;
+  h.fault = (::espn::Restart) boot_log.fault;
+  h.fault_ago = ::espn::boot_log_fault_ago(boot_log, (int64_t) ::time(nullptr), h.uptime_s);
+  h.heap_kb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024.0f;
+  h.block_kb = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024.0f;
+  h.psram_kb = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f;
+#ifdef USE_WIFI
+  auto *w = wifi::global_wifi_component;
+  h.wifi = w != nullptr && w->is_connected();
+  if (h.wifi)
+    h.rssi = w->wifi_rssi();
+#endif
+  const uint32_t at = this->espn_answer_ms_.load();
+  h.espn_status = this->espn_status_.load();
+  h.espn_ago = at == 0 ? -1 : (int64_t) ((millis() - at) / 1000);
+#ifdef ESPHOME_PROJECT_VERSION
+  h.version = ESPHOME_PROJECT_VERSION;
+#else
+  h.version = "";
+#endif
+  h.built = (int64_t) App.get_build_time();
+#if defined(GAMEDAY_BAR)
+  h.channel = "bar";
+#elif defined(GAMEDAY_BETA_CHANNEL)
+  h.channel = this->follow_beta() ? "beta" : "stable";
+#elif defined(USE_UPDATE)
+  h.channel = "stable";
+#else
+  h.channel = "none";
+#endif
+  char buf[384];
+  int n = ::espn::health_json(buf, sizeof(buf), h);
+  if (n <= 0 || n >= (int) sizeof(buf))
+    return "{}";
+  return std::string(buf, n);
+}
+
 // Every loop for the link going down or up, every WIFI_SAMPLE_INTERVAL for
 // the signal.
 void GamedayComponent::wifi_tick_() {
@@ -3348,10 +3417,12 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   StringRef url = request->url_to(buf);
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
     std::string body = this->current_state_json_();
-    // The cached document is rebuilt on changes; the Wi-Fi numbers move all
-    // the time, so they go in fresh at its end.
+    // The cached document is rebuilt on changes; the health and Wi-Fi
+    // numbers move all the time, so they go in fresh at its end.
     if (body.size() >= 2 && body.back() == '}') {
       body.pop_back();
+      body += ",\"health\":";
+      body += this->health_json_();
       body += ",\"wifi\":";
       body += this->wifi_json_();
       body += '}';
