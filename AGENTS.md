@@ -59,6 +59,15 @@ is the short version.
   leaves its input in `tests/build/crash-*`; pass that file to
   `tests/build/fuzz_espn` (or `fuzz_set`) to replay it, and add a host test
   with the fix.
+- Size budget: CI's "Size budget" job checks each build's flash (the OTA
+  image) and static internal RAM (from the ELF), and the memory each ESPN
+  read takes on the host (`make -C tests heap`, `tests/heap_budget.cpp`),
+  against `firmware/budget.json`. A PR fails when a figure goes over its
+  budget, or grows more than the file's `max_growth` against the base
+  branch's last build; the job summary has the table. A change that needs
+  more raises that one entry in the same PR and says why.
+  `python3 scripts/size_budget.py seed <sizes folder>` prints figures with
+  10% headroom.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run

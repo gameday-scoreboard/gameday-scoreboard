@@ -1,0 +1,11 @@
+{
+  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10%. firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there.",
+  "max_growth": {
+    "flash": 40960,
+    "static_ram": 4096,
+    "json": 20480,
+    "heap": 20480
+  },
+  "firmware": {},
+  "host": {}
+}
