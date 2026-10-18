@@ -3848,13 +3848,30 @@ static void test_wifi_history() {
   static int8_t rssi[kWifiMinutes];
   static WifiDrop drops[kWifiDrops];
 
-  // No buffers (no PSRAM): nothing kept, the JSON still parses.
+  // No buffers (no PSRAM): no history, only the total.
   WifiHistory none;
   none.sample(0, true, -60);
   none.up(0);
   none.down(10, WifiCause::SIGNAL);
+  none.up(15);
   CHECK_EQ(none.json(20, true, -60), std::string("{\"rssi\":-60,\"step\":300,\"hist\":[],\"weak\":false,"
-                                                 "\"drops\":0,\"day\":0,\"causes\":{}}"));
+                                                 "\"drops\":1,\"day\":0,\"causes\":{}}"));
+
+  // A panel that drops all the time still answers whole JSON.
+  {
+    static int8_t r2[kWifiMinutes];
+    static WifiDrop d2[kWifiDrops];
+    WifiHistory flap;
+    flap.attach(r2, d2);
+    for (uint32_t i = 0; i < 1000000; i++) {
+      flap.up(i * 2);
+      flap.down(i * 2 + 1, WifiCause::OTHER);
+    }
+    std::string fj = flap.json(2000000, false, -127);
+    CHECK(fj.find("\"weak\":false,\"drops\":1000000,\"day\":64,\"causes\":{\"other\":64},\"last\":\"other\",\"last_ago\":1}") !=
+          std::string::npos);
+    CHECK(fj.back() == '}');
+  }
 
   // A minute keeps the mean of its readings; a minute off Wi-Fi keeps 0.
   WifiHistory h;

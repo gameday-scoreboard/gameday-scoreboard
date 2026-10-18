@@ -133,12 +133,14 @@ class WifiHistory {
     this->up_ = false;
     this->down_s_ = now_s;
     this->open_ = false;
-    if (cause == WifiCause::PANEL || !this->ready())
+    if (cause == WifiCause::PANEL)
+      return;
+    if (cause != WifiCause::ROAM)
+      this->total_++;
+    if (!this->ready())  // no buffers: the total alone
       return;
     this->drops_[this->drop_n_ % kWifiDrops] = {now_s, UINT32_MAX, (uint8_t) cause};
     this->drop_n_++;
-    if (cause != WifiCause::ROAM)
-      this->total_++;
     this->open_ = true;
   }
 
@@ -186,7 +188,7 @@ class WifiHistory {
   //              how long it lasted (left out while it lasts)
   std::string json(uint32_t now_s, bool connected, int8_t rssi) const {
     std::string out = "{";
-    char buf[48];
+    char buf[96];  // room for the weak, drops and day piece at any count
     if (connected && rssi < 0 && rssi > -127) {
       snprintf(buf, sizeof(buf), "\"rssi\":%d,", (int) rssi);
       out += buf;

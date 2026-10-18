@@ -215,7 +215,7 @@ void GamedayComponent::setup() {
 #endif
 #ifdef USE_WIFI
   // About 2 KB: a day of minutes and the last drops. Without PSRAM (or with
-  // it full) there is no history and the "wifi" object only has counts.
+  // it full) there is no history and the "wifi" object only has the total.
   auto *rssi = (int8_t *) heap_caps_calloc(::espn::kWifiMinutes, 1, MALLOC_CAP_SPIRAM);
   auto *drops = (::espn::WifiDrop *) heap_caps_calloc(::espn::kWifiDrops, sizeof(::espn::WifiDrop), MALLOC_CAP_SPIRAM);
   if (rssi != nullptr && drops != nullptr) {
@@ -3225,6 +3225,8 @@ void GamedayComponent::wifi_tick_() {
   std::lock_guard<std::mutex> lock(this->wifi_mutex_);
   if (up != this->wifi_up_) {
     this->wifi_up_ = up;
+    // The page shows the signal as soon as the link is back, not at the next sample.
+    this->wifi_rssi_ = up ? w->wifi_rssi() : 0;
     if (up) {
       this->wifi_hist_.up(now_s);
       this->wifi_reason_seen_ = wifi_reason_seq.load();
