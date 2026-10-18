@@ -14,6 +14,9 @@ substitutions:
   # Where it looks instead with "Follow beta" on: release firmware built from
   # the beta branch, published there by CI (.github/workflows/build.yml).
   beta_update_source: "https://gamedayscoreboard.app/firmware/${variant}-beta/manifest.json"
+  # The same files on a second host. When a manifest read fails, the panel
+  # reads the same path here instead (components/gameday/update_mirror.h).
+  update_mirror_host: "https://updates.gameday-scoreboard.com"
 
   display_panel_width: "64"
   display_panel_height: "64"
@@ -448,8 +451,9 @@ http_request:
   id: http_client
   timeout: 20s
   watchdog_timeout: 30s
-  # ESPN, its logo CDN and GitHub Pages all use Let's Encrypt, which is in the
-  # ESP-IDF certificate bundle, so every fetch (including firmware) is verified.
+  # ESPN, its logo CDN and GitHub Pages all use Let's Encrypt, and the update
+  # mirror (Cloudflare) Google Trust Services; both are in the ESP-IDF
+  # certificate bundle, so every fetch (including firmware) is verified.
   verify_ssl: true
   buffer_size_rx: 2048
 
@@ -539,6 +543,10 @@ gameday:
     update_id: gd_firmware_update
     stable: ${update_source}
     beta: ${beta_update_source}
+  update_mirror:
+    update_id: gd_firmware_update
+    source: ${update_source}
+    host: ${update_mirror_host}
   on_action:
     - if:
         condition:
