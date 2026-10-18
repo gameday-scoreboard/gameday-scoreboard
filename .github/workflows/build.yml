@@ -20,6 +20,12 @@ on:
 permissions:
   contents: read
 
+# The ESPHome every build job uses (the ESPHome beta job aside). dev and beta
+# may pin an ESPHome beta; main and release tags need a final release, which
+# Branch rules checks.
+env:
+  ESPHOME_VERSION: "2026.10.0b3"
+
 # A newer push to the same ref cancels the older run. That stays on for dev
 # too: a merge that lands within a few minutes of the last one leaves the
 # earlier merge commit with a cancelled run and no artifacts, but dev's newest
@@ -60,6 +66,11 @@ jobs:
             echo "summary=Development build" >> "$GITHUB_OUTPUT"
           fi
           cat notes.md
+      # The site's /changelog page is rendered at deploy; fail here first.
+      - name: Changelog page renders
+        run: |
+          cp docs/site/changelog/index.html /tmp/changelog.html
+          python3 scripts/release_notes.py --page /tmp/changelog.html
       - uses: actions/upload-artifact@v7
         with:
           name: release-notes
@@ -68,11 +79,15 @@ jobs:
   branch-rules:
     # Work lands in dev. beta only takes changes promoted from dev, and main
     # (what customers run) only takes changes promoted from beta; only a tag
-    # on main publishes to the flasher and the panels. The
-    # checks are steps, not job conditions, so the job passes (rather than
+    # on main publishes to the flasher and the panels, and main builds only on
+    # a final ESPHome release. The checks are steps, not job conditions, so the job passes (rather than
     # skips) when they don't apply and build still runs.
     name: Branch rules
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The override label on a promotion PR.
+      pull-requests: read
     steps:
       - name: PRs into beta come from dev
         if: github.event_name == 'pull_request' && github.base_ref == 'beta'
@@ -94,6 +109,46 @@ jobs:
             echo "::error::main only takes PRs from beta (this one is from $HEAD_REPO:$HEAD_REF). Target beta instead."
             exit 1
           fi
+      # Customers run main, so main and release tags build only on a final
+      # ESPHome release, like 2026.10.0. The maintainer's esphome-beta-ok
+      # label lets one promotion PR through, and the tag on its merge. Labels
+      # come from the API, not the event, so re-running this job after adding
+      # the label sees it.
+      - name: main builds on a final ESPHome
+        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          final='^[0-9]+\.[0-9]+\.[0-9]+$'
+          # Check the pattern itself first, so an edit can't quietly weaken it.
+          for v in 2026.10.0 2026.9.12; do
+            grep -qE "$final" <<< "$v" || { echo "::error::The final-release pattern misses $v"; exit 1; }
+          done
+          for v in 2026.10.0b3 2026.10.0-dev beta latest dev; do
+            grep -qE "$final" <<< "$v" && { echo "::error::The final-release pattern wrongly takes $v"; exit 1; }
+          done
+          if grep -qE "$final" <<< "$ESPHOME_VERSION"; then
+            echo "ESPHome $ESPHOME_VERSION is a final release."
+            exit 0
+          fi
+          if [ -n "$PR" ]; then
+            prs=$PR
+          else
+            # A tag: the promotion PR that merged this commit into main.
+            prs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+                    --jq '.[] | select(.base.ref == "main" and .merged_at != null) | .number')
+          fi
+          for n in $prs; do
+            ok=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$n" --jq '.labels[] | select(.name == "esphome-beta-ok") | .name')
+            if [ -n "$ok" ]; then
+              echo "::warning::ESPHome $ESPHOME_VERSION is a beta. Building it for main anyway: PR #$n has the esphome-beta-ok label."
+              exit 0
+            fi
+          done
+          echo "::error file=.github/workflows/build.yml::ESPHOME_VERSION is $ESPHOME_VERSION, a beta. main and release tags build only on a final ESPHome release: move the pin to a final release on dev, then promote again. To ship this beta anyway, the maintainer adds the esphome-beta-ok label to the promotion PR and re-runs this job."
+          exit 1
       - uses: actions/checkout@v7
         with:
           # Tags need history for the main check. The quotes matter: a bare 0
@@ -156,7 +211,8 @@ jobs:
         run: |
           set -euo pipefail
           summary=$NOTES
-          url="https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          # The release's section of the site's changelog, which this tag's deploy renders.
+          url="https://gamedayscoreboard.app/changelog/#$GITHUB_REF_NAME"
           if [ "$GITHUB_REF" = refs/heads/beta ]; then
             v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
             v="$v-beta.$GITHUB_RUN_NUMBER"
@@ -171,7 +227,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: ${{ steps.beta.outputs.url }}
@@ -187,6 +243,64 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}
           path: out
+      # For the budget job: the OTA image's size and the ELF's static
+      # internal RAM. The name stays outside publish's firmware-* pattern.
+      - name: Measure flash and static RAM
+        run: python3 scripts/size_budget.py firmware out/${{ matrix.variant }} ${{ matrix.variant }} sizes/${{ matrix.variant }}.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sizes-${{ matrix.variant }}
+          path: sizes
+
+  budget:
+    # Flash, static internal RAM and the memory each ESPN read takes, against
+    # firmware/budget.json. A pull request into dev also fails when one figure
+    # grows more than the file's max_growth against dev's last build. A
+    # promotion carries many changes at once, so it only gets the budget.
+    # The job summary has the table.
+    name: Size budget
+    needs: [build, host-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sizes-*
+          path: sizes
+      - name: Figures from the base branch
+        id: base
+        if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -uo pipefail
+          # The base commit's own run first, then the base branch's newest
+          # runs: a push that lands while dev builds cancels the older run,
+          # sometimes before it uploaded its figures.
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?head_sha=$BASE_SHA&event=push&per_page=5" \
+                   --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' || true)
+          runs="$runs
+          $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$BASE_REF&event=push&per_page=10" \
+              --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' || true)"
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            rm -rf base
+            if gh run download "$id" -p 'sizes-*' -D base 2>/dev/null && [ -n "$(ls -A base 2>/dev/null)" ]; then
+              echo "label=$BASE_REF ${sha::7} (run $id)" >> "$GITHUB_OUTPUT"
+              echo "Base figures from run $id ($sha)"
+              exit 0
+            fi
+          done <<< "$runs"
+          echo "::warning::No figures from a $BASE_REF build found, so only the budget is checked, not the growth."
+      - name: Check the budget
+        env:
+          BASE_LABEL: ${{ steps.base.outputs.label }}
+        run: python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL"
 
   build-demo:
     # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
@@ -211,7 +325,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
       - uses: actions/upload-artifact@v7
         with:
           name: demo-${{ matrix.variant }}
@@ -270,7 +384,7 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
@@ -394,11 +508,23 @@ jobs:
       - run: make -C tests
       - name: Replay tool builds
         run: make -C tests replay
+      - name: Memory each ESPN read takes
+        run: |
+          make -C tests heap
+          python3 scripts/size_budget.py host tests/build/heap.json sizes/host.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sizes-host
+          path: sizes
       - name: Script selftests
         run: |
+          python3 scripts/size_budget.py --selftest
           python3 scripts/factory_flash.py --selftest
           python3 scripts/burnin_monitor.py --selftest
           python3 scripts/improv_scan.py --selftest
+          python3 scripts/site_seo.py --selftest
+      - name: Site pages have their search and sharing tags
+        run: python3 scripts/site_seo.py check docs/site
       - name: Device page mock matches the firmware's set table
         run: python3 tests/web/mock_device.py --selftest
       - name: Fuzz the parsers (30 s a target)
@@ -461,13 +587,20 @@ jobs:
           name: release-notes
           path: notes
       - name: Assemble site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p site/firmware
           # docs/site/. (not docs/site/*) so .well-known/ is copied too.
           cp -r docs/site/. site/
+          # This tag's release is created after the deploy, so its date comes from --date.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-pre-releases --json tagName,publishedAt > /tmp/releases.json
+          python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json --date "$GITHUB_REF_NAME=$(TZ=America/Chicago date +%F)"
           cp -r artifacts/* site/firmware/
           sed -i "s/__VERSION__/${GITHUB_REF_NAME}/g" site/index.html
+          # Support's FAQPage JSON-LD, sitemap.xml and robots.txt.
+          python3 scripts/site_seo.py build site
           ls -R site
           bash scripts/check_site_firmware.sh site "$GITHUB_REF_NAME"
       # Keep the bar panels' beta channel on the site through a release.
@@ -515,3 +648,11 @@ jobs:
           } > release/body.md
           gh release create "$GITHUB_REF_NAME" $ASSETS --title "$GITHUB_REF_NAME" --notes-file release/body.md || \
           { gh release upload "$GITHUB_REF_NAME" $ASSETS --clobber; gh release edit "$GITHUB_REF_NAME" --notes-file release/body.md; }
+      # The same update feed on updates.gameday-scoreboard.com, which panels
+      # read when gamedayscoreboard.app fails. Last, so a mirror problem never
+      # holds up the release.
+      - name: Publish the update mirror
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_MIRROR_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/publish_mirror.sh site

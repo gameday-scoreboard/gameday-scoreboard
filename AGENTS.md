@@ -33,7 +33,12 @@ is the short version.
 - `firmware/pages`: the LVGL pages drawn on the panel.
 - `firmware/web`: the device page. `bundle.js` is generated from `app.js`
   and `app.css`.
-- `docs/site`: the installer and support site.
+- `docs/site`: the installer and support site. Every page needs its own
+  title, description, canonical link and share tags;
+  `python3 scripts/site_seo.py check docs/site` lists what's missing.
+  `docs/site/diy` is the page for DIY owners (boards, panels, wiring);
+  keep it in step with `firmware/controllers/` and the README's Hardware
+  section.
 - `scripts`: generators (`build_web.py`, `build_teams.py`,
   `build_team_colors.py`, `build_timezones.py`), release notes and
   factory tools.
@@ -42,7 +47,8 @@ is the short version.
 
 ## Build and test
 
-- ESPHome 2026.10.0b3, the version CI pins. Use `esphome compile
+- ESPHome 2026.10.0b3, the version CI pins (`ESPHOME_VERSION` in
+  `.github/workflows/build.yml`). Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
 - Host tests: `make -C tests` (needs g++). CI also builds
@@ -59,6 +65,15 @@ is the short version.
   leaves its input in `tests/build/crash-*`; pass that file to
   `tests/build/fuzz_espn` (or `fuzz_set`) to replay it, and add a host test
   with the fix.
+- Size budget: CI's "Size budget" job checks each build's flash (the OTA
+  image) and static internal RAM (from the ELF), and the memory each ESPN
+  read takes on the host (`make -C tests heap`, `tests/heap_budget.cpp`),
+  against `firmware/budget.json`. A PR fails when a figure goes over its
+  budget, or (into `dev`) grows more than the file's `max_growth` against
+  dev's last build; the job summary has the table. A change that needs
+  more raises that one entry in the same PR and says why.
+  `python3 scripts/size_budget.py seed <sizes folder>` prints figures with
+  10% headroom (at least 1 KB).
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run

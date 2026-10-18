@@ -3,7 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Game Day Scoreboard installer</title>
+  <title>Game Day Scoreboard: your team's live score on an LED panel</title>
+  <meta name="description" content="Install Game Day Scoreboard from your browser. It shows your team's live score, game clock and next game on a HUB75 LED panel over Wi-Fi.">
+  <link rel="canonical" href="https://gamedayscoreboard.app/">
+  <meta property="og:site_name" content="Game Day Scoreboard">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Game Day Scoreboard: your team's live score on an LED panel">
+  <meta property="og:description" content="Install Game Day Scoreboard from your browser. It shows your team's live score, game clock and next game on a HUB75 LED panel over Wi-Fi.">
+  <meta property="og:url" content="https://gamedayscoreboard.app/">
+  <meta property="og:image" content="https://gamedayscoreboard.app/media/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@GameDayScore">
+  <meta name="twitter:image" content="https://gamedayscoreboard.app/media/og.jpg">
+  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Game Day Scoreboard",
+    "description": "A 128x64 LED scoreboard for your wall that shows your team's live score, game clock and next game over Wi-Fi.",
+    "brand": { "@type": "Brand", "name": "Game Day Scoreboard" },
+    "image": "https://gamedayscoreboard.app/media/og.jpg",
+    "url": "https://gameday-scoreboard.com/products/game-day-scoreboard",
+    "offers": {
+      "@type": "Offer",
+      "url": "https://gameday-scoreboard.com/products/game-day-scoreboard",
+      "price": "179.00",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/OutOfStock"
+    }
+  }
+  </script>
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
@@ -46,7 +79,7 @@
         <span slot="not-allowed">Open this page over HTTPS to install.</span>
       </esp-web-install-button>
     </p>
-    <p class="note">For the Game Day Scoreboard controller. Built your own on a MoonHub75 board? Use the <a href="/install/diy/">DIY installer</a> instead.</p>
+    <p class="note">For the Game Day Scoreboard controller. Built your own on a MoonHub75 board? Use the <a href="/install/diy/">DIY installer</a> instead. Using another board? See <a href="/diy/">Runs on your own panel</a>.</p>
     <p class="note">Installing erases whatever firmware was on the controller. Your WiFi details and team choice are asked for afterwards.</p>
   </div>
 
@@ -71,7 +104,7 @@
     Source, issues and the YAML for building it yourself: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard">gameday-scoreboard/gameday-scoreboard</a>.
     Built on <a href="https://github.com/pavlov-net/hub75-studio">hub75-studio</a> and ESPHome.
     <br>
-    <a href="/setup/">Setup</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
+    <a href="/setup/">Setup</a> &middot; <a href="/changelog/">What's new</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
   </footer>
 </main>
 </body>

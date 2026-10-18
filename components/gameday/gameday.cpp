@@ -27,9 +27,10 @@
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
 #include "esphome/components/saved_networks/saved_networks.h"
 #endif
-
 #ifdef USE_WIFI
 #include "esphome/components/wifi/wifi_component.h"
+#include <esp_event.h>
+#include <esp_wifi.h>
 #endif
 
 #include <esp_attr.h>
@@ -89,13 +90,16 @@ static const char *const HTTP_CLOCK_URL = "https://site.api.espn.com/apis/site/v
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // Install updates automatically: how often loop() looks, and how long a
-// manifest read gets before its answer is used (the HTTP timeout is 20 s).
+// manifest read gets before its answer is used (the HTTP timeout is 20 s,
+// and a failed read is followed by one from the mirror, update_mirror.h).
 static const uint32_t AUTO_UPDATE_TICK = 10 * 1000;
-static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
+static const uint32_t AUTO_UPDATE_CHECK_WAIT = 2 * MINUTE;
 // After an install, how long the new firmware runs before the update counts
 // as taken: past safe_mode's one minute, when the bootloader can no longer
 // roll it back.
 static const uint32_t UPDATE_GOOD_BOOT = 2 * MINUTE;
+// The Wi-Fi signal is read this often; each minute keeps the mean.
+static const uint32_t WIFI_SAMPLE_INTERVAL = 10 * 1000;
 // A college scan is ~750KB on a Saturday. With nothing live it waits for the
 // next kickoff instead of re-reading every 2 minutes, but never longer than
 // this, so a moved kickoff or the next day's slate is still picked up.
@@ -198,6 +202,25 @@ void GamedaySelect::control(const std::string &value) {
 static json::SpiRamAllocator json_psram;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 #endif
 
+#ifdef USE_WIFI
+// The reason the connection ended, set on the event task. ESPHome's own
+// handler logs it but keeps nothing; wifi_tick_() reads it when the link goes
+// down, and the sequence says whether one came since the link was up.
+static std::atomic<int> wifi_reason{0};           // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static std::atomic<uint32_t> wifi_reason_seq{0};  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+static void on_wifi_disconnected(void *, esp_event_base_t, int32_t, void *data) {
+  // ESPHome marks the link down when its main loop handles this same event,
+  // so the one that ended a connection still finds it up. The retries after
+  // it (no AP found, a failed sign-in) don't, and keep the first reason.
+  auto *w = wifi::global_wifi_component;
+  if (w != nullptr && !w->is_connected())
+    return;
+  wifi_reason.store(((wifi_event_sta_disconnected_t *) data)->reason);
+  wifi_reason_seq.fetch_add(1);
+}
+#endif
+
 void GamedayComponent::setup() {
 #ifdef USE_PSRAM
   ::espn::set_json_allocator(&json_psram);
@@ -210,6 +233,21 @@ void GamedayComponent::setup() {
   if (boot_log.fault != 0 && boot_log.fault_boot != boot_log.boots)
     ESP_LOGW(TAG, "Last trouble: %s, %u start(s) ago", ::espn::restart_key((::espn::Restart) boot_log.fault),
              (unsigned) (boot_log.boots - boot_log.fault_boot));
+#ifdef USE_WIFI
+  // About 2 KB: a day of minutes and the last drops. Without PSRAM (or with
+  // it full) there is no history and the "wifi" object only has the total.
+  auto *rssi = (int8_t *) heap_caps_calloc(::espn::kWifiMinutes, 1, MALLOC_CAP_SPIRAM);
+  auto *drops = (::espn::WifiDrop *) heap_caps_calloc(::espn::kWifiDrops, sizeof(::espn::WifiDrop), MALLOC_CAP_SPIRAM);
+  if (rssi != nullptr && drops != nullptr) {
+    this->wifi_hist_.attach(rssi, drops);
+  } else {
+    heap_caps_free(rssi);
+    heap_caps_free(drops);
+  }
+  if (esp_event_handler_instance_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnected, nullptr,
+                                          nullptr) != ESP_OK)
+    ESP_LOGW(TAG, "Can't follow Wi-Fi disconnects; drops will show no cause");
+#endif
   this->logos_.setup();
   this->pref_ = global_preferences->make_preference<Prefs>(fnv1_hash("gameday_prefs_v1"));
   bool loaded = this->pref_.load(&this->prefs_);
@@ -290,6 +328,15 @@ void GamedayComponent::setup() {
   this->apply_channel_();
 #endif
   this->settle_update_mark_();
+#ifdef GAMEDAY_UPDATE_MIRROR
+  // Any state the update entity publishes while it points at the mirror is
+  // the mirror's answer (a failed read publishes nothing; mirror_tick_).
+  if (this->mirror_update_ != nullptr)
+    this->mirror_update_->add_on_state_callback([this]() {
+      if (this->on_mirror_)
+        this->mirror_answered_ = true;
+    });
+#endif
 #ifdef GAMEDAY_BAR
   this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
   if (!this->bar_pref_.load(&this->now_tried_))
@@ -933,7 +980,11 @@ void GamedayComponent::loop() {
       ::espn::boot_log_clock(boot_log, (int64_t) this->time_->now().timestamp - esp_timer_get_time() / 1000000);
     }
   }
+#ifdef GAMEDAY_UPDATE_MIRROR
+  this->mirror_tick_();
+#endif
   this->captive_tick_();
+  this->wifi_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -1258,8 +1309,75 @@ void GamedayComponent::set_follow_beta(bool on) {
 
 #ifdef GAMEDAY_BETA_CHANNEL
 void GamedayComponent::apply_channel_() {
+#ifdef GAMEDAY_UPDATE_MIRROR
+  this->on_mirror_ = false;
+#endif
   if (this->beta_update_ != nullptr)
     this->beta_update_->set_source_url(this->follow_beta() ? this->beta_source_ : this->stable_source_);
+}
+#endif
+
+#ifdef GAMEDAY_UPDATE_MIRROR
+// Points the update entity back at the primary host for its channel.
+void GamedayComponent::use_primary_() {
+#ifdef GAMEDAY_BETA_CHANNEL
+  this->apply_channel_();
+#else
+  this->on_mirror_ = false;
+  this->mirror_update_->set_source_url(this->primary_source_);
+#endif
+}
+
+// A failed manifest read or install on the primary gets one read from the
+// mirror right away (update_mirror.h). Runs every loop: a refused connection
+// fails in well under a second.
+void GamedayComponent::mirror_tick_() {
+  http_request::HttpRequestUpdate *u = this->mirror_update_;
+  if (u == nullptr)
+    return;
+  ::espn::MirrorInputs in;
+  in.on_mirror = this->on_mirror_;
+  in.error = u->status_has_error();
+  in.answered = this->mirror_answered_;
+  in.waited_ms = millis() - this->mirror_since_ms_;
+  // Only read when it matters: now() converts the time, and this runs every loop.
+  in.clock_valid = in.error && this->time_ != nullptr && this->time_->now().is_valid();
+  switch (::espn::mirror_step(in)) {
+    case ::espn::MirrorStep::NONE:
+      break;
+    case ::espn::MirrorStep::NO_CLOCK:
+      u->status_clear_error();
+      break;
+    case ::espn::MirrorStep::TRY_MIRROR: {
+      const char *mirror = this->follow_beta() ? this->beta_mirror_source_ : this->mirror_source_;
+      ESP_LOGW(TAG, "Update check or install failed; reading the mirror %s", mirror);
+      this->on_mirror_ = true;
+      this->mirror_answered_ = false;
+      this->mirror_since_ms_ = millis();
+      u->set_source_url(mirror);
+      // So the mirror's own failure shows (FAILED below).
+      u->status_clear_error();
+      u->update();
+      break;
+    }
+    case ::espn::MirrorStep::ANSWERED:
+      // update_info keeps the mirror's firmware URL, so an install of this
+      // update downloads from the mirror.
+      ESP_LOGI(TAG, "Update mirror answered: %s at %s", u->update_info.latest_version.c_str(),
+               u->update_info.firmware_url.c_str());
+      this->use_primary_();
+      break;
+    case ::espn::MirrorStep::FAILED:
+      // Cleared, or the next failure on the primary would look like this one.
+      ESP_LOGW(TAG, "Update mirror failed too; the next check starts with the primary");
+      u->status_clear_error();
+      this->use_primary_();
+      break;
+    case ::espn::MirrorStep::TIMED_OUT:
+      ESP_LOGW(TAG, "Update mirror didn't answer; the next check starts with the primary");
+      this->use_primary_();
+      break;
+  }
 }
 #endif
 
@@ -3159,8 +3277,13 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       o["slot"] = e.slot;
       JsonObject t = o["t"].to<JsonObject>();
       put_team(t, (uint8_t) e.team->league, e.team->espn_id);
-      if (!e.game.valid)
+      if (!e.game.valid) {
+        // Only a read that named no game means none is scheduled; before the
+        // first answer the row has nothing to say yet.
+        if (e.sched.valid && e.sched.event_id.empty())
+          o["none"] = true;
         continue;
+      }
       o["id"] = e.game.event_id;
       o["s"] = ::espn::state_name(e.game.state);
       o["kick"] = e.game.kickoff_epoch;
@@ -3240,6 +3363,50 @@ std::string GamedayComponent::health_json_() {
   return std::string(buf, n);
 }
 
+// Every loop for the link going down or up, every WIFI_SAMPLE_INTERVAL for
+// the signal.
+void GamedayComponent::wifi_tick_() {
+#ifdef USE_WIFI
+  auto *w = wifi::global_wifi_component;
+  if (w == nullptr)
+    return;
+  const bool up = w->is_connected();
+  const uint32_t now_ms = millis();
+  const bool sample = now_ms - this->wifi_sample_ms_ >= WIFI_SAMPLE_INTERVAL;
+  if (up == this->wifi_up_ && !sample)
+    return;
+  const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
+  std::lock_guard<std::mutex> lock(this->wifi_mutex_);
+  if (up != this->wifi_up_) {
+    this->wifi_up_ = up;
+    // The page shows the signal as soon as the link is back, not at the next sample.
+    this->wifi_rssi_ = up ? w->wifi_rssi() : 0;
+    if (up) {
+      this->wifi_hist_.up(now_s);
+      this->wifi_reason_seen_ = wifi_reason_seq.load();
+    } else {
+      // A link lost with no disconnect event (the IP went) has no cause.
+      const int reason = wifi_reason_seq.load() != this->wifi_reason_seen_ ? wifi_reason.load() : 0;
+      const ::espn::WifiCause cause = ::espn::wifi_cause(reason);
+      this->wifi_hist_.down(now_s, cause);
+      ESP_LOGI(TAG, "Wi-Fi lost: %s (reason %d), %u drop(s) since start", ::espn::wifi_cause_key(cause), reason,
+               (unsigned) this->wifi_hist_.total());
+    }
+  }
+  if (sample) {
+    this->wifi_sample_ms_ = now_ms;
+    this->wifi_rssi_ = up ? w->wifi_rssi() : 0;
+    this->wifi_hist_.sample(now_s, up, this->wifi_rssi_);
+  }
+#endif
+}
+
+std::string GamedayComponent::wifi_json_() {
+  const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
+  std::lock_guard<std::mutex> lock(this->wifi_mutex_);
+  return this->wifi_hist_.json(now_s, this->wifi_up_, this->wifi_rssi_);
+}
+
 bool GamedayComponent::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   return request->url_to(buf).starts_with("/gameday/");
@@ -3250,12 +3417,14 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   StringRef url = request->url_to(buf);
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
     std::string body = this->current_state_json_();
-    // The cached document is rebuilt on changes; the health numbers move all
-    // the time, so they go in fresh at its end.
+    // The cached document is rebuilt on changes; the health and Wi-Fi
+    // numbers move all the time, so they go in fresh at its end.
     if (body.size() >= 2 && body.back() == '}') {
       body.pop_back();
       body += ",\"health\":";
       body += this->health_json_();
+      body += ",\"wifi\":";
+      body += this->wifi_json_();
       body += '}';
     }
     request->send(200, "application/json", body.c_str());
