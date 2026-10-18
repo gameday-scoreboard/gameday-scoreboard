@@ -28,9 +28,10 @@ script:
   - id: gd_guard
     mode: restart
     then:
+      # QC lights the panel with Power off too (pages/qc.yaml)
       - if:
           condition:
-            switch.is_on: power
+            lambda: 'return id(power).state || id(qc_active);'
           then:
             - hub75.set_brightness:
                 id: matrix
@@ -56,7 +57,10 @@ script:
           condition:
             lambda: 'return id(gameday_ctl).guard_mark() != 0;'
           then:
+            # Not over the QC screen, which has its own lines there
             - lambda: |-
+                if (id(qc_active))
+                  return;
                 lv_obj_move_foreground(id(gd_guard_line));
                 lv_obj_clear_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
             - delay: 15s
