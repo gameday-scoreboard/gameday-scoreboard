@@ -729,6 +729,9 @@
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
+    // The rollback line in the firmware box reads this document, which can
+    // land after the update entity does.
+    if ((S.update_failed || "") !== fwFailed && ents[byName["Firmware"]]) renderUpdate(ents[byName["Firmware"]]);
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -1416,6 +1419,7 @@
   const notesLink = (u) =>
     /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://gamedayscoreboard.app/changelog/#v" + u.value : u.release_url;
   let installing = false;
+  let fwFailed = "";     // S.update_failed as the firmware box last drew it
   const renderUpdate = (u) => {
     const box = $("#fw");
     box.hidden = false;
@@ -1425,6 +1429,7 @@
     const btn = $("#fwInstall");
     const sub = $("#fwSub");
     btn.hidden = true;
+    fwFailed = (S && S.update_failed) || "";
     if (st.includes("INSTALLING") || installing) {
       $("#fwText").textContent = "Installing " + (latest || "update");
       sub.textContent = "Keep the panel powered. It reboots when done and this page reconnects.";
@@ -1433,12 +1438,21 @@
       $("#fwText").textContent = "You're ahead of the latest release, " + cur;
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
-      $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+      // The panel rolled back from this very version (a crash in its first
+      // minute); it won't install it on its own again, but Install still tries.
+      const failed = !!(S && S.update_failed && S.update_failed === u.value);
+      if (failed) {
+        $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
+        sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+      } else {
+        $("#fwText").textContent = "Update available: " + latest;
+        sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+      }
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {
-        if (!confirm("Install " + latest + " now? The panel will reboot.")) return;
+        const ask = failed ? "Try " + latest + " again? It didn't take last time. The panel will reboot." : "Install " + latest + " now? The panel will reboot.";
+        if (!confirm(ask)) return;
         installing = true;
         renderUpdate(u);
         post(u.id, "install");

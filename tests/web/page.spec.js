@@ -743,6 +743,34 @@ test("a beta is newer than its release number, and a release is behind the beta 
   await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
 });
 
+test("an update that rolled back says so and still offers Install", async ({ page, request }) => {
+  await reset(request, { autoupd: true, update_failed: "2026.10.1" });
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await expect(page.locator("#fwText")).toHaveText("The update to v2026.10.1 didn't take and the panel went back to v2026.10.0");
+  await expect(page.locator("#fwSub")).toContainText("Install tries it again. It won't install this one on its own.");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.dismiss(); });
+  await page.locator("#fwInstall").click();
+  expect(asked).toBe("Try v2026.10.1 again? It didn't take last time. The panel will reboot.");
+
+  // Auto update off: nothing to say about the nightly install.
+  await reset(request, { update_failed: "2026.10.1" });
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("The update to v2026.10.1 didn't take and the panel went back to v2026.10.0");
+  await expect(page.locator("#fwSub")).not.toContainText("on its own");
+
+  // The manifest moved past it: a plain update again.
+  entity = { ...fw, value: "2026.10.2", current_version: "2026.10.0" };
+  await reset(request, { autoupd: true, update_failed: "2026.10.1" });
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.2");
+  await expect(page.locator("#fwSub")).toContainText("It installs on its own between 3 and 5 AM.");
+});
+
 test("release notes link to the release's section of the site changelog, a beta to its commit", async ({ page, request }) => {
   await reset(request);
   const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "" };
