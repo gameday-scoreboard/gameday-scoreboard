@@ -1319,7 +1319,7 @@ void GamedayComponent::mirror_tick_() {
       break;
     case ::espn::MirrorStep::TRY_MIRROR: {
       const char *mirror = this->follow_beta() ? this->beta_mirror_source_ : this->mirror_source_;
-      ESP_LOGW(TAG, "Update feed failed; reading the mirror %s", mirror);
+      ESP_LOGW(TAG, "Update check or install failed; reading the mirror %s", mirror);
       this->on_mirror_ = true;
       this->mirror_answered_ = false;
       this->mirror_since_ms_ = millis();
