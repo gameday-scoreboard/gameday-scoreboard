@@ -11,13 +11,16 @@ label in factory/labels/<name>.svg, 50 x 25 mm, ready to print.
 The same write also leaves the QC flag in the panel's NVS, so its first boot
 goes straight into QC mode (firmware/pages/qc.yaml). One press of the button
 there passes the button test and clears the flag. Until then the panel runs
-QC on every boot.
+QC on every boot. With a test panel on the ribbon, the script waits for that
+press in the log, asks whether the colors looked right, and only writes the
+label for a unit that passed. --print-cmd sends each label to a printer.
 
 Run it with the ESPHome venv's python, which has esptool and pyserial:
 
     python scripts/factory_flash.py --release v1.5.5
     python scripts/factory_flash.py --image path/to/firmware.factory.bin
     python scripts/factory_flash.py --release v1.5.5 --dry-run
+    python scripts/factory_flash.py --release v1.5.5 --print-cmd "lp {label}"
     python scripts/factory_flash.py --selftest
 
 --release downloads the factory image from the GitHub release once and keeps
@@ -53,6 +56,8 @@ LABEL_H_MM = 25
 BOOT_VERSION_RE = re.compile(r"gameday-scoreboard version (\d+\.\d+\.\d+)")
 # And this as the flag starts QC mode (firmware/pages/qc.yaml)
 BOOT_QC_RE = re.compile(r"QC mode on \(factory flag\)")
+# And this when the QC press clears the flag
+QC_PRESS_RE = re.compile(r"Factory flag cleared")
 # The flag the firmware reads (components/gameday/qc.h). Change both together.
 QC_FLAG_NAMESPACE = "gameday"
 QC_FLAG_KEY = "qc_pending"
@@ -228,13 +233,15 @@ def pick_port():
     raise RuntimeError(f"can't tell which port is the controller; pass --port. Ports: {listed}")
 
 
-def watch_boot(port, seconds, want_qc):
-    """(version, qc) from the boot log: the version the firmware logs, or None
-    if it isn't seen in time, and whether QC mode started from the flag.
+def watch_boot(port, seconds, want_qc, press_wait=0):
+    """(version, qc, pressed) from the boot log: the version the firmware logs,
+    or None if it isn't seen in time, whether QC mode started from the flag,
+    and whether the QC button press cleared it.
 
     Native USB drops off the bus while the chip resets, so keep trying to open
     the port until the time runs out. QC starts at the end of setup, a moment
-    after the version line, so wait up to 10 s more for it.
+    after the version line, so wait up to 10 s more for it. With press_wait,
+    keep reading that long after QC starts for the operator's press.
     """
     import serial
 
@@ -242,6 +249,7 @@ def watch_boot(port, seconds, want_qc):
     buf = ""
     version = None
     qc = False
+    pressed = False
     while time.monotonic() < deadline:
         try:
             with serial.Serial(port, 115200, timeout=0.5) as ser:
@@ -251,13 +259,40 @@ def watch_boot(port, seconds, want_qc):
                     if m and version is None:
                         version = m.group(1)
                         deadline = min(deadline, time.monotonic() + 10)
-                    qc = qc or bool(BOOT_QC_RE.search(buf))
-                    if version is not None and (qc or not want_qc):
-                        return version, qc
+                    if not qc and BOOT_QC_RE.search(buf):
+                        qc = True
+                        if press_wait:
+                            print(f"  QC is on the panel. Check red, green, blue and white, then press the "
+                                  f"button (waiting {press_wait} s).")
+                            deadline = time.monotonic() + press_wait
+                    pressed = pressed or (qc and bool(QC_PRESS_RE.search(buf)))
+                    if version is not None and (not want_qc or (qc and (pressed or not press_wait))):
+                        return version, qc, pressed
                     buf = buf[-200:]
         except (OSError, serial.SerialException):
             time.sleep(0.5)
-    return version, qc
+    return version, qc, pressed
+
+
+def ask_colors():
+    """The operator's verdict on the QC pattern: True for a pass."""
+    while True:
+        reply = input("  Did the panel show red, green, blue and white, with no dead rows or columns? [y/n]: ")
+        if reply.strip().lower() in ("y", "n"):
+            return reply.strip().lower() == "y"
+
+
+def print_line(cmd, label):
+    """The operator's print command with {label} replaced by the label's path, or the path added at the end."""
+    return cmd.replace("{label}", f'"{label}"') if "{label}" in cmd else f'{cmd} "{label}"'
+
+
+def print_label(cmd, label):
+    line = print_line(cmd, label)
+    print(f"  $ {line}")
+    proc = subprocess.run(line, shell=True)
+    if proc.returncode != 0:
+        print(f"  Print command failed (exit {proc.returncode}). The label is at {label}.")
 
 
 def fetch_release(tag, variant, folder):
@@ -314,7 +349,8 @@ def flash_one(args, image, image_sha, version, out, qc_flag):
         print(f"  Flashed before, at {earlier[-1]['time']}. Use the label from this run.")
 
     if args.boot_check > 0 and not args.dry_run:
-        seen, qc = watch_boot(port, args.boot_check, bool(qc_flag))
+        press_wait = args.qc_wait if qc_flag else 0
+        seen, qc, pressed = watch_boot(port, args.boot_check, bool(qc_flag), press_wait)
         if seen is None:
             row["boot_log"] = "not seen"
             print("  Boot log: no version line seen. Check the panel lights up.")
@@ -327,12 +363,25 @@ def flash_one(args, image, image_sha, version, out, qc_flag):
                 row["result"] = "wrong version"
                 save(log_path, lambda: append_log(log_path, row))
                 raise RuntimeError(f"{name} runs firmware {seen}, expected {version}. No label printed.")
+        if press_wait and qc:
+            if not pressed:
+                row["result"] = "no QC press"
+                save(log_path, lambda: append_log(log_path, row))
+                raise RuntimeError(f"no button press in {press_wait} s. {name} keeps its QC flag and runs QC "
+                                   "again on its next boot. No label printed.")
+            row["boot_log"] += " pressed"
+            if not ask_colors():
+                row["result"] = "QC failed"
+                save(log_path, lambda: append_log(log_path, row))
+                raise RuntimeError(f"{name} failed the QC pattern. Set it aside. No label printed.")
 
     label = out / "labels" / f"{name}.svg"
     if not args.dry_run:
         label.parent.mkdir(parents=True, exist_ok=True)
         save(label, lambda: label.write_text(label_svg(name, mac, version), encoding="utf-8"))
         save(log_path, lambda: append_log(log_path, row))
+        if args.print_cmd:
+            print_label(args.print_cmd, label)
     print(f"OK {name}  label {label}")
 
 
@@ -385,6 +434,50 @@ def selftest():
 
     assert BOOT_QC_RE.search("[I][qc:066]: QC mode on (factory flag)")
     assert not BOOT_QC_RE.search("[I][qc:066]: QC mode on")
+    assert QC_PRESS_RE.search("[I][qc:193]: Factory flag cleared")
+
+    assert print_line("lp {label}", "factory/labels/gameday-2f6a70.svg") == 'lp "factory/labels/gameday-2f6a70.svg"'
+    assert print_line("lp -d dymo", "a.svg") == 'lp -d dymo "a.svg"'
+
+    # The boot watch against a scripted log, through a stand-in for pyserial
+    import types
+
+    class FakeSerial:
+        script = []
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            return FakeSerial.script.pop(0).encode() if FakeSerial.script else b""
+
+    fake = types.ModuleType("serial")
+    fake.Serial = FakeSerial
+    fake.SerialException = OSError
+    real_serial = sys.modules.get("serial")
+    sys.modules["serial"] = fake
+    boot = ["[I][app:100]: Project bharvey88.gameday-scoreboard version 1.5.5\n",
+            "[I][qc:066]: QC mode on (factory flag)\n"]
+    try:
+        FakeSerial.script = boot + ["[I][qc:189]: Button OK\n[I][qc:193]: Factory flag cleared\n"]
+        assert watch_boot("COM7", 5, True, press_wait=5) == ("1.5.5", True, True)
+        FakeSerial.script = list(boot)
+        assert watch_boot("COM7", 5, True) == ("1.5.5", True, False)
+        FakeSerial.script = list(boot)
+        assert watch_boot("COM7", 5, True, press_wait=1) == ("1.5.5", True, False)
+        FakeSerial.script = boot[:1] + ["[I][qc:193]: Factory flag cleared\n"]
+        assert watch_boot("COM7", 1, True, press_wait=5) == ("1.5.5", False, False)
+    finally:
+        if real_serial is None:
+            del sys.modules["serial"]
+        else:
+            sys.modules["serial"] = real_serial
 
     attempts = []
 
@@ -438,6 +531,11 @@ def main():
     ap.add_argument("--no-erase", action="store_true", help="skip the full erase (keeps old settings)")
     ap.add_argument("--boot-check", type=int, default=20, metavar="SECONDS",
                     help="watch the boot log this long for the firmware version, 0 to skip")
+    ap.add_argument("--qc-wait", type=int, default=120, metavar="SECONDS",
+                    help="after QC starts, wait this long for the button press and then ask about the colors; "
+                    "0 writes the label without waiting (default 120, QC's own timeout)")
+    ap.add_argument("--print-cmd", metavar="CMD",
+                    help='print each label with this command, {label} standing for its path, e.g. "lp {label}"')
     ap.add_argument("--dry-run", action="store_true", help="print the esptool commands, touch no board")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
@@ -497,7 +595,8 @@ def main():
 
     done = 0
     while not args.count or done < args.count:
-        reply = input(f"\nPlug in controller {done + 1} and press Enter (q to stop): ").strip().lower()
+        reply = input(f"\nPlug in controller {done + 1} (or close it in the jig) and press Enter (q to stop): ")
+        reply = reply.strip().lower()
         if reply == "q":
             break
         try:
