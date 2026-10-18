@@ -19,8 +19,9 @@ contributors; read it too.
   notes, specs, plans or reviews here: only product code, CHANGELOG, README
   and the site. Maintainer notes are kept privately and loaded through a
   gitignored CLAUDE.local.md.
-- The docs site (docs/wiki, Astro + Starlight, live at
-  docs.gameday-scoreboard.com from `main`) is part of every change. A PR
+- The docs site (docs/wiki, Astro + Starlight; the gameday-scoreboard/docs
+  repo publishes `main` to docs.gameday-scoreboard.com on GitHub Pages
+  every 15 minutes) is part of every change. A PR
   that changes what an owner or DIY builder sees or does updates or adds
   the page for it under docs/wiki/src/content/docs/ in the same PR; CI
   ("Docs updated") fails a PR into `dev` that touches firmware/ or
