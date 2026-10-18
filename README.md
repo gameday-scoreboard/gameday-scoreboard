@@ -23,6 +23,8 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 
 ## Hardware
 
+Building your own? [Runs on your own panel](https://gamedayscoreboard.app/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
+
 - The Game Day Scoreboard controller (build `gameday-scoreboard75.yaml`), or an ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
 
@@ -98,6 +100,10 @@ to the internet, so do not forward a port to it.
 ## Credits
 
 Built on hub75-studio's LVGL pages and controller packages, and on the attribute model of the ha-teamtracker integration. Thanks to both projects.
+
+## Contributing
+
+Contributions are welcome: bug reports from game days, test fixtures from odd games, builds for new boards and fixes to the device page. [CONTRIBUTING.md](CONTRIBUTING.md#where-help-is-wanted) says where help is wanted and how to build and test.
 
 ## License
 

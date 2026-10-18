@@ -234,6 +234,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
         </div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+        <div id="wifiDiag" hidden>
+          <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+          <div class="spark" id="wifiSparkBox" hidden>
+            <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+            <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+          </div>
+          <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+        </div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
         <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
       </div>
@@ -738,6 +746,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
+    // The rollback line in the firmware box reads this document, which can
+    // land after the update entity does.
+    if ((S.update_failed || "") !== fwFailed && ents[byName["Firmware"]]) renderUpdate(ents[byName["Firmware"]]);
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -1142,7 +1153,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       const txt = el("div", "ut");
       const name = n.t.abbr + (n.oa ? " vs " + n.oa : "");
       txt.appendChild(el("div", "n", name));
-      let when = "No game scheduled";
+      let when = n.none ? "No game scheduled" : "Not checked yet";
       if (n.s === "IN") when = n.ts + " - " + n.os + (n.detail ? " · " + n.detail : "");
       else if (n.s === "POST") when = endedAs(n) === "Final" ? "Final " + n.ts + " - " + n.os : endedAs(n);
       else if (n.s === "PRE") when = kickLabel(n.kick, n.tbd) + (n.tv ? " · " + n.tv : "");
@@ -1203,6 +1214,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
     renderData();
     renderHealth();
+    renderWifi();
   };
 
   const renderData = () => {
@@ -1220,9 +1232,15 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     brownout: "Power dip (brownout)", usb: "USB reset",
   };
   const restartName = (k) => RESTARTS[k] || "Other";
-  const ago = (s) => {
+  // The Wi-Fi history (components/gameday/wifi_history.h). Firmware before it
+  // sends none, and the rows stay hidden.
+  const WIFI_CAUSES = {
+    signal: "signal lost", router: "dropped by the router", password: "sign-in refused",
+    roam: "moved to another access point", other: "other",
+  };
+  const span = (s) => {
     if (s < 60) return s + " s";
-    const m = Math.floor(s / 60);
+    const m = Math.round(s / 60);
     if (m < 60) return m + " min";
     const h = Math.floor(m / 60);
     if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
@@ -1232,13 +1250,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const h = S && S.health;
     $("#health").hidden = !h;
     if (!h) return;
-    $("#hStart").textContent = restartName(h.start) + ", " + ago(h.up) + " ago";
+    $("#hStart").textContent = restartName(h.start) + ", " + span(h.up) + " ago";
     $("#hBoots").textContent = h.boots > 1 ? "Start " + h.boots + " since the power came on" : "";
     $("#hFault").textContent = !h.fault ? "None"
-      : restartName(h.fault) + (h.fault_ago != null ? ", " + ago(h.fault_ago) + " ago" : "");
+      : restartName(h.fault) + (h.fault_ago != null ? ", " + span(h.fault_ago) + " ago" : "");
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
     $("#hEspn").textContent = h.espn == null ? "None yet"
-      : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + ago(h.espn_ago) + " ago";
+      : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
     const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
     const b = h.built ? new Date(h.built * 1000) : null;
@@ -1246,8 +1264,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       b.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
     // Live here, so they no longer wait on the RSSI and heap sensors, which
-    // are off until someone turns them on in Home Assistant.
-    $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
+    // are off until someone turns them on in Home Assistant. The Wi-Fi
+    // object, when there is one, fills in the signal.
+    if (!S.wifi) $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
     $("#psram").textContent = h.psram_kb ? Math.round(h.psram_kb) + " KiB" : "";
     renderGuard(h);
   };
@@ -1277,6 +1296,60 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       $("#guardText").textContent = "The panel is running hot, so it is at " + pct + "% of its brightness until it cools. "
         + "Keep it out of direct sun and give it some air behind it.";
     }
+  };
+  // The history across the full width (a day at most), newest at the right,
+  // gaps where the panel was off Wi-Fi (a red tick along the bottom). -95 to
+  // -35 dBm bottom to top.
+  const drawSpark = (svg, hist, step) => {
+    const W = hist.length, H = 48, NS = "http://www.w3.org/2000/svg";
+    const y = (v) => (H - 2 - (Math.min(-35, Math.max(-95, v)) + 95) / 60 * (H - 4)).toFixed(1);
+    let d = "", gaps = "", lo = 0, hi = -127, weak = 0, n = 0;
+    hist.forEach((v, i) => {
+      const x = i;
+      if (v == null) { gaps += "M" + x + " " + (H - 3) + "V" + H; return; }
+      d += (i > 0 && hist[i - 1] != null ? "L" : "M") + x + " " + y(v);
+      if (i === hist.length - 1 || hist[i + 1] == null) d += "h0.01";  // a lone point still shows
+      lo = Math.min(lo, v); hi = Math.max(hi, v); n++;
+      if (v < -75) weak++;
+    });
+    const path = (cls, p) => {
+      const e = document.createElementNS(NS, "path");
+      e.setAttribute("class", cls);
+      e.setAttribute("d", p);
+      e.setAttribute("vector-effect", "non-scaling-stroke");
+      return e;
+    };
+    svg.setAttribute("viewBox", "0 0 " + (W - 1) + " " + H);
+    svg.replaceChildren(path("th", "M0 " + y(-75) + "H" + W));
+    if (gaps) svg.appendChild(path("gap", gaps));
+    if (d) svg.appendChild(path("ln", d));
+    svg.setAttribute("aria-label", n ? "Signal over the last " + span(W * step) + ": " + lo + " to " + hi
+      + " dBm" + (weak ? ", weak for " + span(weak * step) : "") : "No signal readings yet");
+  };
+  const renderWifi = () => {
+    const w = S && S.wifi;
+    $("#wifiDiag").hidden = !w;
+    if (!w) return;
+    $("#rssi").textContent = w.rssi != null ? w.rssi + " dBm" : "Not connected";
+    $("#wifiWeak").hidden = !w.weak;
+    const hist = w.hist || [], step = w.step || 300;
+    $("#wifiSparkBox").hidden = hist.length < 2;
+    if (hist.length >= 2) {
+      drawSpark($("#wifiSpark"), hist, step);
+      $("#wifiFrom").textContent = (hist.length * step >= 86400 ? "24 h" : span(hist.length * step)) + " ago";
+    }
+    // Up less than a day (by the history), every drop since start is in the day.
+    const day = hist.length > 0 && hist.length * step < 86400;
+    const count = day ? w.drops : w.day;
+    $("#wifiDrops").textContent = (count || "None") + (count ? (day ? " since start" : " in 24 h") : "");
+    const causes = Object.entries(w.causes || {}).filter(([k]) => k !== "roam");
+    let line = "";
+    if (w.last) {
+      line = "Last: " + (WIFI_CAUSES[w.last] || "other") + ", " + span(w.last_ago) + " ago"
+        + (w.last_down != null ? ", back in " + span(w.last_down) : "");
+      if (causes.length > 1) line += ". " + causes.map(([k, c]) => c + " " + (WIFI_CAUSES[k] || k)).join(", ");
+    }
+    $("#wifiLast").textContent = line;
   };
 
   // After an install the device reboots. The event stream only retries every
@@ -1421,7 +1494,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       })
       .catch(() => {});
   };
+  // A release has its own section on the site's changelog, in owner words; a
+  // beta has none, so it keeps the manifest's link to its commit.
+  const notesLink = (u) =>
+    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://gamedayscoreboard.app/changelog/#v" + u.value : u.release_url;
   let installing = false;
+  let fwFailed = "";     // S.update_failed as the firmware box last drew it
   const renderUpdate = (u) => {
     const box = $("#fw");
     box.hidden = false;
@@ -1431,6 +1509,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const btn = $("#fwInstall");
     const sub = $("#fwSub");
     btn.hidden = true;
+    fwFailed = (S && S.update_failed) || "";
     if (st.includes("INSTALLING") || installing) {
       $("#fwText").textContent = "Installing " + (latest || "update");
       sub.textContent = "Keep the panel powered. It reboots when done and this page reconnects.";
@@ -1439,12 +1518,21 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       $("#fwText").textContent = "You're ahead of the latest release, " + cur;
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
-      $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+      // The panel rolled back from this very version (a crash in its first
+      // minute); it won't install it on its own again, but Install still tries.
+      const failed = !!(S && S.update_failed && S.update_failed === u.value);
+      if (failed) {
+        $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
+        sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+      } else {
+        $("#fwText").textContent = "Update available: " + latest;
+        sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+      }
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {
-        if (!confirm("Install " + latest + " now? The panel will reboot.")) return;
+        const ask = failed ? "Try " + latest + " again? It didn't take last time. The panel will reboot." : "Install " + latest + " now? The panel will reboot.";
+        if (!confirm(ask)) return;
         installing = true;
         renderUpdate(u);
         post(u.id, "install");
@@ -1458,9 +1546,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       $("#fwText").textContent = "Firmware " + cur;
       sub.textContent = "Not checked yet. It checks a few seconds after the clock syncs, or tap Check for updates.";
     }
-    if (u.release_url && !st.includes("INSTALLING")) {
+    const notesUrl = notesLink(u);
+    if (notesUrl && !st.includes("INSTALLING")) {
       const a = el("a", null, "Release notes");
-      a.href = u.release_url;
+      a.href = notesUrl;
       a.target = "_blank";
       a.rel = "noopener";
       sub.appendChild(document.createTextNode(sub.textContent ? " " : ""));
@@ -1527,7 +1616,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": if (!(S && S.health)) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "RSSI": if (!(S && (S.wifi || S.health))) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
       case "Free Heap (PSRAM)": if (!(S && S.health)) $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };

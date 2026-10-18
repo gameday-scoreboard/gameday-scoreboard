@@ -32,10 +32,12 @@
 #include "poll_timing.h"
 #include "set_request.h"
 #include "startup.h"
+#include "update_mirror.h"
+#include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
 #endif
-#ifdef GAMEDAY_BETA_CHANNEL
+#if defined(GAMEDAY_BETA_CHANNEL) || defined(GAMEDAY_UPDATE_MIRROR)
 #include "esphome/components/http_request/update/http_request_update.h"
 #endif
 
@@ -128,7 +130,7 @@ class GamedaySelect : public select::Select, public Component {
 
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
-//   GET  /gameday/state              full snapshot + settings
+//   GET  /gameday/state              full snapshot + settings, and "wifi" (wifi_history.h)
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
@@ -281,6 +283,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool follow_beta() const { return false; }
 #endif
   void set_follow_beta(bool on);
+  // The update feed's second host (update_mirror.h): `mirror` is `source`
+  // on the mirror, `beta_mirror` the beta manifest there (release builds).
+#ifdef GAMEDAY_UPDATE_MIRROR
+  void set_update_mirror(http_request::HttpRequestUpdate *update, const char *source, const char *mirror,
+                         const char *beta_mirror) {
+    this->mirror_update_ = update;
+    this->primary_source_ = source;
+    this->mirror_source_ = mirror;
+    this->beta_mirror_source_ = beta_mirror;
+  }
+#endif
 
   void setup() override;
   void loop() override;
@@ -326,6 +339,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject power_pref_;
   bool power_loaded_{false};
   bool power_settled_{false};  // ran kPowerSettledMs without a brownout
+  // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
+  // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
+  void wifi_tick_();
+  std::string wifi_json_();
+  ::espn::WifiHistory wifi_hist_;
+  std::mutex wifi_mutex_;
+  uint32_t wifi_sample_ms_{0};
+  bool wifi_up_{false};  // under wifi_mutex_, as is wifi_rssi_
+  int8_t wifi_rssi_{0};  // the last sample
+  uint32_t wifi_reason_seen_{0};  // wifi_reason_seq when the link last came up
   std::mutex state_mutex_;
   std::string state_json_{"{}"};
   UpdateFields last_fields_;
@@ -619,6 +642,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject beta_pref_;
   uint8_t follow_beta_{0};  // 1 = read the beta manifest
   void apply_channel_();
+#endif
+#ifdef GAMEDAY_UPDATE_MIRROR
+  http_request::HttpRequestUpdate *mirror_update_{nullptr};
+  const char *primary_source_{nullptr};
+  const char *mirror_source_{nullptr};
+  const char *beta_mirror_source_{nullptr};
+  uint32_t mirror_since_ms_{0};
+  bool on_mirror_{false};
+  bool mirror_answered_{false};
+  void mirror_tick_();
+  void use_primary_();
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;

@@ -178,7 +178,7 @@ interval:
 # Counted on the press, not the click, so "Button OK" shows as the button
 # goes down. The power toggle on click (firmware/controllers) stands aside
 # while QC runs, and so does boot.yaml's hold timer: a long press here never
-# shows the address or resets Wi-Fi.
+# shows the address or resets anything.
 binary_sensor:
   - id: !extend power_button
     on_press:
