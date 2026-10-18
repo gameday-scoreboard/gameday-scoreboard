@@ -9,7 +9,7 @@ Try [Troubleshooting](/help/troubleshooting/) and [What the panel is telling you
 
 ## Email support
 
-For a Game Day Scoreboard you bought, email [support@gameday-scoreboard.com](mailto:support@gameday-scoreboard.com).
+For a Game Day Scoreboard you bought, email [support@gameday-scoreboard.com](mailto:support@gameday-scoreboard.com). We reply within one business day.
 
 Include what you can of this:
 
