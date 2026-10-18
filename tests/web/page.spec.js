@@ -916,6 +916,27 @@ test("the stale tag follows the device's consecutive misses", async ({ page, req
   await expect(page.locator("#stale")).toBeHidden();
 });
 
+test("a Wi-Fi that wants a sign-in says how to fix it, in place of the panel's reason and the stale tag", async ({ page, request }) => {
+  await reset(request, { captive: true, misses: 1, game: { s: "NOT_FOUND", l: "nfl", why: "Wi-Fi needs a sign-in" }, next: [] });
+  await page.goto("/");
+  await expect(page.locator("#gstate")).toHaveText("NO GAME");
+  await expect(page.locator("#msg")).toHaveText("This Wi-Fi needs a sign-in. Use a home network or a hotspot.");
+  await expect(page.locator("#stale")).toBeVisible();
+  await expect(page.locator("#stale")).toHaveText("Wi-Fi needs a sign-in");
+
+  // Over a game still on the board from before, only the tag says it
+  await reset(request, { captive: true, misses: 1 });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#stale")).toHaveText("Wi-Fi needs a sign-in");
+
+  // Cleared: back to the usual stale tag
+  await reset(request, { captive: false, misses: 3, stale_s: 600 });
+  await page.reload();
+  await expect(page.locator("#stale")).toHaveText("data stale");
+  await expect(page.locator("#stale")).toBeVisible();
+});
+
 test("says when the panel stops answering, and clears it when the panel is back", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

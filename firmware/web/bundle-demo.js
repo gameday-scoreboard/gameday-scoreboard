@@ -471,7 +471,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const msg = $("#msg");
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
-    $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // captive: the panel's Wi-Fi answered with a sign-in page, which the
+    // panel can't get past, so say how to fix it rather than "data stale".
+    const captive = !!(S && S.captive);
+    const stale = $("#stale");
+    stale.textContent = captive ? "Wi-Fi needs a sign-in" : "data stale";
+    stale.classList.toggle("on", captive || ((S && S.misses) || 0) >= 3);
     // Bowl or playoff name, when ESPN gives the game one
     const gname = $("#gname");
     gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
@@ -488,6 +493,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       // why is the panel's own reason ("Can't reach ESPN", "Getting ready"),
       // sent only when its board says something other than its default.
       msg.textContent = !g ? "Waiting for the first fetch"
+        : captive ? "This Wi-Fi needs a sign-in. Use a home network or a hotspot."
         : g.why ? g.why
         : favMode ? "None of your favorites has a game coming up"
           : liveMode ? "No live games right now" : "No upcoming game for this team";

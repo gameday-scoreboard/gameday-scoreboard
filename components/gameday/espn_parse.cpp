@@ -358,7 +358,9 @@ using detail::add_odds;
 using detail::add_part;
 using detail::records_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+  if (captive)
+    return "Wi-Fi needs a sign-in";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)

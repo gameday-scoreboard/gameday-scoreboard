@@ -25,6 +25,15 @@
 #               128: QR + SETUP / Game Day / app (13 s), then the hotspot
 #                    lines (5 s) once it is up
 #   connecting  Connecting to / <network name>, full width, no QR
+#   sign-in     64:  Wi-Fi needs / sign-in / use home or / a hotspot (5 s),
+#                    QR (8 s)
+#               128: QR + the same lines
+#
+# "sign-in" is a connected panel on a Wi-Fi that holds everything behind a
+# sign-in page (a bar, hotel or dorm; components/gameday/captive.h). It comes
+# up over the board when the gameday component sends "captive" and goes on
+# "captive_clear", once ESPN answers (gameday-common.yaml). The boot button's
+# address still takes over while it is held.
 #
 # "wifi lost" means the panel has a saved network and is not on it, either
 # because it dropped or because it never came up this boot. It sits above the
@@ -238,7 +247,7 @@ script:
   # first 5 s, 1 for the next 8 s, then 2 for 5 s when extra is true, and for
   # owner 4 a last 5 s as 3, round and round. boot_refresh decides what each
   # frame shows. owner says whose run it is (1 connected, 2 wifi lost, 3
-  # setup, 4 setup after "Reset Wi-Fi", 0 none): a new owner, or
+  # setup, 4 setup after "Reset Wi-Fi", 5 sign-in, 0 none): a new owner, or
   # the same one gaining or losing its extra turn, starts again at frame 0,
   # so a run never opens partway through. 0 stops the turns.
   - id: boot_qr_cycle
@@ -347,6 +356,14 @@ script:
                 id(boot_set_lines).execute("Open", h1, ip, "pick a team", false);
               else
                 id(boot_set_lines).execute(h1, h2, ip, "pick a team", false);
+            } else if (id(gameday_ctl).captive()) {
+              // On Wi-Fi, but it holds everything behind a sign-in page
+              // (components/gameday/captive.h). The panel can't sign in, so
+              // send the owner to another network: the QR opens the app,
+              // which hands the panel a home network or a phone hotspot.
+              id(boot_qr_cycle).execute(5, false);
+              id(boot_view).execute(wide, wide || id(boot_qr_frame) == 1);
+              id(boot_set_lines).execute("Wi-Fi needs", "sign-in", "use home or", "a hotspot", false);
             } else if (id(boot_hold_since_ms) != 0) {
               id(boot_hold_view).execute();
             } else {
@@ -483,30 +500,59 @@ script:
             - if:
                 condition:
                   lambda: |-
-                    // On Wi-Fi, but the first scoreboard is not ready: hold
-                    // until it is, or until the cap runs out, rather than
-                    // uncover an empty board.
-                    if (id(boot_hold_since_ms) == 0 && !id(gameday_ctl).board_ready())
-                      id(boot_hold_since_ms) = millis() == 0 ? 1 : millis();
-                    return id(gameday_ctl).boot_hold(id(boot_hold_since_ms));
+                    // On Wi-Fi that wants a sign-in, the overlay is what says
+                    // so (boot_refresh). It goes when that clears: the
+                    // captive_clear action in gameday-common.yaml asks again.
+                    return id(gameday_ctl).captive() && !id(qc_active);
                 then:
+                  # A hold for the first scoreboard that started before the
+                  # sign-in state ends here: boot_refresh would otherwise ask
+                  # for this hide again every tick once the hold ran out, and
+                  # captive_clear starts a fresh one.
+                  - lambda: 'id(boot_hold_since_ms) = 0;'
                   - component.resume: boot_check
                   - component.resume: boot_anim
-                  - script.execute: boot_hold_view
+                  # Paint now when the overlay was hidden, but not from inside
+                  # boot_refresh, which can be what called this.
+                  - if:
+                      condition:
+                        not:
+                          script.is_running: boot_refresh
+                      then:
+                        - script.execute:
+                            id: boot_refresh
+                            via_button: false
                   - lvgl.obj.update:
                       id: boot_overlay
                       hidden: false
                 else:
-                  - lambda: 'id(boot_hold_since_ms) = 0;'
-                  - component.suspend: boot_check
-                  - component.suspend: boot_anim
-                  - script.execute:
-                      id: boot_qr_cycle
-                      owner: 0
-                      extra: false
-                  - lvgl.obj.update:
-                      id: boot_overlay
-                      hidden: true
+                  - if:
+                      condition:
+                        lambda: |-
+                          // On Wi-Fi, but the first scoreboard is not ready: hold
+                          // until it is, or until the cap runs out, rather than
+                          // uncover an empty board.
+                          if (id(boot_hold_since_ms) == 0 && !id(gameday_ctl).board_ready())
+                            id(boot_hold_since_ms) = millis() == 0 ? 1 : millis();
+                          return id(gameday_ctl).boot_hold(id(boot_hold_since_ms));
+                      then:
+                        - component.resume: boot_check
+                        - component.resume: boot_anim
+                        - script.execute: boot_hold_view
+                        - lvgl.obj.update:
+                            id: boot_overlay
+                            hidden: false
+                      else:
+                        - lambda: 'id(boot_hold_since_ms) = 0;'
+                        - component.suspend: boot_check
+                        - component.suspend: boot_anim
+                        - script.execute:
+                            id: boot_qr_cycle
+                            owner: 0
+                            extra: false
+                        - lvgl.obj.update:
+                            id: boot_overlay
+                            hidden: true
 
   # Boot button: bring the address back for 20 seconds
   - id: boot_show_address

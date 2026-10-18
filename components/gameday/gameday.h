@@ -22,6 +22,7 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "captive.h"
 #include "espn_parse.h"
 #include "favorites.h"
 #include "offseason.h"
@@ -215,6 +216,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
   bool board_ready() const { return this->board_ready_; }
+  // The Wi-Fi answered ESPN with a sign-in page (captive.h) and ESPN has not
+  // answered since. The boot screen says so over the board (boot.yaml).
+  bool captive() const { return this->captive_; }
+  // Bench only: read some other address in place of captive.h's kProbeUrl,
+  // such as a host on the LAN that answers like a portal. Pass a string
+  // literal: only the pointer is kept, and the probe task reads it.
+  void set_probe_url(const char *url) { this->probe_url_.store(url); }
   // What the panel has downloaded from ESPN since boot: reply bodies and
   // logos. Each request also spends about 6 KB on headers and the TLS
   // handshake, which this does not see.
@@ -765,6 +773,31 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};
+
+  // Sign-in Wi-Fi (captive.h). The probe runs on its own short task, since
+  // it is needed before the clock is set, when no fetch job runs.
+  void captive_tick_();
+  void set_captive_(bool on);
+  void start_probe_();
+  static void probe_task_(void *arg);
+  bool captive_{false};
+  // The probe saw a sign-in page while ESPN reads were still fine: ESPN is
+  // asked at once, and captive_ is set only if that read fails.
+  bool captive_suspect_{false};
+  uint32_t read_fails_{0};        // back_off_() calls this boot, main loop only
+  uint32_t suspect_fails_mark_{0};
+  bool probe_running_{false};     // main loop: a probe task is out
+  bool probe_join_done_{false};   // probed since Wi-Fi last came up
+  uint32_t probe_ms_{0};          // millis() the last probe started
+  uint32_t probe_join_ms_{0};     // millis() Wi-Fi came up, 0 while it is down
+  uint32_t probe_ok_mark_{0};     // espn_ok_reads_ when the last probe started
+  std::atomic<const char *> probe_url_{::espn::kProbeUrl};
+  // Written by the probe task, read by the main loop once probe_done_ is set.
+  std::atomic<bool> probe_done_{false};
+  std::atomic<uint8_t> probe_result_{0};
+  // ESPN answered 200 over HTTPS (open_), from any task: the network is open,
+  // whatever the probe said.
+  std::atomic<uint32_t> espn_ok_reads_{0};
 };
 
 class UpdateTrigger : public Trigger<const UpdateFields &> {
