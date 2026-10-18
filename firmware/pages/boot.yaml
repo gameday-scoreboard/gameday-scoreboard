@@ -279,6 +279,8 @@ script:
       - lambda: |-
           auto *w = wifi::global_wifi_component;
           if (w == nullptr) return;
+          // The boot button's countdown has the screen (boot_hold_tick).
+          if (id(boot_hold_stage) >= 2) return;
           // The app is mid-handover: no QR and no turns, just JOINING.
           const bool provisioning =
               improv_ble::global_improv_component != nullptr &&
@@ -476,83 +478,90 @@ script:
 
   - id: boot_hide
     then:
+      # The boot button's countdown owns the overlay (boot_hold_tick):
+      # nothing hides it or paints over it until the button is let go, and
+      # the release ends in boot_show_address, which asks for this again.
       - if:
           condition:
-            lambda: |-
-              // Not on Wi-Fi: the overlay is the only thing telling the owner
-              // what to do, whether the panel lost its network or was never
-              // set up. Never hide it out from under them, whatever asked
-              // for the hide (the boot button's 20 s timer, for one, which
-              // used to blank a panel in setup until a restart).
-              auto *w = wifi::global_wifi_component;
-              return w != nullptr && !w->is_connected();
+            lambda: 'return id(boot_hold_stage) < 2;'
           then:
-            # Re-arm the hide for when Wi-Fi comes back. A drop shorter than
-            # boot_wifi_lost_later's wait never resets this, so the overlay
-            # would otherwise stay over the scoreboard.
-            - lambda: 'id(boot_ip_shown_ms) = 0;'
-            - component.resume: boot_check
-            - component.resume: boot_anim
-            - script.execute:
-                id: boot_refresh
-                via_button: false
-          else:
             - if:
                 condition:
                   lambda: |-
-                    // On Wi-Fi that wants a sign-in, the overlay is what says
-                    // so (boot_refresh). It goes when that clears: the
-                    // captive_clear action in gameday-common.yaml asks again.
-                    return id(gameday_ctl).captive() && !id(qc_active);
+                    // Not on Wi-Fi: the overlay is the only thing telling the owner
+                    // what to do, whether the panel lost its network or was never
+                    // set up. Never hide it out from under them, whatever asked
+                    // for the hide (the boot button's 20 s timer, for one, which
+                    // used to blank a panel in setup until a restart).
+                    auto *w = wifi::global_wifi_component;
+                    return w != nullptr && !w->is_connected();
                 then:
-                  # A hold for the first scoreboard that started before the
-                  # sign-in state ends here: boot_refresh would otherwise ask
-                  # for this hide again every tick once the hold ran out, and
-                  # captive_clear starts a fresh one.
-                  - lambda: 'id(boot_hold_since_ms) = 0;'
+                  # Re-arm the hide for when Wi-Fi comes back. A drop shorter than
+                  # boot_wifi_lost_later's wait never resets this, so the overlay
+                  # would otherwise stay over the scoreboard.
+                  - lambda: 'id(boot_ip_shown_ms) = 0;'
                   - component.resume: boot_check
                   - component.resume: boot_anim
-                  # Paint now when the overlay was hidden, but not from inside
-                  # boot_refresh, which can be what called this.
-                  - if:
-                      condition:
-                        not:
-                          script.is_running: boot_refresh
-                      then:
-                        - script.execute:
-                            id: boot_refresh
-                            via_button: false
-                  - lvgl.obj.update:
-                      id: boot_overlay
-                      hidden: false
+                  - script.execute:
+                      id: boot_refresh
+                      via_button: false
                 else:
                   - if:
                       condition:
                         lambda: |-
-                          // On Wi-Fi, but the first scoreboard is not ready: hold
-                          // until it is, or until the cap runs out, rather than
-                          // uncover an empty board.
-                          if (id(boot_hold_since_ms) == 0 && !id(gameday_ctl).board_ready())
-                            id(boot_hold_since_ms) = millis() == 0 ? 1 : millis();
-                          return id(gameday_ctl).boot_hold(id(boot_hold_since_ms));
+                          // On Wi-Fi that wants a sign-in, the overlay is what says
+                          // so (boot_refresh). It goes when that clears: the
+                          // captive_clear action in gameday-common.yaml asks again.
+                          return id(gameday_ctl).captive() && !id(qc_active);
                       then:
+                        # A hold for the first scoreboard that started before the
+                        # sign-in state ends here: boot_refresh would otherwise ask
+                        # for this hide again every tick once the hold ran out, and
+                        # captive_clear starts a fresh one.
+                        - lambda: 'id(boot_hold_since_ms) = 0;'
                         - component.resume: boot_check
                         - component.resume: boot_anim
-                        - script.execute: boot_hold_view
+                        # Paint now when the overlay was hidden, but not from inside
+                        # boot_refresh, which can be what called this.
+                        - if:
+                            condition:
+                              not:
+                                script.is_running: boot_refresh
+                            then:
+                              - script.execute:
+                                  id: boot_refresh
+                                  via_button: false
                         - lvgl.obj.update:
                             id: boot_overlay
                             hidden: false
                       else:
-                        - lambda: 'id(boot_hold_since_ms) = 0;'
-                        - component.suspend: boot_check
-                        - component.suspend: boot_anim
-                        - script.execute:
-                            id: boot_qr_cycle
-                            owner: 0
-                            extra: false
-                        - lvgl.obj.update:
-                            id: boot_overlay
-                            hidden: true
+                        - if:
+                            condition:
+                              lambda: |-
+                                // On Wi-Fi, but the first scoreboard is not ready: hold
+                                // until it is, or until the cap runs out, rather than
+                                // uncover an empty board.
+                                if (id(boot_hold_since_ms) == 0 && !id(gameday_ctl).board_ready())
+                                  id(boot_hold_since_ms) = millis() == 0 ? 1 : millis();
+                                return id(gameday_ctl).boot_hold(id(boot_hold_since_ms));
+                            then:
+                              - component.resume: boot_check
+                              - component.resume: boot_anim
+                              - script.execute: boot_hold_view
+                              - lvgl.obj.update:
+                                  id: boot_overlay
+                                  hidden: false
+                            else:
+                              - lambda: 'id(boot_hold_since_ms) = 0;'
+                              - component.suspend: boot_check
+                              - component.suspend: boot_anim
+                              - script.execute:
+                                  id: boot_qr_cycle
+                                  owner: 0
+                                  extra: false
+                              - lvgl.obj.update:
+                                  id: boot_overlay
+                                  hidden: true
 
   # Boot button: bring the address back for 20 seconds
   - id: boot_show_address
@@ -567,52 +576,83 @@ script:
       - delay: 20s
       - script.execute: boot_hide
 
-  # Boot button held down: stage 1 shows the address, stage 2 warns that a
-  # reset is coming with a bar that fills from 5s to 10s, stage 3 resets.
-  # Timed from the press so the customer sees the warning before anything
-  # is erased.
+  # Boot button held down, timed from the press. Nothing is erased while the
+  # button is down: the hold picks what happens and letting go does it
+  # (on_release below), so the owner reads the screen before anything is
+  # gone and can still back out.
+  #   1.5 s  stage 1: the address, as before
+  #   5 s    stage 2: Keep holding / Wi-Fi reset / in 5s, the bar filling
+  #   10 s   stage 3: Release to / reset Wi-Fi / Hold 10s to / erase all
+  #   20 s   stage 4: Release to / erase all / Hold 10s to / cancel
+  #   30 s   stage 5: Release to / cancel
+  # Letting go in stage 2 or 5 goes back to the address and resets nothing.
+  # Stage 6 is a reset on its way, until the restart.
   - id: boot_hold_tick
     then:
       - lambda: |-
-          if (id(boot_button_press_ms) == 0) return;
+          if (id(boot_button_press_ms) == 0 || id(boot_hold_stage) == 6) return;
           const uint32_t held = millis() - id(boot_button_press_ms);
-          if (held >= 10000) {
-            if (id(boot_hold_stage) == 3) return;
-            id(boot_hold_stage) = 3;
-            id(boot_set_lines).execute("Wi-Fi reset", "restarting", "", "", false);
-            id(boot_button_press_ms) = 0;
-            id(reset_wifi).press();
+          if (held < 5000) {
+            if (held >= 1500 && id(boot_hold_stage) < 1) {
+              id(boot_hold_stage) = 1;
+              // A panel switched off with a click would show none of this.
+              if (!id(power).state) id(power).turn_on();
+              id(boot_show_address).execute();
+            }
             return;
           }
-          if (held >= 5000) {
-            if (id(boot_hold_stage) != 2) {
-              id(boot_hold_stage) = 2;
-              // component.suspend maps to stop_poller() on a PollingComponent;
-              // there is no suspend() method to call from a lambda.
-              id(boot_anim).stop_poller();
-              // boot_check repaints the overlay twice a second. On a panel
-              // whose overlay is still up (first boot, or the 45s setup hint)
-              // it would overwrite this warning as fast as we draw it. It is
-              // not resumed on release: boot_show_address ends in boot_hide,
-              // which suspends it anyway, so this is where it would land. The
-              // exception is an outage, where boot_hide resumes it instead of
-              // hiding, which is what keeps the Wi-Fi lost lines coming back.
-              id(boot_check).stop_poller();
-              // The QR would cover the warning, and with boot_check stopped
-              // nothing else would take it down. Full width, so the warning
-              // is not squeezed into half a chain.
-              id(boot_qr_cycle).execute(0, false);
-              id(boot_view).execute(false, false);
-              id(boot_set_lines).execute("Keep holding", "to reset", "Wi-Fi", "", true);
+          const int stage = held >= 30000 ? 5 : held >= 20000 ? 4 : held >= 10000 ? 3 : 2;
+          // Whole seconds left in this stage, so the countdown reads 10..1.
+          const uint32_t stage_end = stage == 2 ? 10000 : stage == 3 ? 20000 : 30000;
+          const unsigned left = stage == 5 ? 0 : (unsigned) ((stage_end - held + 999) / 1000);
+          static int shown = -1;
+          if (id(boot_hold_stage) < 2) {
+            shown = -1;
+            // component.suspend maps to stop_poller() on a PollingComponent;
+            // there is no suspend() method to call from a lambda.
+            id(boot_anim).stop_poller();
+            // boot_check repaints the overlay twice a second. On a panel
+            // whose overlay is still up (first boot, or the 45s setup hint)
+            // it would overwrite this warning as fast as we draw it. It is
+            // not resumed on release: boot_show_address ends in boot_hide,
+            // which suspends it anyway, so this is where it would land. The
+            // exception is an outage, where boot_hide resumes it instead of
+            // hiding, which is what keeps the Wi-Fi lost lines coming back.
+            id(boot_check).stop_poller();
+            // The QR would cover the warning, and with boot_check stopped
+            // nothing else would take it down. Full width, so the warning
+            // is not squeezed into half a chain.
+            id(boot_qr_cycle).execute(0, false);
+            id(boot_view).execute(false, false);
+          }
+          if (stage != id(boot_hold_stage)) {
+            static const char *const LOG[] = {"keep holding for a Wi-Fi reset", "release to reset Wi-Fi",
+                                              "release to factory reset", "release to cancel"};
+            ESP_LOGI("boot", "Button held %us: %s", (unsigned) (held / 1000), LOG[stage - 2]);
+            id(boot_hold_stage) = stage;
+          }
+          // Lines only when the stage or the count changes; the bar every tick.
+          const int key = stage * 100 + (int) left;
+          if (key != shown) {
+            shown = key;
+            char n[16];
+            if (stage == 2) {
+              snprintf(n, sizeof(n), "in %us", left);
+              id(boot_set_lines).execute("Keep holding", "Wi-Fi reset", n, "", true);
+            } else if (stage == 3) {
+              snprintf(n, sizeof(n), "Hold %us to", left);
+              id(boot_set_lines).execute("Release to", "reset Wi-Fi", n, "erase all", false);
+            } else if (stage == 4) {
+              snprintf(n, sizeof(n), "Hold %us to", left);
+              id(boot_set_lines).execute("Release to", "erase all", n, "cancel", false);
+            } else {
+              id(boot_set_lines).execute("Release to", "cancel", "", "", false);
             }
+          }
+          if (stage == 2) {
             int pct = (int) ((held - 5000) / 50);  // 5000ms span -> 0..100
             if (pct > 100) pct = 100;
             lv_bar_set_value(id(boot_bar), pct, LV_ANIM_OFF);
-            return;
-          }
-          if (held >= 1500 && id(boot_hold_stage) < 1) {
-            id(boot_hold_stage) = 1;
-            id(boot_show_address).execute();
           }
 
   # Wi-Fi went away. Undo boot_hide, cancel any pending hide, and say what
@@ -630,9 +670,9 @@ script:
       - lambda: |-
           id(boot_ip_shown_ms) = 0;
           id(boot_hold_since_ms) = 0;
-      # Stage 2 is the "keep holding to reset Wi-Fi" warning, which owns both
-      # the lines and the bar and stopped boot_check for exactly this reason.
-      # Do not repaint over a warning that is about to erase the network.
+      # Stages 2 and up are the boot button's countdown, which owns both the
+      # lines and the bar and stopped boot_check for exactly this reason. Do
+      # not repaint over a screen that says what letting go will erase.
       # boot_refresh derives these same lines when it next runs.
       - if:
           condition:
@@ -768,23 +808,39 @@ improv_ble:
         id: boot_refresh
         via_button: false
 
-# Boot button: the hold is timed from the press so the panel can warn before
-# it erases anything. 1.5s shows the address, 5s starts the "keep holding"
-# warning with a filling bar, 10s resets Wi-Fi. Releasing before 10s leaves
-# the address up for 20s as before and resets nothing.
+# Boot button: the hold is timed from the press (boot_hold_tick) and the
+# release does what the screen said. Let go at 10 to 20 s to reset Wi-Fi, at
+# 20 to 30 s for a factory reset. Letting go any other time leaves the
+# address up for 20 s and resets nothing.
 binary_sensor:
   - id: !extend power_button
     on_press:
       - lambda: |-
+          if (id(boot_hold_stage) == 6) return;
           id(boot_button_press_ms) = millis() == 0 ? 1 : millis();
           id(boot_hold_stage) = 0;
     on_release:
       - lambda: |-
-          const bool warned = id(boot_hold_stage) == 2;
+          const int stage = id(boot_hold_stage);
           id(boot_button_press_ms) = 0;
+          if (stage == 6) return;
+          if (stage == 3 || stage == 4) {
+            id(boot_hold_stage) = 6;
+            if (stage == 3) {
+              ESP_LOGI("boot", "Button released: resetting Wi-Fi");
+              id(boot_set_lines).execute("Wi-Fi reset", "restarting", "", "", false);
+              id(reset_wifi).press();
+            } else {
+              ESP_LOGI("boot", "Button released: factory reset");
+              id(boot_set_lines).execute("Erasing all", "restarting", "", "", false);
+              id(factory_reset_btn).press();
+            }
+            return;
+          }
           id(boot_hold_stage) = 0;
-          if (warned) {
+          if (stage == 2 || stage == 5) {
             // Back out of the warning: restore the address screen and its bar.
+            ESP_LOGI("boot", "Button released: nothing reset");
             id(boot_anim).start_poller();
             id(boot_show_address).execute();
           }
