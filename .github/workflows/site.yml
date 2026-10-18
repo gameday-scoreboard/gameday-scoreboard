@@ -113,6 +113,8 @@ jobs:
           # Releases up to v2026.10.0 carry the ESPHome project name.
           ./scripts/set_manifest_name.sh site/firmware
           sed -i "s/__VERSION__/${TAG}/g" site/index.html
+          # Support's FAQPage JSON-LD, sitemap.xml and robots.txt.
+          python3 scripts/site_seo.py build site
           ls -laR site
       - uses: actions/upload-pages-artifact@v5
         with:
