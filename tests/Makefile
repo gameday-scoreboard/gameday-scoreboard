@@ -2,6 +2,7 @@
 # and the ArduinoJson single header next to this file (ArduinoJson.h, version
 # 7.4.3 to match ESPHome).
 CXX ?= g++
+CC ?= gcc
 CXXFLAGS ?= -std=c++17 -O1 -Wall -Wextra -I../components/gameday -I.
 # Link the GCC runtime in on Windows. Git Bash puts its own older
 # libstdc++-6.dll ahead of the compiler's on PATH, and the mismatched
@@ -16,9 +17,15 @@ all: build/test_parse build/test_networks
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
-build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
+build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) $(SRCS) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(SRCS) build/miniz.o -o $@ $(LDFLAGS)
+
+# miniz v1.15 (public domain), the version in the ESP32-S3 ROM that the
+# firmware inflates ESPN's gzip replies with.
+build/miniz.o: miniz.c
+	@mkdir -p build
+	$(CC) -O1 -c miniz.c -o $@
 
 build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
 	@mkdir -p build

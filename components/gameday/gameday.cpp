@@ -8,9 +8,11 @@
 #include "esphome/core/log.h"
 
 #include <cstring>
+#include <optional>
 #include <strings.h>
 #include <vector>
 
+#include "gzip_stream.h"
 #include "logo_lru.h"
 #include "panel_text.h"
 #include "timezones.h"
@@ -109,61 +111,78 @@ static const char *const MODE_OPTIONS[] = {"My team",       "Live NFL",       "L
                                            "Live anything", "Favorite teams", "Live games"};
 static const uint32_t FAV_TICK = 1000;  // playlist / lock decisions re-run this often
 
-// Feeds ArduinoJson straight from the HTTP socket so a scoreboard document
-// never has to sit in RAM as a whole. Adds what it read to `counter` when done.
-class ContainerReader {
+// The HTTP socket as a byte source for gz::Body.
+struct ContainerSource {
+  http_request::HttpContainer *container{nullptr};
+  int read(uint8_t *buf, size_t max) { return this->container->read(buf, max); }
+};
+
+// One ESPN reply, from the request to the last byte parsed, fed to
+// ArduinoJson straight from the socket so a scoreboard never sits in RAM as a
+// whole. It asks for gzip (a fourteenth of the bytes) only when it could take
+// the inflater's 44 KB from PSRAM, reads whichever encoding came back, and
+// hands the PSRAM back when it goes out of scope, so nothing is held between
+// polls. A build with GAMEDAY_NO_GZIP defined reads ESPN uncompressed, for
+// bench comparisons. Adds the bytes it took off the wire to `counter` when
+// the reply is closed.
+class EspnBody {
  public:
-  ContainerReader(std::shared_ptr<http_request::HttpContainer> container, std::atomic<uint64_t> &counter)
-      : container_(std::move(container)), counter_(counter) {}
-  ~ContainerReader() { this->counter_ += this->total_; }
-  ContainerReader(const ContainerReader &) = delete;
-  ContainerReader &operator=(const ContainerReader &) = delete;
+  explicit EspnBody(std::atomic<uint64_t> &counter) : counter_(counter), start_ms_(millis()) {
+#if defined(USE_PSRAM) && !defined(GAMEDAY_NO_GZIP)
+    this->work_ = static_cast<gz::Work *>(heap_caps_malloc(sizeof(gz::Work), MALLOC_CAP_SPIRAM));
+#endif
+  }
+  ~EspnBody() {
+    this->end();
+    heap_caps_free(this->work_);
+  }
+  EspnBody(const EspnBody &) = delete;
+  EspnBody &operator=(const EspnBody &) = delete;
 
-  int read() {
-    if (!this->fill_())
-      return -1;
-    return static_cast<unsigned char>(this->buf_[this->pos_++]);
+  bool wants_gzip() const { return this->work_ != nullptr; }
+
+  void start(std::shared_ptr<http_request::HttpContainer> container) {
+    this->container_ = std::move(container);
+    this->src_.container = this->container_.get();
+    bool gzip = this->work_ != nullptr &&
+                gz::is_gzip_encoding(this->container_->get_response_header("content-encoding").c_str());
+    this->body_.emplace(this->src_, gzip ? this->work_ : nullptr);
   }
 
-  size_t readBytes(char *dst, size_t n) {
-    size_t copied = 0;
-    while (copied < n) {
-      if (!this->fill_())
-        break;
-      size_t take = std::min(n - copied, this->len_ - this->pos_);
-      memcpy(dst + copied, this->buf_ + this->pos_, take);
-      this->pos_ += take;
-      copied += take;
-    }
-    return copied;
+  gz::Body<ContainerSource> &json() { return *this->body_; }
+
+  // Closes the connection once the parse is done and stops the clock.
+  void end() {
+    if (this->container_ == nullptr)
+      return;
+    this->container_->end();
+    this->container_.reset();
+    this->ms_ = millis() - this->start_ms_;
+    if (this->body_)
+      this->counter_ += this->body_->wire_bytes();
   }
 
-  size_t total() const { return this->total_; }
+  // For the log: bytes on the wire, JSON bytes when they differ, and the
+  // time from the request to the end of the parse.
+  const char *stats() {
+    size_t wire = this->body_ ? this->body_->wire_bytes() : 0;
+    if (this->body_ && this->body_->gzip())
+      snprintf(this->stats_, sizeof(this->stats_), "%u bytes gzip, %u JSON, %u ms", (unsigned) wire,
+               (unsigned) this->body_->json_bytes(), (unsigned) this->ms_);
+    else
+      snprintf(this->stats_, sizeof(this->stats_), "%u bytes, %u ms", (unsigned) wire, (unsigned) this->ms_);
+    return this->stats_;
+  }
 
  private:
-  bool fill_() {
-    if (this->pos_ < this->len_)
-      return true;
-    if (this->eof_)
-      return false;
-    int n = this->container_->read(this->buf_, sizeof(this->buf_));
-    if (n <= 0) {
-      this->eof_ = true;
-      return false;
-    }
-    this->pos_ = 0;
-    this->len_ = (size_t) n;
-    this->total_ += (size_t) n;
-    return true;
-  }
-
-  std::shared_ptr<http_request::HttpContainer> container_;
+  gz::Work *work_{nullptr};
   std::atomic<uint64_t> &counter_;
-  uint8_t buf_[1024];
-  size_t pos_{0};
-  size_t len_{0};
-  size_t total_{0};
-  bool eof_{false};
+  std::shared_ptr<http_request::HttpContainer> container_;
+  ContainerSource src_;
+  std::optional<gz::Body<ContainerSource>> body_;
+  uint32_t start_ms_;
+  uint32_t ms_{0};
+  char stats_[48];
 };
 
 // ---- GamedaySelect ---------------------------------------------------------
@@ -1523,16 +1542,18 @@ bool GamedayComponent::live_leagues_changed_(const std::vector<League> &before) 
   return true;
 }
 
-std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::string &url) {
+bool GamedayComponent::open_(const std::string &url, EspnBody &body) {
   std::vector<http_request::Header> headers = {
       {"User-Agent", USER_AGENT},
       {"Accept", "application/json"},
   };
+  if (body.wants_gzip())
+    headers.push_back({"Accept-Encoding", "gzip"});
   this->espn_requests_++;
-  auto container = this->http_->get(url, headers, {"retry-after"});
+  auto container = this->http_->get(url, headers, {"retry-after", "content-encoding"});
   if (container == nullptr) {
     ESP_LOGW(TAG, "Request failed: %s", url.c_str());
-    return nullptr;
+    return false;
   }
   if (container->status_code != 200) {
     ESP_LOGW(TAG, "HTTP %d for %s", container->status_code, url.c_str());
@@ -1544,10 +1565,11 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
         this->job_.retry_after_ms = ra;
     }
     container->end();
-    return nullptr;
+    return false;
   }
   this->espn_ok_reads_++;
-  return container;
+  body.start(std::move(container));
+  return true;
 }
 
 // ---- Sign-in Wi-Fi (captive.h) ---------------------------------------------
@@ -1706,19 +1728,18 @@ bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out, 
   std::string url = comp_slug != nullptr ? ::espn::team_url(team->league, team->espn_id, comp_slug)
                                          : ::espn::team_url(team->league, team->espn_id);
   ESP_LOGD(TAG, "Fetching schedule: %s", url.c_str());
-  auto container = this->open_(url);
-  if (container == nullptr)
+  EspnBody body(this->espn_bytes_);
+  if (!this->open_(url, body))
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
   Schedule s;
-  bool ok = ::espn::parse_team(reader, s);
-  container->end();
+  bool ok = ::espn::parse_team(body.json(), s);
+  body.end();
   if (!ok) {
-    ESP_LOGW(TAG, "Schedule parse failed after %u bytes", (unsigned) reader.total());
+    ESP_LOGW(TAG, "Schedule parse failed (%s)", body.stats());
     return false;
   }
-  ESP_LOGI(TAG, "Schedule: event %s kickoff %lld group %u (%u bytes)", s.event_id.c_str(),
-           (long long) s.kickoff_epoch, (unsigned) s.group, (unsigned) reader.total());
+  ESP_LOGI(TAG, "Schedule: event %s kickoff %lld group %u (%s)", s.event_id.c_str(),
+           (long long) s.kickoff_epoch, (unsigned) s.group, body.stats());
   out = s;
   return true;
 }
@@ -1732,12 +1753,11 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
                                       const std::string &skip_event, Schedule &out, const char *comp_slug) {
   std::string url = ::espn::team_day_url(team->league, group, day_epoch, comp_slug);
   ESP_LOGD(TAG, "Looking ahead: %s", url.c_str());
-  auto container = this->open_(url);
-  if (container == nullptr)
+  EspnBody body(this->espn_bytes_);
+  if (!this->open_(url, body))
     return -1;
-  ContainerReader reader(container, this->espn_bytes_);
-  int found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
-  container->end();
+  int found = ::espn::parse_team_game(body.json(), team->espn_id, skip_event, out);
+  body.end();
   return found;
 }
 
@@ -1775,14 +1795,13 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
   }
   std::string url = ::espn::schedule_url(team->league, team->espn_id);
   ESP_LOGD(TAG, "Fetching upcoming games: %s", url.c_str());
-  auto container = this->open_(url);
-  if (container == nullptr)
+  EspnBody body(this->espn_bytes_);
+  if (!this->open_(url, body))
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
   // Four: the game on the board plus the three after it.
-  bool ok = ::espn::parse_upcoming(reader, team->espn_id, 4, out);
-  container->end();
-  ESP_LOGI(TAG, "Upcoming: %u game(s) (%u bytes)", (unsigned) out.size(), (unsigned) reader.total());
+  bool ok = ::espn::parse_upcoming(body.json(), team->espn_id, 4, out);
+  body.end();
+  ESP_LOGI(TAG, "Upcoming: %u game(s) (%s)", (unsigned) out.size(), body.stats());
   return ok;
 }
 
@@ -1791,15 +1810,14 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
                                          int64_t epoch) {
   std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now());
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
-  auto container = this->open_(url);
-  if (container == nullptr)
+  EspnBody body(this->espn_bytes_);
+  if (!this->open_(url, body))
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
   size_t before = out.size();
   size_t finals_before = finals != nullptr ? finals->size() : 0;
   size_t pending_before = pending != nullptr ? pending->size() : 0;
   int64_t next = 0;
-  bool ok = ::espn::parse_live_games(reader, out, &next, finals, pending);
+  bool ok = ::espn::parse_live_games(body.json(), out, &next, finals, pending);
   for (size_t i = before; i < out.size(); i++)
     out[i].league = (uint8_t) league;
   if (finals != nullptr)
@@ -1808,10 +1826,10 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
   if (pending != nullptr)
     for (size_t i = pending_before; i < pending->size(); i++)
       (*pending)[i].league = (uint8_t) league;
-  container->end();
-  ESP_LOGI(TAG, "Scan: %u live game(s), %u final(s), %u to come (%u bytes)", (unsigned) out.size(),
+  body.end();
+  ESP_LOGI(TAG, "Scan: %u live game(s), %u final(s), %u to come (%s)", (unsigned) out.size(),
            (unsigned) (finals != nullptr ? finals->size() - finals_before : 0),
-           (unsigned) (pending != nullptr ? pending->size() - pending_before : 0), (unsigned) reader.total());
+           (unsigned) (pending != nullptr ? pending->size() - pending_before : 0), body.stats());
   if (next != 0 && (next_kickoff == 0 || next < next_kickoff))
     next_kickoff = next;
   return ok;
@@ -1828,21 +1846,19 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
                               : ::espn::scoreboard_url(league, schedule.group, schedule.kickoff_epoch,
                                                        schedule.time_tbd);
   ESP_LOGD(TAG, "Fetching game: %s", url.c_str());
-  auto container = this->open_(url);
-  if (container == nullptr)
+  EspnBody body(this->espn_bytes_);
+  if (!this->open_(url, body))
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
   GameSnapshot g;
-  bool ok = per_event ? ::espn::parse_event(reader, info->sport, this->our_id_(), g, schedule.event_id)
-                      : ::espn::parse_scoreboard(reader, schedule.event_id, this->our_id_(), g);
-  container->end();
+  bool ok = per_event ? ::espn::parse_event(body.json(), info->sport, this->our_id_(), g, schedule.event_id)
+                      : ::espn::parse_scoreboard(body.json(), schedule.event_id, this->our_id_(), g);
+  body.end();
   if (!ok) {
-    ESP_LOGW(TAG, "Game %s not parsed (%u bytes)", schedule.event_id.c_str(),
-             (unsigned) reader.total());
+    ESP_LOGW(TAG, "Game %s not parsed (%s)", schedule.event_id.c_str(), body.stats());
     return false;
   }
-  ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%u bytes)", ::espn::state_name(g.state), g.team_abbr.c_str(),
-           g.team_score, g.opp_abbr.c_str(), g.opp_score, g.short_detail.c_str(), (unsigned) reader.total());
+  ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%s)", ::espn::state_name(g.state), g.team_abbr.c_str(),
+           g.team_score, g.opp_abbr.c_str(), g.opp_score, g.short_detail.c_str(), body.stats());
   out = g;
   return true;
 }

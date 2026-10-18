@@ -11,6 +11,8 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nfl_dal.json` | `.../football/nfl/teams/6/schedule`, trimmed to the first 5 events (recorded 2026-09-08) |
 | `schedule_ncaa_bc.json` | `.../football/college-football/teams/103/schedule`, trimmed to the first 5 events (recorded 2026-09-08; the first is already final) |
 | `scoreboard_ncaa_live.json` | `.../football/college-football/scoreboard?groups=80&limit=200` (mix of pre, in, post) |
+| `scoreboard_ncaa_live.json.gz` | `scoreboard_ncaa_live.json` gzipped by Python (file name in the header, mtime 0) |
+| `espn_team_nfl_dal.json.gz` | `.../football/nfl/teams/dal` as ESPN sends it with `Accept-Encoding: gzip`, still compressed (recorded 2026-10-13) |
 | `scoreboard_ncaa_conf_titles.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20251206`, conference title games, all final (recorded 2026-10-08) |
 | `scoreboard_ncaa_cfp_quarterfinals.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20260101`, CFP quarterfinals at neutral sites (recorded 2026-10-08) |
 | `scoreboard_ncaa_cfp_final.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20260119`, CFP national championship (recorded 2026-10-08) |

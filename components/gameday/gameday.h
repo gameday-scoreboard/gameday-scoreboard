@@ -109,6 +109,7 @@ enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
 static constexpr uint8_t FAV_MAX = 16;
 
 class GamedayComponent;
+class EspnBody;
 
 using ::espn::parse_team_ref;
 
@@ -486,7 +487,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Mode 4 with at least one favorite set; with none it behaves like My Team.
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
   uint32_t our_id_() const;  // team id the snapshot is oriented around
-  std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
+  // Sends the request and, on a 200, hands the reply to body to read.
+  bool open_(const std::string &url, EspnBody &body);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
   uint32_t linger_ms_() const;  // how long a final stays up before the next game
