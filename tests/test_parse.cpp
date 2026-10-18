@@ -3486,11 +3486,17 @@ static void test_auto_update() {
 static void test_update_mirror() {
   // On the primary: nothing until a read or install fails.
   MirrorInputs in;
+  in.clock_valid = true;
   CHECK(mirror_step(in) == MirrorStep::NONE);
   in.answered = true;  // a good read on the primary is none of the mirror's business
   CHECK(mirror_step(in) == MirrorStep::NONE);
   in.error = true;
   CHECK(mirror_step(in) == MirrorStep::TRY_MIRROR);
+  // The boot check, before the clock is set, fails TLS everywhere: no mirror read.
+  in.clock_valid = false;
+  CHECK(mirror_step(in) == MirrorStep::NO_CLOCK);
+  in.error = false;
+  CHECK(mirror_step(in) == MirrorStep::NONE);
 
   // On the mirror, its read in flight (the error was cleared to start it).
   MirrorInputs m;

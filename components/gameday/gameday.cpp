@@ -1314,8 +1314,13 @@ void GamedayComponent::mirror_tick_() {
   in.error = u->status_has_error();
   in.answered = this->mirror_answered_;
   in.waited_ms = millis() - this->mirror_since_ms_;
+  // Only read when it matters: now() converts the time, and this runs every loop.
+  in.clock_valid = in.error && this->time_ != nullptr && this->time_->now().is_valid();
   switch (::espn::mirror_step(in)) {
     case ::espn::MirrorStep::NONE:
+      break;
+    case ::espn::MirrorStep::NO_CLOCK:
+      u->status_clear_error();
       break;
     case ::espn::MirrorStep::TRY_MIRROR: {
       const char *mirror = this->follow_beta() ? this->beta_mirror_source_ : this->mirror_source_;

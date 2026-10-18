@@ -45,7 +45,10 @@ echo "Mirror files:"
 
 wrangler() { npx --yes wrangler@4 "$@"; }
 # The first deploy makes the project; its custom domain is added once by hand.
-if ! wrangler pages project list | grep -q "\b$project\b"; then
+# Listed first, not piped: grep -q quitting early under pipefail would read as
+# "no project" and try to create it again.
+projects=$(wrangler pages project list)
+if ! grep -qw -- "$project" <<<"$projects"; then
   wrangler pages project create "$project" --production-branch main
 fi
 wrangler pages deploy "$stage" --project-name "$project" --branch main --commit-dirty=true

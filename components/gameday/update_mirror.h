@@ -24,6 +24,7 @@ static const uint32_t kMirrorWaitMs = 90 * 1000;
 
 enum class MirrorStep : uint8_t {
   NONE,        // nothing to do
+  NO_CLOCK,    // the primary failed before the clock was set: clear the error, no mirror read
   TRY_MIRROR,  // the primary failed: read the mirror now
   ANSWERED,    // the mirror's manifest came back: back to the primary
   FAILED,      // the mirror failed too: back to the primary, clear the error
@@ -35,11 +36,23 @@ struct MirrorInputs {
   bool error{false};      // the update entity's last read or install failed
   bool answered{false};   // it published a state since the mirror read began
   uint32_t waited_ms{0};  // since the mirror read began
+  bool clock_valid{false};  // the panel's clock is set
 };
 
+// The boot check runs before the clock is set, so its TLS fails on any host;
+// the check once the clock is set (gd_check_after_clock in
+// gameday-common.yaml) is the one that counts. The error is cleared so it
+// can't send that later check's panel to the mirror.
+//
+// A mirror read that fails after TIMED_OUT looks like a new failure on the
+// primary and gets one more mirror read. The HTTP timeout (20 s) and watchdog
+// (30 s) end every read well inside kMirrorWaitMs, so that needs a stuck read.
 inline MirrorStep mirror_step(const MirrorInputs &in) {
-  if (!in.on_mirror)
-    return in.error ? MirrorStep::TRY_MIRROR : MirrorStep::NONE;
+  if (!in.on_mirror) {
+    if (!in.error)
+      return MirrorStep::NONE;
+    return in.clock_valid ? MirrorStep::TRY_MIRROR : MirrorStep::NO_CLOCK;
+  }
   if (in.error)
     return MirrorStep::FAILED;
   if (in.answered)
