@@ -198,8 +198,9 @@ jobs:
 
   budget:
     # Flash, static internal RAM and the memory each ESPN read takes, against
-    # firmware/budget.json. A pull request also fails when one figure grows
-    # more than the file's max_growth against the base branch's last build.
+    # firmware/budget.json. A pull request into dev also fails when one figure
+    # grows more than the file's max_growth against dev's last build. A
+    # promotion carries many changes at once, so it only gets the budget.
     # The job summary has the table.
     name: Size budget
     needs: [build, host-tests]
@@ -215,7 +216,7 @@ jobs:
           path: sizes
       - name: Figures from the base branch
         id: base
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.base_ref == 'dev'
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

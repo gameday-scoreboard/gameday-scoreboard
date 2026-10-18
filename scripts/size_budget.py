@@ -14,7 +14,7 @@ branch, with the numbers in the error and in the job summary.
         Every *.json under the sizes dir against the budget; with --base, also
         against the base branch's figures.
     python3 scripts/size_budget.py seed <sizes dir>
-        Prints a budget with 10% headroom over those figures.
+        Prints a budget with 10% headroom (at least 1 KB) over those figures.
     python3 scripts/size_budget.py --selftest
 
 Static internal RAM is every allocated section the ELF places in the
@@ -35,6 +35,7 @@ BUDGET = Path(__file__).resolve().parent.parent / "firmware" / "budget.json"
 DRAM = (0x3FC88000, 0x3FD00000)
 SHF_ALLOC = 0x2
 HEADROOM = 0.10
+HEADROOM_MIN = 1024  # so a 20 B read is not over budget at its next 16-letter string
 
 # What each figure is, for the summary and the errors.
 LABELS = {
@@ -125,7 +126,7 @@ def summary(rows: list, errors: list, base_label: str) -> str:
 def seed(sizes: dict) -> dict:
     out = {}
     for group in ("firmware", "host"):
-        out[group] = {name: {m: math.ceil(v * (1 + HEADROOM)) for m, v in sorted(figs.items())}
+        out[group] = {name: {m: max(math.ceil(v * (1 + HEADROOM)), v + HEADROOM_MIN) for m, v in sorted(figs.items())}
                       for name, figs in sorted(sizes.get(group, {}).items())}
     return out
 
@@ -173,7 +174,7 @@ def selftest() -> None:
     assert len(new) == 1 and "no budget" in new[0]
     gone, _ = check(budget, {}, {}, "dev")
     assert len(gone) == 1 and "nothing measured" in gone[0]
-    assert seed({"host": {"x": {"json": 1000}}}) == {"firmware": {}, "host": {"x": {"json": 1100}}}
+    assert seed({"host": {"x": {"json": 20000, "heap": 18}}}) == {"firmware": {}, "host": {"x": {"json": 22000, "heap": 1042}}}
 
     with tempfile.TemporaryDirectory() as d:
         Path(d, "one").mkdir()
