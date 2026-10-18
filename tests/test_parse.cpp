@@ -19,6 +19,7 @@
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
+#include "wifi_history.h"
 
 using namespace espn;
 
@@ -3762,6 +3763,121 @@ static void test_tbd_kickoff() {
   CHECK(!team_cache_load(c, League::NCAA, kIowa, placeholder - 5 * 86400 + 60, back));
 }
 
+static void test_wifi_history() {
+  CHECK(wifi_cause(200) == WifiCause::SIGNAL);  // beacon timeout
+  CHECK(wifi_cause(3) == WifiCause::ROUTER);    // deauth from the router
+  CHECK(wifi_cause(206) == WifiCause::ROUTER);  // the router restarted
+  CHECK(wifi_cause(15) == WifiCause::PASSWORD);
+  CHECK(wifi_cause(207) == WifiCause::ROAM);
+  CHECK(wifi_cause(8) == WifiCause::PANEL);
+  CHECK(wifi_cause(1) == WifiCause::OTHER);
+  CHECK_EQ(std::string(wifi_cause_key(WifiCause::PASSWORD)), std::string("password"));
+
+  static int8_t rssi[kWifiMinutes];
+  static WifiDrop drops[kWifiDrops];
+
+  // No buffers (no PSRAM): nothing kept, the JSON still parses.
+  WifiHistory none;
+  none.sample(0, true, -60);
+  none.up(0);
+  none.down(10, WifiCause::SIGNAL);
+  CHECK_EQ(none.json(20, true, -60), std::string("{\"rssi\":-60,\"step\":300,\"hist\":[],\"weak\":false,"
+                                                 "\"drops\":0,\"day\":0,\"causes\":{}}"));
+
+  // A minute keeps the mean of its readings; a minute off Wi-Fi keeps 0.
+  WifiHistory h;
+  h.attach(rssi, drops);
+  h.up(0);
+  h.sample(0, true, -60);
+  h.sample(10, true, -62);
+  h.sample(20, true, -65);
+  CHECK_EQ(h.minutes(), 0u);
+  h.sample(60, false, -127);
+  CHECK_EQ(h.minutes(), 1u);
+  CHECK_EQ((int) rssi[0], -62);
+  h.sample(120, true, -70);
+  CHECK_EQ((int) rssi[1], 0);
+  CHECK_EQ(h.json(130, false, -127), std::string("{\"step\":300,\"hist\":[-62],\"weak\":false,"
+                                                  "\"drops\":0,\"day\":0,\"causes\":{}}"));
+
+  // A loop that stalled past several minutes fills them in as off Wi-Fi.
+  h.sample(400, true, -70);
+  CHECK_EQ(h.minutes(), 6u);
+  CHECK_EQ((int) rssi[2], -70);
+  CHECK_EQ((int) rssi[3], 0);
+  // Points end at the newest minute: [-62] then [off, -70, off, off, off]
+  CHECK(h.json(400, true, -70).find("\"hist\":[-62,-70]") != std::string::npos);
+
+  // Drops: the cause, how long it lasted, and the panel leaving on purpose
+  // or a roam not counted as trouble.
+  h.down(1000, WifiCause::SIGNAL);
+  std::string j = h.json(1010, false, -127);
+  CHECK(j.find("\"drops\":1,\"day\":1,\"causes\":{\"signal\":1},\"last\":\"signal\",\"last_ago\":10}") !=
+        std::string::npos);
+  h.up(1042);
+  CHECK(h.json(1100, true, -60).find("\"last_ago\":100,\"last_down\":42}") != std::string::npos);
+  h.up(1050);  // already up
+  CHECK(h.json(1100, true, -60).find("\"last_down\":42}") != std::string::npos);
+  h.down(1200, WifiCause::PANEL);
+  h.up(1210);
+  h.down(1300, WifiCause::ROAM);
+  h.up(1301);
+  h.down(1400, WifiCause::ROUTER);
+  h.down(1401, WifiCause::SIGNAL);  // already down: the first cause stands
+  h.up(1460);
+  CHECK_EQ(h.total(), 2u);
+  j = h.json(1500, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":2,\"causes\":{\"signal\":1,\"router\":1,\"roam\":1},"
+               "\"last\":\"router\",\"last_ago\":100,\"last_down\":60}") != std::string::npos);
+  // A day later the drops are history: still in the total, out of the day.
+  j = h.json(1400 + 24 * 3600, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":0,\"causes\":{},\"last\":\"router\"") != std::string::npos);
+
+  // The weak-signal hint: a median under -75 dBm over the last half hour,
+  // from at least ten minutes on Wi-Fi.
+  WifiHistory w;
+  w.attach(rssi, drops);
+  uint32_t t = 0;
+  // n minutes of one reading each, then a reading-less sample that closes
+  // the last of them
+  auto run = [&](int n, bool on, int8_t v) {
+    for (int m = 0; m < n; m++, t += 60)
+      w.sample(t, on, v);
+    w.sample(t, false, -127);
+  };
+  run(9, true, -80);
+  CHECK(!w.weak());  // nine minutes so far
+  run(1, true, -80);
+  CHECK(w.weak());
+  run(9, true, -60);
+  CHECK(w.weak());  // 10 weak of 19
+  run(2, true, -60);
+  CHECK(!w.weak());  // 10 weak of 21
+  run(30, true, -60);
+  CHECK(!w.weak());
+  run(25, false, -127);
+  run(5, true, -80);
+  CHECK(!w.weak());  // five readings in the last half hour: too few to say
+  run(30, false, -127);
+  CHECK(!w.weak());  // off Wi-Fi: no readings, no hint
+  CHECK(w.json(t, false, -127).find("-80,null,null,null,null,null,null]") != std::string::npos);
+
+  // The ring holds a day: after 25 hours the JSON has 288 points.
+  WifiHistory d;
+  d.attach(rssi, drops);
+  for (uint32_t m = 0; m <= 25 * 60; m++)
+    d.sample(m * 60, true, (int8_t) (m < 24 * 60 ? -50 : -77));
+  CHECK_EQ(d.minutes(), 25u * 60);
+  j = d.json(25 * 3600, true, -77);
+  size_t points = 1;
+  for (char c : j.substr(j.find("\"hist\":["), j.find(']') - j.find("\"hist\":[")))
+    if (c == ',')
+      points++;
+  CHECK_EQ(points, (size_t) (kWifiMinutes / kWifiStep));
+  CHECK(j.find(",-77]") != std::string::npos);
+  CHECK(d.weak());
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -3837,6 +3953,7 @@ int main() {
   test_update_mark();
   test_offseason();
   test_panel_text();
+  test_wifi_history();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

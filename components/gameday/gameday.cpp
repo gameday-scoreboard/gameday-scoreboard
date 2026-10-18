@@ -26,9 +26,15 @@
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
 #include "esphome/components/saved_networks/saved_networks.h"
 #endif
+#ifdef USE_WIFI
+#include "esphome/components/wifi/wifi_component.h"
+#include <esp_event.h>
+#include <esp_wifi.h>
+#endif
 
 #include <esp_heap_caps.h>
 #include <esp_sntp.h>
+#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -70,6 +76,8 @@ static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
 // as taken: past safe_mode's one minute, when the bootloader can no longer
 // roll it back.
 static const uint32_t UPDATE_GOOD_BOOT = 2 * MINUTE;
+// The Wi-Fi signal is read this often; each minute keeps the mean.
+static const uint32_t WIFI_SAMPLE_INTERVAL = 10 * 1000;
 // A college scan is ~750KB on a Saturday. With nothing live it waits for the
 // next kickoff instead of re-reading every 2 minutes, but never longer than
 // this, so a moved kickoff or the next day's slate is still picked up.
@@ -172,9 +180,37 @@ void GamedaySelect::control(const std::string &value) {
 static json::SpiRamAllocator json_psram;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 #endif
 
+#ifdef USE_WIFI
+// The reason of the newest STA disconnect, set on the event task. ESPHome's
+// own handler logs it but keeps nothing; wifi_tick_() reads it when the link
+// goes down, and the sequence says whether one came since the link was up.
+static std::atomic<int> wifi_reason{0};           // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static std::atomic<uint32_t> wifi_reason_seq{0};  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+static void on_wifi_disconnected(void *, esp_event_base_t, int32_t, void *data) {
+  wifi_reason.store(((wifi_event_sta_disconnected_t *) data)->reason);
+  wifi_reason_seq.fetch_add(1);
+}
+#endif
+
 void GamedayComponent::setup() {
 #ifdef USE_PSRAM
   ::espn::set_json_allocator(&json_psram);
+#endif
+#ifdef USE_WIFI
+  // About 2 KB: a day of minutes and the last drops. Without PSRAM (or with
+  // it full) there is no history and the "wifi" object only has counts.
+  auto *rssi = (int8_t *) heap_caps_calloc(::espn::kWifiMinutes, 1, MALLOC_CAP_SPIRAM);
+  auto *drops = (::espn::WifiDrop *) heap_caps_calloc(::espn::kWifiDrops, sizeof(::espn::WifiDrop), MALLOC_CAP_SPIRAM);
+  if (rssi != nullptr && drops != nullptr) {
+    this->wifi_hist_.attach(rssi, drops);
+  } else {
+    heap_caps_free(rssi);
+    heap_caps_free(drops);
+  }
+  if (esp_event_handler_instance_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnected, nullptr,
+                                          nullptr) != ESP_OK)
+    ESP_LOGW(TAG, "Can't follow Wi-Fi disconnects; drops will show no cause");
 #endif
   this->logos_.setup();
   this->pref_ = global_preferences->make_preference<Prefs>(fnv1_hash("gameday_prefs_v1"));
@@ -884,6 +920,7 @@ void GamedayComponent::loop() {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
   }
+  this->wifi_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -2932,6 +2969,48 @@ std::string GamedayComponent::current_state_json_() {
   return this->state_json_;
 }
 
+// Every loop for the link going down or up, every WIFI_SAMPLE_INTERVAL for
+// the signal.
+void GamedayComponent::wifi_tick_() {
+#ifdef USE_WIFI
+  auto *w = wifi::global_wifi_component;
+  if (w == nullptr)
+    return;
+  const bool up = w->is_connected();
+  const uint32_t now_ms = millis();
+  const bool sample = now_ms - this->wifi_sample_ms_ >= WIFI_SAMPLE_INTERVAL;
+  if (up == this->wifi_up_ && !sample)
+    return;
+  const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
+  std::lock_guard<std::mutex> lock(this->wifi_mutex_);
+  if (up != this->wifi_up_) {
+    this->wifi_up_ = up;
+    if (up) {
+      this->wifi_hist_.up(now_s);
+      this->wifi_reason_seen_ = wifi_reason_seq.load();
+    } else {
+      // A link lost with no disconnect event (the IP went) has no cause.
+      const int reason = wifi_reason_seq.load() != this->wifi_reason_seen_ ? wifi_reason.load() : 0;
+      const ::espn::WifiCause cause = ::espn::wifi_cause(reason);
+      this->wifi_hist_.down(now_s, cause);
+      ESP_LOGI(TAG, "Wi-Fi lost: %s (reason %d), %u drop(s) since start", ::espn::wifi_cause_key(cause), reason,
+               (unsigned) this->wifi_hist_.total());
+    }
+  }
+  if (sample) {
+    this->wifi_sample_ms_ = now_ms;
+    this->wifi_rssi_ = up ? w->wifi_rssi() : 0;
+    this->wifi_hist_.sample(now_s, up, this->wifi_rssi_);
+  }
+#endif
+}
+
+std::string GamedayComponent::wifi_json_() {
+  const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
+  std::lock_guard<std::mutex> lock(this->wifi_mutex_);
+  return this->wifi_hist_.json(now_s, this->wifi_up_, this->wifi_rssi_);
+}
+
 bool GamedayComponent::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   return request->url_to(buf).starts_with("/gameday/");
@@ -2942,6 +3021,14 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   StringRef url = request->url_to(buf);
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
     std::string body = this->current_state_json_();
+    // The cached document is rebuilt on changes; the Wi-Fi numbers move all
+    // the time, so they go in fresh at its end.
+    if (body.size() >= 2 && body.back() == '}') {
+      body.pop_back();
+      body += ",\"wifi\":";
+      body += this->wifi_json_();
+      body += '}';
+    }
     request->send(200, "application/json", body.c_str());
     return;
   }

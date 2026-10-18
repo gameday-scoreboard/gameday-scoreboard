@@ -218,6 +218,49 @@ test("a device that never answers /gameday/state leaves the page waiting, not br
   await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
 });
 
+test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", async ({ page, request }) => {
+  await reset(request, {});
+  await page.goto("/");
+  await expect(page.locator("#rssi")).toHaveText("-61 dBm");
+  await expect(page.locator("#wifiWeak")).toBeHidden();
+  // Up an hour: every drop since start is in the day.
+  await expect(page.locator("#wifiDrops")).toHaveText("1 since start");
+  await expect(page.locator("#wifiLast")).toHaveText("Last: signal lost, 40 min ago, back in 42 s");
+  await expect(page.locator("#wifiSpark .ln")).toHaveCount(1);
+  await expect(page.locator("#wifiSpark .gap")).toHaveCount(1);
+  await expect(page.locator("#wifiSpark")).toHaveAttribute("aria-label", "Signal over the last 1 h: -64 to -58 dBm");
+  await expect(page.locator("#wifiFrom")).toHaveText("1 h ago");
+
+  // A full day, weak for the last stretch, three drops in it of two kinds.
+  const hist = Array(288).fill(-66);
+  for (let i = 270; i < 288; i++) hist[i] = -80;
+  await reset(request, { wifi: {
+    rssi: -81, step: 300, hist, weak: true, drops: 5, day: 3, causes: { signal: 2, router: 1, roam: 4 },
+    last: "router", last_ago: 7300,
+  } });
+  await page.reload();
+  await expect(page.locator("#wifiWeak")).toBeVisible();
+  await expect(page.locator("#wifiWeak")).toHaveText(/Move the panel closer to the router/);
+  await expect(page.locator("#wifiDrops")).toHaveText("3 in 24 h");
+  await expect(page.locator("#wifiLast")).toHaveText(
+    "Last: dropped by the router, 2 h 2 min ago. 2 signal lost, 1 dropped by the router");
+  await expect(page.locator("#wifiSpark")).toHaveAttribute("aria-label", /weak for 1 h 30 min$/);
+  await expect(page.locator("#wifiFrom")).toHaveText("24 h ago");
+
+  // No drops, and only a few minutes of history: no line yet.
+  await reset(request, { wifi: { rssi: -55, step: 300, hist: [-55], weak: false, drops: 0, day: 0, causes: {} } });
+  await page.reload();
+  await expect(page.locator("#wifiDrops")).toHaveText("None");
+  await expect(page.locator("#wifiLast")).toHaveText("");
+  await expect(page.locator("#wifiSparkBox")).toBeHidden();
+
+  // Firmware before the history: the rows stay hidden, Signal still comes from the RSSI sensor.
+  await reset(request, { wifi: null });
+  await page.reload();
+  await expect(page.locator("#hostname")).toHaveText("gameday-2f6a70.local");
+  await expect(page.locator("#wifiDiag")).toBeHidden();
+});
+
 test("a failed settings post is retried once, then reported", async ({ page, request }) => {
   await reset(request, {}, ["set"]);
   await page.goto("/");

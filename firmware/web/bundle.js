@@ -218,7 +218,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+        <div class="sub">Diagnostics</div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+        <div id="wifiDiag" hidden>
+          <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+          <div class="spark" id="wifiSparkBox" hidden>
+            <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+            <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+          </div>
+          <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+        </div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
         <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
       </div>
@@ -1177,6 +1186,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
     renderData();
+    renderWifi();
   };
 
   const renderData = () => {
@@ -1185,6 +1195,75 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const size = kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(kb < 100000 ? 1 : 0) + " MB";
     const reads = S.espn_reads || 0;
     $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
+  };
+
+  // The Wi-Fi history (components/gameday/wifi_history.h). Firmware before it
+  // sends none, and the rows stay hidden.
+  const WIFI_CAUSES = {
+    signal: "signal lost", router: "dropped by the router", password: "sign-in refused",
+    roam: "moved to another access point", other: "other",
+  };
+  const span = (s) => {
+    if (s < 60) return s + " s";
+    const m = Math.round(s / 60);
+    if (m < 60) return m + " min";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+    return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
+  };
+  // The history across the full width (a day at most), newest at the right,
+  // gaps where the panel was off Wi-Fi (a red tick along the bottom). -95 to
+  // -35 dBm bottom to top.
+  const drawSpark = (svg, hist, step) => {
+    const W = hist.length, H = 48, NS = "http://www.w3.org/2000/svg";
+    const y = (v) => (H - 2 - (Math.min(-35, Math.max(-95, v)) + 95) / 60 * (H - 4)).toFixed(1);
+    let d = "", gaps = "", lo = 0, hi = -127, weak = 0, n = 0;
+    hist.forEach((v, i) => {
+      const x = i + 0.5;
+      if (v == null) { gaps += "M" + x + " " + (H - 3) + "V" + H; return; }
+      d += (i > 0 && hist[i - 1] != null ? "L" : "M") + x + " " + y(v);
+      if (i === hist.length - 1 || hist[i + 1] == null) d += "h0.01";  // a lone point still shows
+      lo = Math.min(lo, v); hi = Math.max(hi, v); n++;
+      if (v < -75) weak++;
+    });
+    const path = (cls, p) => {
+      const e = document.createElementNS(NS, "path");
+      e.setAttribute("class", cls);
+      e.setAttribute("d", p);
+      e.setAttribute("vector-effect", "non-scaling-stroke");
+      return e;
+    };
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.replaceChildren(path("th", "M0 " + y(-75) + "H" + W));
+    if (gaps) svg.appendChild(path("gap", gaps));
+    if (d) svg.appendChild(path("ln", d));
+    svg.setAttribute("aria-label", n ? "Signal over the last " + span(W * step) + ": " + lo + " to " + hi
+      + " dBm" + (weak ? ", weak for " + span(weak * step) : "") : "No signal readings yet");
+  };
+  const renderWifi = () => {
+    const w = S && S.wifi;
+    $("#wifiDiag").hidden = !w;
+    if (!w) return;
+    $("#rssi").textContent = w.rssi != null ? w.rssi + " dBm" : "Not connected";
+    $("#wifiWeak").hidden = !w.weak;
+    const hist = w.hist || [], step = w.step || 300;
+    $("#wifiSparkBox").hidden = hist.length < 2;
+    if (hist.length >= 2) {
+      drawSpark($("#wifiSpark"), hist, step);
+      $("#wifiFrom").textContent = (hist.length * step >= 86400 ? "24 h" : span(hist.length * step)) + " ago";
+    }
+    // Up less than a day (by the history), every drop since start is in the day.
+    const day = hist.length > 0 && hist.length * step < 86400;
+    const count = day ? w.drops : w.day;
+    $("#wifiDrops").textContent = (count || "None") + (count ? (day ? " since start" : " in 24 h") : "");
+    const causes = Object.entries(w.causes || {}).filter(([k]) => k !== "roam");
+    let line = "";
+    if (w.last) {
+      line = "Last: " + (WIFI_CAUSES[w.last] || "other") + ", " + span(w.last_ago) + " ago"
+        + (w.last_down != null ? ", back in " + span(w.last_down) : "");
+      if (causes.length > 1) line += ". " + causes.map(([k, c]) => c + " " + (WIFI_CAUSES[k] || k)).join(", ");
+    }
+    $("#wifiLast").textContent = line;
   };
 
   // After an install the device reboots. The event stream only retries every
@@ -1435,7 +1514,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "RSSI": if (!(S && S.wifi)) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
       case "Free Heap (PSRAM)": $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };
