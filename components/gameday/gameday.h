@@ -30,6 +30,7 @@
 #include "poll_timing.h"
 #include "set_request.h"
 #include "startup.h"
+#include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
 #endif
@@ -126,7 +127,7 @@ class GamedaySelect : public select::Select, public Component {
 
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
-//   GET  /gameday/state              full snapshot + settings
+//   GET  /gameday/state              full snapshot + settings, and "wifi" (wifi_history.h)
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
@@ -299,6 +300,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();
+  // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
+  // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
+  void wifi_tick_();
+  std::string wifi_json_();
+  ::espn::WifiHistory wifi_hist_;
+  std::mutex wifi_mutex_;
+  uint32_t wifi_sample_ms_{0};
+  bool wifi_up_{false};  // under wifi_mutex_, as is wifi_rssi_
+  int8_t wifi_rssi_{0};  // the last sample
+  uint32_t wifi_reason_seen_{0};  // wifi_reason_seq when the link last came up
   std::mutex state_mutex_;
   std::string state_json_{"{}"};
   UpdateFields last_fields_;
