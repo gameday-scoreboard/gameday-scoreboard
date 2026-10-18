@@ -27,6 +27,38 @@ fixes and the support email, which answers faster than an issue.
 For anything bigger than a fix, open an issue first so we can agree on
 the shape before you spend the time.
 
+### Branches and ESPHome versions
+
+Work lands in `dev`, moves to `beta` (the test channel that the bar
+panels install from), and then to `main`, which customers run. `dev` and
+`beta` may build on an ESPHome beta. `main`, and so every release tag and
+the update feed, builds only on a final ESPHome release.
+
+```mermaid
+flowchart LR
+    dev["dev<br/>changes merge here<br/>ESPHome beta allowed"]
+    beta["beta<br/>bar panels, test channel<br/>ESPHome beta allowed"]
+    main["main<br/>customers<br/>final ESPHome only"]
+    tag["Release tag<br/>zip and site manifests"]
+    dev -- "promotion PR, CI green" --> beta
+    beta -- "ship it, pin must be final" --> main
+    main --> tag
+```
+
+When `dev` is on a beta pin, the final ships first: the pin moves on
+`dev`, `dev` is promoted to `beta`, the bar panels run it for a night, and
+then `beta` is promoted to `main`. What customers get is what the beta
+channel ran.
+
+A fix we want that is only in an ESPHome beta, in order:
+
+1. Copy the component into `components/` and stay on the final release.
+   The Bluetooth setup component is carried this way today.
+2. Wait for the final, or ask upstream for a backport to a patch release.
+   An ESPHome beta runs about two weeks.
+3. The maintainer's override label on the promotion PR, for a fix
+   customers can't wait for.
+
 ### Setup
 
 - [ESPHome](https://esphome.io/) 2026.10.0b3, the version CI builds with.
