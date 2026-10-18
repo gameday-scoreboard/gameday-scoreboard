@@ -505,11 +505,23 @@ script:
                     // captive_clear action in gameday-common.yaml asks again.
                     return id(gameday_ctl).captive() && !id(qc_active);
                 then:
+                  # A hold for the first scoreboard that started before the
+                  # sign-in state ends here: boot_refresh would otherwise ask
+                  # for this hide again every tick once the hold ran out, and
+                  # captive_clear starts a fresh one.
+                  - lambda: 'id(boot_hold_since_ms) = 0;'
                   - component.resume: boot_check
                   - component.resume: boot_anim
-                  - script.execute:
-                      id: boot_refresh
-                      via_button: false
+                  # Paint now when the overlay was hidden, but not from inside
+                  # boot_refresh, which can be what called this.
+                  - if:
+                      condition:
+                        not:
+                          script.is_running: boot_refresh
+                      then:
+                        - script.execute:
+                            id: boot_refresh
+                            via_button: false
                   - lvgl.obj.update:
                       id: boot_overlay
                       hidden: false

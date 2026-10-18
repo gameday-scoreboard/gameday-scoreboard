@@ -1496,8 +1496,9 @@ void GamedayComponent::probe_task_(void *arg) {
     esp_http_client_cleanup(client);
   }
   ::espn::Probe r = ::espn::classify_probe(status, h.location, h.content_type, body);
-  ESP_LOGI(TAG, "Wi-Fi check: %s (HTTP %d%s%s)", ::espn::probe_name(r), status, h.location.empty() ? "" : ", to ",
-           ::espn::detail::url_host(h.location).c_str());
+  const bool redirect = status >= 300 && status < 400 && !h.location.empty();
+  ESP_LOGI(TAG, "Wi-Fi check: %s (HTTP %d%s%s)", ::espn::probe_name(r), status, redirect ? ", to " : "",
+           redirect ? ::espn::detail::url_host(h.location).c_str() : "");
   self->probe_result_ = (uint8_t) r;
   self->probe_done_ = true;
   vTaskDelete(nullptr);
