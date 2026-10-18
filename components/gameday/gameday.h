@@ -773,6 +773,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_probe_();
   static void probe_task_(void *arg);
   bool captive_{false};
+  // The probe saw a sign-in page while ESPN reads were still fine: ESPN is
+  // asked at once, and captive_ is set only if that read fails.
+  bool captive_suspect_{false};
+  uint32_t read_fails_{0};        // back_off_() calls this boot, main loop only
+  uint32_t suspect_fails_mark_{0};
   bool probe_running_{false};     // main loop: a probe task is out
   bool probe_join_done_{false};   // probed since Wi-Fi last came up
   uint32_t probe_ms_{0};          // millis() the last probe started

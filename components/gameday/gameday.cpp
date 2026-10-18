@@ -1540,22 +1540,41 @@ void GamedayComponent::captive_tick_() {
       return;
     this->probe_running_ = false;
     const auto r = (::espn::Probe) this->probe_result_.load();
-    if (r == ::espn::Probe::OPEN || this->espn_ok_reads_.load() != this->probe_ok_mark_)
+    if (r == ::espn::Probe::OPEN || this->espn_ok_reads_.load() != this->probe_ok_mark_) {
+      this->captive_suspect_ = false;
       this->set_captive_(false);
-    else if (r == ::espn::Probe::CAPTIVE && network::is_connected() && !this->demo_playing_())
-      this->set_captive_(true);
+    } else if (r == ::espn::Probe::CAPTIVE && network::is_connected() && !this->demo_playing_()) {
+      if (this->clock_set_() && this->fail_run_.streak == 0 && !this->captive_) {
+        // Nothing says ESPN is out of reach yet (a DNS block page can look
+        // like a portal to the probe): ask ESPN now and say so only if that
+        // read fails too. With no clock nothing can be read to check.
+        ESP_LOGI(TAG, "Wi-Fi check saw a sign-in page: reading ESPN now to check");
+        this->captive_suspect_ = true;
+        this->suspect_fails_mark_ = this->read_fails_;
+        this->end_backoff_wait_();
+        if (!this->busy_)
+          this->schedule_next_(0);
+      } else {
+        this->set_captive_(true);
+      }
+    }
   }
   if (!network::is_connected() || this->demo_playing_()) {
     this->probe_join_ms_ = 0;
     this->probe_join_done_ = false;
+    this->captive_suspect_ = false;
     this->set_captive_(false);
     return;
   }
   if (this->probe_join_ms_ == 0)
     this->probe_join_ms_ = now == 0 ? 1 : now;
-  if (this->captive_ && this->espn_ok_reads_.load() != this->probe_ok_mark_) {
-    ESP_LOGI(TAG, "ESPN answered: this Wi-Fi no longer needs a sign-in");
+  if ((this->captive_ || this->captive_suspect_) && this->espn_ok_reads_.load() != this->probe_ok_mark_) {
+    ESP_LOGI(TAG, "ESPN answered: this Wi-Fi %s", this->captive_ ? "no longer needs a sign-in" : "is open");
+    this->captive_suspect_ = false;
     this->set_captive_(false);
+  } else if (this->captive_suspect_ && this->read_fails_ != this->suspect_fails_mark_) {
+    this->captive_suspect_ = false;
+    this->set_captive_(true);
   }
   // Nothing is due inside the shortest recheck wait.
   if (this->probe_join_done_ && now - this->probe_ms_ < ::espn::kProbeCaptiveRecheckMs)
@@ -1563,12 +1582,14 @@ void GamedayComponent::captive_tick_() {
   // A sign-in network usually blocks the time server too, and with no clock
   // nothing is read from ESPN, so a clock still unset 30 s after joining
   // counts as reads failing.
-  const bool failing = this->misses_ > 0 || (!this->clock_set_() && now - this->probe_join_ms_ >= 30000);
+  const bool failing =
+      this->fail_run_.streak > 0 || (!this->clock_set_() && now - this->probe_join_ms_ >= 30000);
   if (::espn::probe_due(this->probe_join_done_, this->captive_, failing, now - this->probe_ms_))
     this->start_probe_();
 }
 
 uint32_t GamedayComponent::back_off_() {
+  this->read_fails_++;
   uint32_t ms = this->fail_run_.fail(this->job_.throttled, this->job_.retry_after_ms, random_uint32());
   ESP_LOGW(TAG, "%u failed read(s) in a row%s: next try in %us", (unsigned) this->fail_run_.streak,
            this->fail_run_.throttled ? ", ESPN is refusing" : "", (unsigned) (ms / 1000));
