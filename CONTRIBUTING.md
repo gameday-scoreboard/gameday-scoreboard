@@ -3,6 +3,38 @@
 Thanks for helping with Game Day Scoreboard. Bug reports from people
 running it are the most useful thing you can send.
 
+## Where help is wanted
+
+The firmware is open source so anyone with an ESP32-S3 and a HUB75 panel
+can run it, and so the people running it can make it better. You don't
+need to know ESPHome to help. These are the places where help goes
+furthest right now:
+
+- Watch a game on it and tell us what it got wrong. Live scoring is
+  where the bugs are: overtime, a rain delay, a postponed game, a score
+  ESPN takes back a play later. An issue with the league, the time and a
+  photo of the panel is enough to go on.
+- Record the ESPN response for a game we have no test for. The host tests
+  run against real ESPN documents in `tests/fixtures`. Its README lists
+  the ones we have and how each was recorded: `curl` with the User-Agent
+  ESPN accepts, while the game is in the state you want. A rain delay, a
+  suspended baseball game, an NFL game in overtime or a college
+  basketball game in progress, saved as a fixture with a test for what
+  the panel should show, stays covered from then on. This one needs only
+  curl, g++ and some C++.
+- Get it running on a board we haven't tested, like the Waveshare
+  ESP32-S3 RGB Matrix. A pin map in `firmware/controllers/` and a line on
+  the [DIY page](docs/site/diy/index.html) make a good first pull
+  request. Say which panel you used and how long it ran.
+- The device page is plain HTML and JavaScript in `firmware/web`, with
+  browser tests in `tests/web`. Fixes for small phones, keyboard use and
+  screen readers are welcome.
+- If a step in the README or on the site tripped you up, a fix to the
+  wording helps the next person as much as a code change.
+
+A new league, a new screen or anything else that changes what the panel
+shows: open an issue first so we can agree on it before you build it.
+
 ## Reporting a bug or asking for a feature
 
 [Open an issue](https://github.com/gameday-scoreboard/gameday-scoreboard/issues/new/choose)
