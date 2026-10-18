@@ -200,6 +200,7 @@ void GamedayComponent::setup() {
   if (boot_log.fault != 0 && boot_log.fault_boot != boot_log.boots)
     ESP_LOGW(TAG, "Last trouble: %s, %u start(s) ago", ::espn::restart_key((::espn::Restart) boot_log.fault),
              (unsigned) (boot_log.boots - boot_log.fault_boot));
+  this->load_power_log_();  // on_boot has normally done it already
   this->logos_.setup();
   this->pref_ = global_preferences->make_preference<Prefs>(fnv1_hash("gameday_prefs_v1"));
   bool loaded = this->pref_.load(&this->prefs_);
@@ -909,6 +910,12 @@ void GamedayComponent::loop() {
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
+    if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
+      // A settled run: the next brownout starts a new streak
+      this->power_settled_ = true;
+      if (::espn::power_log_settled(this->power_log_))
+        this->save_power_log_();
+    }
     if (!this->boot_clock_noted_ && this->time_ != nullptr && this->time_->now().is_valid()) {
       // A fault at a start with no clock yet: when it happened
       this->boot_clock_noted_ = true;
@@ -1174,6 +1181,59 @@ void GamedayComponent::set_auto_update(bool on) {
   ESP_LOGI(TAG, "Install updates automatically: %s", on ? "on" : "off");
   this->rebuild_state_(&this->last_fields_);
 #endif
+}
+
+void GamedayComponent::load_power_log_() {
+  if (this->power_loaded_)
+    return;
+  this->power_loaded_ = true;
+  this->power_pref_ = global_preferences->make_preference<::espn::PowerLog>(fnv1_hash("gameday_power_v1"));
+  if (!this->power_pref_.load(&this->power_log_))
+    this->power_log_ = ::espn::PowerLog{};
+  const bool brownout =
+      ::espn::classify_restart((int) esp_reset_reason(), false, false) == ::espn::Restart::BROWNOUT;
+  if (::espn::power_log_start(this->power_log_, brownout)) {
+    // Now, not at the next flash write: a weak brick can brown out again
+    // within the minute.
+    this->save_power_log_();
+    ESP_LOGW(TAG, "Brownout restart, %u in a row, %u in all", (unsigned) this->power_log_.streak,
+             (unsigned) this->power_log_.brownouts);
+  }
+  if (this->power_log_.capped)
+    ESP_LOGW(TAG, "Brightness capped at %u after brownouts, until cleared on the device page",
+             (unsigned) ::espn::kPowerCap);
+}
+
+void GamedayComponent::save_power_log_() {
+  this->power_pref_.save(&this->power_log_);
+  global_preferences->sync();
+}
+
+uint8_t GamedayComponent::guard_brightness(uint8_t want) {
+  this->load_power_log_();
+  return ::espn::guarded_brightness(want, this->heat_.step, this->power_log_.capped != 0);
+}
+
+void GamedayComponent::set_chip_temp(float c) {
+  const uint8_t before = this->heat_.step;
+  if (!this->heat_.feed(c, millis()))
+    return;
+  if (this->heat_.step > before)
+    ESP_LOGW(TAG, "Chip at %.1f C: dimming to %u%% of the brightness setting", c,
+             (unsigned) ::espn::kHeatPercent[this->heat_.step]);
+  else
+    ESP_LOGI(TAG, "Chip at %.1f C: back to %u%% of the brightness setting", c,
+             (unsigned) ::espn::kHeatPercent[this->heat_.step]);
+  this->fire_action_("guard");  // gameday-common.yaml applies the brightness and the corner mark
+}
+
+void GamedayComponent::clear_power_cap() {
+  this->load_power_log_();
+  if (!::espn::power_log_clear(this->power_log_))
+    return;
+  this->save_power_log_();
+  ESP_LOGI(TAG, "Power cap cleared by the owner");
+  this->fire_action_("guard");
 }
 
 void GamedayComponent::set_follow_beta(bool on) {
@@ -3005,7 +3065,15 @@ std::string GamedayComponent::health_json_() {
   int n = ::espn::health_json(buf, sizeof(buf), h);
   if (n <= 0 || n >= (int) sizeof(buf))
     return "{}";
-  return std::string(buf, n);
+  // The heat and power keys go in before its closing brace (guard.h)
+  char guard[96];
+  int g = ::espn::guard_json_keys(guard, sizeof(guard), this->heat_.last_c, this->heat_.step, this->power_log_);
+  if (g <= 0 || g >= (int) sizeof(guard))
+    return std::string(buf, n);
+  std::string out(buf, n - 1);
+  out.append(guard, g);
+  out += '}';
+  return out;
 }
 
 bool GamedayComponent::canHandle(AsyncWebServerRequest *request) const {
@@ -3050,7 +3118,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc";
+    bool known = name == "refresh" || name == "qc" || name == "power_ok";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
@@ -3061,6 +3129,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     this->defer([this, name]() {
       if (name == "refresh")
         this->refresh_now();
+      else if (name == "power_ok")
+        this->clear_power_cap();
 #ifdef GAMEDAY_DEMO
       else if (name == "demo")
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);

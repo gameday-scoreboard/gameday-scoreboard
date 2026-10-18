@@ -1,0 +1,112 @@
+# Heat and power protection on the panel (components/gameday/guard.h). The
+# component works out how far to hold the brightness down; this file reads the
+# chip temperature, applies the brightness and says why in a corner.
+#
+# While the panel is held down, a 2x2 dot sits in its top right corner, orange
+# for heat and red for power, and every two minutes the bottom line says why
+# for 15 seconds: "Too warm, dimming" or "Check power supply". It is on the
+# top layer, so it shows over every screen, the boot screen included: a brick
+# that browns out as the panel lights up keeps it on the boot screen.
+
+sensor:
+  - platform: internal_temperature
+    name: "Chip Temperature"
+    id: gd_chip_temp
+    entity_category: diagnostic
+    update_interval: 15s
+    # The last minute's average, every 30 s, so one odd reading can't step
+    # the brightness.
+    filters:
+      - sliding_window_moving_average:
+          window_size: 4
+          send_every: 2
+    on_value:
+      then:
+        - lambda: 'id(gameday_ctl).set_chip_temp(x);'
+
+script:
+  - id: gd_guard
+    mode: restart
+    then:
+      - if:
+          condition:
+            switch.is_on: power
+          then:
+            - hub75.set_brightness:
+                id: matrix
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
+      - lambda: |-
+          const uint8_t mark = id(gameday_ctl).guard_mark();
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+          if (mark == 0) {
+            lv_obj_add_flag(id(gd_guard_dot), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const lv_color_t color = lv_color_hex(mark == 2 ? 0xFF2020 : 0xFF8000);
+          lv_obj_set_pos(id(gd_guard_dot), W - 2, 0);
+          lv_obj_set_style_bg_color(id(gd_guard_dot), color, 0);
+          lv_obj_set_width(id(gd_guard_line), W);
+          lv_obj_set_width(id(gd_guard_lbl), W);
+          lv_obj_set_style_text_color(id(gd_guard_lbl), color, 0);
+          lv_label_set_text(id(gd_guard_lbl), mark == 2 ? "Check power supply" : "Too warm, dimming");
+          lv_obj_move_foreground(id(gd_guard_dot));
+          lv_obj_clear_flag(id(gd_guard_dot), LV_OBJ_FLAG_HIDDEN);
+      - while:
+          condition:
+            lambda: 'return id(gameday_ctl).guard_mark() != 0;'
+          then:
+            - lambda: |-
+                lv_obj_move_foreground(id(gd_guard_line));
+                lv_obj_clear_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+            - delay: 15s
+            - lambda: 'lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);'
+            - delay: 105s
+
+lvgl:
+  top_layer:
+    widgets:
+      - obj:
+          id: gd_guard_dot
+          scrollbar_mode: "OFF"
+          x: 62
+          y: 0
+          width: 2
+          height: 2
+          bg_opa: COVER
+          bg_color: 0xFF8000
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          hidden: true
+      - obj:
+          id: gd_guard_line
+          scrollbar_mode: "OFF"
+          x: 0
+          y: 55
+          width: 64
+          height: 9
+          bg_opa: COVER
+          bg_color: 0x000000
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          hidden: true
+          widgets:
+            - label:
+                id: gd_guard_lbl
+                x: 0
+                y: 0
+                width: 64
+                text_align: CENTER
+                long_mode: SCROLL_CIRCULAR
+                text_font: spleen_8
+                text: ""
+
+esphome:
+  on_boot:
+    # After the boot screen is built, so a cap from the brownouts before this
+    # start is said at once.
+    - priority: -100.0
+      then:
+        - script.execute: gd_guard

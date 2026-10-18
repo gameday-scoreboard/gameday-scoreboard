@@ -67,7 +67,7 @@ script:
       # left alone, so leaving QC knows what to go back to.
       - hub75.set_brightness:
           id: matrix
-          brightness: !lambda 'return (uint8_t) id(brightness).state;'
+          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
       - script.execute: gd_repaint
 
   - id: qc_stop

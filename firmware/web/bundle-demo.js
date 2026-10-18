@@ -5,7 +5,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
 //   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
-//   POST /gameday/action?do=name  refresh
+//   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -96,6 +96,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="play" id="play"></div>
       <div class="splash" id="splash"></div>
     </section>
+
+    <div class="teambar guardbar" id="guard" role="status" hidden>
+      <div class="cur"><div><div class="name" id="guardName"></div><div class="lg" id="guardText"></div></div></div>
+      <button class="btn" id="guardClear" hidden>Clear</button>
+    </div>
 
     <section class="upnext" id="upnext" hidden>
       <div class="uh">Up next</div>
@@ -223,6 +228,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
           <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
           <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+          <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>Above 80 C the panel dims until it cools</small></label><span class="val" id="hTemp"></span></div>
+          <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
           <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
           <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
         </div>
@@ -973,6 +980,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       tiles.appendChild(tile);
     }
   };
+  $("#guardClear").onclick = async () => {
+    await doAction("power_ok");
+    scheduleState(300);
+  };
   $("#pick").onclick = () => openPicker(false);
   $("#favAdd").onclick = () => openPicker(true);
   const openPicker = async (fav) => {
@@ -1228,6 +1239,34 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // are off until someone turns them on in Home Assistant.
     $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
     $("#psram").textContent = Math.round(h.psram_kb) + " KiB";
+    renderGuard(h);
+  };
+
+  // Heat and power protection (components/gameday/guard.h). heat is the
+  // dimming step, power "capped" after two brownout restarts in a row.
+  const HEAT_PERCENT = [100, 70, 45, 25];
+  const renderGuard = (h) => {
+    const hasGuard = h && h.heat != null;
+    $("#hTempRow").hidden = !hasGuard || h.temp == null;
+    $("#hPowerRow").hidden = !hasGuard;
+    const capped = hasGuard && h.power === "capped";
+    const hot = hasGuard && h.heat > 0;
+    $("#guard").hidden = !capped && !hot;
+    $("#guard").classList.toggle("power", capped);
+    if (!hasGuard) return;
+    const pct = HEAT_PERCENT[Math.min(h.heat, HEAT_PERCENT.length - 1)];
+    if (h.temp != null) $("#hTemp").textContent = Math.round(h.temp) + " C" + (hot ? ", dimmed to " + pct + "%" : "");
+    $("#hPower").textContent = (h.brownouts || 0) + (capped ? ", brightness capped" : "");
+    $("#guardClear").hidden = !capped;
+    if (capped) {
+      $("#guardName").textContent = "Check the power supply";
+      $("#guardText").textContent = "The panel restarted twice in a row because its power dipped, so its brightness is held down. "
+        + "Use the power supply that came with it, not a phone charger or a USB port, then press Clear.";
+    } else if (hot) {
+      $("#guardName").textContent = "Too warm, dimming";
+      $("#guardText").textContent = "The panel is running hot, so it is at " + pct + "% of its brightness until it cools. "
+        + "Keep it out of direct sun and give it some air behind it.";
+    }
   };
 
   // After an install the device reboots. The event stream only retries every

@@ -7,7 +7,8 @@ routes with the response shapes from components/gameday/gameday.cpp:
 
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS; 400 when none match
-  POST /gameday/action   400 without do=, 404 for a name the firmware does not know
+  POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
+                         power_ok sets health.power back to "ok"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
 
@@ -93,7 +94,9 @@ INITIAL = {
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
                "heap_kb": 143.2, "block_kb": 40.0, "psram_kb": 4100.5, "rssi": -58, "espn": 200,
-               "espn_ago": 9, "version": "1.5.4", "built": "2026-10-17 20:01:00 -0500", "channel": "stable"},
+               "espn_ago": 9, "version": "1.5.4", "built": "2026-10-17 20:01:00 -0500", "channel": "stable",
+               # guard_json_keys() (components/gameday/guard.h)
+               "temp": 46.5, "heat": 0, "brownouts": 0, "power": "ok"},
     "game": {"s": "PRE", "l": "nfl", "ta": "DAL", "ti": 6, "ts": 0, "oa": "PHI", "oi": 21, "os": 0,
              "tr": "1-0", "or": "0-1", "p": 0, "tt": 3, "ot": 3, "rz": False, "tv": "FOX",
              "venue": "AT&T Stadium", "odds": "DAL -3", "ou": "47.5", "detail": "Sun 3:25 PM",
@@ -442,8 +445,10 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc"):
+            if q["do"] not in ("refresh", "qc", "power_ok"):
                 return self._json(404, {"error": "unknown action"})
+            if q["do"] == "power_ok" and STATE.get("health"):
+                STATE["health"]["power"] = "ok"
             return self._json(200, {"ok": True})
         if u.path == "/gameday/demo":
             q = {k: v[0] for k, v in pairs.items()}
