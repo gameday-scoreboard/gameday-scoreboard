@@ -22,15 +22,23 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "captive.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "guard.h"
+#include "health.h"
 #include "offseason.h"
 #include "recap.h"
 #include "poll_timing.h"
 #include "set_request.h"
 #include "startup.h"
+#include "update_mirror.h"
+#include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
+#endif
+#if defined(GAMEDAY_BETA_CHANNEL) || defined(GAMEDAY_UPDATE_MIRROR)
+#include "esphome/components/http_request/update/http_request_update.h"
 #endif
 
 namespace esphome {
@@ -122,7 +130,7 @@ class GamedaySelect : public select::Select, public Component {
 
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
-//   GET  /gameday/state              full snapshot + settings
+//   GET  /gameday/state              full snapshot + settings, and "wifi" (wifi_history.h)
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
@@ -130,6 +138,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    (down: football, count: baseball, match: soccer)
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
+//                                    beta=0/1 (follow the beta channel; release builds only)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
@@ -214,6 +223,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
   bool board_ready() const { return this->board_ready_; }
+  // The Wi-Fi answered ESPN with a sign-in page (captive.h) and ESPN has not
+  // answered since. The boot screen says so over the board (boot.yaml).
+  bool captive() const { return this->captive_; }
+  // Bench only: read some other address in place of captive.h's kProbeUrl,
+  // such as a host on the LAN that answers like a portal. Pass a string
+  // literal: only the pointer is kept, and the probe task reads it.
+  void set_probe_url(const char *url) { this->probe_url_.store(url); }
   // What the panel has downloaded from ESPN since boot: reply bodies and
   // logos. Each request also spends about 6 KB on headers and the TLS
   // handshake, which this does not see.
@@ -246,10 +262,47 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
 #endif
   void set_auto_update(bool on);
+  // Heat and power protection (guard.h). guard_brightness() is what the
+  // display gets for the owner's Brightness; it runs from on_boot before
+  // setup(), so it loads the power log itself the first time.
+  uint8_t guard_brightness(uint8_t want);
+  // The chip temperature sensor's readings (firmware/pages/guard.yaml).
+  void set_chip_temp(float c);
+  // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
+  uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.step, this->power_log_.capped != 0); }
+  // The owner's clear of the power cap: /gameday/action?do=power_ok.
+  void clear_power_cap();
+  // "Follow beta": the update entity reads the beta manifest instead of the
+  // release one. Off unless the owner turns it on; only in builds with
+  // beta_channel (the release builds, gameday-common.yaml).
+#ifdef GAMEDAY_BETA_CHANNEL
+  void set_beta_channel(http_request::HttpRequestUpdate *update, const char *stable, const char *beta) {
+    this->beta_update_ = update;
+    this->stable_source_ = stable;
+    this->beta_source_ = beta;
+  }
+  bool follow_beta() const { return this->follow_beta_ != 0; }
+#else
+  bool follow_beta() const { return false; }
+#endif
+  void set_follow_beta(bool on);
+  // The update feed's second host (update_mirror.h): `mirror` is `source`
+  // on the mirror, `beta_mirror` the beta manifest there (release builds).
+#ifdef GAMEDAY_UPDATE_MIRROR
+  void set_update_mirror(http_request::HttpRequestUpdate *update, const char *source, const char *mirror,
+                         const char *beta_mirror) {
+    this->mirror_update_ = update;
+    this->primary_source_ = source;
+    this->mirror_source_ = mirror;
+    this->beta_mirror_source_ = beta_mirror;
+  }
+#endif
 
   void setup() override;
   void loop() override;
   void dump_config() override;
+  // Marks the restart as asked for, in the boot log (health.h).
+  void on_shutdown() override;
   float get_setup_priority() const override { return setup_priority::LATE; }
 
   // AsyncWebHandler (HTTP task)
@@ -264,7 +317,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_favorite_(uint8_t slot, uint8_t league, uint32_t id);
   // The whole list at once, in priority order (the page's favs= key).
   void set_favorites_(const std::vector<std::pair<uint8_t, uint32_t>> &list);
-  void favorites_changed_(bool first_pick);
+  // live_before: live_leagues_() from before the change.
+  void favorites_changed_(bool first_pick, const std::vector<League> &live_before);
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
   void put_fav_(uint8_t i, uint8_t league, uint32_t id);  // no save
@@ -275,6 +329,29 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();
+  // The "health" object, read live on each GET /gameday/state (HTTP task).
+  std::string health_json_();
+  ::espn::Restart start_reason_{::espn::Restart::NONE};
+  bool boot_clock_noted_{false};  // boot_log_clock() ran
+  // guard.h. heat_ and power_log_ are main loop only; the HTTP task reads
+  // their small fields for the health block.
+  void load_power_log_();
+  void save_power_log_();
+  ::espn::HeatGuard heat_;
+  ::espn::PowerLog power_log_{};
+  ESPPreferenceObject power_pref_;
+  bool power_loaded_{false};
+  bool power_settled_{false};  // ran kPowerSettledMs without a brownout
+  // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
+  // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
+  void wifi_tick_();
+  std::string wifi_json_();
+  ::espn::WifiHistory wifi_hist_;
+  std::mutex wifi_mutex_;
+  uint32_t wifi_sample_ms_{0};
+  bool wifi_up_{false};  // under wifi_mutex_, as is wifi_rssi_
+  int8_t wifi_rssi_{0};  // the last sample
+  uint32_t wifi_reason_seen_{0};  // wifi_reason_seq when the link last came up
   std::mutex state_mutex_;
   std::string state_json_{"{}"};
   UpdateFields last_fields_;
@@ -405,12 +482,18 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // ESPN answered 403 or 429 to a request in this job (set by open_)
     bool throttled{false};
     uint32_t retry_after_ms{0};
+    // No time server answer yet: read only the Date header of an ESPN reply.
+    bool need_clock{false};
+    int64_t clock_epoch{0};    // 0 when there was no reply or no usable date
+    uint32_t clock_got_ms{0};  // millis() when the reply's headers arrived
   };
   void start_job_();
   void start_worker_();
   static void worker_(void *arg);
   void run_job_();
   void apply_job_();
+  void start_clock_job_();
+  void apply_clock_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);
@@ -474,6 +557,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // show for months (offseason.h); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
   void reset_game_();
+  // Clears the board and scans again now, for a change in what the mode
+  // follows. The caller starts the boot screen hold first.
+  void restart_board_();
+  // Restarts the board when Live games now scans other leagues than before.
+  bool live_leagues_changed_(const std::vector<League> &before);
   void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
   void mark_good_poll_() {
@@ -550,6 +638,25 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Where the bar's "Something wrong?" link on the device page writes to.
   std::string report_email_;
 #endif
+#ifdef GAMEDAY_BETA_CHANNEL
+  http_request::HttpRequestUpdate *beta_update_{nullptr};
+  const char *stable_source_{nullptr};
+  const char *beta_source_{nullptr};
+  ESPPreferenceObject beta_pref_;
+  uint8_t follow_beta_{0};  // 1 = read the beta manifest
+  void apply_channel_();
+#endif
+#ifdef GAMEDAY_UPDATE_MIRROR
+  http_request::HttpRequestUpdate *mirror_update_{nullptr};
+  const char *primary_source_{nullptr};
+  const char *mirror_source_{nullptr};
+  const char *beta_mirror_source_{nullptr};
+  uint32_t mirror_since_ms_{0};
+  bool on_mirror_{false};
+  bool mirror_answered_{false};
+  void mirror_tick_();
+  void use_primary_();
+#endif
   void auto_update_tick_();
   bool followed_game_live_() const;
   ESPPreferenceObject pref7_;
@@ -569,6 +676,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool clock_set_() const { return this->time_ != nullptr && this->time_->now().is_valid(); }
   uint32_t wifi_up_ms_{0};      // millis() when the loop first saw Wi-Fi this boot, 0 = not yet
   uint32_t sntp_asked_ms_{0};   // millis() of the last nudge to the time server, 0 = none since Wi-Fi came up
+  uint32_t http_clock_ms_{0};   // millis() of the last Date header read, 0 = none since Wi-Fi came up
+  bool clock_approx_{false};    // the clock came from ESPN's Date header and no time server has answered since
   bool clock_wait_shown_{false};
   bool board_ready_{false};
   uint32_t board_pending_ms_{0};  // millis() of the last team change, 0 = waiting since boot
@@ -728,6 +837,36 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};
+  // The last ESPN read through open_() (every read but logos and the probe):
+  // its HTTP status (0 for no answer)
+  // and millis() when it came, 0 before the first. Fetch task, HTTP task.
+  std::atomic<int> espn_status_{0};
+  std::atomic<uint32_t> espn_answer_ms_{0};
+
+  // Sign-in Wi-Fi (captive.h). The probe runs on its own short task, since
+  // it is needed before the clock is set, when no fetch job runs.
+  void captive_tick_();
+  void set_captive_(bool on);
+  void start_probe_();
+  static void probe_task_(void *arg);
+  bool captive_{false};
+  // The probe saw a sign-in page while ESPN reads were still fine: ESPN is
+  // asked at once, and captive_ is set only if that read fails.
+  bool captive_suspect_{false};
+  uint32_t read_fails_{0};        // back_off_() calls this boot, main loop only
+  uint32_t suspect_fails_mark_{0};
+  bool probe_running_{false};     // main loop: a probe task is out
+  bool probe_join_done_{false};   // probed since Wi-Fi last came up
+  uint32_t probe_ms_{0};          // millis() the last probe started
+  uint32_t probe_join_ms_{0};     // millis() Wi-Fi came up, 0 while it is down
+  uint32_t probe_ok_mark_{0};     // espn_ok_reads_ when the last probe started
+  std::atomic<const char *> probe_url_{::espn::kProbeUrl};
+  // Written by the probe task, read by the main loop once probe_done_ is set.
+  std::atomic<bool> probe_done_{false};
+  std::atomic<uint8_t> probe_result_{0};
+  // ESPN answered 200 over HTTPS (open_), from any task: the network is open,
+  // whatever the probe said.
+  std::atomic<uint32_t> espn_ok_reads_{0};
 };
 
 class UpdateTrigger : public Trigger<const UpdateFields &> {

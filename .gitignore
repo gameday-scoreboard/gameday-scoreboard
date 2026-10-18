@@ -14,3 +14,9 @@ burnin/
 # Design specs and plans stay out of this public repo.
 docs/superpowers/
 CLAUDE.local.md
+
+# Docs site (docs/wiki) build output
+docs/wiki/node_modules/
+docs/wiki/dist/
+docs/wiki/.astro/
+docs/wiki/src/content/docs/changelog.md

@@ -8,10 +8,13 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "captive.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "guard.h"
+#include "health.h"
 #include "logo_lru.h"
 #include "offseason.h"
 #include "panel_text.h"
@@ -19,6 +22,8 @@
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
+#include "update_mirror.h"
+#include "wifi_history.h"
 
 using namespace espn;
 
@@ -90,6 +95,31 @@ static void test_iso() {
   CHECK_EQ(parse_iso8601_z("2026-09-05T19:30Z"), (int64_t) 1788636600);
   CHECK_EQ(parse_iso8601_z("2026-09-10T00:20:00Z"), (int64_t) 1788999600);
   CHECK_EQ(parse_iso8601_z("garbage"), (int64_t) 0);
+  // HTTP Date headers, as ESPN sends them.
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 GMT"), (int64_t) 1792280369);
+  CHECK_EQ(parse_http_date("Sat, 05 Sep 2026 19:30:00 GMT"), (int64_t) 1788636600);
+  CHECK_EQ(parse_http_date("Sun, 01 Mar 2048 00:00:00 GMT"), (int64_t) 2466633600);
+  CHECK_EQ(parse_http_date(""), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 UTC"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Okt 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 7 Oct 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 24:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2O26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), (int64_t) 0);  // outside 2020 to 2099
+  CHECK_EQ(parse_http_date("Saturday, 17-Oct-26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat Oct 17 23:39:29 2026"), (int64_t) 0);
+  // Fields too long or out of range read as no date instead of overflowing
+  // (found by fuzz_espn).
+  CHECK_EQ(parse_iso8601_z("2026-10-17T999999999:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-999999999-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-2147483647T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T19:999999999Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2147483647-10-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-13-01T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T24:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T-1:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("1969-12-31T23:59Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("9999-12-31T23:59:59Z"), (int64_t) 253402300799);
 }
 
 static void test_team_parse() {
@@ -430,6 +460,64 @@ static void test_no_game_text() {
   // Live modes keep their own "Looking for a live game"
   CHECK_EQ(no_game_text(true, true, false, 1), std::string(""));
   CHECK_EQ(no_game_text(true, true, false, 3), std::string(""));
+  // A sign-in Wi-Fi says so in place of all of them, live modes too
+  CHECK_EQ(no_game_text(false, false, false, 0, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, true, false, 1, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, false), std::string("Can't reach ESPN"));
+}
+
+// The plain HTTP read of ESPN after joining Wi-Fi (captive.h). Only a clear
+// portal answer is a sign-in network; anything ESPN could have sent is not.
+static void test_captive() {
+  // ESPN today: 200, JSON, "{}"
+  CHECK(classify_probe(200, "", "application/json;charset=UTF-8", "{}") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "  \r\n[1]") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "application/json", "") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "\xEF\xBB\xBF{\"a\":1}") == Probe::OPEN);
+  // ESPN's JSON error for a URL it no longer knows still means ESPN answered
+  CHECK(classify_probe(404, "", "application/json", "{\"code\":404}") == Probe::OPEN);
+  // Portals: a redirect to their sign-in page, over HTTP or HTTPS
+  CHECK(classify_probe(302, "http://192.168.10.1:8002/index.php?zone=guest", "text/html", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "https://login.hotelwifi.example/portal?mac=aa:bb", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(307, "HTTPS://Splash.Example.NET/", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(301, "http://user@portal.example/x", "", "") == Probe::CAPTIVE);
+  // or their page in ESPN's place, or the status made for it
+  CHECK(classify_probe(200, "", "text/html", "<!DOCTYPE html><html><head><title>Sign in") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "", "\n  <html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "text/html; charset=utf-8", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "text/html", "<html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "", "") == Probe::CAPTIVE);
+  // ESPN sending plain HTTP on to HTTPS one day is still ESPN
+  CHECK(classify_probe(301, "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/record", "", "") ==
+        Probe::OPEN);
+  CHECK(classify_probe(302, "https://secure.espn.com:443/x", "", "") == Probe::OPEN);
+  CHECK(classify_probe(302, "https://espn.com", "", "") == Probe::OPEN);
+  // but a host that only ends in the same letters is not
+  CHECK(classify_probe(302, "http://notespn.com/login", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "http://espn.com.portal.example/login", "", "") == Probe::CAPTIVE);
+  // Proves nothing: no answer, a relative or missing redirect, an error page
+  // (ESPN's own Akamai "Access Denied" is HTML), an empty or odd body
+  CHECK(classify_probe(0, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(-1, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "/login", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(403, "", "text/html", "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>") == Probe::UNKNOWN);
+  CHECK(classify_probe(503, "", "text/html", "<html>") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "text/plain", "OK") == Probe::UNKNOWN);
+  CHECK(classify_probe(204, "", "", "") == Probe::UNKNOWN);
+
+  // When to probe: once per join
+  CHECK(probe_due(false, false, false, 0));
+  CHECK(probe_due(false, true, true, 0));
+  CHECK(!probe_due(true, false, false, 10 * 60 * 1000));
+  // again every minute on a sign-in network
+  CHECK(!probe_due(true, true, false, kProbeCaptiveRecheckMs - 1));
+  CHECK(probe_due(true, true, false, kProbeCaptiveRecheckMs));
+  // every two while reads fail on one that looked open
+  CHECK(!probe_due(true, false, true, kProbeFailingRecheckMs - 1));
+  CHECK(probe_due(true, false, true, kProbeFailingRecheckMs));
 }
 
 static struct tm mk(int year, int yday, int wday, int hour, int min, int mon = 8, int mday = 5) {
@@ -450,6 +538,11 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(2026, 248, 0, 12, 0), now), std::string("Tomorrow 12:00 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 251, 3, 19, 20), now), std::string("Wed 7:20 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 256, 1, 0, 5, 8, 14), now), std::string("Sep 14 12:05 AM"));
+  // ESPTime{}.to_c_tm(), what the panel gets for an epoch it can't convert:
+  // no label rather than a read before the month table (found by fuzz_espn).
+  CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
+  // A year far enough out to overflow the day count in int.
+  CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
 }
 
 static void test_upcoming() {
@@ -3392,6 +3485,48 @@ static void test_auto_update() {
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
+static void test_update_mirror() {
+  // On the primary: nothing until a read or install fails.
+  MirrorInputs in;
+  in.clock_valid = true;
+  CHECK(mirror_step(in) == MirrorStep::NONE);
+  in.answered = true;  // a good read on the primary is none of the mirror's business
+  CHECK(mirror_step(in) == MirrorStep::NONE);
+  in.error = true;
+  CHECK(mirror_step(in) == MirrorStep::TRY_MIRROR);
+  // The boot check, before the clock is set, fails TLS everywhere: no mirror read.
+  in.clock_valid = false;
+  CHECK(mirror_step(in) == MirrorStep::NO_CLOCK);
+  in.error = false;
+  CHECK(mirror_step(in) == MirrorStep::NONE);
+
+  // On the mirror, its read in flight (the error was cleared to start it).
+  MirrorInputs m;
+  m.on_mirror = true;
+  CHECK(mirror_step(m) == MirrorStep::NONE);
+  m.waited_ms = kMirrorWaitMs - 1;
+  CHECK(mirror_step(m) == MirrorStep::NONE);
+  m.waited_ms = kMirrorWaitMs;
+  CHECK(mirror_step(m) == MirrorStep::TIMED_OUT);
+  m.waited_ms = 5000;
+  m.answered = true;
+  CHECK(mirror_step(m) == MirrorStep::ANSWERED);
+  m.answered = false;
+  m.error = true;
+  CHECK(mirror_step(m) == MirrorStep::FAILED);
+  m.answered = true;  // an error wins: a failed read publishes nothing
+  CHECK(mirror_step(m) == MirrorStep::FAILED);
+  m.waited_ms = kMirrorWaitMs * 2;
+  CHECK(mirror_step(m) == MirrorStep::FAILED);
+  // millis() wraps every 49 days; the unsigned difference still counts up.
+  uint32_t since = 0xFFFFF000u;
+  uint32_t now = since + kMirrorWaitMs;
+  m = MirrorInputs{};
+  m.on_mirror = true;
+  m.waited_ms = now - since;
+  CHECK(mirror_step(m) == MirrorStep::TIMED_OUT);
+}
+
 static void test_update_mark() {
   UpdateMark m{};
   CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
@@ -3480,6 +3615,237 @@ static bool panel_drawable(const std::string &s) {
     return false;
   }
   return true;
+}
+
+static void test_boot_log() {
+  const int64_t now = 1792000000;  // 2026-10-16
+  const uint32_t build_a = 111, build_b = 222;
+  // RTC memory after a power cut is noise; the log starts over.
+  BootLog log;
+  memset(&log, 0xA5, sizeof(log));
+  CHECK(!boot_log_valid(log));
+  CHECK(boot_log_start(log, kResetPowerOn, build_a, 0) == Restart::POWER);
+  CHECK(boot_log_valid(log));
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  CHECK_EQ(boot_log_fault_ago(log, now, 50), (int64_t) -1);
+
+  // A crash: kept, and as old as the uptime while it's this start.
+  CHECK(boot_log_start(log, kResetPanic, build_a, now) == Restart::CRASH);
+  CHECK_EQ(log.boots, 2u);
+  CHECK(log.fault == (uint8_t) Restart::CRASH);
+  CHECK_EQ(boot_log_fault_ago(log, now + 600, 600), (int64_t) 600);
+  // The owner presses Reboot: the start says restart, the crash stays.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetSoftware, build_a, now + 3600) == Restart::RESTART);
+  CHECK(log.fault == (uint8_t) Restart::CRASH);
+  CHECK_EQ(boot_log_fault_ago(log, now + 7200, 3600), (int64_t) 7200);
+  // Without a clock, an earlier fault's age isn't known.
+  CHECK_EQ(boot_log_fault_ago(log, 0, 3600), (int64_t) -1);
+
+  // The S3 sometimes reports esp_restart() as a watchdog; the mark says not.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::RESTART);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::WATCHDOG);  // unmarked
+  CHECK(log.fault == (uint8_t) Restart::WATCHDOG);
+
+  // A planned restart into a different build is an update, either way.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::UPDATE);
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::UPDATE);
+  // An unmarked software reset is still a restart, and the mark is used once.
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::RESTART);
+  CHECK_EQ((int) log.planned, 0);
+
+  // A brownout at a start with no clock yet gets its time once it's set.
+  CHECK(boot_log_start(log, kResetBrownout, build_b, 0) == Restart::BROWNOUT);
+  CHECK_EQ(log.fault_at, (int64_t) 0);
+  boot_log_clock(log, 1000);  // not a real time
+  CHECK_EQ(log.fault_at, (int64_t) 0);
+  boot_log_clock(log, now);
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  boot_log_clock(log, now + 5);  // only the first
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now + 60) == Restart::RESTART);
+  boot_log_clock(log, now + 60);  // not this start's fault
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  CHECK_EQ(boot_log_fault_ago(log, now + 90, 30), (int64_t) 90);
+  CHECK(boot_log_start(log, kResetPowerGlitch, build_b, now) == Restart::BROWNOUT);
+
+  // Power: a log that survived it is cleared anyway, faults and all.
+  CHECK(boot_log_start(log, kResetPowerOn, build_b, now) == Restart::POWER);
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  // A flipped bit and the log starts over.
+  CHECK(boot_log_start(log, kResetPanic, build_b, now) == Restart::CRASH);
+  log.boots ^= 4;
+  CHECK(!boot_log_valid(log));
+  CHECK_EQ(boot_log_fault_ago(log, now, 10), (int64_t) -1);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::RESTART);
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  memset(&log, 0, sizeof(log));
+  boot_log_planned(log);  // no effect on an invalid log
+  CHECK(!boot_log_valid(log));
+
+  CHECK(classify_restart(kResetTaskWdt, true, false) == Restart::WATCHDOG);
+  CHECK(classify_restart(kResetIntWdt, false, false) == Restart::WATCHDOG);
+  CHECK(classify_restart(kResetCpuLockup, false, false) == Restart::CRASH);
+  CHECK(classify_restart(kResetUsb, false, false) == Restart::USB);
+  CHECK(classify_restart(kResetExternal, false, false) == Restart::POWER);
+  CHECK(classify_restart(kResetDeepSleep, false, false) == Restart::OTHER);
+  CHECK(classify_restart(99, false, false) == Restart::OTHER);
+  CHECK_EQ(std::string(restart_key(Restart::BROWNOUT)), std::string("brownout"));
+  CHECK_EQ(std::string(restart_key(Restart::OTHER)), std::string("other"));
+}
+
+static void test_health_json() {
+  Health h{};
+  h.uptime_s = 7260;
+  h.start = Restart::RESTART;
+  h.boots = 3;
+  h.fault = Restart::BROWNOUT;
+  h.fault_ago = 9000;
+  h.heap_kb = 143.24f;
+  h.block_kb = 40.0f;
+  h.psram_kb = 4100.5f;
+  h.wifi = true;
+  h.rssi = -58;
+  h.espn_status = 200;
+  h.espn_ago = 9;
+  h.version = "2026.10.0";
+  h.built = 1792285260;  // 2026-10-18 1:01 AM UTC
+  h.channel = "beta";
+  char buf[512];
+  int n = health_json(buf, sizeof(buf), h);
+  CHECK(n > 0 && n < (int) sizeof(buf));
+  CHECK_EQ(std::string(buf),
+           std::string("{\"up\":7260,\"start\":\"restart\",\"boots\":3,\"fault\":\"brownout\",\"fault_ago\":9000,"
+                       "\"heap_kb\":143.2,\"block_kb\":40.0,\"psram_kb\":4100.5,\"rssi\":-58,\"espn\":200,"
+                       "\"espn_ago\":9,\"version\":\"2026.10.0\",\"built\":1792285260,"
+                       "\"channel\":\"beta\"}"));
+  // Parses, and the optional keys go when they mean nothing.
+  JsonDocument doc;
+  CHECK(!deserializeJson(doc, buf));
+  CHECK_EQ(doc["rssi"].as<int>(), -58);
+  h.fault_ago = -1;
+  h.wifi = false;
+  h.espn_ago = -1;
+  health_json(buf, sizeof(buf), h);
+  doc.clear();
+  CHECK(!deserializeJson(doc, buf));
+  CHECK_EQ(std::string(doc["fault"].as<const char *>()), std::string("brownout"));
+  CHECK(doc["fault_ago"].isNull());
+  CHECK(doc["rssi"].isNull());
+  CHECK(doc["espn"].isNull());
+  h.fault = Restart::NONE;
+  h.espn_status = 0;  // no answer
+  h.espn_ago = 30;
+  health_json(buf, sizeof(buf), h);
+  doc.clear();
+  CHECK(!deserializeJson(doc, buf));
+  CHECK(doc["fault"].isNull());
+  CHECK_EQ(doc["espn"].as<int>(), 0);
+  CHECK_EQ(doc["espn_ago"].as<int>(), 30);
+}
+
+static void test_heat_guard() {
+  HeatGuard g;
+  uint32_t t = 1000;
+  CHECK(!g.feed(NAN, t));
+  CHECK(!g.feed(60.0f, t));
+  CHECK_EQ((int) g.step, 0);
+  // The first hot reading steps down at once, then one step per kHotStepMs.
+  CHECK(g.feed(kHotC, t += 15000));
+  CHECK_EQ((int) g.step, 1);
+  CHECK(!g.feed(kHotC + 1, t += kHotStepMs - 1));
+  CHECK(g.feed(kHotC + 1, t += 1));
+  CHECK_EQ((int) g.step, 2);
+  CHECK(g.feed(kHotC + 1, t += kHotStepMs));
+  CHECK(!g.feed(kHotC + 1, t += kHotStepMs));  // already the dimmest
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  // Between the two limits it holds, however long.
+  CHECK(!g.feed(kCoolC + 1, t += 10 * kCoolStepMs));
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  // Under kCoolC it waits a whole kCoolStepMs before each step back.
+  CHECK(!g.feed(kCoolC - 1, t += 15000));
+  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 15001));
+  CHECK(g.feed(kCoolC - 1, t += 15001));
+  CHECK_EQ((int) g.step, (int) kHeatSteps - 1);
+  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 1));
+  CHECK(g.feed(kCoolC - 1, t += 1));
+  // Warm again in between restarts the wait.
+  CHECK(!g.feed(kCoolC, t += kCoolStepMs));
+  CHECK(!g.feed(kCoolC - 1, t += 15000));
+  CHECK_EQ((int) g.step, 1);
+  CHECK(g.feed(kCoolC - 1, t += kCoolStepMs));
+  CHECK_EQ((int) g.step, 0);
+  CHECK(!g.feed(20.0f, t += kCoolStepMs));
+  // Past the floor it goes straight to the dimmest step.
+  CHECK(g.feed(kHotFloorC, t += 15000));
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  CHECK(g.last_c == kHotFloorC);
+  // millis() wrapping doesn't stall it.
+  HeatGuard w;
+  uint32_t m = 0xFFFFFFFFu - 1000;
+  CHECK(w.feed(kHotC, m));
+  CHECK(w.feed(kHotC, m + kHotStepMs));
+  CHECK_EQ((int) w.step, 2);
+}
+
+static void test_power_log() {
+  PowerLog log{};
+  CHECK(!power_log_start(log, false));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ(log.brownouts, 1u);
+  CHECK_EQ((int) log.capped, 0);
+  // A settled run ends the streak; the count stays.
+  CHECK(power_log_settled(log));
+  CHECK(!power_log_settled(log));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ((int) log.capped, 0);
+  // Two in a row cap it, and power cuts in between don't count either way.
+  CHECK(!power_log_start(log, false));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ((int) log.capped, 1);
+  CHECK_EQ(log.brownouts, 3u);
+  // Settling doesn't lift the cap; only the owner does.
+  CHECK(power_log_settled(log));
+  CHECK_EQ((int) log.capped, 1);
+  CHECK(power_log_clear(log));
+  CHECK(!power_log_clear(log));
+  CHECK_EQ((int) log.capped, 0);
+  CHECK_EQ(log.brownouts, 3u);
+  // The streak doesn't wrap.
+  log.streak = 255;
+  power_log_start(log, true);
+  CHECK_EQ((int) log.streak, 255);
+}
+
+static void test_guarded_brightness() {
+  CHECK_EQ((int) guarded_brightness(128, 0, false), 128);
+  CHECK_EQ((int) guarded_brightness(255, 0, false), 255);
+  CHECK_EQ((int) guarded_brightness(200, 1, false), 140);
+  CHECK_EQ((int) guarded_brightness(200, kHeatSteps, false), 50);
+  CHECK_EQ((int) guarded_brightness(200, 9, false), 50);  // past the last step
+  CHECK_EQ((int) guarded_brightness(200, 0, true), (int) kPowerCap);
+  CHECK_EQ((int) guarded_brightness(40, 0, true), 40);  // already under the cap
+  CHECK_EQ((int) guarded_brightness(255, kHeatSteps, true), (int) kPowerCap);
+  CHECK_EQ((int) guarded_brightness(1, kHeatSteps, true), 1);  // never off
+  CHECK(guard_mark(0, false) == GuardMark::NONE);
+  CHECK(guard_mark(2, false) == GuardMark::HEAT);
+  CHECK(guard_mark(2, true) == GuardMark::POWER);
+
+  char buf[96];
+  PowerLog log{};
+  log.brownouts = 4;
+  log.capped = 1;
+  guard_json_keys(buf, sizeof(buf), 47.25f, 2, log);
+  CHECK_EQ(std::string(buf), std::string(",\"temp\":47.2,\"heat\":2,\"brownouts\":4,\"power\":\"capped\""));
+  log.capped = 0;
+  guard_json_keys(buf, sizeof(buf), NAN, 0, log);
+  CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
 }
 
 static void test_offseason() {
@@ -3745,6 +4111,138 @@ static void test_tbd_kickoff() {
   CHECK(!team_cache_load(c, League::NCAA, kIowa, placeholder - 5 * 86400 + 60, back));
 }
 
+static void test_wifi_history() {
+  CHECK(wifi_cause(200) == WifiCause::SIGNAL);  // beacon timeout
+  CHECK(wifi_cause(3) == WifiCause::ROUTER);    // deauth from the router
+  CHECK(wifi_cause(206) == WifiCause::ROUTER);  // the router restarted
+  CHECK(wifi_cause(15) == WifiCause::PASSWORD);
+  CHECK(wifi_cause(207) == WifiCause::ROAM);
+  CHECK(wifi_cause(8) == WifiCause::PANEL);
+  CHECK(wifi_cause(1) == WifiCause::OTHER);
+  CHECK_EQ(std::string(wifi_cause_key(WifiCause::PASSWORD)), std::string("password"));
+
+  static int8_t rssi[kWifiMinutes];
+  static WifiDrop drops[kWifiDrops];
+
+  // No buffers (no PSRAM): no history, only the total.
+  WifiHistory none;
+  none.sample(0, true, -60);
+  none.up(0);
+  none.down(10, WifiCause::SIGNAL);
+  none.up(15);
+  CHECK_EQ(none.json(20, true, -60), std::string("{\"rssi\":-60,\"step\":300,\"hist\":[],\"weak\":false,"
+                                                 "\"drops\":1,\"day\":0,\"causes\":{}}"));
+
+  // A panel that drops all the time still answers whole JSON.
+  {
+    static int8_t r2[kWifiMinutes];
+    static WifiDrop d2[kWifiDrops];
+    WifiHistory flap;
+    flap.attach(r2, d2);
+    for (uint32_t i = 0; i < 1000000; i++) {
+      flap.up(i * 2);
+      flap.down(i * 2 + 1, WifiCause::OTHER);
+    }
+    std::string fj = flap.json(2000000, false, -127);
+    CHECK(fj.find("\"weak\":false,\"drops\":1000000,\"day\":64,\"causes\":{\"other\":64},\"last\":\"other\",\"last_ago\":1}") !=
+          std::string::npos);
+    CHECK(fj.back() == '}');
+  }
+
+  // A minute keeps the mean of its readings; a minute off Wi-Fi keeps 0.
+  WifiHistory h;
+  h.attach(rssi, drops);
+  h.up(0);
+  h.sample(0, true, -60);
+  h.sample(10, true, -62);
+  h.sample(20, true, -65);
+  CHECK_EQ(h.minutes(), 0u);
+  h.sample(60, false, -127);
+  CHECK_EQ(h.minutes(), 1u);
+  CHECK_EQ((int) rssi[0], -62);
+  h.sample(120, true, -70);
+  CHECK_EQ((int) rssi[1], 0);
+  CHECK_EQ(h.json(130, false, -127), std::string("{\"step\":300,\"hist\":[-62],\"weak\":false,"
+                                                  "\"drops\":0,\"day\":0,\"causes\":{}}"));
+
+  // A loop that stalled past several minutes fills them in as off Wi-Fi.
+  h.sample(400, true, -70);
+  CHECK_EQ(h.minutes(), 6u);
+  CHECK_EQ((int) rssi[2], -70);
+  CHECK_EQ((int) rssi[3], 0);
+  // Points end at the newest minute: [-62] then [off, -70, off, off, off]
+  CHECK(h.json(400, true, -70).find("\"hist\":[-62,-70]") != std::string::npos);
+
+  // Drops: the cause, how long it lasted, and the panel leaving on purpose
+  // or a roam not counted as trouble.
+  h.down(1000, WifiCause::SIGNAL);
+  std::string j = h.json(1010, false, -127);
+  CHECK(j.find("\"drops\":1,\"day\":1,\"causes\":{\"signal\":1},\"last\":\"signal\",\"last_ago\":10}") !=
+        std::string::npos);
+  h.up(1042);
+  CHECK(h.json(1100, true, -60).find("\"last_ago\":100,\"last_down\":42}") != std::string::npos);
+  h.up(1050);  // already up
+  CHECK(h.json(1100, true, -60).find("\"last_down\":42}") != std::string::npos);
+  h.down(1200, WifiCause::PANEL);
+  h.up(1210);
+  h.down(1300, WifiCause::ROAM);
+  h.up(1301);
+  h.down(1400, WifiCause::ROUTER);
+  h.down(1401, WifiCause::SIGNAL);  // already down: the first cause stands
+  h.up(1460);
+  CHECK_EQ(h.total(), 2u);
+  j = h.json(1500, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":2,\"causes\":{\"signal\":1,\"router\":1,\"roam\":1},"
+               "\"last\":\"router\",\"last_ago\":100,\"last_down\":60}") != std::string::npos);
+  // A day later the drops are history: still in the total, out of the day.
+  j = h.json(1400 + 24 * 3600, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":0,\"causes\":{},\"last\":\"router\"") != std::string::npos);
+
+  // The weak-signal hint: a median under -75 dBm over the last half hour,
+  // from at least ten minutes on Wi-Fi.
+  WifiHistory w;
+  w.attach(rssi, drops);
+  uint32_t t = 0;
+  // n minutes of one reading each, then a reading-less sample that closes
+  // the last of them
+  auto run = [&](int n, bool on, int8_t v) {
+    for (int m = 0; m < n; m++, t += 60)
+      w.sample(t, on, v);
+    w.sample(t, false, -127);
+  };
+  run(9, true, -80);
+  CHECK(!w.weak());  // nine minutes so far
+  run(1, true, -80);
+  CHECK(w.weak());
+  run(9, true, -60);
+  CHECK(w.weak());  // 10 weak of 19
+  run(2, true, -60);
+  CHECK(!w.weak());  // 10 weak of 21
+  run(30, true, -60);
+  CHECK(!w.weak());
+  run(25, false, -127);
+  run(5, true, -80);
+  CHECK(!w.weak());  // five readings in the last half hour: too few to say
+  run(30, false, -127);
+  CHECK(!w.weak());  // off Wi-Fi: no readings, no hint
+  CHECK(w.json(t, false, -127).find("-80,null,null,null,null,null,null]") != std::string::npos);
+
+  // The ring holds a day: after 25 hours the JSON has 288 points.
+  WifiHistory d;
+  d.attach(rssi, drops);
+  for (uint32_t m = 0; m <= 25 * 60; m++)
+    d.sample(m * 60, true, (int8_t) (m < 24 * 60 ? -50 : -77));
+  CHECK_EQ(d.minutes(), 25u * 60);
+  j = d.json(25 * 3600, true, -77);
+  size_t points = 1;
+  for (char c : j.substr(j.find("\"hist\":["), j.find(']') - j.find("\"hist\":[")))
+    if (c == ',')
+      points++;
+  CHECK_EQ(points, (size_t) (kWifiMinutes / kWifiStep));
+  CHECK(j.find(",-77]") != std::string::npos);
+  CHECK(d.weak());
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -3757,6 +4255,7 @@ int main() {
   test_splash();
   test_status_text();
   test_no_game_text();
+  test_captive();
   test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();
@@ -3817,9 +4316,16 @@ int main() {
   test_backoff();
   test_cup_backoff();
   test_auto_update();
+  test_update_mirror();
   test_update_mark();
+  test_boot_log();
+  test_health_json();
+  test_heat_guard();
+  test_power_log();
+  test_guarded_brightness();
   test_offseason();
   test_panel_text();
+  test_wifi_history();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

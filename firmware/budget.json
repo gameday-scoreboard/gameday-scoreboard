@@ -1,0 +1,85 @@
+{
+  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there.",
+  "max_growth": {
+    "flash": 40960,
+    "static_ram": 4096,
+    "json": 20480,
+    "heap": 20480
+  },
+  "firmware": {
+    "moonhub75": {
+      "flash": 2434538,
+      "static_ram": 173431
+    },
+    "moonhub75-2panel": {
+      "flash": 2434538,
+      "static_ram": 173431
+    },
+    "scoreboard75": {
+      "flash": 2408860,
+      "static_ram": 172568
+    }
+  },
+  "host": {
+    "poll_mlb_event": {
+      "heap": 1581,
+      "json": 8815
+    },
+    "poll_nba_event": {
+      "heap": 1648,
+      "json": 8052
+    },
+    "poll_ncaa_scoreboard": {
+      "heap": 1508,
+      "json": 221411
+    },
+    "poll_nfl_event": {
+      "heap": 1584,
+      "json": 7503
+    },
+    "poll_nhl_event": {
+      "heap": 1621,
+      "json": 7830
+    },
+    "poll_soccer_event": {
+      "heap": 1850,
+      "json": 14444
+    },
+    "scan_mlb_day": {
+      "heap": 1704,
+      "json": 7003
+    },
+    "scan_nba_day": {
+      "heap": 2424,
+      "json": 6794
+    },
+    "scan_ncaa_day": {
+      "heap": 7104,
+      "json": 16321
+    },
+    "scan_ncaa_live": {
+      "heap": 36186,
+      "json": 185850
+    },
+    "scan_nhl_day": {
+      "heap": 3824,
+      "json": 11460
+    },
+    "scan_soccer_day": {
+      "heap": 1792,
+      "json": 7023
+    },
+    "schedule_nfl": {
+      "heap": 1936,
+      "json": 6657
+    },
+    "team_day_ncaa": {
+      "heap": 1042,
+      "json": 6101
+    },
+    "team_nfl": {
+      "heap": 1042,
+      "json": 6277
+    }
+  }
+}

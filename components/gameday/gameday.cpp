@@ -8,6 +8,7 @@
 #include "esphome/core/log.h"
 
 #include <cstring>
+#include <strings.h>
 #include <vector>
 
 #include "logo_lru.h"
@@ -29,16 +30,35 @@
 #ifdef USE_GAMEDAY_CRASH_REPORT
 #include "esphome/components/crash_report/crash_report.h"
 #endif
+#ifdef USE_WIFI
+#include "esphome/components/wifi/wifi_component.h"
+#include <esp_event.h>
+#include <esp_wifi.h>
+#endif
 
+#include <esp_attr.h>
 #include <esp_heap_caps.h>
+#include <esp_http_client.h>
 #include <esp_sntp.h>
+#include <esp_system.h>
+#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <sys/time.h>
 
 namespace esphome {
 namespace gameday {
 
 static const char *const TAG = "gameday";
+
+static_assert(::espn::kResetPowerOn == ESP_RST_POWERON && ::espn::kResetSoftware == ESP_RST_SW &&
+                  ::espn::kResetPanic == ESP_RST_PANIC && ::espn::kResetWdt == ESP_RST_WDT &&
+                  ::espn::kResetBrownout == ESP_RST_BROWNOUT && ::espn::kResetUsb == ESP_RST_USB &&
+                  ::espn::kResetPowerGlitch == ESP_RST_PWR_GLITCH && ::espn::kResetCpuLockup == ESP_RST_CPU_LOCKUP,
+              "health.h reset reasons no longer match esp_reset_reason_t");
+
+// Survives a restart, a crash and a watchdog (health.h)
+RTC_NOINIT_ATTR static ::espn::BootLog boot_log;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
 // them, but accepts curl.
@@ -63,16 +83,26 @@ static const uint32_t NOT_READY_INTERVAL = 500;
 // With Wi-Fi up and the clock still unset, the time server is asked again this
 // often. lwIP's own wait for a reply is 15 s, so a slow answer is never cut off.
 static const uint32_t SNTP_ASK_INTERVAL = 15 * 1000;
+// A time server usually answers within about a second of Wi-Fi. With none
+// this long after (a network that blocks NTP, or a slow one), the clock is set
+// from the Date header of an ESPN reply instead, and a failed read is tried
+// again this often. Any ESPN URL will do: only the headers are read.
+static const uint32_t HTTP_CLOCK_WAIT = 5 * 1000;
+static const uint32_t HTTP_CLOCK_RETRY = 30 * 1000;
+static const char *const HTTP_CLOCK_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // Install updates automatically: how often loop() looks, and how long a
-// manifest read gets before its answer is used (the HTTP timeout is 20 s).
+// manifest read gets before its answer is used (the HTTP timeout is 20 s,
+// and a failed read is followed by one from the mirror, update_mirror.h).
 static const uint32_t AUTO_UPDATE_TICK = 10 * 1000;
-static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
+static const uint32_t AUTO_UPDATE_CHECK_WAIT = 2 * MINUTE;
 // After an install, how long the new firmware runs before the update counts
 // as taken: past safe_mode's one minute, when the bootloader can no longer
 // roll it back.
 static const uint32_t UPDATE_GOOD_BOOT = 2 * MINUTE;
+// The Wi-Fi signal is read this often; each minute keeps the mean.
+static const uint32_t WIFI_SAMPLE_INTERVAL = 10 * 1000;
 // A college scan is ~750KB on a Saturday. With nothing live it waits for the
 // next kickoff instead of re-reading every 2 minutes, but never longer than
 // this, so a moved kickoff or the next day's slate is still picked up.
@@ -175,9 +205,52 @@ void GamedaySelect::control(const std::string &value) {
 static json::SpiRamAllocator json_psram;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 #endif
 
+#ifdef USE_WIFI
+// The reason the connection ended, set on the event task. ESPHome's own
+// handler logs it but keeps nothing; wifi_tick_() reads it when the link goes
+// down, and the sequence says whether one came since the link was up.
+static std::atomic<int> wifi_reason{0};           // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static std::atomic<uint32_t> wifi_reason_seq{0};  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+static void on_wifi_disconnected(void *, esp_event_base_t, int32_t, void *data) {
+  // ESPHome marks the link down when its main loop handles this same event,
+  // so the one that ended a connection still finds it up. The retries after
+  // it (no AP found, a failed sign-in) don't, and keep the first reason.
+  auto *w = wifi::global_wifi_component;
+  if (w != nullptr && !w->is_connected())
+    return;
+  wifi_reason.store(((wifi_event_sta_disconnected_t *) data)->reason);
+  wifi_reason_seq.fetch_add(1);
+}
+#endif
+
 void GamedayComponent::setup() {
 #ifdef USE_PSRAM
   ::espn::set_json_allocator(&json_psram);
+#endif
+  // A restart keeps the wall clock, so a crash a moment ago has its time now.
+  this->start_reason_ = ::espn::boot_log_start(boot_log, (int) esp_reset_reason(), (uint32_t) App.get_build_time(),
+                                               (int64_t) ::time(nullptr));
+  ESP_LOGI(TAG, "Started by %s, start %u since the power came on", ::espn::restart_key(this->start_reason_),
+           (unsigned) boot_log.boots);
+  if (boot_log.fault != 0 && boot_log.fault_boot != boot_log.boots)
+    ESP_LOGW(TAG, "Last trouble: %s, %u start(s) ago", ::espn::restart_key((::espn::Restart) boot_log.fault),
+             (unsigned) (boot_log.boots - boot_log.fault_boot));
+  this->load_power_log_();  // on_boot has normally done it already
+#ifdef USE_WIFI
+  // About 2 KB: a day of minutes and the last drops. Without PSRAM (or with
+  // it full) there is no history and the "wifi" object only has the total.
+  auto *rssi = (int8_t *) heap_caps_calloc(::espn::kWifiMinutes, 1, MALLOC_CAP_SPIRAM);
+  auto *drops = (::espn::WifiDrop *) heap_caps_calloc(::espn::kWifiDrops, sizeof(::espn::WifiDrop), MALLOC_CAP_SPIRAM);
+  if (rssi != nullptr && drops != nullptr) {
+    this->wifi_hist_.attach(rssi, drops);
+  } else {
+    heap_caps_free(rssi);
+    heap_caps_free(drops);
+  }
+  if (esp_event_handler_instance_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnected, nullptr,
+                                          nullptr) != ESP_OK)
+    ESP_LOGW(TAG, "Can't follow Wi-Fi disconnects; drops will show no cause");
 #endif
   this->logos_.setup();
   this->pref_ = global_preferences->make_preference<Prefs>(fnv1_hash("gameday_prefs_v1"));
@@ -251,7 +324,23 @@ void GamedayComponent::setup() {
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
+#ifdef GAMEDAY_BETA_CHANNEL
+  // Before the update entity's first check, which waits for the main loop.
+  this->beta_pref_ = global_preferences->make_preference<uint8_t>(fnv1_hash("gameday_beta_v1"));
+  if (!this->beta_pref_.load(&this->follow_beta_) || this->follow_beta_ > 1)
+    this->follow_beta_ = 0;
+  this->apply_channel_();
+#endif
   this->settle_update_mark_();
+#ifdef GAMEDAY_UPDATE_MIRROR
+  // Any state the update entity publishes while it points at the mirror is
+  // the mirror's answer (a failed read publishes nothing; mirror_tick_).
+  if (this->mirror_update_ != nullptr)
+    this->mirror_update_->add_on_state_callback([this]() {
+      if (this->on_mirror_)
+        this->mirror_answered_ = true;
+    });
+#endif
 #ifdef GAMEDAY_BAR
   this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
   if (!this->bar_pref_.load(&this->now_tried_))
@@ -261,6 +350,14 @@ void GamedayComponent::setup() {
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
   this->rebuild_favorites_(false);
   this->apply_timezone_();
+  if (this->time_ != nullptr)
+    this->time_->add_on_time_sync_callback([this]() {
+      if (!this->clock_approx_)
+        return;
+      ESP_LOGI(TAG, "Time server answered: clock no longer approximate");
+      this->clock_approx_ = false;
+      this->rebuild_state_(&this->last_fields_);  // drops clock_approx
+    });
   this->publish_selects_();
 #ifdef GAMEDAY_DEMO
   this->demo_setup_();
@@ -334,6 +431,7 @@ void GamedayComponent::select_favorite(uint8_t slot, const std::string &option) 
 void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) {
   if (slot < 1 || slot > FAV_MAX)
     return;
+  std::vector<League> live_before = this->live_leagues_();
   this->put_fav_(slot - 1, league, id);
   if (slot <= 4)
     this->pref3_.save(&this->prefs3_);
@@ -343,10 +441,11 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
   if (slot <= 4 && this->favorite_selects_[slot - 1] != nullptr)
     this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
-  this->favorites_changed_(first_pick);
+  this->favorites_changed_(first_pick, live_before);
 }
 
 void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint32_t>> &list) {
+  std::vector<League> live_before = this->live_leagues_();
   bool any = false;
   for (uint8_t i = 0; i < FAV_MAX; i++) {
     bool set = i < list.size();
@@ -360,10 +459,10 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   for (uint8_t slot = 1; slot <= 4; slot++)
     if (this->favorite_selects_[slot - 1] != nullptr)
       this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
-  this->favorites_changed_(first_pick);
+  this->favorites_changed_(first_pick, live_before);
 }
 
-void GamedayComponent::favorites_changed_(bool first_pick) {
+void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<League> &live_before) {
   bool was_fav_mode = this->favorites_mode_();
   this->rebuild_favorites_(true);
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && (was_fav_mode || this->favorites_mode_())) {
@@ -378,6 +477,9 @@ void GamedayComponent::favorites_changed_(bool first_pick) {
     this->schedule_next_(0);
     return;
   }
+  // Live games on auto reads the favorites' leagues too.
+  if (this->live_leagues_changed_(live_before))
+    return;
   if (first_pick)
     this->emit_({});  // redraw the ticker without the setup prompt
   else
@@ -469,14 +571,7 @@ void GamedayComponent::select_mode(const std::string &option) {
     this->mark_setup_done_();
     if (this->mode_select_ != nullptr)
       this->mode_select_->publish_state(option);
-    this->reset_game_();
-    this->generation_++;
-    this->emit_({});  // clear the board while the next fetch runs
-    this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
-    this->end_backoff_wait_();
-    this->schedule_next_(0);
-    // Somebody asked for a different mode, so they are looking at the panel.
-    this->fire_action_("user_pick");
+    this->restart_board_();
     return;
   }
   ESP_LOGW(TAG, "Unknown mode '%s'", option.c_str());
@@ -522,9 +617,11 @@ void GamedayComponent::set_live_leagues(const std::string &keys) { this->set_liv
 void GamedayComponent::set_live_mask_(uint16_t mask) {
   if (mask == this->prefs7_.live_mask)
     return;
+  std::vector<League> before = this->live_leagues_();
   this->prefs7_.live_mask = mask;
   this->pref7_.save(&this->prefs7_);
-  this->rebuild_state_(&this->last_fields_);
+  if (!this->live_leagues_changed_(before))
+    this->rebuild_state_(&this->last_fields_);
 }
 
 std::vector<League> GamedayComponent::live_leagues_() const {
@@ -866,7 +963,12 @@ void GamedayComponent::dump_config() {
 #ifdef GAMEDAY_BAR
   ESP_LOGCONFIG(TAG, "  Bar beta: installs from the beta channel");
 #endif
+#ifdef GAMEDAY_BETA_CHANNEL
+  ESP_LOGCONFIG(TAG, "  Follow beta: %s", this->follow_beta() ? "on" : "off");
+#endif
 }
+
+void GamedayComponent::on_shutdown() { ::espn::boot_log_planned(boot_log); }
 
 void GamedayComponent::loop() {
   if (this->logos_.loop())
@@ -876,7 +978,23 @@ void GamedayComponent::loop() {
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
+    if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
+      // A settled run: the next brownout starts a new streak
+      this->power_settled_ = true;
+      if (::espn::power_log_settled(this->power_log_))
+        this->save_power_log_();
+    }
+    if (!this->boot_clock_noted_ && this->time_ != nullptr && this->time_->now().is_valid()) {
+      // A fault at a start with no clock yet: when it happened
+      this->boot_clock_noted_ = true;
+      ::espn::boot_log_clock(boot_log, (int64_t) this->time_->now().timestamp - esp_timer_get_time() / 1000000);
+    }
   }
+#ifdef GAMEDAY_UPDATE_MIRROR
+  this->mirror_tick_();
+#endif
+  this->captive_tick_();
+  this->wifi_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -926,14 +1044,21 @@ void GamedayComponent::loop() {
     return;
   if (!network::is_connected() || !this->clock_set_()) {
     this->wait_for_clock_();
+    const uint32_t now = millis();
+    if (network::is_connected() && !this->clock_set_() && now - this->wifi_up_ms_ >= HTTP_CLOCK_WAIT &&
+        (this->http_clock_ms_ == 0 || now - this->http_clock_ms_ >= HTTP_CLOCK_RETRY)) {
+      this->start_clock_job_();
+      return;
+    }
     this->schedule_next_(NOT_READY_INTERVAL);
     return;
   }
   if (!this->selects_published_) {
     this->selects_published_ = true;
     const uint32_t now = millis();
-    ESP_LOGI(TAG, "Startup: Wi-Fi and clock ready at %u ms, clock set %u ms after Wi-Fi", (unsigned) now,
-             (unsigned) (this->wifi_up_ms_ != 0 ? now - this->wifi_up_ms_ : 0));
+    ESP_LOGI(TAG, "Startup: Wi-Fi and clock ready at %u ms, clock set %u ms after Wi-Fi%s", (unsigned) now,
+             (unsigned) (this->wifi_up_ms_ != 0 ? now - this->wifi_up_ms_ : 0),
+             this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
   this->start_job_();
@@ -950,6 +1075,7 @@ void GamedayComponent::wait_for_clock_() {
   if (!network::is_connected()) {
     this->wifi_up_ms_ = 0;
     this->sntp_asked_ms_ = 0;
+    this->http_clock_ms_ = 0;
     return;
   }
   const uint32_t now = millis();
@@ -965,6 +1091,42 @@ void GamedayComponent::wait_for_clock_() {
   this->sntp_asked_ms_ = now == 0 ? 1 : now;
   if (esp_sntp_restart())
     ESP_LOGI(TAG, "Clock not set yet: asking the time server now");
+}
+
+// UDP 123 is blocked on some networks (guest Wi-Fi, some offices and
+// schools), and then no time server ever answers: no clock meant no game all
+// day. Every ESPN reply carries the time in its Date header, and the TLS
+// certificate check means it is ESPN's and not a captive portal's.
+void GamedayComponent::start_clock_job_() {
+  const uint32_t now = millis();
+  this->http_clock_ms_ = now == 0 ? 1 : now;
+  this->job_ = Job{};
+  this->job_.generation = this->generation_;
+  this->job_.need_clock = true;
+  this->start_worker_();
+}
+
+void GamedayComponent::apply_clock_job_() {
+  const Job &j = this->job_;
+  this->schedule_next_(0);
+  if (this->clock_set_())
+    return;  // a time server answered meanwhile
+  if (j.clock_epoch == 0) {
+    ESP_LOGW(TAG, "Clock not set yet and no date from ESPN; trying again in %us",
+             (unsigned) (HTTP_CLOCK_RETRY / 1000));
+    return;
+  }
+  // The header is in whole seconds, so on average half a second behind when
+  // it was sent. Add that and the time since it arrived.
+  int64_t ms = j.clock_epoch * 1000 + 500 + (int64_t) (millis() - j.clock_got_ms);
+  struct timeval tv;
+  tv.tv_sec = (time_t) (ms / 1000);
+  tv.tv_usec = (suseconds_t) ((ms % 1000) * 1000);
+  settimeofday(&tv, nullptr);
+  this->clock_approx_ = true;
+  ESP_LOGI(TAG, "No time server answer %us after Wi-Fi: clock set from ESPN's Date header until one answers",
+           (unsigned) ((millis() - this->wifi_up_ms_) / 1000));
+  this->fire_action_("clock_approx");  // gameday-common.yaml checks for an update
 }
 
 const ::espn::Team *GamedayComponent::current_team_() const {
@@ -1137,6 +1299,150 @@ void GamedayComponent::set_auto_update(bool on) {
   this->rebuild_state_(&this->last_fields_);
 #endif
 }
+
+void GamedayComponent::load_power_log_() {
+  if (this->power_loaded_)
+    return;
+  this->power_loaded_ = true;
+  this->power_pref_ = global_preferences->make_preference<::espn::PowerLog>(fnv1_hash("gameday_power_v1"));
+  if (!this->power_pref_.load(&this->power_log_))
+    this->power_log_ = ::espn::PowerLog{};
+  const bool brownout =
+      ::espn::classify_restart((int) esp_reset_reason(), false, false) == ::espn::Restart::BROWNOUT;
+  if (::espn::power_log_start(this->power_log_, brownout)) {
+    // Now, not at the next flash write: a weak brick can brown out again
+    // within the minute.
+    this->save_power_log_();
+    ESP_LOGW(TAG, "Brownout restart, %u in a row, %u in all", (unsigned) this->power_log_.streak,
+             (unsigned) this->power_log_.brownouts);
+  }
+  if (this->power_log_.capped)
+    ESP_LOGW(TAG, "Brightness capped at %u after brownouts, until cleared on the device page",
+             (unsigned) ::espn::kPowerCap);
+}
+
+void GamedayComponent::save_power_log_() {
+  this->power_pref_.save(&this->power_log_);
+  global_preferences->sync();
+}
+
+uint8_t GamedayComponent::guard_brightness(uint8_t want) {
+  this->load_power_log_();
+  return ::espn::guarded_brightness(want, this->heat_.step, this->power_log_.capped != 0);
+}
+
+void GamedayComponent::set_chip_temp(float c) {
+  const uint8_t before = this->heat_.step;
+  if (!this->heat_.feed(c, millis()))
+    return;
+  if (this->heat_.step > before)
+    ESP_LOGW(TAG, "Chip at %.1f C: dimming to %u%% of the brightness setting", c,
+             (unsigned) ::espn::kHeatPercent[this->heat_.step]);
+  else
+    ESP_LOGI(TAG, "Chip at %.1f C: back to %u%% of the brightness setting", c,
+             (unsigned) ::espn::kHeatPercent[this->heat_.step]);
+  this->fire_action_("guard");  // pages/guard.yaml applies the brightness and the corner mark
+}
+
+void GamedayComponent::clear_power_cap() {
+  this->load_power_log_();
+  if (!::espn::power_log_clear(this->power_log_))
+    return;
+  this->save_power_log_();
+  ESP_LOGI(TAG, "Power cap cleared by the owner");
+  this->fire_action_("guard");
+}
+
+void GamedayComponent::set_follow_beta(bool on) {
+#ifdef GAMEDAY_BETA_CHANNEL
+  if (on == this->follow_beta())
+    return;
+  this->follow_beta_ = on ? 1 : 0;
+  this->beta_pref_.save(&this->follow_beta_);
+  ESP_LOGI(TAG, "Follow beta: %s", on ? "on" : "off");
+  this->apply_channel_();
+  // Read the new manifest now, so the page shows what this channel offers.
+  if (this->beta_update_ != nullptr)
+    this->beta_update_->update();
+  this->rebuild_state_(&this->last_fields_);
+#else
+  (void) on;  // no beta channel in this build
+#endif
+}
+
+#ifdef GAMEDAY_BETA_CHANNEL
+void GamedayComponent::apply_channel_() {
+#ifdef GAMEDAY_UPDATE_MIRROR
+  this->on_mirror_ = false;
+#endif
+  if (this->beta_update_ != nullptr)
+    this->beta_update_->set_source_url(this->follow_beta() ? this->beta_source_ : this->stable_source_);
+}
+#endif
+
+#ifdef GAMEDAY_UPDATE_MIRROR
+// Points the update entity back at the primary host for its channel.
+void GamedayComponent::use_primary_() {
+#ifdef GAMEDAY_BETA_CHANNEL
+  this->apply_channel_();
+#else
+  this->on_mirror_ = false;
+  this->mirror_update_->set_source_url(this->primary_source_);
+#endif
+}
+
+// A failed manifest read or install on the primary gets one read from the
+// mirror right away (update_mirror.h). Runs every loop: a refused connection
+// fails in well under a second.
+void GamedayComponent::mirror_tick_() {
+  http_request::HttpRequestUpdate *u = this->mirror_update_;
+  if (u == nullptr)
+    return;
+  ::espn::MirrorInputs in;
+  in.on_mirror = this->on_mirror_;
+  in.error = u->status_has_error();
+  in.answered = this->mirror_answered_;
+  in.waited_ms = millis() - this->mirror_since_ms_;
+  // Only read when it matters: now() converts the time, and this runs every loop.
+  in.clock_valid = in.error && this->time_ != nullptr && this->time_->now().is_valid();
+  switch (::espn::mirror_step(in)) {
+    case ::espn::MirrorStep::NONE:
+      break;
+    case ::espn::MirrorStep::NO_CLOCK:
+      u->status_clear_error();
+      break;
+    case ::espn::MirrorStep::TRY_MIRROR: {
+      const char *mirror = this->follow_beta() ? this->beta_mirror_source_ : this->mirror_source_;
+      ESP_LOGW(TAG, "Update check or install failed; reading the mirror %s", mirror);
+      this->on_mirror_ = true;
+      this->mirror_answered_ = false;
+      this->mirror_since_ms_ = millis();
+      u->set_source_url(mirror);
+      // So the mirror's own failure shows (FAILED below).
+      u->status_clear_error();
+      u->update();
+      break;
+    }
+    case ::espn::MirrorStep::ANSWERED:
+      // update_info keeps the mirror's firmware URL, so an install of this
+      // update downloads from the mirror.
+      ESP_LOGI(TAG, "Update mirror answered: %s at %s", u->update_info.latest_version.c_str(),
+               u->update_info.firmware_url.c_str());
+      this->use_primary_();
+      break;
+    case ::espn::MirrorStep::FAILED:
+      // Cleared, or the next failure on the primary would look like this one.
+      ESP_LOGW(TAG, "Update mirror failed too; the next check starts with the primary");
+      u->status_clear_error();
+      this->use_primary_();
+      break;
+    case ::espn::MirrorStep::TIMED_OUT:
+      ESP_LOGW(TAG, "Update mirror didn't answer; the next check starts with the primary");
+      this->use_primary_();
+      break;
+  }
+}
+#endif
 
 // At boot, what became of the last install (auto_update.h, UpdateMark), and
 // from now on, note every install as it starts.
@@ -1363,6 +1669,29 @@ void GamedayComponent::reset_game_() {
   this->no_game_confirmed_ = false;
 }
 
+void GamedayComponent::restart_board_() {
+  this->reset_game_();
+  this->generation_++;  // a scan in flight read what the board followed before
+  this->emit_({});      // clear the board while the next fetch runs
+  this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
+  this->end_backoff_wait_();
+  this->schedule_next_(0);
+  // Somebody changed what the panel follows, so they are looking at it.
+  this->fire_action_("user_pick");
+}
+
+// Without this the finals and the "No live ... games" wait from the old
+// leagues stayed up until the next scheduled scan, up to three hours.
+bool GamedayComponent::live_leagues_changed_(const std::vector<League> &before) {
+  if (!::espn::live_scan_changed(this->effective_mode_(), before, this->live_leagues_()))
+    return false;
+  ESP_LOGI(TAG, "Live games leagues changed: scanning again");
+  this->board_ready_ = false;
+  this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+  this->restart_board_();
+  return true;
+}
+
 std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::string &url) {
   std::vector<http_request::Header> headers = {
       {"User-Agent", USER_AGENT},
@@ -1370,6 +1699,8 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
   };
   this->espn_requests_++;
   auto container = this->http_->get(url, headers, {"retry-after"});
+  this->espn_status_ = container == nullptr ? 0 : container->status_code;
+  this->espn_answer_ms_ = millis() == 0 ? 1 : millis();
   if (container == nullptr) {
     ESP_LOGW(TAG, "Request failed: %s", url.c_str());
     return nullptr;
@@ -1386,10 +1717,154 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
     container->end();
     return nullptr;
   }
+  this->espn_ok_reads_++;
   return container;
 }
 
+// ---- Sign-in Wi-Fi (captive.h) ---------------------------------------------
+
+struct ProbeHeaders {
+  std::string location;
+  std::string content_type;
+};
+
+static esp_err_t probe_event(esp_http_client_event_t *evt) {
+  if (evt->event_id != HTTP_EVENT_ON_HEADER || evt->user_data == nullptr || evt->header_key == nullptr ||
+      evt->header_value == nullptr)
+    return ESP_OK;
+  auto *h = static_cast<ProbeHeaders *>(evt->user_data);
+  // Only the host matters, and a portal's link can carry a long query.
+  if (strcasecmp(evt->header_key, "Location") == 0)
+    h->location.assign(evt->header_value, strnlen(evt->header_value, 256));
+  else if (strcasecmp(evt->header_key, "Content-Type") == 0)
+    h->content_type.assign(evt->header_value, strnlen(evt->header_value, 64));
+  return ESP_OK;
+}
+
+// Probe task. Its own esp_http_client rather than http_request, which follows
+// redirects: a portal's redirect is the answer, and following it to an HTTPS
+// sign-in page with its own certificate would only fail.
+void GamedayComponent::probe_task_(void *arg) {
+  auto *self = static_cast<GamedayComponent *>(arg);
+  ProbeHeaders h;
+  esp_http_client_config_t cfg = {};
+  cfg.url = self->probe_url_.load();
+  cfg.timeout_ms = 10000;
+  cfg.disable_auto_redirect = true;
+  cfg.event_handler = &probe_event;
+  cfg.user_data = &h;
+  cfg.user_agent = USER_AGENT;
+  int status = 0;
+  std::string body;
+  esp_http_client_handle_t client = esp_http_client_init(&cfg);
+  if (client != nullptr) {
+    esp_http_client_set_header(client, "Accept", "application/json");
+    if (esp_http_client_open(client, 0) == ESP_OK && esp_http_client_fetch_headers(client) >= 0) {
+      status = esp_http_client_get_status_code(client);
+      char buf[256];
+      int n = esp_http_client_read(client, buf, sizeof(buf));
+      if (n > 0)
+        body.assign(buf, n);
+    }
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+  }
+  ::espn::Probe r = ::espn::classify_probe(status, h.location, h.content_type, body);
+  const bool redirect = status >= 300 && status < 400 && !h.location.empty();
+  ESP_LOGI(TAG, "Wi-Fi check: %s (HTTP %d%s%s)", ::espn::probe_name(r), status, redirect ? ", to " : "",
+           redirect ? ::espn::detail::url_host(h.location).c_str() : "");
+  self->probe_result_ = (uint8_t) r;
+  self->probe_done_ = true;
+  vTaskDelete(nullptr);
+}
+
+void GamedayComponent::start_probe_() {
+  this->probe_join_done_ = true;
+  this->probe_ms_ = millis();
+  this->probe_ok_mark_ = this->espn_ok_reads_.load();
+  this->probe_done_ = false;
+  this->probe_running_ = true;
+  // Plain HTTP and a 256 byte read, no TLS: a small stack is plenty.
+  if (xTaskCreate(&GamedayComponent::probe_task_, "gameday_probe", 6144, this, 1, nullptr) != pdPASS) {
+    ESP_LOGW(TAG, "Could not start the Wi-Fi check (largest free internal block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    this->probe_running_ = false;
+  }
+}
+
+void GamedayComponent::set_captive_(bool on) {
+  if (on == this->captive_)
+    return;
+  this->captive_ = on;
+  if (on)
+    ESP_LOGW(TAG, "This Wi-Fi needs a sign-in: a sign-in page answered in ESPN's place");
+  else
+    ESP_LOGI(TAG, "Wi-Fi sign-in state cleared");
+  this->emit_({});
+  this->fire_action_(on ? "captive" : "captive_clear");  // boot.yaml shows or hides the screen
+}
+
+// Once per join, then again while on a sign-in network or while ESPN reads
+// fail (captive.h, probe_due). Any ESPN answer over HTTPS ends the state, so
+// a network that only looks like a portal to the probe never covers a board
+// that is working.
+void GamedayComponent::captive_tick_() {
+  const uint32_t now = millis();
+  if (this->probe_running_) {
+    if (!this->probe_done_.load())
+      return;
+    this->probe_running_ = false;
+    const auto r = (::espn::Probe) this->probe_result_.load();
+    if (r == ::espn::Probe::OPEN || this->espn_ok_reads_.load() != this->probe_ok_mark_) {
+      this->captive_suspect_ = false;
+      this->set_captive_(false);
+    } else if (r == ::espn::Probe::CAPTIVE && network::is_connected() && !this->demo_playing_()) {
+      if (this->clock_set_() && this->fail_run_.streak == 0 && !this->captive_) {
+        // Nothing says ESPN is out of reach yet (a DNS block page can look
+        // like a portal to the probe): ask ESPN now and say so only if that
+        // read fails too. With no clock nothing can be read to check.
+        ESP_LOGI(TAG, "Wi-Fi check saw a sign-in page: reading ESPN now to check");
+        this->captive_suspect_ = true;
+        this->suspect_fails_mark_ = this->read_fails_;
+        this->end_backoff_wait_();
+        if (!this->busy_)
+          this->schedule_next_(0);
+      } else {
+        this->set_captive_(true);
+      }
+    }
+  }
+  if (!network::is_connected() || this->demo_playing_()) {
+    this->probe_join_ms_ = 0;
+    this->probe_join_done_ = false;
+    this->captive_suspect_ = false;
+    this->set_captive_(false);
+    return;
+  }
+  if (this->probe_join_ms_ == 0)
+    this->probe_join_ms_ = now == 0 ? 1 : now;
+  if ((this->captive_ || this->captive_suspect_) && this->espn_ok_reads_.load() != this->probe_ok_mark_) {
+    ESP_LOGI(TAG, "ESPN answered: this Wi-Fi %s", this->captive_ ? "no longer needs a sign-in" : "is open");
+    this->captive_suspect_ = false;
+    this->set_captive_(false);
+  } else if (this->captive_suspect_ && this->read_fails_ != this->suspect_fails_mark_) {
+    this->captive_suspect_ = false;
+    this->set_captive_(true);
+  }
+  // Nothing is due inside the shortest recheck wait.
+  if (this->probe_join_done_ && now - this->probe_ms_ < ::espn::kProbeCaptiveRecheckMs)
+    return;
+  // A sign-in network usually blocks the time server too, and with no clock
+  // nothing is read from ESPN, so a clock still unset 30 s after joining
+  // counts as reads failing.
+  const bool failing =
+      this->fail_run_.streak > 0 || (!this->clock_set_() && now - this->probe_join_ms_ >= 30000);
+  if (::espn::probe_due(this->probe_join_done_, this->captive_, failing, now - this->probe_ms_))
+    this->start_probe_();
+}
+
 uint32_t GamedayComponent::back_off_() {
+  this->read_fails_++;
   uint32_t ms = this->fail_run_.fail(this->job_.throttled, this->job_.retry_after_ms, random_uint32());
   ESP_LOGW(TAG, "%u failed read(s) in a row%s: next try in %us", (unsigned) this->fail_run_.streak,
            this->fail_run_.throttled ? ", ESPN is refusing" : "", (unsigned) (ms / 1000));
@@ -1766,6 +2241,21 @@ void GamedayComponent::worker_(void *arg) {
 // Worker task: network and parsing only, no display or entity access.
 void GamedayComponent::run_job_() {
   Job &j = this->job_;
+  if (j.need_clock) {
+    // Any status will do, a 404 or a 503 carries the date just the same.
+    std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
+    this->espn_requests_++;
+    auto container = this->http_->get(HTTP_CLOCK_URL, headers, {"date"});
+    if (container == nullptr) {
+      ESP_LOGW(TAG, "Request failed: %s", HTTP_CLOCK_URL);
+      return;
+    }
+    j.clock_got_ms = millis();
+    if (container->status_code > 0)
+      j.clock_epoch = ::espn::parse_http_date(container->get_response_header("date"));
+    container->end();
+    return;
+  }
   if (j.need_recap) {
     // One day's scoreboard: its finals going back, its first kickoff and that
     // game's matchup going forward. The live list is always empty for a day
@@ -1855,6 +2345,10 @@ void GamedayComponent::run_job_() {
 // Main loop: fold the worker's result into the component state and render.
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
+  if (j.need_clock) {
+    this->apply_clock_job_();  // whatever the board follows now, it needs the clock
+    return;
+  }
   if (j.generation != this->generation_) {
     ESP_LOGD(TAG, "Discarding a fetch for the previous team");
     return;
@@ -2144,7 +2638,8 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
 std::string GamedayComponent::no_game_why_() const {
   if (this->game_.valid || this->demo_playing_())
     return "";
-  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_);
+  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_,
+                              this->captive_);
 }
 
 void GamedayComponent::emit_(const ::espn::Splash &splash) {
@@ -2740,6 +3235,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // choice (the bar build), so the page and the app hide the switch.
   doc["autoupd"] = this->auto_update();
 #endif
+#ifdef GAMEDAY_BETA_CHANNEL
+  // Left out in builds with no beta channel (bar, demo), which hides the switch.
+  doc["beta"] = this->follow_beta();
+#endif
 #ifdef USE_UPDATE
   // A release that rolled back here, after a manual install or an automatic
   // one; left out when there is none.
@@ -2751,9 +3250,16 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["bar"]["report"] = this->report_email_;
 #endif
   doc["misses"] = this->misses_;
+  // The Wi-Fi wants a sign-in (captive.h); the page and the app say how to
+  // get the panel onto a network that works.
+  doc["captive"] = this->captive_;
   doc["espn_kb"] = (uint32_t) (this->espn_bytes() / 1000);
   doc["espn_reads"] = this->espn_requests();
   doc["stale_s"] = this->stale_seconds_();
+  // The clock came from ESPN's Date header (to within a second or two) and no
+  // time server has answered yet; left out once one has.
+  if (this->clock_approx_)
+    doc["clock_approx"] = true;
   doc["fallback"] = this->live_fallback_;
   doc["recap"] = this->recap_on_;
 
@@ -2834,8 +3340,13 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       o["slot"] = e.slot;
       JsonObject t = o["t"].to<JsonObject>();
       put_team(t, (uint8_t) e.team->league, e.team->espn_id);
-      if (!e.game.valid)
+      if (!e.game.valid) {
+        // Only a read that named no game means none is scheduled; before the
+        // first answer the row has nothing to say yet.
+        if (e.sched.valid && e.sched.event_id.empty())
+          o["none"] = true;
         continue;
+      }
       o["id"] = e.game.event_id;
       o["s"] = ::espn::state_name(e.game.state);
       o["kick"] = e.game.kickoff_epoch;
@@ -2874,6 +3385,99 @@ std::string GamedayComponent::current_state_json_() {
   return this->state_json_;
 }
 
+std::string GamedayComponent::health_json_() {
+  ::espn::Health h{};
+  h.uptime_s = esp_timer_get_time() / 1000000;
+  h.start = this->start_reason_;
+  h.boots = boot_log.boots;
+  h.fault = (::espn::Restart) boot_log.fault;
+  h.fault_ago = ::espn::boot_log_fault_ago(boot_log, (int64_t) ::time(nullptr), h.uptime_s);
+  h.heap_kb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024.0f;
+  h.block_kb = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024.0f;
+  h.psram_kb = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f;
+#ifdef USE_WIFI
+  auto *w = wifi::global_wifi_component;
+  h.wifi = w != nullptr && w->is_connected();
+  if (h.wifi)
+    h.rssi = w->wifi_rssi();
+#endif
+  const uint32_t at = this->espn_answer_ms_.load();
+  h.espn_status = this->espn_status_.load();
+  h.espn_ago = at == 0 ? -1 : (int64_t) ((millis() - at) / 1000);
+#ifdef ESPHOME_PROJECT_VERSION
+  h.version = ESPHOME_PROJECT_VERSION;
+#else
+  h.version = "";
+#endif
+  h.built = (int64_t) App.get_build_time();
+#if defined(GAMEDAY_BAR)
+  h.channel = "bar";
+#elif defined(GAMEDAY_BETA_CHANNEL)
+  h.channel = this->follow_beta() ? "beta" : "stable";
+#elif defined(USE_UPDATE)
+  h.channel = "stable";
+#else
+  h.channel = "none";
+#endif
+  char buf[384];
+  int n = ::espn::health_json(buf, sizeof(buf), h);
+  if (n <= 0 || n >= (int) sizeof(buf))
+    return "{}";
+  // The heat and power keys go in before its closing brace (guard.h)
+  char guard[96];
+  int g = ::espn::guard_json_keys(guard, sizeof(guard), this->heat_.last_c, this->heat_.step, this->power_log_);
+  if (g <= 0 || g >= (int) sizeof(guard))
+    return std::string(buf, n);
+  std::string out(buf, n - 1);
+  out.append(guard, g);
+  out += '}';
+  return out;
+}
+
+// Every loop for the link going down or up, every WIFI_SAMPLE_INTERVAL for
+// the signal.
+void GamedayComponent::wifi_tick_() {
+#ifdef USE_WIFI
+  auto *w = wifi::global_wifi_component;
+  if (w == nullptr)
+    return;
+  const bool up = w->is_connected();
+  const uint32_t now_ms = millis();
+  const bool sample = now_ms - this->wifi_sample_ms_ >= WIFI_SAMPLE_INTERVAL;
+  if (up == this->wifi_up_ && !sample)
+    return;
+  const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
+  std::lock_guard<std::mutex> lock(this->wifi_mutex_);
+  if (up != this->wifi_up_) {
+    this->wifi_up_ = up;
+    // The page shows the signal as soon as the link is back, not at the next sample.
+    this->wifi_rssi_ = up ? w->wifi_rssi() : 0;
+    if (up) {
+      this->wifi_hist_.up(now_s);
+      this->wifi_reason_seen_ = wifi_reason_seq.load();
+    } else {
+      // A link lost with no disconnect event (the IP went) has no cause.
+      const int reason = wifi_reason_seq.load() != this->wifi_reason_seen_ ? wifi_reason.load() : 0;
+      const ::espn::WifiCause cause = ::espn::wifi_cause(reason);
+      this->wifi_hist_.down(now_s, cause);
+      ESP_LOGI(TAG, "Wi-Fi lost: %s (reason %d), %u drop(s) since start", ::espn::wifi_cause_key(cause), reason,
+               (unsigned) this->wifi_hist_.total());
+    }
+  }
+  if (sample) {
+    this->wifi_sample_ms_ = now_ms;
+    this->wifi_rssi_ = up ? w->wifi_rssi() : 0;
+    this->wifi_hist_.sample(now_s, up, this->wifi_rssi_);
+  }
+#endif
+}
+
+std::string GamedayComponent::wifi_json_() {
+  const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
+  std::lock_guard<std::mutex> lock(this->wifi_mutex_);
+  return this->wifi_hist_.json(now_s, this->wifi_up_, this->wifi_rssi_);
+}
+
 bool GamedayComponent::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   return request->url_to(buf).starts_with("/gameday/");
@@ -2884,6 +3488,16 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   StringRef url = request->url_to(buf);
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
     std::string body = this->current_state_json_();
+    // The cached document is rebuilt on changes; the health and Wi-Fi
+    // numbers move all the time, so they go in fresh at its end.
+    if (body.size() >= 2 && body.back() == '}') {
+      body.pop_back();
+      body += ",\"health\":";
+      body += this->health_json_();
+      body += ",\"wifi\":";
+      body += this->wifi_json_();
+      body += '}';
+    }
     request->send(200, "application/json", body.c_str());
     return;
   }
@@ -2908,7 +3522,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc";
+    bool known = name == "refresh" || name == "qc" || name == "power_ok";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
@@ -2919,6 +3533,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     this->defer([this, name]() {
       if (name == "refresh")
         this->refresh_now();
+      else if (name == "power_ok")
+        this->clear_power_cap();
 #ifdef GAMEDAY_DEMO
       else if (name == "demo")
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);
@@ -3094,6 +3710,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::AUTOUPD:
         this->set_auto_update(op.on);
+        break;
+      case ::espn::SetKind::BETA:
+        this->set_follow_beta(op.on);
         break;
       case ::espn::SetKind::PANELS:
         if (this->panels_ != nullptr)

@@ -137,6 +137,21 @@ test("a game with no kickoff time yet shows its day and TBD", async ({ page, req
   await expect(page.locator("#upnextList .un.fav .w")).toHaveText("Sat, Oct 24 TBD");
 });
 
+test("a favorite says no game scheduled only once ESPN said so", async ({ page, request }) => {
+  const t = (abbr, name, id) => ({ l: "nfl", id, abbr, name });
+  await reset(request, {
+    mode: 4,
+    game: { s: "NOT_FOUND", l: "nfl", why: "Can't reach ESPN" },
+    next: [
+      { slot: 1, t: t("DAL", "Dallas Cowboys", 6) },
+      { slot: 2, t: t("HOU", "Houston Texans", 34), none: true },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator("#msg")).toHaveText("Can't reach ESPN");
+  await expect(page.locator("#upnextList .un.fav .w")).toHaveText(["Not checked yet", "No game scheduled"]);
+});
+
 test("a bowl or playoff game shows its name, other games none", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
@@ -216,6 +231,49 @@ test("a device that never answers /gameday/state leaves the page waiting, not br
   await expect(page.locator("#modes button")).toHaveText(["My team", "Live games", "Favorite teams"]);
   // Entity controls still come from the event stream.
   await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
+});
+
+test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", async ({ page, request }) => {
+  await reset(request, {});
+  await page.goto("/");
+  await expect(page.locator("#rssi")).toHaveText("-61 dBm");
+  await expect(page.locator("#wifiWeak")).toBeHidden();
+  // Up an hour: every drop since start is in the day.
+  await expect(page.locator("#wifiDrops")).toHaveText("1 since start");
+  await expect(page.locator("#wifiLast")).toHaveText("Last: signal lost, 40 min ago, back in 42 s");
+  await expect(page.locator("#wifiSpark .ln")).toHaveCount(1);
+  await expect(page.locator("#wifiSpark .gap")).toHaveCount(1);
+  await expect(page.locator("#wifiSpark")).toHaveAttribute("aria-label", "Signal over the last 1 h: -64 to -58 dBm");
+  await expect(page.locator("#wifiFrom")).toHaveText("1 h ago");
+
+  // A full day, weak for the last stretch, three drops in it of two kinds.
+  const hist = Array(288).fill(-66);
+  for (let i = 270; i < 288; i++) hist[i] = -80;
+  await reset(request, { wifi: {
+    rssi: -81, step: 300, hist, weak: true, drops: 5, day: 3, causes: { signal: 2, router: 1, roam: 4 },
+    last: "router", last_ago: 7300,
+  } });
+  await page.reload();
+  await expect(page.locator("#wifiWeak")).toBeVisible();
+  await expect(page.locator("#wifiWeak")).toHaveText(/Move the panel closer to the router/);
+  await expect(page.locator("#wifiDrops")).toHaveText("3 in 24 h");
+  await expect(page.locator("#wifiLast")).toHaveText(
+    "Last: dropped by the router, 2 h 2 min ago. 2 signal lost, 1 dropped by the router");
+  await expect(page.locator("#wifiSpark")).toHaveAttribute("aria-label", /weak for 1 h 30 min$/);
+  await expect(page.locator("#wifiFrom")).toHaveText("24 h ago");
+
+  // No drops, and only a few minutes of history: no line yet.
+  await reset(request, { wifi: { rssi: -55, step: 300, hist: [-55], weak: false, drops: 0, day: 0, causes: {} } });
+  await page.reload();
+  await expect(page.locator("#wifiDrops")).toHaveText("None");
+  await expect(page.locator("#wifiLast")).toHaveText("");
+  await expect(page.locator("#wifiSparkBox")).toBeHidden();
+
+  // Firmware before the history: the rows stay hidden, Signal still comes from the RSSI sensor.
+  await reset(request, { wifi: null });
+  await page.reload();
+  await expect(page.locator("#hostname")).toHaveText("gameday-2f6a70.local");
+  await expect(page.locator("#wifiDiag")).toBeHidden();
 });
 
 test("a failed settings post is retried once, then reported", async ({ page, request }) => {
@@ -661,6 +719,93 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
+test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="beta"]');
+  await expect(page.locator("#betaRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { beta: "1" });
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { beta: "0" });
+
+  await reset(request, { beta: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#betaRow")).toBeHidden();
+});
+
+test("a beta is newer than its release number, and a release is behind the beta before it", async ({ page, request }) => {
+  await reset(request, { beta: true });
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "1.5.5-beta.812", current_version: "1.5.5" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.5-beta.812");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+
+  // Beta turned off on a beta build: the release it was built from is not an update.
+  entity = { ...fw, value: "1.5.5", current_version: "1.5.5-beta.812" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.5-beta.812");
+  await expect(page.locator("#fwInstall")).toBeHidden();
+
+  // The next beta is newer than the last.
+  entity = { ...fw, value: "1.5.6-beta.3", current_version: "1.5.5-beta.812" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
+});
+
+test("an update that rolled back says so and still offers Install", async ({ page, request }) => {
+  await reset(request, { autoupd: true, update_failed: "2026.10.1" });
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await expect(page.locator("#fwText")).toHaveText("The update to v2026.10.1 didn't take and the panel went back to v2026.10.0");
+  await expect(page.locator("#fwSub")).toContainText("Install tries it again. It won't install this one on its own.");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.dismiss(); });
+  await page.locator("#fwInstall").click();
+  expect(asked).toBe("Try v2026.10.1 again? It didn't take last time. The panel will reboot.");
+
+  // Auto update off: nothing to say about the nightly install.
+  await reset(request, { update_failed: "2026.10.1" });
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("The update to v2026.10.1 didn't take and the panel went back to v2026.10.0");
+  await expect(page.locator("#fwSub")).not.toContainText("on its own");
+
+  // The manifest moved past it: a plain update again.
+  entity = { ...fw, value: "2026.10.2", current_version: "2026.10.0" };
+  await reset(request, { autoupd: true, update_failed: "2026.10.1" });
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.2");
+  await expect(page.locator("#fwSub")).toContainText("It installs on its own between 3 and 5 AM.");
+});
+
+test("release notes link to the release's section of the site changelog, a beta to its commit", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "" };
+  const commit = "https://github.com/gameday-scoreboard/gameday-scoreboard/commit/abc1234";
+  let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0", release_url: "https://github.com/gameday-scoreboard/gameday-scoreboard/releases/tag/v2026.10.1" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  const link = page.locator("#fwSub a", { hasText: "Release notes" });
+  await page.goto("/");
+  await expect(link).toHaveAttribute("href", "https://gamedayscoreboard.app/changelog/#v2026.10.1");
+
+  // Up to date: the running release's section.
+  entity = { ...fw, state: "NO UPDATE", value: "2026.10.0", current_version: "2026.10.0", release_url: "" };
+  await page.reload();
+  await expect(link).toHaveAttribute("href", "https://gamedayscoreboard.app/changelog/#v2026.10.0");
+
+  entity = { ...fw, value: "2026.10.1-beta.9", current_version: "2026.10.0", release_url: commit };
+  await page.reload();
+  await expect(link).toHaveAttribute("href", commit);
+});
+
 test("a team picked in My team stays on the page through a slow re-read", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
@@ -815,6 +960,95 @@ test("the device box shows what the panel downloaded from ESPN", async ({ page, 
   await expect(page.locator("#espnData")).toHaveText("");
 });
 
+test("diagnostics say why the panel restarted and how it is doing", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#health")).toBeVisible();
+  await expect(page.locator("#hStart")).toHaveText("Restart, 2 h 1 min ago");
+  await expect(page.locator("#hBoots")).toHaveText("Start 2 since the power came on");
+  await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
+  await expect(page.locator("#hHeap")).toHaveText("143 KiB, largest piece 40 KiB");
+  await expect(page.locator("#hEspn")).toHaveText("OK, 9 s ago");
+  await expect(page.locator("#hFw")).toHaveText("1.5.4 stable, built Oct 17, 8:01 PM");
+  // The Wi-Fi object, when there is one, fills in the signal.
+  await expect(page.locator("#rssi")).toHaveText("-61 dBm");
+  await expect(page.locator("#psram")).toHaveText("4101 KiB");
+
+  // Pulled power: this start is the power coming on, nothing went wrong
+  // since, and ESPN didn't answer the last read. No Wi-Fi object, so the
+  // signal comes from the health block.
+  const h = (await deviceState(request)).health;
+  await reset(request, {
+    health: { ...h, start: "power", boots: 1, up: 45, fault: undefined, fault_ago: undefined, rssi: undefined,
+              espn: 0, espn_ago: 130, channel: "beta" },
+    wifi: null,
+  });
+  await page.reload();
+  await expect(page.locator("#hStart")).toHaveText("Power on, 45 s ago");
+  await expect(page.locator("#hBoots")).toHaveText("");
+  await expect(page.locator("#hFault")).toHaveText("None");
+  await expect(page.locator("#hEspn")).toHaveText("No answer, 2 min ago");
+  await expect(page.locator("#hFw")).toHaveText("1.5.4 beta, built Oct 17, 8:01 PM");
+  await expect(page.locator("#rssi")).toHaveText("Not connected");
+
+  // A brownout whose time isn't known, before the first ESPN read.
+  await reset(request, {
+    health: { ...h, start: "brownout", fault: "brownout", fault_ago: undefined, espn: undefined, espn_ago: undefined },
+  });
+  await page.reload();
+  await expect(page.locator("#hStart")).toHaveText("Power dip (brownout), 2 h 1 min ago");
+  await expect(page.locator("#hFault")).toHaveText("Power dip (brownout)");
+  await expect(page.locator("#hEspn")).toHaveText("None yet");
+
+  // Firmware from before the health block.
+  await reset(request, { health: null });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#health")).toBeHidden();
+});
+
+test("a hot or under-powered panel says why it is dimmed, and the power cap clears", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#hTemp")).toHaveText("47 C");
+  await expect(page.locator("#hPower")).toHaveText("0");
+  await expect(page.locator("#guard")).toBeHidden();
+
+  const h = (await deviceState(request)).health;
+  await reset(request, { health: { ...h, temp: 78.4, heat: 2 } });
+  await page.reload();
+  await expect(page.locator("#guard")).toBeVisible();
+  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
+  await expect(page.locator("#guardText")).toContainText("at 45% of its brightness");
+  await expect(page.locator("#guardClear")).toBeHidden();
+  await expect(page.locator("#hTemp")).toHaveText("78 C, dimmed to 45%");
+
+  // The power cap wins over the heat, and Clear posts power_ok.
+  await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "capped" } });
+  await page.reload();
+  await expect(page.locator("#guardName")).toHaveText("Check the power supply");
+  await expect(page.locator("#hPower")).toHaveText("3, brightness capped");
+  await page.locator("#guardClear").click();
+  await expect.poll(async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/action").map((p) => p.q.do),
+  ).toContain("power_ok");
+  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
+  await expect(page.locator("#guardClear")).toBeHidden();
+
+  // Before the first temperature reading there is no temperature row.
+  await reset(request, { health: { ...h, temp: undefined } });
+  await page.reload();
+  await expect(page.locator("#hPower")).toHaveText("0");
+  await expect(page.locator("#hTempRow")).toBeHidden();
+
+  // Firmware from before the guard sends none of its keys.
+  await reset(request, { health: { ...h, temp: undefined, heat: undefined, brownouts: undefined, power: undefined } });
+  await page.reload();
+  await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
+  await expect(page.locator("#hPowerRow")).toBeHidden();
+  await expect(page.locator("#guard")).toBeHidden();
+});
+
 test("saved Wi-Fi networks are listed in order and one can be forgotten", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
@@ -875,6 +1109,27 @@ test("the stale tag follows the device's consecutive misses", async ({ page, req
   await page.reload();
   await expect(page.locator("#gstate")).toHaveText("NO GAME");
   await expect(page.locator("#stale")).toBeHidden();
+});
+
+test("a Wi-Fi that wants a sign-in says how to fix it, in place of the panel's reason and the stale tag", async ({ page, request }) => {
+  await reset(request, { captive: true, misses: 1, game: { s: "NOT_FOUND", l: "nfl", why: "Wi-Fi needs a sign-in" }, next: [] });
+  await page.goto("/");
+  await expect(page.locator("#gstate")).toHaveText("NO GAME");
+  await expect(page.locator("#msg")).toHaveText("This Wi-Fi needs a sign-in. Use a home network or a hotspot.");
+  await expect(page.locator("#stale")).toBeVisible();
+  await expect(page.locator("#stale")).toHaveText("Wi-Fi needs a sign-in");
+
+  // Over a game still on the board from before, only the tag says it
+  await reset(request, { captive: true, misses: 1 });
+  await page.reload();
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await expect(page.locator("#stale")).toHaveText("Wi-Fi needs a sign-in");
+
+  // Cleared: back to the usual stale tag
+  await reset(request, { captive: false, misses: 3, stale_s: 600 });
+  await page.reload();
+  await expect(page.locator("#stale")).toHaveText("data stale");
+  await expect(page.locator("#stale")).toBeVisible();
 });
 
 test("says when the panel stops answering, and clears it when the panel is back", async ({ page, request }) => {

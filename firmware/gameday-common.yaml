@@ -11,6 +11,12 @@ substitutions:
   # Where the panel looks for new releases. A bench build can point it at a
   # test manifest with -s update_source <url>.
   update_source: "https://gamedayscoreboard.app/firmware/${variant}/manifest.json"
+  # Where it looks instead with "Follow beta" on: release firmware built from
+  # the beta branch, published there by CI (.github/workflows/build.yml).
+  beta_update_source: "https://gamedayscoreboard.app/firmware/${variant}-beta/manifest.json"
+  # The same files on a second host. When a manifest read fails, the panel
+  # reads the same path here instead (components/gameday/update_mirror.h).
+  update_mirror_host: "https://updates.gameday-scoreboard.com"
 
   display_panel_width: "64"
   display_panel_height: "64"
@@ -80,7 +86,7 @@ esphome:
       then:
         - hub75.set_brightness:
             id: matrix
-            brightness: !lambda 'return id(power).state ? (uint8_t) id(brightness).state : 0;'
+            brightness: !lambda 'return id(power).state ? id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state) : 0;'
         - if:
             condition:
               switch.is_on: power
@@ -172,6 +178,8 @@ packages:
   wizmote: !include pages/wizmote.yaml
   # Factory check (five quick boot button presses in the first 30 s)
   qc: !include pages/qc.yaml
+  # Dims a hot panel and caps one on a weak power brick, and says why
+  guard: !include pages/guard.yaml
 
 # The theme's Spleen fonts, with Latin-1 added to ESPHome's default ASCII so
 # accented names (São Paulo, Atlético) draw. Text from outside the panel goes
@@ -288,6 +296,26 @@ script:
           lv_obj_t *top = lv_layer_top();
           if (top != nullptr)
             lv_obj_invalidate(top);
+
+  # The update component checks the manifest as soon as WiFi is up, which
+  # is before the clock is set; with verify_ssl that first check fails and
+  # the state reads "unknown" for six hours. Check once more once the clock
+  # is first set, by a time server or from ESPN's Date header.
+  - id: gd_check_after_clock
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(gd_update_checked);'
+          then:
+            - lambda: 'id(gd_update_checked) = true;'
+            - delay: 3s
+            # Every update entity rather than id(gd_firmware_update), which
+            # the demo build removes (firmware/pages/demo.yaml).
+            - lambda: |-
+                #ifdef USE_UPDATE
+                for (auto *u : App.get_updates())
+                  u->check();
+                #endif
 
   # Point both logo slots at the cached logos. A logo that is still
   # downloading shows blank until the logo_ready action runs this again.
@@ -433,8 +461,9 @@ http_request:
   id: http_client
   timeout: 20s
   watchdog_timeout: 30s
-  # ESPN, its logo CDN and GitHub Pages all use Let's Encrypt, which is in the
-  # ESP-IDF certificate bundle, so every fetch (including firmware) is verified.
+  # ESPN, its logo CDN and GitHub Pages all use Let's Encrypt, and the update
+  # mirror (Cloudflare) Google Trust Services; both are in the ESP-IDF
+  # certificate bundle, so every fetch (including firmware) is verified.
   verify_ssl: true
   buffer_size_rx: 2048
 
@@ -451,23 +480,7 @@ time:
   - platform: sntp
     id: ha_time  # the clock page extends this id
     on_time_sync:
-      # The update component checks the manifest as soon as WiFi is up, which
-      # is before the clock is set; with verify_ssl that first check fails and
-      # the state reads "unknown" for six hours. Check once more after the
-      # first sync.
-      - if:
-          condition:
-            lambda: 'return !id(gd_update_checked);'
-          then:
-            - lambda: 'id(gd_update_checked) = true;'
-            - delay: 3s
-            # Every update entity rather than id(gd_firmware_update), which
-            # the demo build removes (firmware/pages/demo.yaml).
-            - lambda: |-
-                #ifdef USE_UPDATE
-                for (auto *u : App.get_updates())
-                  u->check();
-                #endif
+      - script.execute: gd_check_after_clock
     # Overridden at boot by the saved Timezone choice. Present so ESPHome
     # 2026.9+ compiles its timezone support at all (posix_tz.cpp is only
     # built when a timezone is configured).
@@ -535,12 +548,33 @@ gameday:
   http_request_id: http_client
   time_id: ha_time
   panel_layout_id: gd_panels
+  # "Follow beta" on the device page switches the update entity between these.
+  beta_channel:
+    update_id: gd_firmware_update
+    stable: ${update_source}
+    beta: ${beta_update_source}
+  update_mirror:
+    update_id: gd_firmware_update
+    source: ${update_source}
+    host: ${update_mirror_host}
   on_action:
     - if:
         condition:
           lambda: 'return x == "logo_ready";'
         then:
           - script.execute: gd_show_logos
+    # The heat or power hold changed (pages/guard.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "guard";'
+        then:
+          - script.execute: gd_guard
+    # No time server answered, so the clock came from ESPN's Date header.
+    - if:
+        condition:
+          lambda: 'return x == "clock_approx";'
+        then:
+          - script.execute: gd_check_after_clock
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:
@@ -573,6 +607,21 @@ gameday:
           lambda: |-
             return x == "board_ready" && id(boot_hold_since_ms) != 0 && id(boot_hold_stage) < 2 &&
                    !id(boot_show_address).is_running();
+        then:
+          - script.execute: boot_hide
+    # Sign-in Wi-Fi (components/gameday/captive.h): the boot screen comes up
+    # over the board to say so (boot.yaml, boot_hide keeps it up), and goes
+    # once ESPN answers. Left alone while the boot button owns the screen,
+    # and on the way out while a join's QR or a no-team QR turn is up, which
+    # hide it themselves.
+    - if:
+        condition:
+          lambda: |-
+            if (id(boot_hold_stage) >= 2 || id(boot_show_address).is_running())
+              return false;
+            if (x == "captive")
+              return true;
+            return x == "captive_clear" && !id(boot_hide_later).is_running() && !id(boot_app_qr_on);
         then:
           - script.execute: boot_hide
     # Picking a team or a mode is somebody standing in front of a dark panel
@@ -672,7 +721,7 @@ switch:
     turn_on_action:
       - hub75.set_brightness:
           id: matrix
-          brightness: !lambda return id(brightness).state;
+          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
       - script.execute: gd_repaint
     turn_off_action:
       - hub75.set_brightness:
@@ -712,7 +761,7 @@ number:
             then:
               - hub75.set_brightness:
                   id: matrix
-                  brightness: !lambda return x;
+                  brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) x);'
   - platform: template
     name: "Scroll Speed"
     id: shared_scroll_speed
@@ -758,6 +807,7 @@ button:
           App.safe_reboot();
   - platform: factory_reset
     name: "Factory Reset"
+    id: factory_reset_btn
     entity_category: config
 
 text_sensor:
