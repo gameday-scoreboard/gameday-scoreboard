@@ -94,7 +94,7 @@ INITIAL = {
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
                "heap_kb": 143.2, "block_kb": 40.0, "psram_kb": 4100.5, "rssi": -58, "espn": 200,
-               "espn_ago": 9, "version": "1.5.4", "built": "2026-10-17 20:01:00 -0500", "channel": "stable",
+               "espn_ago": 9, "version": "1.5.4", "built": 1792285260, "channel": "stable",
                # guard_json_keys() (components/gameday/guard.h)
                "temp": 46.5, "heat": 0, "brownouts": 0, "power": "ok"},
     "game": {"s": "PRE", "l": "nfl", "ta": "DAL", "ti": 6, "ts": 0, "oa": "PHI", "oi": 21, "os": 0,

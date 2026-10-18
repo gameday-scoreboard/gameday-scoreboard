@@ -800,7 +800,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};
-  // The last scoreboard or schedule read: its HTTP status (0 for no answer)
+  // The last ESPN read through open_() (every read but logos and the probe):
+  // its HTTP status (0 for no answer)
   // and millis() when it came, 0 before the first. Fetch task, HTTP task.
   std::atomic<int> espn_status_{0};
   std::atomic<uint32_t> espn_answer_ms_{0};

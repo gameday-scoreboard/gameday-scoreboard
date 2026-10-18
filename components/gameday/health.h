@@ -212,7 +212,7 @@ struct Health {
   int espn_status;      // HTTP status of the last ESPN read, 0 for no answer
   int64_t espn_ago;     // seconds since it, -1 before the first read
   const char *version;  // the release, "2026.10.0"
-  const char *built;    // the build's compile time
+  int64_t built;        // the build's compile time, Unix seconds
   const char *channel;  // stable, beta, bar or none
 };
 
@@ -236,9 +236,9 @@ inline int health_json(char *buf, size_t size, const Health &h) {
     snprintf(espn, sizeof(espn), ",\"espn\":%d,\"espn_ago\":%lld", h.espn_status, (long long) h.espn_ago);
   return snprintf(buf, size,
                   "{\"up\":%lld,\"start\":\"%s\",\"boots\":%u%s,\"heap_kb\":%.1f,\"block_kb\":%.1f,"
-                  "\"psram_kb\":%.1f%s%s,\"version\":\"%s\",\"built\":\"%s\",\"channel\":\"%s\"}",
+                  "\"psram_kb\":%.1f%s%s,\"version\":\"%s\",\"built\":%lld,\"channel\":\"%s\"}",
                   (long long) h.uptime_s, restart_key(h.start), (unsigned) h.boots, fault, h.heap_kb, h.block_kb,
-                  h.psram_kb, rssi, espn, h.version, h.built, h.channel);
+                  h.psram_kb, rssi, espn, h.version, (long long) h.built, h.channel);
 }
 
 }  // namespace espn

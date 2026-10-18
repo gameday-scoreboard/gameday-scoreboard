@@ -863,7 +863,7 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
   await expect(page.locator("#hHeap")).toHaveText("143 KiB, largest piece 40 KiB");
   await expect(page.locator("#hEspn")).toHaveText("OK, 9 s ago");
-  await expect(page.locator("#hFw")).toHaveText("1.5.4 stable, built 2026-10-17 20:01:00 -0500");
+  await expect(page.locator("#hFw")).toHaveText("1.5.4 stable, built Oct 17, 8:01 PM");
   await expect(page.locator("#rssi")).toHaveText("-58 dBm");
   await expect(page.locator("#psram")).toHaveText("4101 KiB");
 
@@ -879,7 +879,7 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await expect(page.locator("#hBoots")).toHaveText("");
   await expect(page.locator("#hFault")).toHaveText("None");
   await expect(page.locator("#hEspn")).toHaveText("No answer, 2 min ago");
-  await expect(page.locator("#hFw")).toHaveText("1.5.4 beta, built 2026-10-17 20:01:00 -0500");
+  await expect(page.locator("#hFw")).toHaveText("1.5.4 beta, built Oct 17, 8:01 PM");
   await expect(page.locator("#rssi")).toHaveText("Not connected");
 
   // A brownout whose time isn't known, before the first ESPN read.

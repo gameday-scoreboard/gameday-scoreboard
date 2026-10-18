@@ -3283,9 +3283,7 @@ std::string GamedayComponent::health_json_() {
 #else
   h.version = "";
 #endif
-  char built[Application::BUILD_TIME_STR_SIZE];
-  App.get_build_time_string(built);
-  h.built = built;
+  h.built = (int64_t) App.get_build_time();
 #if defined(GAMEDAY_BAR)
   h.channel = "bar";
 #elif defined(GAMEDAY_BETA_CHANNEL)
