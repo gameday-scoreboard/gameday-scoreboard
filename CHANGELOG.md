@@ -53,6 +53,7 @@ owns the panel, not for the code.
 - During a game the panel asks ESPN for just that game instead of the whole day's scoreboard, about a tenth of the data it downloaded before. The device page shows how much the panel has pulled from ESPN since it started, for anyone on a capped plan.
 - The device page's header shows a GD mark instead of a football. The lines under the Live games and Favorite teams bars now name the settings that decide the behavior: Switch every, the favorites' slot order, and Alternate.
 - A team logo that will not download is asked for less and less often, instead of every 15 seconds, and a logo that ESPN refuses waits much longer. The score keeps updating as before, and the logo shows up once a request goes through.
+- The Device card on the device page has a Diagnostics section: why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the Wi-Fi signal, the last read from ESPN and the firmware version and build. If the panel restarted on its own, this says why.
 
 ## v1.5.5
 
