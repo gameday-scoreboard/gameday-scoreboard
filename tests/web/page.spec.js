@@ -906,13 +906,13 @@ test("a hot or under-powered panel says why it is dimmed, and the power cap clea
   await expect(page.locator("#guard")).toBeHidden();
 
   const h = (await deviceState(request)).health;
-  await reset(request, { health: { ...h, temp: 83.4, heat: 2 } });
+  await reset(request, { health: { ...h, temp: 78.4, heat: 2 } });
   await page.reload();
   await expect(page.locator("#guard")).toBeVisible();
   await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
   await expect(page.locator("#guardText")).toContainText("at 45% of its brightness");
   await expect(page.locator("#guardClear")).toBeHidden();
-  await expect(page.locator("#hTemp")).toHaveText("83 C, dimmed to 45%");
+  await expect(page.locator("#hTemp")).toHaveText("78 C, dimmed to 45%");
 
   // The power cap wins over the heat, and Clear posts power_ok.
   await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "capped" } });

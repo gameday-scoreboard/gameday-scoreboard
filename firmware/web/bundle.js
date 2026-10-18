@@ -228,7 +228,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
           <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
           <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
-          <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>Above 80 C the panel dims until it cools</small></label><span class="val" id="hTemp"></span></div>
+          <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>Above 75 C the panel dims until it cools</small></label><span class="val" id="hTemp"></span></div>
           <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
           <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
           <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>

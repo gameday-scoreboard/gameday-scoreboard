@@ -20,10 +20,13 @@
 
 namespace espn {
 
-// Chip temperatures, degrees C
-static const float kHotC = 80.0f;
-static const float kHotFloorC = 90.0f;
-static const float kCoolC = 75.0f;
+// Chip temperatures, degrees C. A panel indoors at full brightness reads
+// about 46 C, 20 to 25 C over the room. So 75 C is about 50 C around the
+// panel and 85 C about 60 C, both short of the 65 C the module is rated for
+// and the 70 C the parts and the PETG case are held to.
+static const float kHotC = 75.0f;
+static const float kHotFloorC = 85.0f;
+static const float kCoolC = 70.0f;
 static const uint32_t kHotStepMs = 2 * 60 * 1000;
 static const uint32_t kCoolStepMs = 5 * 60 * 1000;
 
