@@ -137,6 +137,21 @@ test("a game with no kickoff time yet shows its day and TBD", async ({ page, req
   await expect(page.locator("#upnextList .un.fav .w")).toHaveText("Sat, Oct 24 TBD");
 });
 
+test("a favorite says no game scheduled only once ESPN said so", async ({ page, request }) => {
+  const t = (abbr, name, id) => ({ l: "nfl", id, abbr, name });
+  await reset(request, {
+    mode: 4,
+    game: { s: "NOT_FOUND", l: "nfl", why: "Can't reach ESPN" },
+    next: [
+      { slot: 1, t: t("DAL", "Dallas Cowboys", 6) },
+      { slot: 2, t: t("HOU", "Houston Texans", 34), none: true },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator("#msg")).toHaveText("Can't reach ESPN");
+  await expect(page.locator("#upnextList .un.fav .w")).toHaveText(["Not checked yet", "No game scheduled"]);
+});
+
 test("a bowl or playoff game shows its name, other games none", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

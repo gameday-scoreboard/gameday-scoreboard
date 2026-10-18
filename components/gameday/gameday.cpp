@@ -3249,8 +3249,13 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       o["slot"] = e.slot;
       JsonObject t = o["t"].to<JsonObject>();
       put_team(t, (uint8_t) e.team->league, e.team->espn_id);
-      if (!e.game.valid)
+      if (!e.game.valid) {
+        // Only a read that named no game means none is scheduled; before the
+        // first answer the row has nothing to say yet.
+        if (e.sched.valid && e.sched.event_id.empty())
+          o["none"] = true;
         continue;
+      }
       o["id"] = e.game.event_id;
       o["s"] = ::espn::state_name(e.game.state);
       o["kick"] = e.game.kickoff_epoch;
