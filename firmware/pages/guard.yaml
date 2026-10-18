@@ -1,0 +1,138 @@
+# Heat and power protection on the panel (components/gameday/guard.h). The
+# component works out how far to hold the brightness down; this file reads the
+# chip temperature, applies the brightness and says why on the screen.
+#
+# While the panel is held down, a small icon pulses slowly in its top right
+# corner, a thermometer for heat and a plug for power, and every two minutes
+# the bottom line says why for 15 seconds, in orange for heat and red for
+# power: "Too warm, dimming" or "Check power supply". Both are on the top
+# layer, so they show over every screen, the boot screen included: a brick
+# that browns out as the panel lights up keeps it on the boot screen.
+
+sensor:
+  - platform: internal_temperature
+    name: "Chip Temperature"
+    id: gd_chip_temp
+    entity_category: diagnostic
+    update_interval: 15s
+    # The last minute's average, every 30 s, so one odd reading can't step
+    # the brightness.
+    filters:
+      - sliding_window_moving_average:
+          window_size: 4
+          send_every: 2
+    on_value:
+      then:
+        - lambda: 'id(gameday_ctl).set_chip_temp(x);'
+
+script:
+  - id: gd_guard
+    mode: restart
+    then:
+      # QC lights the panel with Power off too (pages/qc.yaml)
+      - if:
+          condition:
+            lambda: 'return id(power).state || id(qc_active);'
+          then:
+            - hub75.set_brightness:
+                id: matrix
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
+      - lambda: |-
+          const uint8_t mark = id(gameday_ctl).guard_mark();
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+          auto pulse = [](void *icon, int32_t v) { lv_obj_set_style_opa((lv_obj_t *) icon, (lv_opa_t) v, 0); };
+          lv_anim_delete(id(gd_guard_icon), pulse);
+          if (mark == 0) {
+            lv_obj_add_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          image::Image *icon = mark == 2 ? id(gd_guard_power_img) : id(gd_guard_heat_img);
+          lv_image_set_src(id(gd_guard_icon), icon);
+          lv_obj_set_pos(id(gd_guard_icon), W - icon->get_width(), 0);
+          // Fades to a third and back, 3 s round trip
+          lv_anim_t a;
+          lv_anim_init(&a);
+          lv_anim_set_var(&a, id(gd_guard_icon));
+          lv_anim_set_exec_cb(&a, pulse);
+          lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_30);
+          lv_anim_set_duration(&a, 1500);
+          lv_anim_set_reverse_duration(&a, 1500);
+          lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+          lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+          lv_anim_start(&a);
+          if (!id(qc_active))
+            lv_obj_move_foreground(id(gd_guard_icon));
+          lv_obj_clear_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+          const lv_color_t color = lv_color_hex(mark == 2 ? 0xFF2020 : 0xFF8000);
+          lv_obj_set_width(id(gd_guard_line), W);
+          lv_obj_set_width(id(gd_guard_lbl), W);
+          lv_obj_set_style_text_color(id(gd_guard_lbl), color, 0);
+          lv_label_set_text(id(gd_guard_lbl), mark == 2 ? "Check power supply" : "Too warm, dimming");
+      - while:
+          condition:
+            lambda: 'return id(gameday_ctl).guard_mark() != 0;'
+          then:
+            # Not over the QC screen, which has its own lines there
+            - lambda: |-
+                if (id(qc_active))
+                  return;
+                lv_obj_move_foreground(id(gd_guard_icon));
+                lv_obj_move_foreground(id(gd_guard_line));
+                lv_obj_clear_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+            - delay: 15s
+            - lambda: 'lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);'
+            - delay: 105s
+
+image:
+  - platform: file
+    file: images/guard-heat.png
+    id: gd_guard_heat_img
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/guard-power.png
+    id: gd_guard_power_img
+    type: RGB565
+    transparency: alpha_channel
+
+lvgl:
+  top_layer:
+    widgets:
+      - image:
+          id: gd_guard_icon
+          src: gd_guard_heat_img
+          x: 57
+          y: 0
+          hidden: true
+      - obj:
+          id: gd_guard_line
+          scrollbar_mode: "OFF"
+          x: 0
+          y: 55
+          width: 64
+          height: 9
+          bg_opa: COVER
+          bg_color: 0x000000
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          hidden: true
+          widgets:
+            - label:
+                id: gd_guard_lbl
+                x: 0
+                y: 0
+                width: 64
+                text_align: CENTER
+                long_mode: SCROLL_CIRCULAR
+                text_font: spleen_8
+                text: ""
+
+esphome:
+  on_boot:
+    # After the boot screen is built, so a cap from the brownouts before this
+    # start is said at once.
+    - priority: -100.0
+      then:
+        - script.execute: gd_guard

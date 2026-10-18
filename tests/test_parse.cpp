@@ -13,6 +13,7 @@
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "guard.h"
 #include "health.h"
 #include "logo_lru.h"
 #include "offseason.h"
@@ -3749,6 +3750,104 @@ static void test_health_json() {
   CHECK_EQ(doc["espn_ago"].as<int>(), 30);
 }
 
+static void test_heat_guard() {
+  HeatGuard g;
+  uint32_t t = 1000;
+  CHECK(!g.feed(NAN, t));
+  CHECK(!g.feed(60.0f, t));
+  CHECK_EQ((int) g.step, 0);
+  // The first hot reading steps down at once, then one step per kHotStepMs.
+  CHECK(g.feed(kHotC, t += 15000));
+  CHECK_EQ((int) g.step, 1);
+  CHECK(!g.feed(kHotC + 1, t += kHotStepMs - 1));
+  CHECK(g.feed(kHotC + 1, t += 1));
+  CHECK_EQ((int) g.step, 2);
+  CHECK(g.feed(kHotC + 1, t += kHotStepMs));
+  CHECK(!g.feed(kHotC + 1, t += kHotStepMs));  // already the dimmest
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  // Between the two limits it holds, however long.
+  CHECK(!g.feed(kCoolC + 1, t += 10 * kCoolStepMs));
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  // Under kCoolC it waits a whole kCoolStepMs before each step back.
+  CHECK(!g.feed(kCoolC - 1, t += 15000));
+  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 15001));
+  CHECK(g.feed(kCoolC - 1, t += 15001));
+  CHECK_EQ((int) g.step, (int) kHeatSteps - 1);
+  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 1));
+  CHECK(g.feed(kCoolC - 1, t += 1));
+  // Warm again in between restarts the wait.
+  CHECK(!g.feed(kCoolC, t += kCoolStepMs));
+  CHECK(!g.feed(kCoolC - 1, t += 15000));
+  CHECK_EQ((int) g.step, 1);
+  CHECK(g.feed(kCoolC - 1, t += kCoolStepMs));
+  CHECK_EQ((int) g.step, 0);
+  CHECK(!g.feed(20.0f, t += kCoolStepMs));
+  // Past the floor it goes straight to the dimmest step.
+  CHECK(g.feed(kHotFloorC, t += 15000));
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  CHECK(g.last_c == kHotFloorC);
+  // millis() wrapping doesn't stall it.
+  HeatGuard w;
+  uint32_t m = 0xFFFFFFFFu - 1000;
+  CHECK(w.feed(kHotC, m));
+  CHECK(w.feed(kHotC, m + kHotStepMs));
+  CHECK_EQ((int) w.step, 2);
+}
+
+static void test_power_log() {
+  PowerLog log{};
+  CHECK(!power_log_start(log, false));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ(log.brownouts, 1u);
+  CHECK_EQ((int) log.capped, 0);
+  // A settled run ends the streak; the count stays.
+  CHECK(power_log_settled(log));
+  CHECK(!power_log_settled(log));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ((int) log.capped, 0);
+  // Two in a row cap it, and power cuts in between don't count either way.
+  CHECK(!power_log_start(log, false));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ((int) log.capped, 1);
+  CHECK_EQ(log.brownouts, 3u);
+  // Settling doesn't lift the cap; only the owner does.
+  CHECK(power_log_settled(log));
+  CHECK_EQ((int) log.capped, 1);
+  CHECK(power_log_clear(log));
+  CHECK(!power_log_clear(log));
+  CHECK_EQ((int) log.capped, 0);
+  CHECK_EQ(log.brownouts, 3u);
+  // The streak doesn't wrap.
+  log.streak = 255;
+  power_log_start(log, true);
+  CHECK_EQ((int) log.streak, 255);
+}
+
+static void test_guarded_brightness() {
+  CHECK_EQ((int) guarded_brightness(128, 0, false), 128);
+  CHECK_EQ((int) guarded_brightness(255, 0, false), 255);
+  CHECK_EQ((int) guarded_brightness(200, 1, false), 140);
+  CHECK_EQ((int) guarded_brightness(200, kHeatSteps, false), 50);
+  CHECK_EQ((int) guarded_brightness(200, 9, false), 50);  // past the last step
+  CHECK_EQ((int) guarded_brightness(200, 0, true), (int) kPowerCap);
+  CHECK_EQ((int) guarded_brightness(40, 0, true), 40);  // already under the cap
+  CHECK_EQ((int) guarded_brightness(255, kHeatSteps, true), (int) kPowerCap);
+  CHECK_EQ((int) guarded_brightness(1, kHeatSteps, true), 1);  // never off
+  CHECK(guard_mark(0, false) == GuardMark::NONE);
+  CHECK(guard_mark(2, false) == GuardMark::HEAT);
+  CHECK(guard_mark(2, true) == GuardMark::POWER);
+
+  char buf[96];
+  PowerLog log{};
+  log.brownouts = 4;
+  log.capped = 1;
+  guard_json_keys(buf, sizeof(buf), 47.25f, 2, log);
+  CHECK_EQ(std::string(buf), std::string(",\"temp\":47.2,\"heat\":2,\"brownouts\":4,\"power\":\"capped\""));
+  log.capped = 0;
+  guard_json_keys(buf, sizeof(buf), NAN, 0, log);
+  CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -4221,6 +4320,9 @@ int main() {
   test_update_mark();
   test_boot_log();
   test_health_json();
+  test_heat_guard();
+  test_power_log();
+  test_guarded_brightness();
   test_offseason();
   test_panel_text();
   test_wifi_history();

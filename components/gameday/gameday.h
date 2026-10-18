@@ -25,6 +25,7 @@
 #include "captive.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "guard.h"
 #include "health.h"
 #include "offseason.h"
 #include "recap.h"
@@ -258,6 +259,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
 #endif
   void set_auto_update(bool on);
+  // Heat and power protection (guard.h). guard_brightness() is what the
+  // display gets for the owner's Brightness; it runs from on_boot before
+  // setup(), so it loads the power log itself the first time.
+  uint8_t guard_brightness(uint8_t want);
+  // The chip temperature sensor's readings (firmware/pages/guard.yaml).
+  void set_chip_temp(float c);
+  // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
+  uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.step, this->power_log_.capped != 0); }
+  // The owner's clear of the power cap: /gameday/action?do=power_ok.
+  void clear_power_cap();
   // "Follow beta": the update entity reads the beta manifest instead of the
   // release one. Off unless the owner turns it on; only in builds with
   // beta_channel (the release builds, gameday-common.yaml).
@@ -319,6 +330,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string health_json_();
   ::espn::Restart start_reason_{::espn::Restart::NONE};
   bool boot_clock_noted_{false};  // boot_log_clock() ran
+  // guard.h. heat_ and power_log_ are main loop only; the HTTP task reads
+  // their small fields for the health block.
+  void load_power_log_();
+  void save_power_log_();
+  ::espn::HeatGuard heat_;
+  ::espn::PowerLog power_log_{};
+  ESPPreferenceObject power_pref_;
+  bool power_loaded_{false};
+  bool power_settled_{false};  // ran kPowerSettledMs without a brownout
   // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
   void wifi_tick_();

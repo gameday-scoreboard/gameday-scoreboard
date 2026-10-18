@@ -265,6 +265,10 @@ button { font: inherit; color: inherit; }
 .modes button:hover { border-color: #3a4556; }
 .modes button.on { background: var(--accent); border-color: var(--accent); color: #041022; font-weight: 700; }
 .modes + .teambar { margin-top: 8px; }
+.guardbar { border-color: #c96a00; }
+.guardbar .name { color: #ffab40; white-space: normal; }
+.guardbar.power { border-color: #b02a2a; }
+.guardbar.power .name { color: #ff8a8a; }
 .livebar .stepper { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--muted); }
 .favbar { align-items: flex-start; }
 .favbar .favctls { display: flex; flex-direction: column; gap: 8px; flex: none; }

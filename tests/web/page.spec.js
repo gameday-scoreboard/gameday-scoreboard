@@ -1007,6 +1007,48 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await expect(page.locator("#health")).toBeHidden();
 });
 
+test("a hot or under-powered panel says why it is dimmed, and the power cap clears", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#hTemp")).toHaveText("47 C");
+  await expect(page.locator("#hPower")).toHaveText("0");
+  await expect(page.locator("#guard")).toBeHidden();
+
+  const h = (await deviceState(request)).health;
+  await reset(request, { health: { ...h, temp: 78.4, heat: 2 } });
+  await page.reload();
+  await expect(page.locator("#guard")).toBeVisible();
+  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
+  await expect(page.locator("#guardText")).toContainText("at 45% of its brightness");
+  await expect(page.locator("#guardClear")).toBeHidden();
+  await expect(page.locator("#hTemp")).toHaveText("78 C, dimmed to 45%");
+
+  // The power cap wins over the heat, and Clear posts power_ok.
+  await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "capped" } });
+  await page.reload();
+  await expect(page.locator("#guardName")).toHaveText("Check the power supply");
+  await expect(page.locator("#hPower")).toHaveText("3, brightness capped");
+  await page.locator("#guardClear").click();
+  await expect.poll(async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/action").map((p) => p.q.do),
+  ).toContain("power_ok");
+  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
+  await expect(page.locator("#guardClear")).toBeHidden();
+
+  // Before the first temperature reading there is no temperature row.
+  await reset(request, { health: { ...h, temp: undefined } });
+  await page.reload();
+  await expect(page.locator("#hPower")).toHaveText("0");
+  await expect(page.locator("#hTempRow")).toBeHidden();
+
+  // Firmware from before the guard sends none of its keys.
+  await reset(request, { health: { ...h, temp: undefined, heat: undefined, brownouts: undefined, power: undefined } });
+  await page.reload();
+  await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
+  await expect(page.locator("#hPowerRow")).toBeHidden();
+  await expect(page.locator("#guard")).toBeHidden();
+});
+
 test("saved Wi-Fi networks are listed in order and one can be forgotten", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
