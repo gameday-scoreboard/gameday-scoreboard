@@ -127,7 +127,8 @@ inline uint8_t guarded_brightness(uint8_t want, uint8_t heat_step, bool power_ca
   return (uint8_t) b;
 }
 
-// What the panel shows in its corner, and the page's guard state
+// What the panel shows in its corner and on its bottom line, and the page's
+// guard state
 enum class GuardMark : uint8_t { NONE = 0, HEAT, POWER };
 
 // Power wins: it lasts until cleared, and a weak brick is the likelier cause
