@@ -8,6 +8,7 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "captive.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
@@ -92,6 +93,31 @@ static void test_iso() {
   CHECK_EQ(parse_iso8601_z("2026-09-05T19:30Z"), (int64_t) 1788636600);
   CHECK_EQ(parse_iso8601_z("2026-09-10T00:20:00Z"), (int64_t) 1788999600);
   CHECK_EQ(parse_iso8601_z("garbage"), (int64_t) 0);
+  // HTTP Date headers, as ESPN sends them.
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 GMT"), (int64_t) 1792280369);
+  CHECK_EQ(parse_http_date("Sat, 05 Sep 2026 19:30:00 GMT"), (int64_t) 1788636600);
+  CHECK_EQ(parse_http_date("Sun, 01 Mar 2048 00:00:00 GMT"), (int64_t) 2466633600);
+  CHECK_EQ(parse_http_date(""), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 UTC"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Okt 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 7 Oct 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 24:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2O26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), (int64_t) 0);  // outside 2020 to 2099
+  CHECK_EQ(parse_http_date("Saturday, 17-Oct-26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat Oct 17 23:39:29 2026"), (int64_t) 0);
+  // Fields too long or out of range read as no date instead of overflowing
+  // (found by fuzz_espn).
+  CHECK_EQ(parse_iso8601_z("2026-10-17T999999999:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-999999999-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-2147483647T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T19:999999999Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2147483647-10-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-13-01T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T24:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T-1:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("1969-12-31T23:59Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("9999-12-31T23:59:59Z"), (int64_t) 253402300799);
 }
 
 static void test_team_parse() {
@@ -432,6 +458,64 @@ static void test_no_game_text() {
   // Live modes keep their own "Looking for a live game"
   CHECK_EQ(no_game_text(true, true, false, 1), std::string(""));
   CHECK_EQ(no_game_text(true, true, false, 3), std::string(""));
+  // A sign-in Wi-Fi says so in place of all of them, live modes too
+  CHECK_EQ(no_game_text(false, false, false, 0, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, true, false, 1, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, false), std::string("Can't reach ESPN"));
+}
+
+// The plain HTTP read of ESPN after joining Wi-Fi (captive.h). Only a clear
+// portal answer is a sign-in network; anything ESPN could have sent is not.
+static void test_captive() {
+  // ESPN today: 200, JSON, "{}"
+  CHECK(classify_probe(200, "", "application/json;charset=UTF-8", "{}") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "  \r\n[1]") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "application/json", "") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "\xEF\xBB\xBF{\"a\":1}") == Probe::OPEN);
+  // ESPN's JSON error for a URL it no longer knows still means ESPN answered
+  CHECK(classify_probe(404, "", "application/json", "{\"code\":404}") == Probe::OPEN);
+  // Portals: a redirect to their sign-in page, over HTTP or HTTPS
+  CHECK(classify_probe(302, "http://192.168.10.1:8002/index.php?zone=guest", "text/html", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "https://login.hotelwifi.example/portal?mac=aa:bb", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(307, "HTTPS://Splash.Example.NET/", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(301, "http://user@portal.example/x", "", "") == Probe::CAPTIVE);
+  // or their page in ESPN's place, or the status made for it
+  CHECK(classify_probe(200, "", "text/html", "<!DOCTYPE html><html><head><title>Sign in") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "", "\n  <html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "text/html; charset=utf-8", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "text/html", "<html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "", "") == Probe::CAPTIVE);
+  // ESPN sending plain HTTP on to HTTPS one day is still ESPN
+  CHECK(classify_probe(301, "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/record", "", "") ==
+        Probe::OPEN);
+  CHECK(classify_probe(302, "https://secure.espn.com:443/x", "", "") == Probe::OPEN);
+  CHECK(classify_probe(302, "https://espn.com", "", "") == Probe::OPEN);
+  // but a host that only ends in the same letters is not
+  CHECK(classify_probe(302, "http://notespn.com/login", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "http://espn.com.portal.example/login", "", "") == Probe::CAPTIVE);
+  // Proves nothing: no answer, a relative or missing redirect, an error page
+  // (ESPN's own Akamai "Access Denied" is HTML), an empty or odd body
+  CHECK(classify_probe(0, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(-1, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "/login", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(403, "", "text/html", "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>") == Probe::UNKNOWN);
+  CHECK(classify_probe(503, "", "text/html", "<html>") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "text/plain", "OK") == Probe::UNKNOWN);
+  CHECK(classify_probe(204, "", "", "") == Probe::UNKNOWN);
+
+  // When to probe: once per join
+  CHECK(probe_due(false, false, false, 0));
+  CHECK(probe_due(false, true, true, 0));
+  CHECK(!probe_due(true, false, false, 10 * 60 * 1000));
+  // again every minute on a sign-in network
+  CHECK(!probe_due(true, true, false, kProbeCaptiveRecheckMs - 1));
+  CHECK(probe_due(true, true, false, kProbeCaptiveRecheckMs));
+  // every two while reads fail on one that looked open
+  CHECK(!probe_due(true, false, true, kProbeFailingRecheckMs - 1));
+  CHECK(probe_due(true, false, true, kProbeFailingRecheckMs));
 }
 
 static struct tm mk(int year, int yday, int wday, int hour, int min, int mon = 8, int mday = 5) {
@@ -452,6 +536,11 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(2026, 248, 0, 12, 0), now), std::string("Tomorrow 12:00 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 251, 3, 19, 20), now), std::string("Wed 7:20 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 256, 1, 0, 5, 8, 14), now), std::string("Sep 14 12:05 AM"));
+  // ESPTime{}.to_c_tm(), what the panel gets for an epoch it can't convert:
+  // no label rather than a read before the month table (found by fuzz_espn).
+  CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
+  // A year far enough out to overflow the day count in int.
+  CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
 }
 
 static void test_upcoming() {
@@ -3990,6 +4079,7 @@ int main() {
   test_splash();
   test_status_text();
   test_no_game_text();
+  test_captive();
   test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();

@@ -286,6 +286,26 @@ script:
           if (top != nullptr)
             lv_obj_invalidate(top);
 
+  # The update component checks the manifest as soon as WiFi is up, which
+  # is before the clock is set; with verify_ssl that first check fails and
+  # the state reads "unknown" for six hours. Check once more once the clock
+  # is first set, by a time server or from ESPN's Date header.
+  - id: gd_check_after_clock
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(gd_update_checked);'
+          then:
+            - lambda: 'id(gd_update_checked) = true;'
+            - delay: 3s
+            # Every update entity rather than id(gd_firmware_update), which
+            # the demo build removes (firmware/pages/demo.yaml).
+            - lambda: |-
+                #ifdef USE_UPDATE
+                for (auto *u : App.get_updates())
+                  u->check();
+                #endif
+
   # Point both logo slots at the cached logos. A logo that is still
   # downloading shows blank until the logo_ready action runs this again.
   # A failed download is retried by the cache itself on a later board update.
@@ -448,23 +468,7 @@ time:
   - platform: sntp
     id: ha_time  # the clock page extends this id
     on_time_sync:
-      # The update component checks the manifest as soon as WiFi is up, which
-      # is before the clock is set; with verify_ssl that first check fails and
-      # the state reads "unknown" for six hours. Check once more after the
-      # first sync.
-      - if:
-          condition:
-            lambda: 'return !id(gd_update_checked);'
-          then:
-            - lambda: 'id(gd_update_checked) = true;'
-            - delay: 3s
-            # Every update entity rather than id(gd_firmware_update), which
-            # the demo build removes (firmware/pages/demo.yaml).
-            - lambda: |-
-                #ifdef USE_UPDATE
-                for (auto *u : App.get_updates())
-                  u->check();
-                #endif
+      - script.execute: gd_check_after_clock
     # Overridden at boot by the saved Timezone choice. Present so ESPHome
     # 2026.9+ compiles its timezone support at all (posix_tz.cpp is only
     # built when a timezone is configured).
@@ -549,6 +553,12 @@ gameday:
           lambda: 'return x == "guard";'
         then:
           - script.execute: gd_guard
+    # No time server answered, so the clock came from ESPN's Date header.
+    - if:
+        condition:
+          lambda: 'return x == "clock_approx";'
+        then:
+          - script.execute: gd_check_after_clock
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:
@@ -581,6 +591,21 @@ gameday:
           lambda: |-
             return x == "board_ready" && id(boot_hold_since_ms) != 0 && id(boot_hold_stage) < 2 &&
                    !id(boot_show_address).is_running();
+        then:
+          - script.execute: boot_hide
+    # Sign-in Wi-Fi (components/gameday/captive.h): the boot screen comes up
+    # over the board to say so (boot.yaml, boot_hide keeps it up), and goes
+    # once ESPN answers. Left alone while the boot button owns the screen,
+    # and on the way out while a join's QR or a no-team QR turn is up, which
+    # hide it themselves.
+    - if:
+        condition:
+          lambda: |-
+            if (id(boot_hold_stage) >= 2 || id(boot_show_address).is_running())
+              return false;
+            if (x == "captive")
+              return true;
+            return x == "captive_clear" && !id(boot_hide_later).is_running() && !id(boot_app_qr_on);
         then:
           - script.execute: boot_hide
     # Picking a team or a mode is somebody standing in front of a dark panel
