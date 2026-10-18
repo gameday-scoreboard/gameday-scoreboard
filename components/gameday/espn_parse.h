@@ -291,6 +291,10 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
 // Hawaii to central Europe.
 inline int64_t tbd_day_epoch(int64_t placeholder) { return placeholder + 12 * 3600; }
 int64_t parse_iso8601_z(const std::string &s);
+// An HTTP Date header, "Sat, 17 Oct 2026 23:39:29 GMT" (the only form a
+// server may send), as a UTC epoch. 0 when it is anything else or outside
+// 2020 to 2099.
+int64_t parse_http_date(const std::string &s);
 const char *state_name(GameState s);
 // "0:42 2nd" from the raw clock and period. ESPN's pre-formatted shortDetail
 // lags those fields by a poll or two, so it is only used for the states that

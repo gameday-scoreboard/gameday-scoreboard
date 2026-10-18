@@ -31,6 +31,7 @@
 #include <esp_sntp.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <sys/time.h>
 
 namespace esphome {
 namespace gameday {
@@ -60,6 +61,13 @@ static const uint32_t NOT_READY_INTERVAL = 500;
 // With Wi-Fi up and the clock still unset, the time server is asked again this
 // often. lwIP's own wait for a reply is 15 s, so a slow answer is never cut off.
 static const uint32_t SNTP_ASK_INTERVAL = 15 * 1000;
+// A time server usually answers within about a second of Wi-Fi. With none
+// this long after (a network that blocks NTP, or a slow one), the clock is set
+// from the Date header of an ESPN reply instead, and a failed read is tried
+// again this often. Any ESPN URL will do: only the headers are read.
+static const uint32_t HTTP_CLOCK_WAIT = 5 * 1000;
+static const uint32_t HTTP_CLOCK_RETRY = 30 * 1000;
+static const char *const HTTP_CLOCK_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // Install updates automatically: how often loop() looks, and how long a
@@ -265,6 +273,14 @@ void GamedayComponent::setup() {
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
   this->rebuild_favorites_(false);
   this->apply_timezone_();
+  if (this->time_ != nullptr)
+    this->time_->add_on_time_sync_callback([this]() {
+      if (!this->clock_approx_)
+        return;
+      ESP_LOGI(TAG, "Time server answered: clock no longer approximate");
+      this->clock_approx_ = false;
+      this->rebuild_state_(&this->last_fields_);  // drops clock_approx
+    });
   this->publish_selects_();
 #ifdef GAMEDAY_DEMO
   this->demo_setup_();
@@ -933,14 +949,21 @@ void GamedayComponent::loop() {
     return;
   if (!network::is_connected() || !this->clock_set_()) {
     this->wait_for_clock_();
+    const uint32_t now = millis();
+    if (network::is_connected() && !this->clock_set_() && now - this->wifi_up_ms_ >= HTTP_CLOCK_WAIT &&
+        (this->http_clock_ms_ == 0 || now - this->http_clock_ms_ >= HTTP_CLOCK_RETRY)) {
+      this->start_clock_job_();
+      return;
+    }
     this->schedule_next_(NOT_READY_INTERVAL);
     return;
   }
   if (!this->selects_published_) {
     this->selects_published_ = true;
     const uint32_t now = millis();
-    ESP_LOGI(TAG, "Startup: Wi-Fi and clock ready at %u ms, clock set %u ms after Wi-Fi", (unsigned) now,
-             (unsigned) (this->wifi_up_ms_ != 0 ? now - this->wifi_up_ms_ : 0));
+    ESP_LOGI(TAG, "Startup: Wi-Fi and clock ready at %u ms, clock set %u ms after Wi-Fi%s", (unsigned) now,
+             (unsigned) (this->wifi_up_ms_ != 0 ? now - this->wifi_up_ms_ : 0),
+             this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
   this->start_job_();
@@ -957,6 +980,7 @@ void GamedayComponent::wait_for_clock_() {
   if (!network::is_connected()) {
     this->wifi_up_ms_ = 0;
     this->sntp_asked_ms_ = 0;
+    this->http_clock_ms_ = 0;
     return;
   }
   const uint32_t now = millis();
@@ -972,6 +996,42 @@ void GamedayComponent::wait_for_clock_() {
   this->sntp_asked_ms_ = now == 0 ? 1 : now;
   if (esp_sntp_restart())
     ESP_LOGI(TAG, "Clock not set yet: asking the time server now");
+}
+
+// UDP 123 is blocked on some networks (guest Wi-Fi, some offices and
+// schools), and then no time server ever answers: no clock meant no game all
+// day. Every ESPN reply carries the time in its Date header, and the TLS
+// certificate check means it is ESPN's and not a captive portal's.
+void GamedayComponent::start_clock_job_() {
+  const uint32_t now = millis();
+  this->http_clock_ms_ = now == 0 ? 1 : now;
+  this->job_ = Job{};
+  this->job_.generation = this->generation_;
+  this->job_.need_clock = true;
+  this->start_worker_();
+}
+
+void GamedayComponent::apply_clock_job_() {
+  const Job &j = this->job_;
+  this->schedule_next_(0);
+  if (this->clock_set_())
+    return;  // a time server answered meanwhile
+  if (j.clock_epoch == 0) {
+    ESP_LOGW(TAG, "Clock not set yet and no date from ESPN; trying again in %us",
+             (unsigned) (HTTP_CLOCK_RETRY / 1000));
+    return;
+  }
+  // The header is in whole seconds, so on average half a second behind when
+  // it was sent. Add that and the time since it arrived.
+  int64_t ms = j.clock_epoch * 1000 + 500 + (int64_t) (millis() - j.clock_got_ms);
+  struct timeval tv;
+  tv.tv_sec = (time_t) (ms / 1000);
+  tv.tv_usec = (suseconds_t) ((ms % 1000) * 1000);
+  settimeofday(&tv, nullptr);
+  this->clock_approx_ = true;
+  ESP_LOGI(TAG, "No time server answer %us after Wi-Fi: clock set from ESPN's Date header until one answers",
+           (unsigned) ((millis() - this->wifi_up_ms_) / 1000));
+  this->fire_action_("clock_approx");  // gameday-common.yaml checks for an update
 }
 
 const ::espn::Team *GamedayComponent::current_team_() const {
@@ -1820,6 +1880,21 @@ void GamedayComponent::worker_(void *arg) {
 // Worker task: network and parsing only, no display or entity access.
 void GamedayComponent::run_job_() {
   Job &j = this->job_;
+  if (j.need_clock) {
+    // Any status will do, a 404 or a 503 carries the date just the same.
+    std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
+    this->espn_requests_++;
+    auto container = this->http_->get(HTTP_CLOCK_URL, headers, {"date"});
+    if (container == nullptr) {
+      ESP_LOGW(TAG, "Request failed: %s", HTTP_CLOCK_URL);
+      return;
+    }
+    j.clock_got_ms = millis();
+    if (container->status_code > 0)
+      j.clock_epoch = ::espn::parse_http_date(container->get_response_header("date"));
+    container->end();
+    return;
+  }
   if (j.need_recap) {
     // One day's scoreboard: its finals going back, its first kickoff and that
     // game's matchup going forward. The live list is always empty for a day
@@ -1909,6 +1984,10 @@ void GamedayComponent::run_job_() {
 // Main loop: fold the worker's result into the component state and render.
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
+  if (j.need_clock) {
+    this->apply_clock_job_();  // whatever the board follows now, it needs the clock
+    return;
+  }
   if (j.generation != this->generation_) {
     ESP_LOGD(TAG, "Discarding a fetch for the previous team");
     return;
@@ -2812,6 +2891,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["espn_kb"] = (uint32_t) (this->espn_bytes() / 1000);
   doc["espn_reads"] = this->espn_requests();
   doc["stale_s"] = this->stale_seconds_();
+  // The clock came from ESPN's Date header (to within a second or two) and no
+  // time server has answered yet; left out once one has.
+  if (this->clock_approx_)
+    doc["clock_approx"] = true;
   doc["fallback"] = this->live_fallback_;
   doc["recap"] = this->recap_on_;
 

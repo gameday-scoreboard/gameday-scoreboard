@@ -421,12 +421,18 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // ESPN answered 403 or 429 to a request in this job (set by open_)
     bool throttled{false};
     uint32_t retry_after_ms{0};
+    // No time server answer yet: read only the Date header of an ESPN reply.
+    bool need_clock{false};
+    int64_t clock_epoch{0};    // 0 when there was no reply or no usable date
+    uint32_t clock_got_ms{0};  // millis() when the reply's headers arrived
   };
   void start_job_();
   void start_worker_();
   static void worker_(void *arg);
   void run_job_();
   void apply_job_();
+  void start_clock_job_();
+  void apply_clock_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);
@@ -598,6 +604,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool clock_set_() const { return this->time_ != nullptr && this->time_->now().is_valid(); }
   uint32_t wifi_up_ms_{0};      // millis() when the loop first saw Wi-Fi this boot, 0 = not yet
   uint32_t sntp_asked_ms_{0};   // millis() of the last nudge to the time server, 0 = none since Wi-Fi came up
+  uint32_t http_clock_ms_{0};   // millis() of the last Date header read, 0 = none since Wi-Fi came up
+  bool clock_approx_{false};    // the clock came from ESPN's Date header and no time server has answered since
   bool clock_wait_shown_{false};
   bool board_ready_{false};
   uint32_t board_pending_ms_{0};  // millis() of the last team change, 0 = waiting since boot
