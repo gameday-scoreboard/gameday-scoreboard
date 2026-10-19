@@ -14,7 +14,7 @@ is the short version.
   release builds. Each only names itself and picks a pin map from
   `firmware/controllers/`; everything else is in
   `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
-  gameday.yaml booting two panels wide, offered by the DIY installer.
+  gameday.yaml booting two panels wide, offered by the installer.
   `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.

@@ -11,9 +11,9 @@ The firmware is the same, with every league and setting. The prebuilt firmware f
 
 You supply the board, the panels, the case, the stand and the power supply. Size the supply for your panels (see [Panels and power](/diy/panels/#power)).
 
-## Your own installer
+## The same installer
 
-A board you built installs from the [DIY installer](https://gamedayscoreboard.app/install/diy/), which asks for your layout before you install. The Game Day Scoreboard controller has its own pins and its own installer, so never use that one on a DIY board. See [Install the firmware](/diy/install/).
+A board on the MoonHub75 pinout installs from the same [installer](https://install.gameday-scoreboard.com/) as a Game Day Scoreboard, which asks for your layout before you install. See [Install the firmware](/diy/install/).
 
 ## Layout default
 

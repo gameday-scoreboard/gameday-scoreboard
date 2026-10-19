@@ -29,7 +29,7 @@ Pixel pitch isn't part of these settings, so a 64x64 panel is driven the same wa
 | One 128x64 panel | One 128x64 panel | Logos at the edges, big scores, records and timeout pips in the middle |
 | Two 64x64 panels side by side | One 128x64 panel (the same choice) | Same as one 128x64 panel |
 
-One firmware drives both layouts. You pick the layout in the [DIY installer](/diy/install/) before you install, and you can change it later on the device page. See [Panel sizes](/using/panel-sizes/).
+One firmware drives both layouts. You pick the layout in the [installer](/diy/install/) before you install, and you can change it later on the device page. See [Panel sizes](/using/panel-sizes/).
 
 ## Chain two 64x64 panels
 
