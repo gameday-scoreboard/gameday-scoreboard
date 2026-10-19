@@ -54,6 +54,14 @@
     footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
     .demo { display: block; width: 100%; border-radius: 12px; border: 1px solid #262e38; background: #000; margin: 0 0 6px; }
     .demo-note { margin: 0 0 28px; }
+    .signup { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
+    .signup input[type=email] { flex: 1 1 220px; min-width: 0; font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #262e38; background: #0b0f14; color: #e6edf3; }
+    .signup button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 8px; border: 0; background: #f2b632; color: #0b0f14; cursor: pointer; }
+    .signup button[disabled] { opacity: 0.6; }
+    .signup[hidden] { display: none; }
+    .signup-msg { margin: 0 0 12px; }
+    .signup-msg:empty { display: none; }
+    .sr, .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   </style>
   <!-- Pinned with an integrity hash. To move versions: fetch the new file, compute
        sha384 (openssl dgst -sha384 -binary | openssl base64 -A) and update both. -->
@@ -68,6 +76,20 @@
 
   <video class="demo" src="media/demo.mp4" autoplay muted loop playsinline preload="metadata"></video>
   <p class="note demo-note">What it looks like during a game: a scripted game recorded on a panel, with the real celebrations.</p>
+
+  <div class="card" id="signup">
+    <h2>Get one when they're ready</h2>
+    <p>Ready-made Game Day Scoreboards go on sale soon. Leave your email and we'll tell you the day you can order.</p>
+    <form class="signup" method="post" action="https://support.gameday-scoreboard.com/signup">
+      <input type="hidden" name="page" value="/">
+      <label for="signup-email" class="sr">Email</label>
+      <input type="email" id="signup-email" name="email" required maxlength="200" autocomplete="email" placeholder="you@example.com">
+      <button>Join the launch list</button>
+      <div class="trap" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    </form>
+    <p class="signup-msg" role="status" aria-live="polite"></p>
+    <p class="note">One email when it's ready to order, plus the odd launch update. Every email has an unsubscribe link. Our store on Shopify keeps the list; see <a href="/privacy/#launch-list">Privacy</a>.</p>
+  </div>
 
   <div class="card">
     <h2>1. Install</h2>
@@ -107,5 +129,30 @@
     <a href="/setup/">Setup</a> &middot; <a href="/changelog/">What's new</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
   </footer>
 </main>
+<script>
+  // With JavaScript the thank-you shows in place. Without it, or if the request fails, the form posts as usual
+  // and the browser lands on a thank-you page that links back here.
+  document.querySelectorAll("form.signup").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      if (!window.fetch || !window.URLSearchParams) return;
+      e.preventDefault();
+      var button = form.querySelector("button");
+      var msg = form.parentNode.querySelector(".signup-msg");
+      button.disabled = true;
+      fetch(form.action, { method: "POST", headers: { Accept: "application/json" }, body: new URLSearchParams(new FormData(form)) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) {
+            form.hidden = true;
+            msg.textContent = "You're on the list. We'll email you when it's ready to order.";
+          } else {
+            msg.textContent = j.error || "That didn't go through. Try again.";
+            button.disabled = false;
+          }
+        })
+        .catch(function () { form.submit(); });
+    });
+  });
+</script>
 </body>
 </html>
