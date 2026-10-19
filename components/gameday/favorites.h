@@ -39,6 +39,7 @@ struct FavRules {
 struct FavChoice {
   int index{-1};  // slot to show, -1 when no favorite has a card
   bool locked{false};
+  bool again{false};  // the playlist moved on and came back to the card already up (a playlist of one)
 };
 
 inline bool fav_locked(const FavGame &g, int64_t now, const FavRules &r) {
@@ -144,8 +145,10 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
   // A remote press shows its card for the dwell even when a filter would skip it.
   if ((ok(current) || (current == pinned && valid(current))) && now - shown_since < dwell)
     c.index = current;
-  else
+  else {
     c.index = fav_next_(games, current, ok);
+    c.again = c.index >= 0 && c.index == current;
+  }
   return c;
 }
 

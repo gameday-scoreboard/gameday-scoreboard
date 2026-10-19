@@ -740,6 +740,8 @@ bool GamedayComponent::fav_choose_(int64_t now_epoch) {
   if (c.index == this->fav_shown_) {
     if (was_locked != c.locked)
       this->fav_poll_ms_ = 0;
+    if (c.again)
+      this->fav_shown_since_ = now_epoch;  // a new turn, so its countdown comes after the card again
     return false;
   }
   this->fav_shown_ = c.index;
