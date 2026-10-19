@@ -54,6 +54,8 @@ struct Settings {
   bool bootaddr{true}, autoupd{false}, beta{false};
   TeamRef favs[16];
   uint16_t live_mask{0};
+  std::string msg, msgurl;
+  int msgevery{kMsgEveryDefault};
 };
 constexpr int kFavMax = 16;
 constexpr int kMaxCols = 2;
@@ -106,6 +108,11 @@ void load(Settings &s, JsonObjectConst o) {
   num("release", s.release);
   num("tz", s.tz);
   num("panels", s.panels);
+  num("msgevery", s.msgevery);
+  if (o["msg"].is<const char *>())
+    s.msg = o["msg"].as<const char *>();
+  if (o["msgurl"].is<const char *>())
+    s.msgurl = o["msgurl"].as<const char *>();
   int collide = s.collide ? 1 : 0;
   num("collide", collide);
   s.collide = collide != 0;
@@ -152,6 +159,9 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
+    case SetKind::MSG: s.msg = op.text; break;
+    case SetKind::MSGURL: s.msgurl = op.text; break;
+    case SetKind::MSGEVERY: s.msgevery = op.value; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -195,6 +205,9 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
   doc["panels"] = s.panels;
+  doc["msg"] = s.msg;
+  doc["msgurl"] = s.msgurl;
+  doc["msgevery"] = s.msgevery;
 }
 
 void test_fixture_cases() {
@@ -260,6 +273,17 @@ void test_parse_set() {
   SCHECK(!parse_set("tz", "-1", op, kFavMax), "tz -1");
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
   SCHECK(parse_set("down", "on", op, kFavMax) && !op.on, "down on is off");
+  SCHECK(parse_set("msg", "Happy birthday", op, kFavMax) && op.kind == SetKind::MSG && op.text == "Happy birthday",
+         "msg");
+  SCHECK(parse_set("msg", std::string(300, 'x'), op, kFavMax) && op.text.size() == kMsgTextMax, "msg is capped");
+  SCHECK(parse_set("msgurl", "https://example.com/names.txt", op, kFavMax) && op.kind == SetKind::MSGURL, "msgurl");
+  SCHECK(!parse_set("msgurl", "ftp://example.com/names.txt", op, kFavMax), "msgurl ftp");
+  SCHECK(!parse_set("msgurl", "https://exa mple.com", op, kFavMax), "msgurl with a space");
+  SCHECK(!parse_set("msgurl", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "msgurl too long");
+  SCHECK(parse_set("msgevery", "0", op, kFavMax) && op.value == 0, "msgevery 0 holds the board");
+  SCHECK(parse_set("msgevery", "99", op, kFavMax) && op.value == kMsgEveryMax, "msgevery 99");
+  SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");
+  SCHECK(!parse_set("msgevery", "-1", op, kFavMax), "msgevery -1");
 
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {

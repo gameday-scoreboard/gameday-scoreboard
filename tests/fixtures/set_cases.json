@@ -13,7 +13,7 @@
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "today": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "opp": true, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1
+    "autoupd": false, "beta": false, "panels": 1, "msg": "", "msgurl": "", "msgevery": 2
   },
   "cases": [
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
@@ -103,6 +103,17 @@
 
     {"name": "no known key answers 400", "start": {"rotate": 5}, "set": [["bogus", "1"]], "status": 400, "expect": {"rotate": 5}},
     {"name": "unknown keys next to known ones are skipped", "set": [["bogus", "1"], ["rotate", "5"]], "expect": {"rotate": 5}},
-    {"name": "one refused key doesn't stop the rest", "set": [["mode", "9"], ["rotate", "5"], ["tz", "Mars"]], "expect": {"mode": 0, "rotate": 5, "tz": 1}}
+    {"name": "one refused key doesn't stop the rest", "set": [["mode", "9"], ["rotate", "5"], ["tz", "Mars"]], "expect": {"mode": 0, "rotate": 5, "tz": 1}},
+    {"name": "a message card's text", "set": [["msg", "Happy birthday, Sam!"]], "expect": {"msg": "Happy birthday, Sam!"}},
+    {"name": "message lines are trimmed and blank ones dropped", "set": [["msg", "  Wings $5 \r\n\n\tPints $3  \n"]], "expect": {"msg": "Wings $5\nPints $3"}},
+    {"name": "emoji are left out of a message", "set": [["msg", "Happy birthday 🎂 Sam"]], "expect": {"msg": "Happy birthday Sam"}},
+    {"name": "a message is cut at 200 bytes", "set": [["msg", "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"]], "expect": {"msg": "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"}},
+    {"name": "an empty message clears it", "start": {"msg": "Pizza's here"}, "set": [["msg", ""]], "expect": {"msg": ""}},
+    {"name": "a list address", "set": [["msgurl", "http://192.168.1.20/names.txt"]], "expect": {"msgurl": "http://192.168.1.20/names.txt"}},
+    {"name": "a list address that isn't http is refused", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", "file:///etc/passwd"]], "expect": {"msgurl": "https://example.com/a.txt"}},
+    {"name": "an empty list address clears it", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", ""]], "expect": {"msgurl": ""}},
+    {"name": "msgevery 0 holds the board between games", "set": [["msgevery", "0"]], "expect": {"msgevery": 0}},
+    {"name": "msgevery past 30 is 30", "set": [["msgevery", "45"]], "expect": {"msgevery": 30}},
+    {"name": "msgevery as text is refused", "start": {"msgevery": 5}, "set": [["msgevery", "soon"]], "expect": {"msgevery": 5}}
   ]
 }

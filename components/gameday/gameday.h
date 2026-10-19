@@ -27,7 +27,9 @@
 #include "favorites.h"
 #include "guard.h"
 #include "ha_events.h"
+#include "board_text.h"
 #include "health.h"
+#include "message.h"
 #include "offseason.h"
 #include "recap.h"
 #include "poll_timing.h"
@@ -113,6 +115,9 @@ struct UpdateFields {
 
 enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
 
+// PSRAM text (logo_cache.h's allocator): the message card's list.
+using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
+
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
 // jump to the first four.
 static constexpr uint8_t FAV_MAX = 16;
@@ -146,6 +151,9 @@ class GamedaySelect : public select::Select, public Component {
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
+//   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
+//                                    no text takes it down
+//   POST /gameday/set?msg=...&msgurl=...&msgevery=0-30   the message card (message.h)
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
 //   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
@@ -296,6 +304,18 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool follow_beta() const { return false; }
 #endif
   void set_follow_beta(bool on);
+  // The banner (message.h): text over everything for secs seconds (0 is
+  // the default), from the device page, the app or Home Assistant. "" takes
+  // it down. say_text() is what firmware/pages/message.yaml draws.
+  void say(const std::string &text, int secs);
+  const std::string &say_text() const { return this->say_text_; }
+  int say_secs() const { return this->say_secs_; }
+  // The message card's page on the scoreboard page now, "" while it is
+  // down (gd_msg_card in firmware/pages/gameday-live.yaml). A page too tall
+  // for the panel rolls up; the page says how long one pass takes, and the
+  // card stays up at least that long.
+  const std::string &msg_card() const { return this->msg_card_; }
+  void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The update feed's second host (update_mirror.h): `mirror` is `source`
   // on the mirror, `beta_mirror` the beta manifest there (release builds).
 #ifdef GAMEDAY_UPDATE_MIRROR
@@ -347,6 +367,42 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // their small fields for the health block.
   void load_power_log_();
   void save_power_log_();
+  // The banner and the message card (message.h). The card's settings are
+  // their own blob, its text and address kept here only as long as they are.
+  struct PrefsMsg {
+    char text[::espn::kMsgTextMax + 1];
+    char url[::espn::kMsgUrlMax + 1];
+    uint8_t every;
+    uint8_t spare[3];
+  } __attribute__((packed));
+  ESPPreferenceObject msg_pref_;
+  std::string msg_text_, msg_url_;
+  uint8_t msg_every_{::espn::kMsgEveryDefault};
+  void load_msg_();
+  void set_msg_(const std::string *text, const std::string *url, int every);
+  void msg_reset_();    // a new text or address: back to the top, up soon
+  void msg_tick_();     // main loop: the card's turns and the reads they need
+  void msg_show_(const std::string &page);
+  std::string say_text_;
+  int say_secs_{::espn::kSayDefaultSecs};
+  // The entries on hand, [msg_from_, msg_from_ + msg_n_), one per line:
+  // the saved text, or one read's window of the list (PSRAM).
+  PsString msg_list_;
+  uint32_t msg_from_{0}, msg_n_{0};
+  bool msg_eof_{false};
+  uint32_t msg_list_ms_{0};  // millis() of the read, 0 = none
+  uint32_t msg_pos_{0};      // the entry the next page starts at
+  bool msg_read_due_{false};
+  uint32_t msg_read_from_{0};
+  uint32_t msg_fail_ms_{0};  // millis() of the last failed read, 0 = none since
+  int msg_status_{-1};       // the last read's HTTP status, 0 no answer, -1 none yet
+  uint32_t msg_total_{0};    // entries in the file, once a read got to its end
+  std::string msg_card_;
+  bool msg_shown_{false};
+  uint32_t msg_since_ms_{0};  // when the card last went up or down
+  uint32_t msg_tick_ms_{0};
+  uint32_t msg_roll_ms_{0};
+  uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
   ESPPreferenceObject power_pref_;
@@ -496,6 +552,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool need_clock{false};
     int64_t clock_epoch{0};    // 0 when there was no reply or no usable date
     uint32_t clock_got_ms{0};  // millis() when the reply's headers arrived
+    // The message card's list (message.h): kMsgChunkLines entries from
+    // msg_from, read on this task so it never runs alongside an ESPN read.
+    bool need_msg{false};
+    std::string msg_url;
+    uint32_t msg_from{0};
+    PsString msg_list;
+    uint32_t msg_n{0};
+    uint32_t msg_seen{0};  // entries in the file up to where the read stopped
+    bool msg_eof{false};
+    bool msg_ok{false};
+    int msg_status{0};  // HTTP status, 0 for no answer
   };
   void start_job_();
   void start_worker_();
@@ -504,6 +571,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_job_();
   void start_clock_job_();
   void apply_clock_job_();
+  void start_msg_job_();
+  void run_msg_job_();
+  void apply_msg_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);
@@ -840,6 +910,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // a game, or its default or a live mode's words.
   std::string no_game_why_() const;
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
+  uint32_t gave_up_ms_{0};     // millis() when the loop last wrote a worker off, 0 = never
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;
   uint32_t generation_{0};

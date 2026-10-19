@@ -82,6 +82,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         require((op.mask >> kLeagueCount) == 0, "the mask names a league past kLeagues", k, v);
         mask = op.mask;
         break;
+      case SetKind::MSG:
+        require(op.text.size() <= kMsgTextMax, "the message is longer than kMsgTextMax", k, v);
+        // What the board gets of each page, as msg_tick_ hands it to board_lines().
+        for (uint32_t i = 0; i < msg_count(op.text); i += kMsgPageLines)
+          esphome::gameday::panel_text(msg_entries(op.text, i, kMsgPageLines));
+        break;
+      case SetKind::MSGURL:
+        require(msg_url_ok(op.text) && op.text.size() <= kMsgUrlMax, "the address is not one the panel reads", k, v);
+        break;
+      case SetKind::MSGEVERY:
+        require(op.value >= 0 && op.value <= kMsgEveryMax, "msgevery is out of range", k, v);
+        break;
       default:
         break;
     }

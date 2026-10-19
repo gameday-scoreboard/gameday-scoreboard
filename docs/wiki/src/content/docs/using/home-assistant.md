@@ -82,6 +82,27 @@ Every value arrives as text, so match `"true"` and `"7"` in quotes. To see them,
 Use `play: goal` for hockey or soccer, `play: home_run` for baseball, or leave `play` out to catch every score. Home Assistant accepts these events from the panel without the "Allow the device to perform Home Assistant actions" option.
 :::
 
+## Messages
+
+:::note[Coming in the next release]
+The **Message** text entity puts a banner on the panel: set it, from a dashboard or an automation's `text.set_value`, and the text goes over the board for 10 seconds. The **show_message** action, listed as `esphome.<your panel's name>_show_message`, does the same with `message` and `seconds` (0 for 10):
+
+```yaml
+- alias: "Tell the room the pizza is here"
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.front_door
+      to: "on"
+  actions:
+    - action: esphome.gameday_2f6a70_show_message
+      data:
+        message: "Pizza's here!"
+        seconds: 15
+```
+
+Use your panel's own name in the action. Like the other device actions, it needs no "Allow the device to perform Home Assistant actions" option. The message card that takes turns between games is set on the device page. See [Your own messages](/using/messages/).
+:::
+
 ## What you can automate
 
 Game Status changes when a game starts, when someone scores and when it ends, not on every play, so it makes a good trigger and keeps your history small. Some ideas:
