@@ -65,6 +65,26 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 
 The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Team, Mode, Power, Brightness, Scroll Speed, Select Page, Game Status, Last Play, Firmware, Install Updates Automatically, Refresh Now, Reboot and the WizMote pairing switches. Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. Men's college basketball teams aren't in Home Assistant's Team list (it would be too long for an entity); pick them on the device page. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
 
+Game Live, Team Score and Opponent Score follow the game in Game Status, and the panel fires an `esphome.gameday_score` event on every score in that game (`team`, `opponent`, `play`, `points`, `team_score`, `opponent_score`, `sport`, `my_team`) and `esphome.gameday_final` when it ends. Values arrive as text. To flash a light when your team scores a touchdown:
+
+```yaml
+- alias: "Flash the lights on our touchdown"
+  triggers:
+    - trigger: event
+      event_type: esphome.gameday_score
+      event_data:
+        play: touchdown
+        my_team: "true"
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.living_room
+      data:
+        flash: long
+```
+
+The [Home Assistant page](https://docs.gameday-scoreboard.com/using/home-assistant/) lists every field.
+
 ## Build it yourself
 
 ```

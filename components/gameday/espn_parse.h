@@ -319,6 +319,8 @@ std::string baseball_clock_text(const GameSnapshot &s);
 Splash baseball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
 // The count while a half inning is on ("2-1"), else "".
 std::string baseball_count(const GameSnapshot &s);
+// The latest play is a home run.
+bool baseball_home_run(const GameSnapshot &s);
 // Hockey (sport_hockey.cpp).
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);

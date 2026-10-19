@@ -38,6 +38,48 @@ Favorites, the timezone, the ticker switches, the celebrations, the Live games l
 
 :::note[Coming in the next release]
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
+
+**Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in My team and Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
+:::
+
+## Score events
+
+:::note[Coming in the next release]
+The panel sends Home Assistant an event every time either side scores in the game Game Status follows, and another when that game ends. They come whether or not the panel celebrates the score on screen, in every sport, basketball included. An event goes out once per score, so nothing repeats in your logbook. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
+
+`esphome.gameday_score` carries:
+
+| Field | What it is |
+| --- | --- |
+| `team` | The team that scored, like `DAL`. |
+| `opponent` | The other team. |
+| `play` | `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and for any other football score. |
+| `points` | The points since the panel's last check. In basketball that can be more than one basket. |
+| `team_score`, `opponent_score` | The score now, the scoring team's first. |
+| `sport` | `football`, `baseball`, `basketball`, `hockey` or `soccer`. |
+| `my_team` | `true` when your team scored. Always `false` in Live games, where neither side is yours. |
+
+`esphome.gameday_final` carries `team` and `opponent` (the left and right sides of the board), both scores, `result` (`win`, `loss` or `draw` for `team`), `winner` (empty on a draw), `sport` and `my_team` (`true` when `team` is your team).
+
+Every value arrives as text, so match `"true"` and `"7"` in quotes. To see them, open **Developer tools**, then **Events**, and listen to `esphome.gameday_score` during a game. This automation flashes a light when your team scores a touchdown:
+
+```yaml
+- alias: "Flash the lights on our touchdown"
+  triggers:
+    - trigger: event
+      event_type: esphome.gameday_score
+      event_data:
+        play: touchdown
+        my_team: "true"
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.living_room
+      data:
+        flash: long
+```
+
+Use `play: goal` for hockey or soccer, `play: home_run` for baseball, or leave `play` out to catch every score. Home Assistant accepts these events from the panel without the "Allow the device to perform Home Assistant actions" option.
 :::
 
 ## What you can automate
