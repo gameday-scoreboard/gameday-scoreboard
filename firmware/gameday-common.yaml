@@ -49,6 +49,16 @@ substitutions:
 # and overflowed it (backlog #84); the multi-sport build overflows the same
 # way on 2026.8.2. With 16 KB, internal RAM still never dropped below 32 KB
 # free on the bench.
+#
+# The TLS record buffers are fixed size (16 KB in, 4 KB out per open
+# connection, in PSRAM), not ESP-IDF's dynamic buffers. On IDF 5.5 a failed
+# decrypt in the middle of a read (the hardware AES bounce buffer couldn't get
+# 1,600 B of internal RAM) leaves the dynamic receive buffer sized for that
+# record. esp_http_client returns the bytes it already had, the next read
+# reuses the buffer, and a bigger record overruns it into the next PSRAM
+# block. The panel then crashed in the heap freeing the scan's JSON document.
+# mbedtls bounds-checks a fixed buffer correctly; IDF master fixed the dynamic
+# one in September 2026, after 5.5.
 esp32:
   framework:
     advanced:
@@ -57,8 +67,7 @@ esp32:
       CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST: y
       CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY: y
       CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y
-      CONFIG_MBEDTLS_DYNAMIC_BUFFER: y
-      CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA: y
+      CONFIG_MBEDTLS_DYNAMIC_BUFFER: n
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
