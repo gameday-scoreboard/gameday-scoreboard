@@ -32,6 +32,10 @@ At kickoff the board switches to the live scoreboard:
 - **Timeout pips** under each logo: three bars per team, lit gold for each timeout left and dim for each one used.
 - **The ticker** with the down, distance and where the ball is, like "3rd & 4 at FIU 31", and the last play. Turn either off in the Ticker card on the device page. See [The ticker](/using/ticker/).
 
+:::note[Coming in the next release]
+After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Pre-game odds and TV**.
+:::
+
 On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker.
 
 ## Scoring splashes

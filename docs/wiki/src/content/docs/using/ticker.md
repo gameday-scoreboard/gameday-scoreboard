@@ -30,6 +30,10 @@ The Ticker card on the device page has a switch for each part. All of them start
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. A very long play is cut short. |
 | **Pre-game odds and TV** | The line, over/under and TV channel before the start, in every league, when ESPN has them. |
 
+:::note[Coming in the next release]
+In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Pre-game odds and TV** also adds ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+:::
+
 These three, Down and distance, Count and at-bat and Match stats, are the game situation for their sport. Hockey and basketball have no situation line, so they have no switch of their own. The card only shows the switches for sports your panel follows, from your team, your favorites and the leagues you picked for Live games, so turning off football's line leaves baseball's count alone.
 
 With every switch off during play, the ticker shows ESPN's short status for the game, like the clock.
