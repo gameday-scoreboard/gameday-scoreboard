@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.gamedayscoreboard.scoreboard",
+      "sha256_cert_fingerprints": [
+        "39:A4:2E:F2:0B:A7:3E:E0:50:F7:DD:47:64:53:5B:EC:69:95:C2:65:94:75:A2:8E:37:40:9F:A7:51:E9:BC:62"
+      ]
+    }
+  }
+]
