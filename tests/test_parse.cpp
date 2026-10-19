@@ -1673,6 +1673,10 @@ static void test_soccer_text_helpers() {
   CHECK_EQ(soccer_board_record("6-10-12"), std::string("6-10-12"));
   CHECK_EQ(soccer_board_record("12-10-12"), std::string("46 pts"));  // too wide under a logo
   CHECK_EQ(soccer_board_record(""), std::string(""));
+  CHECK_EQ(soccer_board_record("999-999-999"), std::string("3996 pts"));
+  // A count past three digits (the fuzzer's 1068893704 overflowed 3 * w).
+  CHECK_EQ(soccer_board_record("1068893704-1-1"), std::string("1068893704-1-1"));
+  CHECK_EQ(soccer_board_record("12-2147483648-1"), std::string("12-2147483648-1"));
 }
 
 // A club's next game across its league and cups (team endpoints recorded

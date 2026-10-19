@@ -303,8 +303,11 @@ std::string soccer_situation(const GameSnapshot &s, size_t max) {
 std::string soccer_board_record(const std::string &wdl) {
   if (wdl.size() <= 7)
     return wdl;
+  // Three digits a count at most: a longer one (only a malformed record has
+  // one) stops the match, so the record shows as it came and 3 * w can't
+  // overflow.
   int w = 0, d = 0, l = 0;
-  if (sscanf(wdl.c_str(), "%d-%d-%d", &w, &d, &l) != 3)
+  if (sscanf(wdl.c_str(), "%3d-%3d-%3d", &w, &d, &l) != 3)
     return wdl;
   return std::to_string(3 * w + d) + " pts";
 }
