@@ -910,6 +910,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // a game, or its default or a live mode's words.
   std::string no_game_why_() const;
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
+  uint32_t gave_up_ms_{0};     // millis() when the loop last wrote a worker off, 0 = never
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;
   uint32_t generation_{0};

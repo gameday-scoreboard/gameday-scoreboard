@@ -77,6 +77,8 @@ static const uint32_t POST_LINGER = 30 * MINUTE;
 // For the panel's own trouble (a fetch task that never finished or could not
 // start). A failed ESPN read backs off instead (back_off_).
 static const uint32_t RETRY_INTERVAL = MINUTE;
+// The longest one message list read keeps reading (run_msg_job_).
+static const uint32_t MSG_READ_LIMIT = 30 * 1000;
 // Wi-Fi and the clock are re-checked this often at boot: every second waited
 // here is a second of boot screen.
 static const uint32_t NOT_READY_INTERVAL = 500;
@@ -1030,8 +1032,9 @@ void GamedayComponent::loop() {
         this->busy_ = false;
         this->busy_since_ms_ = 0;
         this->worker_seq_++;  // a late finisher must not signal job_done_
+        this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
-          this->msg_fail_ms_ = millis() == 0 ? 1 : millis();
+          this->msg_fail_ms_ = this->gave_up_ms_;
         // Wait a full retry before starting another worker rather than
         // stacking a second one on top of a task that may still be alive.
         this->schedule_next_(RETRY_INTERVAL);
@@ -1044,8 +1047,10 @@ void GamedayComponent::loop() {
     this->apply_job_();
     return;
   }
-  // The message card's list, between ESPN reads and outside their timing.
-  if (this->msg_read_due_ && network::is_connected()) {
+  // The message card's list, between ESPN reads and outside their timing,
+  // but never sooner after a written-off worker than the next ESPN read is.
+  if (this->msg_read_due_ && network::is_connected() &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_msg_job_();
     return;
   }
@@ -3716,7 +3721,10 @@ void GamedayComponent::run_msg_job_() {
   uint8_t buf[512];
   bool more = true;
   bool complete = false;
-  while (more && reader.bytes() < ::espn::kMsgReadMaxBytes) {
+  const uint32_t started = millis();
+  // A server that trickles its file out is cut off well inside the loop's
+  // WORKER_DEADLINE, so this task is never written off.
+  while (more && reader.bytes() < ::espn::kMsgReadMaxBytes && millis() - started < MSG_READ_LIMIT) {
     int n = container->read(buf, sizeof(buf));
     if (n <= 0) {
       complete = n == 0 && container->is_read_complete();
