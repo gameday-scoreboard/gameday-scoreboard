@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <string>
 
+#include "message.h"
+
 namespace espn {
 
 // Seconds each card keeps the board: the next game, its countdown, the
@@ -109,13 +111,17 @@ inline std::string countdown_day_label(uint32_t ymd) {
 }
 
 // The name as the panel keeps it: spaces trimmed, line breaks and other
-// control characters dropped, cut to kCountdownNameMax bytes without
-// splitting a UTF-8 character.
+// control characters and stray bytes that aren't UTF-8 dropped, cut to
+// kCountdownNameMax bytes without splitting a UTF-8 character.
 inline std::string countdown_name(const std::string &v) {
   std::string out;
-  for (unsigned char c : v)
-    if (c >= 0x20 && c != 0x7F)
-      out += (char) c;
+  for (size_t i = 0; i < v.size();) {
+    size_t n = detail::utf8_len(v, i);
+    unsigned char c = (unsigned char) v[i];
+    if (n > 1 || (c >= 0x20 && c < 0x7F))
+      out.append(v, i, n);
+    i += n;
+  }
   size_t a = out.find_first_not_of(' ');
   if (a == std::string::npos)
     return "";

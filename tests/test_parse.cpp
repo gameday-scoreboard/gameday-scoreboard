@@ -4066,6 +4066,9 @@ static void test_countdown() {
   CHECK_EQ(countdown_name("Graduation day Rena\xc3\xa9"), std::string("Graduation day Rena"));
   CHECK_EQ(countdown_name("Graduation day Ren\xc3\xa9"), std::string("Graduation day Ren\xc3\xa9"));
   CHECK_EQ(countdown_name("Nineteen characters x"), std::string("Nineteen characters"));
+  CHECK_EQ(countdown_name("Caf\xe9 day"), std::string("Caf day"));
+  CHECK_EQ(countdown_name("Half \xc3"), std::string("Half"));
+  CHECK_EQ(countdown_name("\x80\xbf" "Opening Day"), std::string("Opening Day"));
 
   // My team: the next game's card and its countdown take 10 s turns, the
   // custom countdown the last turn of each minute, on the wall clock.
