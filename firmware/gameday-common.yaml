@@ -633,6 +633,35 @@ gameday:
             - switch.is_off: power
         then:
           - switch.turn_on: power
+  # Home Assistant events for automations: every score and the final of the
+  # game Game Status follows (components/gameday/ha_events.h), for both sides
+  # whatever the splash settings. Home Assistant takes events from any
+  # ESPHome device; only actions need "Allow the device to perform Home
+  # Assistant actions".
+  on_score:
+    - homeassistant.event:
+        event: esphome.gameday_score
+        data:
+          team: !lambda 'return x.team;'
+          opponent: !lambda 'return x.opponent;'
+          play: !lambda 'return x.play;'
+          points: !lambda 'return to_string(x.points);'
+          team_score: !lambda 'return to_string(x.team_score);'
+          opponent_score: !lambda 'return to_string(x.opponent_score);'
+          sport: !lambda 'return x.sport;'
+          my_team: !lambda 'return x.my_team ? "true" : "false";'
+  on_final:
+    - homeassistant.event:
+        event: esphome.gameday_final
+        data:
+          team: !lambda 'return x.team;'
+          opponent: !lambda 'return x.opponent;'
+          team_score: !lambda 'return to_string(x.team_score);'
+          opponent_score: !lambda 'return to_string(x.opponent_score);'
+          result: !lambda 'return x.result;'
+          winner: !lambda 'return x.winner;'
+          sport: !lambda 'return x.sport;'
+          my_team: !lambda 'return x.my_team ? "true" : "false";'
   on_update:
     # Published on every update, though the value often repeats: Home
     # Assistant only logs a change, and the device page takes each Game
@@ -643,6 +672,18 @@ gameday:
     - text_sensor.template.publish:
         id: gd_last_play_sensor
         state: !lambda 'return x.ha_last_play;'
+    # Only on a change, so the score sensors don't send the same number on
+    # every redraw. Unknown with no game and before kickoff.
+    - lambda: |-
+        id(gd_game_live).publish_state(x.ha_live);  // a binary sensor sends changes only
+        auto put = [](sensor::Sensor *s, int score) {
+          float v = score < 0 ? NAN : (float) score;
+          if (s->has_state() && (s->state == v || (std::isnan(v) && std::isnan(s->state))))
+            return;
+          s->publish_state(v);
+        };
+        put(id(gd_team_score), x.ha_team_score);
+        put(id(gd_opp_score), x.ha_opp_score);
     # The board gets the text through panel_text() so a character the fonts
     # lack never draws as a box; Home Assistant keeps the original above.
     - script.execute:
@@ -825,11 +866,31 @@ text_sensor:
       icon: "mdi:ip-outline"
       entity_category: "diagnostic"
 
+binary_sensor:
+  - platform: template
+    name: "Game Live"
+    id: gd_game_live
+    icon: "mdi:broadcast"
+
 # The heap sensors are off in Home Assistant until someone turns them on, and
 # read every 5 minutes: free heap moves a little all the time, and at 30 s it
 # was a recorder row a minute per sensor. Bench and burn-in scripts read
 # GET /gameday/heap, which is live.
 sensor:
+  # The game Game Status follows: the panel's team (left on the board) and
+  # the other side. No state_class, so Home Assistant keeps no statistics.
+  - platform: template
+    name: "Team Score"
+    id: gd_team_score
+    icon: "mdi:scoreboard-outline"
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    name: "Opponent Score"
+    id: gd_opp_score
+    icon: "mdi:scoreboard-outline"
+    accuracy_decimals: 0
+    update_interval: never
   - platform: template
     name: "Free Heap (PSRAM)"
     device_class: data_size

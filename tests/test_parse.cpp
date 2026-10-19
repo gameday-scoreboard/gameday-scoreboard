@@ -14,6 +14,7 @@
 #include "espn_parse_impl.h"
 #include "favorites.h"
 #include "guard.h"
+#include "ha_events.h"
 #include "health.h"
 #include "logo_lru.h"
 #include "offseason.h"
@@ -336,6 +337,142 @@ static GameSnapshot live(int us, int them, GameState st = GameState::IN) {
   s.team_color = "002a5c";
   s.opp_color = "004c54";
   return s;
+}
+
+// Home Assistant's score and final events (ha_events.h).
+static void test_ha_events() {
+  HaTracker t;
+  // The first read of a game fires nothing, a repeat of it nothing either.
+  CHECK(t.update(live(7, 0), false).empty());
+  CHECK(t.update(live(7, 0), false).empty());
+  // A field goal for us, then a touchdown for them.
+  auto e = t.update(live(10, 0), false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].team, std::string("DAL"));
+  CHECK_EQ(e[0].opponent, std::string("PHI"));
+  CHECK_EQ(e[0].play, std::string("field_goal"));
+  CHECK_EQ(e[0].points, 3);
+  CHECK_EQ(e[0].team_score, 10);
+  CHECK_EQ(e[0].opponent_score, 0);
+  CHECK_EQ(e[0].sport, std::string("football"));
+  CHECK(e[0].my_team);
+  e = t.update(live(10, 7), false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].team, std::string("PHI"));
+  CHECK_EQ(e[0].play, std::string("touchdown"));
+  CHECK_EQ(e[0].team_score, 7);
+  CHECK_EQ(e[0].opponent_score, 10);
+  CHECK(!e[0].my_team);
+  // Both sides between two reads, ours first; a score taken back fires nothing.
+  e = t.update(live(12, 8), false);
+  CHECK_EQ(e.size(), (size_t) 2);
+  CHECK_EQ(e[0].play, std::string("two_point"));
+  CHECK_EQ(e[1].play, std::string("extra_point"));
+  CHECK(t.update(live(10, 8), false).empty());
+  // A score on the last play comes with the final.
+  e = t.update(live(13, 8, GameState::POST), false);
+  CHECK_EQ(e.size(), (size_t) 2);
+  CHECK_EQ(e[0].play, std::string("field_goal"));
+  CHECK_EQ(e[1].play, std::string("final"));
+  CHECK_EQ(e[1].team, std::string("DAL"));
+  CHECK_EQ(e[1].result, std::string("win"));
+  CHECK_EQ(e[1].winner, std::string("DAL"));
+  CHECK(e[1].my_team);
+  CHECK(t.update(live(13, 8, GameState::POST), false).empty());  // once
+
+  // A suspended game goes to post without completed: no final.
+  HaTracker s;
+  s.update(live(3, 0), false);
+  GameSnapshot sus = live(3, 0, GameState::POST);
+  sus.completed = false;
+  CHECK(s.update(sus, false).empty());
+  // A game first seen as a final, or before kickoff, fires nothing.
+  HaTracker f;
+  CHECK(f.update(live(20, 3, GameState::POST), false).empty());
+  HaTracker pre;
+  CHECK(pre.update(live(0, 0, GameState::PRE), false).empty());
+  CHECK(pre.update(live(0, 0), false).empty());
+
+  // The Live modes: nobody's team. The final names the left side.
+  HaTracker n;
+  n.update(live(0, 0), true);
+  e = n.update(live(6, 0), true);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK(!e[0].my_team);
+  e = n.update(live(6, 9, GameState::POST), true);
+  CHECK_EQ(e.size(), (size_t) 2);
+  CHECK_EQ(e[1].result, std::string("loss"));
+  CHECK_EQ(e[1].winner, std::string("PHI"));
+  CHECK(!e[1].my_team);
+
+  // Two games alternating on the board each keep their own last read.
+  HaTracker a;
+  GameSnapshot g2 = live(0, 0);
+  g2.event_id = "2";
+  g2.team_abbr = "KC";
+  g2.opp_abbr = "BUF";
+  a.update(live(0, 0), false);
+  a.update(g2, false);
+  CHECK_EQ(a.update(live(7, 0), false).size(), (size_t) 1);
+  g2.opp_score = 3;
+  e = a.update(g2, false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].team, std::string("BUF"));
+  // The same game read from the other side doesn't fire.
+  GameSnapshot flip = live(0, 7);
+  flip.team_abbr = "PHI";
+  flip.opp_abbr = "DAL";
+  CHECK(a.update(flip, false).empty());
+
+  // Other sports' plays.
+  HaTracker b;
+  GameSnapshot mlb = live(1, 0);
+  mlb.sport = Sport::BASEBALL;
+  b.update(mlb, false);
+  mlb.team_score = 3;
+  mlb.mlb.play_type = "Home Run";
+  e = b.update(mlb, false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].play, std::string("home_run"));
+  CHECK_EQ(e[0].points, 2);
+  CHECK_EQ(e[0].sport, std::string("baseball"));
+  mlb.mlb.play_type = "Single";
+  mlb.last_play = "Smith singled to left, Jones scored.";
+  mlb.opp_score = 1;
+  CHECK_EQ(b.update(mlb, false)[0].play, std::string("run"));
+  HaTracker nhl;
+  GameSnapshot h = live(0, 0);
+  h.sport = Sport::HOCKEY;
+  nhl.update(h, false);
+  h.opp_score = 1;
+  CHECK_EQ(nhl.update(h, false)[0].play, std::string("goal"));
+  HaTracker nba;
+  GameSnapshot bb = live(50, 48);
+  bb.sport = Sport::BASKETBALL;
+  nba.update(bb, false);
+  bb.team_score = 53;
+  CHECK_EQ(nba.update(bb, false)[0].play, std::string("score"));
+  // A level soccer game decided on penalties.
+  HaTracker soc;
+  GameSnapshot fc = live(1, 1);
+  fc.sport = Sport::SOCCER;
+  soc.update(fc, false);
+  fc.state = GameState::POST;
+  fc.completed = true;
+  fc.soc.team_shootout = 3;
+  fc.soc.opp_shootout = 4;
+  e = soc.update(fc, false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].result, std::string("loss"));
+  CHECK_EQ(e[0].winner, std::string("PHI"));
+  fc.soc.team_shootout = fc.soc.opp_shootout = -1;
+  HaTracker draw;
+  fc.state = GameState::IN;
+  draw.update(fc, false);
+  fc.state = GameState::POST;
+  e = draw.update(fc, false);
+  CHECK_EQ(e[0].result, std::string("draw"));
+  CHECK_EQ(e[0].winner, std::string(""));
 }
 
 static void test_splash() {
@@ -4326,6 +4463,7 @@ int main() {
   test_offseason();
   test_panel_text();
   test_wifi_history();
+  test_ha_events();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

@@ -26,6 +26,7 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "guard.h"
+#include "ha_events.h"
 #include "health.h"
 #include "offseason.h"
 #include "recap.h"
@@ -98,6 +99,11 @@ struct UpdateFields {
   // recorder isn't writing a row every poll or every playlist card.
   std::string ha_status_text;
   std::string ha_last_play;
+  // Home Assistant's Game Live and the two score sensors, for the same game.
+  // The scores are -1 with no game or before kickoff.
+  bool ha_live{false};
+  int ha_team_score{-1};
+  int ha_opp_score{-1};
   // The off-season clock (offseason.h) on the no-game screen, in team_color.
   // next_line is the next game for a wide board, its kickoff on a second
   // line; empty when none is known, and the page shows the date instead.
@@ -172,6 +178,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   }
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
+  }
+  // Scores and finals of the game Home Assistant follows (ha_events.h).
+  void add_on_ha_event_callback(std::function<void(const ::espn::HaEvent &)> &&cb) {
+    this->ha_event_callbacks_.push_back(std::move(cb));
   }
 
   // Called by the selects and by template entities in YAML.
@@ -602,6 +612,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   select::Select *team_select_{nullptr};
   select::Select *timezone_select_{nullptr};
   std::vector<std::function<void(const UpdateFields &)>> callbacks_;
+  std::vector<std::function<void(const ::espn::HaEvent &)>> ha_event_callbacks_;
+  ::espn::HaTracker ha_tracker_;
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};
@@ -873,6 +885,27 @@ class UpdateTrigger : public Trigger<const UpdateFields &> {
  public:
   explicit UpdateTrigger(GamedayComponent *parent) {
     parent->add_on_update_callback([this](const UpdateFields &f) { this->trigger(f); });
+  }
+};
+
+// Fire on the main loop when the game Home Assistant follows scores or ends.
+class ScoreTrigger : public Trigger<const ::espn::HaEvent &> {
+ public:
+  explicit ScoreTrigger(GamedayComponent *parent) {
+    parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) {
+      if (e.play != "final")
+        this->trigger(e);
+    });
+  }
+};
+
+class FinalTrigger : public Trigger<const ::espn::HaEvent &> {
+ public:
+  explicit FinalTrigger(GamedayComponent *parent) {
+    parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) {
+      if (e.play == "final")
+        this->trigger(e);
+    });
   }
 };
 

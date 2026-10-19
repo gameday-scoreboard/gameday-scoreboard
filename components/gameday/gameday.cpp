@@ -2714,6 +2714,21 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   const GameSnapshot &ha = this->ha_game_();
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;
+  if (ha.valid && ha.state != GameState::NOT_FOUND) {
+    f.ha_live = ha.state == GameState::IN;
+    if (ha.state != GameState::PRE) {
+      f.ha_team_score = ha.team_score;
+      f.ha_opp_score = ha.opp_score;
+    }
+  }
+  // Redraws repeat the same read, which the tracker sees as no change.
+  bool ha_neutral = this->live_mode_() && !this->live_fallback_ && !this->demo_playing_();
+  for (const auto &e : this->ha_tracker_.update(ha, ha_neutral)) {
+    ESP_LOGI(TAG, "Home Assistant event: %s %s %d-%d", e.team.c_str(), e.play.c_str(), e.team_score,
+             e.opponent_score);
+    for (auto &cb : this->ha_event_callbacks_)
+      cb(e);
+  }
   // Before the Live mode prefixes, so a fallback team's Next line keeps "No
   // live X games, showing CHI |" in front of it.
   this->clock_fields_(f);
@@ -2726,6 +2741,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.status_text = this->recap_ticker_;
       f.ha_status_text = "No live " + league_word + "games right now";
       f.ha_last_play.clear();
+      f.ha_live = false;
+      f.ha_team_score = f.ha_opp_score = -1;
       f.message = this->recap_message_;
     } else if (this->live_fallback_ && saved != nullptr) {
       std::string showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";

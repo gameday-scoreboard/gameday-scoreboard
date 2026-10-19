@@ -22,6 +22,10 @@ CONF_HTTP_REQUEST_ID = "http_request_id"
 CONF_PANEL_LAYOUT_ID = "panel_layout_id"
 CONF_ON_UPDATE = "on_update"
 CONF_ON_ACTION = "on_action"
+# Scores and finals of the game Home Assistant follows (ha_events.h), for
+# homeassistant.event in gameday-common.yaml.
+CONF_ON_SCORE = "on_score"
+CONF_ON_FINAL = "on_final"
 # The demo build (firmware/gameday-demo.yaml): a looping scripted game the
 # remote and the device page start and stop. Off in release firmware.
 CONF_DEMO = "demo"
@@ -52,6 +56,15 @@ UpdateTrigger = gameday_ns.class_(
 )
 ActionTrigger = gameday_ns.class_(
     "ActionTrigger", automation.Trigger.template(cg.std_string)
+)
+HaEventConstRef = (
+    cg.global_ns.namespace("espn").struct("HaEvent").operator("const").operator("ref")
+)
+ScoreTrigger = gameday_ns.class_(
+    "ScoreTrigger", automation.Trigger.template(HaEventConstRef)
+)
+FinalTrigger = gameday_ns.class_(
+    "FinalTrigger", automation.Trigger.template(HaEventConstRef)
 )
 
 COMPONENT_DIR = Path(__file__).resolve().parent
@@ -162,6 +175,12 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
         cv.Optional(CONF_ON_ACTION): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ActionTrigger)}
         ),
+        cv.Optional(CONF_ON_SCORE): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ScoreTrigger)}
+        ),
+        cv.Optional(CONF_ON_FINAL): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FinalTrigger)}
+        ),
     }
 ).extend(cv.COMPONENT_SCHEMA), _not_demo_and_bar)
 
@@ -224,3 +243,7 @@ async def to_code(config):
     for conf in config.get(CONF_ON_ACTION, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [(cg.std_string, "x")], conf)
+    for key in (CONF_ON_SCORE, CONF_ON_FINAL):
+        for conf in config.get(key, []):
+            trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+            await automation.build_automation(trigger, [(HaEventConstRef, "x")], conf)
