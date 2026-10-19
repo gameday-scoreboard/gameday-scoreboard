@@ -6,6 +6,7 @@
 // splashes the win, and the other side's splash can be off, but a light show
 // in the living room is the owner's call in their own automation.
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -74,10 +75,12 @@ inline const char *ha_play(const GameSnapshot &cur, int points) {
   }
 }
 
-// Remembers the last read of the few games Home Assistant has followed
-// lately, so Favorites alternating between two live games, or Live games
-// rotating, still sees each score once when its game comes back. A game read
-// for the first time fires nothing: the panel just started or picked it up.
+// Remembers the last read of the games Home Assistant followed most
+// recently, so Favorites alternating between two live games, or Live games
+// rotating, still sees each score once when its game comes back: late, if
+// the score came while another game was up. Eight covers a full Sunday
+// slot of NFL games. A game read for the first time fires nothing: the
+// panel just started or picked it up.
 class HaTracker {
  public:
   // cur is the game Home Assistant follows now; neutral is true in the Live
@@ -124,12 +127,17 @@ class HaTracker {
     GameState state{GameState::NOT_FOUND};
     int team_score{0}, opp_score{0};
   };
-  static constexpr size_t kGames = 4;
+  static constexpr size_t kGames = 8;
 
+  // Moves the game to the back, so the one forgotten first is the one
+  // followed least recently.
   Seen *find_(const std::string &event_id) {
-    for (auto &s : this->seen_)
-      if (s.event_id == event_id)
-        return &s;
+    for (size_t i = 0; i < this->seen_.size(); i++) {
+      if (this->seen_[i].event_id != event_id)
+        continue;
+      std::rotate(this->seen_.begin() + i, this->seen_.begin() + i + 1, this->seen_.end());
+      return &this->seen_.back();
+    }
     return nullptr;
   }
 
@@ -178,7 +186,7 @@ class HaTracker {
     return e;
   }
 
-  std::vector<Seen> seen_;  // oldest first
+  std::vector<Seen> seen_;  // followed least recently first
 };
 
 }  // namespace espn

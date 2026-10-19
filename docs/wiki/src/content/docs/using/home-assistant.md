@@ -45,7 +45,7 @@ A **Chip Temperature** sensor reports the controller's temperature, the reading 
 ## Score events
 
 :::note[Coming in the next release]
-The panel sends Home Assistant an event every time either side scores in the game Game Status follows, and another when that game ends. They come whether or not the panel celebrates the score on screen, in every sport, basketball included. An event goes out once per score, so nothing repeats in your logbook.
+The panel sends Home Assistant an event every time either side scores in the game Game Status follows, and another when that game ends. They come whether or not the panel celebrates the score on screen, in every sport, basketball included. An event goes out once per score, so nothing repeats in your logbook. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
 
 `esphome.gameday_score` carries:
 

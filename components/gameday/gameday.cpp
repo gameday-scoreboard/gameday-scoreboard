@@ -2721,9 +2721,12 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_opp_score = ha.opp_score;
     }
   }
-  // Redraws repeat the same read, which the tracker sees as no change.
-  bool ha_neutral = this->live_mode_() && !this->live_fallback_ && !this->demo_playing_();
-  for (const auto &e : this->ha_tracker_.update(ha, ha_neutral)) {
+  // Redraws repeat the same read, which the tracker sees as no change. The
+  // demo's scripted game sends no events into someone's automations.
+  std::vector<::espn::HaEvent> ha_events;
+  if (!this->demo_playing_())
+    ha_events = this->ha_tracker_.update(ha, this->live_mode_() && !this->live_fallback_);
+  for (const auto &e : ha_events) {
     ESP_LOGI(TAG, "Home Assistant event: %s %s %d-%d", e.team.c_str(), e.play.c_str(), e.team_score,
              e.opponent_score);
     for (auto &cb : this->ha_event_callbacks_)

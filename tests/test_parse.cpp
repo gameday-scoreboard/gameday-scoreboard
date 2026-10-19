@@ -424,6 +424,23 @@ static void test_ha_events() {
   flip.opp_abbr = "DAL";
   CHECK(a.update(flip, false).empty());
 
+  // The game followed least recently is the one forgotten: game 2, read
+  // again in the middle of twelve other games, is still known; game 1 isn't.
+  for (int i = 3; i <= 8; i++) {
+    GameSnapshot o = live(0, 0);
+    o.event_id = std::to_string(i);
+    a.update(o, false);
+  }
+  a.update(g2, false);
+  for (int i = 9; i <= 14; i++) {
+    GameSnapshot o = live(0, 0);
+    o.event_id = std::to_string(i);
+    a.update(o, false);
+  }
+  g2.opp_score = 6;
+  CHECK_EQ(a.update(g2, false).size(), (size_t) 1);
+  CHECK(a.update(live(14, 0), false).empty());  // a first read again
+
   // Other sports' plays.
   HaTracker b;
   GameSnapshot mlb = live(1, 0);
