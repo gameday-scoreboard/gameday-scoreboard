@@ -48,7 +48,7 @@ Issues are public. Leave out Wi-Fi passwords and anything else private.
 Bought a scoreboard and need help with it? The
 [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting
 and the common fixes, and the
-[support page](https://gamedayscoreboard.app/support/) has the support
+[support page](https://install.gameday-scoreboard.com/support/) has the support
 email, which answers faster than an issue.
 
 ## Changing the code

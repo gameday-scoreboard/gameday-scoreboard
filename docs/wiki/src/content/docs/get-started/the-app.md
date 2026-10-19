@@ -22,7 +22,7 @@ The phone has to be on the same Wi-Fi network as the panel. A guest network can 
 
 ## The QR code on the panel
 
-The QR code the panel shows during setup, when it has lost Wi-Fi and right after it joins, opens `https://gamedayscoreboard.app/setup`. On an iPhone, point the Camera at it. It opens the Game Day app if you have it installed, and the setup page in your browser if you don't.
+The QR code the panel shows during setup, when it has lost Wi-Fi and right after it joins, opens `https://install.gameday-scoreboard.com/s`. On an iPhone, point the Camera at it. It opens the Game Day app if you have it installed, and the setup page in your browser if you don't.
 
 ## Without the app
 

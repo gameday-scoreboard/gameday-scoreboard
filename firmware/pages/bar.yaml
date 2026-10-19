@@ -1,6 +1,6 @@
 # The bar build: the real scoreboard firmware for the free panels in bars,
 # plus the beta channel. Included only by the *-bar.yaml top-level files,
-# which point the updater at gamedayscoreboard.app/firmware/beta/<variant>/
+# which point the updater at install.gameday-scoreboard.com/firmware/beta/<variant>/
 # (published from the beta branch, see .github/workflows/build.yml).
 #
 # Unlike release firmware it installs updates on its own, with no setting:

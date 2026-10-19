@@ -21,7 +21,7 @@ is the short version.
 - `firmware/gameday-bar.yaml` and `firmware/gameday-scoreboard75-bar.yaml`
   are the bar builds, for the free panels in bars: the same firmware plus
   `firmware/pages/bar.yaml`, which reads the beta channel
-  (`gamedayscoreboard.app/firmware/beta/<variant>/`) and installs from it
+  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`) and installs from it
   on its own at night. CI publishes them only from `beta`. Release
   firmware never installs anything unless the owner turns on "Install
   updates automatically".

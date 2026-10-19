@@ -212,7 +212,7 @@ jobs:
           set -euo pipefail
           summary=$NOTES
           # The release's section of the site's changelog, which this tag's deploy renders.
-          url="https://gamedayscoreboard.app/changelog/#$GITHUB_REF_NAME"
+          url="https://install.gameday-scoreboard.com/changelog/#$GITHUB_REF_NAME"
           if [ "$GITHUB_REF" = refs/heads/beta ]; then
             v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
             v="$v-beta.$GITHUB_RUN_NUMBER"
@@ -402,9 +402,9 @@ jobs:
 
   publish-beta:
     # The beta channels, from one build of the beta branch:
-    # - gamedayscoreboard.app/firmware/beta/<variant>/, the bar builds, read
+    # - install.gameday-scoreboard.com/firmware/beta/<variant>/, the bar builds, read
     #   only by bar panels.
-    # - gamedayscoreboard.app/firmware/<variant>-beta/, the release builds,
+    # - install.gameday-scoreboard.com/firmware/<variant>-beta/, the release builds,
     #   read by panels with "Follow beta" on (the two-panel build follows
     #   moonhub75's, as it does for releases).
     # Runs when someone pushes (promotes) to beta, or runs Build on beta by
@@ -451,7 +451,7 @@ jobs:
             (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
             (cd stage/firmware && zip -r "../../release/firmware-$v-beta.zip" "$v-beta")
           done
-          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/, and panels with Follow beta on from gamedayscoreboard.app/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
+          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from install.gameday-scoreboard.com/firmware/beta/, and panels with Follow beta on from install.gameday-scoreboard.com/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
           if gh release view beta-firmware >/dev/null 2>&1; then
             gh release upload beta-firmware release/*.zip --clobber
             gh release edit beta-firmware --prerelease --title "Beta $BETA" --notes "$notes"
@@ -641,7 +641,7 @@ jobs:
           {
             cat notes/notes.md
             echo
-            echo "Install or update from the [flasher page](https://gamedayscoreboard.app/), or let a panel already running v0.2.2 or later update itself from its device page."
+            echo "Install or update from the [flasher page](https://install.gameday-scoreboard.com/), or let a panel already running v0.2.2 or later update itself from its device page."
             if [ -n "$PREV" ]; then
               echo
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"
@@ -650,7 +650,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" $ASSETS --title "$GITHUB_REF_NAME" --notes-file release/body.md || \
           { gh release upload "$GITHUB_REF_NAME" $ASSETS --clobber; gh release edit "$GITHUB_REF_NAME" --notes-file release/body.md; }
       # The same update feed on updates.gameday-scoreboard.com, which panels
-      # read when gamedayscoreboard.app fails. Last, so a mirror problem never
+      # read when install.gameday-scoreboard.com fails. Last, so a mirror problem never
       # holds up the release.
       - name: Publish the update mirror
         env:

@@ -794,12 +794,12 @@ test("release notes link to the release's section of the site changelog, a beta 
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   const link = page.locator("#fwSub a", { hasText: "Release notes" });
   await page.goto("/");
-  await expect(link).toHaveAttribute("href", "https://gamedayscoreboard.app/changelog/#v2026.10.1");
+  await expect(link).toHaveAttribute("href", "https://install.gameday-scoreboard.com/changelog/#v2026.10.1");
 
   // Up to date: the running release's section.
   entity = { ...fw, state: "NO UPDATE", value: "2026.10.0", current_version: "2026.10.0", release_url: "" };
   await page.reload();
-  await expect(link).toHaveAttribute("href", "https://gamedayscoreboard.app/changelog/#v2026.10.0");
+  await expect(link).toHaveAttribute("href", "https://install.gameday-scoreboard.com/changelog/#v2026.10.0");
 
   entity = { ...fw, value: "2026.10.1-beta.9", current_version: "2026.10.0", release_url: commit };
   await page.reload();

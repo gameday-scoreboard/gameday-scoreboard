@@ -5,7 +5,9 @@
         "appIDs": ["3NRQ7L5FUW.app.gamedayscoreboard.scoreboard"],
         "components": [
           { "/": "/setup", "comment": "Opens the app straight into Bluetooth panel setup" },
-          { "/": "/setup/*", "comment": "Same, with a trailing slash or query string" }
+          { "/": "/setup/*", "comment": "Same, with a trailing slash or query string" },
+          { "/": "/s", "comment": "The panel's QR code, the short form of /setup" },
+          { "/": "/s/*", "comment": "Same, with a trailing slash or query string" }
         ]
       }
     ]

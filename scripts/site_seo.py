@@ -24,7 +24,7 @@ import sys
 import tempfile
 from html.parser import HTMLParser
 
-BASE = "https://gamedayscoreboard.app"
+BASE = "https://install.gameday-scoreboard.com"
 FAQ_PAGE = "support/index.html"
 REQUIRED_PROPS = ["og:title", "og:description", "og:url", "og:image", "og:type"]
 REQUIRED_NAMES = ["description", "twitter:card", "twitter:image"]

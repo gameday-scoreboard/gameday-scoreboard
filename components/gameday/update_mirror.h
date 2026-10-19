@@ -1,5 +1,5 @@
 // The update feed's second host. Every release and beta is published to
-// gamedayscoreboard.app (GitHub Pages) and, with the same files, to a mirror
+// install.gameday-scoreboard.com (GitHub Pages) and, with the same files, to a mirror
 // on our own domain (build.yml, site.yml). The manifest names its binaries by
 // relative path, so whichever host answered the manifest also serves the
 // download, and the OTA checks the same md5 either way.
