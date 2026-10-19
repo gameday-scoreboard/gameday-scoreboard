@@ -185,7 +185,7 @@ script:
           lv_obj_set_width(id(boot_title), cw);
           lv_obj_set_width(id(boot_rule), cw - 8);
           lv_obj_set_width(id(boot_bar), cw - 16);
-          lv_obj_set_pos(id(boot_bar), x0 + 8, wide ? 60 : 59);
+          lv_obj_set_pos(id(boot_bar), x0 + 8, wide ? 61 : 59);
           if (wide) {
             lv_obj_set_style_text_font(id(boot_title), id(spleen_16), 0);
             lv_obj_set_pos(id(boot_title), x0, 2);
@@ -978,7 +978,7 @@ lvgl:
             - bar:
                 id: boot_bar
                 x: 8
-                y: 60
+                y: 61
                 width: 112
                 height: 3
                 min_value: 0
