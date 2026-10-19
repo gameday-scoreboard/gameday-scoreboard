@@ -77,6 +77,8 @@ static const uint32_t POST_LINGER = 30 * MINUTE;
 // For the panel's own trouble (a fetch task that never finished or could not
 // start). A failed ESPN read backs off instead (back_off_).
 static const uint32_t RETRY_INTERVAL = MINUTE;
+// The longest one message list read keeps reading (run_msg_job_).
+static const uint32_t MSG_READ_LIMIT = 30 * 1000;
 // Wi-Fi and the clock are re-checked this often at boot: every second waited
 // here is a second of boot screen.
 static const uint32_t NOT_READY_INTERVAL = 500;
@@ -328,6 +330,7 @@ void GamedayComponent::setup() {
       cd_ymd != this->countdown_.ymd)
     this->countdown_ = CountdownPrefs{};
   this->countdown_.name[::espn::kCountdownNameMax] = '\0';
+  this->load_msg_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -1005,6 +1008,8 @@ void GamedayComponent::loop() {
 #endif
   this->captive_tick_();
   this->wifi_tick_();
+  // Before the demo's early return, so the scripted game takes the card down.
+  this->msg_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -1039,6 +1044,9 @@ void GamedayComponent::loop() {
         this->busy_ = false;
         this->busy_since_ms_ = 0;
         this->worker_seq_++;  // a late finisher must not signal job_done_
+        this->gave_up_ms_ = millis() == 0 ? 1 : millis();
+        if (this->job_.need_msg)
+          this->msg_fail_ms_ = this->gave_up_ms_;
         // Wait a full retry before starting another worker rather than
         // stacking a second one on top of a task that may still be alive.
         this->schedule_next_(RETRY_INTERVAL);
@@ -1049,6 +1057,13 @@ void GamedayComponent::loop() {
     this->busy_since_ms_ = 0;
     this->job_done_ = false;
     this->apply_job_();
+    return;
+  }
+  // The message card's list, between ESPN reads and outside their timing,
+  // but never sooner after a written-off worker than the next ESPN read is.
+  if (this->msg_read_due_ && network::is_connected() &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
+    this->start_msg_job_();
     return;
   }
   if ((int32_t) (millis() - this->next_fetch_ms_) < 0)
@@ -2281,6 +2296,10 @@ void GamedayComponent::worker_(void *arg) {
 // Worker task: network and parsing only, no display or entity access.
 void GamedayComponent::run_job_() {
   Job &j = this->job_;
+  if (j.need_msg) {
+    this->run_msg_job_();
+    return;
+  }
   if (j.need_clock) {
     // Any status will do, a 404 or a 503 carries the date just the same.
     std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
@@ -2385,6 +2404,10 @@ void GamedayComponent::run_job_() {
 // Main loop: fold the worker's result into the component state and render.
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
+  if (j.need_msg) {
+    this->apply_msg_job_();  // whatever the board follows, the card is the same
+    return;
+  }
   if (j.need_clock) {
     this->apply_clock_job_();  // whatever the board follows now, it needs the clock
     return;
@@ -2848,8 +2871,13 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     }
   }
 
-  if (!f.splash_text.empty())
+  if (!f.splash_text.empty()) {
     ESP_LOGI(TAG, "Splash: %s", f.splash_text.c_str());
+    // The message card makes way at once, and stays away for a while after.
+    this->splash_ms_ = millis() == 0 ? 1 : millis();
+    if (this->msg_shown_)
+      this->msg_show_("");
+  }
   this->last_fields_ = f;
   this->rebuild_state_(&f);
   if (this->hold_for_logos_(f))
@@ -3397,6 +3425,18 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // The device page shows the bar beta note and a "Something wrong?" link.
   doc["bar"]["report"] = this->report_email_;
 #endif
+  // The message card (message.h). msgread is the list's last read, left out
+  // with no address or before the first: its HTTP status (0 for no answer)
+  // and, once a read got to the end of the file, how many entries it holds.
+  doc["msg"] = this->msg_text_;
+  doc["msgurl"] = this->msg_url_;
+  doc["msgevery"] = this->msg_every_;
+  if (!this->msg_url_.empty() && this->msg_status_ >= 0) {
+    JsonObject mr = doc["msgread"].to<JsonObject>();
+    mr["status"] = this->msg_status_;
+    if (this->msg_total_ > 0 || this->msg_eof_)
+      mr["entries"] = this->msg_total_;
+  }
   doc["misses"] = this->misses_;
   // The Wi-Fi wants a sign-in (captive.h); the page and the app say how to
   // get the panel onto a network that works.
@@ -3626,6 +3666,241 @@ std::string GamedayComponent::wifi_json_() {
   return this->wifi_hist_.json(now_s, this->wifi_up_, this->wifi_rssi_);
 }
 
+// ---- banner and message card (message.h) -------------------------------------
+
+// Each line through panel_text() on its own, which would make the line breaks
+// spaces.
+static std::string board_lines(const std::string &text) {
+  std::string out;
+  size_t p = 0;
+  while (p <= text.size()) {
+    size_t nl = text.find('\n', p);
+    if (nl == std::string::npos)
+      nl = text.size();
+    if (!out.empty())
+      out += '\n';
+    out += panel_text(text.substr(p, nl - p));
+    p = nl + 1;
+  }
+  return out;
+}
+
+void GamedayComponent::say(const std::string &text, int secs) {
+  this->say_text_ = board_lines(::espn::message_clean(text, ::espn::kMsgTextMax, true));
+  this->say_secs_ = ::espn::clamp_say_secs(secs);
+  if (this->say_text_.empty())
+    ESP_LOGI(TAG, "Banner down");
+  else
+    ESP_LOGI(TAG, "Banner for %ds: %s", this->say_secs_, this->say_text_.c_str());
+  this->fire_action_("say");  // firmware/pages/message.yaml
+}
+
+void GamedayComponent::load_msg_() {
+  this->msg_pref_ = global_preferences->make_preference<PrefsMsg>(fnv1_hash("gameday_msg_v1"));
+  PrefsMsg p{};
+  if (!this->msg_pref_.load(&p))
+    return;  // nothing set: no card
+  p.text[sizeof(p.text) - 1] = '\0';
+  p.url[sizeof(p.url) - 1] = '\0';
+  this->msg_text_ = p.text;
+  this->msg_url_ = ::espn::msg_url_ok(p.url) ? p.url : "";
+  this->msg_every_ = (uint8_t) ::espn::clamp_msg_every(p.every);
+  this->msg_reset_();
+}
+
+// Any of the three; a null pointer or a negative every leaves that one as it is.
+void GamedayComponent::set_msg_(const std::string *text, const std::string *url, int every) {
+  bool reset = false;
+  if (text != nullptr && *text != this->msg_text_) {
+    this->msg_text_ = *text;
+    reset = true;
+  }
+  if (url != nullptr && *url != this->msg_url_) {
+    this->msg_url_ = *url;
+    reset = true;
+  }
+  if (every >= 0 && every != this->msg_every_) {
+    this->msg_every_ = (uint8_t) every;
+    reset = true;
+  }
+  if (!reset)
+    return;
+  PrefsMsg p{};
+  strncpy(p.text, this->msg_text_.c_str(), sizeof(p.text) - 1);
+  strncpy(p.url, this->msg_url_.c_str(), sizeof(p.url) - 1);
+  p.every = this->msg_every_;
+  this->msg_pref_.save(&p);
+  ESP_LOGI(TAG, "Message card: %s, every %u min", !this->msg_url_.empty() ? this->msg_url_.c_str()
+                                                  : !this->msg_text_.empty() ? "own text" : "off",
+           (unsigned) this->msg_every_);
+  this->msg_reset_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
+// The list starts over from the top, and the card comes up at the next
+// chance between games rather than after a full wait.
+void GamedayComponent::msg_reset_() {
+  this->msg_list_.clear();
+  this->msg_list_.shrink_to_fit();
+  this->msg_from_ = 0;
+  this->msg_n_ = 0;
+  this->msg_eof_ = false;
+  this->msg_list_ms_ = 0;
+  this->msg_pos_ = 0;
+  this->msg_read_due_ = false;
+  this->msg_fail_ms_ = 0;
+  this->msg_status_ = -1;
+  this->msg_total_ = 0;
+  if (this->msg_url_.empty() && !this->msg_text_.empty()) {
+    // The saved text is the whole list.
+    this->msg_list_.assign(this->msg_text_.data(), this->msg_text_.size());
+    this->msg_n_ = ::espn::msg_count(this->msg_list_);
+    this->msg_eof_ = true;
+    this->msg_total_ = this->msg_n_;
+  }
+  if (this->msg_shown_)
+    this->msg_show_("");
+  this->msg_since_ms_ = millis() - (uint32_t) this->msg_every_ * 60u * 1000u;
+}
+
+void GamedayComponent::msg_show_(const std::string &page) {
+  if (page == this->msg_card_) {
+    // The same page again (a one-page list holding the board): leave it be,
+    // so a page that rolls isn't sent back to its top.
+    this->msg_since_ms_ = millis();
+    return;
+  }
+  this->msg_card_ = page;
+  this->msg_shown_ = !page.empty();
+  this->msg_since_ms_ = millis();
+  if (!page.empty())
+    this->msg_roll_ms_ = 0;  // the page says how long it rolls when it goes up
+  this->fire_action_("msg");  // gd_msg_card in firmware/pages/gameday-live.yaml
+}
+
+void GamedayComponent::msg_tick_() {
+  const uint32_t now = millis();
+  if (now - this->msg_tick_ms_ < 250)
+    return;
+  this->msg_tick_ms_ = now;
+  const bool on = !this->msg_url_.empty() || !this->msg_text_.empty();
+  // Not over a live game, the demo or a splash.
+  const bool between = !this->demo_playing_() && this->last_fields_.game_state != "IN" &&
+                       (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+  const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
+  ::espn::MsgTurn turn =
+      ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
+  if (turn == ::espn::MsgTurn::NONE)
+    return;
+  if (turn == ::espn::MsgTurn::HIDE) {
+    this->msg_show_("");
+    return;
+  }
+  const bool url = !this->msg_url_.empty();
+  const bool may_read = url && (this->msg_fail_ms_ == 0 || now - this->msg_fail_ms_ >= ::espn::kMsgRetryMs);
+  const bool stale = may_read && this->msg_list_ms_ != 0 && now - this->msg_list_ms_ >= ::espn::kMsgRefreshMs;
+  ::espn::MsgPage page = ::espn::msg_next_page(this->msg_pos_, this->msg_from_, this->msg_n_, this->msg_eof_, stale,
+                                               ::espn::kMsgPageLines);
+  if (page.read) {
+    // The card waits for the read; a page already up stays until it lands.
+    if (may_read && !(this->busy_ && this->job_.need_msg)) {
+      this->msg_read_due_ = true;
+      this->msg_read_from_ = page.next;
+    } else if (!may_read && this->msg_shown_) {
+      this->msg_show_("");  // the last read failed: nothing new until the retry
+    }
+    return;
+  }
+  if (page.count == 0) {
+    if (this->msg_shown_)
+      this->msg_show_("");
+    return;
+  }
+  this->msg_pos_ = page.next;
+  this->msg_show_(board_lines(::espn::msg_entries(this->msg_list_, page.first - this->msg_from_, page.count)));
+}
+
+void GamedayComponent::start_msg_job_() {
+  this->msg_read_due_ = false;
+  this->job_ = Job{};
+  this->job_.generation = this->generation_;
+  this->job_.need_msg = true;
+  this->job_.msg_url = this->msg_url_;
+  this->job_.msg_from = this->msg_read_from_;
+  this->start_worker_();
+}
+
+// Worker task. Keeps entries [msg_from, msg_from + kMsgChunkLines) and stops
+// reading as soon as it has them.
+void GamedayComponent::run_msg_job_() {
+  Job &j = this->job_;
+  std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}, {"Accept", "text/plain"}};
+  auto container = this->http_->get(j.msg_url, headers);
+  if (container == nullptr) {
+    ESP_LOGW(TAG, "Message list: no answer from %s", j.msg_url.c_str());
+    return;
+  }
+  j.msg_status = container->status_code;
+  if (container->status_code != 200) {
+    ESP_LOGW(TAG, "Message list: HTTP %d for %s", container->status_code, j.msg_url.c_str());
+    container->end();
+    return;
+  }
+  ::espn::MsgReader<PsString> reader(j.msg_from, ::espn::kMsgChunkLines);
+  uint8_t buf[512];
+  bool more = true;
+  bool complete = false;
+  const uint32_t started = millis();
+  // A server that trickles its file out is cut off well inside the loop's
+  // WORKER_DEADLINE, so this task is never written off.
+  while (more && reader.bytes() < ::espn::kMsgReadMaxBytes && millis() - started < MSG_READ_LIMIT) {
+    int n = container->read(buf, sizeof(buf));
+    if (n <= 0) {
+      complete = n == 0 && container->is_read_complete();
+      break;
+    }
+    more = reader.feed((const char *) buf, (size_t) n);
+  }
+  container->end();
+  // A file longer than the read allows ends there: the next page is the top.
+  if (more && (complete || reader.bytes() >= ::espn::kMsgReadMaxBytes))
+    reader.finish();
+  else if (more && reader.kept() == 0)
+    return;  // cut off with nothing to show: a failed read
+  j.msg_ok = true;
+  j.msg_eof = reader.eof();
+  j.msg_n = reader.kept();
+  j.msg_seen = reader.seen();
+  j.msg_list = std::move(reader.list());
+}
+
+void GamedayComponent::apply_msg_job_() {
+  Job &j = this->job_;
+  if (j.msg_url != this->msg_url_)
+    return;  // the address changed meanwhile; msg_reset_ has started over
+  const uint32_t now = millis();
+  this->msg_status_ = j.msg_status;
+  if (!j.msg_ok) {
+    this->msg_fail_ms_ = now == 0 ? 1 : now;
+    // Show what is on hand again until the retry.
+    this->msg_pos_ = this->msg_from_;
+    this->rebuild_state_(&this->last_fields_);
+    return;
+  }
+  this->msg_fail_ms_ = 0;
+  this->msg_list_ = std::move(j.msg_list);
+  this->msg_from_ = j.msg_from;
+  this->msg_n_ = j.msg_n;
+  this->msg_eof_ = j.msg_eof;
+  this->msg_list_ms_ = now == 0 ? 1 : now;
+  this->msg_pos_ = j.msg_from;
+  if (j.msg_eof)
+    this->msg_total_ = j.msg_seen;
+  ESP_LOGI(TAG, "Message list: entries %u to %u%s", (unsigned) j.msg_from + 1, (unsigned) (j.msg_from + j.msg_n),
+           j.msg_eof ? ", the end of the file" : "");
+  this->rebuild_state_(&this->last_fields_);
+}
+
 bool GamedayComponent::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   return request->url_to(buf).starts_with("/gameday/");
@@ -3670,12 +3945,19 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc" || name == "power_ok";
+    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
     if (!known) {
       request->send(404, "application/json", "{\"error\":\"unknown action\"}");
+      return;
+    }
+    if (name == "say") {
+      std::string text = request->arg("text");
+      int secs = atoi(request->arg("secs").c_str());
+      this->defer([this, text, secs]() { this->say(text, secs); });
+      request->send(200, "application/json", "{\"ok\":true}");
       return;
     }
     this->defer([this, name]() {
@@ -3783,6 +4065,10 @@ void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
 void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::string>> &kv) {
   bool dirty = false;
   ::espn::SetOp op;
+  // The message card's keys are saved together, once.
+  std::string msg_text, msg_url;
+  uint8_t msg_keys = 0;
+  int msg_every = -1;
   for (const auto &p : kv) {
     if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
       ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
@@ -3875,8 +4161,21 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         if (this->panels_ != nullptr)
           this->panels_->set_cols((uint8_t) op.value);
         break;
+      case ::espn::SetKind::MSG:
+        msg_text = op.text;
+        msg_keys |= 1;
+        break;
+      case ::espn::SetKind::MSGURL:
+        msg_url = op.text;
+        msg_keys |= 2;
+        break;
+      case ::espn::SetKind::MSGEVERY:
+        msg_every = op.value;
+        break;
     }
   }
+  if (msg_keys != 0 || msg_every >= 0)
+    this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
   if (dirty)
     this->rebuild_state_(&this->last_fields_);
 }

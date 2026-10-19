@@ -530,6 +530,24 @@ script:
                 lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
             - script.execute: tt_hide_splash
 
+  # The message card (components/gameday/message.h): a page of the owner's
+  # entries, or nothing. The component decides when, between games, and
+  # sends "msg" (gameday-common.yaml on_action) for each change.
+  - id: gd_msg_card
+    then:
+      - lambda: |-
+          const std::string &page = id(gameday_ctl).msg_card();
+          if (page.empty()) {
+            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                       id(spleen_8)->get_lv_font()};
+          const size_t n = gameday::board_ascii(page.c_str()) ? 3 : 2;
+          id(gameday_ctl).set_msg_roll_ms(gameday::board_text(id(tt_msg), id(tt_msg_lbl), page.c_str(), fonts, n));
+          lv_obj_move_foreground(id(tt_msg));
+          lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+
   # The off-season clock's time, and the date when that line has no next
   # game, in the panel's time zone; or the countdown card's digits. A label
   # is only rewritten when its text changes, so once a minute.
@@ -981,6 +999,31 @@ lvgl:
                   hidden: true
                   text: ""
                   styles: ["tt_st_status_text"]
+
+        # The owner's message card, over the board between games (gd_msg_card)
+        - obj:
+            id: tt_msg
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_msg_lbl
+                  x: 1
+                  y: 0
+                  width: 62
+                  text_align: CENTER
+                  long_mode: WRAP
+                  text: ""
+                  text_color: 0xFFFFFF
 
       on_load:
         then:

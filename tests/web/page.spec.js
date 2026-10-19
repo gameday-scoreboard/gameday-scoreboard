@@ -1259,3 +1259,64 @@ test("a reset the panel never got doesn't claim it's resetting", async ({ page, 
   await expect(page.locator("#gone")).toBeHidden();
   await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
 });
+
+const actions = async (request) =>
+  (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/action").map((p) => p.q);
+
+test("the banner posts its text and seconds, and Take down posts no text", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#msgCard")).toBeVisible();
+  await page.locator("#sayGo").click();
+  await expect(page.locator("#toast")).toHaveText("Type the banner first");
+  await page.locator("#sayText").fill("Pizza's here!");
+  await page.locator("#saySecs").fill("900");
+  await page.locator("#sayGo").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "Pizza's here!", secs: "600" });
+  await expect(page.locator("#saySecs")).toHaveValue("600");
+  await page.locator("#sayStop").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "" });
+});
+
+test("the message card posts its text, address and timing, and Clear turns it off", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#msgText").fill("Wings $5 till 7\nPints $3");
+  await page.locator("#msgEvery").selectOption("0");
+  await page.locator("#msgSave").click();
+  await expectSet(request, { msg: "Wings $5 till 7\nPints $3", msgurl: "", msgevery: "0" });
+  await expect.poll(async () => (await deviceState(request)).msg).toBe("Wings $5 till 7\nPints $3");
+
+  await page.locator("#msgUrl").fill("names.txt");
+  await page.locator("#msgSave").click();
+  await expect(page.locator("#toast")).toHaveText("The list's address starts with http:// or https://");
+
+  await page.locator("#msgUrl").fill("https://example.com/names.txt");
+  await page.locator("#msgSave").click();
+  await expectSet(request, { msg: "Wings $5 till 7\nPints $3", msgurl: "https://example.com/names.txt", msgevery: "0" });
+  await expect(page.locator("#msgRead")).toHaveText("Not read yet. The panel reads it when the card's turn comes.");
+
+  await page.locator("#msgClear").click();
+  await expectSet(request, { msg: "", msgurl: "" });
+  await expect(page.locator("#msgText")).toHaveValue("");
+  await expect(page.locator("#msgUrl")).toHaveValue("");
+});
+
+test("the message card says how the list's last read went, and hides on firmware without it", async ({ page, request }) => {
+  const url = "https://example.com/plates.txt";
+  await reset(request, { msgurl: url, msgread: { status: 200, entries: 412 } });
+  await page.goto("/");
+  await expect(page.locator("#msgUrl")).toHaveValue(url);
+  await expect(page.locator("#msgRead")).toHaveText("The list has 412 entries.");
+  await reset(request, { msgurl: url, msgread: { status: 404 } });
+  await page.goto("/");
+  await expect(page.locator("#msgRead")).toHaveText("That address answered with an error (HTTP 404). It tries again in a few minutes.");
+  await reset(request, { msgurl: url, msgread: { status: 0 } });
+  await page.goto("/");
+  await expect(page.locator("#msgRead")).toHaveText("The panel couldn't reach that address. It tries again in a few minutes.");
+
+  await reset(request, { msg: null, msgurl: null, msgevery: null, msgread: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#msgCard")).toBeHidden();
+});

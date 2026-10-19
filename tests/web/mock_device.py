@@ -8,7 +8,8 @@ routes with the response shapes from components/gameday/gameday.cpp:
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS; 400 when none match
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
-                         power_ok sets health.power back to "ok"
+                         power_ok sets health.power back to "ok"; say keeps its cleaned
+                         text in "say" for tests to read (the panel has no such key)
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
 
@@ -65,8 +66,10 @@ TZS = [name for name, _posix, _iana in TZ_ROWS]
 # /gameday/set's keys in the order the firmware applies them, and its limits.
 SET_H = (REPO / "components/gameday/set_request.h").read_text(encoding="utf-8")
 SET_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSetKeys\[\] = \{(.*?)\};", SET_H, re.S).group(1)))
-LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) int (k\w+) = (\d+);",
-                                             SET_H + (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
+MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
+LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
+                                             SET_H + MESSAGE_H +
+                                             (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -93,6 +96,7 @@ INITIAL = {
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
+    "msg": "", "msgurl": "", "msgevery": 2,
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
@@ -169,6 +173,30 @@ def atoi(v):
 
 def clamp(v, lo, hi):
     return min(LIMITS[hi], max(LIMITS[lo], v))
+
+
+# message.h's emoji(): left out of a message rather than drawn as '?'.
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE00-\uFE0F\u200D\u20E3\U000E0000-\U000E007F]")
+
+
+def message_clean(v, cap, lines):
+    """message_clean() in components/gameday/message.h."""
+    v = EMOJI.sub("", v).replace("\t", " ")
+    v = "".join(c for c in v if c == "\n" or (ord(c) >= 0x20 and ord(c) != 0x7F))
+    out = ("\n" if lines else " ").join(ln.strip(" ") for ln in v.split("\n") if ln.strip(" "))
+    out = re.sub(r"(?<=[ \n]) +", "", out)
+    raw = out.encode("utf-8")
+    if len(raw) > cap:
+        out = raw[:cap].decode("utf-8", "ignore").rstrip(" \n")
+    return out
+
+
+def msg_url_ok(v):
+    """msg_url_ok() in components/gameday/message.h."""
+    if not v:
+        return True
+    rest = v[7:] if v.startswith("http://") else v[8:] if v.startswith("https://") else ""
+    return len(v) <= LIMITS["kMsgUrlMax"] and bool(rest) and all(0x20 < ord(c) < 0x7F for c in v)
 
 
 def parse_team_ref(v):
@@ -259,6 +287,14 @@ def apply_set(kv):
             day = countdown_date(v)
             if day is not None:
                 STATE["cddate"] = day
+        elif k == "msg":
+            STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
+        elif k == "msgurl":
+            if msg_url_ok(v):
+                STATE["msgurl"] = v
+        elif k == "msgevery":
+            if v[:1].isdigit():
+                STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
 
 
 def countdown_name(v):
@@ -479,10 +515,12 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "power_ok"):
+            if q["do"] not in ("refresh", "qc", "power_ok", "say"):
                 return self._json(404, {"error": "unknown action"})
             if q["do"] == "power_ok" and STATE.get("health"):
                 STATE["health"]["power"] = "ok"
+            if q["do"] == "say":
+                STATE["say"] = message_clean(q.get("text", ""), LIMITS["kMsgTextMax"], True)
             return self._json(200, {"ok": True})
         if u.path == "/gameday/demo":
             q = {k: v[0] for k, v in pairs.items()}

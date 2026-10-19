@@ -152,6 +152,19 @@ button { font: inherit; color: inherit; }
 .sw.on { background: var(--accent); }
 .sw.on::after { left: 21px; background: #fff; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* message card: text boxes */
+.card .field {
+  display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 8px 10px; font: inherit; font-size: 14px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+}
+.card textarea.field { resize: vertical; min-height: 44px; }
+.card .field:focus, .ctl input.num:focus { outline: none; border-color: var(--accent); }
+.ctl input.num {
+  width: 64px; text-align: center; font: inherit; font-size: 14px; padding: 6px 8px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+}
+.card label.fl { display: block; font-size: 14px; margin: 4px 0 6px; }
+.card label.fl small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
 /* panel picker */
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .panelpick {

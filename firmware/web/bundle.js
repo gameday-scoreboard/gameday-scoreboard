@@ -5,7 +5,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
 //   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
-//   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap)
+//   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
+//                                 say&text=...&secs=N (the banner)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -162,6 +163,25 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
         <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
         <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+      </div>
+      <div class="card" id="msgCard" hidden>
+        <h2>Message</h2>
+        <div class="sub">Banner</div>
+        <p class="hint">Your words over whatever the panel shows, for a few seconds.</p>
+        <textarea id="sayText" class="field" rows="2" maxlength="200" placeholder="Pizza's here!" aria-label="Banner text"></textarea>
+        <div class="ctl"><label for="saySecs">Seconds on screen</label><input type="number" id="saySecs" class="num" min="1" max="600" step="1" value="10"></div>
+        <div class="actions"><button class="btn primary" id="sayGo">Show</button><button class="btn" id="sayStop">Take down</button></div>
+        <div class="sub">Message card</div>
+        <p class="hint">Takes turns with the scoreboard between games, and steps aside when a game is live. Nothing shows until you add text or a list.</p>
+        <textarea id="msgText" class="field" rows="3" maxlength="200" placeholder="One per line, like Wings $5 till 7" aria-label="Message card text"></textarea>
+        <label class="fl" for="msgUrl">Or a list from a web address<small>A plain text file, one entry per line, like a list of names. The panel reads it a page at a time, so it can be long. When there is an address, the card shows the list.</small></label>
+        <input type="url" id="msgUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
+        <p class="hint" id="msgRead" hidden></p>
+        <div class="ctl"><label for="msgEvery">Show it</label><select id="msgEvery">
+          <option value="0">Whenever no game is on</option><option value="1">Every minute</option><option value="2">Every 2 minutes</option>
+          <option value="5">Every 5 minutes</option><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option>
+        </select></div>
+        <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
       </div>
       <div class="card">
         <h2>Panel</h2>
@@ -330,6 +350,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
+    msg: String, msgurl: String, msgevery: Number,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -428,9 +449,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     setQueue = run;
     return run;
   };
-  const doAction = async (name) => {
+  const doAction = async (name, params) => {
     try {
-      const r = await fetch("/gameday/action?do=" + encodeURIComponent(name), { method: "POST" });
+      const extra = params ? "&" + qs(params) : "";
+      const r = await fetch("/gameday/action?do=" + encodeURIComponent(name) + extra, { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
     } catch (e) {
       toast("Device did not respond (" + (e.message || "network") + ")");
@@ -780,6 +802,58 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
+    renderMsg();
+  };
+
+  // ---- message: the banner and the message card ---------------------------------
+  // The boxes take the panel's text when it changes there, never while
+  // someone is typing in them.
+  const msgSeen = { msg: null, msgurl: null, msgevery: null };
+  const fillField = (input, key) => {
+    const v = String(S[key] || (key === "msgevery" ? 0 : ""));
+    if (v === msgSeen[key] || document.activeElement === input) return;
+    msgSeen[key] = v;
+    input.value = v;
+  };
+  const renderMsg = () => {
+    // Older firmware has no message card.
+    $("#msgCard").hidden = S.msg === undefined;
+    if (S.msg === undefined) return;
+    fillField($("#msgText"), "msg");
+    fillField($("#msgUrl"), "msgurl");
+    fillField($("#msgEvery"), "msgevery");
+    const read = S.msgread;
+    const line = $("#msgRead");
+    line.hidden = !S.msgurl;
+    if (!S.msgurl) return;
+    if (!read || read.status === undefined) line.textContent = "Not read yet. The panel reads it when the card's turn comes.";
+    else if (read.status === 0) line.textContent = "The panel couldn't reach that address. It tries again in a few minutes.";
+    else if (read.status !== 200) line.textContent = "That address answered with an error (HTTP " + read.status + "). It tries again in a few minutes.";
+    else if (read.entries !== undefined) line.textContent = "The list has " + read.entries + (read.entries === 1 ? " entry." : " entries.");
+    else line.textContent = "Reading the list a page at a time.";
+  };
+  $("#sayGo").onclick = () => {
+    const text = $("#sayText").value.trim();
+    if (!text) return toast("Type the banner first");
+    const secs = Math.min(600, Math.max(1, Number($("#saySecs").value) || 10));
+    $("#saySecs").value = secs;
+    doAction("say", { text, secs });
+    toast("Banner up for " + secs + " s");
+  };
+  $("#sayStop").onclick = () => doAction("say", { text: "" });
+  $("#msgSave").onclick = () => {
+    const url = $("#msgUrl").value.trim();
+    if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The list's address starts with http:// or https://");
+    msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
+    setGD({ msg: $("#msgText").value, msgurl: url, msgevery: $("#msgEvery").value });
+    toast(url || $("#msgText").value.trim() ? "Message card saved" : "Message card off");
+  };
+  $("#msgClear").onclick = () => {
+    $("#msgText").value = "";
+    $("#msgUrl").value = "";
+    msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
+    setGD({ msg: "", msgurl: "" });
+    toast("Message card off");
   };
 
   // ---- panel picker ------------------------------------------------------------

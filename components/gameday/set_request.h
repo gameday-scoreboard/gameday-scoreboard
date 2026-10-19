@@ -12,6 +12,7 @@
 
 #include "countdown.h"
 #include "leagues.h"
+#include "message.h"
 #include "startup.h"
 #include "teams.h"
 #include "timezones.h"
@@ -23,7 +24,8 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta",   "countdown", "cdname", "cddate"};
+                                    "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
+                                    "msgevery"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -159,6 +161,9 @@ enum class SetKind : uint8_t {
   COUNTDOWN,  // on, the next game's countdown card
   CD_NAME,    // text, the custom countdown's name
   CD_DATE,    // ymd, the custom countdown's day (0 clears it)
+  MSG,       // text, the message card's own entries (message.h); "" clears it
+  MSGURL,    // text, the list's address; "" clears it
+  MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
 };
 
 struct TeamRef {
@@ -261,6 +266,22 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
       return true;
     op.team = TeamRef{};
     return v == "none" || v.empty();
+  }
+  if (k == "msg") {
+    op.kind = SetKind::MSG;
+    op.text = message_clean(v, kMsgTextMax, true);
+    return true;
+  }
+  if (k == "msgurl") {
+    op.kind = SetKind::MSGURL;
+    op.text = v;
+    return msg_url_ok(v);
+  }
+  if (k == "msgevery") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    op.kind = SetKind::MSGEVERY;
+    op.value = clamp_msg_every(atoi(v.c_str()));
+    return !v.empty() && v[0] >= '0' && v[0] <= '9';
   }
   if (k == "tzauto")
     return on(SetKind::TZ_AUTO);
