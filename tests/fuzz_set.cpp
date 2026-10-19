@@ -84,7 +84,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         break;
       case SetKind::MSG:
         require(op.text.size() <= kMsgTextMax, "the message is longer than kMsgTextMax", k, v);
-        // What the board gets of each entry, as GamedayComponent::msg_page_text_ makes it.
+        // What the board gets of each page, as msg_tick_ hands it to board_lines().
         for (uint32_t i = 0; i < msg_count(op.text); i += kMsgPageLines)
           esphome::gameday::panel_text(msg_entries(op.text, i, kMsgPageLines));
         break;

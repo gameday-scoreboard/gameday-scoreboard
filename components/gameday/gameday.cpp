@@ -998,6 +998,8 @@ void GamedayComponent::loop() {
 #endif
   this->captive_tick_();
   this->wifi_tick_();
+  // Before the demo's early return, so the scripted game takes the card down.
+  this->msg_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -1007,7 +1009,6 @@ void GamedayComponent::loop() {
   // The finals rotation turns its cards on its own clock, fetch or no fetch.
   if (this->recap_on_ && !this->demo_playing_())
     this->recap_tick_();
-  this->msg_tick_();
   if (this->busy_) {
     if (!this->job_done_) {
       // A worker that died without setting job_done_ would block the loop

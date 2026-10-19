@@ -36,7 +36,7 @@ Use your panel's own name or address. Leaving `text` empty takes the banner down
 
 ## A message card
 
-In the **Message card** part of the same card, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds up to 200 characters.
+In the **Message card** part of the same card, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
 
 **Show it** sets how often the card takes the board between games:
 

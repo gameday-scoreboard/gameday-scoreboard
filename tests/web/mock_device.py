@@ -8,8 +8,8 @@ routes with the response shapes from components/gameday/gameday.cpp:
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS; 400 when none match
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
-                         power_ok sets health.power back to "ok"; say puts its text in
-                         "say" (cleared after secs, as the banner comes down)
+                         power_ok sets health.power back to "ok"; say keeps its cleaned
+                         text in "say" for tests to read (the panel has no such key)
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
 
