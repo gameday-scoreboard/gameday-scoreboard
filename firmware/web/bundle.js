@@ -1571,7 +1571,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   // A release has its own section on the site's changelog, in owner words; a
   // beta has none, so it keeps the manifest's link to its commit.
   const notesLink = (u) =>
-    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://gamedayscoreboard.app/changelog/#v" + u.value : u.release_url;
+    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://install.gameday-scoreboard.com/changelog/#v" + u.value : u.release_url;
   let installing = false;
   let fwFailed = "";     // S.update_failed as the firmware box last drew it
   const renderUpdate = (u) => {

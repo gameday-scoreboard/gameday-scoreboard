@@ -22,11 +22,11 @@ A USB install from the browser installer is different. It erases whatever was on
 
 You need a desktop or laptop computer with Chrome or Edge, and a USB cable.
 
-1. Open the installer at [gamedayscoreboard.app](https://gamedayscoreboard.app/). It's for the Game Day Scoreboard controller.
-2. Plug the controller into the computer with the USB cable.
-3. Click **Install Game Day Scoreboard**.
-4. Wait for the install to finish.
-5. The same dialog then offers to put the panel on your Wi-Fi. Enter your network name and password.
+1. Open the installer at [install.gameday-scoreboard.com](https://install.gameday-scoreboard.com/).
+2. Click the picture that matches your panels: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The Install button appears once you pick.
+3. Plug the controller into the computer with the USB cable.
+4. Click **Install Game Day Scoreboard** and pick the controller's port when the browser asks.
+5. When the install finishes, click **Next**. The controller restarts, and within about half a minute the same window asks for your Wi-Fi. Pick your network and enter the password.
 
 If you skip the Wi-Fi step, the panel shows **SETUP** with the QR code for the app and starts its **Game Day** hotspot. Carry on from [Set up your panel](/get-started/setup/).
 
@@ -34,4 +34,4 @@ If the installer says the browser can't talk to the controller over USB, switch 
 
 ## Built your own?
 
-The installer above is for the Game Day Scoreboard controller. For a MoonHub75 board or your own ESP32-S3 board, use the DIY installer instead. See [Install on your own board](/diy/install/).
+The same installer works on a MoonHub75 board, or your own ESP32-S3 board wired to the MoonHub75 pinout. See [Install on your own board](/diy/install/).

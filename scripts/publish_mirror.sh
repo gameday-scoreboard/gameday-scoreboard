@@ -2,7 +2,7 @@
 # Publish an assembled site's update feed to the mirror, a Cloudflare Pages
 # project served at updates.gameday-scoreboard.com, then check the mirror
 # serves what the site has. A panel reads the mirror when its manifest read
-# from gamedayscoreboard.app fails (components/gameday/update_mirror.h), at
+# from install.gameday-scoreboard.com fails (components/gameday/update_mirror.h), at
 # the same path, so every channel goes: firmware/<variant>/, the beta
 # channels, the two-panel build.
 #
@@ -21,7 +21,7 @@ project=${MIRROR_PROJECT:-gameday-firmware}
 host=${MIRROR_HOST:-https://updates.gameday-scoreboard.com}
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-  echo "::warning::No Cloudflare token for the update mirror, so this deploy reached gamedayscoreboard.app only."
+  echo "::warning::No Cloudflare token for the update mirror, so this deploy reached install.gameday-scoreboard.com only."
   exit 0
 fi
 

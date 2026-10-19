@@ -6,10 +6,12 @@
 # title plus up to four lines: small, big, small, small. boot_refresh tests
 # them in this order: connected, waiting, wifi lost, setup, connecting.
 #
-# Three of them carry a QR code for https://gamedayscoreboard.app/setup, a
+# Three of them carry a QR code for https://install.gameday-scoreboard.com/s, a
 # universal link: the iPhone Camera opens the Game Day app when it is
-# installed and the setup web page when it is not. On a 128 px chain the
-# code sits on the left half and the lines move to the right half, so
+# installed and the setup web page when it is not. The path is /s, not
+# /setup: LVGL encodes at error correction M, so 42 bytes is the most that
+# fits QR version 3, the largest that draws 2 px a module in 64 px. On a
+# 128 px chain the code sits on the left half and the lines move to the right half, so
 # nothing has to take turns with it. On a single 64 px panel there is no
 # room for both, so the code takes turns with the lines. See boot_qr_box
 # below for the sizing and boot_qr_cycle for the timing.
@@ -1031,7 +1033,7 @@ lvgl:
                       size: 64
                       light_color: 0xA0A0A0
                       dark_color: 0x000000
-                      text: "https://gamedayscoreboard.app/setup"
+                      text: "https://install.gameday-scoreboard.com/s"
 
 esphome:
   on_boot:

@@ -417,7 +417,7 @@ def selftest():
     assert "header" in check_image(b"\x00" * 0x20000)
     assert "too small" in check_image(b"\xe9")
 
-    built = bytes(good) + (b"https://gamedayscoreboard.app/firmware/scoreboard75/manifest.json\x00"
+    built = bytes(good) + (b"https://install.gameday-scoreboard.com/firmware/scoreboard75/manifest.json\x00"
                            b"Project bharvey88.gameday-scoreboard version 1.5.5\x00")
     assert image_info(built) == ("scoreboard75", "1.5.5")
     assert image_info(bytes(good)) == ("", "")

@@ -3,109 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DIY installer - Game Day Scoreboard</title>
-  <meta name="description" content="Install the open-source Game Day Scoreboard firmware from your browser onto a HUB75 controller you built yourself on the MoonHub75 pinout.">
-  <link rel="canonical" href="https://gamedayscoreboard.app/install/diy/">
-  <meta property="og:site_name" content="Game Day Scoreboard">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="DIY installer - Game Day Scoreboard">
-  <meta property="og:description" content="Install the open-source Game Day Scoreboard firmware from your browser onto a HUB75 controller you built yourself on the MoonHub75 pinout.">
-  <meta property="og:url" content="https://gamedayscoreboard.app/install/diy/">
-  <meta property="og:image" content="https://gamedayscoreboard.app/media/og.jpg">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:site" content="@GameDayScore">
-  <meta name="twitter:image" content="https://gamedayscoreboard.app/media/og.jpg">
-  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <title>Game Day Scoreboard installer</title>
+  <!-- The MoonHub75 installer moved to the home page. -->
+  <meta name="robots" content="noindex">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/">
+  <meta http-equiv="refresh" content="0; url=/">
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
-    main { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
-    h1 { font-size: 2rem; margin: 0 0 4px; }
-    .sub { color: #9da7b3; margin: 0 0 32px; }
-    .card { background: #151b23; border: 1px solid #262e38; border-radius: 12px; padding: 20px 24px; margin: 0 0 20px; }
-    .card h2 { margin: 0 0 6px; font-size: 1.2rem; }
-    .card p { margin: 0 0 14px; color: #c3ccd6; }
-    esp-web-install-button { --esp-tools-button-color: #f2b632; --esp-tools-button-text-color: #0b0f14; }
-    ol li { margin: 6px 0; }
-    code { background: #1f2731; padding: 1px 6px; border-radius: 4px; }
-    .note { font-size: 0.9rem; color: #9da7b3; }
+    main { max-width: 720px; margin: 0 auto; padding: 40px 20px; }
     a { color: #7cc4ff; }
-    /* Same pictures as the panel picker on the device page. */
-    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 16px; }
-    .panelpick { background: #0b0f14; border: 1px solid #262e38; border-radius: 12px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; color: #d6dde7; font: inherit; font-size: 0.95rem; }
-    .panelpick:hover { border-color: #3a4556; }
-    .panelpick[aria-pressed="true"] { border-color: #f2b632; box-shadow: 0 0 0 1px #f2b632 inset; }
-    .panelpick svg { width: 100%; max-width: 160px; height: auto; }
-    .panelpick svg rect { fill: #1d2532; stroke: #5a6678; stroke-width: 2; }
-    .panelpick[aria-pressed="true"] svg rect { fill: #3a3210; stroke: #f2b632; }
-    .panelpick small { color: #9da7b3; font-size: 0.8rem; margin-top: -4px; }
-    footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
   </style>
-  <!-- Pinned with an integrity hash. To move versions: fetch the new file, compute
-       sha384 (openssl dgst -sha384 -binary | openssl base64 -A) and update both. -->
-  <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"
-          integrity="sha384-f+fR3K1mnKB2tVps4hdEh+qJvLgH2bKw81Yn+eNE3+gE8YpqocjkxQON4k19I3e/"
-          crossorigin="anonymous"></script>
 </head>
 <body>
 <main>
-  <h1>DIY installer</h1>
-  <p class="sub">Game Day Scoreboard for a controller you built yourself on the MoonHub75 pinout.</p>
-
-  <div class="card">
-    <h2>Install</h2>
-    <p>Which panels does yours drive? Click the picture that matches, so the scoreboard starts with the right layout. You can change it later on the device page.</p>
-    <div class="panels" id="panels">
-      <button type="button" class="panelpick" data-manifest="/firmware/moonhub75/manifest.json" aria-pressed="false">
-        <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
-        <span>One 64x64 panel</span>
-      </button>
-      <button type="button" class="panelpick" data-manifest="/firmware/moonhub75-2panel/manifest.json" aria-pressed="false">
-        <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
-        <span>One 128x64 panel</span>
-        <small>or two 64x64 side by side</small>
-      </button>
-    </div>
-    <p>Then plug the controller into this computer over USB and click Install.</p>
-    <p id="install" hidden>
-      <esp-web-install-button manifest="/firmware/moonhub75/manifest.json">
-        <button slot="activate">Install for MoonHub75</button>
-        <span slot="unsupported">This browser cannot talk to the controller over USB. Try a desktop browser.</span>
-        <span slot="not-allowed">Open this page over HTTPS to install.</span>
-      </esp-web-install-button>
-    </p>
-    <script>
-      // The two builds are the same firmware with a different first-boot
-      // layout; both take updates from the one-panel manifest afterwards.
-      (() => {
-        const picks = document.querySelectorAll("#panels .panelpick");
-        const installer = document.querySelector("esp-web-install-button");
-        picks.forEach((b) => b.addEventListener("click", () => {
-          picks.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-          installer.setAttribute("manifest", b.dataset.manifest);
-          document.getElementById("install").hidden = false;
-        }));
-      })();
-    </script>
-    <p class="note">Needs an ESP32-S3 HUB75 controller on the <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> pinout, with 16MB flash and octal PSRAM. Have a Game Day Scoreboard controller? Use the <a href="/">main installer</a>.</p>
-    <p class="note">Other boards, panel sizes and wiring a bare ESP32-S3 are on <a href="/diy/">Runs on your own panel</a>.</p>
-    <p class="note">Installing erases whatever firmware was on the controller. Your WiFi details and team choice are asked for afterwards.</p>
-  </div>
-
-  <div class="card">
-    <h2>After installing</h2>
-    <p>Joining WiFi and picking your team work the same as on the Game Day Scoreboard controller. Follow steps 2 and 3 on the <a href="/">main installer page</a>. Updates arrive over WiFi from then on, built for your pinout.</p>
-  </div>
-
-  <footer>
-    Source, issues and the YAML for building it yourself: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard">gameday-scoreboard/gameday-scoreboard</a>.
-    Built on <a href="https://github.com/pavlov-net/hub75-studio">hub75-studio</a> and ESPHome.
-    <br>
-    <a href="/setup/">Setup</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
-  </footer>
+  <p>The MoonHub75 installer is now the <a href="/">main installer</a>.</p>
 </main>
 </body>
 </html>
