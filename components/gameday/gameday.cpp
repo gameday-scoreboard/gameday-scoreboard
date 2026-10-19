@@ -3928,6 +3928,10 @@ void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
 void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::string>> &kv) {
   bool dirty = false;
   ::espn::SetOp op;
+  // The message card's keys are saved together, once.
+  std::string msg_text, msg_url;
+  uint8_t msg_keys = 0;
+  int msg_every = -1;
   for (const auto &p : kv) {
     if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
       ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
@@ -4012,16 +4016,20 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
           this->panels_->set_cols((uint8_t) op.value);
         break;
       case ::espn::SetKind::MSG:
-        this->set_msg_(&op.text, nullptr, -1);
+        msg_text = op.text;
+        msg_keys |= 1;
         break;
       case ::espn::SetKind::MSGURL:
-        this->set_msg_(nullptr, &op.text, -1);
+        msg_url = op.text;
+        msg_keys |= 2;
         break;
       case ::espn::SetKind::MSGEVERY:
-        this->set_msg_(nullptr, nullptr, op.value);
+        msg_every = op.value;
         break;
     }
   }
+  if (msg_keys != 0 || msg_every >= 0)
+    this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
   if (dirty)
     this->rebuild_state_(&this->last_fields_);
 }
