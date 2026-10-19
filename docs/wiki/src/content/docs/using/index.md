@@ -20,6 +20,7 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [The ticker](/using/ticker/): the scrolling line along the bottom.
 - [Panel sizes and layouts](/using/panel-sizes/): one 64x64 panel, or a 128x64 display.
 - [WizMote remote](/using/remote/): pairing and what each button does.
+- [Your own messages](/using/messages/): a banner over the board, or a message card between games.
 - [Firmware updates](/using/updates/): checking, installing and automatic updates.
 - [The boot button and resets](/using/buttons-and-resets/): every hold and what it does.
 - [Wi-Fi](/using/wifi/): saved networks, the hotspot and `.local` names.

@@ -1,0 +1,74 @@
+# The banner: words from the owner over whatever is on screen, the clock page
+# and the boot screen included, for a few seconds (components/gameday/
+# message.h). It comes from POST /gameday/action?do=say, the device page,
+# the app, or Home Assistant through the Message text entity below or the
+# show_message action (gameday-common.yaml). The gameday component sends
+# "say" (gameday-common.yaml on_action) with the text in say_text(). It is on
+# the top layer, so the panel's Power switch still decides whether anything
+# lights up.
+#
+# The message card, which takes turns with the board between games, is on
+# the scoreboard page (gameday-live.yaml, gd_msg_card).
+
+script:
+  - id: gd_say
+    mode: restart
+    then:
+      - lambda: |-
+          lv_obj_add_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);
+          const std::string &text = id(gameday_ctl).say_text();
+          // Not over the QC screen, which a technician is reading.
+          if (text.empty() || id(qc_active))
+            return;
+          const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                       id(spleen_8)->get_lv_font()};
+          gameday::board_text(id(gd_say_box), id(gd_say_lbl), text.c_str(), fonts, 3);
+          lv_obj_move_foreground(id(gd_say_box));
+          lv_obj_clear_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);
+      - if:
+          condition:
+            lambda: 'return !lv_obj_has_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);'
+          then:
+            - delay: !lambda 'return (uint32_t) id(gameday_ctl).say_secs() * 1000;'
+            - lambda: 'lv_obj_add_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);'
+
+# For Home Assistant dashboards and automations: setting it shows the banner
+# for 10 seconds. The show_message action (gameday-common.yaml) also takes
+# the seconds.
+text:
+  - platform: template
+    name: "Message"
+    id: gd_message_text
+    icon: "mdi:message-text"
+    mode: text
+    max_length: 200
+    optimistic: true
+    set_action:
+      - lambda: 'id(gameday_ctl).say(x, 0);'
+
+lvgl:
+  top_layer:
+    widgets:
+      - obj:
+          id: gd_say_box
+          scrollbar_mode: "OFF"
+          x: 0
+          y: 0
+          width: 64
+          height: 64
+          bg_opa: COVER
+          bg_color: 0x000000
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          hidden: true
+          widgets:
+            - label:
+                id: gd_say_lbl
+                x: 1
+                y: 0
+                width: 62
+                text_align: CENTER
+                long_mode: WRAP
+                text: ""
+                text_color: 0xFFFFFF

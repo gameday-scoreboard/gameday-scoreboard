@@ -180,6 +180,8 @@ packages:
   qc: !include pages/qc.yaml
   # Dims a hot panel and caps one on a weak power brick, and says why
   guard: !include pages/guard.yaml
+  # The owner's banner over everything, and its Home Assistant text entity
+  message: !include pages/message.yaml
 
 # The theme's Spleen fonts, with Latin-1 added to ESPHome's default ASCII so
 # accented names (São Paulo, Atlético) draw. Text from outside the panel goes
@@ -213,6 +215,15 @@ logger:
 # No Home Assistant required: never reboot for lack of an API client.
 api:
   reboot_timeout: 0s
+  # The banner (pages/message.yaml) with its seconds, 10 when 0. Home
+  # Assistant lists it as esphome.<device name>_show_message.
+  actions:
+    - action: show_message
+      variables:
+        message: string
+        seconds: int
+      then:
+        - lambda: 'id(gameday_ctl).say(message, seconds);'
 
 ota:
   - platform: esphome
@@ -575,6 +586,17 @@ gameday:
           lambda: 'return x == "clock_approx";'
         then:
           - script.execute: gd_check_after_clock
+    # The owner's banner (pages/message.yaml) and message card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "say";'
+        then:
+          - script.execute: gd_say
+    - if:
+        condition:
+          lambda: 'return x == "msg";'
+        then:
+          - script.execute: gd_msg_card
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:

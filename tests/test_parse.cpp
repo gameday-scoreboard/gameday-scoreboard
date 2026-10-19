@@ -17,6 +17,7 @@
 #include "ha_events.h"
 #include "health.h"
 #include "logo_lru.h"
+#include "message.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
@@ -4064,6 +4065,138 @@ static void test_offseason() {
   CHECK_EQ(clock_color(true, parse_color("")), (uint32_t) 0xFFFFFF);  // a team with no color from ESPN
 }
 
+// Reads text through MsgReader in pieces of `step` bytes, as a socket hands it over.
+static MsgReader<std::string> read_list(const std::string &file, uint32_t from, uint32_t max, size_t step) {
+  MsgReader<std::string> r(from, max);
+  bool more = true;
+  for (size_t i = 0; i < file.size() && more; i += step)
+    more = r.feed(file.data() + i, std::min(step, file.size() - i));
+  if (more)
+    r.finish();
+  return r;
+}
+
+static void test_message() {
+  // Cleaning: the saved text keeps its lines, a list entry is one line.
+  CHECK_EQ(message_clean("  Wings $5 \r\n\n\tPints $3  \n", kMsgTextMax, true), std::string("Wings $5\nPints $3"));
+  CHECK_EQ(message_clean("a\nb", kMsgTextMax, false), std::string("a b"));
+  CHECK_EQ(message_clean("Happy birthday \xF0\x9F\x8E\x82 Sam", kMsgTextMax, true), std::string("Happy birthday Sam"));
+  CHECK_EQ(message_clean("\xE2\x9D\xA4\xEF\xB8\x8F Go team", kMsgTextMax, true), std::string("Go team"));
+  CHECK_EQ(message_clean("\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x8D\xB3", kMsgTextMax, true), std::string(""));
+  CHECK_EQ(message_clean("bell\x07 rings", kMsgTextMax, true), std::string("bell rings"));
+  // Latin-1 and the rest stay for panel_text() to map.
+  CHECK_EQ(message_clean("Jos\xC3\xA9\xE2\x80\x99s", kMsgTextMax, true), std::string("Jos\xC3\xA9\xE2\x80\x99s"));
+  // Cut at the cap, never inside a character, and no trailing space.
+  CHECK_EQ(message_clean("abc\xC3\xA9", 4, true), std::string("abc"));
+  CHECK_EQ(message_clean("ab cd", 3, true), std::string("ab"));
+  CHECK_EQ(message_clean(std::string(300, 'x'), kMsgTextMax, true).size(), kMsgTextMax);
+  // A broken byte is kept for panel_text() to turn into '?'.
+  CHECK_EQ(message_clean("a\x80" "b", kMsgTextMax, true), std::string("a\x80" "b"));
+
+  CHECK(msg_url_ok(""));
+  CHECK(msg_url_ok("http://192.168.1.20/names.txt"));
+  CHECK(msg_url_ok("https://gist.githubusercontent.com/x/raw/plates.txt"));
+  CHECK(!msg_url_ok("https://"));
+  CHECK(!msg_url_ok("ftp://example.com/a.txt"));
+  CHECK(!msg_url_ok("example.com/a.txt"));
+  CHECK(!msg_url_ok("http://exa mple.com/"));
+  CHECK(!msg_url_ok("http://example.com/\xC3\xA9"));
+  CHECK(!msg_url_ok("http://" + std::string(kMsgUrlMax, 'a')));
+
+  CHECK_EQ(clamp_say_secs(0), kSayDefaultSecs);
+  CHECK_EQ(clamp_say_secs(-4), kSayDefaultSecs);
+  CHECK_EQ(clamp_say_secs(30), 30);
+  CHECK_EQ(clamp_say_secs(100000), kSaySecsMax);
+  CHECK_EQ(clamp_msg_every(-1), 0);
+  CHECK_EQ(clamp_msg_every(99), kMsgEveryMax);
+
+  std::string list = "Ann\nBo\nCy\nDee\nEd";
+  CHECK_EQ(msg_count(list), 5u);
+  CHECK_EQ(msg_count(std::string()), 0u);
+  CHECK_EQ(msg_entries(list, 0, 2), std::string("Ann\nBo"));
+  CHECK_EQ(msg_entries(list, 3, 4), std::string("Dee\nEd"));
+  CHECK_EQ(msg_entries(list, 5, 4), std::string(""));
+
+  // The reader: every piece size gives the same list.
+  std::string file = "\xEF\xBB\xBFJane Doe\r\n\r\n  John Smith  \r\n# not a comment\nZo\xC3\xAB\n" + std::string(100, 'L') + "\nlast";
+  for (size_t step : {1, 3, 7, 512}) {
+    auto r = read_list(file, 0, kMsgChunkLines, step);
+    CHECK(r.eof());
+    CHECK_EQ(r.kept(), 6u);
+    CHECK_EQ(msg_entries(r.list(), 0, 4), std::string("Jane Doe\nJohn Smith\n# not a comment\nZo\xC3\xAB"));
+    CHECK_EQ(msg_entries(r.list(), 4, 1), std::string(kMsgLineMax, 'L'));
+    CHECK_EQ(msg_entries(r.list(), 5, 1), std::string("last"));
+  }
+  // A window into a long list: entries 250-349 of 1000, and it stops reading
+  // as soon as it has them.
+  std::string names;
+  for (int i = 0; i < 1000; i++)
+    names += "Name " + std::to_string(i) + "\n";
+  auto w = read_list(names, 250, kMsgChunkLines, 64);
+  CHECK(!w.eof());
+  CHECK(w.full());
+  CHECK_EQ(w.seen(), 350u);
+  CHECK_EQ(msg_entries(w.list(), 0, 1), std::string("Name 250"));
+  CHECK_EQ(msg_entries(w.list(), 99, 1), std::string("Name 349"));
+  CHECK(w.bytes() < names.size() / 2);
+  // The last window runs to the end.
+  auto tail = read_list(names, 950, kMsgChunkLines, 64);
+  CHECK(tail.eof());
+  CHECK_EQ(tail.kept(), 50u);
+  // A window past the end keeps nothing.
+  auto past = read_list(names, 5000, kMsgChunkLines, 64);
+  CHECK(past.eof());
+  CHECK_EQ(past.kept(), 0u);
+  CHECK_EQ(past.seen(), 1000u);
+
+  // Paging: a short list from the top, wrapping round.
+  MsgPage p = msg_next_page(0, 0, 5, true, false, kMsgPageLines);
+  CHECK(!p.read);
+  CHECK_EQ(p.first, 0u);
+  CHECK_EQ(p.count, 4u);
+  CHECK_EQ(p.next, 4u);
+  p = msg_next_page(4, 0, 5, true, false, kMsgPageLines);
+  CHECK_EQ(p.count, 1u);
+  CHECK_EQ(p.next, 0u);  // back to the top
+  // Stale at the top: read it again.
+  p = msg_next_page(0, 0, 5, true, true, kMsgPageLines);
+  CHECK(p.read);
+  CHECK_EQ(p.next, 0u);
+  // Not stale in the middle: keep going.
+  p = msg_next_page(4, 0, 5, true, true, kMsgPageLines);
+  CHECK(!p.read);
+  // A long list: the window ends, read the next one from where it stopped.
+  p = msg_next_page(96, 0, 100, false, false, kMsgPageLines);
+  CHECK_EQ(p.count, 4u);
+  CHECK_EQ(p.next, 100u);
+  p = msg_next_page(100, 0, 100, false, false, kMsgPageLines);
+  CHECK(p.read);
+  CHECK_EQ(p.next, 100u);
+  // The last window of a long list ends: back to the top, which needs a read.
+  p = msg_next_page(950, 900, 50, true, false, kMsgPageLines);
+  CHECK(p.read);
+  CHECK_EQ(p.next, 0u);
+  // Nothing read yet.
+  p = msg_next_page(0, 0, 0, false, false, kMsgPageLines);
+  CHECK(p.read);
+  // An empty file: nothing to show until it is stale.
+  p = msg_next_page(0, 0, 0, true, false, kMsgPageLines);
+  CHECK(!p.read);
+  CHECK_EQ(p.count, 0u);
+  CHECK(msg_next_page(0, 0, 0, true, true, kMsgPageLines).read);
+
+  // Turns: every 2 minutes for a page, or holding the board.
+  CHECK(msg_turn(false, true, false, 999999, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(false, true, true, 0, 2, kMsgPageMs) == MsgTurn::HIDE);
+  CHECK(msg_turn(true, false, true, 0, 2, kMsgPageMs) == MsgTurn::HIDE);  // a game went live
+  CHECK(msg_turn(true, true, false, 119999, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, true, false, 120000, 2, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, true, kMsgPageMs - 1, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, 2, kMsgPageMs) == MsgTurn::HIDE);
+  CHECK(msg_turn(true, true, false, 0, 0, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, 0, kMsgPageMs) == MsgTurn::NEXT);
+}
+
 static void test_panel_text() {
   using esphome::gameday::panel_text;
   // An iPhone hotspot name (backlog #144)
@@ -4479,6 +4612,7 @@ int main() {
   test_guarded_brightness();
   test_offseason();
   test_panel_text();
+  test_message();
   test_wifi_history();
   test_ha_events();
   failures += run_set_tests(checks);
