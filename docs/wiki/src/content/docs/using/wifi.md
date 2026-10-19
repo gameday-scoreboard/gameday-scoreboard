@@ -47,7 +47,7 @@ A short drop, like a mesh system moving the panel to another access point, doesn
 When the network comes back, the panel rejoins and the board comes back by itself.
 
 :::note[Coming in the next release]
-When the panel starts up and can't find its Wi-Fi, as after a power cut while the router is still starting, it says **Waiting for** the network and **Just had a power cut? Routers take a few minutes** for its first 3 minutes, then **Wi-Fi lost**. Bluetooth and the hotspot come on at the usual times meanwhile.
+When the panel starts up and can't find its Wi-Fi, as after a power cut while the router is still starting, it says **Waiting for** the network and **Just had a power cut? / Routers take a few min** for its first 3 minutes, then **Wi-Fi lost**. Bluetooth and the hotspot come on at the usual times meanwhile.
 
 On a bar, hotel or dorm Wi-Fi that lets the panel join but then wants you to sign in on a web page, the panel says **Wi-Fi needs sign-in, use home or a hotspot**, with the QR code for the app. The panel can't sign in to those pages, so set it up on a home network or a phone hotspot. The message goes away by itself once scores come through.
 

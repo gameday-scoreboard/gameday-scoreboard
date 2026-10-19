@@ -38,7 +38,7 @@ If you changed your router or your Wi-Fi password, open the Game Day app and giv
 **Why:** the panel says so when it has been off its network for more than about 10 seconds. It turns Bluetooth back on so the app can reach it, and restarts itself once, a minute into the outage.
 
 :::note[Coming in the next release]
-Right after a power cut, the panel says **Waiting for** your network and **Just had a power cut? Routers take a few minutes** instead, while your router starts. Wait. The panel joins by itself once the router is back, and only says **Wi-Fi lost** if it still can't after 3 minutes.
+Right after a power cut, the panel says **Waiting for** your network and **Just had a power cut? / Routers take a few min** instead, while your router starts. Wait. The panel joins by itself once the router is back, and only says **Wi-Fi lost** if it still can't after 3 minutes.
 :::
 
 ## The panel says Can't reach ESPN

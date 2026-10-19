@@ -129,7 +129,9 @@ globals:
   # the router may still be starting (see the waiting state in boot_refresh).
   # A software restart is not one: the offline restart in gameday-common.yaml,
   # an update, the Reboot button. Those panels go to Wi-Fi lost at the usual
-  # 30 s, since the owner may already have seen it before the restart.
+  # 30 s, since the owner may already have seen it before the restart. A
+  # crash or watchdog restart keeps the grace: it can't tell a router outage
+  # from a healthy one, and the wait costs nothing.
   - id: boot_power_cut_grace
     type: bool
     initial_value: 'esp_reset_reason() != ESP_RST_SW'
