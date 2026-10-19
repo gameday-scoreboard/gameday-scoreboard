@@ -3,136 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Set up Game Day Scoreboard</title>
-  <meta name="description" content="Plug in the panel, join your 2.4 GHz Wi-Fi from the Game Day app or the panel's own hotspot, and pick your team. It takes a few minutes.">
-  <link rel="canonical" href="https://install.gameday-scoreboard.com/setup/">
-  <meta property="og:site_name" content="Game Day Scoreboard">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="Set up Game Day Scoreboard">
-  <meta property="og:description" content="Plug in the panel, join your 2.4 GHz Wi-Fi from the Game Day app or the panel's own hotspot, and pick your team. It takes a few minutes.">
-  <meta property="og:url" content="https://install.gameday-scoreboard.com/setup/">
-  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:site" content="@GameDayScore">
-  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
-  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <title>Set up your Game Day Scoreboard</title>
+  <!-- Setup lives on app.gameday-scoreboard.com; this host is for installing firmware. -->
+  <meta name="robots" content="noindex">
+  <link rel="canonical" href="https://app.gameday-scoreboard.com/setup/">
+  <meta http-equiv="refresh" content="0; url=https://app.gameday-scoreboard.com/setup/">
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
-    main { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
-    h1 { font-size: 2rem; margin: 0 0 4px; }
-    .sub { color: #9da7b3; margin: 0 0 32px; }
-    .card { background: #151b23; border: 1px solid #262e38; border-radius: 12px; padding: 20px 24px; margin: 0 0 20px; }
-    .card h2 { margin: 0 0 6px; font-size: 1.2rem; }
-    .card p { margin: 0 0 14px; color: #c3ccd6; }
-    ol li, ul li { margin: 6px 0; color: #c3ccd6; }
-    code { background: #1f2731; padding: 1px 6px; border-radius: 4px; }
-    .note { font-size: 0.9rem; color: #9da7b3; }
+    main { max-width: 720px; margin: 0 auto; padding: 40px 20px; }
     a { color: #7cc4ff; }
-    footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
-    .signup { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
-    .signup input[type=email] { flex: 1 1 220px; min-width: 0; font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #262e38; background: #0b0f14; color: #e6edf3; }
-    .signup button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 8px; border: 0; background: #f2b632; color: #0b0f14; cursor: pointer; }
-    .signup button[disabled] { opacity: 0.6; }
-    .signup[hidden] { display: none; }
-    .signup-msg { margin: 0 0 12px; }
-    .signup-msg:empty { display: none; }
-    .sr, .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Set up your panel</h1>
-  <p class="sub">You need a phone and your Wi-Fi password. It takes a few minutes.</p>
-
-  <div class="card">
-    <h2>1. Plug it in</h2>
-    <p>Plug in the panel. After a few seconds it shows <strong>SETUP</strong> and a QR code.</p>
-  </div>
-
-  <div class="card">
-    <h2>2. Set it up in the Game Day app</h2>
-    <p>Open the Game Day app on your iPhone. It finds the panel over Bluetooth, asks which Wi-Fi network the panel should join and the password, then lets you pick your team.</p>
-    <p class="note">The app is coming soon to the App Store.</p>
-  </div>
-
-  <div class="card">
-    <h2>Without the app: use the panel's hotspot</h2>
-    <p>While it shows SETUP, the panel also starts its own Wi-Fi network named <code>Game Day</code> plus six letters and numbers, like <code>Game Day 2f6a70</code>, and the screen shows the name. Join it from any phone or laptop and a setup page opens. Pick your Wi-Fi network, enter the password and save.</p>
-    <p>Once it's on your Wi-Fi, the panel shows its address, like <code>gameday-2f6a70.local</code>. Open that in a browser and pick your team. If your phone won't open a <code>.local</code> address, hold the button on the controller for 1.5 seconds and the panel shows the number version too.</p>
-  </div>
-
-  <div class="card">
-    <h2>Use 2.4 GHz Wi-Fi</h2>
-    <p>The panel only joins 2.4 GHz networks. If your router has separate names for 2.4 GHz and 5 GHz, pick the 2.4 GHz one. Use your main network, not a guest network: a guest network can keep your phone from reaching the panel afterwards.</p>
-  </div>
-
-  <div class="card">
-    <h2>New router or Wi-Fi password?</h2>
-    <p>The panel says <strong>Wi-Fi lost</strong>. Open the Game Day app and give it the new network or password the same way as the first time. Without the app, join the panel's <code>Game Day</code> hotspot as above. It comes up within a few minutes of the panel losing Wi-Fi.</p>
-  </div>
-
-  <div class="card" id="remote">
-    <h2>Optional: a WizMote remote</h2>
-    <p>The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart bulbs. It talks to the panel directly, so there's no hub to set up.</p>
-    <p>To pair it, open the Remote section in the Game Day app or on the panel's page, turn on Discovery, then press any button on the remote.</p>
-    <ul>
-      <li>ON and OFF turn the panel on and off.</li>
-      <li>The brightness buttons make it brighter or dimmer, and the night button dims it right down.</li>
-      <li>Buttons 1 to 4 jump to your first four favorite teams.</li>
-    </ul>
-  </div>
-
-  <div class="card">
-    <h2>Reinstalling the firmware</h2>
-    <p>You don't need this to set up a panel. The <a href="/">installer page</a> reinstalls the firmware from a desktop browser over USB and erases the panel's settings. Use it to bring back a panel that won't start, or to build your own.</p>
-  </div>
-
-  <div class="card" id="signup">
-    <h2>Get one when they're ready</h2>
-    <p>Ready-made Game Day Scoreboards go on sale soon. Leave your email and we'll tell you the day you can order.</p>
-    <form class="signup" method="post" action="https://support.gameday-scoreboard.com/signup">
-      <input type="hidden" name="page" value="/setup/">
-      <label for="signup-email" class="sr">Email</label>
-      <input type="email" id="signup-email" name="email" required maxlength="200" autocomplete="email" placeholder="you@example.com">
-      <button>Join the launch list</button>
-      <div class="trap" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-    </form>
-    <p class="signup-msg" role="status" aria-live="polite"></p>
-    <p class="note">One email when it's ready to order, plus the odd launch update. Every email has an unsubscribe link. Our store on Shopify keeps the list; see <a href="/privacy/#launch-list">Privacy</a>.</p>
-  </div>
-
-  <footer>
-    Questions or something not working? See <a href="/support/">Support</a>. The full guide to every setting and each sport is at <a href="https://docs.gameday-scoreboard.com/">docs.gameday-scoreboard.com</a>.
-  </footer>
+  <p>Setup moved to <a href="https://app.gameday-scoreboard.com/setup/">app.gameday-scoreboard.com/setup</a>.</p>
 </main>
-<script>
-  // With JavaScript the thank-you shows in place. Without it, or if the request fails, the form posts as usual
-  // and the browser lands on a thank-you page that links back here.
-  document.querySelectorAll("form.signup").forEach(function (form) {
-    form.addEventListener("submit", function (e) {
-      if (!window.fetch || !window.URLSearchParams) return;
-      e.preventDefault();
-      var button = form.querySelector("button");
-      var msg = form.parentNode.querySelector(".signup-msg");
-      button.disabled = true;
-      fetch(form.action, { method: "POST", headers: { Accept: "application/json" }, body: new URLSearchParams(new FormData(form)) })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (j.ok) {
-            form.hidden = true;
-            msg.textContent = "You're on the list. We'll email you when it's ready to order.";
-          } else {
-            msg.textContent = j.error || "That didn't go through. Try again.";
-            button.disabled = false;
-          }
-        })
-        .catch(function () { form.submit(); });
-    });
-  });
-</script>
 </body>
 </html>
