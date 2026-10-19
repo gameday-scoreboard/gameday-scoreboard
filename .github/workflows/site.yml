@@ -1,6 +1,6 @@
 name: Site
 
-# Republish gamedayscoreboard.app when only docs/site changed, without a
+# Republish install.gameday-scoreboard.com when only docs/site changed, without a
 # firmware release. The firmware files come from the latest release tag's
 # firmware-moonhub75.zip asset, so panels see the same manifest and binaries
 # they saw before. Falls back to the tag's Build artifact for a release that
@@ -133,9 +133,9 @@ jobs:
           want=$(jq -r .version "$m")
           got=""
           for i in $(seq 1 30); do
-            got=$(curl -fsS "https://gamedayscoreboard.app/firmware/beta/scoreboard75/manifest.json?run=$GITHUB_RUN_ID-$i" | jq -r .version)
+            got=$(curl -fsS "https://install.gameday-scoreboard.com/firmware/beta/scoreboard75/manifest.json?run=$GITHUB_RUN_ID-$i" | jq -r .version)
             if [ "$got" = "$want" ]; then echo "Live: beta $got"; exit 0; fi
             sleep 20
           done
-          echo "::error::gamedayscoreboard.app still serves beta '$got' 10 minutes after deploying $want"
+          echo "::error::install.gameday-scoreboard.com still serves beta '$got' 10 minutes after deploying $want"
           exit 1
