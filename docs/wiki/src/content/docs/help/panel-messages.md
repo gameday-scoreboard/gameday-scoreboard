@@ -37,6 +37,7 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 :::note[Coming in the next release]
 | The panel says | What it means | What to do |
 | --- | --- | --- |
+| **Waiting for** and a network name, with **Just had a power cut? Routers take a few minutes** | The panel just started and hasn't found its Wi-Fi yet. After a power cut the panel is up in seconds, and the router takes a few minutes. | Wait. The panel joins by itself once the router is back. If it still can't after 3 minutes, it says **Wi-Fi lost / open app**. |
 | **Wi-Fi needs sign-in / use home or a hotspot**, with a QR code | The network wants a sign-in on a web page, like many bar, hotel and dorm networks. The panel can't sign in. | Set it up on a home network or a phone hotspot. The message goes by itself once scores come through. |
 :::
 

@@ -2,9 +2,9 @@
 # and has shown its connect hint for a while; the boot button brings the
 # full address back.
 #
-# Four states, driven by the real WiFi state every half second. Each is a
+# Five states, driven by the real WiFi state every half second. Each is a
 # title plus up to four lines: small, big, small, small. boot_refresh tests
-# them in this order: connected, wifi lost, setup, connecting.
+# them in this order: connected, waiting, wifi lost, setup, connecting.
 #
 # Three of them carry a QR code for https://gamedayscoreboard.app/setup, a
 # universal link: the iPhone Camera opens the Game Day app when it is
@@ -25,6 +25,10 @@
 #               128: QR + SETUP / Game Day / app (13 s), then the hotspot
 #                    lines (5 s) once it is up
 #   connecting  Connecting to / <network name>, full width, no QR
+#   waiting     64:  Waiting for / <network name> (5 s), Just had a /
+#                    power cut? / Routers take / a few min (5 s)
+#               128: Waiting for / <network name> / Just had a power cut? /
+#                    Routers take a few min, full width, no QR
 #   sign-in     64:  Wi-Fi needs / sign-in / use home or / a hotspot (5 s),
 #                    QR (8 s)
 #               128: QR + the same lines
@@ -34,6 +38,10 @@
 # up over the board when the gameday component sends "captive" and goes on
 # "captive_clear", once ESPN answers (gameday-common.yaml). The boot button's
 # address still takes over while it is held.
+#
+# "waiting" is a boot that has not reached its saved network 30 s in and may
+# be back from a power cut, when the router takes minutes to start. It holds
+# until 3 minutes in, then gives way to "wifi lost".
 #
 # "wifi lost" means the panel has a saved network and is not on it, either
 # because it dropped or because it never came up this boot. It sits above the
@@ -117,6 +125,14 @@ globals:
   - id: boot_had_creds
     type: bool
     initial_value: 'false'
+  # True when this boot could be the panel coming back from a power cut, so
+  # the router may still be starting (see the waiting state in boot_refresh).
+  # A software restart is not one: the offline restart in gameday-common.yaml,
+  # an update, the Reboot button. Those panels go to Wi-Fi lost at the usual
+  # 30 s, since the owner may already have seen it before the restart.
+  - id: boot_power_cut_grace
+    type: bool
+    initial_value: 'esp_reset_reason() != ESP_RST_SW'
   # The turn boot_qr_cycle picked: 0 the state's own text, 1 the QR code,
   # 2 the hotspot text. boot_refresh reads it to choose the lines.
   - id: boot_qr_frame
@@ -295,10 +311,14 @@ script:
           // boot and not now is a drop: say so immediately, the owner is
           // watching a board that just stopped updating. Never connected this
           // boot could just be a panel still coming up, so wait out a grace
-          // period first. Association normally takes a few seconds, 30 leaves
-          // room for a scan and a retry without ever flashing the alarm on a
-          // healthy boot, and it is a full minute short of the 90s fallback AP
-          // so the message is up long before the hotspot text could appear.
+          // period first. Association normally takes a few seconds, and 30
+          // leaves room for a scan and a retry without ever flashing the alarm
+          // on a healthy boot.
+          //
+          // After a power cut the panel is up in seconds and the router takes
+          // minutes, so a boot that may be one (boot_power_cut_grace) says it
+          // is waiting for the network until 3 minutes in, and only then that
+          // Wi-Fi is lost. Bluetooth and the hotspot still start on time.
           //
           // The blank-SSID half of have_creds is what keeps a panel out of
           // here after "Reset Wi-Fi": that panel boots with an empty network in
@@ -307,8 +327,24 @@ script:
           // handover from the app, which clears the one in memory.
           const bool have_creds = w->has_sta() && !w->get_sta().get_ssid().empty();
           if (have_creds) id(boot_had_creds) = true;
-          const bool lost = id(boot_had_creds) && (id(boot_last_connected_ms) != 0 || millis() > 30000);
+          static const uint32_t GRACE_MS = 30000, ROUTER_MS = 3 * 60 * 1000;
+          const bool never = id(boot_last_connected_ms) == 0;
+          const bool waiting = id(boot_had_creds) && never && id(boot_power_cut_grace) &&
+                               millis() > GRACE_MS && millis() <= ROUTER_MS;
+          const bool lost = id(boot_had_creds) && !waiting && (!never || millis() > GRACE_MS);
           const bool wide = lv_disp_get_hor_res(lv_disp_get_default()) >= 128;
+          // The network it is trying to join. wifi_ssid_to() stays blank until
+          // the panel is on one, so name the saved network that worked last,
+          // which is the one it tries first.
+          auto network = [w]() -> std::string {
+            char buf[wifi::SSID_BUFFER_SIZE];
+            std::string name = w->wifi_ssid_to(buf);
+            if (name.empty()) {
+              const auto nets = id(gd_networks).list();
+              name = nets.empty() ? w->get_sta().get_ssid().str() : nets.front().ssid;
+            }
+            return name;
+          };
           // The address as up to two lines of 12 characters, split after the
           // dash in gameday-2f6a70.local. A name that will not split that way
           // stays on one line and scrolls, slowly.
@@ -406,6 +442,23 @@ script:
             if (id(boot_hold_since_ms) != 0 && !via_button && !id(boot_show_address).is_running() &&
                 !id(gameday_ctl).boot_hold(id(boot_hold_since_ms)))
               id(boot_hide).execute();
+          } else if (waiting) {
+            // Maybe a power cut, router still starting. Ahead of the setup
+            // branch for the same reason as lost below: the hotspot comes up
+            // inside these 3 minutes. No QR: nothing needs the app yet. On a
+            // 64 px panel the network name and the power cut take turns.
+            id(boot_qr_cycle).execute(0, false);
+            id(boot_view).execute(false, false);
+            if (provisioning) {
+              const std::string joining = w->get_sta().get_ssid().str();
+              id(boot_set_lines).execute("JOINING", joining.empty() ? std::string("Wi-Fi") : joining, "", "", true);
+            } else if (wide)
+              id(boot_set_lines).execute("Waiting for", network(), "Just had a power cut?",
+                                         "Routers take a few min", true);
+            else if ((millis() - GRACE_MS) % 10000 < 5000)
+              id(boot_set_lines).execute("Waiting for", network(), "", "", true);
+            else
+              id(boot_set_lines).execute("Just had a", "power cut?", "Routers take", "a few min", true);
           } else if (lost) {
             // Tested before the setup branch below on purpose. The fallback AP
             // starts 90 seconds into any outage, so that branch would otherwise
@@ -450,8 +503,7 @@ script:
           } else {
             id(boot_qr_cycle).execute(0, false);
             id(boot_view).execute(false, false);
-            char ssid[wifi::SSID_BUFFER_SIZE];
-            id(boot_set_lines).execute(wide ? "Connecting to" : "Connecting", w->wifi_ssid_to(ssid), "", "", true);
+            id(boot_set_lines).execute(wide ? "Connecting to" : "Connecting", network(), "", "", true);
           }
 
   # Keep the address up for a while after connecting, then clear the overlay
