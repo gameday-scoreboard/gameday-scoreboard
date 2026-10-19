@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "countdown.h"
 #include "leagues.h"
 #include "startup.h"
 #include "teams.h"
@@ -22,7 +23,7 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta"};
+                                    "beta",   "countdown", "cdname", "cddate"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -155,6 +156,9 @@ enum class SetKind : uint8_t {
   COUNT,     // on, baseball
   MATCH,     // on, soccer
   BETA,      // on, release builds only
+  COUNTDOWN,  // on, the next game's countdown card
+  CD_NAME,    // text, the custom countdown's name
+  CD_DATE,    // ymd, the custom countdown's day (0 clears it)
 };
 
 struct TeamRef {
@@ -172,6 +176,8 @@ struct SetOp {
   TeamRef team;
   std::vector<TeamRef> teams;
   std::vector<std::string> refused;  // favs entries left out, for the log
+  std::string text;
+  uint32_t ymd{0};
 };
 
 // Decodes one key=value from the request. False when the key is unknown or
@@ -280,6 +286,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::AUTOUPD);
   if (k == "beta")
     return on(SetKind::BETA);
+  if (k == "countdown")
+    return on(SetKind::COUNTDOWN);
+  if (k == "cdname") {
+    op.kind = SetKind::CD_NAME;
+    op.text = countdown_name(v);
+    return true;
+  }
+  if (k == "cddate") {
+    // "2026-12-25"; "" or "none" clears it. Anything else is refused.
+    op.kind = SetKind::CD_DATE;
+    return parse_countdown_date(v, op.ymd);
+  }
   return false;
 }
 

@@ -138,8 +138,9 @@ button { font: inherit; color: inherit; }
 .spark .gap { fill: none; stroke: var(--red); stroke-width: 1.5; }
 .sparklbl { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 3px; }
 .ctl input[type=range] { width: 46%; accent-color: var(--accent); }
-.ctl select {
+.ctl select, .ctl input[type=text], .ctl input[type=date] {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 55%;
+  font: inherit; font-size: 14px; color-scheme: dark;
 }
 /* toggle */
 .sw {

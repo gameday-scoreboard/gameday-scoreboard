@@ -51,7 +51,9 @@ struct Settings {
   uint8_t team_league{0};
   int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true};
-  bool bootaddr{true}, autoupd{false}, beta{false};
+  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true};
+  std::string cdname;
+  uint32_t cdymd{0};
   TeamRef favs[16];
   uint16_t live_mask{0};
 };
@@ -120,6 +122,11 @@ void load(Settings &s, JsonObjectConst o) {
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
+  flag("countdown", s.countdown);
+  if (o["cdname"].is<const char *>())
+    s.cdname = o["cdname"].as<const char *>();
+  if (o["cddate"].is<const char *>())
+    parse_countdown_date(o["cddate"].as<const char *>(), s.cdymd);
 }
 
 void apply(Settings &s, const SetOp &op) {
@@ -152,6 +159,9 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
+    case SetKind::COUNTDOWN: s.countdown = op.on; break;
+    case SetKind::CD_NAME: s.cdname = op.text; break;
+    case SetKind::CD_DATE: s.cdymd = op.ymd; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -194,6 +204,9 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
+  doc["countdown"] = s.countdown;
+  doc["cdname"] = s.cdname;
+  doc["cddate"] = countdown_date_text(s.cdymd);
   doc["panels"] = s.panels;
 }
 
@@ -260,6 +273,14 @@ void test_parse_set() {
   SCHECK(!parse_set("tz", "-1", op, kFavMax), "tz -1");
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
   SCHECK(parse_set("down", "on", op, kFavMax) && !op.on, "down on is off");
+  SCHECK(parse_set("countdown", "0", op, kFavMax) && op.kind == SetKind::COUNTDOWN && !op.on, "countdown 0");
+  SCHECK(parse_set("cdname", "  Christmas \n", op, kFavMax) && op.kind == SetKind::CD_NAME && op.text == "Christmas",
+         "cdname trims");
+  SCHECK(parse_set("cddate", "2026-12-25", op, kFavMax) && op.kind == SetKind::CD_DATE && op.ymd == 20261225,
+         "cddate");
+  SCHECK(parse_set("cddate", "none", op, kFavMax) && op.ymd == 0, "cddate none clears");
+  SCHECK(!parse_set("cddate", "12/25/2026", op, kFavMax), "cddate in another format");
+  SCHECK(!parse_set("cddate", "2027-02-29", op, kFavMax), "cddate on a day that doesn't exist");
 
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {

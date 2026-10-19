@@ -69,6 +69,12 @@ script:
           lv_obj_set_style_text_font(id(gd_clock_sub_lbl), wide ? id(spleen_12) : id(spleen_8), 0);
           lv_obj_set_pos(id(gd_clock_time_lbl), 0, wide ? 6 : 14);
           lv_obj_set_pos(id(gd_clock_sub_lbl), 0, wide ? 26 : 34);
+          // The countdown card: big digits where the clock's time goes, and
+          // the matchup or the countdown's name under them (gd_update moves
+          // that line up on a wide display).
+          lv_obj_set_width(id(gd_countdown_lbl), W);
+          lv_obj_set_style_text_font(id(gd_countdown_lbl), wide ? id(spleen_32) : id(spleen_16), 0);
+          lv_obj_set_pos(id(gd_countdown_lbl), 0, wide ? 3 : 14);
           lv_obj_set_width(id(tt_game_status_lbl), W);
           lv_obj_t *abars[3] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3)};
           lv_obj_t *hbars[3] = {id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
@@ -223,6 +229,7 @@ script:
       opp_marks: int
       message: string
       clock_card: bool
+      countdown_card: bool
       next_line: string
     then:
       - lambda: |-
@@ -339,7 +346,7 @@ script:
       - lambda: |-
           // Toggle between the game layout and the "no game" layout
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          if (clock_card || game_state == "NOT_FOUND" || game_state == "BYE" || game_state == "") {
+          if (clock_card || countdown_card || game_state == "NOT_FOUND" || game_state == "BYE" || game_state == "") {
             // The component's words for this screen (the finals rotation's
             // headers and next kickoff, "No live games"), else the default.
             const char *msg = message.empty() ? "No upcoming game" : message.c_str();
@@ -352,12 +359,28 @@ script:
             lv_obj_clear_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(tt_no_game_container), LV_OBJ_FLAG_HIDDEN);
           }
-          // The off-season clock takes the message's place, and borrows the
-          // ticker from the hidden game layout so it keeps running under it.
-          lv_obj_t *ticker_parent = clock_card ? id(tt_no_game_container) : id(tt_game_container);
+          // The off-season clock and the countdown take the message's place,
+          // and borrow the ticker from the hidden game layout so it keeps
+          // running under them.
+          lv_obj_t *ticker_parent = clock_card || countdown_card ? id(tt_no_game_container) : id(tt_game_container);
           if (lv_obj_get_parent(id(tt_game_status_lbl)) != ticker_parent)
             lv_obj_set_parent(id(tt_game_status_lbl), ticker_parent);
-          if (clock_card) {
+          if (countdown_card) {
+            // gd_clock_tick writes the digits from gd_countdown_at.
+            lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_color(id(gd_countdown_lbl), lv_color_hex((uint32_t) team_color), 0);
+            id(gd_clock_date) = false;
+            const char *cur = lv_label_get_text(id(gd_clock_sub_lbl));
+            if (cur == nullptr || next_line != cur)
+              lv_label_set_text(id(gd_clock_sub_lbl), next_line.c_str());
+            lv_obj_set_y(id(gd_clock_sub_lbl), W >= 128 ? 38 : 34);
+            lv_obj_clear_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+            id(gd_clock_tick).execute();
+          } else if (clock_card) {
+            lv_obj_add_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_y(id(gd_clock_sub_lbl), W >= 128 ? 26 : 34);
             lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_style_text_color(id(gd_clock_time_lbl), lv_color_hex((uint32_t) team_color), 0);
             id(gd_clock_date) = W < 128 || next_line.empty();
@@ -373,6 +396,7 @@ script:
             lv_obj_clear_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
           }
           // Records are pre/post-game info; hide them while the game is live
           // (the layout also hides them entirely on narrow displays).
@@ -507,22 +531,28 @@ script:
             - script.execute: tt_hide_splash
 
   # The off-season clock's time, and the date when that line has no next
-  # game, in the panel's time zone. A label is only rewritten when its text
-  # changes, so once a minute.
+  # game, in the panel's time zone; or the countdown card's digits. A label
+  # is only rewritten when its text changes, so once a minute.
   - id: gd_clock_tick
     then:
       - lambda: |-
-          if (lv_obj_has_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN))
+          bool countdown = !lv_obj_has_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+          if (!countdown && lv_obj_has_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN))
             return;
           ESPTime now = id(ha_time).now();
           if (!now.is_valid())
             return;
-          struct tm t = now.to_c_tm();
           auto put = [](lv_obj_t *lbl, const std::string &text) {
             const char *cur = lv_label_get_text(lbl);
             if (cur == nullptr || text != cur)
               lv_label_set_text(lbl, text.c_str());
           };
+          if (countdown) {
+            put(id(gd_countdown_lbl),
+                ::espn::countdown_card_text(id(gd_countdown_at), id(gd_countdown_end), (int64_t) now.timestamp));
+            return;
+          }
+          struct tm t = now.to_c_tm();
           put(id(gd_clock_time_lbl), ::espn::clock_time_text(t));
           if (id(gd_clock_date))
             put(id(gd_clock_sub_lbl), ::espn::clock_date_text(t));
@@ -927,6 +957,18 @@ lvgl:
                   width: 64
                   text_align: CENTER
                   long_mode: CLIP
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_score_text"]
+              # The countdown card's digits, shown by gd_update in the same place
+              - label:
+                  id: gd_countdown_lbl
+                  x: 0
+                  y: 3
+                  width: 128
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text_font: spleen_32
                   hidden: true
                   text: ""
                   styles: ["tt_st_score_text"]

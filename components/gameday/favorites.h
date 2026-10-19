@@ -21,6 +21,7 @@ struct FavGame {
   // idle; 0 = no limit. Football has none, so a bye week never hides a team;
   // other leagues use it to drop a team that is out of season.
   int64_t horizon_s{0};
+  bool countdown{false};  // its countdown card takes a turn after it (countdown.h)
 };
 
 struct FavRules {
@@ -29,6 +30,7 @@ struct FavRules {
   bool alternate{false};      // two locked games: flip between them (else the higher slot wins)
   int64_t rotate_s{5 * 60};   // flip interval when alternating
   int64_t dwell_s{10};        // seconds per card in the idle playlist
+  int64_t countdown_s{0};     // and after a card with a countdown, the countdown's
   bool today_only{false};     // idle playlist: only games today (local time) or live
   int64_t day_start{0};       // today's local midnight, epoch seconds
   int64_t day_end{0};         // the next one
@@ -138,8 +140,9 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
       break;
   }
   auto ok = [&](int i) { return ok_at(i, level); };
+  int64_t dwell = r.dwell_s + (valid(current) && games[current].countdown ? r.countdown_s : 0);
   // A remote press shows its card for the dwell even when a filter would skip it.
-  if ((ok(current) || (current == pinned && valid(current))) && now - shown_since < r.dwell_s)
+  if ((ok(current) || (current == pinned && valid(current))) && now - shown_since < dwell)
     c.index = current;
   else
     c.index = fav_next_(games, current, ok);

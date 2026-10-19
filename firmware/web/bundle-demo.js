@@ -153,6 +153,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
+      <div class="card" id="cdCard" hidden>
+        <h2>Between games</h2>
+        <p class="hint">What the panel shows while no game is on.</p>
+        <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+        <div class="sub">Your own countdown</div>
+        <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
+        <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
+        <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
+        <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+      </div>
       <div class="card">
         <h2>Panel</h2>
         <div id="panelCtls"></div>
@@ -315,7 +325,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", countdown: (v) => v === "1",
+    cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
@@ -671,6 +682,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
+  // The custom countdown: the name and the day post on their own, as they change.
+  const cdName = $("#cdname");
+  const cdDate = $("#cddate");
+  cdName.onchange = () => setGD({ cdname: cdName.value.trim() });
+  cdDate.onchange = () => setGD({ cddate: cdDate.value || "none" });
+  $("#cdClear").onclick = () => setGD({ cdname: "", cddate: "none" });
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
@@ -742,6 +759,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
     });
+    // Firmware from before the countdown card leaves these out.
+    $("#cdCard").hidden = S.countdown === undefined;
+    if (document.activeElement !== cdName) cdName.value = S.cdname || "";
+    if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
+    $("#cdClear").hidden = !S.cdname && !S.cddate;
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
