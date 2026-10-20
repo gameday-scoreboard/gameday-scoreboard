@@ -16,6 +16,10 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 | At a break | Halftime in football, the hits and errors between half innings in baseball, the series or records in basketball and hockey, and the goals, cards and stats at half time in soccer. |
 | After the final | "Final" with the records, or the sport's result line, like hits and errors in baseball or the goals in soccer. |
 
+:::note[Coming in the next release]
+At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
+:::
+
 Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 
 ## The switches

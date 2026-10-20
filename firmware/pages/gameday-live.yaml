@@ -476,6 +476,96 @@ script:
             lv_obj_clear_flag(id(tt_away_team_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(id(tt_home_team_lbl), LV_OBJ_FLAG_HIDDEN);
           }
+      - lambda: |-
+          // Halftime and the final: the line score takes turns with the board
+          // above the ticker, 10 s each (gd_line_turn, flipped by the interval
+          // below). The component lays it out for this width
+          // (components/gameday/line_score.h); the Spleen fonts are monospaced,
+          // so a character is 6 px in spleen_12 and 5 px in spleen_8.
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          ::espn::LineScoreText ls = id(gameday_ctl).line_score(W);
+          if (ls.font == 0 || clock_card || (game_state != "IN" && game_state != "POST")) {
+            id(gd_line_ready) = false;
+            id(gd_line_turn) = false;
+            lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          id(gd_line_ready) = true;
+          auto put = [](lv_obj_t *lbl, const std::string &text) {
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || text != cur)
+              lv_label_set_text(lbl, text.c_str());
+          };
+          auto bright = [](uint32_t c) -> lv_color_t {
+            uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+            uint32_t m = std::max(r, std::max(g, b));
+            if (m == 0)
+              return lv_color_hex(0xFFFFFF);
+            if (m < 0xC0) {
+              r = r * 0xC0 / m;
+              g = g * 0xC0 / m;
+              b = b * 0xC0 / m;
+            }
+            return lv_color_make(r, g, b);
+          };
+          const lv_font_t *f = ls.font == 12 ? id(spleen_12)->get_lv_font() : id(spleen_8)->get_lv_font();
+          const int cw = ls.font == 12 ? 6 : 5;
+          lv_obj_t *team = id(tt_line_team_lbl), *opp = id(tt_line_opp_lbl), *body = id(tt_line_body_lbl);
+          lv_obj_set_size(id(tt_line), W, 55);
+          for (lv_obj_t *l : {id(tt_line_head_lbl), team, opp, body})
+            lv_obj_set_style_text_font(l, f, 0);
+          lv_obj_set_style_text_color(team, bright((uint32_t) team_color), 0);
+          lv_obj_set_style_text_color(opp, bright((uint32_t) opponent_color), 0);
+          put(team, team_abbr);
+          put(opp, opponent_abbr);
+          put(body, ls.body);
+          const int line_h = lv_font_get_line_height(f);
+          if (ls.columns) {
+            // A single panel: the teams in two columns of five characters
+            // under their abbreviations, the periods down the left.
+            const int x0 = (W - 12 * cw) / 2;
+            lv_obj_add_flag(id(tt_line_head_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(tt_line_title_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_RIGHT, 0);
+            lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_RIGHT, 0);
+            lv_obj_set_pos(team, x0 + 2 * cw, 0);
+            lv_obj_set_width(team, 5 * cw);
+            lv_obj_set_pos(opp, x0 + 7 * cw, 0);
+            lv_obj_set_width(opp, 5 * cw);
+            lv_obj_set_style_text_line_space(body, 9 - line_h, 0);
+            lv_obj_set_pos(body, x0, 10);
+            lv_obj_set_width(body, 12 * cw);
+          } else {
+            // The classic line score, centered: abbreviations, then the
+            // period numbers over each side's points, and Final or Halftime.
+            const int abbr_w = ls.abbr_cols * cw, cols_w = (int) ls.head.size() * cw;
+            int x0 = (W - abbr_w - cols_w) / 2;
+            if (x0 < 0)
+              x0 = 0;
+            const int pitch = ls.font == 12 ? 14 : 11;
+            const int y0 = ls.font == 12 ? 3 : 7;
+            put(id(tt_line_head_lbl), ls.head);
+            lv_obj_set_pos(id(tt_line_head_lbl), x0 + abbr_w, y0);
+            lv_obj_set_width(id(tt_line_head_lbl), cols_w);
+            lv_obj_clear_flag(id(tt_line_head_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_pos(team, x0, y0 + pitch);
+            lv_obj_set_width(team, abbr_w);
+            lv_obj_set_pos(opp, x0, y0 + 2 * pitch);
+            lv_obj_set_width(opp, abbr_w);
+            lv_obj_set_style_text_line_space(body, pitch - line_h, 0);
+            lv_obj_set_pos(body, x0 + abbr_w, y0 + pitch);
+            lv_obj_set_width(body, cols_w);
+            put(id(tt_line_title_lbl), ls.title);
+            lv_obj_set_width(id(tt_line_title_lbl), W);
+            lv_obj_set_pos(id(tt_line_title_lbl), 0, y0 + 3 * pitch + 1);
+            lv_obj_clear_flag(id(tt_line_title_lbl), LV_OBJ_FLAG_HIDDEN);
+          }
+          if (id(gd_line_turn))
+            lv_obj_clear_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+          else
+            lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
       - if:
           condition:
             lambda: 'return !splash_text.empty();'
@@ -549,6 +639,29 @@ interval:
   - interval: 1s
     then:
       - script.execute: gd_clock_tick
+  # The line score's turn on the board (gd_update shows it); the board
+  # always comes first.
+  - interval: 10s
+    then:
+      - lambda: |-
+          if (!id(gd_line_ready))
+            return;
+          id(gd_line_turn) = !id(gd_line_turn);
+          if (id(gd_line_turn))
+            lv_obj_clear_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+          else
+            lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+
+globals:
+  # The board has a line score (halftime or a final), and it is its turn.
+  - id: gd_line_ready
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: gd_line_turn
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 lvgl:
   style_definitions:
@@ -878,6 +991,48 @@ lvgl:
                   hidden: true
                   text: ""
                   styles: ["tt_st_score_text"]
+
+              # Halftime and the final: the line score over the board, above
+              # the ticker, in turns with it. Laid out and shown by gd_update.
+              - obj:
+                  id: tt_line
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 55
+                  hidden: true
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: tt_line_head_lbl
+                        long_mode: CLIP
+                        text: ""
+                        text_color: 0x909090
+                    - label:
+                        id: tt_line_team_lbl
+                        long_mode: CLIP
+                        text: ""
+                    - label:
+                        id: tt_line_opp_lbl
+                        long_mode: CLIP
+                        text: ""
+                    - label:
+                        id: tt_line_body_lbl
+                        long_mode: CLIP
+                        text: ""
+                        text_color: 0xFFFFFF
+                    - label:
+                        id: tt_line_title_lbl
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text: ""
+                        text_color: 0xC0C0C0
+                        text_font: spleen_8
 
               - label:
                   id: tt_game_status_lbl

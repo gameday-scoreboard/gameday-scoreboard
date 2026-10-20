@@ -16,11 +16,13 @@
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
+#include "line_score.h"
 #include "logo_lru.h"
 #include "message.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
+#include "score_log.h"
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
@@ -4572,6 +4574,286 @@ static void test_wifi_history() {
   CHECK(d.weak());
 }
 
+// The line score at halftime and the final (line_score.h), from the recorded
+// single-event documents.
+static void test_line_score() {
+  // NHL final, WSH 5-3 over PIT, read as Washington's panel
+  GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
+  CHECK_EQ((int) f.team_line_count, 3);
+  CHECK_EQ((int) f.team_lines[0], 2);
+  CHECK_EQ((int) f.opp_lines[2], 0);
+  CHECK(line_score_due(f));
+  LineScoreText t = line_score_text(f, 128);
+  CHECK_EQ((int) t.font, 12);
+  CHECK(!t.columns);
+  CHECK_EQ((int) t.abbr_cols, 4);
+  CHECK_EQ(t.head, std::string(" 1  2  3  T"));
+  CHECK_EQ(t.body, std::string(" 2  2  1  5\n 1  2  0  3"));
+  CHECK_EQ(t.title, std::string("Final"));
+  t = line_score_text(f, 64);
+  CHECK_EQ((int) t.font, 8);
+  CHECK(t.columns);
+  CHECK_EQ(t.body, std::string("1     2    1\n2     2    2\n3     1    0\nT     5    3"));
+
+  // A regular-season shootout: periods 4 and 5 fold into one SO column
+  GameSnapshot so = nhl_event("fixtures/event_nhl_final_so.json", kPenguins);
+  t = line_score_text(so, 128);
+  CHECK_EQ(t.head, std::string(" 1  2  3 SO  T"));
+  CHECK_EQ(t.body, std::string(" 1  1  2  0  4\n 1  0  3  1  5"));
+  CHECK_EQ(t.title, std::string("Final/SO"));
+  t = line_score_text(so, 64);
+  CHECK_EQ(t.body, std::string("1     1    1\n2     1    0\n3     2    3\nSO    0    1\nT     4    5"));
+
+  // Live hockey is not halftime: no line score
+  GameSnapshot live = nhl_event("fixtures/event_nhl_live.json", kAvalanche);
+  CHECK(!line_score_due(live));
+  CHECK_EQ((int) line_score_text(live, 128).font, 0);
+
+  // WNBA halftime: the quarters still to play are blank
+  GameSnapshot h = hoops_event("fixtures/event_wnba_half.json", kLiberty);
+  CHECK(at_halftime(h));
+  CHECK(line_score_due(h));
+  t = line_score_text(h, 128);
+  CHECK_EQ((int) t.font, 12);
+  CHECK_EQ(t.head, std::string(" 1  2  3  4   T"));
+  CHECK_EQ(t.body, std::string("26 28        54\n26 30        56"));
+  CHECK_EQ(t.title, std::string("Halftime"));
+  t = line_score_text(h, 64);
+  CHECK_EQ(t.body, std::string("1H   54   56\n2H          \nT    54   56"));
+
+  // MLB final, CLE 9-3 at CHW: innings in threes, then R H E
+  GameSnapshot m = mlb_event("fixtures/event_mlb_final.json", kWhiteSox);
+  t = line_score_text(m, 128);
+  CHECK_EQ((int) t.font, 8);
+  CHECK_EQ(t.head, std::string("123 456 789  R  H E"));
+  CHECK_EQ(t.body.substr(0, t.body.find('\n')), std::string("100 101 000  3  " + std::to_string(m.mlb.team_hits) +
+                                                             " " + std::to_string(m.mlb.team_errors)));
+  t = line_score_text(m, 64);
+  CHECK_EQ(t.body.substr(0, 12), std::string("R     3    9"));
+
+  // The home side ahead after the top of the 9th never bats in it: an x
+  GameSnapshot x = m;
+  x.team_line_count = 8;
+  t = line_score_text(x, 128);
+  CHECK_EQ(t.body.substr(0, 12), std::string("100 101 00x "));
+  // Extra innings that no longer fit in threes, then a 10-run inning
+  GameSnapshot ex = m;
+  ex.team_line_count = ex.opp_line_count = 12;
+  t = line_score_text(ex, 128);
+  CHECK_EQ(t.head.substr(0, 13), std::string("123456789012 "));
+  ex.opp_lines[2] = 11;
+  t = line_score_text(ex, 128);
+  CHECK(t.head.find("R") != std::string::npos);
+  CHECK((int) (t.abbr_cols + t.head.size()) * 5 <= 128);
+
+  // Football final with overtime folded into one column, at 128 in the small font
+  GameSnapshot sea;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_super_bowl.json"), Sport::FOOTBALL, 26, sea, "401772988"));
+  t = line_score_text(sea, 128);
+  CHECK_EQ(t.head, std::string(" 1  2  3  4   T"));
+  CHECK_EQ(t.body, std::string(" 3  6  3 17  29\n 0  0  0 13  13"));
+  GameSnapshot ot = sea;
+  ot.team_line_count = ot.opp_line_count = 6;
+  ot.team_lines[4] = 0;
+  ot.team_lines[5] = 6;
+  ot.opp_lines[4] = 3;
+  ot.opp_lines[5] = 0;
+  t = line_score_text(ot, 128);
+  CHECK_EQ(t.head, std::string(" 1  2  3  4 OT   T"));
+  CHECK_EQ((int) t.font, 8);  // an OT column takes the small font
+  t = line_score_text(ot, 64);
+  CHECK_EQ(t.body, std::string("1H    9    0\n2H   20   13\nOT    6    3\nT    29   13"));
+
+  // A soccer final has no line score
+  GameSnapshot epl;
+  CHECK(parse_event_str(slurp("fixtures/event_epl_final.json"), Sport::SOCCER, 359, epl, ""));
+  CHECK(!line_score_due(epl));
+  CHECK_EQ(epl.headline, std::string("Guimar\xc3\xa3" "es stunner helps Arsenal keep perfect start"));
+  CHECK_EQ(so.headline, std::string("Blake's shootout goal rescues Hurricanes in 5-4 win over Penguins"));
+  CHECK_EQ(f.headline, std::string(""));
+}
+
+// A live football snapshot for the scoring log, DAL (away, ours) at PHI.
+static GameSnapshot log_read(int us, int them, int period, const char *clock, const char *type = "",
+                             int value = 0, uint32_t team = 0, const char *who = "", int yards = 0,
+                             const char *text = "") {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::IN;
+  g.event_id = "401";
+  g.team_abbr = "DAL";
+  g.opp_abbr = "PHI";
+  g.team_id = 6;
+  g.opp_id = 21;
+  g.team_score = us;
+  g.opp_score = them;
+  g.period = period;
+  g.display_clock = clock;
+  g.play_type = type;
+  g.play_value = (int8_t) value;
+  g.play_team = team;
+  g.play_athlete = who;
+  g.play_yards = (int16_t) yards;
+  g.last_play = text;
+  return g;
+}
+
+static void test_score_log() {
+  CHECK_EQ(espn::detail::last_name("J. Grier"), std::string("Grier"));
+  CHECK_EQ(espn::detail::last_name("O. Mabson II"), std::string("Mabson II"));
+  CHECK_EQ(espn::detail::last_name("G.Kittle"), std::string("Kittle"));
+  CHECK_EQ(espn::detail::pass_target("(Shotgun) B.Purdy pass short left to G.Kittle for 11 yards, TOUCHDOWN."),
+           std::string("Kittle"));
+  CHECK_EQ(espn::detail::pass_target("(00:38) No Huddle-Shotgun #17 J.Kohl pass complete short right to #4 J.Resar "
+                               "caught at FIU31, for 6 yards"),
+           std::string("Resar"));
+  CHECK_EQ(espn::detail::pass_target("#13 J.Grier rush left for 28 yards gain to the MNE00 TOUCHDOWN"), std::string(""));
+
+  ScoreLog log;
+  // The first read of a game logs nothing; repeats add nothing.
+  log.update(log_read(0, 0, 1, "15:00"));
+  log.update(log_read(0, 0, 1, "15:00"));
+  CHECK(log.lines("401").empty());
+  // A touchdown pass seen as the last play, then the extra point finishes its line
+  log.update(log_read(6, 0, 1, "7:12", "Passing Touchdown", 6, 6, "B. Smith", 12,
+                      "(Shotgun) D.Prescott pass short right to C.Lamb for 12 yards, TOUCHDOWN."));
+  log.update(log_read(6, 0, 1, "7:12", "Passing Touchdown", 6, 6, "B. Smith", 12));
+  CHECK_EQ(log.lines("401").size(), (size_t) 1);
+  CHECK_EQ(log.lines("401")[0], std::string("Q1 7:12 Lamb 12 yd pass, DAL 6-0"));
+  log.update(log_read(7, 0, 1, "7:12", "Extra Point Good", 1, 6, "B. Aubrey"));
+  CHECK_EQ(log.lines("401").size(), (size_t) 1);
+  CHECK_EQ(log.lines("401")[0], std::string("Q1 7:12 Lamb 12 yd pass, DAL 7-0"));
+  // Their field goal; a touchdown run with the try already in (NFL text)
+  log.update(log_read(7, 3, 2, "11:02", "Field Goal Good", 3, 21, "J. Elliott", 48));
+  log.update(log_read(7, 10, 2, "3:40", "Rushing Touchdown", 7, 21, "S. Barkley", 28));
+  // A read that missed the play: the score alone
+  log.update(log_read(14, 10, 3, "9:00", "Kickoff", 0, 21));
+  // Both sides between reads: neither is described
+  log.update(log_read(17, 12, 4, "5:00", "Safety", 2, 6));
+  // A safety right after a touchdown does not finish the touchdown's line
+  log.update(log_read(23, 12, 4, "4:00", "Rushing Touchdown", 6, 6, "J. Williams", 1));
+  log.update(log_read(23, 14, 4, "3:50", "Safety", 2, 21, "N. Smith"));
+  // Overtime, and a final whose score came with it
+  GameSnapshot fin = log_read(26, 14, 5, "6:01", "Field Goal Good", 3, 6, "B. Aubrey", 33);
+  fin.state = GameState::POST;
+  log.update(fin);
+  std::vector<std::string> l = log.lines("401");
+  CHECK_EQ(l.size(), (size_t) 9);
+  if (l.size() == 9) {
+    CHECK_EQ(l[1], std::string("Q2 11:02 Elliott 48 yd FG, PHI 3-7"));
+    CHECK_EQ(l[2], std::string("Q2 3:40 Barkley 28 yd run, PHI 10-7"));
+    CHECK_EQ(l[3], std::string("Q3 9:00 DAL TD, DAL 14-10"));
+    CHECK_EQ(l[4], std::string("Q4 5:00 DAL FG, DAL 17-12"));
+    CHECK_EQ(l[5], std::string("Q4 5:00 PHI safety, PHI 12-17"));
+    CHECK_EQ(l[6], std::string("Q4 4:00 Williams 1 yd run, DAL 23-12"));
+    CHECK_EQ(l[7], std::string("Q4 3:50 Safety, PHI 14-23"));
+    CHECK_EQ(l[8], std::string("OT 6:01 Aubrey 33 yd FG, DAL 26-14"));
+  }
+
+  // A second game, then a third: the first is forgotten, the second kept
+  GameSnapshot other = log_read(0, 0, 1, "15:00");
+  other.event_id = "402";
+  log.update(other);
+  other.team_score = 3;
+  log.update(other);
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  CHECK_EQ(log.lines("401").size(), (size_t) 9);
+  GameSnapshot third = other;
+  third.event_id = "403";
+  log.update(third);
+  CHECK(log.lines("401").empty());
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  // A final read for the first time (the finals rotation) takes no slot
+  GameSnapshot rot = other;
+  rot.event_id = "404";
+  rot.state = GameState::POST;
+  log.update(rot);
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  // The same game from the other side (two favorites) keeps its scores straight
+  GameSnapshot flip = other;
+  std::swap(flip.team_abbr, flip.opp_abbr);
+  std::swap(flip.team_score, flip.opp_score);
+  std::swap(flip.team_id, flip.opp_id);
+  log.update(flip);
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  // Only the latest twelve lines stay
+  for (int i = 1; i <= 14; i++) {
+    other.team_score = 3 + 3 * i;
+    log.update(other);
+  }
+  l = log.lines("402");
+  CHECK_EQ(l.size(), ScoreLog::kLines);
+  CHECK_EQ(l.back(), std::string("Q1 15:00 DAL FG, DAL 45-0"));
+
+  // Hockey: the scorer when the last play is the goal; the shootout
+  ScoreLog hl;
+  GameSnapshot hk = log_read(0, 0, 1, "20:00");
+  hk.sport = Sport::HOCKEY;
+  hl.update(hk);
+  hk.team_score = 1;
+  hk.period = 2;
+  hk.display_clock = "12:04";
+  hk.play_type = "Goal";
+  hk.play_value = 1;
+  hk.play_team = 6;
+  hk.play_athlete = "S. Crosby";
+  hl.update(hk);
+  hk.opp_score = 1;
+  hk.period = 3;
+  hk.display_clock = "1:10";
+  hk.play_value = 0;
+  hl.update(hk);
+  hk.team_score = 2;
+  hk.period = 5;
+  hk.state = GameState::POST;
+  hl.update(hk);
+  l = hl.lines("401");
+  CHECK_EQ(l.size(), (size_t) 3);
+  if (l.size() == 3) {
+    CHECK_EQ(l[0], std::string("P2 12:04 Crosby goal, DAL 1-0"));
+    CHECK_EQ(l[1], std::string("P3 1:10 PHI goal, PHI 1-1"));
+    CHECK_EQ(l[2], std::string("SO DAL wins shootout, DAL 2-1"));
+  }
+
+  // Baseball: ESPN's play text, trimmed, with the half inning
+  ScoreLog bl;
+  GameSnapshot b = log_read(0, 0, 6, "0:00");
+  b.sport = Sport::BASEBALL;
+  b.short_detail = "Top 6th";
+  bl.update(b);
+  b.team_score = 2;
+  b.play_value = 2;
+  b.play_team = 6;
+  b.last_play = "Mesa Jr. homered to right center (401 feet), Caminero scored.";
+  bl.update(b);
+  b.opp_score = 1;
+  b.short_detail = "Bot 6th";
+  b.play_value = 0;
+  bl.update(b);
+  l = bl.lines("401");
+  CHECK_EQ(l.size(), (size_t) 2);
+  if (l.size() == 2) {
+    CHECK_EQ(l[0], std::string("T6 Mesa Jr. homered to right center, Caminero scored, DAL 2-0"));
+    CHECK_EQ(l[1], std::string("B6 PHI 1 run, PHI 1-2"));
+  }
+
+  // Basketball keeps no log
+  ScoreLog nl;
+  GameSnapshot n = log_read(0, 0, 1, "12:00");
+  n.sport = Sport::BASKETBALL;
+  nl.update(n);
+  n.team_score = 2;
+  nl.update(n);
+  CHECK(nl.lines("401").empty());
+
+  // The ticker: headline and log after the first part
+  CHECK_EQ(with_score_log("Final | DAL 5-2, PHI 4-3", "Cowboys win it", {"Q1 DAL TD, DAL 7-0"}),
+           std::string("Final | Cowboys win it | Q1 DAL TD, DAL 7-0 | DAL 5-2, PHI 4-3"));
+  CHECK_EQ(with_score_log("Halftime", "", {"Q1 DAL TD, DAL 7-0"}), std::string("Halftime | Q1 DAL TD, DAL 7-0"));
+  CHECK_EQ(with_score_log("Final | X", "", {}), std::string("Final | X"));
+  CHECK_EQ(with_score_log("Final", "Guimar\xc3\xa3" "es stunner", {}), std::string("Final | Guimaraes stunner"));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -4657,6 +4939,8 @@ int main() {
   test_message();
   test_wifi_history();
   test_ha_events();
+  test_line_score();
+  test_score_log();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
