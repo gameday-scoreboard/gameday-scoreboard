@@ -519,8 +519,7 @@ script:
           }
           const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
                                        id(spleen_8)->get_lv_font()};
-          const size_t n = gameday::board_ascii(page.c_str()) ? 3 : 2;
-          id(gameday_ctl).set_msg_roll_ms(gameday::board_text(id(tt_msg), id(tt_msg_lbl), page.c_str(), fonts, n));
+          id(gameday_ctl).set_msg_roll_ms(gameday::board_text(id(tt_msg), id(tt_msg_lbl), page.c_str(), fonts, 3));
           lv_obj_move_foreground(id(tt_msg));
           lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
 

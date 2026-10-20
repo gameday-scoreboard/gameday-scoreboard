@@ -18,16 +18,6 @@ static constexpr uint32_t kBoardRollHoldMs = 2000;
 
 inline void board_roll_y_(void *label, int32_t v) { lv_obj_set_y((lv_obj_t *) label, v); }
 
-// Spleen 5x8 draws the Latin-1 letters (é, ñ, ü) blank on the panel, though
-// they are in its glyph list; the two bigger sizes draw them. Text with one
-// leaves the smallest font out and rolls instead.
-inline bool board_ascii(const char *text) {
-  for (const char *p = text; *p != '\0'; p++)
-    if ((unsigned char) *p >= 0x80)
-      return false;
-  return true;
-}
-
 // fonts: biggest first. Returns how long one pass of a rolling text takes in
 // ms, 0 when it stands still.
 inline uint32_t board_text(lv_obj_t *box, lv_obj_t *label, const char *text, const lv_font_t *const *fonts,

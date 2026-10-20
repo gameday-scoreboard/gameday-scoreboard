@@ -35,6 +35,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - When an update crashes as it starts and the panel goes back to the firmware it had, the device page says the update didn't take and which version the panel went back to.
 - Home Assistant: new Game Live, Team Score and Opponent Score entities follow the game in Game Status, and the panel fires an `esphome.gameday_score` event on every score in that game and `esphome.gameday_final` when it ends, in every sport, so an automation can flash the lights when your team scores.
 - The device page's link to an update's release notes opens that release on gamedayscoreboard.app/changelog.
+- Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text instead of a gap ("Atl tico").
 
 ## v2026.10.0
 

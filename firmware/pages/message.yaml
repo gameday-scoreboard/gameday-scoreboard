@@ -22,7 +22,7 @@ script:
             return;
           const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
                                        id(spleen_8)->get_lv_font()};
-          gameday::board_text(id(gd_say_box), id(gd_say_lbl), text.c_str(), fonts, gameday::board_ascii(text.c_str()) ? 3 : 2);
+          gameday::board_text(id(gd_say_box), id(gd_say_lbl), text.c_str(), fonts, 3);
           lv_obj_move_foreground(id(gd_say_box));
           lv_obj_clear_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);
       - if:
