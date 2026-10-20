@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "espn_parse.h"
+#include "line_score.h"
 #include "panel_text.h"
 #include "recap.h"
+#include "score_log.h"
 
 using namespace espn;
 
@@ -129,6 +131,16 @@ size_t render(const GameSnapshot &prev, const GameSnapshot &g, int64_t now) {
   }
   if (g.sport == Sport::BASKETBALL)
     n += basketball_series(g).size();
+  // The halftime and final boards: the line score at both widths, and the
+  // scoring log from the two reads.
+  for (int width : {64, 128, 256}) {
+    LineScoreText t = line_score_text(g, width);
+    n += t.head.size() + t.body.size() + t.title.size();
+  }
+  ScoreLog log;
+  log.update(prev);
+  log.update(g);
+  n += with_score_log(status_text(g, TickerOptions{}, kick_local), g.headline, log.lines(g.event_id)).size();
   return n;
 }
 

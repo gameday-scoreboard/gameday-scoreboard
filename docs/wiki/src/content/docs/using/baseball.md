@@ -48,4 +48,10 @@ When your team wins, a victory splash with fireworks says your abbreviation and 
 
 The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. The final stays up for ten minutes in My team, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up your team's next game.
 
+:::note[Coming in the next release]
+At the final the board takes turns, 10 seconds each, with the line score: runs by inning in groups of three, then runs, hits and errors, like a box score. An inning the home team didn't need to bat in shows an x. A long extra-inning game drops the groups, and a very long one shows runs, hits and errors alone. On a 64x64 panel it's runs, hits and errors, the teams side by side under their abbreviations.
+
+With **Last play** on, the final's ticker also runs the scoring plays the panel saw, like "T6 Riley homered to left, Acuna scored, ATL 2-0", and ESPN's headline for the game when it has one.
+:::
+
 A postponed, canceled or suspended game shows ESPN's word for it and gets no victory splash.

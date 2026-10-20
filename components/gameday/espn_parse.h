@@ -119,6 +119,19 @@ struct GameSnapshot {
   std::string drive;
   int8_t team_win_pct{-1};
   std::string odds, over_under, tv, venue;
+  // The last play's details, for the scoring log (score_log.h): ESPN's play
+  // type ("Rushing Touchdown", "Field Goal Good"), its points, its yards, the
+  // side's team id and the first player named ("J. Grier").
+  std::string play_type, play_athlete;
+  int8_t play_value{0};
+  int16_t play_yards{0};
+  uint32_t play_team{0};
+  // Each side's points by period, quarter or inning, for the line score
+  // (line_score.h). A period past kLinesMax adds into the last one.
+  static constexpr uint8_t kLinesMax = 16;
+  uint8_t team_lines[kLinesMax]{}, opp_lines[kLinesMax]{};
+  uint8_t team_line_count{0}, opp_line_count{0};
+  std::string headline;  // ESPN's story line on a final, "" when it has none
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};

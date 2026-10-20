@@ -33,8 +33,12 @@ inline bool time_tbd(JsonObjectConst comp) {
 }
 
 // The fields read from one event, whether it sits in a scoreboard's events
-// array or is a single-event document's root.
-inline void fill_event_filter(JsonObject ev) {
+// array or is a single-event document's root. board_extras adds what the
+// halftime and final boards need (line score, headline, the last play's
+// details for the scoring log): every league polls its game on its own
+// (LeagueInfo::per_event), so a whole day's scoreboard, up to 750 KB for
+// college football, leaves them out.
+inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   ev["id"] = true;
   ev["date"] = true;
   ev["status"]["displayClock"] = true;
@@ -69,9 +73,17 @@ inline void fill_event_filter(JsonObject ev) {
   comp["broadcasts"].add<JsonObject>()["names"] = true;
   comp["venue"]["fullName"] = true;
   comp["notes"].add<JsonObject>()["headline"] = true;
+  if (!board_extras)
+    return;
+  comp["situation"]["lastPlay"]["type"]["text"] = true;
+  comp["situation"]["lastPlay"]["statYardage"] = true;
+  comp["situation"]["lastPlay"]["team"]["id"] = true;
+  comp["situation"]["lastPlay"]["athletesInvolved"][0]["shortName"] = true;
+  c["linescores"][0]["value"] = true;
+  comp["headlines"][0]["shortLinkText"] = true;
 }
 
-inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>()); }
+inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>(), false); }
 
 inline void fill_baseball_filter(JsonObject ev) {
   JsonObject comp = ev["competitions"][0];
@@ -228,6 +240,17 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     (ours ? s.team_color : s.opp_color) = color;
     (ours ? s.team_logo : s.opp_logo) = logo;
     (ours ? s.team_timeouts : s.opp_timeouts) = timeouts;
+    uint8_t *lines = ours ? s.team_lines : s.opp_lines;
+    uint8_t &count = ours ? s.team_line_count : s.opp_line_count;
+    count = 0;
+    for (JsonVariantConst ls : c["linescores"].as<JsonArrayConst>()) {
+      float v = ls["value"] | 0.0f;
+      int pts = v > 0 ? (int) (v + 0.5f) : 0;
+      if (count < GameSnapshot::kLinesMax)
+        lines[count++] = 0;
+      pts += lines[count - 1];
+      lines[count - 1] = (uint8_t) std::min(pts, 255);
+    }
     if (ours) {
       s.team_winner = winner;
       s.team_home = home;
@@ -243,6 +266,11 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   JsonObjectConst lp = sit["lastPlay"];
   if ((lp["scoreValue"] | 0) >= 3)
     s.drive = str_or_empty(lp["drive"]["description"]);
+  s.play_type = str_or_empty(lp["type"]["text"]);
+  s.play_athlete = str_or_empty(lp["athletesInvolved"][0]["shortName"]);
+  s.play_value = (int8_t) std::min(100, std::max(0, lp["scoreValue"] | 0));
+  s.play_yards = (int16_t) std::min(200, std::max(-200, lp["statYardage"] | 0));
+  s.play_team = (uint32_t) atol(str_or_empty(lp["team"]["id"]).c_str());
   JsonVariantConst win = lp["probability"][s.team_home ? "homeWinPercentage" : "awayWinPercentage"];
   if (win.is<float>()) {
     // ESPN goes to 0.999 and 0.001 well before the end; 100% would claim
@@ -257,6 +285,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   s.tv = str_or_empty(comp["broadcasts"][0]["names"][0]);
   s.venue = str_or_empty(comp["venue"]["fullName"]);
   s.game_name = short_game_name(str_or_empty(comp["notes"][0]["headline"]));
+  s.headline = str_or_empty(comp["headlines"][0]["shortLinkText"]);
   s.valid = true;
   out = s;
   return true;

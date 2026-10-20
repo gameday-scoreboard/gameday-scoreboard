@@ -2734,6 +2734,12 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   std::string kickoff = kickoff_of(g);
   f.kickoff = kickoff;
   f.status_text = ::espn::status_text(g, opts, kickoff);
+  // Halftime and the final: ESPN's headline (a final only) and the scores the
+  // panel saw, behind the same switch as the last play.
+  this->score_log_.update(g);
+  if (opts.last_play && g.valid && (::espn::at_halftime(g) || (g.state == GameState::POST && g.completed)))
+    f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
+                                           this->score_log_.lines(g.event_id));
   const GameSnapshot &ha = this->ha_game_();
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;

@@ -65,3 +65,9 @@ At halftime the clock row says "Halftime" and the ticker shows both teams' recor
 At the final the ticker says "Final" with the records. The final stays up for half an hour, then the panel moves on to your team's next game. In Live games the panel moves to another game instead, and in Favorite teams **After the final** sets how long it stays; see [Favorite teams](/using/favorites/).
 
 A postponed, canceled or suspended game shows ESPN's word for it instead of "Final", and gets no victory splash.
+
+:::note[Coming in the next release]
+At halftime and the final the board takes turns, 10 seconds each, with the line score: each team's points by quarter and the total, with one OT column after overtime. On a 64x64 panel it's by half, the teams side by side under their abbreviations.
+
+With **Last play** on, the ticker at halftime and the final also runs the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. A score the panel didn't see as it happened, because it started or switched to the game later, isn't in the list; the line score still counts it.
+:::

@@ -29,9 +29,11 @@
 #include "ha_events.h"
 #include "board_text.h"
 #include "health.h"
+#include "line_score.h"
 #include "message.h"
 #include "offseason.h"
 #include "recap.h"
+#include "score_log.h"
 #include "poll_timing.h"
 #include "set_request.h"
 #include "startup.h"
@@ -315,6 +317,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // for the panel rolls up; the page says how long one pass takes, and the
   // card stays up at least that long.
   const std::string &msg_card() const { return this->msg_card_; }
+  // The board game's line score at halftime and the final, laid out for a
+  // display width_px wide (line_score.h); font 0 the rest of the time. Read by
+  // gd_update in firmware/pages/gameday-live.yaml.
+  ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The update feed's second host (update_mirror.h): `mirror` is `source`
   // on the mirror, `beta_mirror` the beta manifest there (release builds).
@@ -684,6 +690,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::vector<std::function<void(const UpdateFields &)>> callbacks_;
   std::vector<std::function<void(const ::espn::HaEvent &)>> ha_event_callbacks_;
   ::espn::HaTracker ha_tracker_;
+  // The board game's scores as they went by, for the halftime and final
+  // tickers (score_log.h): about 1 KB of internal RAM for two games.
+  ::espn::ScoreLog score_log_;
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};
