@@ -537,7 +537,7 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
     int period = ev["status"]["period"] | 0;
     g.period = (uint8_t) (period < 0 ? 0 : period > 255 ? 255 : period);
     float clock = ev["status"]["clock"] | -1.0f;
-    g.clock_s = clock < 0 || clock > 100000 ? -1 : (int32_t) clock;
+    g.clock_s = clock >= 0 && clock <= 100000 ? (int32_t) clock : -1;  // NaN fails both
     for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
       bool home = detail::str_or_empty(c["homeAway"]) == "home";
       std::string abbr = detail::str_or_empty(c["team"]["abbreviation"]);

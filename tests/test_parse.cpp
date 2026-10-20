@@ -415,6 +415,8 @@ static void test_best_game() {
   CHECK_EQ(clock_seconds("65'"), 3900);
   CHECK_EQ(clock_seconds("90'+3'"), 5400);
   CHECK_EQ(clock_seconds(""), -1);
+  CHECK_EQ(clock_seconds("99999999999:00"), -1);
+  CHECK_EQ(clock_seconds("1:99999999999"), -1);
 
   CHECK_EQ(game_progress(League::NCAA, 4, 900), 750);
   CHECK_EQ(game_progress(League::NFL, 1, 900), 0);

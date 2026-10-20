@@ -58,13 +58,18 @@ inline Regulation regulation(League league) {
 inline int clock_seconds(const std::string &c) {
   if (c.empty() || c[0] < '0' || c[0] > '9')
     return -1;
-  int a = atoi(c.c_str());
+  // Held to four digits a part, so nonsense from the feed can't overflow.
+  long a = strtol(c.c_str(), nullptr, 10);
+  if (a > 9999)
+    return -1;
   size_t colon = c.find(':');
-  if (colon != std::string::npos)
-    return a * 60 + atoi(c.c_str() + colon + 1);
+  if (colon != std::string::npos) {
+    long b = strtol(c.c_str() + colon + 1, nullptr, 10);
+    return b < 0 || b > 9999 ? -1 : (int) (a * 60 + b);
+  }
   if (c.find('\'') != std::string::npos)
-    return a * 60;
-  return a;
+    return (int) a * 60;
+  return (int) a;
 }
 
 // How far through regulation the game is, 0 to 1000. A clock that runs down
