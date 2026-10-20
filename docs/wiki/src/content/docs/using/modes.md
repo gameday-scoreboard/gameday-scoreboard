@@ -38,7 +38,7 @@ Live games follows the best game on instead of a random one, with the **Pick the
 
 - **The best game** is the closest one with the least time left. A game in overtime or extra innings comes first, and in college a ranked team, more so a top-ranked one, moves a game up.
 - **It never leaves mid-play.** The panel looks for a better game at the end of a quarter, period or half inning, at halftime, or when the game ends, and no sooner than **Switch every** minutes after the last look. It stays on the game it shows unless another one is clearly better.
-- **Upset alert.** When a ranked college team trails in the fourth quarter, the last ten minutes of a basketball game, or overtime, the panel flashes **UPSET ALERT** in red over that game, once a game. Those games also jump to the front of the line.
+- **Upset alert.** When the better-ranked college team trails (a ranked team behind an unranked one, or behind a lower-ranked one) in the fourth quarter, the last ten minutes of a basketball game, or overtime, the panel flashes **UPSET ALERT** in red over that game, once a game. Those games also jump to the front of the line.
 
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
 :::
