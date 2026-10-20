@@ -116,7 +116,10 @@
     </div>
     <div class="teambar livebar" id="livebar" hidden>
       <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
-      <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+      <div class="livectls">
+        <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button></div>
+      </div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
@@ -332,6 +335,7 @@
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
@@ -627,8 +631,10 @@
     // team a rotation of recent finals, and keeps scanning.
     $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
       : S.recap ? "No live game right now, showing recent finals"
-        : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after Switch every. ")
+        : S.best ? "Following the best game on" : "Following a random game in progress";
+    $("#liveLg").textContent = (S.fallback || S.recap ? ""
+      : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
+        : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";

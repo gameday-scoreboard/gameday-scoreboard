@@ -162,6 +162,11 @@ struct LiveGame {
   uint32_t away_id{0};      // shown on the left, like a broadcast
   uint32_t home_id{0};      // for its logo, fetched as soon as the game is picked
   std::string away_abbr, home_abbr;
+  // Where the game stands, for the best-game pick (best_game.h).
+  int16_t away_score{0}, home_score{0};
+  uint8_t period{0};
+  int32_t clock_s{-1};  // ESPN's status clock: left in the period, or soccer's elapsed
+  uint8_t away_rank{99}, home_rank{99};  // AP rank, 99 when unranked
 };
 
 // A finished game from a day's scoreboard, for the finals rotation (recap.h).
