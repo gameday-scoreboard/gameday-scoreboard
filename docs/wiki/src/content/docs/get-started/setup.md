@@ -13,7 +13,7 @@ Connect the power supply that came with the panel. The panel lights up with **GA
 
 A panel that isn't on Wi-Fi yet then shows **SETUP** and a QR code. On the 128x64 panel the QR code sits on the left half and the words **SETUP / Game Day / app** sit beside it. On a single 64x64 panel there is no room for both, so the words and the QR code take turns: about 5 seconds of words, then 8 seconds of QR code.
 
-The QR code opens `https://install.gameday-scoreboard.com/s`. On an iPhone, point the Camera at it: it opens the Game Day app if you have it, or the setup page in your browser if you don't.
+The QR code opens `https://app.gameday-scoreboard.com/setup`. On an iPhone, point the Camera at it: it opens the Game Day app if you have it, or the setup page in your browser if you don't.
 
 ## Set it up in the Game Day app
 
