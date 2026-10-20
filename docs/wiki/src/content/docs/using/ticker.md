@@ -22,6 +22,10 @@ At halftime and the final, with **Last play** on, the ticker also runs the scori
 
 Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 
+:::note[Coming in the next release]
+Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text. Before, they came out as a gap, like "Atl tico".
+:::
+
 ## The switches
 
 The Ticker card on the device page has a switch for each part. All of them start on.

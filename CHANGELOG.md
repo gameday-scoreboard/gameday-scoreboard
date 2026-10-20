@@ -35,6 +35,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - When an update crashes as it starts and the panel goes back to the firmware it had, the device page says the update didn't take and which version the panel went back to.
 - Home Assistant: new Game Live, Team Score and Opponent Score entities follow the game in Game Status, and the panel fires an `esphome.gameday_score` event on every score in that game and `esphome.gameday_final` when it ends, in every sport, so an automation can flash the lights when your team scores.
 - The device page's link to an update's release notes opens that release on gamedayscoreboard.app/changelog.
+- Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text instead of a gap ("Atl tico").
 - At halftime and the final the board takes turns with the line score: each team's points by quarter, period or inning and the total, with runs, hits and errors in baseball. On a 64x64 panel it's a shorter form, by half in football and basketball. With Last play on, the halftime and final ticker also lists the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and the final adds ESPN's headline for the game.
 
 ## v2026.10.0

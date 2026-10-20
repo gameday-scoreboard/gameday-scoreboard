@@ -196,9 +196,12 @@ packages:
 # accented names (São Paulo, Atlético) draw. Text from outside the panel goes
 # through panel_text() (components/gameday/panel_text.h), which only puts out
 # these characters, so all three sizes carry the same list. A glyph listed
-# here that a font lacks fails the build rather than drawing a box.
+# here that a font lacks fails the build rather than drawing a box. Spleen's
+# 5x8 has its Latin-1 glyphs blank, so 5x8 comes from fonts/spleen-5x8.bdf,
+# where they are drawn.
 font:
   - id: !extend spleen_8
+    file: fonts/spleen-5x8.bdf
     glyphs: &panel_glyphs
       - ' !"#$%&''()*+,-./0123456789:;<=>?@'
       - 'ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`'
