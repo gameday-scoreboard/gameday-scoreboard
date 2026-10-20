@@ -8,6 +8,7 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "best_game.h"
 #include "captive.h"
 #include "demo.h"
 #include "espn_parse.h"
@@ -359,6 +360,140 @@ static GameSnapshot live(int us, int them, GameState st = GameState::IN) {
   s.team_color = "002a5c";
   s.opp_color = "004c54";
   return s;
+}
+
+// Live games' best-game pick and the upset alert (best_game.h).
+static LiveGame lg(League l, int away, int home, int period, int clock, uint8_t away_rank = 99,
+                   uint8_t home_rank = 99, const char *id = "1") {
+  LiveGame g;
+  g.league = (uint8_t) l;
+  g.event_id = id;
+  g.away_score = (int16_t) away;
+  g.home_score = (int16_t) home;
+  g.period = (uint8_t) period;
+  g.clock_s = clock;
+  g.away_rank = away_rank;
+  g.home_rank = home_rank;
+  return g;
+}
+
+static void test_best_game() {
+  // The scan reads where each game stands.
+  std::string json = slurp("fixtures/scoreboard_ncaa_live.json");
+  std::vector<LiveGame> games;
+  CHECK(parse_live_games(json, games));
+  const LiveGame *ore = nullptr;
+  for (auto &g : games) {
+    g.league = (uint8_t) League::NCAA;
+    if (g.event_id == kLiveEvent)
+      ore = &g;
+  }
+  CHECK(ore != nullptr);
+  if (ore != nullptr) {
+    CHECK_EQ((int) ore->away_score, 24);
+    CHECK_EQ((int) ore->home_score, 24);
+    CHECK_EQ((int) ore->period, 4);
+    CHECK_EQ((int) ore->clock_s, 900);
+    CHECK_EQ((int) ore->away_rank, 99);
+    CHECK_EQ((int) ore->home_rank, 2);
+  }
+  // #2 Oregon tied with Boise State in the 4th beats the blowouts and the
+  // closer games still in the 3rd.
+  CHECK_EQ(games[best_live_game(games, "")].event_id, std::string(kLiveEvent));
+  // The same holds with finals and pending asked for (the no-team scan).
+  std::vector<LiveGame> again;
+  std::vector<Final> finals;
+  std::vector<Pending> pending;
+  int64_t next = 0;
+  CHECK(parse_live_games(json, again, &next, &finals, &pending));
+  CHECK_EQ(again.size(), games.size());
+  for (size_t i = 0; i < again.size() && i < games.size(); i++)
+    CHECK_EQ((int) again[i].home_score, (int) games[i].home_score);
+
+  CHECK_EQ(clock_seconds("8:27"), 507);
+  CHECK_EQ(clock_seconds("12.3"), 12);
+  CHECK_EQ(clock_seconds("65'"), 3900);
+  CHECK_EQ(clock_seconds("90'+3'"), 5400);
+  CHECK_EQ(clock_seconds(""), -1);
+
+  CHECK_EQ(game_progress(League::NCAA, 4, 900), 750);
+  CHECK_EQ(game_progress(League::NFL, 1, 900), 0);
+  CHECK_EQ(game_progress(League::NFL, 4, 0), 1000);
+  CHECK_EQ(game_progress(League::NBA, 3, 507), 573);
+  CHECK_EQ(game_progress(League::MCBB, 2, 600), 750);
+  CHECK_EQ(game_progress(League::MLB, 7, 0), 777);
+  CHECK_EQ(game_progress(League::EPL, 1, 1500), 277);
+  CHECK_EQ(game_progress(League::NHL, 4, 300), 1000);
+  CHECK_EQ(game_progress(League::NFL, 0, 0), 0);
+  CHECK(in_overtime(League::NFL, 5));
+  CHECK(!in_overtime(League::MCBB, 2));
+  CHECK(in_overtime(League::MLB, 10));
+
+  // Upset alert: the better-ranked side trails late.
+  CHECK(upset_alert(lg(League::NCAA, 24, 21, 4, 600, 99, 2)));
+  CHECK(!upset_alert(lg(League::NCAA, 21, 24, 4, 600, 99, 2)));  // the ranked side leads
+  CHECK(!upset_alert(lg(League::NCAA, 24, 24, 4, 600, 99, 2)));  // tied
+  CHECK(!upset_alert(lg(League::NCAA, 24, 21, 3, 600, 99, 2)));  // not late yet
+  CHECK(upset_alert(lg(League::NCAA, 27, 24, 5, -1, 99, 2)));    // overtime
+  CHECK(upset_alert(lg(League::NCAA, 17, 20, 4, 300, 3, 18)));   // #3 trails #18
+  CHECK(!upset_alert(lg(League::NCAA, 20, 17, 4, 300, 3, 18)));
+  CHECK(!upset_alert(lg(League::MCBB, 70, 60, 2, 660, 99, 5)));  // 11 minutes left
+  CHECK(upset_alert(lg(League::MCBB, 70, 60, 2, 540, 99, 5)));   // 9 minutes left
+  CHECK(!upset_alert(lg(League::NBA, 100, 90, 4, 60)));          // no ranks in the pros
+
+  // Close beats lopsided, late beats early, overtime beats regulation.
+  int tie_late = live_interest(lg(League::NFL, 21, 21, 4, 120));
+  int tie_early = live_interest(lg(League::NFL, 7, 7, 1, 600));
+  int blowout = live_interest(lg(League::NFL, 35, 3, 4, 120));
+  int one_score = live_interest(lg(League::NFL, 17, 21, 4, 120));
+  int ot = live_interest(lg(League::NFL, 24, 24, 5, 400));
+  CHECK(tie_late > tie_early);
+  CHECK(tie_late > one_score);
+  CHECK(one_score > blowout);
+  CHECK(ot > tie_late);
+  CHECK_EQ(blowout, 0);
+  // An AP rank and an upset add on.
+  CHECK(live_interest(lg(League::NCAA, 14, 14, 2, 300, 99, 4)) > live_interest(lg(League::NCAA, 14, 14, 2, 300)));
+  CHECK(live_interest(lg(League::NCAA, 28, 10, 4, 300, 99, 4)) > tie_late);  // #4 down 18 late
+  CHECK(live_interest(lg(League::NHL, 2, 2, 3, 300)) > live_interest(lg(League::NHL, 4, 1, 3, 300)));
+  CHECK(live_interest(lg(League::MLB, 3, 3, 9, 0)) > live_interest(lg(League::MLB, 3, 3, 3, 0)));
+
+  // The game on the board keeps it against a near tie, not a clearly better one.
+  std::vector<LiveGame> two = {lg(League::NFL, 17, 21, 4, 120, 99, 99, "a"), lg(League::NFL, 21, 21, 4, 120, 99, 99, "b")};
+  CHECK_EQ(two[best_live_game(two, "")].event_id, std::string("b"));
+  CHECK_EQ(two[best_live_game(two, "a")].event_id, std::string("b"));  // 75 x 3 is well short of a tie's 300
+  two[0] = lg(League::NFL, 21, 21, 4, 150, 99, 99, "a");
+  CHECK_EQ(two[best_live_game(two, "a")].event_id, std::string("a"));
+  // A game the board saw end goes last, even when the scan still lists it.
+  two[0] = lg(League::NFL, 21, 21, 4, 0, 99, 99, "a");
+  CHECK_EQ(two[best_live_game(two, "a", true)].event_id, std::string("b"));
+  std::vector<LiveGame> one = {two[0]};
+  CHECK_EQ(best_live_game(one, "a", true), (size_t) 0);
+  std::vector<LiveGame> empty;
+  CHECK_EQ(best_live_game(empty, ""), (size_t) 0);
+
+  // Breaks in play: the only time the pick moves off the game on the board.
+  GameSnapshot s = live(14, 10);
+  for (const char *d : {"End of 3rd", "End 5th", "Mid 7th", "Halftime", "HT", "End of 1st Quarter"}) {
+    s.short_detail = d;
+    CHECK(at_break(s));
+  }
+  for (const char *d : {"8:27 - 3rd", "Top 7th", "Bot 3rd", "25'", "0:00 - 2nd", ""}) {
+    s.short_detail = d;
+    CHECK(!at_break(s));
+  }
+  CHECK(at_break(live(14, 10, GameState::POST)));
+  CHECK(at_break(GameSnapshot{}));
+
+  // A poll of the followed game, the away side as team, checked for an upset.
+  GameSnapshot p = live(24, 21);
+  p.period = 4;
+  p.display_clock = "4:12";
+  LiveGame v = live_view(p, (uint8_t) League::NCAA, 99, 2);
+  CHECK_EQ((int) v.clock_s, 252);
+  CHECK_EQ((int) v.away_score, 24);
+  CHECK(upset_alert(v));
+  CHECK(!upset_alert(live_view(p, (uint8_t) League::NCAA, 2, 99)));
 }
 
 // Home Assistant's score and final events (ha_events.h).
@@ -4941,6 +5076,7 @@ int main() {
   test_ha_events();
   test_line_score();
   test_score_log();
+  test_best_game();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

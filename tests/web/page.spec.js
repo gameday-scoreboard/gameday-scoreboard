@@ -609,7 +609,7 @@ test("Live games bar says when the leagues are automatic, and goes back to autom
   // Nothing picked: the leagues of the team and favorites (NFL and NCAAF in the mock), drawn as a suggestion.
   await reset(request, { mode: 5 });
   await page.goto("/");
-  await expect(lg).toHaveText("Moves on when it ends, or after Switch every. Leagues follow your team and favorites. Tap a league to choose by hand:");
+  await expect(lg).toHaveText("Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues follow your team and favorites. Tap a league to choose by hand:");
   await expect(page.locator("#liveChips")).toHaveClass(/auto/);
   await expect(chipsOn(page)).toHaveText(["NFL", "NCAAF"]);
   await expect(back).toBeHidden();
@@ -618,11 +618,11 @@ test("Live games bar says when the leagues are automatic, and goes back to autom
   // turns manual before the device answers.
   await slowReads(page, 1000);
   await chip(page, "MLB").click();
-  await expect(lg).toHaveText("Moves on when it ends, or after Switch every. Leagues:");
+  await expect(lg).toHaveText("Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues:");
   await expect(page.locator("#liveChips")).not.toHaveClass(/auto/);
   await expect(back).toBeVisible();
   await expectSet(request, { live: "nfl,ncaa,mlb" });
-  await staysAs(lg, ["Moves on when it ends, or after Switch every. Leagues:"], 1500);
+  await staysAs(lg, ["Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues:"], 1500);
   expect((await deviceState(request)).live_auto).toBe(false);
 
   // Back to automatic posts an empty list and the device works the leagues out again.
@@ -630,7 +630,7 @@ test("Live games bar says when the leagues are automatic, and goes back to autom
   await expectSet(request, { live: "" });
   await expect(lg).toContainText("Leagues follow your team and favorites.");
   await expect(back).toBeHidden();
-  await staysAs(lg, ["Moves on when it ends, or after Switch every. Leagues follow your team and favorites. Tap a league to choose by hand:"], 1500);
+  await staysAs(lg, ["Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues follow your team and favorites. Tap a league to choose by hand:"], 1500);
   await expect(chipsOn(page)).toHaveText(["NFL", "NCAAF"]);
   const st = await deviceState(request);
   expect([st.live_auto, st.live]).toEqual([true, ["nfl", "ncaa"]]);
@@ -639,15 +639,30 @@ test("Live games bar says when the leagues are automatic, and goes back to autom
   // An old football live mode has fixed leagues: no automatic wording, no link.
   await reset(request, { mode: 2 });
   await page.reload();
-  await expect(lg).toHaveText("Moves on when it ends, or after Switch every. Leagues:");
+  await expect(lg).toHaveText("Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues:");
   await expect(back).toBeHidden();
+});
+
+test("Pick the best game switch posts and changes what the Live games bar says", async ({ page, request }) => {
+  const name = page.locator("#liveName");
+  const sw = page.locator('#livebar .sw[data-set="best"]');
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
+  await page.goto("/");
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await expect(name).toHaveText("Following the best game on");
+  await sw.click();
+  await expectSet(request, { best: "0" });
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await expect(name).toHaveText("Following a random game in progress");
+  await expect(page.locator("#liveLg")).toHaveText("Moves on when it ends, or after Switch every. Leagues:");
+  expect((await deviceState(request)).best).toBe(false);
 });
 
 test("Live games bar says when nothing is live and the panel shows your team or finals", async ({ page, request }) => {
   const name = page.locator("#liveName");
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
   await page.goto("/");
-  await expect(name).toHaveText("Following a random game in progress");
+  await expect(name).toHaveText("Following the best game on");
 
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false, fallback: true });
   await page.reload();

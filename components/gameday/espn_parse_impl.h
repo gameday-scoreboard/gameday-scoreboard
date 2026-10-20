@@ -135,10 +135,14 @@ inline void fill_scan_filter(JsonDocument &f, bool finals = false, bool pending 
   c["homeAway"] = true;
   c["team"]["abbreviation"] = true;
   c["team"]["conferenceId"] = true;
+  // Where each live game stands, for the best-game pick.
+  ev["status"]["period"] = true;
+  ev["status"]["clock"] = true;
+  c["score"] = true;
+  c["curatedRank"]["current"] = true;
   if (!finals && !pending)
     return;
   c["records"].add<JsonObject>()["summary"] = true;
-  c["curatedRank"]["current"] = true;
   c["team"]["color"] = true;
   if (pending)
     comp["broadcasts"].add<JsonObject>()["names"] = true;
@@ -146,7 +150,6 @@ inline void fill_scan_filter(JsonDocument &f, bool finals = false, bool pending 
     return;
   ev["status"]["type"]["completed"] = true;
   ev["status"]["type"]["shortDetail"] = true;
-  c["score"] = true;
   c["winner"] = true;
 }
 
@@ -531,16 +534,29 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       continue;
     LiveGame g;
     g.event_id = detail::str_or_empty(ev["id"]);
+    int period = ev["status"]["period"] | 0;
+    g.period = (uint8_t) (period < 0 ? 0 : period > 255 ? 255 : period);
+    float clock = ev["status"]["clock"] | -1.0f;
+    g.clock_s = clock < 0 || clock > 100000 ? -1 : (int32_t) clock;
     for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
       bool home = detail::str_or_empty(c["homeAway"]) == "home";
       std::string abbr = detail::str_or_empty(c["team"]["abbreviation"]);
+      JsonVariantConst sc = c["score"];
+      int score = sc.is<const char *>() ? atoi(sc.as<const char *>()) : (sc | 0);
+      int16_t pts = (int16_t) (score < 0 ? 0 : score > 999 ? 999 : score);
+      int r = c["curatedRank"]["current"] | 99;
+      uint8_t rank = (uint8_t) (r >= 1 && r <= 25 ? r : 99);
       if (home) {
         g.home_abbr = abbr;
         g.home_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
         g.group = (uint32_t) atol(detail::str_or_empty(c["team"]["conferenceId"]).c_str());
+        g.home_score = pts;
+        g.home_rank = rank;
       } else {
         g.away_abbr = abbr;
         g.away_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
+        g.away_score = pts;
+        g.away_rank = rank;
       }
     }
     if (!g.event_id.empty() && g.away_id != 0)

@@ -1288,6 +1288,16 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
     this->rebuild_state_(&this->last_fields_);
 }
 
+void GamedayComponent::set_best_game(bool on) {
+  uint8_t next = on ? (this->prefs8_.live & ~LIVE8_RANDOM) : (this->prefs8_.live | LIVE8_RANDOM);
+  if (next == this->prefs8_.live)
+    return;
+  this->prefs8_.live = next;
+  this->pref8_.save(&this->prefs8_);
+  // Nothing on the board changes: the next pick follows the new rule.
+  this->rebuild_state_(&this->last_fields_);
+}
+
 void GamedayComponent::set_ticker8_(uint8_t f, bool on) {
   uint8_t next = on ? (this->prefs8_.ticker | f) : (this->prefs8_.ticker & ~f);
   if (next == this->prefs8_.ticker)
@@ -1657,6 +1667,8 @@ void GamedayComponent::reset_game_() {
   this->lingered_event_.clear();
   this->linger_backoff_ms_ = 0;
   this->live_away_id_ = 0;
+  this->live_away_rank_ = 99;
+  this->live_home_rank_ = 99;
   this->live_started_ms_ = 0;
   this->live_none_ = false;
   this->live_rescan_ms_ = NO_LIVE_RESCAN;
@@ -2127,8 +2139,11 @@ void GamedayComponent::start_job_() {
         // fire another one on the retry a minute later.
         this->live_started_ms_ = now == 0 ? 1 : now;
       } else {
+        // Picking the best game: only at a break in this one, never in the
+        // middle of a drive.
         bool rotate = this->live_started_ms_ != 0 &&
-                      (now - this->live_started_ms_) >= (uint32_t) this->prefs2_.rotate_minutes * MINUTE;
+                      (now - this->live_started_ms_) >= (uint32_t) this->prefs2_.rotate_minutes * MINUTE &&
+                      (!this->best_game() || ::espn::at_break(this->game_));
         bool ended = this->game_.valid && this->game_.state != GameState::IN;
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_;
       }
@@ -2473,8 +2488,25 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(0);  // the days the rotation still needs, or the wait
       return;
     }
-    const ::espn::LiveGame &g = j.live[pick[random_uint32() % pick.size()]];
-    ESP_LOGI(TAG, "Following %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+    bool best = this->best_game();
+    bool over = this->game_.valid && this->game_.state != GameState::IN;
+    const ::espn::LiveGame &g = j.live[best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
+                                            : pick[random_uint32() % pick.size()]];
+    if (best && !over && this->game_.valid && g.event_id == this->schedule_.event_id && !this->live_none_ &&
+        !this->live_fallback_) {
+      // Still the best game on: keep it, and look again at a later break.
+      ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      this->live_away_rank_ = g.away_rank;
+      this->live_home_rank_ = g.home_rank;
+      this->live_started_ms_ = now == 0 ? 1 : now;
+      this->schedule_next_(0);
+      return;
+    }
+    if (best)
+      ESP_LOGI(TAG, "Following %s @ %s, the best of %u (interest %d)", g.away_abbr.c_str(), g.home_abbr.c_str(),
+               (unsigned) j.live.size(), ::espn::live_interest(g));
+    else
+      ESP_LOGI(TAG, "Following %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
     // Both logos download while the game is read, so its board can go up whole.
     this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.away_id, g.away_abbr.c_str()));
     this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.home_id, g.home_abbr.c_str()));
@@ -2491,6 +2523,8 @@ void GamedayComponent::apply_job_() {
     this->schedule_.kickoff_epoch = (int64_t) this->time_->timestamp_now();
     this->schedule_fetched_ms_ = now == 0 ? 1 : now;  // 0 reads as "never fetched"
     this->live_away_id_ = g.away_id;
+    this->live_away_rank_ = g.away_rank;
+    this->live_home_rank_ = g.home_rank;
     this->live_started_ms_ = now == 0 ? 1 : now;
     this->game_ = GameSnapshot{};
     this->prev_ = GameSnapshot{};
@@ -2573,6 +2607,15 @@ void GamedayComponent::apply_job_() {
   ::espn::Splash splash =
       ::espn::decide_splash(this->prev_, this->game_, this->opponent_splashes(),
                             this->live_mode_() && !this->live_fallback_);
+  // A ranked side trailing late in the best game on: once a game, and never
+  // over a score's own splash (the next poll shows it).
+  if (splash.text.empty() && this->live_mode_() && !this->live_fallback_ && this->best_game() &&
+      this->game_.state == GameState::IN && this->upset_event_ != this->game_.event_id &&
+      ::espn::upset_alert(::espn::live_view(this->game_, this->schedule_.league, this->live_away_rank_,
+                                            this->live_home_rank_))) {
+    this->upset_event_ = this->game_.event_id;
+    splash = ::espn::Splash{"UPSET ALERT", ::espn::kUpsetColor};
+  }
   if (this->game_.state == GameState::POST) {
     if (this->post_since_ms_ == 0)
       this->post_since_ms_ = now == 0 ? 1 : now;
@@ -3283,6 +3326,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["play"] = this->ticker_last_play();
   doc["odds"] = this->ticker_odds();
   doc["opp"] = this->opponent_splashes();
+  doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
 #if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
   // Left out where nothing can be installed (the demo build) or there is no
@@ -4016,6 +4060,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::OPP:
         this->set_opponent_splashes(op.on);
+        break;
+      case ::espn::SetKind::BEST:
+        this->set_best_game(op.on);
         break;
       case ::espn::SetKind::BOOTADDR:
         this->set_show_boot_address(op.on);

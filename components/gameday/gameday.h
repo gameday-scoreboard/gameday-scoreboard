@@ -22,6 +22,7 @@
 
 #include "auto_update.h"
 #include "badge.h"
+#include "best_game.h"
 #include "captive.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -236,6 +237,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_down_distance() const { return this->flag_(FLAG_DOWN); }
   bool ticker_baseball_count() const { return (this->prefs8_.ticker & TICK8_COUNT) != 0; }
   bool ticker_soccer_stats() const { return (this->prefs8_.ticker & TICK8_MATCH) != 0; }
+  // Live games follows the best game on (best_game.h) rather than a random one.
+  bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
@@ -269,6 +272,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_down_distance(bool on) { this->set_flag_(FLAG_DOWN, on); }
   void set_ticker_baseball_count(bool on) { this->set_ticker8_(TICK8_COUNT, on); }
   void set_ticker_soccer_stats(bool on) { this->set_ticker8_(TICK8_MATCH, on); }
+  void set_best_game(bool on);
   void set_ticker_last_play(bool on) { this->set_flag_(FLAG_PLAY, on); }
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
@@ -489,10 +493,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // since a blob that changes size fails to load and resets.
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
-    uint8_t spare[3];
+    uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
+    uint8_t spare[2];
   } __attribute__((packed));
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
+  static constexpr uint8_t LIVE8_RANDOM = 1;  // "Pick the best game" off: a random game, as before
   void set_ticker8_(uint8_t f, bool on);
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
@@ -809,6 +815,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_fav_job_(uint32_t now);
   void apply_fav_job_(uint32_t now);
   uint32_t live_away_id_{0};      // the followed live game's away team
+  // The followed live game's AP ranks from the scan (99 unranked), for the
+  // upset alert between scans, and the game it last went up for.
+  uint8_t live_away_rank_{99}, live_home_rank_{99};
+  std::string upset_event_;
   uint32_t live_started_ms_{0};   // when the current live game was picked,
                                   // or, in the fallback, when the last scan ran
   bool live_none_{false};         // last scan found nothing in progress
