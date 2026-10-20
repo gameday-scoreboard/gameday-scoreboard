@@ -45,6 +45,10 @@ inline void fill_event_filter(JsonObject ev) {
   JsonObject comp = ev["competitions"].add<JsonObject>();
   comp["timeValid"] = true;
   comp["situation"]["lastPlay"]["text"] = true;
+  comp["situation"]["lastPlay"]["scoreValue"] = true;
+  comp["situation"]["lastPlay"]["drive"]["description"] = true;
+  comp["situation"]["lastPlay"]["probability"]["homeWinPercentage"] = true;
+  comp["situation"]["lastPlay"]["probability"]["awayWinPercentage"] = true;
   comp["situation"]["downDistanceText"] = true;
   comp["situation"]["shortDownDistanceText"] = true;
   comp["situation"]["isRedZone"] = true;
@@ -233,6 +237,19 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   }
   if (!found_us)
     return false;
+
+  // A touchdown is worth 6 and a field goal 3; the extra point, two-point try
+  // and safety after them don't repeat the drive.
+  JsonObjectConst lp = sit["lastPlay"];
+  if ((lp["scoreValue"] | 0) >= 3)
+    s.drive = str_or_empty(lp["drive"]["description"]);
+  JsonVariantConst win = lp["probability"][s.team_home ? "homeWinPercentage" : "awayWinPercentage"];
+  if (win.is<float>()) {
+    // ESPN goes to 0.999 and 0.001 well before the end; 100% would claim
+    // a result the game hasn't reached.
+    int pct = (int) (win.as<float>() * 100.0f + 0.5f);
+    s.team_win_pct = (int8_t) std::min(99, std::max(1, pct));
+  }
 
   JsonObjectConst odds = comp["odds"][0];
   s.odds = str_or_empty(odds["details"]);

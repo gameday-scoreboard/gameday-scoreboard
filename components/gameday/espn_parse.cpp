@@ -408,11 +408,25 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play)
+  if (o.last_play) {
     add_last_play(out, s.last_play);
+    if (!s.drive.empty())
+      add_part(out, "Drive: " + s.drive);
+  }
+  if (o.odds)
+    add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+std::string win_chance(const GameSnapshot &s) {
+  if (s.team_win_pct < 1)
+    return "";
+  // The side ahead in ESPN's model, so the number is always 50 or more.
+  bool ours = s.team_win_pct >= 50;
+  int pct = ours ? s.team_win_pct : 100 - s.team_win_pct;
+  return (ours ? s.team_abbr : s.opp_abbr) + " " + std::to_string(pct) + "% to win";
 }
 
 std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local) {

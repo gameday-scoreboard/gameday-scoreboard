@@ -113,6 +113,11 @@ struct GameSnapshot {
   std::string last_play, down_distance;
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
+  // Football: how the drive went ("4 plays, 58 yards, 1:36"), only while the
+  // last play is a touchdown or field goal, and our side's chance to win
+  // after the last play (1 to 99), -1 when ESPN gives none.
+  std::string drive;
+  int8_t team_win_pct{-1};
   std::string odds, over_under, tv, venue;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
@@ -261,6 +266,9 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// "KC 72% to win" for the side ESPN's model favors, "" when it gives no
+// number (football's last play only).
+std::string win_chance(const GameSnapshot &s);
 // The board and ticker with no game on the board, in place of the page's
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
 // be read from ESPN before it), "Can't reach ESPN" while reads fail and

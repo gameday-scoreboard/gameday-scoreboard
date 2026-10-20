@@ -184,6 +184,21 @@ static void test_scoreboard_live() {
   CHECK(s.last_play.rfind("End of 3rd quarter", 0) == 0);
   CHECK(!s.completed);
 
+  // The drive comes with a touchdown or field goal only: TEX's field goal
+  // carries it, ME @ APP's rushing touchdown too, the failed two-point try
+  // after FUR's touchdown (scoreValue 0) doesn't.
+  GameSnapshot fg;
+  CHECK(parse_scoreboard_str(json, "401856667", 251, fg));
+  CHECK_EQ(fg.drive, std::string("12 plays, 50 yards, 5:48"));
+  CHECK_EQ((int) fg.team_win_pct, 99);  // 0.999 home, never 100
+  GameSnapshot td;
+  CHECK(parse_scoreboard_str(json, "401866627", 2026, td));
+  CHECK_EQ(td.drive, std::string("3 plays, 68 yards, 1:16"));
+  GameSnapshot two;
+  CHECK(parse_scoreboard_str(json, "401856666", 231, two));
+  CHECK(two.drive.empty());
+  CHECK_EQ((int) two.team_win_pct, -1);  // no probability on that play
+
   // Same event from Oregon's side flips everything
   GameSnapshot o;
   CHECK(parse_scoreboard_str(json, kLiveEvent, kOregon, o));
@@ -218,6 +233,10 @@ static void test_event_live() {
   CHECK_EQ(s.venue, std::string("AmFirst Stadium"));
   CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-10-14T00:00Z"));
   CHECK(s.last_play.find("J.Kohl pass complete") != std::string::npos);
+  // JXST is home at 0.9567; a plain catch doesn't repeat its drive.
+  CHECK_EQ((int) s.team_win_pct, 4);
+  CHECK_EQ(win_chance(s), std::string("JXST 96% to win"));
+  CHECK(s.drive.empty());
 
   GameSnapshot x;
   CHECK(!parse_event_str(json, Sport::FOOTBALL, kSeahawks, x, "401871053"));  // not our game
@@ -555,6 +574,25 @@ static void test_status_text() {
   std::string t = status_text(s, only_play, "");
   CHECK_EQ(t.size(), (size_t) 160);
   CHECK(t.substr(157) == "...");
+  // A scoring play's drive follows Last play; the win chance follows Odds.
+  GameSnapshot sc = live(10, 7);
+  sc.last_play = "G.Spetic field goal GOOD";
+  sc.drive = "12 plays, 50 yards, 5:48";
+  sc.team_win_pct = 72;
+  CHECK_EQ(status_text(sc, only_play, ""),
+           std::string("G.Spetic field goal GOOD | Drive: 12 plays, 50 yards, 5:48 | DAL 72% to win"));
+  TickerOptions play_no_odds = only_play;
+  play_no_odds.odds = false;
+  CHECK_EQ(status_text(sc, play_no_odds, ""), std::string("G.Spetic field goal GOOD | Drive: 12 plays, 50 yards, 5:48"));
+  TickerOptions odds_only = only_play;
+  odds_only.last_play = false;
+  CHECK_EQ(status_text(sc, odds_only, ""), std::string("DAL 72% to win"));
+  sc.team_win_pct = 31;  // the other side is ahead in the model
+  CHECK_EQ(win_chance(sc), std::string("PHI 69% to win"));
+  sc.team_win_pct = 50;
+  CHECK_EQ(win_chance(sc), std::string("DAL 50% to win"));
+  sc.team_win_pct = -1;
+  CHECK_EQ(status_text(sc, odds_only, ""), std::string("In Progress"));
   // Halftime
   GameSnapshot h = live(14, 7);
   h.short_detail = "Halftime";
