@@ -417,6 +417,12 @@ static void test_best_game() {
   CHECK_EQ(clock_seconds(""), -1);
   CHECK_EQ(clock_seconds("99999999999:00"), -1);
   CHECK_EQ(clock_seconds("1:99999999999"), -1);
+  // An over/under far past int's range prints as a decimal (the fuzzer's find).
+  JsonDocument ou;
+  deserializeJson(ou, "[44, 47.5, 2.14748e10]");
+  CHECK_EQ(espn::detail::format_over_under(ou[0]), std::string("44"));
+  CHECK_EQ(espn::detail::format_over_under(ou[1]), std::string("47.5"));
+  CHECK(espn::detail::format_over_under(ou[2]).find('.') != std::string::npos);
 
   CHECK_EQ(game_progress(League::NCAA, 4, 900), 750);
   CHECK_EQ(game_progress(League::NFL, 1, 900), 0);

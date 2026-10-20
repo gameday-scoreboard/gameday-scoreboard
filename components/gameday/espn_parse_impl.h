@@ -184,7 +184,8 @@ inline std::string format_over_under(JsonVariantConst v) {
     return "";
   float f = v.as<float>();
   char buf[16];
-  if (f == (int) f)
+  // Range first: casting a float past int's range is undefined.
+  if (f > -1e6f && f < 1e6f && f == (int) f)
     snprintf(buf, sizeof(buf), "%d", (int) f);
   else
     snprintf(buf, sizeof(buf), "%.1f", f);
