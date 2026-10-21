@@ -3133,7 +3133,7 @@ void GamedayComponent::apply_recap_job_() {
     ::espn::RecapDay d;
     d.league = i;
     d.day = j.recap_day;
-    d.finals = std::move(j.finals);
+    d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
     if (::espn::recap_count(this->recap_days_, i) >= ::espn::kRecapMinFinals ||
         ++this->recap_back_[i] > ::espn::kRecapMaxDays) {
