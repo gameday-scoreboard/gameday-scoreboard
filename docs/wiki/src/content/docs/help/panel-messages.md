@@ -66,6 +66,10 @@ These show on the board or in the ticker.
 
 A panel with no team picked also brings the app's QR code back over the board for 13 seconds every 3 minutes, until you pick one.
 
+:::note[Coming in the next release]
+That QR code comes with **Pick your team in the app** beside it on a 128x64 panel. On a single 64x64 panel the words show for 5 seconds, then the QR code for 8.
+:::
+
 ## When you hold the button
 
 The button on the controller shows the panel's address and resets it. See [Buttons and resets](/using/buttons-and-resets/).
