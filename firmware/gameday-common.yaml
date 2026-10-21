@@ -5,7 +5,7 @@ substitutions:
   # The MAC suffix keeps two panels on one network apart: gameday-2f6a70.local
   name: "gameday"
   friendly_name: "Game Day Scoreboard"
-  version: "2026.10.0"
+  version: "2026.10.1"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
   # Where the panel looks for new releases. A bench build can point it at a
@@ -14,9 +14,6 @@ substitutions:
   # Where it looks instead with "Follow beta" on: release firmware built from
   # the beta branch, published there by CI (.github/workflows/build.yml).
   beta_update_source: "https://install.gameday-scoreboard.com/firmware/${variant}-beta/manifest.json"
-  # The same files on a second host. When a manifest read fails, the panel
-  # reads the same path here instead (components/gameday/update_mirror.h).
-  update_mirror_host: "https://updates.gameday-scoreboard.com"
 
   display_panel_width: "64"
   display_panel_height: "64"
@@ -576,10 +573,6 @@ gameday:
     update_id: gd_firmware_update
     stable: ${update_source}
     beta: ${beta_update_source}
-  update_mirror:
-    update_id: gd_firmware_update
-    source: ${update_source}
-    host: ${update_mirror_host}
   on_action:
     - if:
         condition:
