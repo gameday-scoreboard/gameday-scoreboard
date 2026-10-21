@@ -4795,6 +4795,17 @@ static void test_line_score() {
   CHECK_EQ((int) f.team_line_count, 3);
   CHECK_EQ((int) f.team_lines[0], 2);
   CHECK_EQ((int) f.opp_lines[2], 0);
+  {
+    // A period value past int's range (found by the fuzzer) is capped, not cast
+    std::string json = slurp("fixtures/event_nhl_final.json");
+    const std::string first = "\"linescores\":[{\"value\":2.0,";
+    size_t at = json.find(first);
+    CHECK(at != std::string::npos);
+    json.replace(at, first.size(), "\"linescores\":[{\"value\":1.40187e+10,");
+    GameSnapshot big;
+    CHECK(parse_event_str(json, Sport::HOCKEY, kCapitals, big, root_id(json)));
+    CHECK(big.team_lines[0] == 255 || big.opp_lines[0] == 255);
+  }
   CHECK(line_score_due(f));
   LineScoreText t = line_score_text(f, 128);
   CHECK_EQ((int) t.font, 12);
