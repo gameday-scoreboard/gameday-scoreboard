@@ -153,6 +153,9 @@ WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
 # The saved team's league byte, which outlives a cleared team and counts in
 # Live auto. A fresh panel's is NFL.
 TEAM_LEAGUE = ["nfl"]
+# Live games' own list (the live mask), kept apart from the state's live list,
+# which shows every league instead while no team is picked.
+LIVE_LIST = [[]]
 
 
 def reset_state(overrides):
@@ -163,6 +166,7 @@ def reset_state(overrides):
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
     TEAM_LEAGUE[0] = (STATE.get("team") or {}).get("l", "nfl")
+    LIVE_LIST[0] = [] if STATE.get("live_auto", True) else list(STATE.get("live", []))
 
 
 def atoi(v):
@@ -218,10 +222,22 @@ def live_auto_leagues():
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
+def no_team_default():
+    """set_request.h no_team_default(): My team with no team, or Favorites with none set."""
+    if STATE["team"]:
+        return False
+    return STATE["mode"] == 0 or (STATE["mode"] == 4 and not any(STATE["favs"]))
+
+
 def state_doc():
-    """rebuild_state_() works the auto leagues out each time from the team and favorites."""
-    if STATE.get("live_auto"):
+    """rebuild_state_() works the leagues out each time: every league with no team
+    picked (no_team_leagues()), else the auto leagues from the team and favorites."""
+    if no_team_default():
+        STATE["live"] = list(LEAGUES)
+    elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
+    else:
+        STATE["live"] = list(LIVE_LIST[0])
     return STATE
 
 
@@ -274,7 +290,7 @@ def apply_set(kv):
         elif k == "live":
             keys = [lg for lg in LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
-            STATE["live"] = keys
+            LIVE_LIST[0] = keys
         elif k == "tz":
             i = timezone_index(v)
             if i >= 0:

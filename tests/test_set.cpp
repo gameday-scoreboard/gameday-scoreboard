@@ -215,7 +215,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     if (f.id != 0)
       fav_leagues.push_back(f.league);
   JsonArray live = doc["live"].to<JsonArray>();
-  for (League l : live_leagues(s.live_mask, s.team_league, fav_leagues))
+  bool no_team = no_team_default(s.team.id != 0, (uint8_t) s.mode, !fav_leagues.empty());
+  for (League l : no_team ? no_team_leagues() : live_leagues(s.live_mask, s.team_league, fav_leagues))
     live.add(league_key(l));
   doc["live_auto"] = s.live_mask == 0;
   doc["tz"] = s.tz;
@@ -351,12 +352,29 @@ void test_scan_leagues() {
   SCHECK(keys(scan_leagues((uint8_t) Mode::MY_TEAM, live)) == "", "My team scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NFL, live)) == "nfl", "Live NFL");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NCAA, live)) == "ncaa", "Live college");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything and the no-team default");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything");
   SCHECK(keys(scan_leagues((uint8_t) Mode::FAVORITES, live)) == "", "Favorites scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live)) == "mlb,nba,nhl", "Live games, its own leagues");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, (uint8_t) League::EPL, {}))) == "epl",
          "Live games, auto from the team's league");
   SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
+}
+
+// A panel nobody has picked a team on runs Live games over every league.
+void test_no_team() {
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
+         "the no-team default's scan reads every league");
+  const uint8_t my_team = (uint8_t) Mode::MY_TEAM, favs = (uint8_t) Mode::FAVORITES;
+  SCHECK(no_team_default(false, my_team, false), "My team, no team");
+  SCHECK(no_team_default(false, my_team, true), "My team, no team, favorites set for later");
+  SCHECK(!no_team_default(true, my_team, false), "My team with a team");
+  SCHECK(no_team_default(false, favs, false), "Favorites with none set");
+  SCHECK(!no_team_default(false, favs, true), "Favorites with one set");
+  SCHECK(!no_team_default(true, favs, false), "Favorites with none set and a team saved");
+  for (uint8_t m : {(uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA, (uint8_t) Mode::LIVE_ANY, (uint8_t) Mode::LIVE})
+    SCHECK(!no_team_default(false, m, false), "mode %u is a choice", (unsigned) m);
 }
 
 // A change to Live games' leagues restarts the scan only when it changes what
@@ -393,6 +411,7 @@ int run_set_tests(int &total_checks) {
   test_parse_set();
   test_live_leagues();
   test_scan_leagues();
+  test_no_team();
   test_live_scan_changed();
   test_fixture_cases();
   total_checks += checks;

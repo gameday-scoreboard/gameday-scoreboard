@@ -23,6 +23,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ## Unreleased
 
 - A night schedule dims the panel, or turns its screen off, between two times you pick, 11 PM to 7 AM to start. Turn it on in the Panel card on the device page, then choose Screen at night: On at a night brightness of its own, or Off. A live game for your team or a favorite keeps the panel at its normal brightness until the game ends. While it's on, the device page says so, like "Night mode until 7:00 AM". It's off on a new panel.
+- A panel with no team picked follows live games in every league, not only football, so a new panel on a weeknight in October shows the hockey, basketball and baseball games that are on. College basketball comes from the Top 25 games until you pick a team. Every 3 minutes the app's QR code comes back saying "Pick your team in the app"; on a single 64x64 panel the words and the QR code take turns.
 
 ## v2026.10.1
 

@@ -536,6 +536,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // live-game modes: scan the day's games first, then follow one
     bool need_scan{false};
     std::vector<League> scan_leagues;
+    bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
     std::vector<::espn::LiveGame> live;
     bool scan_ok{false};
     int64_t next_kickoff{0};  // earliest kickoff not started yet, 0 for none
@@ -611,11 +612,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // get that day's finished games and the ones not started yet.
   bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
                          std::vector<::espn::Final> *finals = nullptr,
-                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0);
+                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0, bool top25 = false);
   // The mode the panel runs: the saved one, except that with no team picked
-  // My team (and Favorites with none set) runs as Live anything.
+  // My team (and Favorites with none set) runs as Live games over every
+  // league (live_leagues_).
   uint8_t effective_mode_() const {
-    return this->no_team_default() ? (uint8_t) Mode::LIVE_ANY : this->prefs2_.mode;
+    return this->no_team_default() ? (uint8_t) Mode::LIVE : this->prefs2_.mode;
   }
   static bool is_live_mode_(uint8_t m) {
     return (m >= (uint8_t) Mode::LIVE_NFL && m <= (uint8_t) Mode::LIVE_ANY) || m == (uint8_t) Mode::LIVE;
