@@ -778,7 +778,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::NightPrefs night_{};
   bool night_loaded_{false};
   ::espn::Night night_now_{::espn::Night::DAY};
-  bool owner_scan_live_{false};  // Live games: the last scan saw a game of the owner's team or a favorite
+  // Live games: both sides of every game in progress at the last scan, so
+  // a team or favorite changed between scans counts at once. A full college
+  // football Saturday is a few hundred entries: PSRAM.
+  struct LiveSide {
+    uint32_t id;
+    uint8_t league;
+  };
+  std::vector<LiveSide, PsramAllocator<LiveSide>> scan_live_sides_;
   void load_night_();
   void set_night_(const ::espn::NightPrefs &p);
   void night_tick_();  // from loop(), every AUTO_UPDATE_TICK

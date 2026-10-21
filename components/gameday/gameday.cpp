@@ -1469,8 +1469,9 @@ bool GamedayComponent::owner_team_(uint8_t league, uint32_t id) const {
 bool GamedayComponent::owner_game_live_() const {
   if (!this->live_mode_() || this->live_fallback_)
     return this->followed_game_live_();
-  if (this->owner_scan_live_)
-    return true;
+  for (const auto &side : this->scan_live_sides_)
+    if (this->owner_team_(side.league, side.id))
+      return true;
   const GameSnapshot &g = this->game_;
   const uint8_t league = this->schedule_.league;
   return g.valid && g.state == GameState::IN &&
@@ -1851,7 +1852,7 @@ void GamedayComponent::reset_game_() {
 
 void GamedayComponent::restart_board_() {
   this->reset_game_();
-  this->owner_scan_live_ = false;  // until the next scan
+  this->scan_live_sides_.clear();  // until the next scan
   this->generation_++;  // a scan in flight read what the board followed before
   this->emit_({});      // clear the board while the next fetch runs
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
@@ -2569,10 +2570,11 @@ void GamedayComponent::apply_job_() {
     this->clear_backoff_();
     // For the night schedule: a game of the owner's on now, whichever game
     // the board picks.
-    this->owner_scan_live_ = false;
-    for (const auto &g : j.live)
-      if (this->owner_team_(g.league, g.away_id) || this->owner_team_(g.league, g.home_id))
-        this->owner_scan_live_ = true;
+    this->scan_live_sides_.clear();
+    for (const auto &g : j.live) {
+      this->scan_live_sides_.push_back({g.away_id, g.league});
+      this->scan_live_sides_.push_back({g.home_id, g.league});
+    }
     // Prefer a different game than the one we just showed.
     std::vector<size_t> pick;
     for (size_t i = 0; i < j.live.size(); i++)
