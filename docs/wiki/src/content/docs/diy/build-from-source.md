@@ -32,7 +32,7 @@ The components in `components/` are:
 
 ## Install ESPHome
 
-Use the ESPHome version CI builds with. It's `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, 2026.10.0b3 on the `dev` branch. Install it in a Python virtual environment.
+Use the ESPHome version CI builds with. It's `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, 2026.10.0 on the `dev` branch. Install it in a Python virtual environment.
 
 ```sh
 python -m venv esphome-venv
@@ -53,7 +53,7 @@ esphome-venv\Scripts\activate
 Then install the pinned version:
 
 ```sh
-pip install esphome==2026.10.0b3
+pip install esphome==2026.10.0
 ```
 
 The `dev` and `beta` branches may build on an ESPHome beta. `main`, which every release and the update feed come from, builds only on a final ESPHome release.
