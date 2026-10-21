@@ -48,9 +48,7 @@ With the switch off, the panel still checks and the device page tells you when a
 
 If a new version crashes as it starts, the panel goes back to the firmware it had. It remembers that version and doesn't install it on its own again, so it never restarts into the same bad update every night. A later release still installs, and **Install** on the device page still tries the one that failed.
 
-:::note[Coming in the next release]
-The Firmware box says when this happened: **The update to** a version **didn't take and the panel went back to** the version it runs now, with **Install tries it again.** If the panel can't read the update server, it tries a second update server at once, so an outage at one doesn't hold up an update.
-:::
+The Firmware box says when this happened: **The update to** a version **didn't take and the panel went back to** the version it runs now, with **Install tries it again.**
 
 ## Beta versions
 

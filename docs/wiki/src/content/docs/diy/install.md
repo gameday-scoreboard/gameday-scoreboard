@@ -51,6 +51,4 @@ The 128x64 build reads its updates from the `moonhub75` folder too. The panel sa
 
 Each release on [GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/releases) also carries the MoonHub75 factory image, `gameday-scoreboard-<version>.factory.bin`, and a zip of each variant's folder.
 
-:::note[Coming in the next release]
-When the release feed can't be read, the panel tries the same files on a second host, updates.gameday-scoreboard.com. A **Follow beta** switch on the device page gets test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.
-:::
+A **Follow beta** switch on the device page gets test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.
