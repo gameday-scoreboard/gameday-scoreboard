@@ -89,7 +89,7 @@ INITIAL = {
     "team": team("nfl", 6),
     "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False,
@@ -259,7 +259,7 @@ def apply_set(kv):
             if ref is None and v not in ("none", ""):
                 continue
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
-        elif k in ("today", "jump", "banner"):
+        elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
         elif k == "live":
             keys = [lg for lg in LEAGUES if lg in v.split(",")]

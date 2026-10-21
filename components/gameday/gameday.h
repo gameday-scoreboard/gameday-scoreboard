@@ -215,6 +215,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // scores (on by default); favorites.h has the rules.
   void set_jump_to_action(bool on) { this->set_fav7_(FAV7_JUMP, on); }
   void set_score_banner(bool on) { this->set_fav7_(FAV7_NO_BANNER, !on); }
+  // Live games: a favorite's game takes the board while it is live (favorites.h).
+  void set_favorites_take_over(bool on);
   // Live mode's leagues as keys ("nfl,mlb"); "" = the leagues you follow.
   void set_live_leagues(const std::string &keys);
   void set_live_mask_(uint16_t mask);
@@ -222,6 +224,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool today_only() const { return (this->prefs7_.flags & FAV7_TODAY) != 0; }
   bool jump_to_action() const { return (this->prefs7_.flags & FAV7_JUMP) != 0; }
   bool score_banner() const { return (this->prefs7_.flags & FAV7_NO_BANNER) == 0; }
+  bool favorites_take_over() const { return (this->prefs7_.flags & FAV7_TAKEOVER) != 0; }
   // The banner the scoreboard page shows when another favorite scores
   // (pages/gameday-live.yaml, gd_fav_banner), in that team's color.
   const std::string &fav_banner_text() const { return this->fav_banner_text_; }
@@ -501,6 +504,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static constexpr uint8_t FAV7_JUMP = 2;   // Jump to the action
   // The score banner is on by default, and a saved spare bit is 0: set means off.
   static constexpr uint8_t FAV7_NO_BANNER = 4;
+  static constexpr uint8_t FAV7_TAKEOVER = 8;  // Live games: Favorites take over
   void set_fav7_(uint8_t f, bool set);
   // The ticker's situation line per sport. Football's stays FLAG_DOWN in
   // Prefs; Prefs::flags is full. The spare bits are for later settings,
@@ -537,6 +541,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::vector<::espn::LiveGame> live;
     bool scan_ok{false};
     int64_t next_kickoff{0};  // earliest kickoff not started yet, 0 for none
+    // Favorites take over: the favorites to look for, and the earliest
+    // kickoff not started yet of a game one plays, 0 for none.
+    std::vector<::espn::FavRef> fav_watch;
+    int64_t fav_kickoff{0};
     bool need_schedule{false};
     Schedule schedule;
     bool schedule_ok{false};
@@ -609,7 +617,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // get that day's finished games and the ones not started yet.
   bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
                          std::vector<::espn::Final> *finals = nullptr,
-                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0);
+                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0,
+                         const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr);
   // The mode the panel runs: the saved one, except that with no team picked
   // My team (and Favorites with none set) runs as Live anything.
   uint8_t effective_mode_() const {
@@ -839,9 +848,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const GameSnapshot &ha_game_() const;  // the game Home Assistant's sensors follow
   void start_fav_job_(uint32_t now);
   void apply_fav_job_(uint32_t now);
-  uint32_t live_away_id_{0};      // the followed live game's away team
+  // The followed live game's away team, or with Favorites take over the
+  // favorite's side, so the favorite is the board's own team.
+  uint32_t live_away_id_{0};
   // The followed live game's AP ranks from the scan (99 unranked), for the
-  // upset alert between scans, and the game it last went up for.
+  // upset alert between scans, and the game it last went up for. Away is the
+  // side live_away_id_ names.
   uint8_t live_away_rank_{99}, live_home_rank_{99};
   std::string upset_event_;
   uint32_t live_started_ms_{0};   // when the current live game was picked,
@@ -852,6 +864,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // A live mode with nothing live: the board shows the saved team's card and
   // keeps scanning. The mode the owner picked does not change.
   bool live_fallback_{false};
+  // Favorites take over: on, with favorites to look for, in a live mode.
+  bool take_over_() const { return this->favorites_take_over() && this->live_mode_() && !this->fav_.empty(); }
+  std::vector<::espn::FavRef> fav_refs_() const;
+  int live_fav_{-1};          // the fav_ entry whose game took the board, -1 for none
+  int64_t take_scan_at_{0};   // epoch: scan then for a favorite's kickoff, 0 for none
 
   // The finals rotation (recap.h): a live mode with nothing live on a panel
   // with no team. Finals are kept across live spells and only re-read for a

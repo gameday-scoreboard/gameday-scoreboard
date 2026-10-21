@@ -458,10 +458,13 @@ inline uint8_t best_rank(JsonObjectConst comp) {
 // pending, also lists the games next_kickoff counts (a postponed or
 // canceled game is "post", not "pre"): the kPendingKeep best by
 // pending_before(), in that order. Finals and pending come with no league
-// set: the caller knows which league it asked for.
+// set: the caller knows which league it asked for. With watch (team ids) and
+// watch_kickoff, also reports the earliest kickoff not started yet of a game
+// one of those teams plays, 0 when there is none (Favorites take over).
 template<typename TInput, typename TOut>
 bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
-                      std::vector<Final> *finals = nullptr, std::vector<Pending> *pending = nullptr) {
+                      std::vector<Final> *finals = nullptr, std::vector<Pending> *pending = nullptr,
+                      const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr) {
   JsonDocument filter(detail::json_allocator());
   detail::fill_scan_filter(filter, finals != nullptr, pending != nullptr);
   JsonDocument doc(detail::json_allocator());
@@ -471,6 +474,8 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
     return false;
   if (next_kickoff != nullptr)
     *next_kickoff = 0;
+  if (watch_kickoff != nullptr)
+    *watch_kickoff = 0;
   // Kept apart from *pending until the end, so the cap counts this document only.
   std::vector<Pending> later;
   for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
@@ -485,6 +490,14 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       int64_t k = parse_iso8601_z(detail::str_or_empty(ev["date"]));
       if (k > 0 && next_kickoff != nullptr && (*next_kickoff == 0 || k < *next_kickoff))
         *next_kickoff = k;
+      if (k > 0 && watch != nullptr && watch_kickoff != nullptr && (*watch_kickoff == 0 || k < *watch_kickoff))
+        for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+          uint32_t id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
+          if (id != 0 && std::find(watch->begin(), watch->end(), id) != watch->end()) {
+            *watch_kickoff = k;
+            break;
+          }
+        }
       GameSnapshot g;
       if (k > 0 && pending != nullptr && away != 0 && detail::snapshot_from_event(ev, away, g)) {
         Pending p;

@@ -24,7 +24,7 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "msg",      "msgurl", "msgevery", "best",
-                                    "jump",   "banner"};
+                                    "jump",   "banner",   "favtake"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -163,6 +163,7 @@ enum class SetKind : uint8_t {
   BEST,      // on, Live games picks the best game (best_game.h)
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
+  FAVTAKE,   // on, Live games locks onto a favorite's game while it is live (favorites.h)
 };
 
 struct TeamRef {
@@ -311,6 +312,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::JUMP);
   if (k == "banner")
     return on(SetKind::BANNER);
+  if (k == "favtake")
+    return on(SetKind::FAVTAKE);
   return false;
 }
 

@@ -43,6 +43,19 @@ Live games follows the best game on instead of a random one, with the **Pick the
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
 :::
 
+:::note[Coming in the next release]
+### Favorites take over
+
+Turn on **Favorites take over** under **Switch every** and a game one of your [favorites](/using/favorites/) is playing gets the panel while it's on, whatever else is live. Live games carries on as usual the rest of the time. Your favorites can be from any sport, like the Cowboys, Mavericks, Stars and Rangers on one list.
+
+- The panel moves to a favorite's game when it starts, even in the middle of another game, and stays there until it ends.
+- Your favorite is the panel's own team, on the left, and its scores always get a splash, the same as in Favorite teams. The other side's follow **Opponent scores too**.
+- **Two favorites at once** shows up under the switch once it's on, and it's the same setting as **Two games at once** in Favorite teams. **Stick with the higher team** stays on the favorite higher in your list, and moves to a higher one when its game starts. **Alternate** switches between your favorites' games every **Switch every** minutes.
+- Only favorites in the leagues Live games follows count. On automatic leagues, that's all of them.
+
+The bar under the board says **Locked on** and the team's name while a favorite has the panel. It's off until you turn it on.
+:::
+
 ### Choosing the leagues
 
 The league buttons under the mode buttons pick the leagues. Until you pick any, Live games follows the leagues of your team and your favorites, and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your team and favorites. At least one league stays on.

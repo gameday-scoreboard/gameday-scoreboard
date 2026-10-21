@@ -483,6 +483,9 @@ void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<Lea
     this->schedule_next_(0);
     return;
   }
+  // Favorites take over looks for the new list on the next cycle.
+  this->live_fav_ = -1;
+  this->take_scan_at_ = 1;
   // Live games on auto reads the favorites' leagues too.
   if (this->live_leagues_changed_(live_before))
     return;
@@ -613,6 +616,26 @@ void GamedayComponent::set_release_seconds(int seconds) {
 }
 
 void GamedayComponent::set_today_only(bool on) { this->set_fav7_(FAV7_TODAY, on); }
+
+void GamedayComponent::set_favorites_take_over(bool on) {
+  if (on == this->favorites_take_over())
+    return;
+  // Scan now rather than at the next Switch every, so a favorite live right
+  // now takes the board. Off, the game on the board stays until the rotation
+  // moves on, as any other game would.
+  this->take_scan_at_ = 1;
+  if (!on)
+    this->live_fav_ = -1;
+  this->set_fav7_(FAV7_TAKEOVER, on);
+}
+
+// In fav_ order (every entry has a team), so a rank is an index into fav_.
+std::vector<::espn::FavRef> GamedayComponent::fav_refs_() const {
+  std::vector<::espn::FavRef> out;
+  for (const auto &e : this->fav_)
+    out.push_back({(uint8_t) e.team->league, e.team->espn_id});
+  return out;
+}
 
 void GamedayComponent::set_fav7_(uint8_t f, bool set) {
   uint8_t next = set ? (this->prefs7_.flags | f) : (this->prefs7_.flags & ~f);
@@ -1736,6 +1759,8 @@ void GamedayComponent::reset_game_() {
   this->live_none_ = false;
   this->live_rescan_ms_ = NO_LIVE_RESCAN;
   this->live_fallback_ = false;
+  this->live_fav_ = -1;
+  this->take_scan_at_ = 0;
   // The finals and the walks stay: they are per league, not per mode.
   this->recap_on_ = false;
   this->recap_cards_.clear();
@@ -2049,7 +2074,8 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
 
 bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
                                          std::vector<::espn::Final> *finals, std::vector<::espn::Pending> *pending,
-                                         int64_t epoch) {
+                                         int64_t epoch, const std::vector<uint32_t> *watch,
+                                         int64_t *watch_kickoff) {
   std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now());
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
   auto container = this->open_(url);
@@ -2059,8 +2085,8 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
   size_t before = out.size();
   size_t finals_before = finals != nullptr ? finals->size() : 0;
   size_t pending_before = pending != nullptr ? pending->size() : 0;
-  int64_t next = 0;
-  bool ok = ::espn::parse_live_games(reader, out, &next, finals, pending);
+  int64_t next = 0, watched = 0;
+  bool ok = ::espn::parse_live_games(reader, out, &next, finals, pending, watch, &watched);
   for (size_t i = before; i < out.size(); i++)
     out[i].league = (uint8_t) league;
   if (finals != nullptr)
@@ -2075,6 +2101,8 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
            (unsigned) (pending != nullptr ? pending->size() - pending_before : 0), (unsigned) reader.total());
   if (next != 0 && (next_kickoff == 0 || next < next_kickoff))
     next_kickoff = next;
+  if (watch_kickoff != nullptr && watched != 0 && (*watch_kickoff == 0 || watched < *watch_kickoff))
+    *watch_kickoff = watched;
   return ok;
 }
 
@@ -2166,6 +2194,12 @@ void GamedayComponent::start_job_() {
     this->start_fav_job_(now);
     return;
   }
+  // Favorites take over: a scan when a favorite's game is due to start.
+  bool take_due = false;
+  if (this->take_over_()) {
+    j.fav_watch = this->fav_refs_();
+    take_due = this->take_scan_at_ != 0 && (int64_t) this->time_->timestamp_now() >= this->take_scan_at_;
+  }
   if (j.team == nullptr && !this->live_mode_()) {
     this->schedule_next_(SCHEDULE_INTERVAL);
     return;
@@ -2182,7 +2216,7 @@ void GamedayComponent::start_job_() {
       return;
     }
     uint32_t since = now - this->live_started_ms_;
-    if (this->live_started_ms_ != 0 && since < this->live_rescan_ms_) {
+    if (this->live_started_ms_ != 0 && since < this->live_rescan_ms_ && !take_due) {
       this->schedule_next_(this->live_rescan_ms_ - since);
       return;
     }
@@ -2194,7 +2228,8 @@ void GamedayComponent::start_job_() {
   if (this->live_mode_()) {
     // Inside the fallback live_started_ms_ times the rescan instead of the
     // rotate: the board is on the owner's own team until a game kicks off.
-    bool rescan_due = this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= this->live_rescan_ms_;
+    bool rescan_due =
+        this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= this->live_rescan_ms_ || take_due;
     if (!this->live_fallback_ || rescan_due) {
       if (this->live_fallback_) {
         j.need_scan = true;
@@ -2204,11 +2239,15 @@ void GamedayComponent::start_job_() {
       } else {
         // Picking the best game: only at a break in this one, never in the
         // middle of a drive.
-        bool rotate = this->live_started_ms_ != 0 &&
+        // A favorite's game that took the board holds it: no rotate, unless
+        // two favorites alternate. A favorite higher in the list starting
+        // later comes in on its kickoff scan (take_due).
+        bool held = this->take_over_() && this->live_fav_ >= 0 && this->prefs4_.collide == 0;
+        bool rotate = !held && this->live_started_ms_ != 0 &&
                       (now - this->live_started_ms_) >= (uint32_t) this->prefs2_.rotate_minutes * MINUTE &&
                       (!this->best_game() || ::espn::at_break(this->game_));
         bool ended = this->game_.valid && this->game_.state != GameState::IN;
-        j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_;
+        j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_ || take_due;
       }
       // With no team, nothing live means the finals rotation: the scan keeps
       // today's finals for it.
@@ -2367,8 +2406,16 @@ void GamedayComponent::run_job_() {
     std::vector<::espn::Final> *finals = j.want_finals ? &j.finals : nullptr;
     std::vector<::espn::Pending> *pending = j.want_finals ? &j.pending : nullptr;
     j.scan_ok = true;
-    for (League l : j.scan_leagues)
-      j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending) && j.scan_ok;
+    for (League l : j.scan_leagues) {
+      // Favorites take over: this league's favorites, for their next kickoff.
+      std::vector<uint32_t> watch;
+      for (const auto &f : j.fav_watch)
+        if (f.league == (uint8_t) l)
+          watch.push_back(f.id);
+      j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending, 0,
+                                          watch.empty() ? nullptr : &watch, &j.fav_kickoff) &&
+                  j.scan_ok;
+    }
     return;  // the main loop picks a game, then the next cycle polls it
   }
   if (j.need_upcoming) {
@@ -2476,6 +2523,12 @@ void GamedayComponent::apply_job_() {
     if (j.want_finals)
       this->recap_absorb_(j, (int64_t) this->time_->timestamp_now());
     this->clear_backoff_();
+    // Favorites take over: when to scan for the next favorite's kickoff. The
+    // pick below says again whether a favorite has the board.
+    this->take_scan_at_ = this->take_over_() ? ::espn::take_over_rescan_at((int64_t) this->time_->timestamp_now(),
+                                                                           j.fav_kickoff)
+                                             : 0;
+    this->live_fav_ = -1;
     // Prefer a different game than the one we just showed.
     std::vector<size_t> pick;
     for (size_t i = 0; i < j.live.size(); i++)
@@ -2553,19 +2606,44 @@ void GamedayComponent::apply_job_() {
     }
     bool best = this->best_game();
     bool over = this->game_.valid && this->game_.state != GameState::IN;
-    const ::espn::LiveGame &g = j.live[best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
-                                            : pick[random_uint32() % pick.size()]];
-    if (best && !over && this->game_.valid && g.event_id == this->schedule_.event_id && !this->live_none_ &&
-        !this->live_fallback_) {
-      // Still the best game on: keep it, and look again at a later break.
-      ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
-      this->live_away_rank_ = g.away_rank;
-      this->live_home_rank_ = g.home_rank;
+    // Favorites take over: a favorite's game in progress has the board.
+    std::vector<::espn::FavRef> favs;
+    if (this->take_over_())
+      favs = this->fav_refs_();
+    int taken = favs.empty() ? -1
+                             : ::espn::take_over_pick(j.live, favs, this->schedule_.event_id, over,
+                                                      this->prefs4_.collide == 1);
+    const ::espn::LiveGame &g =
+        j.live[taken >= 0 ? (size_t) taken
+                          : best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
+                                 : pick[random_uint32() % pick.size()]];
+    int fav_rank = taken >= 0 ? ::espn::live_fav_rank(g, favs) : -1;
+    // The favorite's side is the board's own team, as in Favorite teams mode;
+    // any other game reads like a broadcast, away team first.
+    bool fav_home = fav_rank >= 0 && favs[fav_rank].id == g.home_id && favs[fav_rank].id != g.away_id;
+    uint32_t side_id = fav_home ? g.home_id : g.away_id;
+    uint8_t side_rank = fav_home ? g.home_rank : g.away_rank;
+    uint8_t other_rank = fav_home ? g.away_rank : g.home_rank;
+    if ((best || taken >= 0) && !over && this->game_.valid && g.event_id == this->schedule_.event_id &&
+        side_id == this->live_away_id_ && !this->live_none_ && !this->live_fallback_) {
+      // Still the favorite's game, or the best game on: keep it, and look
+      // again at the next scan.
+      if (taken >= 0)
+        ESP_LOGI(TAG, "Favorites take over: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      else
+        ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      this->live_fav_ = fav_rank;
+      this->live_away_rank_ = side_rank;
+      this->live_home_rank_ = other_rank;
       this->live_started_ms_ = now == 0 ? 1 : now;
+      this->rebuild_state_(&this->last_fields_);
       this->schedule_next_(0);
       return;
     }
-    if (best)
+    if (taken >= 0)
+      ESP_LOGI(TAG, "Favorites take over: following %s @ %s for %s", g.away_abbr.c_str(), g.home_abbr.c_str(),
+               this->fav_[fav_rank].team->abbr);
+    else if (best)
       ESP_LOGI(TAG, "Following %s @ %s, the best of %u (interest %d)", g.away_abbr.c_str(), g.home_abbr.c_str(),
                (unsigned) j.live.size(), ::espn::live_interest(g));
     else
@@ -2585,9 +2663,10 @@ void GamedayComponent::apply_job_() {
     this->schedule_.league = g.league;
     this->schedule_.kickoff_epoch = (int64_t) this->time_->timestamp_now();
     this->schedule_fetched_ms_ = now == 0 ? 1 : now;  // 0 reads as "never fetched"
-    this->live_away_id_ = g.away_id;
-    this->live_away_rank_ = g.away_rank;
-    this->live_home_rank_ = g.home_rank;
+    this->live_away_id_ = side_id;
+    this->live_away_rank_ = side_rank;
+    this->live_home_rank_ = other_rank;
+    this->live_fav_ = fav_rank;
     this->live_started_ms_ = now == 0 ? 1 : now;
     this->game_ = GameSnapshot{};
     this->prev_ = GameSnapshot{};
@@ -2669,7 +2748,7 @@ void GamedayComponent::apply_job_() {
   }
   ::espn::Splash splash =
       ::espn::decide_splash(this->prev_, this->game_, this->opponent_splashes(),
-                            this->live_mode_() && !this->live_fallback_);
+                            this->live_mode_() && !this->live_fallback_ && this->live_fav_ < 0);
   // A ranked side trailing late in the best game on: once a game, and never
   // over a score's own splash (the next poll shows it).
   if (splash.text.empty() && this->live_mode_() && !this->live_fallback_ && this->best_game() &&
@@ -3377,6 +3456,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["today"] = this->today_only();
   doc["jump"] = this->jump_to_action();
   doc["banner"] = this->score_banner();
+  doc["favtake"] = this->favorites_take_over();
   JsonArray live = doc["live"].to<JsonArray>();
   for (League l : this->live_leagues_())
     live.add(::espn::league_key(l));
@@ -3437,6 +3517,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     doc["clock_approx"] = true;
   doc["fallback"] = this->live_fallback_;
   doc["recap"] = this->recap_on_;
+  // Favorites take over has the board on this favorite's game; left out otherwise.
+  if (this->live_mode_() && this->live_fav_ >= 0 && this->live_fav_ < (int) this->fav_.size()) {
+    JsonObject favlock = doc["favlock"].to<JsonObject>();
+    put_team(favlock, (uint8_t) this->fav_[this->live_fav_].team->league, this->fav_[this->live_fav_].team->espn_id);
+  }
 
   JsonObject game = doc["game"].to<JsonObject>();
   game["s"] = g.valid ? ::espn::state_name(g.state) : "NOT_FOUND";
@@ -4091,6 +4176,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::BANNER:
         this->set_score_banner(op.on);
+        break;
+      case ::espn::SetKind::FAVTAKE:
+        this->set_favorites_take_over(op.on);
         break;
       case ::espn::SetKind::LIVE:
         this->set_live_mask_(op.mask);
