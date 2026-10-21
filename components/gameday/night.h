@@ -79,6 +79,14 @@ inline std::string night_time_text(uint16_t minutes) {
   return buf;
 }
 
+// Minutes after midnight -> "7:00 AM", for the log
+inline std::string night_clock12(uint16_t minutes) {
+  const unsigned h = minutes / 60 % 24;
+  char buf[12];
+  snprintf(buf, sizeof(buf), "%u:%02u %s", h % 12 == 0 ? 12 : h % 12, (unsigned) (minutes % 60), h < 12 ? "AM" : "PM");
+  return buf;
+}
+
 // True when the minute is inside [start, end), across midnight when end is
 // earlier than start. The same start and end is an empty window.
 inline bool night_window(uint16_t start, uint16_t end, int minute) {

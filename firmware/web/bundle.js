@@ -184,7 +184,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <h2>Panel</h2>
         <div id="panelCtls"></div>
         <div id="nightCtls" hidden>
-          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at full brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
           <div id="nightSet" hidden>
             <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
             <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
@@ -853,8 +853,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const until = clock12(S.nightend, true);
     $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
     $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
-      : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to full brightness."
-        : "Your game keeps the panel at full brightness. Night mode comes back when it ends, until " + until + ".";
+      : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
+        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
   };
 
   // ---- message: the banner and the message card ---------------------------------

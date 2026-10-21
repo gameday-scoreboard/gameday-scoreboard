@@ -779,8 +779,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool night_loaded_{false};
   ::espn::Night night_now_{::espn::Night::DAY};
   // Live games: both sides of every game in progress at the last scan, so
-  // a team or favorite changed between scans counts at once. A full college
-  // football Saturday is a few hundred entries: PSRAM.
+  // a team or favorite changed between scans counts at once. A game of the
+  // owner's that ends between scans keeps the panel lit until the next one,
+  // which errs toward lit. A full college football Saturday is a few
+  // hundred entries: PSRAM.
   struct LiveSide {
     uint32_t id;
     uint8_t league;

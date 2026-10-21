@@ -4207,6 +4207,10 @@ static void test_night() {
   CHECK_EQ(night_parse_time(""), -1);
   CHECK_EQ(night_time_text(7 * 60), std::string("07:00"));
   CHECK_EQ(night_time_text(23 * 60 + 30), std::string("23:30"));
+  CHECK_EQ(night_clock12(7 * 60), std::string("7:00 AM"));
+  CHECK_EQ(night_clock12(0), std::string("12:00 AM"));
+  CHECK_EQ(night_clock12(12 * 60 + 5), std::string("12:05 PM"));
+  CHECK_EQ(night_clock12(23 * 60 + 30), std::string("11:30 PM"));
 
   // Across midnight, and inside one day
   CHECK(night_window(23 * 60, 7 * 60, 23 * 60));

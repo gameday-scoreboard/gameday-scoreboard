@@ -1442,8 +1442,8 @@ void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
     return;
   this->night_ = p;
   this->night_pref_.save(&this->night_);
-  ESP_LOGI(TAG, "Night schedule: %s, %s to %s, %s", p.on ? "on" : "off", ::espn::night_time_text(p.start).c_str(),
-           ::espn::night_time_text(p.end).c_str(), p.screen_off ? "screen off" : "dimmed");
+  ESP_LOGI(TAG, "Night schedule: %s, %s to %s, %s", p.on ? "on" : "off", ::espn::night_clock12(p.start).c_str(),
+           ::espn::night_clock12(p.end).c_str(), p.screen_off ? "screen off" : "dimmed");
   this->night_tick_();
   // New hours or a new level with the state unchanged still need the
   // brightness applied again.
@@ -1490,7 +1490,7 @@ void GamedayComponent::night_tick_() {
   const ::espn::Night next = ::espn::night_state(this->night_, valid, minute, owner_live);
   if (next == this->night_now_)
     return;
-  const std::string until = ::espn::night_time_text(this->night_.end);
+  const std::string until = ::espn::night_clock12(this->night_.end);
   switch (next) {
     case ::espn::Night::DIM:
       ESP_LOGI(TAG, "Night schedule: dimming to %u until %s", (unsigned) this->night_.level, until.c_str());
