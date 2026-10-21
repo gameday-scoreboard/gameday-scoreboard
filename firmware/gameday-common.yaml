@@ -609,6 +609,12 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # Another favorite scored (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "fav_banner";'
+        then:
+          - script.execute: gd_fav_banner
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:

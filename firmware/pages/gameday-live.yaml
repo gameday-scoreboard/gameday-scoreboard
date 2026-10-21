@@ -44,6 +44,34 @@ script:
           lv_obj_add_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
           id(tt_fx).pause();
 
+  # Favorites: another favorite scored while this game is on ("KC TD,
+  # 21-17"). A band over the situation row and the ticker in that team's
+  # color for five seconds, so the game on the board stays in view.
+  - id: gd_fav_banner
+    mode: restart
+    then:
+      - lambda: |-
+          const std::string text = gameday::panel_text(id(gameday_ctl).fav_banner_text());
+          if (text.empty()) {
+            lv_obj_add_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          lv_obj_set_width(id(tt_fav_banner), W);
+          lv_obj_set_width(id(tt_fav_banner_lbl), W);
+          lv_obj_set_style_text_font(id(tt_fav_banner_lbl), W >= 128 ? id(spleen_12)->get_lv_font() : id(spleen_8)->get_lv_font(), 0);
+          lv_obj_align(id(tt_fav_banner_lbl), LV_ALIGN_LEFT_MID, 0, 0);
+          lv_label_set_text(id(tt_fav_banner_lbl), text.c_str());
+          // White on the team color, unless the color is too light for it.
+          uint32_t c = id(gameday_ctl).fav_banner_color();
+          uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+          bool light = r * 299 + g * 587 + b * 114 > 160000;
+          lv_obj_set_style_bg_color(id(tt_fav_banner), lv_color_hex(c), 0);
+          lv_obj_set_style_text_color(id(tt_fav_banner_lbl), lv_color_hex(light ? 0x000000 : 0xFFFFFF), 0);
+          lv_obj_clear_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);
+      - delay: 5s
+      - lambda: 'lv_obj_add_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);'
+
   - id: tt_apply_layout
     then:
       - lambda: |-
@@ -1042,6 +1070,32 @@ lvgl:
                   long_mode: SCROLL_CIRCULAR
                   text: ""
                   styles: ["tt_st_status_text"]
+
+        # Another favorite's score, shown by gd_fav_banner. Under the splash,
+        # so this game's own score still takes the whole board.
+        - obj:
+            id: tt_fav_banner
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 48
+            width: 64
+            height: 16
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_fav_banner_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: SCROLL_CIRCULAR
+                  text: ""
+                  text_color: 0xFFFFFF
 
         # Full-screen score splash (TOUCHDOWN! etc), shown briefly on scores
         - obj:
