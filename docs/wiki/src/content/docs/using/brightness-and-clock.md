@@ -43,10 +43,8 @@ On a single 64x64 panel the date goes under the time, and the next game goes in 
 
 ## Heat and power protection
 
-:::note[Coming in the next release]
 **Too warm.** If the controller's chip reads above 75 C, in a sunny window or a closed cabinet for example, the panel dims itself a step at a time: to 70%, then 45%, then 25% of your brightness, one step every two minutes while it stays hot, and straight to 25% at 85 C. A small thermometer pulses slowly in the top right corner, and every two minutes the bottom line says **Too warm, dimming** in orange for 15 seconds. Once the chip is back under 70 C, the panel steps back up every five minutes until it's at your brightness again. Keep it out of direct sun and give it some air behind it.
 
 **Weak power supply.** If the panel restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, it holds its brightness at about a quarter of full so it stays on. A small plug pulses slowly in the top right corner, and every two minutes the bottom line says **Check power supply** in red. Use the power supply that came with the panel, not a phone charger or a USB port, then press **Clear** in the notice on the device page.
 
 The device page shows both notices under the board, and the chip temperature under Diagnostics.
-:::

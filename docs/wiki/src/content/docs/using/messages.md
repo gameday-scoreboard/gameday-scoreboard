@@ -5,9 +5,7 @@ sidebar:
   order: 12
 ---
 
-:::note[Coming in the next release]
 Everything on this page arrives with the next release.
-:::
 
 The panel can show your words as well as scores, in two ways:
 
