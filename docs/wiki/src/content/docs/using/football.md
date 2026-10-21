@@ -32,9 +32,7 @@ At kickoff the board switches to the live scoreboard:
 - **Timeout pips** under each logo: three bars per team, lit gold for each timeout left and dim for each one used.
 - **The ticker** with the down, distance and where the ball is, like "3rd & 4 at FIU 31", and the last play. Turn either off in the Ticker card on the device page. See [The ticker](/using/ticker/).
 
-:::note[Coming in the next release]
 After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Pre-game odds and TV**.
-:::
 
 On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker.
 
@@ -66,8 +64,6 @@ At the final the ticker says "Final" with the records. The final stays up for ha
 
 A postponed, canceled or suspended game shows ESPN's word for it instead of "Final", and gets no victory splash.
 
-:::note[Coming in the next release]
 At halftime and the final the board takes turns, 10 seconds each, with the line score: each team's points by quarter and the total, with one OT column after overtime. On a 64x64 panel it's by half, the teams side by side under their abbreviations.
 
 With **Last play** on, the ticker at halftime and the final also runs the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. A score the panel didn't see as it happened, because it started or switched to the game later, isn't in the list; the line score still counts it.
-:::

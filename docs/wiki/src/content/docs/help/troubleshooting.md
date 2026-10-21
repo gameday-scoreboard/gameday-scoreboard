@@ -25,9 +25,7 @@ While it joins, the panel shows **JOINING** and the name of the network it was g
 
 **Why:** the panel's Wi-Fi only works on 2.4 GHz. A guest network can let the panel join but keep your phone from reaching it afterwards.
 
-:::note[Coming in the next release]
 If the panel says **Wi-Fi needs sign-in, use home or a hotspot**, the network wants a sign-in on a web page, like many bar, hotel and dorm networks. The panel can't sign in to those pages. Set it up on a home network or a phone hotspot instead.
-:::
 
 ## The panel says Wi-Fi lost
 
@@ -37,9 +35,7 @@ If you changed your router or your Wi-Fi password, open the Game Day app and giv
 
 **Why:** the panel says so when it has been off its network for more than about 10 seconds. It turns Bluetooth back on so the app can reach it, and restarts itself once, a minute into the outage.
 
-:::note[Coming in the next release]
 Right after a power cut, the panel says **Waiting for** your network and **Just had a power cut? / Routers take a few min** instead, while your router starts. Wait. The panel joins by itself once the router is back, and only says **Wi-Fi lost** if it still can't after 3 minutes.
-:::
 
 ## The panel says Can't reach ESPN
 
@@ -53,9 +49,7 @@ Try another network, like your home Wi-Fi or a phone hotspot.
 
 **Why:** the panel needs the time before it can read any scores, and it gets the time from the internet. Some guest, office and school networks block that.
 
-:::note[Coming in the next release]
 On a network that blocks time servers, the panel sets its clock from ESPN a few seconds after joining and shows today's games instead of **Getting ready**.
-:::
 
 ## Half the board is blank, or the picture shows twice
 
@@ -82,9 +76,7 @@ The panel restarts with the new layout.
 
 Look at **Signal** in the Device card on the device page. It's in dBm, and the closer the number is to zero, the stronger the signal. If it's weak, move the panel closer to the router, or the router closer to the panel.
 
-:::note[Coming in the next release]
 The Diagnostics section of the Device card counts the panel's Wi-Fi drops and shows the cause of the last one, with a graph of the signal over the last day. Below -75 dBm the page says **Weak signal**.
-:::
 
 ## I need to reset Wi-Fi
 
@@ -98,7 +90,6 @@ Let go before 10 seconds and nothing resets.
 
 **Why:** a Wi-Fi reset makes the panel forget its saved networks and restart into setup, so you can put it on a new network from the Game Day app or its hotspot. Your team, favorites and other settings stay as they were. See [Buttons and resets](/using/buttons-and-resets/).
 
-:::note[Coming in the next release]
 Nothing resets while you hold the button. Letting go does what the screen says:
 
 | Hold for | The panel says | Let go and |
@@ -110,7 +101,6 @@ Nothing resets while you hold the button. Letting go does what the screen says:
 | 30 seconds | **Release to cancel** | Nothing resets |
 
 After a Wi-Fi reset the panel keeps its saved networks and stays in setup for 15 minutes. Unplug it and plug it back in, or wait out the 15 minutes, and it rejoins the Wi-Fi it already knows. Holding the button on a panel that's switched off turns it on, so you can see the countdown.
-:::
 
 ## Start over from scratch
 
@@ -118,9 +108,7 @@ Use **Factory reset** in the Device card on the device page. It erases everythin
 
 A [USB install](/get-started/install-firmware/) erases everything too.
 
-:::note[Coming in the next release]
 No app and no device page? Hold the button on the controller. At 20 seconds the panel says **Release to erase all**. Let go then for a factory reset. Changed your mind? Keep holding to 30 seconds, until it says **Release to cancel**, and let go.
-:::
 
 ## The panel won't start
 
@@ -138,7 +126,6 @@ Check **Night schedule** in the Panel card on the device page. While it's on, th
 
 ## The panel is dim, or shows a thermometer or plug in the corner
 
-:::note[Coming in the next release]
 A small icon pulsing slowly in the top right corner means the panel is holding its brightness down to protect itself. Every two minutes the bottom line says why.
 
 **A thermometer, and Too warm, dimming:** the panel is running hot. Keep it out of direct sun and give it some air behind it. It goes back to your brightness by itself as it cools.
@@ -146,7 +133,6 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 **A plug, and Check power supply:** the panel restarted twice in a row because its power dipped, so it keeps its brightness low to stay on. Use the power supply that came with it, not a phone charger or a USB port. Then press **Clear** on the device page. The icon stays until you do.
 
 **Why:** above a 75 C reading from the controller's chip, the panel steps its brightness down, a step every two minutes while it stays hot, as far as a quarter of your setting. Once the chip reads under 70 C, it comes back a step at a time. A power supply too weak for the panel makes it restart when it lights up, and a lower brightness draws less power. The device page shows the same message, and the chip temperature under Diagnostics.
-:::
 
 ## The device page says an update didn't take
 
@@ -156,6 +142,4 @@ If you want to try the update again, press **Install** on the device page. A lat
 
 **Why:** when a new version crashes as it starts, the panel goes back to the firmware it had. It remembers that version and doesn't install it on its own again, so it doesn't restart into the same bad update every night. See [Updates](/using/updates/).
 
-:::note[Coming in the next release]
 The device page says **The update to** the new version **didn't take and the panel went back to** the version it's running, with **Install tries it again** under it.
-:::

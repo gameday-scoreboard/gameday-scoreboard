@@ -39,10 +39,8 @@ In the playoffs the series, like "CAR leads series 2-0", is in the ticker before
 
 The ticker says "Final", or "Final/OT", "Final/SO" or "Final/2OT", with the series or the records. The final stays up for half an hour in My team, then the panel looks up your team's next game.
 
-:::note[Coming in the next release]
 At the final the board takes turns, 10 seconds each, with the line score: each team's goals by period and the total, with one OT column after overtime (SO after a shootout). On a 64x64 panel the teams sit side by side under their abbreviations, with the periods down the left.
 
 With **Last play** on, the final's ticker also runs the goals the panel saw, like "P2 12:04 Crosby goal, PIT 2-1", and ESPN's headline for the game when it has one.
-:::
 
 A postponed, canceled or suspended game shows ESPN's word for it and gets no victory splash.

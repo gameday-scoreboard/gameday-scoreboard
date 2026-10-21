@@ -74,10 +74,6 @@ It checks for a new release every six hours, and the device page shows an **Inst
 
 Your team and settings stay through an update. See [Updates](/using/updates/).
 
-:::note[Coming in the next release]
-If the update server doesn't answer, the panel checks a second copy of the same files at `updates.gameday-scoreboard.com`.
-:::
-
 ## How fast does support answer?
 
 Email [support@gameday-scoreboard.com](mailto:support@gameday-scoreboard.com) and we reply within one business day. See [Get support](/help/support/) for what to include.

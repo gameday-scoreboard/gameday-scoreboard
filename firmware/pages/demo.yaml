@@ -16,7 +16,6 @@ gameday:
   demo: true
   # No update entity to point anywhere (update: !remove below).
   beta_channel: !remove
-  update_mirror: !remove
 
 web_server:
   js_include: web/bundle-demo.js

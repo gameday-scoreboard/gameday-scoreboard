@@ -36,15 +36,12 @@ A few diagnostic sensors, the Wi-Fi signal and the free memory readings, are the
 
 Favorites, the timezone, the ticker switches, the celebrations, the Live games leagues and the panel layout have no entities. Set them on the device page or in the app.
 
-:::note[Coming in the next release]
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
 
 **Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in My team and Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
-:::
 
 ## Score events
 
-:::note[Coming in the next release]
 The panel sends Home Assistant an event every time either side scores in the game Game Status follows, and another when that game ends. They come whether or not the panel celebrates the score on screen, in every sport, basketball included. An event goes out once per score, so nothing repeats in your logbook. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
 
 `esphome.gameday_score` carries:
@@ -80,11 +77,9 @@ Every value arrives as text, so match `"true"` and `"7"` in quotes. To see them,
 ```
 
 Use `play: goal` for hockey or soccer, `play: home_run` for baseball, or leave `play` out to catch every score. Home Assistant accepts these events from the panel without the "Allow the device to perform Home Assistant actions" option.
-:::
 
 ## Messages
 
-:::note[Coming in the next release]
 The **Message** text entity puts a banner on the panel: set it, from a dashboard or an automation's `text.set_value`, and the text goes over the board for 10 seconds. The **show_message** action, listed as `esphome.<your panel's name>_show_message`, does the same with `message` and `seconds` (0 for 10):
 
 ```yaml
@@ -101,7 +96,6 @@ The **Message** text entity puts a banner on the panel: set it, from a dashboard
 ```
 
 Use your panel's own name in the action. Like the other device actions, it needs no "Allow the device to perform Home Assistant actions" option. The message card that takes turns between games is set on the device page. See [Your own messages](/using/messages/).
-:::
 
 ## What you can automate
 
