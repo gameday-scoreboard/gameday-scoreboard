@@ -395,10 +395,7 @@ void GamedayComponent::put_fav_(uint8_t i, uint8_t league, uint32_t id) {
 }
 
 bool GamedayComponent::no_team_default() const {
-  if (this->current_team_() != nullptr)
-    return false;
-  return this->prefs2_.mode == (uint8_t) Mode::MY_TEAM ||
-         (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty());
+  return ::espn::no_team_default(this->current_team_() != nullptr, this->prefs2_.mode, !this->fav_.empty());
 }
 
 std::string GamedayComponent::favorite_option_(uint8_t slot) const {
@@ -637,6 +634,8 @@ void GamedayComponent::set_live_mask_(uint16_t mask) {
 }
 
 std::vector<League> GamedayComponent::live_leagues_() const {
+  if (this->no_team_default())
+    return ::espn::no_team_leagues();
   std::vector<uint8_t> fav_leagues;
   for (uint8_t i = 0; i < FAV_MAX; i++)
     if (this->fav_id_(i) != 0)
@@ -2049,8 +2048,8 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
 
 bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
                                          std::vector<::espn::Final> *finals, std::vector<::espn::Pending> *pending,
-                                         int64_t epoch) {
-  std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now());
+                                         int64_t epoch, bool top25) {
+  std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now(), top25);
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
   auto container = this->open_(url);
   if (container == nullptr)
@@ -2162,6 +2161,7 @@ void GamedayComponent::start_job_() {
   j.team = this->current_team_();
   j.mode = this->effective_mode_();
   j.scan_leagues = this->scan_leagues_();
+  j.top25 = this->no_team_default();
   if (this->favorites_mode_()) {
     this->start_fav_job_(now);
     return;
@@ -2360,7 +2360,8 @@ void GamedayComponent::run_job_() {
     std::vector<::espn::LiveGame> live;
     j.recap_ok = this->fetch_live_games_((League) j.recap_league, live, j.next_kickoff,
                                          j.recap_forward ? nullptr : &j.finals,
-                                         j.recap_forward ? &j.pending : nullptr, ::espn::espn_day_epoch(j.recap_day));
+                                         j.recap_forward ? &j.pending : nullptr, ::espn::espn_day_epoch(j.recap_day),
+                                         j.top25);
     return;
   }
   if (j.need_scan) {
@@ -2368,7 +2369,7 @@ void GamedayComponent::run_job_() {
     std::vector<::espn::Pending> *pending = j.want_finals ? &j.pending : nullptr;
     j.scan_ok = true;
     for (League l : j.scan_leagues)
-      j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending) && j.scan_ok;
+      j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending, 0, j.top25) && j.scan_ok;
     return;  // the main loop picks a game, then the next cycle polls it
   }
   if (j.need_upcoming) {
@@ -3132,7 +3133,7 @@ void GamedayComponent::apply_recap_job_() {
     ::espn::RecapDay d;
     d.league = i;
     d.day = j.recap_day;
-    d.finals = std::move(j.finals);
+    d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
     if (::espn::recap_count(this->recap_days_, i) >= ::espn::kRecapMinFinals ||
         ++this->recap_back_[i] > ::espn::kRecapMaxDays) {

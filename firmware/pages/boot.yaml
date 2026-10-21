@@ -65,7 +65,8 @@
 # width, with no QR, for 20 seconds. Off Wi-Fi the overlay never hides, so
 # the button cannot blank a panel that is in setup or has lost its network.
 # A panel with no team picked brings the QR back over the board for 13 s
-# every 3 minutes (boot_app_qr_turn) until one is.
+# every 3 minutes (boot_app_qr_turn) until one is: on 128 the QR beside Pick
+# your / team in / the app, on 64 those lines (5 s), then the QR (8 s).
 #
 # Nothing here should scroll. Lines are kept to 12 characters (60 px of
 # Spleen 5x8) on a 64 px column, the hostname is split at its dash to fit,
@@ -415,8 +416,14 @@ script:
               // who needs the app next. A panel with a team and the setting
               // off, or back on its network after a drop, hides straight
               // away (see the hide timers below) and only flashes the hold
-              // view here. boot_app_qr_turn borrows the same view.
-              if (id(boot_join_qr) || id(boot_app_qr_on)) {
+              // view here.
+              if (id(boot_app_qr_on)) {
+                // boot_app_qr_turn's 13 s: on 128 the QR beside the lines
+                // throughout, on 64 the lines (5 s), then the QR (8 s).
+                id(boot_qr_cycle).execute(6, false);
+                id(boot_view).execute(wide, wide || id(boot_qr_frame) == 1);
+                id(boot_set_lines).execute("Pick your", "team in", "the app", "", false);
+              } else if (id(boot_join_qr)) {
                 id(boot_qr_cycle).execute(1, id(gameday_ctl).show_boot_address());
                 const bool addr = id(boot_qr_frame) == 2;
                 id(boot_view).execute(wide, wide || !addr);
@@ -749,10 +756,10 @@ script:
                 id(boot_set_lines).execute("Wi-Fi", "lost", "open app", "", true);
 
   # A panel nobody has picked a team on (no_team_default in the gameday
-  # component) shows the app's QR code for one turn every 3 minutes, the
-  # fresh panel's 13 s of QR, until a team is picked. Only over the board:
-  # not while the overlay is up for anything else, during QC, or with the
-  # boot button in use.
+  # component) shows the app's QR code with "Pick your / team in / the app"
+  # for one 13 s turn every 3 minutes, until a team is picked. Only over the
+  # board: not while the overlay is up for anything else, during QC, or with
+  # the boot button in use.
   - id: boot_app_qr_turn
     mode: single
     then:
@@ -767,6 +774,7 @@ script:
           then:
             - lambda: |-
                 id(boot_app_qr_on) = true;
+                id(boot_qr_since_ms) = 0;  // every turn opens on its first frame
                 ESP_LOGI("boot", "No team yet: the app's QR code takes a turn");
             - component.resume: boot_check
             - script.execute:

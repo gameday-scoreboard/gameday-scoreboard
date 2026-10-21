@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- A panel with no team picked follows live games in every league, not only football, so a new panel on a weeknight in October shows the hockey, basketball and baseball games that are on. College basketball comes from the Top 25 games until you pick a team. Every 3 minutes the app's QR code comes back saying "Pick your team in the app"; on a single 64x64 panel the words and the QR code take turns.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.

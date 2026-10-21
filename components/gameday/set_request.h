@@ -107,9 +107,26 @@ inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, cons
   return out;
 }
 
+// No team picked: My team with no team, or Favorites with no favorite set.
+// Any Live mode counts as a choice. The panel then runs Live games over
+// no_team_leagues() and the state document's live list is that set.
+inline bool no_team_default(bool have_team, uint8_t mode, bool have_favorite) {
+  return !have_team && (mode == (uint8_t) Mode::MY_TEAM || (mode == (uint8_t) Mode::FAVORITES && !have_favorite));
+}
+
+// The leagues a panel with no team picked scans: every league, in kLeagues
+// order. Men's college basketball is read as ESPN's Top 25 slate there
+// (scan_url's top25), not all of Division I.
+inline std::vector<League> no_team_leagues() {
+  std::vector<League> out;
+  for (const auto &l : kLeagues)
+    out.push_back(l.league);
+  return out;
+}
+
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
-// (live_leagues above). Live anything is also the no-team default. A mode
+// (live_leagues above, or no_team_leagues for the no-team default). A mode
 // that follows a team scans none.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
