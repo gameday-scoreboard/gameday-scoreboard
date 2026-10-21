@@ -4997,6 +4997,162 @@ static void test_score_log() {
   CHECK_EQ(with_score_log("Final", "Guimar\xc3\xa3" "es stunner", {}), std::string("Final | Guimaraes stunner"));
 }
 
+// Favorites' Jump to the action and the banner when another favorite scores.
+static GameSnapshot live_snap(Sport sport, int period, const char *clock, int us, int them) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::IN;
+  g.event_id = "1";
+  g.sport = sport;
+  g.period = period;
+  g.display_clock = clock;
+  g.team_abbr = "KC";
+  g.opp_abbr = "LV";
+  g.team_score = us;
+  g.opp_score = them;
+  g.short_detail = std::string(clock) + " - " + std::to_string(period) + "th";
+  return g;
+}
+
+static void test_fav_action() {
+  // Football: the red zone at any score, the last two minutes of the 4th or
+  // overtime only when it is a one-score game.
+  GameSnapshot f = live_snap(Sport::FOOTBALL, 2, "8:00", 0, 28);
+  CHECK(!in_action(f, League::NFL));
+  f.is_red_zone = true;
+  CHECK(in_action(f, League::NFL));
+  f = live_snap(Sport::FOOTBALL, 4, "1:59", 21, 14);
+  CHECK(in_action(f, League::NFL));
+  CHECK(in_action(f, League::NCAA));
+  f.display_clock = "2:01";
+  CHECK(!in_action(f, League::NFL));
+  f = live_snap(Sport::FOOTBALL, 2, "1:00", 21, 14);
+  CHECK(!in_action(f, League::NFL));  // the end of the first half is not the action
+  f = live_snap(Sport::FOOTBALL, 4, "1:00", 30, 14);
+  CHECK(!in_action(f, League::NFL));  // two scores up
+  f = live_snap(Sport::FOOTBALL, 5, "6:00", 17, 17);
+  CHECK(!in_action(f, League::NFL));
+  f.display_clock = "0:45";
+  CHECK(in_action(f, League::NFL));
+  f.short_detail = "End of 4th";
+  CHECK(!in_action(f, League::NFL));  // a break in play
+  f.short_detail = "0:45 - OT";
+  f.state = GameState::POST;
+  CHECK(!in_action(f, League::NFL));
+
+  // Baseball: the bases loaded during a half inning, whatever the score.
+  GameSnapshot b = live_snap(Sport::BASEBALL, 7, "", 1, 9);
+  b.mlb.half = Half::TOP;
+  b.mlb.bases = Baseball::FIRST | Baseball::THIRD;
+  CHECK(!in_action(b, League::MLB));
+  b.mlb.bases |= Baseball::SECOND;
+  CHECK(in_action(b, League::MLB));
+  b.mlb.half = Half::MID;
+  CHECK(!in_action(b, League::MLB));
+
+  // Basketball: the last two minutes of the last period (a college game has
+  // two halves) or overtime, within six.
+  GameSnapshot h = live_snap(Sport::BASKETBALL, 4, "1:30", 100, 95);
+  CHECK(in_action(h, League::NBA));
+  h.team_score = 110;
+  CHECK(!in_action(h, League::NBA));
+  h = live_snap(Sport::BASKETBALL, 2, "0:58", 70, 70);
+  h.nba.regulation = 2;
+  CHECK(in_action(h, League::MCBB));
+  h.nba.regulation = 4;
+  CHECK(!in_action(h, League::NBA));  // only the 2nd quarter
+  GameSnapshot ot = hoops_event("fixtures/event_wnba_ot.json", kDream);
+  CHECK(in_action(ot, League::WNBA));  // 20.8 left in overtime
+
+  // Hockey: the last two minutes of the 3rd or overtime, within a goal.
+  GameSnapshot k = live_snap(Sport::HOCKEY, 3, "1:10", 2, 3);
+  CHECK(in_action(k, League::NHL));
+  k.team_score = 1;
+  CHECK(!in_action(k, League::NHL));
+  k = live_snap(Sport::HOCKEY, 2, "1:10", 2, 3);
+  CHECK(!in_action(k, League::NHL));
+
+  // Soccer: from the 88th minute of the second half on, stoppage and extra
+  // time included, within a goal.
+  GameSnapshot s = soccer_event("fixtures/event_soccer_stoppage.json", kInter);
+  CHECK(in_action(s, League::MLS));  // 2-1 at 90'+2'
+  GameSnapshot m = live_snap(Sport::SOCCER, 2, "87'", 1, 1);
+  CHECK(!in_action(m, League::EPL));
+  m.display_clock = "88'";
+  CHECK(in_action(m, League::EPL));
+  m.display_clock = "105'";
+  m.period = 3;
+  CHECK(in_action(m, League::EPL));
+  m = live_snap(Sport::SOCCER, 1, "45'+2'", 0, 0);
+  CHECK(!in_action(m, League::EPL));
+
+  // Jump to the action: the game at its action goes up in place of the
+  // pick, stays up while the action lasts, then the board goes back.
+  auto g = [](bool action) {
+    FavGame x;
+    x.valid = true;
+    x.state = GameState::IN;
+    x.action = action;
+    return x;
+  };
+  std::vector<FavGame> games = {g(false), g(false), g(false)};
+  CHECK_EQ(action_favorite(games, 0, 0), -1);
+  games[2].action = true;
+  CHECK_EQ(action_favorite(games, 0, 0), 2);
+  games[1].action = true;
+  CHECK_EQ(action_favorite(games, 0, 2), 2);  // already up for its action: stays
+  CHECK_EQ(action_favorite(games, 0, 0), 1);  // else the first slot at its action
+  games[0].action = true;
+  CHECK_EQ(action_favorite(games, 0, 2), -1);  // the pick is at its action itself
+  games = {g(false), g(false), g(false)};
+  CHECK_EQ(action_favorite(games, 0, 2), -1);  // action over: back to the pick
+  games[1].action = true;
+  games[1].state = GameState::POST;
+  CHECK_EQ(action_favorite(games, 0, 0), -1);  // a final is never the action
+  CHECK_EQ(action_favorite({}, -1, -1), -1);
+
+  // The banner when another favorite scores: the favorite's score first.
+  GameSnapshot a = live_snap(Sport::FOOTBALL, 3, "8:00", 14, 17);
+  GameSnapshot a2 = a;
+  a2.team_score = 21;
+  CHECK_EQ(fav_score_banner(a, a2), std::string("KC TD, 21-17"));
+  a2.team_score = 20;
+  CHECK_EQ(fav_score_banner(a, a2), std::string("KC TD, 20-17"));
+  a2.team_score = 17;
+  CHECK_EQ(fav_score_banner(a, a2), std::string("KC FG, 17-17"));
+  a2.team_score = 15;
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));  // a safety, or the extra point after a TD
+  a2.team_score = 14;
+  a2.opp_score = 24;
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));  // only the favorite's own scores
+  a2 = a;
+  a2.team_score = 21;
+  a2.state = GameState::POST;
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));
+  GameSnapshot pre = a;
+  pre.state = GameState::PRE;
+  CHECK_EQ(fav_score_banner(pre, a), std::string(""));  // the first poll since kickoff is the baseline
+  a2 = a;
+  a2.team_score = 21;
+  a2.event_id = "2";
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));
+
+  GameSnapshot r = live_snap(Sport::BASEBALL, 5, "", 2, 2), r2 = r;
+  r2.team_score = 3;
+  CHECK_EQ(fav_score_banner(r, r2), std::string("KC RUN, 3-2"));
+  r2.team_score = 5;
+  CHECK_EQ(fav_score_banner(r, r2), std::string("KC 3 RUNS, 5-2"));
+  r2.mlb.play_type = "Home Run";
+  CHECK_EQ(fav_score_banner(r, r2), std::string("KC HR, 5-2"));
+  GameSnapshot q = live_snap(Sport::SOCCER, 2, "60'", 0, 1), q2 = q;
+  q2.team_score = 1;
+  CHECK_EQ(fav_score_banner(q, q2), std::string("KC GOAL, 1-1"));
+  q.sport = q2.sport = Sport::HOCKEY;
+  CHECK_EQ(fav_score_banner(q, q2), std::string("KC GOAL, 1-1"));
+  q.sport = q2.sport = Sport::BASKETBALL;
+  CHECK_EQ(fav_score_banner(q, q2), std::string(""));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -5018,6 +5174,7 @@ int main() {
   test_clock_text();
   test_color();
   test_favorites();
+  test_fav_action();
   test_followed_favorite();
   test_schedule_league();
   test_schedule_due();

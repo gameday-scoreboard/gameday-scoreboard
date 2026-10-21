@@ -419,6 +419,12 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
   await expectSet(request, { bootaddr: "0" });
   await page.locator('.sw[data-set="today"]').click();
   await expectSet(request, { today: "1" });
+  await expect(page.locator('.sw[data-set="jump"]')).not.toHaveClass(/\bon\b/);
+  await expect(page.locator('.sw[data-set="banner"]')).toHaveClass(/\bon\b/);
+  await page.locator('.sw[data-set="jump"]').click();
+  await expectSet(request, { jump: "1" });
+  await page.locator('.sw[data-set="banner"]').click();
+  await expectSet(request, { banner: "0" });
   await expect(page.locator('.sw[data-set="down"]')).not.toHaveClass(/\bon\b/);
   await expect(page.locator('.sw[data-set="play"]')).toHaveClass(/\bon\b/);
 });

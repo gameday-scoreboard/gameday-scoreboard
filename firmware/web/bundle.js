@@ -184,6 +184,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <h2>Favorites</h2>
         <p class="hint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
         <div class="ctl"><label>Only today's games<small>The playlist skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+        <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
+        <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
         <div id="favCtls"></div>
         <button class="btn" id="favAdd">Add a favorite</button>
       </div>
@@ -339,7 +341,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),

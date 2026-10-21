@@ -211,11 +211,21 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_release_seconds(int seconds);
   void set_collision_alternate(bool alternate);
   void set_today_only(bool on);
+  // Jump to the action (off by default) and the banner when another favorite
+  // scores (on by default); favorites.h has the rules.
+  void set_jump_to_action(bool on) { this->set_fav7_(FAV7_JUMP, on); }
+  void set_score_banner(bool on) { this->set_fav7_(FAV7_NO_BANNER, !on); }
   // Live mode's leagues as keys ("nfl,mlb"); "" = the leagues you follow.
   void set_live_leagues(const std::string &keys);
   void set_live_mask_(uint16_t mask);
   std::vector<League> live_leagues_() const;  // the leagues Live mode scans
   bool today_only() const { return (this->prefs7_.flags & FAV7_TODAY) != 0; }
+  bool jump_to_action() const { return (this->prefs7_.flags & FAV7_JUMP) != 0; }
+  bool score_banner() const { return (this->prefs7_.flags & FAV7_NO_BANNER) == 0; }
+  // The banner the scoreboard page shows when another favorite scores
+  // (pages/gameday-live.yaml, gd_fav_banner), in that team's color.
+  const std::string &fav_banner_text() const { return this->fav_banner_text_; }
+  uint32_t fav_banner_color() const { return this->fav_banner_color_; }
   void refresh_now();
   // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
   // them to the demo (demo.cpp).
@@ -484,10 +494,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs7 {
     uint8_t fav_league[PREFS7_FAVS];
     uint32_t fav_id[PREFS7_FAVS];  // 0 = empty
-    uint8_t flags;                 // FAV7_TODAY
+    uint8_t flags;                 // FAV7_*
     uint16_t live_mask;            // Live mode: 1 << League per league, 0 = the leagues you follow
   } __attribute__((packed));
   static constexpr uint8_t FAV7_TODAY = 1;  // idle playlist shows only today's games
+  static constexpr uint8_t FAV7_JUMP = 2;   // Jump to the action
+  // The score banner is on by default, and a saved spare bit is 0: set means off.
+  static constexpr uint8_t FAV7_NO_BANNER = 4;
+  void set_fav7_(uint8_t f, bool set);
   // The ticker's situation line per sport. Football's stays FLAG_DOWN in
   // Prefs; Prefs::flags is full. The spare bits are for later settings,
   // since a blob that changes size fails to load and resets.
@@ -796,6 +810,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint32_t stuck_for_ms{0};  // and how long it lasts
     std::vector<Schedule> comps;  // soccer: reads per competition, as Job::comps
     int comp_next{-1};            // the cup read due next, -1 when none
+    int64_t action_epoch{0};  // the last poll that found the game at its action, 0 = none
+    uint32_t side_ms{0};      // the last poll while another favorite had the board
   };
   // The favorite cards are ~1 KB each and internal heap is the panel's
   // scarcest resource: PSRAM (logo_cache.h's allocator).
@@ -803,6 +819,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   FavList fav_;
   int fav_shown_{-1};
   int64_t fav_shown_since_{0};  // epoch seconds
+  // What pick_favorite chose, and since when. The board shows it unless Jump
+  // to the action put another favorite up for its action.
+  int fav_base_{-1};
+  int64_t fav_base_since_{0};
+  std::string fav_banner_text_;
+  uint32_t fav_banner_color_{0};
+  // While a favorite has the board, the others that are live get a slower
+  // poll of their own for the action and the score banner. -1 when none is due.
+  int fav_side_due_(uint32_t now, int64_t now_epoch) const;
   int fav_pinned_{-1};
   bool fav_locked_{false};
   uint32_t fav_poll_ms_{0};
