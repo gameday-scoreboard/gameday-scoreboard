@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "auto_update.h"
+#include "night.h"
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
@@ -4190,6 +4191,75 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
 }
 
+static void test_night() {
+  // Times as the page's fields send them
+  CHECK_EQ(night_parse_time("23:00"), 23 * 60);
+  CHECK_EQ(night_parse_time("7:05"), 7 * 60 + 5);
+  CHECK_EQ(night_parse_time("00:00"), 0);
+  CHECK_EQ(night_parse_time("23:59"), 23 * 60 + 59);
+  CHECK_EQ(night_parse_time("24:00"), -1);
+  CHECK_EQ(night_parse_time("12:60"), -1);
+  CHECK_EQ(night_parse_time("12:5"), -1);
+  CHECK_EQ(night_parse_time("123:00"), -1);
+  CHECK_EQ(night_parse_time(":30"), -1);
+  CHECK_EQ(night_parse_time("1a:00"), -1);
+  CHECK_EQ(night_parse_time("11 PM"), -1);
+  CHECK_EQ(night_parse_time(""), -1);
+  CHECK_EQ(night_time_text(7 * 60), std::string("07:00"));
+  CHECK_EQ(night_time_text(23 * 60 + 30), std::string("23:30"));
+
+  // Across midnight, and inside one day
+  CHECK(night_window(23 * 60, 7 * 60, 23 * 60));
+  CHECK(night_window(23 * 60, 7 * 60, 2 * 60));
+  CHECK(!night_window(23 * 60, 7 * 60, 7 * 60));  // over at the end minute
+  CHECK(!night_window(23 * 60, 7 * 60, 12 * 60));
+  CHECK(night_window(60, 6 * 60, 3 * 60));
+  CHECK(!night_window(60, 6 * 60, 23 * 60));
+  CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+
+  NightPrefs p = night_defaults();
+  CHECK(!p.on);
+  CHECK_EQ((int) p.start, 23 * 60);
+  CHECK_EQ((int) p.end, 7 * 60);
+  CHECK(!p.screen_off);
+  CHECK_EQ((int) p.level, (int) kNightLevelDefault);
+  const int late = 2 * 60;
+  CHECK(night_state(p, true, late, false) == Night::DAY);  // off out of the box
+  p.on = 1;
+  CHECK(night_state(p, true, late, false) == Night::DIM);
+  CHECK(night_state(p, true, 12 * 60, false) == Night::DAY);
+  CHECK(night_state(p, false, late, false) == Night::DAY);  // no clock yet: never dark
+  CHECK(night_state(p, true, late, true) == Night::GAME);
+  p.screen_off = 1;
+  CHECK(night_state(p, true, late, false) == Night::DARK);
+  CHECK(night_state(p, true, late, true) == Night::GAME);  // a live game lights it
+
+  p.level = 20;
+  CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
+  CHECK_EQ((int) night_brightness(128, Night::DARK, p), 0);
+  CHECK_EQ((int) night_brightness(128, Night::GAME, p), 128);
+  CHECK_EQ((int) night_brightness(128, Night::DAY, p), 128);
+  // Heat and power still hold the night level down
+  CHECK_EQ((int) guarded_brightness(night_brightness(128, Night::DIM, p), kHeatSteps, false), 5);
+  CHECK_EQ(std::string(night_word(Night::DAY)), std::string(""));
+  CHECK_EQ(std::string(night_word(Night::DARK)), std::string("off"));
+
+  // A damaged blob goes back to the defaults field by field
+  NightPrefs bad{};
+  bad.on = 7;
+  bad.start = 5000;
+  bad.end = 6 * 60;
+  bad.screen_off = 9;
+  bad.level = 0;
+  night_sanitize(bad);
+  CHECK_EQ((int) bad.on, 1);
+  CHECK_EQ((int) bad.start, (int) kNightStartDefault);
+  CHECK_EQ((int) bad.end, 6 * 60);
+  CHECK_EQ((int) bad.screen_off, 1);
+  CHECK_EQ((int) bad.level, (int) kNightLevelDefault);
+  static_assert(sizeof(NightPrefs) == 10, "NightPrefs is saved in flash: its size can't change");
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -5234,6 +5304,7 @@ int main() {
   test_heat_guard();
   test_power_log();
   test_guarded_brightness();
+  test_night();
   test_offseason();
   test_panel_text();
   test_message();

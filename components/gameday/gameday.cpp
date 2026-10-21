@@ -1044,6 +1044,7 @@ void GamedayComponent::loop() {
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
+    this->night_tick_();
     if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
       // A settled run: the next brownout starts a new streak
       this->power_settled_ = true;
@@ -1414,9 +1415,98 @@ void GamedayComponent::save_power_log_() {
   global_preferences->sync();
 }
 
-uint8_t GamedayComponent::guard_brightness(uint8_t want) {
+uint8_t GamedayComponent::guard_brightness(uint8_t want, bool night) {
   this->load_power_log_();
+  if (night) {
+    this->load_night_();
+    want = ::espn::night_brightness(want, this->night_now_, this->night_);
+    if (want == 0)
+      return 0;  // screen off for the night
+  }
   return ::espn::guarded_brightness(want, this->heat_.step, this->power_log_.capped != 0);
+}
+
+void GamedayComponent::load_night_() {
+  if (this->night_loaded_)
+    return;
+  this->night_loaded_ = true;
+  this->night_pref_ = global_preferences->make_preference<::espn::NightPrefs>(fnv1_hash("gameday_night_v1"));
+  if (!this->night_pref_.load(&this->night_))
+    this->night_ = ::espn::night_defaults();
+  ::espn::night_sanitize(this->night_);
+}
+
+void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
+  this->load_night_();
+  if (memcmp(&p, &this->night_, sizeof(p)) == 0)
+    return;
+  this->night_ = p;
+  this->night_pref_.save(&this->night_);
+  ESP_LOGI(TAG, "Night schedule: %s, %s to %s, %s", p.on ? "on" : "off", ::espn::night_time_text(p.start).c_str(),
+           ::espn::night_time_text(p.end).c_str(), p.screen_off ? "screen off" : "dimmed");
+  this->night_tick_();
+  // New hours or a new level with the state unchanged still need the
+  // brightness applied again.
+  this->fire_action_("guard");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+bool GamedayComponent::owner_team_(uint8_t league, uint32_t id) const {
+  if (id == 0)
+    return false;
+  if (this->prefs_.team_id == id && this->prefs_.league == league)
+    return true;
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    if (this->fav_id_(i) == id && this->fav_league_(i) == league)
+      return true;
+  return false;
+}
+
+// A game of the owner's team or a favorite is in progress. My team and
+// Favorites only follow those, so a live game on the board is theirs. Live
+// games follows anyone's: theirs if one side is the owner's, on the board or
+// in the last scan.
+bool GamedayComponent::owner_game_live_() const {
+  if (!this->live_mode_() || this->live_fallback_)
+    return this->followed_game_live_();
+  if (this->owner_scan_live_)
+    return true;
+  const GameSnapshot &g = this->game_;
+  const uint8_t league = this->schedule_.league;
+  return g.valid && g.state == GameState::IN &&
+         (this->owner_team_(league, g.team_id) || this->owner_team_(league, g.opp_id));
+}
+
+void GamedayComponent::night_tick_() {
+  this->load_night_();
+  ESPTime now = this->time_ != nullptr ? this->time_->now() : ESPTime{};
+  const bool valid = now.is_valid();
+  const int minute = valid ? now.hour * 60 + now.minute : 0;
+  // Only asked inside the hours, where it matters
+  const bool owner_live = this->night_.on && valid &&
+                          ::espn::night_window(this->night_.start, this->night_.end, minute) &&
+                          this->owner_game_live_();
+  const ::espn::Night next = ::espn::night_state(this->night_, valid, minute, owner_live);
+  if (next == this->night_now_)
+    return;
+  const std::string until = ::espn::night_time_text(this->night_.end);
+  switch (next) {
+    case ::espn::Night::DIM:
+      ESP_LOGI(TAG, "Night schedule: dimming to %u until %s", (unsigned) this->night_.level, until.c_str());
+      break;
+    case ::espn::Night::DARK:
+      ESP_LOGI(TAG, "Night schedule: screen off until %s", until.c_str());
+      break;
+    case ::espn::Night::GAME:
+      ESP_LOGI(TAG, "Night schedule: a game of yours is live, normal brightness until it ends");
+      break;
+    case ::espn::Night::DAY:
+      ESP_LOGI(TAG, "Night schedule: over, normal brightness");
+      break;
+  }
+  this->night_now_ = next;
+  this->fire_action_("guard");  // pages/guard.yaml applies the brightness
+  this->rebuild_state_(&this->last_fields_);
 }
 
 void GamedayComponent::set_chip_temp(float c) {
@@ -1761,6 +1851,7 @@ void GamedayComponent::reset_game_() {
 
 void GamedayComponent::restart_board_() {
   this->reset_game_();
+  this->owner_scan_live_ = false;  // until the next scan
   this->generation_++;  // a scan in flight read what the board followed before
   this->emit_({});      // clear the board while the next fetch runs
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
@@ -2476,6 +2567,12 @@ void GamedayComponent::apply_job_() {
     if (j.want_finals)
       this->recap_absorb_(j, (int64_t) this->time_->timestamp_now());
     this->clear_backoff_();
+    // For the night schedule: a game of the owner's on now, whichever game
+    // the board picks.
+    this->owner_scan_live_ = false;
+    for (const auto &g : j.live)
+      if (this->owner_team_(g.league, g.away_id) || this->owner_team_(g.league, g.home_id))
+        this->owner_scan_live_ = true;
     // Prefer a different game than the one we just showed.
     std::vector<size_t> pick;
     for (size_t i = 0; i < j.live.size(); i++)
@@ -3393,6 +3490,15 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["opp"] = this->opponent_splashes();
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
+  // The night schedule (night.h). night_now is what it is doing: "" (not
+  // now), "dim", "off" or "game" (its hours, held off by a live game).
+  this->load_night_();
+  doc["night"] = this->night_.on != 0;
+  doc["nightstart"] = ::espn::night_time_text(this->night_.start);
+  doc["nightend"] = ::espn::night_time_text(this->night_.end);
+  doc["nightscreen"] = this->night_.screen_off == 0;
+  doc["nightlevel"] = this->night_.level;
+  doc["night_now"] = ::espn::night_word(this->night_now_);
 #if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
   // Left out where nothing can be installed (the demo build) or there is no
   // choice (the bar build), so the page and the app hide the switch.
@@ -4056,6 +4162,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   std::string msg_text, msg_url;
   uint8_t msg_keys = 0;
   int msg_every = -1;
+  // So are the night schedule's.
+  this->load_night_();
+  ::espn::NightPrefs night = this->night_;
   for (const auto &p : kv) {
     if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
       ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
@@ -4159,8 +4268,24 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
       case ::espn::SetKind::MSGEVERY:
         msg_every = op.value;
         break;
+      case ::espn::SetKind::NIGHT:
+        night.on = op.on ? 1 : 0;
+        break;
+      case ::espn::SetKind::NIGHT_START:
+        night.start = (uint16_t) op.value;
+        break;
+      case ::espn::SetKind::NIGHT_END:
+        night.end = (uint16_t) op.value;
+        break;
+      case ::espn::SetKind::NIGHT_SCREEN:
+        night.screen_off = op.on ? 0 : 1;
+        break;
+      case ::espn::SetKind::NIGHT_LEVEL:
+        night.level = (uint8_t) op.value;
+        break;
     }
   }
+  this->set_night_(night);
   if (msg_keys != 0 || msg_every >= 0)
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
   if (dirty)

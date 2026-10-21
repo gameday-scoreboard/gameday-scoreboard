@@ -1,6 +1,6 @@
 ---
 title: "Brightness, panel on and off, and the clock"
-description: "Set the panel's brightness, turn it off and on, dim it for the night, and switch between the scoreboard and the clock."
+description: "Set the panel's brightness, turn it off and on, dim it or turn it off at night on a schedule, and switch between the scoreboard and the clock."
 sidebar:
   order: 17
 ---
@@ -12,6 +12,22 @@ The Panel card on the device page holds the settings for the screen itself: **Pa
 **Brightness** runs from 1 (dimmest) to 255 (brightest). A new panel starts at 128. The panel keeps your setting through restarts.
 
 A WizMote remote's brightness buttons move the same setting, a tenth of full at a time, and **NIGHT** dims the panel right down to a night level, about 8% of full. See [WizMote remote](/using/remote/).
+
+## Night schedule
+
+:::note[Coming in the next release]
+The night schedule dims the panel, or turns its screen off, between two times you pick, so a panel in the living room isn't lighting up the house at 2 AM. It's off on a new panel. Set it in the Panel card on the device page:
+
+1. Turn on **Night schedule**.
+2. Set **Starts at** and **Ends at**. A new panel starts at 11 PM to 7 AM. The night can run past midnight.
+3. Pick **Screen at night**. On keeps the panel lit at the **Night brightness** below it, 1 to 255 like **Brightness** (16 to start). Off turns the screen dark for those hours.
+
+A live game for your team or one of your favorites keeps the panel at its normal brightness until the game ends, so a late game still shows. Then the night setting comes back until the end time.
+
+While night mode is on, the device page says so under the board, like **Night mode until 7:00 AM**, so a dark panel doesn't look broken. The panel keeps following your games all night, and the board is up to date the moment it lights up again.
+
+The schedule runs on the panel's own clock, set from the internet, in the timezone under Setup. Until the panel has the time after it starts, it stays at its normal brightness. The heat and power protection below still hold the night brightness down when they need to.
+:::
 
 ## Turning the panel off and on
 

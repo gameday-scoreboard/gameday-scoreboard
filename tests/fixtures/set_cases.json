@@ -13,7 +13,8 @@
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "today": false, "jump": false, "banner": true, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "opp": true, "best": true, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1, "msg": "", "msgurl": "", "msgevery": 2
+    "autoupd": false, "beta": false, "panels": 1, "msg": "", "msgurl": "", "msgevery": 2,
+    "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
   "cases": [
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
@@ -118,6 +119,20 @@
     {"name": "an empty list address clears it", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", ""]], "expect": {"msgurl": ""}},
     {"name": "msgevery 0 holds the board between games", "set": [["msgevery", "0"]], "expect": {"msgevery": 0}},
     {"name": "msgevery past 30 is 30", "set": [["msgevery", "45"]], "expect": {"msgevery": 30}},
-    {"name": "msgevery as text is refused", "start": {"msgevery": 5}, "set": [["msgevery", "soon"]], "expect": {"msgevery": 5}}
+    {"name": "msgevery as text is refused", "start": {"msgevery": 5}, "set": [["msgevery", "soon"]], "expect": {"msgevery": 5}},
+
+    {"name": "night schedule on with its hours", "set": [["night", "1"], ["nightstart", "22:30"], ["nightend", "6:15"]],
+     "expect": {"night": true, "nightstart": "22:30", "nightend": "06:15"}},
+    {"name": "night schedule off keeps its hours", "start": {"night": true, "nightstart": "21:00"}, "set": [["night", "0"]],
+     "expect": {"night": false, "nightstart": "21:00"}},
+    {"name": "screen off at night", "set": [["nightscreen", "0"]], "expect": {"nightscreen": false}},
+    {"name": "screen back on at night", "start": {"nightscreen": false}, "set": [["nightscreen", "1"]], "expect": {"nightscreen": true}},
+    {"name": "night brightness", "set": [["nightlevel", "40"]], "expect": {"nightlevel": 40}},
+    {"name": "night brightness 0 is 1", "set": [["nightlevel", "0"]], "expect": {"nightlevel": 1}},
+    {"name": "night brightness past 255 is 255", "set": [["nightlevel", "900"]], "expect": {"nightlevel": 255}},
+    {"name": "a night time past 23:59 is refused", "set": [["nightstart", "24:00"], ["nightend", "07:60"]],
+     "expect": {"nightstart": "23:00", "nightend": "07:00"}},
+    {"name": "a night time with AM or PM is refused", "set": [["nightstart", "11 PM"]], "expect": {"nightstart": "23:00"}},
+    {"name": "midnight starts the night", "set": [["nightstart", "00:00"]], "expect": {"nightstart": "00:00"}}
   ]
 }

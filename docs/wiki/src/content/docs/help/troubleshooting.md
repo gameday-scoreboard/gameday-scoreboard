@@ -128,6 +128,14 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 **Why:** a USB install replaces everything on the controller, so it brings back a panel that can't start the firmware it has.
 
+## The panel goes dark or dim at night
+
+:::note[Coming in the next release]
+Check **Night schedule** in the Panel card on the device page. While it's on, the device page says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
+
+**Why:** the night schedule dims the panel, or turns its screen off, between the times you set. A live game for your team or a favorite brings it back to full brightness until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+:::
+
 ## The panel is dim, or shows a thermometer or plug in the corner
 
 :::note[Coming in the next release]
