@@ -148,6 +148,11 @@ esphome:
                 return w != nullptr && w->has_sta() && !id(gd_networks).in_setup() &&
                        (id(gd_networks).count() > 0 || !w->get_sta().get_ssid().empty());
             then:
+              # The Bluetooth advert then tells the app this panel lost its
+              # network rather than being new.
+              - lambda: |-
+                  if (improv_ble::global_improv_component != nullptr)
+                    improv_ble::global_improv_component->set_has_saved_network(true);
               - script.execute: gd_ble_grace
             else:
               - ble.enable:
@@ -280,8 +285,10 @@ wifi:
         // counter stays parked at zero.
         id(gd_ever_connected) = true;
         id(gd_offline_seconds) = 0;
-        if (improv_ble::global_improv_component != nullptr)
+        if (improv_ble::global_improv_component != nullptr) {
           improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
+          improv_ble::global_improv_component->set_has_saved_network(true);
+        }
         // The network that just worked is the first one tried next boot.
         id(gd_networks).note_connected(wifi::global_wifi_component->get_sta());
         ESP_LOGI("wifi", "Connected. Internal heap free: %u bytes",
