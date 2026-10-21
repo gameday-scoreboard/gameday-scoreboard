@@ -148,6 +148,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
           <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl" data-sport="football"><label>Pre-game season leaders<small>Football: before kickoff, each team's passing leader with yards and touchdowns.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -339,7 +340,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
+    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),

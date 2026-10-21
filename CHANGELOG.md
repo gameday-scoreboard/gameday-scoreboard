@@ -37,6 +37,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - The device page's link to an update's release notes opens that release on gamedayscoreboard.app/changelog.
 - Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text instead of a gap ("Atl tico").
 - At halftime and the final the board takes turns with the line score: each team's points by quarter, period or inning and the total, with runs, hits and errors in baseball. On a 64x64 panel it's a shorter form, by half in football and basketball. With Last play on, the halftime and final ticker also lists the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and the final adds ESPN's headline for the game.
+- Before a football game the ticker shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD". A new Pre-game season leaders switch on the device page turns them off. On a single 64x64 panel, which has no room for the records on the board, the pre-game ticker also shows both teams' records.
 
 ## v2026.10.0
 

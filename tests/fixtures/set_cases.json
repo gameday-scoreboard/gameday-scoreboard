@@ -12,7 +12,7 @@
   "base": {
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "today": false, "jump": false, "banner": true, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
-    "down": true, "count": true, "match": true, "play": true, "odds": true, "opp": true, "best": true, "bootaddr": true,
+    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "msg": "", "msgurl": "", "msgevery": 2
   },
   "cases": [
@@ -41,6 +41,8 @@
      "expect": {"down": false, "play": false, "odds": false, "opp": false, "bootaddr": false, "tz_auto": false}},
     {"name": "best game off", "set": [["best", "0"]], "expect": {"best": false}},
     {"name": "jump to the action on, score banner off", "set": [["jump", "1"], ["banner", "0"]], "expect": {"jump": true, "banner": false}},
+    {"name": "pre-game leaders off", "set": [["leaders", "0"]], "expect": {"leaders": false}},
+    {"name": "pre-game leaders back on", "start": {"leaders": false}, "set": [["leaders", "1"]], "expect": {"leaders": true}},
     {"name": "jump and banner back", "start": {"jump": true, "banner": false}, "set": [["jump", "0"], ["banner", "1"]], "expect": {"jump": false, "banner": true}},
     {"name": "best game back on", "start": {"best": false}, "set": [["best", "1"]], "expect": {"best": true}},
     {"name": "each sport's situation switch is its own", "set": [["count", "0"]], "expect": {"down": true, "count": false, "match": true}},
