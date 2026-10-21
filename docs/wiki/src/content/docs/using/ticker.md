@@ -20,15 +20,11 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds. On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records after the kickoff time before the game, in football, baseball, basketball and hockey.
 :::
 
-:::note[Coming in the next release]
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
-:::
 
 Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 
-:::note[Coming in the next release]
 Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text. Before, they came out as a gap, like "Atl tico".
-:::
 
 ## The switches
 
@@ -42,9 +38,9 @@ The Ticker card on the device page has a switch for each part. All of them start
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. A very long play is cut short. |
 | **Pre-game odds and TV** | The line, over/under and TV channel before the start, in every league, when ESPN has them. |
 
-:::note[Coming in the next release]
 In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Pre-game odds and TV** also adds ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
 
+:::note[Coming in the next release]
 A **Pre-game season leaders** switch, on to start, adds football's passing leaders before kickoff. Like the situation switches, it shows only on a panel that follows football.
 :::
 
@@ -65,9 +61,7 @@ The ticker also says when something needs your attention:
 
 For the messages that take over the whole board, see [Panel messages](/help/panel-messages/).
 
-:::note[Coming in the next release]
 A panel that is too warm or on a weak power supply says so on its bottom line every two minutes, for 15 seconds: "Too warm, dimming" in orange or "Check power supply" in red. See [Brightness, panel on and off, and the clock](/using/brightness-and-clock/#heat-and-power-protection).
-:::
 
 ## Ticker speed
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble
+// Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
 // the password out of the log, and goes back to the saved network after a failed handover.

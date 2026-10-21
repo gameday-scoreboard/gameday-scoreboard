@@ -24,7 +24,7 @@ permissions:
 # may pin an ESPHome beta; main and release tags need a final release, which
 # Branch rules checks.
 env:
-  ESPHOME_VERSION: "2026.10.0b3"
+  ESPHOME_VERSION: "2026.10.0"
 
 # A newer push to the same ref cancels the older run. That stays on for dev
 # too: a merge that lands within a few minutes of the last one leaves the

@@ -18,7 +18,6 @@ The controller has one button, the boot button. A quick press turns the panel on
 
 The address hold is the quickest way to find the panel again. See [Wi-Fi](/using/wifi/).
 
-:::note[Coming in the next release]
 Nothing resets until you let go, and the button gains a factory reset. Hold it and watch the screen:
 
 | Hold | The screen says | Let go then and |
@@ -30,7 +29,6 @@ Nothing resets until you let go, and the button gains a factory reset. Hold it a
 | Past 30 seconds | **Release to cancel** | nothing is reset |
 
 Holding the button on a panel that is off turns it on, so you can see the countdown.
-:::
 
 ## Reset Wi-Fi
 
@@ -40,9 +38,7 @@ The panel forgets every Wi-Fi network it has saved and restarts into setup, show
 
 Your team, favorites and every other setting stay as they were.
 
-:::note[Coming in the next release]
 Reset Wi-Fi keeps the saved networks. The panel restarts into setup mode for 15 minutes, so you can put it on a new network from the Game Day app or its hotspot. The setup screen also says **Unplug it to rejoin saved Wi-Fi**: unplug the panel and plug it back in, and it goes back to the networks it already knows. It does that by itself after the 15 minutes too, or a little later if you're still setting it up from the app or the hotspot.
-:::
 
 ## Factory reset
 
@@ -50,9 +46,7 @@ Factory reset erases everything: the saved Wi-Fi networks, your team, your favor
 
 Start it from **Factory reset** in the Device card on the device page. The page asks you to confirm first.
 
-:::note[Coming in the next release]
 With no app and no device page, hold the boot button until the screen says **Release to erase all**, at 20 seconds, then let go. If you change your mind, keep holding past 30 seconds until it says **Release to cancel**.
-:::
 
 ## What each reset keeps
 

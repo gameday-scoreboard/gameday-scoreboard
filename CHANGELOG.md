@@ -13,31 +13,37 @@ The release renames that heading to the new version. A released section
 stays as it shipped: a change to something it describes is a new bullet
 under `## Unreleased`.
 
-The site renders this file to gamedayscoreboard.app/changelog, newest first,
+The site renders this file to install.gameday-scoreboard.com/changelog, newest first,
 with a one-line summary for each release: the first sentence of the first
 bullet, or a plain line between the heading and the bullets when a release
-needs a better one. Panels link to their release's section there. Neither
+needs a better one; that plain line is also the update summary on the device
+page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
-- The installer and the updates moved to install.gameday-scoreboard.com, and the setup page to app.gameday-scoreboard.com/setup, which the QR code on the panel opens. One installer now covers the Game Day Scoreboard controller and any board on the MoonHub75 pinout: pick one panel or two, then click Install. After the install, give it a few more seconds and the same window asks for your WiFi. The early test controllers on the scoreboard75 pinout have their own installer, linked from the main page.
+- Before a football game the ticker shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD". A new Pre-game season leaders switch on the device page turns them off. On a single 64x64 panel, which has no room for the records on the board, the pre-game ticker also shows both teams' records.
+
+## v2026.10.1
+
+Line scores at halftime and the final, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
+
+- At halftime and the final the board takes turns with the line score: each team's points by quarter, period or inning and the total, with runs, hits and errors in baseball. On a 64x64 panel it's a shorter form, by half in football and basketball. With Last play on, the halftime and final ticker also lists the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and the final adds ESPN's headline for the game.
+- After a power cut the panel waits for your router instead of asking you to fix the Wi-Fi. A panel that hasn't found its network 30 seconds after starting says "Waiting for" the network and "Just had a power cut? Routers take a few min", and only shows "Wi-Fi lost" with the app QR code after 3 minutes.
 - A panel that runs hot, in a sunny window or a closed cabinet, dims itself a step at a time instead of cooking. A small thermometer pulses slowly in its top right corner, and every two minutes the bottom line says "Too warm, dimming". It goes back to your brightness as it cools. The device page says so too, and shows the chip temperature under Diagnostics. Home Assistant gets a Chip Temperature sensor.
 - A panel that restarts twice in a row because its power dipped, as on a phone charger or a power supply too weak for it, keeps its brightness low so it stays on. A small plug pulses slowly in its top right corner, and every two minutes the bottom line says "Check power supply", until you press Clear on the device page.
+- On a bar, hotel or dorm Wi-Fi that joins and then wants you to sign in on a web page, the panel says "Wi-Fi needs sign-in, use home or a hotspot" with the QR code for the app, instead of "Can't reach ESPN" forever. The panel can't sign in to those pages, so set it up on a home network or a phone hotspot. The device page says the same, and the message goes away by itself once scores come through.
+- On a network that blocks time servers (some guest, office and school Wi-Fi), the panel now sets its clock from ESPN a few seconds after joining and shows today's games, instead of saying "Getting ready" all day. It switches to a time server's clock as soon as one answers.
+- The installer and the updates moved to install.gameday-scoreboard.com, and the setup page to app.gameday-scoreboard.com/setup, which the QR code on the panel opens. One installer now covers the Game Day Scoreboard controller and any board on the MoonHub75 pinout: pick one panel or two, then click Install. After the install, give it a few more seconds and the same window asks for your WiFi. The early test controllers on the scoreboard75 pinout have their own installer, linked from the main page.
 - The Device card on the device page has a Diagnostics section: why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the Wi-Fi signal, the last read from ESPN and the firmware version and build. If the panel restarted on its own, this says why. Under Signal it draws the last day of Wi-Fi signal, says when the signal is weak, and counts Wi-Fi drops with the cause of the last one.
-- After a power cut the panel waits for your router instead of asking you to fix the Wi-Fi. A panel that hasn't found its network 30 seconds after starting says "Waiting for" the network and "Just had a power cut? Routers take a few min", and only shows "Wi-Fi lost" with the app QR code after 3 minutes.
 - Reset Wi-Fi keeps the saved networks. The panel restarts into setup for 15 minutes so you can give it a new network; unplug it, or let the 15 minutes run out, and it goes back to the networks it already knows. The setup screen takes a turn saying "Unplug it to rejoin saved Wi-Fi". Factory Reset still erases everything.
 - The button on the controller resets Wi-Fi or the whole panel without the app or the device page, and nothing happens until you let go. Hold it: at 5 seconds the screen starts counting down, at 10 it says "Release to reset Wi-Fi", at 20 "Release to erase all" for a factory reset, and at 30 "Release to cancel". Before, a 10 second hold reset Wi-Fi while you were still holding it, and there was no factory reset on the button. Holding the button on a panel that's switched off turns it on, so you can see the countdown.
-- On a network that blocks time servers (some guest, office and school Wi-Fi), the panel now sets its clock from ESPN a few seconds after joining and shows today's games, instead of saying "Getting ready" all day. It switches to a time server's clock as soon as one answers.
-- On a bar, hotel or dorm Wi-Fi that joins and then wants you to sign in on a web page, the panel says "Wi-Fi needs sign-in, use home or a hotspot" with the QR code for the app, instead of "Can't reach ESPN" forever. The panel can't sign in to those pages, so set it up on a home network or a phone hotspot. The device page says the same, and the message goes away by itself once scores come through.
 - When the panel can't reach ESPN, the device page now says the same as the panel, and its Up next list says "Not checked yet" for a favorite the panel hasn't read yet, keeping "No game scheduled" for when ESPN says there is none.
 - In Live games, a change to the leagues, or to the favorites they follow, takes effect right away instead of leaving the old leagues' final scores up until the next check.
 - When an update crashes as it starts and the panel goes back to the firmware it had, the device page says the update didn't take and which version the panel went back to.
 - Home Assistant: new Game Live, Team Score and Opponent Score entities follow the game in Game Status, and the panel fires an `esphome.gameday_score` event on every score in that game and `esphome.gameday_final` when it ends, in every sport, so an automation can flash the lights when your team scores.
-- The device page's link to an update's release notes opens that release on gamedayscoreboard.app/changelog.
+- The device page's link to an update's release notes opens that release on install.gameday-scoreboard.com/changelog.
 - Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text instead of a gap ("Atl tico").
-- At halftime and the final the board takes turns with the line score: each team's points by quarter, period or inning and the total, with runs, hits and errors in baseball. On a 64x64 panel it's a shorter form, by half in football and basketball. With Last play on, the halftime and final ticker also lists the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and the final adds ESPN's headline for the game.
-- Before a football game the ticker shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD". A new Pre-game season leaders switch on the device page turns them off. On a single 64x64 panel, which has no room for the records on the board, the pre-game ticker also shows both teams' records.
 
 ## v2026.10.0
 

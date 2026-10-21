@@ -22,9 +22,7 @@ Two warnings can appear on the board:
 
 The dot at the top right says **live** while the page is connected to the panel and **offline** when it isn't.
 
-:::note[Coming in the next release]
 When the board is empty, the page shows the panel's own reason, the same words the panel shows, like **Can't reach ESPN** or **Getting ready**. On a Wi-Fi that wants you to sign in on a web page, the board says **Wi-Fi needs a sign-in** instead of **data stale**. See [Panel messages](/help/panel-messages/).
-:::
 
 ## Up next
 
@@ -32,9 +30,7 @@ In My team, a list under the board shows the next three games after the one on t
 
 In Favorite teams, the list has one row per favorite: the live score, the final, or the next kickoff and channel. The row the panel is showing now is highlighted. **No game scheduled** means ESPN lists no game for that team.
 
-:::note[Coming in the next release]
 A favorite the panel hasn't read from ESPN yet says **Not checked yet**, so it no longer looks like a team with no game.
-:::
 
 ## Choosing a team
 
@@ -80,15 +76,11 @@ Settings are grouped in cards. In the order the page shows them:
 The Ticker card has a **Pre-game season leaders** switch, on to start: before kickoff in football, each team's passing leader with yards and touchdowns. It shows only on a panel that follows football. See [The ticker](/using/ticker/).
 :::
 
-:::note[Coming in the next release]
 The Favorites card has two more switches: **Jump to the action** (off to start) moves the panel to another favorite's game at its big moment, then back, and **Score banner** (on to start) shows another favorite's score along the bottom for five seconds. See [Favorite teams](/using/favorites/#when-a-game-is-on).
-:::
 
-:::note[Coming in the next release]
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).
 
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
-:::
 
 Only the ticker switches for sports your panel follows are shown. Hockey and basketball have no game situation line, so they have no switch of their own.
 
@@ -111,8 +103,6 @@ The Device card has the buttons and the details about the panel itself.
 
 Under them: the **Firmware** box, the Wi-Fi networks list, the panel's **Address** and **Name**, its Wi-Fi **Signal**, free memory, and **ESPN data**, how much the panel has downloaded from ESPN since it started, for anyone on a capped internet plan.
 
-:::note[Coming in the next release]
 A **Diagnostics** section in the Device card says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal** it draws the last day of Wi-Fi signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one.
 
 The Device card can also show a **Follow beta** switch. Beta versions are test builds for test panels and can have bugs. Leave it off.
-:::
