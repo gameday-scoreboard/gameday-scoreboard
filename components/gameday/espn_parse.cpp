@@ -550,8 +550,14 @@ std::string short_game_name(const std::string &headline) {
     c = (char) tolower((unsigned char) c);
   if (has_time_of_day(lower))
     return "";
-  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk"
-  for (const char *tail : {" presented by ", " powered by ", " hosted by "}) {
+  // Notes that report a result or a schedule change, not a name: "Paris
+  // Saint-Germain win 4-3 on penalties", "Rain - Makeup date April 5".
+  for (const char *note : {" win ", " wins ", "makeup", "postponed", "suspended"})
+    if (lower.find(note) != std::string::npos)
+      return "";
+  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk",
+  // "Ivy League Tournament pres. by TIAA"
+  for (const char *tail : {" presented by ", " pres. by ", " powered by ", " hosted by "}) {
     size_t at = lower.find(tail);
     if (at != std::string::npos) {
       s.resize(at);
