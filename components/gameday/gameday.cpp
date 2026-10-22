@@ -1265,6 +1265,8 @@ void GamedayComponent::loop() {
         this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
           this->msg_fail_ms_ = this->gave_up_ms_;
+        // need_scan, like need_msg, was set before the task started, so the
+        // abandoned task can't have changed it.
         if (this->job_.need_scan)
           this->live_started_ms_ =
               ::espn::live_clock_after_failed_scan(this->live_started_ms_, this->live_fallback_, this->recap_on_);
