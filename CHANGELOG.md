@@ -24,6 +24,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 - Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", the way football's names a bowl. The device page no longer shows a rain delay or a shootout result as the game's name.
 - Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
+- In a Live mode with your team on the board between games, a look for live games that fails (a slow or dropped connection) is tried again within a few minutes. Before, the panel waited for the next kickoff it knew of, up to 3 hours, and could miss the start of a game.
 
 ## v2026.10.1
 

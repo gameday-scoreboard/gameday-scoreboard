@@ -85,4 +85,24 @@ inline bool cup_read_backs_off(bool cup_ok, bool polled, bool game_ok, bool thro
   return polled ? !game_ok : (!cup_ok || throttled);
 }
 
+// ---- Live modes' scan clock ---------------------------------------------------
+
+// While nothing is live (the saved team's card, or the finals rotation with no
+// team) the board waits `rescan_ms` from `started_ms` before it scans for a
+// live game again. 0 means no wait is running: scan now. A favorite's game
+// due to start (take_due) cuts the wait short. Times are millis(), so the
+// subtraction is safe across its wrap.
+inline bool live_rescan_due(uint32_t now, uint32_t started_ms, uint32_t rescan_ms, bool take_due) {
+  return started_ms == 0 || now - started_ms >= rescan_ms || take_due;
+}
+
+// The scan clock after a scan failed, or its worker was given up on. While
+// the board waits on a scan, the wait starts over from nothing, so the next
+// try is the back-off's retry and not the end of a wait that can run three
+// hours. While a game is followed the clock times its rotate, and the next
+// cycle's own checks decide whether to scan again.
+inline uint32_t live_clock_after_failed_scan(uint32_t started_ms, bool fallback, bool recap_on) {
+  return fallback || recap_on ? 0 : started_ms;
+}
+
 }  // namespace espn
