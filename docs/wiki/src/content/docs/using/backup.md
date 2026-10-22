@@ -20,13 +20,19 @@ Your browser saves a small file named after the panel and the day, like `gameday
 2. In the **Setup** card, under **Backup**, tap **Import settings** and pick the file.
 3. The page asks before it changes anything. Tap **OK**.
 
-The page says **Restored** when the panel has the settings. A file from another panel works the same way; the page tells you which panel it came from before you say yes.
+The page says **Restored** when the panel has the settings. They're saved on the panel at once, so you can unplug it and carry it to its room straight away.
 
-If the backup has a different panel layout (one 64x64 panel against a 128x64 one), the panel restarts with the new layout and the page reconnects when it's back.
+A file from another panel works the same way; the page tells you which panel it came from before you say yes. The panel keeps its own nickname and panel layout, so a second panel doesn't take the first one's name, and a 64x64 panel's backup doesn't turn a 128x64 panel into half a board. The page says which of the two it kept, like **This panel kept its own nickname**.
+
+A backup this panel saved itself, restored after a factory reset, brings back its nickname and layout too. If the layout is different from the one it has now, the panel restarts with it and the page reconnects when it's back.
+
+:::note[Coming in the next release]
+Keeping the nickname and layout on a backup from another panel, and saving a restore on the panel at once.
+:::
 
 ## What's in the file
 
-- The panel's **Nickname**. A backup loaded onto a second panel gives it the same nickname, so rename that one afterwards.
+- The panel's **Nickname**, restored only onto the same panel
 - Your team and what the panel shows: **My team**, **Favorite teams** or **Live games**
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
@@ -36,7 +42,7 @@ If the backup has a different panel layout (one 64x64 panel against a 128x64 one
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
 - The message card's text, list address and timing
-- The panel layout, **Brightness** and **Ticker speed**
+- The panel layout (restored only onto the same panel), **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
 ## What isn't
@@ -46,7 +52,7 @@ If the backup has a different panel layout (one 64x64 panel against a 128x64 one
 
 ## When it won't restore
 
-The panel checks the whole file before it changes anything. If a setting in it has the wrong kind of value, like text where a number goes, or a team, time or message list address the panel can't read, nothing changes and the page says which one, like **Not restored: mode should be a whole number. Nothing was changed.** That happens to a file that was edited by hand or damaged; restore an untouched copy instead.
+The panel checks the whole file before it changes anything. If a setting in it has the wrong kind of value, like text where a number goes, or a team or time the panel can't read, nothing changes and the page says which one, like **Not restored: mode should be a whole number. Nothing was changed.** That happens to a file that was edited by hand or damaged; restore an untouched copy instead.
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 
@@ -54,7 +60,7 @@ The panel checks the whole file before it changes anything. If a setting in it h
 
 ## When something is left out
 
-A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
+A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone, a kind of message list address or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
 
 ## For scripts and Home Assistant
 
@@ -65,4 +71,4 @@ curl -o backup.json http://gameday-2f6a70.local/gameday/settings
 curl -X POST -H "Content-Type: application/json" --data-binary @backup.json http://gameday-2f6a70.local/gameday/settings
 ```
 
-The restore answers `{"ok":true,"restart":false,"skipped":[]}`, or an `error` with the reason and nothing changed. Send it as `application/json`, as above.
+The restore answers `{"ok":true,"restart":false,"skipped":[],"kept":[]}`, or an `error` with the reason and nothing changed. `kept` lists `nick` and `panels` when the file came from another panel and this one kept its own. Send it as `application/json`, as above.

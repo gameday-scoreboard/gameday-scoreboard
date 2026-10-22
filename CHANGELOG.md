@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.

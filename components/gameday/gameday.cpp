@@ -4412,6 +4412,16 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
       in.error = "Not a settings backup.";
     } else {
       ::espn::SettingsTarget target;
+      target.name = this->hostname();
+      {
+        // The nickname from the cached state document: this runs on the web
+        // server's task, and the main loop owns nick_.
+        JsonDocument filter(::espn::detail::json_allocator()), state(::espn::detail::json_allocator());
+        filter["nick"] = true;
+        std::string json = this->current_state_json_();
+        if (deserializeJson(state, json, DeserializationOption::Filter(filter)) == DeserializationError::Ok)
+          target.nick = state["nick"] | "";
+      }
       target.fav_max = FAV_MAX;
       if (this->panels_ != nullptr) {
         target.panels = this->panels_->cols();
@@ -4442,6 +4452,8 @@ void GamedayComponent::apply_settings_(const ::espn::SettingsImport &in) {
   ESP_LOGI(TAG, "Settings import: %u settings, %u left out", (unsigned) in.ops.size(), (unsigned) in.skipped.size());
   for (const auto &s : in.skipped)
     ESP_LOGW(TAG, "Left out of the import: %s", s.c_str());
+  for (const auto &k : in.kept)
+    ESP_LOGI(TAG, "Kept this panel's own %s", k.c_str());
   this->apply_ops_(in.ops);
   if (in.brightness >= 0 && this->brightness_number_ != nullptr)
     this->brightness_number_->make_call().set_value((float) in.brightness).perform();
