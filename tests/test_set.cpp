@@ -60,7 +60,7 @@ struct Settings {
   std::vector<std::pair<std::string, uint16_t>> lists;
   int list{0};
   uint16_t live_mask{0};
-  std::string msg, msgurl;
+  std::string msg, msgurl, nick;
   int msgevery{kMsgEveryDefault};
   NightPrefs night{night_defaults()};
 };
@@ -131,6 +131,8 @@ void load(Settings &s, JsonObjectConst o) {
     s.msg = o["msg"].as<const char *>();
   if (o["msgurl"].is<const char *>())
     s.msgurl = o["msgurl"].as<const char *>();
+  if (o["nick"].is<const char *>())
+    s.nick = o["nick"].as<const char *>();
   int collide = s.collide ? 1 : 0;
   num("collide", collide);
   s.collide = collide != 0;
@@ -235,6 +237,7 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::MSG: s.msg = op.text; break;
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
+    case SetKind::NICK: s.nick = op.text; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -302,6 +305,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["msg"] = s.msg;
   doc["msgurl"] = s.msgurl;
   doc["msgevery"] = s.msgevery;
+  doc["nick"] = s.nick;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -375,6 +379,15 @@ void test_parse_set() {
   SCHECK(parse_set("msg", "Happy birthday", op, kFavMax) && op.kind == SetKind::MSG && op.text == "Happy birthday",
          "msg");
   SCHECK(parse_set("msg", std::string(300, 'x'), op, kFavMax) && op.text.size() == kMsgTextMax, "msg is capped");
+  SCHECK(parse_set("nick", "Garage", op, kFavMax) && op.kind == SetKind::NICK && op.text == "Garage", "nick");
+  SCHECK(parse_set("nick", std::string(100, 'x'), op, kFavMax) && op.text.size() == kNickMax, "nick is capped");
+  SCHECK(parse_set("nick", "a\nb", op, kFavMax) && op.text == "a b", "nick is one line");
+  SCHECK(parse_set("nick", "Caf\xE9 \xC3\xA9t\xC3", op, kFavMax) && op.text == "Caf \xC3\xA9t",
+         "bytes that aren't UTF-8 are left out of a nickname");
+  SCHECK(utf8_only("A\xE0\x81\x81" "B\xED\xA0\x80" "C\xF4\x90\x80\x80" "D\xC1\xBF" "E") == "ABCDE",
+         "overlong forms, surrogates and code points past U+10FFFF are left out");
+  SCHECK(utf8_only("\xC3\xA9\xE2\x80\x99\xF0\x9F\x8F\x88") == "\xC3\xA9\xE2\x80\x99\xF0\x9F\x8F\x88",
+         "valid two, three and four byte characters stay");
   SCHECK(parse_set("msgurl", "https://example.com/names.txt", op, kFavMax) && op.kind == SetKind::MSGURL, "msgurl");
   SCHECK(!parse_set("msgurl", "ftp://example.com/names.txt", op, kFavMax), "msgurl ftp");
   SCHECK(!parse_set("msgurl", "https://exa mple.com", op, kFavMax), "msgurl with a space");

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "esphome/components/http_request/http_request.h"
+#include "esphome/components/number/number.h"
 #include "esphome/components/panel_layout/panel_layout.h"
 #include "esphome/components/select/select.h"
 #include "esphome/components/time/real_time_clock.h"
@@ -39,13 +40,13 @@
 #include "score_log.h"
 #include "poll_timing.h"
 #include "set_request.h"
+#include "settings_doc.h"
 #include "startup.h"
-#include "update_mirror.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
 #endif
-#if defined(GAMEDAY_BETA_CHANNEL) || defined(GAMEDAY_UPDATE_MIRROR)
+#ifdef GAMEDAY_BETA_CHANNEL
 #include "esphome/components/http_request/update/http_request_update.h"
 #endif
 
@@ -161,6 +162,9 @@ class GamedaySelect : public select::Select, public Component {
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
 //   POST /gameday/set?msg=...&msgurl=...&msgevery=0-30   the message card (message.h)
+//   GET  /gameday/settings           the settings backup, one JSON document (settings_doc.h)
+//   POST /gameday/settings           a backup as a JSON body, checked whole, then applied;
+//                                    400 with "error" when refused or past 4 KB
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
 //   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
@@ -181,6 +185,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
   void set_web_server_base(web_server_base::WebServerBase *base) { this->base_ = base; }
   void set_panel_layout(panel_layout::PanelLayout *p) { this->panels_ = p; }
+  // Brightness and Scroll Speed, kept in the settings backup (settings_doc.h).
+  void set_brightness_number(number::Number *n) { this->brightness_number_ = n; }
+  void set_scroll_number(number::Number *n) { this->scroll_number_ = n; }
   void add_on_action_callback(std::function<void(std::string)> &&cb) {
     this->action_callbacks_.push_back(std::move(cb));
   }
@@ -352,17 +359,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
-  // The update feed's second host (update_mirror.h): `mirror` is `source`
-  // on the mirror, `beta_mirror` the beta manifest there (release builds).
-#ifdef GAMEDAY_UPDATE_MIRROR
-  void set_update_mirror(http_request::HttpRequestUpdate *update, const char *source, const char *mirror,
-                         const char *beta_mirror) {
-    this->mirror_update_ = update;
-    this->primary_source_ = source;
-    this->mirror_source_ = mirror;
-    this->beta_mirror_source_ = beta_mirror;
-  }
-#endif
 
   void setup() override;
   void loop() override;
@@ -374,6 +370,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // AsyncWebHandler (HTTP task)
   bool canHandle(AsyncWebServerRequest *request) const override;
   void handleRequest(AsyncWebServerRequest *request) override;
+  // POST /gameday/settings's JSON body, before handleRequest.
+  void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) override;
 
  protected:
   void apply_team_(const ::espn::Team &t);
@@ -404,6 +402,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void handle_wifi_(AsyncWebServerRequest *request);
 #endif
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
+  void apply_ops_(const std::vector<::espn::SetOp> &ops);
+  // GET and POST /gameday/settings, the backup (settings_doc.h).
+  void handle_settings_(AsyncWebServerRequest *request);
+  // Main loop: an import checked by handle_settings_.
+  void apply_settings_(const ::espn::SettingsImport &in);
   void rebuild_state_(const UpdateFields *f);  // main loop only
   std::string current_state_json_();
   // The "health" object, read live on each GET /gameday/state (HTTP task).
@@ -450,6 +453,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  // The panel's nickname ("Living room"), shown by the device page and the
+  // apps. The hostname, Wi-Fi hotspot and Home Assistant name stay as they are.
+  struct PrefsNick {
+    char text[::espn::kNickMax + 1];
+  } __attribute__((packed));
+  ESPPreferenceObject nick_pref_;
+  std::string nick_;
+  void load_nick_();
+  void set_nick_(const std::string &nick);
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
   ESPPreferenceObject power_pref_;
@@ -470,6 +482,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   UpdateFields last_fields_;
   web_server_base::WebServerBase *base_{nullptr};
   panel_layout::PanelLayout *panels_{nullptr};
+  number::Number *brightness_number_{nullptr};
+  number::Number *scroll_number_{nullptr};
+  // An import's body as it arrives (HTTP task only), freed once handled.
+  PsString settings_body_;
   std::vector<std::function<void(std::string)>> action_callbacks_;
   Splash last_splash_;  // for the page: the splash goes out once per emit
   static constexpr uint8_t FLAG_CLOCK = 1;
@@ -803,17 +819,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject beta_pref_;
   uint8_t follow_beta_{0};  // 1 = read the beta manifest
   void apply_channel_();
-#endif
-#ifdef GAMEDAY_UPDATE_MIRROR
-  http_request::HttpRequestUpdate *mirror_update_{nullptr};
-  const char *primary_source_{nullptr};
-  const char *mirror_source_{nullptr};
-  const char *beta_mirror_source_{nullptr};
-  uint32_t mirror_since_ms_{0};
-  bool on_mirror_{false};
-  bool mirror_answered_{false};
-  void mirror_tick_();
-  void use_primary_();
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;

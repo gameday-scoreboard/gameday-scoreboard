@@ -95,10 +95,9 @@ static const char *const HTTP_CLOCK_URL = "https://site.api.espn.com/apis/site/v
 static const int64_t PRE_NEAR_SECONDS = 60 * 60;
 static const uint32_t NO_LIVE_RESCAN = 2 * MINUTE;
 // Install updates automatically: how often loop() looks, and how long a
-// manifest read gets before its answer is used (the HTTP timeout is 20 s,
-// and a failed read is followed by one from the mirror, update_mirror.h).
+// manifest read gets before its answer is used (the HTTP timeout is 20 s).
 static const uint32_t AUTO_UPDATE_TICK = 10 * 1000;
-static const uint32_t AUTO_UPDATE_CHECK_WAIT = 2 * MINUTE;
+static const uint32_t AUTO_UPDATE_CHECK_WAIT = MINUTE;
 // After an install, how long the new firmware runs before the update counts
 // as taken: past safe_mode's one minute, when the bootloader can no longer
 // roll it back.
@@ -333,6 +332,7 @@ void GamedayComponent::setup() {
       this->prefs9_.active > this->prefs9_.count)
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
   this->load_msg_();
+  this->load_nick_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -344,15 +344,6 @@ void GamedayComponent::setup() {
   this->apply_channel_();
 #endif
   this->settle_update_mark_();
-#ifdef GAMEDAY_UPDATE_MIRROR
-  // Any state the update entity publishes while it points at the mirror is
-  // the mirror's answer (a failed read publishes nothing; mirror_tick_).
-  if (this->mirror_update_ != nullptr)
-    this->mirror_update_->add_on_state_callback([this]() {
-      if (this->on_mirror_)
-        this->mirror_answered_ = true;
-    });
-#endif
 #ifdef GAMEDAY_BAR
   this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
   if (!this->bar_pref_.load(&this->now_tried_))
@@ -1227,9 +1218,6 @@ void GamedayComponent::loop() {
       ::espn::boot_log_clock(boot_log, (int64_t) this->time_->now().timestamp - esp_timer_get_time() / 1000000);
     }
   }
-#ifdef GAMEDAY_UPDATE_MIRROR
-  this->mirror_tick_();
-#endif
   this->captive_tick_();
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the card down.
@@ -1721,75 +1709,8 @@ void GamedayComponent::set_follow_beta(bool on) {
 
 #ifdef GAMEDAY_BETA_CHANNEL
 void GamedayComponent::apply_channel_() {
-#ifdef GAMEDAY_UPDATE_MIRROR
-  this->on_mirror_ = false;
-#endif
   if (this->beta_update_ != nullptr)
     this->beta_update_->set_source_url(this->follow_beta() ? this->beta_source_ : this->stable_source_);
-}
-#endif
-
-#ifdef GAMEDAY_UPDATE_MIRROR
-// Points the update entity back at the primary host for its channel.
-void GamedayComponent::use_primary_() {
-#ifdef GAMEDAY_BETA_CHANNEL
-  this->apply_channel_();
-#else
-  this->on_mirror_ = false;
-  this->mirror_update_->set_source_url(this->primary_source_);
-#endif
-}
-
-// A failed manifest read or install on the primary gets one read from the
-// mirror right away (update_mirror.h). Runs every loop: a refused connection
-// fails in well under a second.
-void GamedayComponent::mirror_tick_() {
-  http_request::HttpRequestUpdate *u = this->mirror_update_;
-  if (u == nullptr)
-    return;
-  ::espn::MirrorInputs in;
-  in.on_mirror = this->on_mirror_;
-  in.error = u->status_has_error();
-  in.answered = this->mirror_answered_;
-  in.waited_ms = millis() - this->mirror_since_ms_;
-  // Only read when it matters: now() converts the time, and this runs every loop.
-  in.clock_valid = in.error && this->time_ != nullptr && this->time_->now().is_valid();
-  switch (::espn::mirror_step(in)) {
-    case ::espn::MirrorStep::NONE:
-      break;
-    case ::espn::MirrorStep::NO_CLOCK:
-      u->status_clear_error();
-      break;
-    case ::espn::MirrorStep::TRY_MIRROR: {
-      const char *mirror = this->follow_beta() ? this->beta_mirror_source_ : this->mirror_source_;
-      ESP_LOGW(TAG, "Update check or install failed; reading the mirror %s", mirror);
-      this->on_mirror_ = true;
-      this->mirror_answered_ = false;
-      this->mirror_since_ms_ = millis();
-      u->set_source_url(mirror);
-      // So the mirror's own failure shows (FAILED below).
-      u->status_clear_error();
-      u->update();
-      break;
-    }
-    case ::espn::MirrorStep::ANSWERED:
-      // update_info keeps the mirror's firmware URL, so an install of this
-      // update downloads from the mirror.
-      ESP_LOGI(TAG, "Update mirror answered: %s at %s", u->update_info.latest_version.c_str(),
-               u->update_info.firmware_url.c_str());
-      this->use_primary_();
-      break;
-    case ::espn::MirrorStep::FAILED:
-      // Cleared, or the next failure on the primary would look like this one.
-      ESP_LOGW(TAG, "Update mirror failed too; the next check starts with the primary");
-      u->status_clear_error();
-      this->use_primary_();
-      break;
-    case ::espn::MirrorStep::TIMED_OUT:
-      ESP_LOGW(TAG, "Update mirror didn't answer; the next check starts with the primary");
-      this->use_primary_();
-      break;
-  }
 }
 #endif
 
@@ -3691,6 +3612,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   JsonDocument doc(::espn::detail::json_allocator());
   const GameSnapshot &g = this->game_;
   doc["name"] = this->hostname();
+  doc["nick"] = this->nick_;  // "" until the owner names the panel
   doc["version"] = App.get_comment();
   doc["setup"] = this->flag_(FLAG_SETUP);
   doc["panels"] = this->panels_ != nullptr ? this->panels_->cols() : 0;
@@ -4063,6 +3985,26 @@ void GamedayComponent::load_msg_() {
   this->msg_reset_();
 }
 
+void GamedayComponent::load_nick_() {
+  this->nick_pref_ = global_preferences->make_preference<PrefsNick>(fnv1_hash("gameday_nick_v1"));
+  PrefsNick p{};
+  if (!this->nick_pref_.load(&p))
+    return;  // never named
+  p.text[sizeof(p.text) - 1] = '\0';
+  this->nick_ = ::espn::message_clean(::espn::utf8_only(p.text), ::espn::kNickMax, false);
+}
+
+void GamedayComponent::set_nick_(const std::string &nick) {
+  if (nick == this->nick_)
+    return;
+  this->nick_ = nick;
+  PrefsNick p{};
+  strncpy(p.text, nick.c_str(), sizeof(p.text) - 1);
+  this->nick_pref_.save(&p);
+  ESP_LOGI(TAG, "Nickname: %s", nick.empty() ? "(none)" : nick.c_str());
+  this->rebuild_state_(&this->last_fields_);
+}
+
 // Any of the three; a null pointer or a negative every leaves that one as it is.
 void GamedayComponent::set_msg_(const std::string *text, const std::string *url, int every) {
   bool reset = false;
@@ -4294,6 +4236,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     this->handle_set_(request);
     return;
   }
+  if (url == StringRef("/gameday/settings")) {
+    this->handle_settings_(request);
+    return;
+  }
   if (url == StringRef("/gameday/action") && request->method() == HTTP_POST) {
     std::string name = request->arg("do");
     if (name.empty()) {
@@ -4418,8 +4364,20 @@ void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
 }
 
 void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::string>> &kv) {
+  std::vector<::espn::SetOp> ops;
+  for (const auto &p : kv) {
+    ::espn::SetOp op;
+    if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
+      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
+      continue;
+    }
+    ops.push_back(std::move(op));
+  }
+  this->apply_ops_(ops);
+}
+
+void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   bool dirty = false;
-  ::espn::SetOp op;
   // The message card's keys are saved together, once.
   std::string msg_text, msg_url;
   uint8_t msg_keys = 0;
@@ -4427,11 +4385,7 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
-  for (const auto &p : kv) {
-    if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
-      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
-      continue;
-    }
+  for (const auto &op : ops) {
     switch (op.kind) {
       case ::espn::SetKind::TEAM:
         if (op.team.id != 0)
@@ -4545,6 +4499,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
       case ::espn::SetKind::MSGEVERY:
         msg_every = op.value;
         break;
+      case ::espn::SetKind::NICK:
+        this->set_nick_(op.text);
+        break;
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;
         break;
@@ -4567,6 +4524,106 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
   if (dirty)
     this->rebuild_state_(&this->last_fields_);
+}
+
+// The import's body arrives here in pieces before handleRequest. The web
+// server hands over a JSON body only on its own path (the form posts of
+// /gameday/set never come here), one request at a time.
+void GamedayComponent::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
+                                  size_t total) {
+  char buf[AsyncWebServerRequest::URL_BUF_SIZE];
+  if (request->url_to(buf) != StringRef("/gameday/settings"))
+    return;
+  if (index == 0) {
+    PsString().swap(this->settings_body_);
+    if (total <= ::espn::kSettingsMaxBytes)
+      this->settings_body_.reserve(total);
+  }
+  if (total <= ::espn::kSettingsMaxBytes)
+    this->settings_body_.append((const char *) data, len);
+}
+
+void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_GET) {
+    // From the cached state document, built on the main loop, so nothing
+    // here reads a setting while the loop changes it.
+    std::string state = this->current_state_json_();
+    JsonDocument in(::espn::detail::json_allocator());
+    // Before the first build the document is "{}", and a backup of it would be empty.
+    if (deserializeJson(in, state) != DeserializationError::Ok || in["mode"].isNull()) {
+      request->send(500, "application/json", "{\"error\":\"not ready\"}");
+      return;
+    }
+    JsonDocument out(::espn::detail::json_allocator());
+    int brightness = this->brightness_number_ != nullptr && this->brightness_number_->has_state()
+                         ? (int) this->brightness_number_->state
+                         : -1;
+    int scroll =
+        this->scroll_number_ != nullptr && this->scroll_number_->has_state() ? (int) this->scroll_number_->state : -1;
+    // The live mask isn't in the state (its live list is what the panel scans
+    // now); one 16-bit read, so the web server can take it as it is.
+    ::espn::settings_from_state(in.as<JsonObjectConst>(), this->prefs7_.live_mask, brightness, scroll, out);
+    std::string body;
+    serializeJson(out, body);
+    request->send(200, "application/json", body.c_str());
+    return;
+  }
+  if (request->method() != HTTP_POST) {
+    request->send(400, "application/json", "{\"error\":\"GET or POST\"}");
+    return;
+  }
+  PsString body;
+  body.swap(this->settings_body_);
+  size_t length = request->contentLength();
+  // 400, not 413: ESPHome's web server sends any code it has no name for as 500.
+  if (length > ::espn::kSettingsMaxBytes) {
+    request->send(400, "application/json", "{\"error\":\"That file is too big to be a settings backup.\"}");
+    return;
+  }
+  ::espn::SettingsImport in;
+  {
+    JsonDocument doc(::espn::detail::json_allocator());
+    // A body left from a request that broke off doesn't match this one's length.
+    if (body.empty() || body.size() != length ||
+        deserializeJson(doc, body.data(), body.size()) != DeserializationError::Ok) {
+      in.error = "Not a settings backup.";
+    } else {
+      ::espn::SettingsTarget target;
+      target.fav_max = FAV_MAX;
+      if (this->panels_ != nullptr) {
+        target.panels = this->panels_->cols();
+        target.max_panels = this->panels_->max_cols();
+      }
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+      target.autoupd = true;
+#endif
+#ifdef GAMEDAY_BETA_CHANNEL
+      target.beta = true;
+#endif
+      target.brightness = this->brightness_number_ != nullptr;
+      target.scroll = this->scroll_number_ != nullptr;
+      ::espn::parse_settings(doc.as<JsonVariantConst>(), target, in);
+    }
+  }
+  std::string reply = ::espn::settings_reply(in);
+  if (!in.error.empty()) {
+    ESP_LOGW(TAG, "Settings import refused: %s", in.error.c_str());
+    request->send(400, "application/json", reply.c_str());
+    return;
+  }
+  this->defer([this, in]() { this->apply_settings_(in); });
+  request->send(200, "application/json", reply.c_str());
+}
+
+void GamedayComponent::apply_settings_(const ::espn::SettingsImport &in) {
+  ESP_LOGI(TAG, "Settings import: %u settings, %u left out", (unsigned) in.ops.size(), (unsigned) in.skipped.size());
+  for (const auto &s : in.skipped)
+    ESP_LOGW(TAG, "Left out of the import: %s", s.c_str());
+  this->apply_ops_(in.ops);
+  if (in.brightness >= 0 && this->brightness_number_ != nullptr)
+    this->brightness_number_->make_call().set_value((float) in.brightness).perform();
+  if (in.scroll >= 0 && this->scroll_number_ != nullptr)
+    this->scroll_number_->make_call().set_value((float) in.scroll).perform();
 }
 
 }  // namespace gameday

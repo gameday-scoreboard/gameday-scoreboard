@@ -188,6 +188,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       </div>
       <div class="card">
         <h2>Panel</h2>
+        <div id="nickRow" hidden>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
+          <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
+        </div>
         <div id="panelCtls"></div>
         <div id="nightCtls" hidden>
           <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
@@ -244,6 +248,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl">
           <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
+        </div>
+        <div id="backup" hidden>
+          <div class="sub">Backup</div>
+          <p class="hint">Save this panel's settings to a file, then load them back after a reset or onto another panel. Wi-Fi networks and the WizMote pairing aren't in the file.</p>
+          <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
+          <input type="file" id="bkFile" accept=".json,application/json" hidden>
+          <p class="hint" id="bkNote" role="status" hidden></p>
         </div>
       </div>
       <div class="card">
@@ -378,7 +389,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
     }),
     list: Number,
-    msg: String, msgurl: String, msgevery: Number,
+    msg: String, msgurl: String, msgevery: Number, nick: String,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
@@ -1067,6 +1078,36 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     toast("Message card off");
   };
 
+  // ---- nickname: the header, the tab title and the box ---------------------------
+  let pingTitle = "";  // the device's own name, from the event stream
+  let nickSeen = null;
+  // ESPHome's own page script names the tab after the device on each of its
+  // pings; while there is a nickname the tab keeps it.
+  let nickTitle = "";
+  new MutationObserver(() => {
+    if (nickTitle && document.title !== nickTitle) document.title = nickTitle;
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
+  const renderNick = () => {
+    const nick = (S && S.nick) || "";
+    $("#devname").textContent = nick || pingTitle || (S && S.name) || "connecting";
+    nickTitle = nick ? nick + " · Game Day Scoreboard" : "";
+    const title = nickTitle || pingTitle || "Game Day Scoreboard";
+    if (document.title !== title) document.title = title;
+    // Older firmware has no nickname.
+    $("#nickRow").hidden = !S || S.nick === undefined;
+    const input = $("#nick");
+    if (nick === nickSeen || document.activeElement === input) return;
+    nickSeen = nick;
+    input.value = nick;
+  };
+  $("#nick").onchange = () => {
+    const nick = $("#nick").value.trim();
+    $("#nick").value = nick;
+    nickSeen = null;
+    setGD({ nick });
+    toast(nick ? "Nickname saved" : "Nickname cleared");
+  };
+
   // ---- panel picker ------------------------------------------------------------
   // Picking a layout restarts the device; the page waits it out.
   const renderPanels = () => {
@@ -1084,6 +1125,74 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         toBoard();
       };
     });
+  };
+
+  // ---- settings backup ---------------------------------------------------------
+  // GET /gameday/settings is the file; POST takes one back, checked whole on
+  // the panel before anything changes. Firmware without it answers 404 and the
+  // section stays hidden.
+  const BACKUP_MAX = 4096;
+  const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
+  const probeBackup = async (retry) => {
+    try {
+      const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
+      // Only a 404 is firmware without it; a 500 is a panel still starting.
+      if (r.status === 404) $("#backup").hidden = true;
+      else if (r.ok) $("#backup").hidden = false;
+      else if (retry) setTimeout(() => probeBackup(false), 5000);
+      return r.ok ? await r.json() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  $("#bkExport").onclick = async () => {
+    const doc = await probeBackup();
+    if (!doc) { toast("Device did not respond. Try again."); return; }
+    const day = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const a = el("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    backupNote("Saved " + name + ".");
+  };
+  $("#bkImport").onclick = () => { $("#bkFile").value = ""; $("#bkFile").click(); };
+  $("#bkFile").onchange = async () => {
+    const f = $("#bkFile").files[0];
+    if (!f) return;
+    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    const text = await f.text();
+    let doc;
+    try { doc = JSON.parse(text); } catch (_) { doc = null; }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
+      backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const from = typeof doc.name === "string" && S && doc.name !== S.name ? " (saved from " + doc.name + ")" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are.")) return;
+    let r, j;
+    try {
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
+    const left = (j.skipped || []).join(", ");
+    backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    if (j.restart) {
+      waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
+      toBoard();
+      return;
+    }
+    toast("Settings restored");
+    scheduleState(APPLY_MS + 100);
   };
 
   // ---- controls --------------------------------------------------------
@@ -1547,6 +1656,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderNick();
     renderData();
     renderHealth();
     renderWifi();
@@ -1966,7 +2076,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       if (!ev.data) return;
       try {
         const p = JSON.parse(ev.data);
-        if (p.title) $("#devname").textContent = p.title;
+        if (p.title) { pingTitle = p.title; renderNick(); }
         if (p.comment) $("#ver").textContent = p.comment;
       } catch (_) {}
     });
@@ -1981,6 +2091,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   connect();
   fetchState();
   loadNetworks();
+  probeBackup(true);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();

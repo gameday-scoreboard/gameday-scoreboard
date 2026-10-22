@@ -26,7 +26,7 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "msg",      "msgurl", "msgevery", "best",
                                     "jump",   "banner",   "leaders", "night",  "nightstart", "nightend",
-                                    "nightscreen", "nightlevel", "favtake", "lists", "list"};
+                                    "nightscreen", "nightlevel", "favtake", "nick", "lists", "list"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -189,6 +189,7 @@ enum class SetKind : uint8_t {
   NIGHT_END,    // value, minutes after midnight
   NIGHT_SCREEN, // on: lit at the night brightness, off: dark
   NIGHT_LEVEL,  // value, 1 to 255
+  NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
 };
@@ -296,6 +297,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   if (k == "msg") {
     op.kind = SetKind::MSG;
     op.text = message_clean(v, kMsgTextMax, true);
+    return true;
+  }
+  if (k == "nick") {
+    op.kind = SetKind::NICK;
+    op.text = message_clean(utf8_only(v), kNickMax, false);
     return true;
   }
   if (k == "msgurl") {

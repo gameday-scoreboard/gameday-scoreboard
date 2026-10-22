@@ -83,8 +83,10 @@ Live games has a **Pick the best game** switch under **Switch every**, on unless
 A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. See [Playlists](/using/favorites/#playlists).
 :::
 
-:::note[Coming in the next release]
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).
+
+:::note[Coming in the next release]
+The Panel card starts with a **Nickname** box. Give each panel a name, like "Living room" or "Garage", so you can tell them apart. The page's header and the browser tab show it, and so does the panel list in the iPhone app. Up to 32 characters (fewer with accents); emoji are left out. Clear the box to go back to the panel's own name. The nickname doesn't change the panel's network name, its address, its Wi-Fi hotspot or its name in Home Assistant.
 :::
 
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
@@ -98,6 +100,10 @@ The panel fills the screen with a splash when someone scores, in the scoring tea
 ### Timezone
 
 The Time line in the Setup card names the panel's timezone. While it follows your browser, opening the page from a browser in another zone moves the panel to that zone. Tap **choose manually** to pick one from the list instead; the page then leaves it alone until you tap **follow this browser**. The list covers the US zones (Eastern, Central, Mountain, Arizona, Pacific, Alaska and Hawaii), Canada Atlantic and Newfoundland, Mexico City, UK and Ireland, Central Europe, Australia Eastern and UTC. A new panel starts on US Central.
+
+### Backup
+
+The Setup card has a **Backup** section: **Export settings** saves this panel's settings to a file, and **Import settings** loads a saved file back, onto this panel or another one. Wi-Fi networks and the WizMote pairing aren't in the file. See [Back up and restore settings](/using/backup/).
 
 ## The Device card
 
