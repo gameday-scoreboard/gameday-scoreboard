@@ -26,7 +26,7 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "msg",      "msgurl", "msgevery", "best",
                                     "jump",   "banner",   "leaders", "night",  "nightstart", "nightend",
-                                    "nightscreen", "nightlevel", "favtake", "nick"};
+                                    "nightscreen", "nightlevel", "favtake", "nick", "lists", "list"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -190,6 +190,8 @@ enum class SetKind : uint8_t {
   NIGHT_SCREEN, // on: lit at the night brightness, off: dark
   NIGHT_LEVEL,  // value, 1 to 255
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
+  LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
+  LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
 };
 
 struct TeamRef {
@@ -324,6 +326,22 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     int level = atoi(v.c_str());
     op.value = level < 1 ? 1 : level > 255 ? 255 : level;
     return true;
+  }
+  if (k == "lists") {
+    // Parsed by playlists.h once the request's favorites are in, since a
+    // playlist can only hold favorites.
+    op.kind = SetKind::LISTS;
+    op.text = v;
+    return true;
+  }
+  if (k == "list") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    // A number past the last playlist is refused where the playlists are known.
+    // strtol, not atoi: a number too long for an int saturates, and is refused.
+    op.kind = SetKind::LIST;
+    long n = strtol(v.c_str(), nullptr, 10);
+    op.value = n >= 0 && n <= 16 ? (int) n : -1;
+    return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
   }
   if (k == "night")
     return on(SetKind::NIGHT);

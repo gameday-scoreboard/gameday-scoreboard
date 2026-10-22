@@ -5,6 +5,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
 //   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
+//   POST /gameday/settings        a settings document as JSON; the playlists go this way
 //   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
 //                                 say&text=...&secs=N (the banner)
 // The ESPHome event stream (/events) still carries the entities that stay
@@ -135,6 +136,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
       <div class="favctls">
+        <div class="stepper" id="favListRow" hidden><label for="favList">Playing</label><select id="favList"></select></div>
         <div class="stepper"><label for="lockon">Take over</label><input type="number" id="lockon" min="5" max="120" step="1"><span>min before kickoff</span></div>
         <div class="stepper"><label for="release">After the final</label><select id="release">
           <option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option>
@@ -204,12 +206,18 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       </div>
       <div class="card">
         <h2>Favorites</h2>
-        <p class="hint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
-        <div class="ctl"><label>Only today's games<small>The playlist skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+        <p class="hint" id="favHint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
+        <div class="ctl"><label>Only today's games<small>Between games, the panel skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
         <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
         <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
         <div id="favCtls"></div>
         <button class="btn" id="favAdd">Add a favorite</button>
+      </div>
+      <div class="card">
+        <h2>Playlists</h2>
+        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <div id="listCtls"></div>
+        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button><button class="btn" id="listSport">One per sport</button></div>
       </div>
       <div class="card">
         <h2>Remote</h2>
@@ -375,6 +383,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
+    // Teams as places in favs, which is how the state document lists them.
+    lists: (v) => v.split(";").filter(Boolean).map((p) => {
+      const [n, refs] = p.split("=");
+      const keys = (refs || "").split(",");
+      return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
+    }),
+    list: Number,
     msg: String, msgurl: String, msgevery: Number, nick: String,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
@@ -383,6 +398,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     team: (a, b) => refKey(a) === refKey(b),
     live: (a, b) => (a || []).slice().sort().join(",") === (b || []).slice().sort().join(","),
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
+    lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
+    list: (a, b) => (a || 0) === (b || 0),
   };
   const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
   const overlay = () => {
@@ -431,9 +448,25 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (stateAgain) { stateAgain = false; fetchState(); }
   };
   const scheduleState = (ms) => { clearTimeout(stateTimer); stateTimer = setTimeout(fetchState, ms); };
+  // Playlists run to about 5 KB, past the 512 bytes the panel takes in a URL
+  // (and ESPHome reads a form body in one piece, so a long one can arrive cut
+  // short). They go to the settings import instead, which reads a JSON body
+  // whole, as {"schema": 1, "lists": [{"n": "Football", "t": ["nfl:6"]}], "list": 2}.
+  const setRequest = (params) => {
+    if (params.lists === undefined) return ["/gameday/set?" + qs(params), { method: "POST" }];
+    const doc = {
+      schema: 1,
+      lists: String(params.lists).split(";").filter(Boolean).map((p) => {
+        const [n, refs] = p.split("=");
+        return { n, t: (refs || "").split(",").filter(Boolean) };
+      }),
+    };
+    if (params.list !== undefined) doc.list = Number(params.list);
+    return ["/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) }];
+  };
   const postSet = async (params, attempt = 0) => {
     try {
-      const r = await fetch("/gameday/set?" + qs(params), { method: "POST" });
+      const r = await fetch(...setRequest(params));
       if (!r.ok) throw new Error("HTTP " + r.status);
       return true;
     } catch (e) {
@@ -727,12 +760,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (favs) {
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);
+      const playing = playingList();
       $("#favName").textContent = !set
         ? "No favorites set yet"
         : S.locked && shown
           ? "Locked on " + (shown.t.name || shown.t.abbr)
-          : "Cycling through your favorites";
+          : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
     }
+    renderListPick();
   };
 
   // ---- toggles and favorites (static controls on the state document) --------
@@ -797,6 +832,129 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
   };
+  // Playlists (components/gameday/playlists.h): named groups of favorites.
+  // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
+  const lists = () => (S && S.lists) || [];
+  const playingList = () => (S && S.list ? lists()[S.list - 1] : null);
+  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
+  // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
+  const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
+  // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
+  const cleanName = (v) => {
+    let out = "", bytes = 0;
+    for (const ch of v.replace(/[;=]/g, "").replace(/\s+/g, " ").trim()) {
+      bytes += new TextEncoder().encode(ch).length;
+      if (bytes > 16) break;
+      out += ch;
+    }
+    return out.trim();
+  };
+  const SPORTS = [["Football", ["nfl", "ncaa"]], ["Baseball", ["mlb"]], ["Basketball", ["nba", "wnba", "mcbb"]],
+    ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
+  const listMax = () => (S && S.listmax) || 16;
+  let listSig = "";
+  const renderLists = () => {
+    const host = $("#listCtls");
+    host.innerHTML = "";
+    const ls = lists();
+    ls.forEach((l, i) => {
+      const box = el("div", "plist");
+      const row = el("div", "ctl");
+      const name = el("input", "field pname");
+      name.value = l.n;
+      name.maxLength = 16;
+      name.setAttribute("aria-label", "Playlist name");
+      name.onchange = () => {
+        const n = cleanName(name.value);
+        if (!n || n === l.n) { name.value = l.n; return; }
+        if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another playlist has that name"); }
+        const next = ls.map((o, k) => (k === i ? { n, f: o.f } : o));
+        postLists(next, S.list === i + 1 ? i + 1 : undefined);
+      };
+      row.appendChild(name);
+      if (i < 4) row.appendChild(el("small", "pbtn", "Button " + (i + 1)));
+      const ctl = el("span", "favmove");
+      const mk = (label, title, fn) => {
+        const b = el("button", null, label);
+        b.title = title;
+        b.setAttribute("aria-label", title + " " + l.n);
+        b.onclick = fn;
+        ctl.appendChild(b);
+      };
+      const swap = (j) => {
+        if (j < 0 || j >= ls.length) return;
+        const next = ls.slice();
+        next[i] = ls[j];
+        next[j] = ls[i];
+        postLists(next);
+      };
+      mk("\u25B2", "Move up", () => swap(i - 1));
+      mk("\u25BC", "Move down", () => swap(i + 1));
+      mk("\u2715", "Remove", () => postLists(ls.filter((_, k) => k !== i)));
+      row.appendChild(ctl);
+      box.appendChild(row);
+      const chips = el("div", "chips");
+      chips.setAttribute("role", "group");
+      chips.setAttribute("aria-label", "Teams in " + l.n);
+      favKeys.forEach((key, fi) => {
+        const t = teamByKey(key);
+        const on = l.f.includes(fi);
+        const c = el("button", "chip", t ? t[2] : key);
+        c.title = t ? t[3] : key;
+        setOn(c, on, "aria-pressed");
+        c.onclick = () => {
+          const f = on ? l.f.filter((x) => x !== fi) : l.f.concat([fi]).sort((a, b) => a - b);
+          postLists(ls.map((o, k) => (k === i ? { n: o.n, f } : o)));
+        };
+        chips.appendChild(c);
+      });
+      box.appendChild(chips);
+      host.appendChild(box);
+    });
+    const none = !favKeys.length;
+    if (none) host.appendChild(el("p", "hint", "Add favorites first, then group them here."));
+    else if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
+    $("#listActions").hidden = none;
+    $("#listAdd").hidden = ls.length >= listMax();
+    $("#favHint").textContent = "Up to 16 teams from any league. In Favorite teams mode the order is the priority. "
+      + (ls.length ? "Your playlists have buttons 1 to 4 on a WizMote remote." : "Buttons 1 to 4 on a WizMote remote jump to the first four.");
+  };
+  $("#listAdd").onclick = () => {
+    const ls = lists();
+    let n = ls.length + 1;
+    while (ls.some((l) => l.n === "Playlist " + n)) n++;
+    postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
+  };
+  $("#listSport").onclick = () => {
+    const ls = lists().slice();
+    let added = 0;
+    for (const [n, lgs] of SPORTS) {
+      const f = favKeys.map((k, i) => (lgs.includes(k.split(":")[0]) ? i : -1)).filter((i) => i >= 0);
+      if (!f.length || ls.some((l) => l.n === n) || ls.length >= listMax()) continue;
+      ls.push({ n, f });
+      added++;
+    }
+    if (!added) return toast("Every sport in your favorites has a playlist");
+    postLists(ls);
+    toast(added === 1 ? "Added a playlist" : "Added " + added + " playlists");
+  };
+  const listPick = $("#favList");
+  const renderListPick = () => {
+    const ls = lists();
+    $("#favListRow").hidden = !ls.length;
+    if (document.activeElement === listPick) return;
+    const opts = ["All favorites"].concat(ls.map((l) => l.n));
+    if (opts.join("\n") !== Array.from(listPick.options).map((o) => o.text).join("\n")) {
+      listPick.innerHTML = "";
+      opts.forEach((t, i) => {
+        const o = el("option", null, t);
+        o.value = String(i);
+        listPick.appendChild(o);
+      });
+    }
+    listPick.value = String(S.list || 0);
+  };
+  listPick.onchange = () => setGD({ mode: 4, list: listPick.value });
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
@@ -807,6 +965,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       if (pickFav && $("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
+    }
+    // Redrawn only when something changed, so a name being typed keeps its place.
+    const sig = favKeys.join(",") + "|" + JSON.stringify(lists());
+    if (sig !== listSig && !(document.activeElement && document.activeElement.classList.contains("pname"))) {
+      listSig = sig;
+      renderLists();
     }
     // A situation switch for each sport the panel follows (team, favorites,
     // Live games leagues picked by hand), all of them before anything is
@@ -1450,7 +1614,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const host = $("#upnextList");
     host.innerHTML = "";
     for (const n of list) {
-      const row = el("div", "un fav" + (n.slot === S.shown ? " shown" : ""));
+      // A favorite outside the playlist being played only shows near its kickoff.
+      // slot is the favorite's place counted from 1; a playlist counts from 0.
+      const out = playingList() && playingList().f.length && !playingList().f.includes(n.slot - 1);
+      const row = el("div", "un fav" + (n.slot === S.shown ? " shown" : "") + (out ? " out" : ""));
       const img = el("img");
       img.loading = "lazy";
       img.alt = "";

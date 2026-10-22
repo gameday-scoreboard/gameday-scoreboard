@@ -23,6 +23,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ## Unreleased
 
 - A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.
+- Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
 
 ## v2026.10.1
 
