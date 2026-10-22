@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- Favorites take over on Stick with the higher team: a favorite higher in your list now takes the panel when its game starts even if ESPN didn't answer for its league the last time the panel looked, instead of waiting for the game on the panel to end.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
