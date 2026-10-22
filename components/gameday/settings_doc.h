@@ -6,7 +6,8 @@
 //    "team": "nfl:6", "mode": 4, "favs": ["nfl:6", "", "mlb:15"],
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
 // "none" is no team, "" in favs an empty slot (the remote's buttons keep their
-// teams), [] in live the leagues of the teams it follows. Brightness and
+// teams), [] in live the leagues of the teams it follows. lists are the
+// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}]. Brightness and
 // scroll are the Home Assistant numbers of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
@@ -26,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "playlists.h"
 #include "set_request.h"
 
 namespace espn {
@@ -33,12 +35,15 @@ namespace espn {
 // Goes up only when a key changes meaning; new keys don't need it, since an
 // older firmware lists what it doesn't know and restores the rest.
 constexpr int kSettingsSchema = 1;
-// The largest import the panel reads. A full document is about 1 KB.
-constexpr size_t kSettingsMaxBytes = 4096;
+// The largest import the panel reads. A typical document is about 1 KB; one
+// with every favorite in all 16 playlists is about 6 KB (test_settings.cpp
+// checks the fullest export fits). The buffer is PSRAM, held only during an
+// import.
+constexpr size_t kSettingsMaxBytes = 8192;
 constexpr int kScrollMin = 1;
 constexpr int kScrollMax = 10;
 
-enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST };
+enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
 
 // The JSON type of each set key in a settings document.
 inline SettingType setting_type(const char *k) {
@@ -46,7 +51,7 @@ inline SettingType setting_type(const char *k) {
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
                                       "leaders", "night", "nightscreen", "favtake"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel"};
+                                     "release", "collide", "msgevery", "nightlevel", "list"};
   static const char *const kText[] = {"team", "fav1", "fav2", "fav3", "fav4", "tz",
                                       "msg",  "msgurl", "nightstart", "nightend", "nick"};
   static const char *const kList[] = {"favs", "live"};
@@ -62,6 +67,8 @@ inline SettingType setting_type(const char *k) {
   for (const char *l : kList)
     if (strcmp(k, l) == 0)
       return SettingType::LIST;
+  if (strcmp(k, "lists") == 0)
+    return SettingType::PLAYLISTS;
   return SettingType::NONE;
 }
 
@@ -95,7 +102,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "msg",      "msgurl",
-                                      "msgevery", "autoupd",  "beta"};
+                                      "msgevery", "autoupd",  "beta",     "lists",       "list"};
   for (const char *k : kKeys) {
     if (strcmp(k, "team") == 0) {
       if (s["team"].is<JsonObjectConst>()) {
@@ -115,6 +122,22 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
       JsonArray list = out["favs"].to<JsonArray>();
       for (const auto &f : favs)
         list.add(f);
+    } else if (strcmp(k, "lists") == 0) {
+      // The state's teams are places in favs; the backup names them.
+      if (!s["lists"].is<JsonArrayConst>())
+        continue;
+      JsonArrayConst favs = s["favs"].as<JsonArrayConst>();
+      JsonArray lists = out["lists"].to<JsonArray>();
+      for (JsonObjectConst l : s["lists"].as<JsonArrayConst>()) {
+        JsonObject o = lists.add<JsonObject>();
+        o["n"] = l["n"];
+        JsonArray t = o["t"].to<JsonArray>();
+        for (JsonVariantConst f : l["f"].as<JsonArrayConst>()) {
+          std::string ref = f.is<int>() ? team_ref_text(favs[f.as<int>()].as<JsonObjectConst>()) : std::string();
+          if (!ref.empty())
+            t.add(ref);
+        }
+      }
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
@@ -310,6 +333,44 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
                 return detail::settings_fail(out, "favs lists " + text + " twice.");
           op.teams.push_back(t);
         }
+        break;
+      }
+      case SettingType::PLAYLISTS: {
+        // Into lists= text: "Name=nfl:6,ncaa:251;Name2=...". A team this
+        // firmware doesn't know, a nameless playlist and any past the most
+        // are left out and listed.
+        const char *bad = "lists should be playlists like {\"n\": \"Football\", \"t\": [\"nfl:6\"]}.";
+        if (!v.is<JsonArrayConst>())
+          return detail::settings_fail(out, bad);
+        std::string text;
+        size_t kept = 0;
+        for (JsonVariantConst e : v.as<JsonArrayConst>()) {
+          if (!e.is<JsonObjectConst>() || !e["n"].is<const char *>() || !e["t"].is<JsonArrayConst>())
+            return detail::settings_fail(out, bad);
+          std::string name = list_name_clean(e["n"].as<const char *>());
+          std::string refs;
+          for (JsonVariantConst t : e["t"].as<JsonArrayConst>()) {
+            if (!t.is<const char *>())
+              return detail::settings_fail(out, bad);
+            TeamRef ref;
+            std::string r = t.as<const char *>();
+            int known = detail::settings_team(r, ref);
+            if (known == -2 || known == 0)
+              return detail::settings_fail(out, "lists should list teams like nfl:6.");
+            if (known == -1) {
+              out.skipped.push_back("lists=" + name + ":" + r);
+              continue;
+            }
+            refs += (refs.empty() ? "" : ",") + r;
+          }
+          if (name.empty() || kept == (size_t) kListMax) {
+            out.skipped.push_back("lists=" + name);
+            continue;
+          }
+          kept++;
+          text += (text.empty() ? "" : ";") + name + "=" + refs;
+        }
+        parse_set(k, text, op, target.fav_max);
         break;
       }
       case SettingType::NONE:

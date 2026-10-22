@@ -24,6 +24,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 - A panel that restarts during the night schedule's hours, as it does for the nightly update, comes back at its night brightness or with its screen off, instead of at full brightness for its first few seconds. After a power cut the schedule starts the moment the panel has the time.
 - A night schedule sent with the same start and end time, by an app, a script or a settings backup, keeps the hours it had instead of turning on and never running.
+- Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
 
 ## v2026.10.1
 
