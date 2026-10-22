@@ -25,6 +25,13 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 
 While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app lets you pick your team.
 
+:::note[Coming in the next release]
+On iPhone, a network that isn't in the list, like a hidden one, goes in with **Type a network name** at the bottom of the list. While the panel joins, the app shows each step as it happens. If the panel can't get on your Wi-Fi, the app says which problem it most likely is:
+
+- **Check the password**: the panel can see the network, so the password is the likely problem. Passwords are case sensitive.
+- **The panel can't see** the network: it isn't in the panel's list, which usually means a 5 GHz network. Pick the 2.4 GHz name from the list and try again.
+:::
+
 ## Without the app: use the panel's hotspot
 
 While it shows SETUP, the panel also starts its own Wi-Fi network, named **Game Day** plus six letters and numbers, like `Game Day 2f6a70`. Once the hotspot is up, the panel takes a turn showing **Join WiFi / Game Day** and those six characters, so you know which network is yours. Two panels in one house each get their own name.
