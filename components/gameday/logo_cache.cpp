@@ -105,20 +105,24 @@ bool LogoCache::pinned_url_(std::string_view url) const {
   return false;
 }
 
-// Main loop. A failed logo still on screen is asked for again on its own, so
-// it does not wait for the next board update, which can be hours away.
-void LogoCache::retry_pinned_(uint32_t now) {
+// Main loop, once a second. Asks again for a failed logo that is still on
+// screen, and starts the logo task again for anything still queued after it
+// could not start, so neither waits for the next board update, which can be
+// hours away.
+void LogoCache::retry_(uint32_t now) {
   if (now - this->retry_check_ms_ < 1000)
     return;
   this->retry_check_ms_ = now;
   Locked guard(this->lock_);
+  bool queued = false;
   for (auto &e : this->entries_) {
     if (e->state == State::FAILED && this->pinned_url_(e->url) &&
-        ::espn::logo_retry_due(e->failed_ms, e->wait_ms, now)) {
+        ::espn::logo_retry_due(e->failed_ms, e->wait_ms, now))
       e->state = State::QUEUED;
-      this->start_task_();
-    }
+    queued |= e->state == State::QUEUED;
   }
+  if (queued)
+    this->start_task_();
 }
 
 // Caller holds the lock. Drops the least recently used logo that is idle and
@@ -138,17 +142,25 @@ void LogoCache::make_room_() {
     this->entries_.erase(this->entries_.begin() + i);
 }
 
-// Caller holds the lock.
+// Caller holds the lock. When the task can't start (no internal block big
+// enough for its stack), retry_() tries again a second later.
 void LogoCache::start_task_() {
   if (this->task_running_)
     return;
   this->task_running_ = true;
   // Same stack as the ESPN worker: the TLS handshake needs it.
   if (xTaskCreate(&LogoCache::task_, "gameday_logo", 16384, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the logo task (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    if (this->start_fails_ == 0)
+      ESP_LOGW(TAG, "Could not start the logo task (largest free internal block %u bytes)",
+               (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    if (this->start_fails_ < UINT16_MAX)
+      this->start_fails_++;
     this->task_running_ = false;
+    return;
   }
+  if (this->start_fails_ > 0)
+    ESP_LOGI(TAG, "Started the logo task after %u failed tries", (unsigned) this->start_fails_);
+  this->start_fails_ = 0;
 }
 
 void LogoCache::task_(void *arg) {
@@ -248,7 +260,7 @@ bool LogoCache::download_(const std::string &url, Bytes &body, bool &throttled, 
 // Decodes into the entry itself, so the image object lives in PSRAM with it.
 // Safe without the lock: the entry is DOWNLOADED until the caller marks it
 // READY, so nothing draws it and nothing drops it.
-bool LogoCache::decode_(std::optional<runtime_image::RuntimeImage> &image, const Bytes &body) {
+bool LogoCache::decode_(std::optional<Logo> &image, const Bytes &body) {
   image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
                 LOGO_SIZE, LOGO_SIZE);
   bool ok = image->begin_decode(body.size());
@@ -266,15 +278,18 @@ bool LogoCache::decode_(std::optional<runtime_image::RuntimeImage> &image, const
   }
   if (ok)
     ok = image->end_decode();
-  if (!ok)
+  if (ok) {
+    image->drop_decoder();
+  } else {
     image.reset();
+  }
   return ok;
 }
 
 bool LogoCache::loop() {
   if (this->lock_ == nullptr)
     return false;
-  this->retry_pinned_(millis());
+  this->retry_(millis());
   if (!this->downloaded_.exchange(false))
     return false;
   bool ready = false;

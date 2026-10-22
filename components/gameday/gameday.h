@@ -39,6 +39,7 @@
 #include "recap.h"
 #include "score_log.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
@@ -311,6 +312,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
 #endif
   void set_auto_update(bool on);
+  // Brightness and Scroll Speed (template numbers that save their own value
+  // after their set_action runs) write flash on the next loop.
+  void sync_soon() {
+    this->defer("prefs_sync", [this]() { this->sync_prefs_(); });
+  }
   // Heat and power protection (guard.h). guard_brightness() is what the
   // display gets for the owner's Brightness, after the night schedule
   // (night.h) unless night is false (the QC screen); it runs from on_boot
@@ -568,6 +574,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
   void save_prefs_();
+  // Writes every saved setting to flash now, unless a batch (apply_ops_, a
+  // settings restore) is still applying its keys (prefs_sync.h). Call after
+  // an owner's change.
+  void sync_prefs_();
+  // Ends a batch, writing flash once if anything in it was saved.
+  void end_sync_batch_();
+  ::espn::PrefsSyncGate sync_gate_;
   void publish_selects_();
   void publish_team_select_(const std::string &option);
   void apply_timezone_();
@@ -603,6 +616,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool no_event{false};
     GameSnapshot game;
     bool game_ok{false};
+    // The poll reached ESPN, which didn't serve this game: a 404, or a
+    // document for another game or one the parser rejects (fetch_game_).
+    bool game_gone{false};
     // Favorite Teams mode: which cached entry this cycle refreshes or polls
     int fav_index{-1};
     uint32_t our_id{0};
@@ -853,6 +869,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject team_cache_pref_;
   bool team_cache_tried_{false};     // one look per boot
   bool cache_unconfirmed_{false};    // schedule_ came from the cache and no poll has confirmed it
+  std::string gone_event_;           // the last game ESPN didn't serve that the team was read again for
   bool upcoming_after_poll_{false};  // booted from the cache: season list after the first board
   bool load_team_cache_(const ::espn::Team *team);
   void save_team_cache_(const ::espn::Team *team);
