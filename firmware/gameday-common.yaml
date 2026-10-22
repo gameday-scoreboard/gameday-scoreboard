@@ -813,6 +813,11 @@ select:
     type: mode
     name: "Mode"
     icon: "mdi:shuffle-variant"
+  - platform: gameday
+    gameday_id: gameday_ctl
+    type: playlist
+    name: "Playlist"
+    icon: "mdi:playlist-star"
 
 switch:
   - platform: template

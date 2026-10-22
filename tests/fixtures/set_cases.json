@@ -11,7 +11,7 @@
   ],
   "base": {
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
-    "favs": ["", "", "", ""], "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
+    "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
@@ -167,6 +167,26 @@
     {"name": "a night time past 23:59 is refused", "set": [["nightstart", "24:00"], ["nightend", "07:60"]],
      "expect": {"nightstart": "23:00", "nightend": "07:00"}},
     {"name": "a night time with AM or PM is refused", "set": [["nightstart", "11 PM"]], "expect": {"nightstart": "23:00"}},
-    {"name": "midnight starts the night", "set": [["nightstart", "00:00"]], "expect": {"nightstart": "00:00"}}
+    {"name": "midnight starts the night", "set": [["nightstart", "00:00"]], "expect": {"nightstart": "00:00"}},
+    {"name": "lists sets playlists over the favorites", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "Football=nfl:6;Dallas=nfl:6,nba:6,nhl:25"]], "expect": {"lists": [{"n": "Football", "f": [0]}, {"n": "Dallas", "f": [0, 1, 2]}], "list": 0}},
+    {"name": "a playlist keeps only favorites", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "Mix=nfl:6,nfl:21,nfl:99999,bogus,nfl:6"]], "expect": {"lists": [{"n": "Mix", "f": [0]}]}},
+    {"name": "a playlist with no name is left out", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "=nfl:6;  =nba:6;Hockey=nhl:25"]], "expect": {"lists": [{"n": "Hockey", "f": [2]}]}},
+    {"name": "a playlist name is cut to 16 bytes", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "Sunday Football Crew=nfl:6"]], "expect": {"lists": [{"n": "Sunday Football", "f": [0]}]}},
+    {"name": "favs in the same request come first", "start": {"favs": ["", "", "", ""]}, "set": [["lists", "Two=nba:6,mlb:15"], ["favs", "mlb:15,nba:6"]], "expect": {"lists": [{"n": "Two", "f": [0, 1]}]}},
+    {"name": "list plays a playlist in Favorite teams", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}, {"n": "B", "f": [1]}]}, "set": [["list", "2"]], "expect": {"list": 2, "mode": 4}},
+    {"name": "list 0 is every favorite", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "mode": 4, "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["list", "0"]], "expect": {"list": 0, "mode": 4}},
+    {"name": "list past the last playlist is refused", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}]}, "set": [["list", "2"]], "expect": {"list": 0, "mode": 0}},
+    {"name": "list too long for a number is refused", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["list", "19999999999"]], "expect": {"list": 1}},
+    {"name": "list that isn't a number is refused", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["list", "abc"]], "expect": {"list": 1}},
+    {"name": "the playing playlist stays chosen by name", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}, {"n": "B", "f": [1]}], "list": 2}, "set": [["lists", "B=nba:6;A=nfl:6"]], "expect": {"list": 1}},
+    {"name": "renaming the playing playlist with list keeps it", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["lists", "Z=nfl:6"], ["list", "1"]], "expect": {"lists": [{"n": "Z", "f": [0]}], "list": 1}},
+    {"name": "renaming the playing playlist in My team stays in My team", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "mode": 0, "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["lists", "Z=nfl:6"], ["list", "1"]], "expect": {"lists": [{"n": "Z", "f": [0]}], "list": 1, "mode": 0}},
+    {"name": "list with lists names the playing one and keeps the mode", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "mode": 0}, "set": [["lists", "A=nfl:6;B=nba:6"], ["list", "2"]], "expect": {"list": 2, "mode": 0}},
+    {"name": "list with lists past the last playlist keeps the one playing by name", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "mode": 4, "lists": [{"n": "A", "f": [0]}, {"n": "B", "f": [1]}], "list": 2}, "set": [["lists", "B=nba:6"], ["list", "3"]], "expect": {"list": 1, "mode": 4}},
+    {"name": "the playing playlist gone is every favorite", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}, {"n": "B", "f": [1]}], "list": 1}, "set": [["lists", "B=nba:6"]], "expect": {"list": 0}},
+    {"name": "lists empty clears them", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["lists", ""]], "expect": {"lists": [], "list": 0}},
+    {"name": "reordered favorites keep their playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 2]}]}, "set": [["favs", "nhl:25,mlb:15,nfl:6"]], "expect": {"lists": [{"n": "A", "f": [0, 2]}]}},
+    {"name": "a favorite taken out leaves its playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 1]}]}, "set": [["favs", "nba:6,nhl:25"]], "expect": {"lists": [{"n": "A", "f": [0]}]}},
+    {"name": "a fav slot replaced leaves its playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 1]}]}, "set": [["fav1", "nfl:21"]], "expect": {"lists": [{"n": "A", "f": [1]}]}}
   ]
 }

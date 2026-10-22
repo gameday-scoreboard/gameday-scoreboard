@@ -28,6 +28,9 @@ struct FavGame {
   bool countdown{false};  // its countdown card takes a turn after it (countdown.h)
   // A recent poll found the game at its action (in_action), for Jump to the action.
   bool action{false};
+  // The team is in the playlist being played (playlists.h). One that isn't
+  // still locks on near its kickoff, but stays out of the idle playlist.
+  bool in_list{true};
 };
 
 struct FavRules {
@@ -133,7 +136,7 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
   // goes blank while it has cards.
   int level = 0;
   auto ok_at = [&](int i, int lv) {
-    if (!valid(i))
+    if (!valid(i) || !games[i].in_list)
       return false;
     if (lv >= 2)
       return true;
@@ -255,12 +258,12 @@ inline std::string fav_score_banner(const GameSnapshot &prev, const GameSnapshot
 
 // The favorite Home Assistant reports while the idle playlist rotates, so its
 // sensors don't change with every card: the next kickoff, else the first slot
-// with a card. -1 when no favorite has one.
+// with a card, among the playlist being played. -1 when none has one.
 inline int followed_favorite(const std::vector<FavGame> &games) {
   int best = -1;
   for (int i = 0; i < (int) games.size(); i++) {
     const FavGame &g = games[i];
-    if (!g.valid)
+    if (!g.valid || !g.in_list)
       continue;
     if (best < 0) {
       best = i;

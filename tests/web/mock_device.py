@@ -6,7 +6,10 @@ the entities the page builds controls from, and the gameday component's
 routes with the response shapes from components/gameday/gameday.cpp:
 
   GET  /gameday/state    the document rebuild_state_() writes
-  POST /gameday/set      only the keys in SET_KEYS; 400 when none match
+  POST /gameday/set      only the keys in SET_KEYS, from a form body or the URL's query
+                         (the body first, as ESPHome reads them); 400 when none match.
+                         A URL past 512 bytes answers 414 and a body past 1024 bytes
+                         400, as the panel's server does
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
                          power_ok sets health.power back to "ok"; say keeps its cleaned
                          text in "say" for tests to read (the panel has no such key)
@@ -73,7 +76,8 @@ SET_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSetKeys\[\] = \{(.*?)\};", 
 MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
 LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
                                              SET_H + MESSAGE_H +
-                                             (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -93,6 +97,10 @@ SETTINGS_TYPES = {k: t for t in ("Bool", "Int", "Text", "List") for k in _settin
 SETTINGS_ORDER = _settings_list("kKeys")
 SETTINGS_SCHEMA = int(re.search(r"kSettingsSchema = (\d+);", SETTINGS_H)[1])
 SETTINGS_MAX = int(re.search(r"kSettingsMaxBytes = (\d+);", SETTINGS_H)[1])
+# The panel's web server: ESP-IDF's URL cap (CONFIG_HTTPD_MAX_URI_LEN) and
+# the form body cap (CONFIG_HTTPD_MAX_REQ_HDR_LEN, as ESPHome sets it).
+URI_MAX = 512
+FORM_MAX = 1024
 
 
 def team(lg, tid):
@@ -108,7 +116,7 @@ INITIAL = {
     "team": team("nfl", 6),
     "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
@@ -261,6 +269,37 @@ def state_doc():
     return STATE
 
 
+def fav_refs():
+    return [(t["l"], t["id"]) if t else None for t in STATE["favs"]]
+
+
+def remap_lists(before):
+    """remap_lists_(): each playlist keeps its teams wherever the favorites moved them."""
+    after = fav_refs()
+    for pl in STATE["lists"]:
+        teams = [before[i] for i in pl["f"] if i < len(before) and before[i]]
+        pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
+
+
+def parse_lists(v):
+    """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
+    out = []
+    for part in v.split(";") if v else []:
+        if len(out) >= LIMITS["kListMax"]:
+            break
+        name, _eq, refs = part.partition("=")
+        name = message_clean(name.replace("=", ""), LIMITS["kListNameMax"], False)
+        if not name:
+            continue
+        teams = []
+        for r in refs.split(",") if refs else []:
+            ref = parse_team_ref(r)
+            if ref and ref not in teams and len(teams) < FAV_MAX:
+                teams.append(ref)
+        out.append({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams]})
+    return out
+
+
 def night_time(v):
     """night_parse_time() in components/gameday/night.h, as the state document writes it."""
     m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
@@ -271,7 +310,11 @@ def night_time(v):
 
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
+    # apply_ops_: list= with lists= names the playlist playing after the change.
+    with_lists = any(k == "lists" for k, _ in kv)
+    keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
     for k, v in kv:
+        before = fav_refs()
         if k == "team":
             ref = parse_team_ref(v)
             if ref:
@@ -300,11 +343,25 @@ def apply_set(kv):
                     refs.append(ref)
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
             STATE["favs"] = [team(*r) for r in refs] + [{}] * (4 - len(refs))
+            remap_lists(before)
         elif k in ("fav1", "fav2", "fav3", "fav4"):
             ref = parse_team_ref(v)
             if ref is None and v not in ("none", ""):
                 continue
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
+            remap_lists(before)
+        elif k == "lists":
+            # set_lists_(): the playlist being played stays chosen by its name.
+            active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] else ""
+            STATE["lists"] = parse_lists(v)
+            STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
+            if 0 <= keep_list <= len(STATE["lists"]):
+                STATE["list"] = keep_list
+        elif k == "list":
+            # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it.
+            if not with_lists and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
+                STATE["list"] = atoi(v)
+                STATE["mode"] = 4
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
         elif k == "live":
@@ -370,6 +427,10 @@ def settings_doc():
             while favs and not favs[-1]:
                 favs.pop()
             out["favs"] = favs
+        elif k == "lists":
+            # The state's teams are places in favs; the backup names them.
+            out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
+                            for pl in s.get("lists", [])]
         elif k == "live":
             # Live games' own list, not the state's (every league with no team picked).
             out["live"] = list(LIVE_LIST[0])
@@ -415,6 +476,34 @@ def import_settings(doc):
         if k not in doc or doc[k] is None:
             continue
         v, kind = doc[k], SETTINGS_TYPES.get(k)
+        if k == "lists":
+            # The PLAYLISTS case: into lists= text, unknown teams, nameless
+            # playlists and any past kListMax left out and listed.
+            bad = 'lists should be playlists like {"n": "Football", "t": ["nfl:6"]}.'
+            if not isinstance(v, list):
+                return fail(bad)
+            parts = []
+            for e in v:
+                if not isinstance(e, dict) or not isinstance(e.get("n"), str) or not isinstance(e.get("t"), list):
+                    return fail(bad)
+                name = message_clean(e["n"].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
+                refs = []
+                for t in e["t"]:
+                    if not isinstance(t, str):
+                        return fail(bad)
+                    r = team_ref(t)
+                    if r in (-2, 0):
+                        return fail("lists should list teams like nfl:6.")
+                    if r == -1:
+                        skipped.append(f"lists={name}:{t}")
+                        continue
+                    refs.append(t)
+                if not name or len(parts) == LIMITS["kListMax"]:
+                    skipped.append("lists=" + name)
+                    continue
+                parts.append(name + "=" + ",".join(refs))
+            kv.append(("lists", ";".join(parts)))
+            continue
         if kind == "Bool":
             if not isinstance(v, bool):
                 return fail(k + " should be true or false.")
@@ -426,7 +515,8 @@ def import_settings(doc):
             if not is_int(v):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
-                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255)}.get(k, (None, None))
+                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
+                      "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
             # Out of range is left out and listed (newer firmware may take more).
@@ -751,7 +841,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "Not a settings backup."})
             return self._json(*import_settings(doc))
         if u.path == "/gameday/set":
+            if len(self.path) > URI_MAX:
+                return self._json(414, {"error": "URI too long"})
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > FORM_MAX:
+                return self._json(400, {"error": "Request size is too big"})
+            body = parse_qs(self.rfile.read(n).decode("utf-8", "replace"), keep_blank_values=True)
             q = {k: v[0] for k, v in pairs.items()}
+            q.update({k: v[0] for k, v in body.items()})
             LOG.append({"path": u.path, "q": q})
             if "set" in FAIL:
                 return self._send(500, "text/plain", "")

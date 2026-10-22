@@ -77,7 +77,7 @@ A change to the leagues, or to the favorites they follow, takes effect right awa
 
 ## Favorite teams
 
-The panel cycles through up to 16 favorite teams, and a favorite's game takes the panel shortly before kickoff. See [Favorite teams](/using/favorites/) for how the playlist works and its settings.
+The panel cycles through up to 16 favorite teams, and a favorite's game takes the panel shortly before kickoff. See [Favorite teams](/using/favorites/) for how it works, its settings and playlists.
 
 Favorite teams with no favorites set works like My team, and the ticker asks you to add teams.
 

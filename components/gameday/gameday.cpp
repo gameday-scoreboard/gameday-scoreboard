@@ -197,6 +197,8 @@ void GamedaySelect::control(const std::string &value) {
     this->parent_->select_mode(value);
   else if (this->type_ == SelectType::FAVORITE)
     this->parent_->select_favorite(this->slot_, value);
+  else if (this->type_ == SelectType::PLAYLIST)
+    this->parent_->select_playlist(value);
   else
     this->parent_->select_timezone(value);
 }
@@ -332,6 +334,10 @@ void GamedayComponent::setup() {
       cd_ymd != this->countdown_.ymd)
     this->countdown_ = CountdownPrefs{};
   this->countdown_.name[::espn::kCountdownNameMax] = '\0';
+  this->pref9_ = global_preferences->make_preference<Prefs9>(fnv1_hash("gameday_prefs9_v1"));
+  if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
+      this->prefs9_.active > this->prefs9_.count)
+    this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
   this->load_msg_();
   this->load_nick_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
@@ -433,11 +439,13 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   if (slot < 1 || slot > FAV_MAX)
     return;
   std::vector<League> live_before = this->live_leagues_();
+  std::vector<::espn::TeamRef> before = this->fav_refs_all_();
   this->put_fav_(slot - 1, league, id);
   if (slot <= 4)
     this->pref3_.save(&this->prefs3_);
   else
     this->pref7_.save(&this->prefs7_);
+  this->remap_lists_(before);
   bool first_pick = id != 0 && this->mark_setup_done_();
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
   if (slot <= 4 && this->favorite_selects_[slot - 1] != nullptr)
@@ -447,6 +455,7 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
 
 void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint32_t>> &list) {
   std::vector<League> live_before = this->live_leagues_();
+  std::vector<::espn::TeamRef> before = this->fav_refs_all_();
   bool any = false;
   for (uint8_t i = 0; i < FAV_MAX; i++) {
     bool set = i < list.size();
@@ -455,6 +464,7 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   }
   this->pref3_.save(&this->prefs3_);
   this->pref7_.save(&this->prefs7_);
+  this->remap_lists_(before);
   bool first_pick = any && this->mark_setup_done_();
   ESP_LOGI(TAG, "Favorites: %u team(s)", (unsigned) list.size());
   for (uint8_t slot = 1; slot <= 4; slot++)
@@ -490,8 +500,146 @@ void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<Lea
     this->rebuild_state_(&this->last_fields_);
 }
 
+// ---- Playlists (playlists.h) -------------------------------------------------
+
+std::vector<::espn::TeamRef> GamedayComponent::fav_refs_all_() const {
+  std::vector<::espn::TeamRef> out;
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    out.push_back({this->fav_league_(i), this->fav_id_(i)});
+  return out;
+}
+
+void GamedayComponent::remap_lists_(const std::vector<::espn::TeamRef> &before) {
+  if (this->prefs9_.count == 0)
+    return;
+  std::vector<::espn::TeamRef> after = this->fav_refs_all_();
+  for (uint8_t n = 0; n < this->prefs9_.count; n++)
+    this->prefs9_.mask[n] = ::espn::remap_mask(this->prefs9_.mask[n], before, after);
+  this->pref9_.save(&this->prefs9_);
+}
+
+std::string GamedayComponent::list_name_(uint8_t n) const {
+  if (n < 1 || n > this->prefs9_.count)
+    return "";
+  const char *name = this->prefs9_.name[n - 1];
+  return std::string(name, strnlen(name, ::espn::kListNameMax));
+}
+
+bool GamedayComponent::fav_in_list_(size_t i) const {
+  uint8_t a = this->prefs9_.active;
+  return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
+}
+
+void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
+  std::string active_name = this->list_name_(this->prefs9_.active);
+  bool was_active = this->prefs9_.active != 0;
+  uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
+  std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
+  Prefs9 p{};
+  p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
+  for (uint8_t n = 0; n < p.count; n++) {
+    strncpy(p.name[n], lists[n].name.c_str(), ::espn::kListNameMax);
+    p.mask[n] = ::espn::list_mask(lists[n].teams, favs);
+  }
+  // The playlist being played stays chosen by its name; with that name gone
+  // it is every favorite. keep (list= in the same request, as a rename sends
+  // it) names it instead.
+  this->prefs9_ = p;
+  uint8_t active = 0;
+  if (keep >= 0 && keep <= p.count) {
+    active = (uint8_t) keep;
+  } else {
+    for (uint8_t n = 1; n <= p.count && !active_name.empty(); n++)
+      if (this->list_name_(n) == active_name)
+        active = n;
+  }
+  this->prefs9_.active = active;
+  this->pref9_.save(&this->prefs9_);
+  ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
+  this->publish_playlist_select_();
+  uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
+  // A rename alone plays the same teams, so the board stays as it is.
+  if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask))
+    this->set_active_list_(active, false);  // other teams play now: pick again
+  else
+    this->rebuild_state_(&this->last_fields_);
+}
+
+// From the page, Home Assistant or the remote (announce: the name goes up on
+// the board, so a press in the dark says what it picked). Favorite teams
+// starts playing it, from its first card.
+void GamedayComponent::set_active_list_(uint8_t n, bool announce) {
+  if (n > this->prefs9_.count)
+    n = 0;
+  if (n != this->prefs9_.active) {
+    this->prefs9_.active = n;
+    this->pref9_.save(&this->prefs9_);
+    ESP_LOGI(TAG, "Playlist: %s", n == 0 ? "every favorite" : this->list_name_(n).c_str());
+  }
+  this->publish_playlist_select_();
+  if (announce)
+    this->say(n == 0 ? "All favorites" : this->list_name_(n), 3);
+  if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES) {
+    this->select_mode(MODE_OPTIONS[(uint8_t) Mode::FAVORITES]);
+    return;
+  }
+  // As a change to the favorites list: drop the board and pick again from
+  // the cards the panel already has.
+  this->rebuild_favorites_(true);
+  this->generation_++;
+  this->game_ = GameSnapshot{};
+  this->prev_ = GameSnapshot{};
+  this->emit_({});
+  this->end_backoff_wait_();
+  this->schedule_next_(0);
+}
+
+void GamedayComponent::select_playlist(const std::string &option) {
+  if (option == "All favorites") {
+    this->set_active_list_(0, false);
+    return;
+  }
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++)
+    if (this->list_name_(n) == option) {
+      this->set_active_list_(n, false);
+      return;
+    }
+  ESP_LOGW(TAG, "Unknown playlist '%s'", option.c_str());
+  this->publish_playlist_select_();
+}
+
+// Home Assistant reads the options when it connects, so a playlist added or
+// renamed shows there after its next reconnect.
+void GamedayComponent::publish_playlist_select_() {
+  if (this->playlist_select_ == nullptr)
+    return;
+  this->playlist_options_.clear();
+  this->playlist_options_.push_back("All favorites");
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++)
+    this->playlist_options_.push_back(this->list_name_(n));
+  FixedVector<const char *> options;
+  options.init(this->playlist_options_.size());
+  for (const auto &o : this->playlist_options_)
+    options.push_back(o.c_str());
+  this->playlist_select_->traits.set_options(options);
+  this->playlist_select_->publish_state(this->playlist_options_[this->prefs9_.active]);
+}
+
 #ifndef GAMEDAY_DEMO
-void GamedayComponent::remote_number(uint8_t n) { this->press_favorite(n); }
+// With playlists, buttons 1-4 play the first four; without, they jump to the
+// first four favorites.
+void GamedayComponent::remote_number(uint8_t n) {
+  if (this->prefs9_.count == 0) {
+    this->press_favorite(n);
+    return;
+  }
+  if (n > this->prefs9_.count) {
+    ESP_LOGI(TAG, "Remote button %u: no playlist %u", (unsigned) n, (unsigned) n);
+    return;
+  }
+  ESP_LOGI(TAG, "Remote button %u: playlist %s", (unsigned) n, this->list_name_(n).c_str());
+  this->set_active_list_(n, true);
+}
 #endif
 
 void GamedayComponent::press_favorite(uint8_t slot) {
@@ -556,6 +704,7 @@ void GamedayComponent::publish_selects_() {
   for (uint8_t slot = 1; slot <= 4; slot++)
     if (this->favorite_selects_[slot - 1] != nullptr)
       this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
+  this->publish_playlist_select_();
 }
 
 void GamedayComponent::select_mode(const std::string &option) {
@@ -748,6 +897,7 @@ std::vector<::espn::FavGame> GamedayComponent::fav_games_() const {
     g.countdown = this->countdown_on() && e.game.valid && e.game.state == GameState::PRE && !e.game.time_tbd &&
                   e.game.kickoff_epoch > 0;
     g.action = e.action_epoch != 0 && now - e.action_epoch < ::espn::kActionHoldS;
+    g.in_list = this->fav_in_list_(e.slot - 1);
     out.push_back(g);
   }
   return out;
@@ -817,14 +967,19 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
         !(e.game.event_id == e.stuck_event && now - e.stuck_ms < e.stuck_for_ms))
       e.stale = true;  // released: the team endpoint now points at the next game
   }
+  // The playlist's own teams first, so its cards come up before the rest.
   int refresh = -1;
-  for (size_t i = 0; i < this->fav_.size(); i++) {
-    const FavEntry &e = this->fav_[i];
-    bool missing = !e.sched.valid || e.stale;
-    uint32_t age = now - e.fetched_ms;
-    if ((missing && (e.fetched_ms == 0 || age >= RETRY_INTERVAL)) || (!missing && age >= SCHEDULE_INTERVAL)) {
-      refresh = (int) i;
-      break;
+  for (int pass = 0; pass < 2 && refresh < 0; pass++) {
+    for (size_t i = 0; i < this->fav_.size(); i++) {
+      const FavEntry &e = this->fav_[i];
+      if (this->fav_in_list_(e.slot - 1) != (pass == 0))
+        continue;
+      bool missing = !e.sched.valid || e.stale;
+      uint32_t age = now - e.fetched_ms;
+      if ((missing && (e.fetched_ms == 0 || age >= RETRY_INTERVAL)) || (!missing && age >= SCHEDULE_INTERVAL)) {
+        refresh = (int) i;
+        break;
+      }
     }
   }
   bool forced = false;
@@ -3152,12 +3307,20 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
     if (!this->recap_on_ || !this->recap_cards_.empty())
       return;
   } else if (this->favorites_mode_()) {
-    // Every favorite has been read, and none has a game.
-    for (const auto &e : this->fav_)
+    // Every favorite in the playlist has been read, and none has a game.
+    const FavEntry *first = nullptr;
+    for (const auto &e : this->fav_) {
+      if (!this->fav_in_list_(e.slot - 1))
+        continue;
       if (!e.sched.valid || !e.sched.event_id.empty())
         return;
-    team = this->fav_[0].team;
-    color = this->fav_[0].sched.team_color;
+      if (first == nullptr)
+        first = &e;
+    }
+    if (first == nullptr)
+      return;
+    team = first->team;
+    color = first->sched.team_color;
   } else {
     if (team == nullptr)
       return;
@@ -3607,6 +3770,18 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       put_team(o, this->fav_league_(i), this->fav_id_(i));
   }
   doc["favmax"] = FAV_MAX;
+  // Each playlist's teams as places in favs.
+  JsonArray lists = doc["lists"].to<JsonArray>();
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++) {
+    JsonObject o = lists.add<JsonObject>();
+    o["n"] = this->list_name_(n);
+    JsonArray f = o["f"].to<JsonArray>();
+    for (uint8_t i = 0; i < FAV_MAX; i++)
+      if (this->fav_id_(i) != 0 && ((this->prefs9_.mask[n - 1] >> i) & 1u))
+        f.add(i);
+  }
+  doc["list"] = this->prefs9_.active;
+  doc["listmax"] = ::espn::kListMax;
   doc["today"] = this->today_only();
   doc["jump"] = this->jump_to_action();
   doc["banner"] = this->score_banner();
@@ -4347,6 +4522,15 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
+  // list= with lists= names the playlist playing after the change (a rename
+  // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
+  bool with_lists = false;
+  int keep_list = -1;
+  for (const auto &op : ops) {
+    with_lists = with_lists || op.kind == ::espn::SetKind::LISTS;
+    if (op.kind == ::espn::SetKind::LIST)
+      keep_list = op.value;
+  }
   for (const auto &op : ops) {
     switch (op.kind) {
       case ::espn::SetKind::TEAM:
@@ -4396,6 +4580,17 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       }
       case ::espn::SetKind::FAV_SLOT:
         this->set_favorite_(op.slot, op.team.league, op.team.id);
+        break;
+      case ::espn::SetKind::LISTS:
+        this->set_lists_(::espn::parse_lists(op.text, FAV_MAX), keep_list);
+        break;
+      case ::espn::SetKind::LIST:
+        if (with_lists)
+          break;  // set_lists_ took it
+        if (op.value > this->prefs9_.count)
+          ESP_LOGW(TAG, "No playlist %d", op.value);
+        else
+          this->set_active_list_((uint8_t) op.value, false);
         break;
       case ::espn::SetKind::TZ:
         this->select_timezone(::espn::kTimezones[op.value].name);
