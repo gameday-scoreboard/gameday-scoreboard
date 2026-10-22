@@ -343,9 +343,13 @@ std::string pregame_records(const GameSnapshot &s) {
   return out;
 }
 
-// "1381" to "1,381"
-static std::string with_commas(const std::string &digits) {
-  std::string out;
+// "1381" to "1,381". Anything but digits is dropped first, so a count ESPN
+// already wrote as "1,381" comes out the same instead of "1,,381".
+static std::string with_commas(const std::string &number) {
+  std::string digits, out;
+  for (char c : number)
+    if (c >= '0' && c <= '9')
+      digits += c;
   size_t n = digits.size();
   for (size_t i = 0; i < n; i++) {
     if (i > 0 && (n - i) % 3 == 0)
@@ -377,7 +381,7 @@ std::string leader_line(const std::string &short_name, const std::string &displa
       break;
     start = comma + 2;
   }
-  if (name.empty() || yards.empty())
+  if (name.empty() || with_commas(yards).empty())
     return "";
   std::string out = name + " " + with_commas(yards) + " yds";
   if (!tds.empty())

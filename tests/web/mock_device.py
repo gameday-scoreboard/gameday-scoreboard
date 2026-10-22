@@ -199,6 +199,11 @@ def atoi(v):
     return int(m.group()) if m else 0
 
 
+def whole_int(v):
+    # set_request.h parse_whole_int: an optional minus and up to six digits, nothing else
+    return re.fullmatch(r"-?\d{1,6}", v) is not None
+
+
 def clamp(v, lo, hi):
     return min(LIMITS[hi], max(LIMITS[lo], v))
 
@@ -320,14 +325,17 @@ def apply_set(kv):
             elif v == "none":
                 STATE["team"] = {}
         elif k == "mode":
-            if 0 <= atoi(v) < LIMITS["kModeCount"]:
-                STATE["mode"] = atoi(v)
+            if whole_int(v) and 0 <= int(v) < LIMITS["kModeCount"]:
+                STATE["mode"] = int(v)
         elif k == "rotate":
-            STATE["rotate"] = clamp(atoi(v), "kRotateMinMinutes", "kRotateMaxMinutes")
+            if whole_int(v):
+                STATE["rotate"] = clamp(int(v), "kRotateMinMinutes", "kRotateMaxMinutes")
         elif k == "lockon":
-            STATE["lockon"] = clamp(atoi(v), "kLockonMinMinutes", "kLockonMaxMinutes")
+            if whole_int(v):
+                STATE["lockon"] = clamp(int(v), "kLockonMinMinutes", "kLockonMaxMinutes")
         elif k == "release":
-            STATE["release"] = clamp(atoi(v), "kReleaseMinSeconds", "kReleaseMaxSeconds")
+            if whole_int(v):
+                STATE["release"] = clamp(int(v), "kReleaseMinSeconds", "kReleaseMaxSeconds")
         elif k == "collide":
             STATE["collide"] = 1 if v == "1" else 0
         elif k == "favs":
