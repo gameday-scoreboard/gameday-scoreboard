@@ -617,8 +617,9 @@ def import_settings(doc):
 
 
 def countdown_name(v):
-    """countdown.h's countdown_name(): trimmed, no control characters, at most kCountdownNameMax bytes."""
-    raw = "".join(c for c in v if c >= " " and c != "\x7f").strip(" ").encode("utf-8")
+    """countdown.h's countdown_name(): trimmed, no control characters or emoji, at most kCountdownNameMax bytes."""
+    v = "".join(c for c in EMOJI.sub("", v) if c >= " " and c != "\x7f")
+    raw = re.sub(r" {2,}", " ", v).strip(" ").encode("utf-8")
     return raw[:COUNTDOWN_NAME_MAX].decode("utf-8", "ignore").rstrip(" ")
 
 
