@@ -111,14 +111,17 @@ inline std::string countdown_day_label(uint32_t ymd) {
 }
 
 // The name as the panel keeps it: spaces trimmed, line breaks and other
-// control characters and stray bytes that aren't UTF-8 dropped, cut to
-// kCountdownNameMax bytes without splitting a UTF-8 character.
+// control characters, emoji (message.h) and stray bytes that aren't UTF-8
+// dropped, cut to kCountdownNameMax bytes without splitting a UTF-8
+// character.
 inline std::string countdown_name(const std::string &v) {
   std::string out;
   for (size_t i = 0; i < v.size();) {
     size_t n = detail::utf8_len(v, i);
     unsigned char c = (unsigned char) v[i];
-    if (n > 1 || (c >= 0x20 && c < 0x7F))
+    bool keep = n > 1 ? !detail::emoji(detail::utf8_cp(v, i, n)) : c >= 0x20 && c < 0x7F;
+    // A dropped emoji between two words leaves one space, not two.
+    if (keep && !(c == ' ' && !out.empty() && out.back() == ' '))
       out.append(v, i, n);
     i += n;
   }
