@@ -1369,6 +1369,50 @@ test("the banner posts its text and seconds, and Take down posts no text", async
   await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "" });
 });
 
+test("the nickname names the page and the header, and saving it posts nick", async ({ page, request }) => {
+  await reset(request, { nick: "Garage" });
+  await page.goto("/");
+  await expect(page.locator("#nick")).toHaveValue("Garage");
+  await expect(page.locator("#devname")).toHaveText("Garage");
+  await expect(page).toHaveTitle("Garage · Game Day Scoreboard");
+
+  await page.locator("#nick").fill("  Living room ");
+  await page.locator("#nick").press("Enter");
+  await expectSet(request, { nick: "Living room" });
+  await expect(page.locator("#toast")).toHaveText("Nickname saved");
+  await expect.poll(async () => (await deviceState(request)).nick).toBe("Living room");
+  await expect(page).toHaveTitle("Living room · Game Day Scoreboard");
+
+  await page.locator("#nick").fill("");
+  await page.locator("#nick").press("Enter");
+  await expectSet(request, { nick: "" });
+  await expect(page.locator("#toast")).toHaveText("Nickname cleared");
+  await expect(page).not.toHaveTitle(/·/);
+  await expect(page.locator("#devname")).not.toHaveText("Living room");
+});
+
+test("the nickname keeps the tab title when something else renames it, and the box while it is being typed in", async ({ page, request }) => {
+  await reset(request, { nick: "Garage" });
+  await page.goto("/");
+  await expect(page).toHaveTitle("Garage · Game Day Scoreboard");
+  // ESPHome's own page script names the tab after the device on its pings.
+  await page.evaluate(() => { document.title = "Game Day Scoreboard 2f6a70"; });
+  await expect(page).toHaveTitle("Garage · Game Day Scoreboard");
+
+  await page.locator("#nick").fill("Gar");
+  await request.post("/gameday/set?nick=Den");
+  await expect.poll(async () => (await deviceState(request)).nick).toBe("Den");
+  await expect(page).toHaveTitle("Den · Game Day Scoreboard");
+  await expect(page.locator("#nick")).toHaveValue("Gar");
+});
+
+test("the nickname box hides on firmware without it", async ({ page, request }) => {
+  await reset(request, { nick: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#nickRow")).toBeHidden();
+});
+
 test("the message card posts its text, address and timing, and Clear turns it off", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

@@ -48,7 +48,7 @@ inline SettingType setting_type(const char *k) {
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel"};
   static const char *const kText[] = {"team", "fav1", "fav2", "fav3", "fav4", "tz",
-                                      "msg",  "msgurl", "nightstart", "nightend"};
+                                      "msg",  "msgurl", "nightstart", "nightend", "nick"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -90,7 +90,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     out["name"] = s["name"];
   // In the device page's order. Ints, switches and text have the state's
   // key and type; the rest are converted.
-  static const char *const kKeys[] = {"team",     "mode",     "favs",     "rotate",      "lockon",     "release",
+  static const char *const kKeys[] = {"nick",     "team",     "mode",     "favs",     "rotate",      "lockon",     "release",
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
