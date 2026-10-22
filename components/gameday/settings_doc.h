@@ -35,8 +35,11 @@ namespace espn {
 // Goes up only when a key changes meaning; new keys don't need it, since an
 // older firmware lists what it doesn't know and restores the rest.
 constexpr int kSettingsSchema = 1;
-// The largest import the panel reads. A full document is about 1 KB.
-constexpr size_t kSettingsMaxBytes = 4096;
+// The largest import the panel reads. A typical document is about 1 KB; one
+// with every favorite in all 16 playlists is about 6 KB (test_settings.cpp
+// checks the fullest export fits). The buffer is PSRAM, held only during an
+// import.
+constexpr size_t kSettingsMaxBytes = 8192;
 constexpr int kScrollMin = 1;
 constexpr int kScrollMax = 10;
 

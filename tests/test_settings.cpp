@@ -303,6 +303,36 @@ void test_playlists() {
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":[6]}]})", "a playlist team as a number");
 }
 
+// The fullest export the panel can write comes back through its own import:
+// 16 favorites with the longest league and team id, all of them in 16
+// playlists, and every text at its cap in characters JSON escapes.
+void test_fullest_fits() {
+  JsonDocument state, out;
+  SCHECK(!deserializeJson(state, slurp("fixtures/api/state.json")), "fixtures/api/state.json doesn't parse");
+  JsonArray favs = state["favs"].to<JsonArray>();
+  for (int i = 0; i < 16; i++) {
+    JsonObject f = favs.add<JsonObject>();
+    f["l"] = "wnba";
+    f["id"] = 100000 + i;
+  }
+  JsonArray lists = state["lists"].to<JsonArray>();
+  for (int i = 0; i < kListMax; i++) {
+    JsonObject l = lists.add<JsonObject>();
+    l["n"] = std::string(kListNameMax, '"');
+    JsonArray f = l["f"].to<JsonArray>();
+    for (int j = 0; j < 16; j++)
+      f.add(j);
+  }
+  state["list"] = kListMax;
+  state["msg"] = std::string(kMsgTextMax, '"');
+  state["msgurl"] = "http://" + std::string(kMsgUrlMax - 7, 'a');
+  state["nick"] = std::string(kNickMax, '"');
+  settings_from_state(state.as<JsonObjectConst>(), 0, 255, 10, out);
+  size_t bytes = measureJson(out);
+  SCHECK(bytes <= kSettingsMaxBytes, "the fullest backup is %zu bytes, past kSettingsMaxBytes (%zu)", bytes,
+         kSettingsMaxBytes);
+}
+
 void test_reply() {
   SettingsImport in = import(R"({"schema":1,"panels":1,"sparkle":1})");
   SCHECK(settings_reply(in) == R"({"ok":true,"restart":true,"skipped":["sparkle"]})", "reply: %s",
@@ -322,6 +352,7 @@ int main() {
   test_refused();
   test_left_out();
   test_playlists();
+  test_fullest_fits();
   test_reply();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

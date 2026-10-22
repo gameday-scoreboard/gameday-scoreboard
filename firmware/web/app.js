@@ -1,7 +1,8 @@
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
-//   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
+//   POST /gameday/set key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...),
+//                                 as a form body (or the URL's query, up to 512 bytes)
 //   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
 //                                 say&text=...&secs=N (the banner)
 // The ESPHome event stream (/events) still carries the entities that stay
@@ -446,7 +447,12 @@
   const scheduleState = (ms) => { clearTimeout(stateTimer); stateTimer = setTimeout(fetchState, ms); };
   const postSet = async (params, attempt = 0) => {
     try {
-      const r = await fetch("/gameday/set?" + qs(params), { method: "POST" });
+      // In the body: the panel takes a URL of 512 bytes at most, and the playlists alone can pass that.
+      const r = await fetch("/gameday/set", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: qs(params),
+      });
       if (!r.ok) throw new Error("HTTP " + r.status);
       return true;
     } catch (e) {

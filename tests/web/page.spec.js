@@ -568,6 +568,23 @@ test("One per sport makes a playlist for each sport in the favorites", async ({ 
   await expect(page.locator("#toast")).toHaveText("Every sport in your favorites has a playlist");
 });
 
+// All 16 playlists with every favorite are about 3 KB of form, far past the
+// panel's 512-byte URL; the mock answers a long URL 414 as the panel does.
+test("all 16 playlists with every favorite save", async ({ page, request }) => {
+  const favs = Array.from({ length: 16 }, (_, i) => ({ l: "nfl", id: i + 1, abbr: "T" + (i + 1), name: "Team " + (i + 1) }));
+  const all = Array.from({ length: 16 }, (_, i) => i);
+  const keys = favs.map((f) => "nfl:" + f.id).join(",");
+  await reset(request, { favs, lists: Array.from({ length: 15 }, (_, i) => ({ n: "Playlist " + (i + 1), f: all })) });
+  await page.goto("/");
+  await expect(page.locator("#listCtls .plist")).toHaveCount(15);
+  await page.locator("#listAdd").click();
+  const want = Array.from({ length: 15 }, (_, i) => "Playlist " + (i + 1) + "=" + keys).join(";") + ";Playlist 16=";
+  await expectSet(request, { lists: want });
+  await page.locator("#listCtls .plist").nth(15).locator(".chip").first().click();
+  await expectSet(request, { lists: want + "nfl:1" });
+  await expect(page.locator("#toast")).not.toContainText("did not respond");
+});
+
 test("playlists wait for favorites", async ({ page, request }) => {
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
