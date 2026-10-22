@@ -120,7 +120,7 @@ struct UpdateFields {
 
 enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE };
 
-// PSRAM text (logo_cache.h's allocator): the message card's list.
+// PSRAM text (psram.h): the message card's list.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
 
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
@@ -859,7 +859,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint32_t side_ms{0};      // the last poll while another favorite had the board
   };
   // The favorite cards are ~1 KB each and internal heap is the panel's
-  // scarcest resource: PSRAM (logo_cache.h's allocator).
+  // scarcest resource: PSRAM (psram.h).
   using FavList = std::vector<FavEntry, PsramAllocator<FavEntry>>;
   FavList fav_;
   int fav_shown_{-1};

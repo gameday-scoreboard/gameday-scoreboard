@@ -13,27 +13,13 @@
 
 #include "esphome/components/http_request/http_request.h"
 #include "esphome/components/runtime_image/runtime_image.h"
+#include "psram.h"
 
 namespace esphome::gameday {
 
-// PSRAM first, internal RAM only if PSRAM is full. Aborts on failure, as
-// operator new does with exceptions off.
-inline void *psram_alloc(size_t size) {
-  void *p = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-  if (p == nullptr)
-    abort();
-  return p;
-}
-
-template<class T> struct PsramAllocator {
-  using value_type = T;
-  PsramAllocator() = default;
-  template<class U> PsramAllocator(const PsramAllocator<U> &) {}
-  T *allocate(size_t n) { return static_cast<T *>(psram_alloc(n * sizeof(T))); }
-  void deallocate(T *p, size_t) { heap_caps_free(p); }
-  template<class U> bool operator==(const PsramAllocator<U> &) const { return true; }
-  template<class U> bool operator!=(const PsramAllocator<U> &) const { return false; }
-};
+using ::espn::psram_alloc;
+using ::espn::psram_free;
+using ::espn::PsramAllocator;
 
 // Team logos, downloaded and decoded once, then kept in PSRAM until the
 // panel restarts. Downloads run on their own task so a slow logo server can
@@ -74,7 +60,7 @@ class LogoCache {
   enum class State : uint8_t { QUEUED, LOADING, DOWNLOADED, READY, FAILED };
   struct Entry {
     static void *operator new(size_t size) { return psram_alloc(size); }
-    static void operator delete(void *p) { heap_caps_free(p); }
+    static void operator delete(void *p) { psram_free(p); }
 
     Url url;
     Bytes body;  // the PNG, from the task to the main loop
