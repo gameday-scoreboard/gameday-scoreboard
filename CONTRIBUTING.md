@@ -53,7 +53,8 @@ email, which answers faster than an issue.
 
 ## Changing the code
 
-1. Fork the repo and branch from `dev`.
+1. Fork the repo and branch from `dev`. Name the branch after the change,
+   like `espn-gzip`.
 2. Make the change and test it (below).
 3. Open a pull request against `dev`. `beta` and `main` only take
    promotion PRs from the maintainers, and CI fails anything else.
@@ -143,8 +144,12 @@ visible changed. `docs/wiki/README.md` has the page conventions, and
 - Commit messages are one plain sentence about what changed for the
   person watching the panel, like "Name each panel's hotspot after its
   suffix".
-- Leave the version number and CHANGELOG.md alone; the maintainers write
-  both when a release goes out.
+- If the change is something an owner would notice, add a bullet for it
+  under `## Unreleased` at the top of CHANGELOG.md, in plain words for
+  the person who owns the panel (start the heading if it isn't there).
+  Leave the version number and the released sections alone; the
+  maintainers bump the version and name the section when a release
+  goes out.
 
 ### Things we won't merge
 

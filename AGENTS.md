@@ -96,6 +96,9 @@ is the short version.
 
 - Branch from `dev` and open PRs against `dev`. `beta` and `main` only take
   promotion PRs, and CI enforces that.
+- Name the branch after the change (`espn-gzip`, `power-cut-boot`). The
+  name stays in the merge commit, so CI's Branch rules job refuses a head
+  branch with a tracker's ticket in it, like `card-123-...`.
 - A PR description says what changed and how it was tested. No links to
   private repos or trackers, no ticket numbers from them, and no AI
   attribution in PR text or comments. Maintainers keep reviews and
@@ -110,8 +113,11 @@ is the short version.
   passwords or keys to the default build. The README section "On your
   network" explains why.
 - Team logos come from ESPN at runtime. Don't commit league or team logos.
-- Version bumps and CHANGELOG sections are written by maintainers at
-  release time. Leave both alone in a feature PR.
+- A PR that changes what an owner sees or does adds its own bullet under
+  `## Unreleased` at the top of CHANGELOG.md (start the heading if it
+  isn't there), written for the person who owns the panel. Never add to
+  a released `## vX.Y.Z` section. The version bump and renaming
+  Unreleased to the version are the maintainers', at release time.
 - A change an owner or DIY builder can see or do comes with its docs
   page, updated or added under `docs/wiki/src/content/docs/` in the same
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
