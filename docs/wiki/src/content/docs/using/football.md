@@ -20,11 +20,9 @@ The ticker along the bottom carries:
 
 A game whose kickoff time isn't set yet, like a college game a couple of weeks out, shows the day and "TBD", like "Sat TBD".
 
-:::note[Coming in the next release]
 After the odds, the ticker also shows each team's passing leader for the season with yards and touchdowns, like "Prescott 1,381 yds 9 TD", when ESPN has one. Early in the season, before a team has a passing line, it shows the rushing or receiving leader instead. **Pre-game season leaders** on the device page turns them off.
 
 On a single 64x64 panel, which has no room for the records under the logos, the ticker shows both teams' records after the kickoff time, like "DAL 2-3, GB 3-2".
-:::
 
 ## During the game
 

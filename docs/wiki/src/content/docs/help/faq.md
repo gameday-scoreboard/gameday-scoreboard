@@ -19,9 +19,7 @@ Yes. Between seasons it shows the clock above, with your team's next game when E
 
 ## Can it turn off at night?
 
-:::note[Coming in the next release]
 Yes. Turn on **Night schedule** in the Panel card on the device page and pick the hours. It can dim the panel to a night brightness or turn the screen off, and a live game for your team or a favorite keeps it bright until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
-:::
 
 ## Can I use it outside?
 
