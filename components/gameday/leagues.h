@@ -1,7 +1,8 @@
 // Every league the panel can follow and what differs between them. Pure, no
 // ESPHome includes, so the host tests use it too. scripts/build_teams.py,
-// scripts/build_web.py and __init__.py read kLeagues with a regex: keep one
-// row per line in the same field order.
+// scripts/build_web.py, __init__.py and tests/web/mock_device.py read kLeagues
+// through leagues_table.py, which stops on a row it can't read: keep
+// LeagueInfo's field order.
 #pragma once
 
 #include <cstdint>
