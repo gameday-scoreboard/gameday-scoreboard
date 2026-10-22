@@ -10,10 +10,11 @@ CONF_GAMEDAY_ID = "gameday_id"
 GamedaySelect = gameday_ns.class_("GamedaySelect", select.Select, cg.Component)
 SelectType = gameday_ns.enum("SelectType", is_class=True)
 # Favorites and the timezone are set from the device page (/gameday/set) and
-# have no entity; only the two selects worth having in Home Assistant remain.
+# have no entity; only the selects worth having in Home Assistant remain.
 SELECT_TYPES = {
     "team": SelectType.TEAM,
     "mode": SelectType.MODE,
+    "playlist": SelectType.PLAYLIST,
 }
 MODE_OPTIONS = [
     "My team",
@@ -43,11 +44,14 @@ async def to_code(config):
     # Compare the plain string: codegen enum members are MockObj placeholders
     # and comparing them with == is always truthy.
     kind = config[CONF_TYPE]
-    options = team_options() if kind == "team" else MODE_OPTIONS
+    # The playlists are the owner's own: the component sets the names at boot.
+    options = team_options() if kind == "team" else ["All favorites"] if kind == "playlist" else MODE_OPTIONS
     await select.register_select(var, config, options=options)
     cg.add(var.set_type(SELECT_TYPES[kind]))
     cg.add(var.set_parent(parent))
     if kind == "team":
         cg.add(parent.set_team_select(var))
+    elif kind == "playlist":
+        cg.add(parent.set_playlist_select(var))
     else:
         cg.add(parent.set_mode_select(var))

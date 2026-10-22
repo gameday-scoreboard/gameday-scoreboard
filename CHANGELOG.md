@@ -22,6 +22,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
 - The board says **Can't reach ESPN** in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and in Live games after "No live NFL games, showing CHI" when your team's card can't be read. A panel cut off from ESPN for days keeps saying so instead of switching to "No upcoming game" every couple of days.
 
 ## v2026.10.1
