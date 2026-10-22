@@ -472,7 +472,9 @@ def import_settings(doc):
         return fail("Not a settings backup.")
     if doc["schema"] > SETTINGS_SCHEMA:
         return fail("This backup is from newer firmware. Update the panel, then restore it.")
-    kv, skipped, favs, numbers = [], [], None, {}
+    kv, skipped, kept, favs, numbers = [], [], [], None, {}
+    # The nickname and layout come back only onto the panel the file is from.
+    same_panel = isinstance(doc.get("name"), str) and doc["name"] == STATE.get("name")
     ranges = {"rotate": ("kRotateMinMinutes", "kRotateMaxMinutes"), "lockon": ("kLockonMinMinutes", "kLockonMaxMinutes"),
               "release": ("kReleaseMinSeconds", "kReleaseMaxSeconds")}
     for k in SET_KEYS:
@@ -526,6 +528,10 @@ def import_settings(doc):
             if lo is not None and not lo <= v <= hi:
                 skipped.append(f"{k}={v}")
                 continue
+            if k == "panels" and not same_panel:
+                if v != STATE.get("panels"):
+                    kept.append(k)
+                continue
             kv.append((k, str(v)))
         elif kind == "Text":
             if not isinstance(v, str):
@@ -538,9 +544,12 @@ def import_settings(doc):
                     skipped.append(f"{k}={v}")
                     continue
                 kv.append((k, v if r == 1 else "none"))
-            elif k == "tz" and timezone_index(v) < 0:
-                skipped.append(f"tz={v}")
-            elif (k == "msgurl" and not msg_url_ok(v)) or (k in ("nightstart", "nightend") and not night_time(v)):
+            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)):
+                skipped.append(f"{k}={v}")
+            elif k == "nick" and not same_panel:
+                if v != STATE.get("nick", ""):
+                    kept.append(k)
+            elif k in ("nightstart", "nightend") and not night_time(v):
                 return fail(k + " isn't a value the panel takes.")
             else:
                 kv.append((k, v))
@@ -593,7 +602,7 @@ def import_settings(doc):
     apply_set([p for p in kv if SET_KEYS.index(p[0]) > SET_KEYS.index("favs")])
     for ent, value in numbers.items():
         entity(ent)["value"] = entity(ent)["state"] = str(value)
-    return 200, {"ok": True, "restart": restart, "skipped": skipped}
+    return 200, {"ok": True, "restart": restart, "skipped": skipped, "kept": kept}
 
 
 def selftest():

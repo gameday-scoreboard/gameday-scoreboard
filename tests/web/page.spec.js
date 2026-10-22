@@ -1654,15 +1654,18 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   const file = (name, body) => ({ name, mimeType: "application/json", buffer: Buffer.from(body) });
   const posts = async () => (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/settings");
 
-  // Another panel's backup, with an empty remote slot and a key from newer firmware.
-  const backup = { ...doc, name: "gameday-aba970", team: "mlb:15", mode: 4, favs: ["mlb:15", "", "nfl:6"], down: false,
-                   brightness: 60, sparkle: true };
+  // Another panel's backup, with an empty remote slot, its own nickname and a
+  // key from newer firmware. This panel keeps its own nickname.
+  const backup = { ...doc, name: "gameday-aba970", nick: "Den", team: "mlb:15", mode: 4, favs: ["mlb:15", "", "nfl:6"],
+                   down: false, brightness: 60, sparkle: true };
   let asked = "";
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
   await page.setInputFiles("#bkFile", file("den.json", JSON.stringify(backup)));
-  await expect(page.locator("#bkNote")).toHaveText("Restored. This panel's firmware doesn't have: sparkle.");
-  expect(asked).toBe("Replace this panel's settings with den.json (saved from gameday-aba970)? Wi-Fi networks and the WizMote pairing stay as they are.");
+  await expect(page.locator("#bkNote")).toHaveText(
+    "Restored. This panel kept its own nickname. This panel's firmware doesn't have: sparkle.");
+  expect(asked).toBe("Replace this panel's settings with den.json (saved from gameday-aba970)? Wi-Fi networks and the WizMote pairing stay as they are, and so do this panel's nickname and layout.");
   const st = await deviceState(request);
+  expect(st.nick).toBe("");
   expect(st.team.abbr).toBe("ATL");
   expect(st.mode).toBe(4);
   expect(st.down).toBe(false);
@@ -1686,15 +1689,31 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   expect((await deviceState(request)).team.abbr).toBe("ATL");
 });
 
-test("Import of a backup with another panel layout waits out the restart", async ({ page, request }) => {
+test("Import of this panel's own backup with another layout waits out the restart", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#backup")).toBeVisible();
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.setInputFiles("#bkFile", { name: "one.json", mimeType: "application/json",
+                                        buffer: Buffer.from(JSON.stringify({ schema: 1, name: "gameday-2f6a70", panels: 1 })) });
+  await expect(page.locator("#gone")).toHaveText("Restarting with the restored panel layout. This page reconnects when the panel is back.");
+  expect(asked).toBe("Replace this panel's settings with one.json? Wi-Fi networks and the WizMote pairing stay as they are.");
+  expect((await deviceState(request)).panels).toBe(1);
+});
+
+test("Import of another panel's backup keeps this panel's layout", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   await expect(page.locator("#backup")).toBeVisible();
   page.once("dialog", (d) => d.accept());
-  await page.setInputFiles("#bkFile", { name: "one.json", mimeType: "application/json",
-                                        buffer: Buffer.from(JSON.stringify({ schema: 1, panels: 1 })) });
-  await expect(page.locator("#gone")).toHaveText("Restarting with the restored panel layout. This page reconnects when the panel is back.");
-  expect((await deviceState(request)).panels).toBe(1);
+  await page.setInputFiles("#bkFile", { name: "small.json", mimeType: "application/json",
+                                        buffer: Buffer.from(JSON.stringify({ schema: 1, name: "gameday-aba970", panels: 1, down: false })) });
+  await expect(page.locator("#bkNote")).toHaveText("Restored. This panel kept its own panel layout.");
+  await expect(page.locator("#gone")).toBeHidden();
+  const st = await deviceState(request);
+  expect(st.panels).toBe(2);
+  expect(st.down).toBe(false);
 });
 
 test("the backup section hides on firmware without it", async ({ page, request }) => {

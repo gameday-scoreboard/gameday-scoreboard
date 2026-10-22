@@ -187,7 +187,7 @@
       <div class="card">
         <h2>Panel</h2>
         <div id="nickRow" hidden>
-          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the iPhone app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
         <div id="panelCtls"></div>
@@ -1196,8 +1196,10 @@
       backupNote("That file isn't a settings backup.");
       return;
     }
-    const from = typeof doc.name === "string" && S && doc.name !== S.name ? " (saved from " + doc.name + ")" : "";
-    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are.")) return;
+    const other = !!S && doc.name !== S.name;
+    const from = other && typeof doc.name === "string" ? " (saved from " + doc.name + ")" : "";
+    const own = other ? ", and so do this panel's nickname and layout" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are" + own + ".")) return;
     let r, j;
     try {
       r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
@@ -1208,7 +1210,9 @@
     }
     if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
     const left = (j.skipped || []).join(", ");
-    backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    const kept = (j.kept || []).map((k) => ({ nick: "nickname", panels: "panel layout" })[k] || k).join(" and ");
+    backupNote("Restored." + (kept ? " This panel kept its own " + kept + "." : "") +
+      (left ? " This panel's firmware doesn't have: " + left + "." : ""));
     if (j.restart) {
       waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
       toBoard();

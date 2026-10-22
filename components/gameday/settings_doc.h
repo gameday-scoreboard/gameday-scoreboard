@@ -14,9 +14,12 @@
 // type, or text the panel can't read (a team, a time, an address), refuses
 // the document. What this firmware doesn't know or can't take (a key, a team,
 // a league or a time zone from newer firmware, a number out of its range, a
-// favorite past its 16) is left out and listed, so a backup still restores
-// across versions. Wi-Fi networks and
-// the WizMote pairing are not in it.
+// favorite past its 16, a message list address it can't read) is left out
+// and listed, so a backup still restores across versions. The nickname and
+// the panel layout describe the panel, not the owner's choices: they come
+// back only onto the panel the file was saved from (its "name", the hostname,
+// which a factory reset keeps), and a file from another panel lists them as
+// kept. Wi-Fi networks and the WizMote pairing are not in it.
 // Pure, no ESPHome includes, so the host tests cover it.
 #pragma once
 
@@ -164,6 +167,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
 
 // What the panel can take, from the build and the running firmware.
 struct SettingsTarget {
+  std::string name;  // this panel's hostname, as the export writes it
+  std::string nick;  // its nickname now
   size_t fav_max{16};
   int panels{0};      // panels wide now; 0 when the build has no panel layout
   int max_panels{0};  // the most it drives
@@ -179,6 +184,7 @@ struct SettingsImport {
   int scroll{-1};
   bool restart{false};  // the panel count changes, so the panel restarts
   std::vector<std::string> skipped;  // "key" or "key=value" this firmware left out
+  std::vector<std::string> kept;     // "nick", "panels": another panel's, this one keeps its own
   std::string error;  // why the document was refused; nothing was applied
 };
 
@@ -221,6 +227,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     return detail::settings_fail(out, "Not a settings backup.");
   if (schema > kSettingsSchema)
     return detail::settings_fail(out, "This backup is from newer firmware. Update the panel, then restore it.");
+  // Saved from this panel (after a factory reset, say), not from another one.
+  bool same_panel = !target.name.empty() && doc["name"].is<const char *>() && target.name == doc["name"].as<const char *>();
 
   for (const char *key : kSetKeys) {
     JsonVariantConst v = doc[key];
@@ -260,6 +268,11 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;
         }
+        if (k == "panels" && !same_panel) {
+          if (n != target.panels)
+            out.kept.push_back(k);
+          continue;
+        }
         if (k == "panels")
           out.restart = n != target.panels;
         break;
@@ -280,8 +293,14 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, r == 0 ? "none" : text, op, target.fav_max);
           break;
         }
-        if (k == "tz" && timezone_index(text.c_str()) < 0) {
+        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text))) {
           out.skipped.push_back(k + "=" + text);
+          continue;
+        }
+        if (k == "nick" && !same_panel) {
+          parse_set(k, text, op, target.fav_max);
+          if (op.text != target.nick)
+            out.kept.push_back(k);
           continue;
         }
         if (!parse_set(k, text, op, target.fav_max))
@@ -433,6 +452,9 @@ inline std::string settings_reply(const SettingsImport &in) {
     JsonArray skipped = doc["skipped"].to<JsonArray>();
     for (const auto &s : in.skipped)
       skipped.add(s);
+    JsonArray kept = doc["kept"].to<JsonArray>();
+    for (const auto &k : in.kept)
+      kept.add(k);
   }
   std::string body;
   serializeJson(doc, body);
