@@ -158,3 +158,14 @@ the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
 `set_request.h`, and `tests/web/mock_device.py --selftest` through the device
 page's mock, so the two answer the same way. Add a case there when a set key
 or its limits change.
+
+Not from ESPN either: `api/` is the panel's own HTTP API as the companion
+app sees it. `state.json` is a `GET /gameday/state` document with every key
+the firmware can send, so it has some together that a real panel never sends
+at once (the bar build's `bar` next to `beta`, favorites rows next to the
+team's upcoming games, a reason for an empty board next to a live game).
+`wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
+/gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
+(`demo` and `demo_stop` only in demo builds). `test_api.cpp` fails when the
+firmware and these files disagree, and the companion app's tests read them,
+so a firmware change to the API updates them in the same PR.
