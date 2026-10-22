@@ -280,6 +280,19 @@ void test_left_out() {
   refused(R"({"schema":1,"brightness":"900"})", "brightness as text on any build");
 }
 
+// The same start and end would leave the schedule on and never running: the
+// end is left out, and the panel keeps its own.
+void test_night_hours() {
+  SettingsImport in = import(R"({"schema":1,"night":true,"nightstart":"23:00","nightend":"23:00"})");
+  SCHECK(in.error.empty() && skipped(in, "nightend=23:00") && find(in, SetKind::NIGHT_END) == nullptr &&
+             find(in, SetKind::NIGHT_START) != nullptr && find(in, SetKind::NIGHT) != nullptr,
+         "the same start and end wasn't left out: '%s'", in.error.c_str());
+  in = import(R"({"schema":1,"nightstart":"22:00","nightend":"06:30"})");
+  SCHECK(in.error.empty() && in.skipped.empty() && find(in, SetKind::NIGHT_END) != nullptr &&
+             find(in, SetKind::NIGHT_END)->value == 6 * 60 + 30,
+         "good hours didn't come back");
+}
+
 // Playlists come back by name and team, as lists= text in the order given.
 void test_playlists() {
   SettingsImport in = import(R"({"schema":1,"lists":[{"n":"Pros","t":["nfl:6","mlb:999999"]},{"n":" ; ","t":["nfl:6"]},
@@ -380,6 +393,7 @@ int main() {
   test_favs();
   test_refused();
   test_left_out();
+  test_night_hours();
   test_playlists();
   test_fullest_fits();
   test_reply();

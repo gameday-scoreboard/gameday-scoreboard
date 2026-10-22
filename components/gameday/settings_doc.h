@@ -381,6 +381,20 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     out.ops.push_back(op);
   }
 
+  // The same start and end would turn the schedule on and never run it: the
+  // end is left out, and the panel keeps the end it has.
+  const SetOp *night_start = nullptr;
+  for (const auto &op : out.ops)
+    if (op.kind == SetKind::NIGHT_START)
+      night_start = &op;
+  for (size_t i = 0; night_start != nullptr && i < out.ops.size(); i++) {
+    if (out.ops[i].kind == SetKind::NIGHT_END && out.ops[i].value == night_start->value) {
+      out.skipped.push_back("nightend=" + night_time_text((uint16_t) out.ops[i].value));
+      out.ops.erase(out.ops.begin() + i);
+      break;
+    }
+  }
+
   for (const char *n : {"brightness", "scroll"}) {
     JsonVariantConst v = doc[n];
     if (v.isNull())

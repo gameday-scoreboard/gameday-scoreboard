@@ -30,6 +30,8 @@ The panel pairs with one remote at a time. Pairing another one replaces the firs
 
 The brightness buttons move the same **Brightness** setting as the device page and the app.
 
+During the [night schedule](/using/brightness-and-clock/)'s hours the panel stays at its night setting: the brightness buttons change the daytime brightness for the morning, and a screen that's off for the night stays off, whatever you press, until the hours end or a game of yours goes live. To light it up at night, turn **Night schedule** off in the Panel card on the device page.
+
 ## The numbered buttons
 
 Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.
