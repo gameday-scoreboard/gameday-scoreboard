@@ -4,7 +4,7 @@
 
 A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League.
 
-Watch the [full demo](https://gamedayscoreboard.app/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
+Watch the [full demo](https://install.gameday-scoreboard.com/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
 
 If you already use Home Assistant and want room lighting to celebrate too, [gameday-matrix](https://github.com/bharvey88/gameday-matrix) does the same thing through a blueprint.
 
@@ -23,7 +23,7 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 
 ## Hardware
 
-Building your own? [Runs on your own panel](https://gamedayscoreboard.app/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
+Building your own? [Runs on your own panel](https://install.gameday-scoreboard.com/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
 
 - The Game Day Scoreboard controller (build `gameday-scoreboard75.yaml`), or an ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
@@ -36,8 +36,8 @@ The MoonHub75 pinout, under the names ESPHome uses (that board's README calls th
 
 ## Install
 
-1. Open the [installer page](https://gamedayscoreboard.app/), plug the controller in over USB, and click Install. That page is for the Game Day Scoreboard controller, which starts on a 128x64 display. Built your own on the MoonHub75 pinout? Use the [DIY installer](https://gamedayscoreboard.app/install/diy/) instead: it asks whether yours drives one 64x64 panel or a 128x64 display before you click Install, so the first boot uses the right layout.
-2. Enter your WiFi details in the dialog that follows the install. If you skip it, the panel shows a QR code for the Game Day app and starts a hotspot named Game Day plus six letters and numbers, like Game Day 2f6a70; join it and a setup page opens.
+1. Open the [installer page](https://install.gameday-scoreboard.com/), pick whether yours drives one 64x64 panel or a 128x64 display (or two 64x64 side by side), plug the controller in over USB, and click Install. It's for the Game Day Scoreboard controller and any board on the MoonHub75 pinout. An early test controller on the scoreboard75 pinout has its own [scoreboard75 installer](https://install.gameday-scoreboard.com/install/scoreboard75/).
+2. Click Next when the install finishes and enter your WiFi details when the dialog asks. If you skip it, the panel shows a QR code for the Game Day app and starts a hotspot named Game Day plus six letters and numbers, like Game Day 2f6a70; join it and a setup page opens.
 3. Once it's on WiFi the panel shows a QR code for the Game Day app, then the `gameday-xxxxxx.local` name of its own page. Pick your team in the app, or open that name on your phone and pick it there. Until you pick a team or a mode, from that page, the Game Day app or Home Assistant, the ticker asks you to and gives the panel's IP address for phones that can't resolve `.local` names. Holding the controller's boot button for 1.5 seconds shows the name and the IP address again any time.
 
 Team changes take effect immediately and survive reboots. Wrong panel size? Click the matching picture in the Setup card. Nothing needs reflashing to change teams or layouts.
@@ -51,7 +51,7 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 | Show | My team, Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every minute unless you change Switch every (1 to 30 minutes) |
 | Team | All 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
-| Ticker: Down and distance, Count and at-bat, Match stats, Last play, Pre-game odds and TV | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. The page shows only the ones for sports your panel follows |
+| Ticker: Down and distance, Count and at-bat, Match stats, Last play, Pre-game odds and TV, Pre-game season leaders | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. Before kickoff in football, each team's passing leader. The page shows only the ones for sports your panel follows |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
 | Favorites | Up to 16 teams in priority order. "Only today's games" keeps the playlist to the favorites playing today. The first four are the numbered buttons on a WizMote remote |
 | Remote | Pair a WizMote: turn discovery on, press any button on the remote. ON/OFF, brightness and NIGHT buttons control the panel |

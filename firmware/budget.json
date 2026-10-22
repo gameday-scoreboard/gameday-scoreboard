@@ -35,7 +35,7 @@
     },
     "poll_nfl_event": {
       "heap": 1584,
-      "json": 7503
+      "json": 8878
     },
     "poll_nhl_event": {
       "heap": 1621,
@@ -55,7 +55,7 @@
     },
     "scan_ncaa_day": {
       "heap": 7104,
-      "json": 16321
+      "json": 20942
     },
     "scan_ncaa_live": {
       "heap": 36186,

@@ -1,6 +1,6 @@
 from esphome import automation
 import esphome.codegen as cg
-# Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble (MIT for
+# Local override of ESPHome 2026.10.0 esphome/components/improv_ble (MIT for
 # Python). Game Day change: answers Improv RPC 0x04 (Get Wi-Fi Networks) over
 # BLE. Every change from upstream is marked GAMEDAY.
 from esphome.components import binary_sensor, improv_base, output

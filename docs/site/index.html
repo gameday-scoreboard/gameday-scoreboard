@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Game Day Scoreboard: your team's live score on an LED panel</title>
   <meta name="description" content="Install Game Day Scoreboard from your browser. It shows your team's live score, game clock and next game on a HUB75 LED panel over Wi-Fi.">
-  <link rel="canonical" href="https://gamedayscoreboard.app/">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/">
   <meta property="og:site_name" content="Game Day Scoreboard">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Game Day Scoreboard: your team's live score on an LED panel">
   <meta property="og:description" content="Install Game Day Scoreboard from your browser. It shows your team's live score, game clock and next game on a HUB75 LED panel over Wi-Fi.">
-  <meta property="og:url" content="https://gamedayscoreboard.app/">
-  <meta property="og:image" content="https://gamedayscoreboard.app/media/og.jpg">
+  <meta property="og:url" content="https://install.gameday-scoreboard.com/">
+  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@GameDayScore">
-  <meta name="twitter:image" content="https://gamedayscoreboard.app/media/og.jpg">
+  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
   <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
   <script type="application/ld+json">
   {
@@ -26,7 +26,7 @@
     "name": "Game Day Scoreboard",
     "description": "A 128x64 LED scoreboard for your wall that shows your team's live score, game clock and next game over Wi-Fi.",
     "brand": { "@type": "Brand", "name": "Game Day Scoreboard" },
-    "image": "https://gamedayscoreboard.app/media/og.jpg",
+    "image": "https://install.gameday-scoreboard.com/media/og.jpg",
     "url": "https://gameday-scoreboard.com/products/game-day-scoreboard",
     "offers": {
       "@type": "Offer",
@@ -51,6 +51,15 @@
     code { background: #1f2731; padding: 1px 6px; border-radius: 4px; }
     .note { font-size: 0.9rem; color: #9da7b3; }
     a { color: #7cc4ff; }
+    /* Same pictures as the panel picker on the device page. */
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 16px; }
+    .panelpick { background: #0b0f14; border: 1px solid #262e38; border-radius: 12px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; color: #d6dde7; font: inherit; font-size: 0.95rem; }
+    .panelpick:hover { border-color: #3a4556; }
+    .panelpick[aria-pressed="true"] { border-color: #f2b632; box-shadow: 0 0 0 1px #f2b632 inset; }
+    .panelpick svg { width: 100%; max-width: 160px; height: auto; }
+    .panelpick svg rect { fill: #1d2532; stroke: #5a6678; stroke-width: 2; }
+    .panelpick[aria-pressed="true"] svg rect { fill: #3a3210; stroke: #f2b632; }
+    .panelpick small { color: #9da7b3; font-size: 0.8rem; margin-top: -4px; }
     footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
     .demo { display: block; width: 100%; border-radius: 12px; border: 1px solid #262e38; background: #000; margin: 0 0 6px; }
     .demo-note { margin: 0 0 28px; }
@@ -93,21 +102,46 @@
 
   <div class="card">
     <h2>1. Install</h2>
-    <p>Plug the controller into this computer over USB and click Install. One firmware covers a single 64x64 panel and two panels side by side; you pick which on the device page afterwards.</p>
-    <p>
-      <esp-web-install-button manifest="firmware/scoreboard75/manifest.json">
+    <p>Which panels does yours drive? Click the picture that matches, so the scoreboard starts with the right layout. You can change it later on the device page.</p>
+    <div class="panels" id="panels">
+      <button type="button" class="panelpick" data-manifest="firmware/moonhub75/manifest.json" aria-pressed="false">
+        <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
+        <span>One 64x64 panel</span>
+      </button>
+      <button type="button" class="panelpick" data-manifest="firmware/moonhub75-2panel/manifest.json" aria-pressed="false">
+        <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
+        <span>One 128x64 panel</span>
+        <small>or two 64x64 side by side</small>
+      </button>
+    </div>
+    <p>Then plug the controller into this computer over USB and click Install.</p>
+    <p id="install" hidden>
+      <esp-web-install-button manifest="firmware/moonhub75/manifest.json">
         <button slot="activate">Install Game Day Scoreboard</button>
         <span slot="unsupported">This browser cannot talk to the controller over USB. Try a desktop browser.</span>
         <span slot="not-allowed">Open this page over HTTPS to install.</span>
       </esp-web-install-button>
     </p>
-    <p class="note">For the Game Day Scoreboard controller. Built your own on a MoonHub75 board? Use the <a href="/install/diy/">DIY installer</a> instead. Using another board? See <a href="/diy/">Runs on your own panel</a>.</p>
-    <p class="note">Installing erases whatever firmware was on the controller. Your WiFi details and team choice are asked for afterwards.</p>
+    <script>
+      // The two builds are the same firmware with a different first-boot
+      // layout; both take updates from the one-panel manifest afterwards.
+      (() => {
+        const picks = document.querySelectorAll("#panels .panelpick");
+        const installer = document.querySelector("#install esp-web-install-button");
+        picks.forEach((b) => b.addEventListener("click", () => {
+          picks.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+          installer.setAttribute("manifest", b.dataset.manifest);
+          document.getElementById("install").hidden = false;
+        }));
+      })();
+    </script>
+    <p class="note">For the Game Day Scoreboard controller and any ESP32-S3 HUB75 controller on the <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> pinout with 16MB flash and octal PSRAM. Have a test controller on the scoreboard75 pinout? Use the <a href="/install/scoreboard75/">scoreboard75 installer</a>. Using another board? See <a href="/diy/">Runs on your own panel</a>.</p>
+    <p class="note">Installing replaces whatever firmware was on the controller. WiFi comes next, in the same window.</p>
   </div>
 
   <div class="card">
     <h2>2. Join WiFi</h2>
-    <p>When the install finishes the same dialog offers to connect the device to WiFi. Enter your network name and password. If you skip it, the panel starts a hotspot named <code>Game Day</code> plus six letters and numbers, like <code>Game Day 2f6a70</code>, and shows the name on screen; join it and a setup page opens.</p>
+    <p>When the install finishes, click <strong>Next</strong>. The controller restarts, and within about half a minute the same window asks for your WiFi: pick your network and enter the password. If you skip it, the panel starts a hotspot named <code>Game Day</code> plus six letters and numbers, like <code>Game Day 2f6a70</code>, and shows the name on screen; join it and a setup page opens.</p>
   </div>
 
   <div class="card">
@@ -117,7 +151,7 @@
       <li>Tap <strong>Change team</strong> and pick from the logos, a tab per league, or use the <strong>On now</strong> tab to jump into a game that's already playing.</li>
       <li>Two panels side by side? In the <strong>Setup</strong> card, click the two-panel picture. The matrix restarts using both.</li>
       <li>The timezone follows the phone or computer you opened the page on, so kickoff times read right without setting anything.</li>
-      <li>Optional: the ticker parts, opponent celebrations, up to 16 favorite teams (the first four on a <a href="/setup/#remote">WizMote remote</a>), or <strong>Live games</strong>, which follows a random game in progress in the leagues you pick.</li>
+      <li>Optional: the ticker parts, opponent celebrations, up to 16 favorite teams (the first four on a <a href="https://app.gameday-scoreboard.com/setup/#remote">WizMote remote</a>), or <strong>Live games</strong>, which follows a random game in progress in the leagues you pick.</li>
     </ol>
     <p class="note">The panel shows the next game with the line, TV network and start time, switches to the live board at the start, celebrates scores, and lingers on the final. The page mirrors it, lists the next three games in football and soccer, and updates the firmware when a new version is out, by itself if you turn that on. The panel gets its scores from ESPN by itself. No Home Assistant needed, though the device does show up there if you want it.</p>
   </div>
@@ -126,7 +160,7 @@
     Source, issues and the YAML for building it yourself: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard">gameday-scoreboard/gameday-scoreboard</a>.
     Built on <a href="https://github.com/pavlov-net/hub75-studio">hub75-studio</a> and ESPHome.
     <br>
-    <a href="/setup/">Setup</a> &middot; <a href="/changelog/">What's new</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
+    <a href="https://app.gameday-scoreboard.com/setup/">Setup</a> &middot; <a href="/changelog/">What's new</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
   </footer>
 </main>
 <script>

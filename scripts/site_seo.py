@@ -4,7 +4,9 @@
 check <dir>: every page (an index.html outside firmware/) has its own title
 and description, a canonical URL that matches where it lives, Open Graph and
 Twitter card tags, a share image that exists in the site, and JSON-LD that
-parses. CI runs it on docs/site.
+parses. A page with <meta name="robots" content="noindex"> (a redirect, a
+test-board installer) is skipped here and left out of the sitemap. CI runs it
+on docs/site.
 
 build <dir>: check, then add the FAQPage JSON-LD to support/ from the page's
 own cards, and write sitemap.xml and robots.txt. Both site deploys run it on
@@ -22,7 +24,7 @@ import sys
 import tempfile
 from html.parser import HTMLParser
 
-BASE = "https://gamedayscoreboard.app"
+BASE = "https://install.gameday-scoreboard.com"
 FAQ_PAGE = "support/index.html"
 REQUIRED_PROPS = ["og:title", "og:description", "og:url", "og:image", "og:type"]
 REQUIRED_NAMES = ["description", "twitter:card", "twitter:image"]
@@ -101,12 +103,19 @@ def squash(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
+def noindex(path):
+    with open(path, encoding="utf-8") as f:
+        head = Head()
+        head.feed(f.read())
+    return "noindex" in head.meta.get("robots", "")
+
+
 def pages(site):
-    """(path under the site, URL) for every page, home first."""
+    """(path under the site, URL) for every page search engines may list, home first."""
     found = []
     for root, dirs, files in os.walk(site):
         dirs[:] = sorted(d for d in dirs if not (root == site and d == "firmware") and not d.startswith("."))
-        if "index.html" in files:
+        if "index.html" in files and not noindex(os.path.join(root, "index.html")):
             rel = os.path.relpath(os.path.join(root, "index.html"), site).replace(os.sep, "/")
             url = BASE + "/" + rel[: -len("index.html")]
             found.append((rel, url))
@@ -211,6 +220,10 @@ def selftest():
                 f.write(page(rel, "Page " + rel, desc + rel))
         os.makedirs(os.path.join(site, "media"))
         open(os.path.join(site, "media/og.jpg"), "wb").close()
+        # A noindex page needs none of the tags and stays out of the sitemap.
+        os.makedirs(os.path.join(site, "old"))
+        with open(os.path.join(site, "old/index.html"), "w", encoding="utf-8") as f:
+            f.write('<!doctype html><html><head><meta name="robots" content="noindex"></head></html>')
         assert [p for p, _ in pages(site)] == ["index.html", "install/diy/index.html", "support/index.html"]
         assert check(site) == [], check(site)
         assert build(site) == []
@@ -226,7 +239,7 @@ def selftest():
         with open(os.path.join(site, "sitemap.xml"), encoding="utf-8") as f:
             sitemap = f.read()
         assert f"<loc>{BASE}/</loc>" in sitemap and f"<loc>{BASE}/install/diy/</loc>" in sitemap
-        assert "firmware" not in sitemap
+        assert "firmware" not in sitemap and "/old/" not in sitemap
         with open(os.path.join(site, "robots.txt"), encoding="utf-8") as f:
             assert f"Sitemap: {BASE}/sitemap.xml" in f.read()
 

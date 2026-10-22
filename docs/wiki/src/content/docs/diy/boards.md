@@ -9,7 +9,7 @@ The prebuilt firmware for DIY builds targets one pinout, the [MoonHub75](https:/
 
 ## MoonHub75
 
-The MoonHub75 has a prebuilt firmware. Install it from your browser with the [DIY installer](/diy/install/) and it takes updates over Wi-Fi like any other panel.
+The MoonHub75 has a prebuilt firmware. Install it from your browser with the [installer](/diy/install/) and it takes updates over Wi-Fi like any other panel.
 
 Its pin map in the firmware also sets up an I2S microphone on GPIO10, GPIO11 and GPIO12, as the MoonHub75 carries one. The scoreboard pages don't use it.
 
@@ -59,10 +59,10 @@ Give your copy its own `variant` name in the top-level file. The variant picks t
 
 A pin map in `firmware/controllers/` and a line on the DIY page make a good first pull request. Say which panel you used and how long it ran. See [CONTRIBUTING.md](https://github.com/gameday-scoreboard/gameday-scoreboard/blob/dev/CONTRIBUTING.md#where-help-is-wanted).
 
-## The Game Day Scoreboard controller is a different board
+## The scoreboard75 test controllers
 
-The Game Day Scoreboard controller uses different pins. Its pin map is `firmware/controllers/scoreboard75.yaml`, its build is `firmware/gameday-scoreboard75.yaml`, and it has its own installer at [gamedayscoreboard.app](https://gamedayscoreboard.app/).
+The early Game Day Scoreboard test controllers use different pins, the scoreboard75 pinout. Their pin map is `firmware/controllers/scoreboard75.yaml`, their build is `firmware/gameday-scoreboard75.yaml`, and they have their own [scoreboard75 installer](https://install.gameday-scoreboard.com/install/scoreboard75/).
 
 :::caution
-On a board you built, use the DIY installer or build `gameday.yaml`. Never flash `gameday-scoreboard75.yaml` or the main installer's firmware to a MoonHub75-pinout board. The panel pins won't match, and that build takes its updates from the controller's feed.
+On a MoonHub75-pinout board, use the [main installer](https://install.gameday-scoreboard.com/) or build `gameday.yaml`. Never flash `gameday-scoreboard75.yaml` or the scoreboard75 installer's firmware to it. The panel pins won't match, and that build takes its updates from the scoreboard75 feed.
 :::

@@ -12,6 +12,9 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          text in "say" for tests to read (the panel has no such key)
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
+  GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
+  POST /gameday/settings a backup as a JSON body: checked whole, then applied through
+                         apply_set; 400 with "error" when refused
 
 /?demo loads bundle-demo.js instead, the demo build's page, and
 GET/POST /gameday/demo answer as demo.cpp does.
@@ -23,8 +26,9 @@ more fail names drop the connection with no answer, the way a panel that has
 gone does: "events" for the event stream (an open one ends within half a
 second), "down" for every route but the test hooks. "wifi" replaces the saved
 network list; null stands for firmware without the list, whose /gameday/wifi
-answers 404. GET /_log lists the /gameday/set, /gameday/action and
-/gameday/wifi requests seen since the last reset.
+answers 404. "settings" is firmware without the backup: /gameday/settings
+answers 404. GET /_log lists the /gameday/set, /gameday/action,
+/gameday/wifi and /gameday/settings requests seen since the last reset.
 
 Started by playwright.config.js. Run by hand with `python mock_device.py 8765`
 and open http://127.0.0.1:8765/.
@@ -77,6 +81,18 @@ MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-commo
 FIXTURE = REPO / "tests/fixtures/set_cases.json"
 COUNTDOWN_NAME_MAX = int(re.search(r"kCountdownNameMax = (\d+);",
                                    (REPO / "components/gameday/countdown.h").read_text(encoding="utf-8"))[1])
+# The settings backup's key types and export order (settings_doc.h).
+SETTINGS_H = (REPO / "components/gameday/settings_doc.h").read_text(encoding="utf-8")
+
+
+def _settings_list(name):
+    return tuple(re.findall(r'"(\w+)"', re.search(name + r"\[\] = \{(.*?)\};", SETTINGS_H, re.S).group(1)))
+
+
+SETTINGS_TYPES = {k: t for t in ("Bool", "Int", "Text", "List") for k in _settings_list("k" + t)}
+SETTINGS_ORDER = _settings_list("kKeys")
+SETTINGS_SCHEMA = int(re.search(r"kSettingsSchema = (\d+);", SETTINGS_H)[1])
+SETTINGS_MAX = int(re.search(r"kSettingsMaxBytes = (\d+);", SETTINGS_H)[1])
 
 
 def team(lg, tid):
@@ -92,11 +108,13 @@ INITIAL = {
     "team": team("nfl", 6),
     "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "today": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
-    "msg": "", "msgurl": "", "msgevery": 2,
+    "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
+    "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
@@ -143,6 +161,7 @@ ENTITIES = [
     {"id": "button/Factory Reset", "domain": "button", "name": "Factory Reset", "state": ""},
 ]
 FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
+ENTITIES_INITIAL = copy.deepcopy(ENTITIES)
 
 STATE = copy.deepcopy(INITIAL)
 FAIL = set()
@@ -154,6 +173,9 @@ WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
 # The saved team's league byte, which outlives a cleared team and counts in
 # Live auto. A fresh panel's is NFL.
 TEAM_LEAGUE = ["nfl"]
+# Live games' own list (the live mask), kept apart from the state's live list,
+# which shows every league instead while no team is picked.
+LIVE_LIST = [[]]
 
 
 def reset_state(overrides):
@@ -164,6 +186,7 @@ def reset_state(overrides):
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
     TEAM_LEAGUE[0] = (STATE.get("team") or {}).get("l", "nfl")
+    LIVE_LIST[0] = [] if STATE.get("live_auto", True) else list(STATE.get("live", []))
 
 
 def atoi(v):
@@ -219,11 +242,31 @@ def live_auto_leagues():
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
+def no_team_default():
+    """set_request.h no_team_default(): My team with no team, or Favorites with none set."""
+    if STATE["team"]:
+        return False
+    return STATE["mode"] == 0 or (STATE["mode"] == 4 and not any(STATE["favs"]))
+
+
 def state_doc():
-    """rebuild_state_() works the auto leagues out each time from the team and favorites."""
-    if STATE.get("live_auto"):
+    """rebuild_state_() works the leagues out each time: every league with no team
+    picked (no_team_leagues()), else the auto leagues from the team and favorites."""
+    if no_team_default():
+        STATE["live"] = list(LEAGUES)
+    elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
+    else:
+        STATE["live"] = list(LIVE_LIST[0])
     return STATE
+
+
+def night_time(v):
+    """night_parse_time() in components/gameday/night.h, as the state document writes it."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        return None
+    return f"{int(m[1]):02d}:{m[2]}"
 
 
 def apply_set(kv):
@@ -262,19 +305,19 @@ def apply_set(kv):
             if ref is None and v not in ("none", ""):
                 continue
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
-        elif k == "today":
-            STATE["today"] = v == "1"
+        elif k in ("today", "jump", "banner", "favtake"):
+            STATE[k] = v == "1"
         elif k == "live":
             keys = [lg for lg in LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
-            STATE["live"] = keys
+            LIVE_LIST[0] = keys
         elif k == "tz":
             i = timezone_index(v)
             if i >= 0:
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "count", "match", "play", "odds", "opp", "bootaddr", "autoupd", "beta"):
+        elif k in ("down", "count", "match", "play", "odds", "leaders", "opp", "best", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
@@ -289,12 +332,170 @@ def apply_set(kv):
                 STATE["cddate"] = day
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
+        elif k == "nick":
+            # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
+            STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)
         elif k == "msgurl":
             if msg_url_ok(v):
                 STATE["msgurl"] = v
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k in ("night", "nightscreen"):
+            STATE[k] = v == "1"
+        elif k in ("nightstart", "nightend"):
+            if night_time(v):
+                STATE[k] = night_time(v)
+        elif k == "nightlevel":
+            STATE["nightlevel"] = min(255, max(1, atoi(v)))
+
+
+def entity(name):
+    return next(e for e in ENTITIES if e["name"] == name)
+
+
+def team_text(t):
+    return f"{t['l']}:{t['id']}" if t and t.get("id") else ""
+
+
+def settings_doc():
+    """settings_from_state(): the backup GET /gameday/settings writes."""
+    s = state_doc()
+    out = {"schema": SETTINGS_SCHEMA, "version": s["version"], "name": s["name"]}
+    for k in SETTINGS_ORDER:
+        if k == "team":
+            out["team"] = team_text(s["team"]) or "none"
+        elif k == "favs":
+            favs = [team_text(t) for t in s["favs"]]
+            while favs and not favs[-1]:
+                favs.pop()
+            out["favs"] = favs
+        elif k == "live":
+            # Live games' own list, not the state's (every league with no team picked).
+            out["live"] = list(LIVE_LIST[0])
+        elif k == "tz":
+            out["tz"] = s["tz_name"]
+        elif k == "tzauto":
+            out["tzauto"] = s["tz_auto"]
+        elif k in s:
+            out[k] = s[k]
+    if s.get("panels"):
+        out["panels"] = s["panels"]
+    out["brightness"] = int(entity("Brightness")["value"])
+    out["scroll"] = int(entity("Scroll Speed")["value"])
+    return out
+
+
+def import_settings(doc):
+    """parse_settings() and apply_settings_(): (code, reply). Nothing changes on a 400."""
+    def fail(why):
+        return 400, {"error": why}
+
+    def is_int(v):
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    def team_ref(v):
+        """settings_team(): 1 known, 0 empty, -1 unknown here, -2 not a team."""
+        if v in ("", "none"):
+            return 0
+        lg, colon, tid = v.partition(":")
+        m = re.match(r"\s*\d+", tid)
+        if not colon or not lg or not m or int(m.group()) == 0:
+            return -2
+        return 1 if parse_team_ref(v) else -1
+
+    if not isinstance(doc, dict) or not is_int(doc.get("schema")) or doc["schema"] < 1:
+        return fail("Not a settings backup.")
+    if doc["schema"] > SETTINGS_SCHEMA:
+        return fail("This backup is from newer firmware. Update the panel, then restore it.")
+    kv, skipped, favs, numbers = [], [], None, {}
+    ranges = {"rotate": ("kRotateMinMinutes", "kRotateMaxMinutes"), "lockon": ("kLockonMinMinutes", "kLockonMaxMinutes"),
+              "release": ("kReleaseMinSeconds", "kReleaseMaxSeconds")}
+    for k in SET_KEYS:
+        if k not in doc or doc[k] is None:
+            continue
+        v, kind = doc[k], SETTINGS_TYPES.get(k)
+        if kind == "Bool":
+            if not isinstance(v, bool):
+                return fail(k + " should be true or false.")
+            if k == "beta" and "beta" not in STATE or k == "autoupd" and "autoupd" not in STATE:
+                skipped.append(k)
+                continue
+            kv.append((k, "1" if v else "0"))
+        elif kind == "Int":
+            if not is_int(v):
+                return fail(k + " should be a whole number.")
+            lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
+                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255)}.get(k, (None, None))
+            if k in ranges:
+                lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
+            # Out of range is left out and listed (newer firmware may take more).
+            if lo is not None and not lo <= v <= hi:
+                skipped.append(f"{k}={v}")
+                continue
+            kv.append((k, str(v)))
+        elif kind == "Text":
+            if not isinstance(v, str):
+                return fail(k + " should be text.")
+            if k == "team" or re.fullmatch(r"fav[1-4]", k):
+                r = team_ref(v)
+                if r == -2:
+                    return fail(k + " should be a team like nfl:6, or none.")
+                if r == -1:
+                    skipped.append(f"{k}={v}")
+                    continue
+                kv.append((k, v if r == 1 else "none"))
+            elif k == "tz" and timezone_index(v) < 0:
+                skipped.append(f"tz={v}")
+            elif (k == "msgurl" and not msg_url_ok(v)) or (k in ("nightstart", "nightend") and not night_time(v)):
+                return fail(k + " isn't a value the panel takes.")
+            else:
+                kv.append((k, v))
+        elif kind == "List":
+            if not isinstance(v, list):
+                return fail(k + " should be a list.")
+            if any(not isinstance(e, str) for e in v):
+                return fail(k + " should be a list of text.")
+            if k == "live":
+                skipped += [f"live={e}" for e in v if e not in LEAGUES]
+                kv.append(("live", ",".join(e for e in v if e in LEAGUES)))
+                continue
+            favs = []
+            for e in v:
+                if len(favs) == FAV_MAX:
+                    if e not in ("", "none"):
+                        skipped.append("favs=" + e)
+                    continue
+                r = team_ref(e)
+                if r == -2:
+                    return fail("favs should list teams like nfl:6.")
+                if r == -1:
+                    skipped.append("favs=" + e)
+                ref = parse_team_ref(e) if r == 1 else None
+                if ref and ref in favs:
+                    return fail(f"favs lists {e} twice.")
+                favs.append(ref)
+        else:
+            skipped.append(k)
+    for name, ent, lo, hi in (("brightness", "Brightness", 1, 255), ("scroll", "Scroll Speed", 1, 10)):
+        if name in doc and doc[name] is not None:
+            if not is_int(doc[name]):
+                return fail(name + " should be a whole number.")
+            if not lo <= doc[name] <= hi:
+                skipped.append(f"{name}={doc[name]}")
+                continue
+            numbers[ent] = doc[name]
+    known = set(SET_KEYS) | {"schema", "version", "name", "brightness", "scroll"}
+    skipped += [k for k in doc if k not in known]
+    restart = any(k == "panels" and int(v) != STATE.get("panels") for k, v in kv)
+    # Applied in kSetKeys order; favs slot by slot, keeping empty slots.
+    apply_set([p for p in kv if SET_KEYS.index(p[0]) < SET_KEYS.index("favs")])
+    if favs is not None:
+        STATE["favs"] = [team(*r) if r else {} for r in favs] + [{}] * (4 - len(favs))
+    apply_set([p for p in kv if SET_KEYS.index(p[0]) > SET_KEYS.index("favs")])
+    for ent, value in numbers.items():
+        entity(ent)["value"] = entity(ent)["state"] = str(value)
+    return 200, {"ok": True, "restart": restart, "skipped": skipped}
 
 
 def countdown_name(v):
@@ -354,6 +555,36 @@ def selftest():
                 print(f"FAIL {case['name']}: {key} is {json.dumps(have)}, expected {json.dumps(want)}")
     reset_state({})
     print(f"{len(fx['cases'])} set cases, {bad} failures")
+
+    # The export of the API fixture's state is the API fixture's backup, as in
+    # tests/test_settings.cpp, and the backup comes back with nothing left out.
+    api = REPO / "tests/fixtures/api"
+    fixture_state = json.loads((api / "state.json").read_text(encoding="utf-8"))
+    want = json.loads((api / "settings.json").read_text(encoding="utf-8"))
+    reset_state(fixture_state)
+    STATE["live"] = fixture_state["live"]
+    LIVE_LIST[0] = []
+    entity("Brightness")["value"], entity("Scroll Speed")["value"] = str(want["brightness"]), str(want["scroll"])
+    have = settings_doc()
+    if have != want or list(have) != list(want):
+        bad += 1
+        print("FAIL the export of fixtures/api/state.json isn't fixtures/api/settings.json:\n  "
+              + json.dumps(have) + "\n  " + json.dumps(want))
+    code, reply = import_settings(want)
+    if code != 200 or reply["skipped"] or settings_doc() != want:
+        bad += 1
+        print(f"FAIL the settings fixture didn't come back whole: {code} {json.dumps(reply)}")
+    for doc in ({"schema": 1, "mode": "4"}, {"schema": 2}, {"schema": 1, "favs": ["nfl:6", "nfl:6"]},
+                {"schema": 1, "brightness": 40, "scroll": "5"}):
+        before = json.dumps(STATE, sort_keys=True)
+        code, _ = import_settings(doc)
+        if code != 400 or json.dumps(STATE, sort_keys=True) != before:
+            bad += 1
+            print(f"FAIL {json.dumps(doc)} wasn't refused whole")
+    reset_state({})
+    for e in ENTITIES:
+        e.update(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"]))
+    print(f"settings backup: {bad} failures in all")
     return bad == 0
 
 
@@ -441,6 +672,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, state_doc())
         if u.path == "/update/Firmware":
             return self._json(200, FIRMWARE)
+        if u.path == "/gameday/settings":
+            if "settings" in FAIL:
+                return self._json(404, {"error": "unknown route"})
+            return self._json(200, settings_doc())
         if u.path == "/gameday/wifi":
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
@@ -487,6 +722,8 @@ class Handler(BaseHTTPRequestHandler):
             DEMO.clear()
             DEMO.update(copy.deepcopy(DEMO_INITIAL))
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
+            for e in ENTITIES:
+                e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":
             q = {k: v[0] for k, v in pairs.items()}
@@ -500,6 +737,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"error": "not a saved network"})
             WIFI["list"] = keep
             return self._json(200, {"ok": True})
+        if u.path == "/gameday/settings":
+            n = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(n)
+            LOG.append({"path": u.path, "body": raw.decode("utf-8", "replace")})
+            if "settings" in FAIL:
+                return self._json(404, {"error": "unknown route"})
+            if n > SETTINGS_MAX:
+                return self._json(400, {"error": "That file is too big to be a settings backup."})
+            try:
+                doc = json.loads(raw)
+            except ValueError:
+                return self._json(400, {"error": "Not a settings backup."})
+            return self._json(*import_settings(doc))
         if u.path == "/gameday/set":
             q = {k: v[0] for k, v in pairs.items()}
             LOG.append({"path": u.path, "q": q})

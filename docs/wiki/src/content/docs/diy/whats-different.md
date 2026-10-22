@@ -11,9 +11,9 @@ The firmware is the same, with every league and setting. The prebuilt firmware f
 
 You supply the board, the panels, the case, the stand and the power supply. Size the supply for your panels (see [Panels and power](/diy/panels/#power)).
 
-## Your own installer
+## The same installer
 
-A board you built installs from the [DIY installer](https://gamedayscoreboard.app/install/diy/), which asks for your layout before you install. The Game Day Scoreboard controller has its own pins and its own installer, so never use that one on a DIY board. See [Install the firmware](/diy/install/).
+A board on the MoonHub75 pinout installs from the same [installer](https://install.gameday-scoreboard.com/) as a Game Day Scoreboard, which asks for your layout before you install. See [Install the firmware](/diy/install/).
 
 ## Layout default
 
@@ -23,9 +23,7 @@ The Game Day Scoreboard ships with one 128x64 panel and starts two panels wide. 
 
 On a Game Day Scoreboard the button is on the controller. On your board it's whatever you wired to GPIO0, usually the BOOT button. It does the same things: a click turns the panel on or off, a 1.5 second hold shows the panel's address and IP address, and a longer hold resets Wi-Fi. See [Buttons and resets](/using/buttons-and-resets/).
 
-:::note[Coming in the next release]
 Nothing resets until you let go of the button. Hold it and the screen counts down from 5 seconds. Let go after 10 seconds to reset Wi-Fi, or after 20 seconds for a factory reset. At 30 seconds it says "Release to cancel".
-:::
 
 ## No factory check
 

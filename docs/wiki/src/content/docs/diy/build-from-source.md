@@ -12,7 +12,7 @@ Build from the YAML when your board has its own pins, when you want to change so
 | Path | What it holds |
 | --- | --- |
 | `firmware/gameday.yaml` | The release build for the MoonHub75 pinout. It names the build and picks the pin map. |
-| `firmware/gameday-2panel.yaml` | `gameday.yaml` starting two panels wide. The DIY installer offers it for a 128x64 display. |
+| `firmware/gameday-2panel.yaml` | `gameday.yaml` starting two panels wide. The installer offers it for a 128x64 display. |
 | `firmware/gameday-scoreboard75.yaml` | The release build for the Game Day Scoreboard controller. Not for DIY boards. |
 | `firmware/controllers/` | One pin map per board: `moonhub75.yaml` and `scoreboard75.yaml`. |
 | `firmware/gameday-common.yaml` | Everything else: version, update feed, Wi-Fi, the panel layout, the pages and settings. Don't build it directly. |
@@ -32,7 +32,7 @@ The components in `components/` are:
 
 ## Install ESPHome
 
-Use the ESPHome version CI builds with. It's `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, 2026.10.0b3 on the `dev` branch. Install it in a Python virtual environment.
+Use the ESPHome version CI builds with. It's `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, 2026.10.0 on the `dev` branch. Install it in a Python virtual environment.
 
 ```sh
 python -m venv esphome-venv
@@ -53,14 +53,12 @@ esphome-venv\Scripts\activate
 Then install the pinned version:
 
 ```sh
-pip install esphome==2026.10.0b3
+pip install esphome==2026.10.0
 ```
 
 The `dev` and `beta` branches may build on an ESPHome beta. `main`, which every release and the update feed come from, builds only on a final ESPHome release.
 
-:::note[Coming in the next release]
 CI checks the rule: a pull request into `main` or a release tag fails when the pin isn't a final release like 2026.10.0.
-:::
 
 ## Get the code
 
@@ -88,7 +86,7 @@ Plug the board in and run:
 esphome run firmware/gameday.yaml
 ```
 
-ESPHome builds the firmware and asks which port to flash. Pick the USB port. Joining Wi-Fi and picking a team then work the same as after the [DIY installer](/diy/install/).
+ESPHome builds the firmware and asks which port to flash. Pick the USB port. Joining Wi-Fi and picking a team then work the same as after the [browser installer](/diy/install/).
 
 :::caution
 A build that keeps the variant `moonhub75` reads the MoonHub75 release feed. When the next release comes out, the device page offers it, and installing it replaces your build. For a board with its own pins, give your copy its own `variant` name. See [Other boards](/diy/boards/#other-boards).

@@ -100,6 +100,10 @@
       <button class="btn" id="guardClear" hidden>Clear</button>
     </div>
 
+    <div class="teambar nightbar" id="nightbar" role="status" hidden>
+      <div class="cur"><div><div class="name" id="nightName"></div><div class="lg" id="nightText"></div></div></div>
+    </div>
+
     <section class="upnext" id="upnext" hidden>
       <div class="uh">Up next</div>
       <div class="ul" id="upnextList"></div>
@@ -116,7 +120,14 @@
     </div>
     <div class="teambar livebar" id="livebar" hidden>
       <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
-      <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+      <div class="livectls">
+        <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button></div>
+        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button></div>
+        <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
+          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+        </select></div>
+      </div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
@@ -141,7 +152,8 @@
           <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl" data-sport="football"><label>Pre-game season leaders<small>Football: before kickoff, each team's passing leader with yards and touchdowns.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -182,12 +194,27 @@
       </div>
       <div class="card">
         <h2>Panel</h2>
+        <div id="nickRow" hidden>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
+          <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
+        </div>
         <div id="panelCtls"></div>
+        <div id="nightCtls" hidden>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div id="nightSet" hidden>
+            <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
+            <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
+            <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
+            <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>Favorites</h2>
         <p class="hint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
         <div class="ctl"><label>Only today's games<small>The playlist skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+        <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
+        <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
         <div id="favCtls"></div>
         <button class="btn" id="favAdd">Add a favorite</button>
       </div>
@@ -221,6 +248,13 @@
         <div class="ctl">
           <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
+        </div>
+        <div id="backup" hidden>
+          <div class="sub">Backup</div>
+          <p class="hint">Save this panel's settings to a file, then load them back after a reset or onto another panel. Wi-Fi networks and the WizMote pairing aren't in the file.</p>
+          <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
+          <input type="file" id="bkFile" accept=".json,application/json" hidden>
+          <p class="hint" id="bkNote" role="status" hidden></p>
         </div>
       </div>
       <div class="card">
@@ -288,6 +322,7 @@
         <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
         <button class="btn" id="close">Close</button>
       </div>
+      <div class="favcount" id="favCount" role="status" hidden></div>
       <div class="tiles" id="tiles" role="tabpanel"></div>
     </div>
   </div>
@@ -341,13 +376,15 @@
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1", countdown: (v) => v === "1",
-    cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    best: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
+    countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
-    msg: String, msgurl: String, msgevery: Number,
+    msg: String, msgurl: String, msgevery: Number, nick: String,
+    night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -612,6 +649,9 @@
     showFavRotate();
     setGD({ collide: collideSelect.value });
   };
+  // Live games' Favorites take over uses the same rule.
+  const liveCollide = $("#liveCollide");
+  liveCollide.onchange = () => setGD({ collide: liveCollide.value });
   favRotate.onchange = () => {
     const v = Math.min(30, Math.max(1, Number(favRotate.value) || 1));
     favRotate.value = v;
@@ -636,10 +676,16 @@
     const auto = liveAuto();
     // With nothing live the device shows the saved team's card, or with no
     // team a rotation of recent finals, and keeps scanning.
-    $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
-      : S.recap ? "No live game right now, showing recent finals"
-        : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after Switch every. ")
+    // Favorites take over: a favorite's game in progress has the panel.
+    const lock = S.favlock && S.favlock.id ? S.favlock : null;
+    $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
+      : S.fallback ? "No live game right now, showing your team until one starts"
+        : S.recap ? "No live game right now, showing recent finals"
+          : S.best ? "Following the best game on" : "Following a random game in progress";
+    $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
+      : S.fallback || S.recap ? ""
+        : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
+          : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
@@ -684,6 +730,8 @@
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
     }
+    $("#liveCollideRow").hidden = !S.favtake;
+    if (document.activeElement !== liveCollide) liveCollide.value = String(S.collide || 0);
     if (favs) {
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);
@@ -751,9 +799,14 @@
     if (!favKeys.length) host.appendChild(el("p", "hint", "No favorites yet."));
     $("#favAdd").hidden = favKeys.length >= favMax();
   };
-  const addFav = (t) => {
+  // The favorites picker stays open: a tap adds a team, or takes out one
+  // already in the list (checked).
+  const toggleFav = (t) => {
     const key = keyOf(t);
-    if (favKeys.includes(key)) return toast(t[3] + " is already a favorite");
+    if (favKeys.includes(key)) {
+      postFavs(favKeys.filter((k) => k !== key));
+      return toast("Removed the " + t[3]);
+    }
     if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
@@ -765,6 +818,7 @@
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
       renderFavs();
+      if (pickFav && $("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
@@ -800,6 +854,58 @@
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+  };
+
+  // ---- night schedule (components/gameday/night.h) ---------------------------
+  // Times come as "23:00". 12-hour for people: "11 PM", "7:30 AM", and with
+  // full set the minutes always show, "7:00 AM".
+  const clock12 = (hhmm, full) => {
+    const [h, m] = String(hhmm || "0:0").split(":").map(Number);
+    const mm = String(m || 0).padStart(2, "0");
+    return ((h % 12) || 12) + (full || m ? ":" + mm : "") + (h < 12 ? " AM" : " PM");
+  };
+  const nightStart = $("#nightStart");
+  const nightEnd = $("#nightEnd");
+  const nightLevel = $("#nightLevel");
+  const nightTime = (input, key, other) => {
+    input.onchange = () => {
+      if (!input.value) { input.value = S[key]; return; }
+      if (input.value === S[key]) return;
+      if (input.value === other.value) {
+        toast("The night has to end at a different time than it starts");
+        input.value = S[key];
+        return;
+      }
+      setGD({ [key]: input.value });
+    };
+  };
+  nightTime(nightStart, "nightstart", nightEnd);
+  nightTime(nightEnd, "nightend", nightStart);
+  nightLevel.oninput = () => ($("#nightLevelVal").textContent = nightLevel.value);
+  nightLevel.onchange = () => setGD({ nightlevel: nightLevel.value });
+  const renderNight = () => {
+    if (!S) return;
+    // Older firmware has no night schedule.
+    $("#nightCtls").hidden = S.night === undefined;
+    $("#nightbar").hidden = !S.night_now;
+    if (S.night === undefined) return;
+    $("#nightSet").hidden = !S.night;
+    if (document.activeElement !== nightStart) nightStart.value = S.nightstart;
+    if (document.activeElement !== nightEnd) nightEnd.value = S.nightend;
+    if (document.activeElement !== nightLevel) {
+      nightLevel.value = S.nightlevel;
+      $("#nightLevelVal").textContent = S.nightlevel;
+    }
+    const hours = "between " + clock12(S.nightstart) + " and " + clock12(S.nightend);
+    $("#nightLevelRow").hidden = !S.nightscreen;
+    $("#nightLevelHint").textContent = "How bright the panel is " + hours + ".";
+    $("#nightScreenHint").textContent = S.nightscreen ? "On at the night brightness below." : "Off: the screen goes dark " + hours + ".";
+    // A dark or dim panel that doesn't look broken
+    const until = clock12(S.nightend, true);
+    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
+    $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
+      : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
+        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
   };
 
   // ---- message: the banner and the message card ---------------------------------
@@ -853,6 +959,36 @@
     toast("Message card off");
   };
 
+  // ---- nickname: the header, the tab title and the box ---------------------------
+  let pingTitle = "";  // the device's own name, from the event stream
+  let nickSeen = null;
+  // ESPHome's own page script names the tab after the device on each of its
+  // pings; while there is a nickname the tab keeps it.
+  let nickTitle = "";
+  new MutationObserver(() => {
+    if (nickTitle && document.title !== nickTitle) document.title = nickTitle;
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
+  const renderNick = () => {
+    const nick = (S && S.nick) || "";
+    $("#devname").textContent = nick || pingTitle || (S && S.name) || "connecting";
+    nickTitle = nick ? nick + " · Game Day Scoreboard" : "";
+    const title = nickTitle || pingTitle || "Game Day Scoreboard";
+    if (document.title !== title) document.title = title;
+    // Older firmware has no nickname.
+    $("#nickRow").hidden = !S || S.nick === undefined;
+    const input = $("#nick");
+    if (nick === nickSeen || document.activeElement === input) return;
+    nickSeen = nick;
+    input.value = nick;
+  };
+  $("#nick").onchange = () => {
+    const nick = $("#nick").value.trim();
+    $("#nick").value = nick;
+    nickSeen = null;
+    setGD({ nick });
+    toast(nick ? "Nickname saved" : "Nickname cleared");
+  };
+
   // ---- panel picker ------------------------------------------------------------
   // Picking a layout restarts the device; the page waits it out.
   const renderPanels = () => {
@@ -870,6 +1006,74 @@
         toBoard();
       };
     });
+  };
+
+  // ---- settings backup ---------------------------------------------------------
+  // GET /gameday/settings is the file; POST takes one back, checked whole on
+  // the panel before anything changes. Firmware without it answers 404 and the
+  // section stays hidden.
+  const BACKUP_MAX = 4096;
+  const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
+  const probeBackup = async (retry) => {
+    try {
+      const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
+      // Only a 404 is firmware without it; a 500 is a panel still starting.
+      if (r.status === 404) $("#backup").hidden = true;
+      else if (r.ok) $("#backup").hidden = false;
+      else if (retry) setTimeout(() => probeBackup(false), 5000);
+      return r.ok ? await r.json() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  $("#bkExport").onclick = async () => {
+    const doc = await probeBackup();
+    if (!doc) { toast("Device did not respond. Try again."); return; }
+    const day = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const a = el("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    backupNote("Saved " + name + ".");
+  };
+  $("#bkImport").onclick = () => { $("#bkFile").value = ""; $("#bkFile").click(); };
+  $("#bkFile").onchange = async () => {
+    const f = $("#bkFile").files[0];
+    if (!f) return;
+    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    const text = await f.text();
+    let doc;
+    try { doc = JSON.parse(text); } catch (_) { doc = null; }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
+      backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const from = typeof doc.name === "string" && S && doc.name !== S.name ? " (saved from " + doc.name + ")" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are.")) return;
+    let r, j;
+    try {
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
+    const left = (j.skipped || []).join(", ");
+    backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    if (j.restart) {
+      waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
+      toBoard();
+      return;
+    }
+    toast("Settings restored");
+    scheduleState(APPLY_MS + 100);
   };
 
   // ---- controls --------------------------------------------------------
@@ -1021,9 +1225,13 @@
       const card = el("div", "game" + (g.state === "in" ? " live" : ""));
       const mkSide = (s) => {
         const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && keyOf(t) === cur ? " on" : ""));
+        const b = el("button", "side" + (t && picked(keyOf(t), cur) ? " on" : ""));
         b.disabled = !t;
-        b.title = t ? "Follow the " + t[3] : "Not in the team list";
+        b.title = t ? (pickFav ? t[3] : "Follow the " + t[3]) : "Not in the team list";
+        if (t) {
+          b.dataset.key = keyOf(t);
+          if (pickFav) b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+        }
         const img = el("img");
         img.loading = "lazy";
         img.src = logoUrl(g.league, s.id, s.abbr);
@@ -1036,7 +1244,7 @@
         b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
         b.onclick = () => {
           if (!t) return;
-          if (pickFav) return choose(t);
+          if (pickFav) return toggleFav(t);
           setGD({ team: keyOf(t) });
           toast("Now following the " + t[3]);
           $("#modal").classList.remove("open");
@@ -1054,15 +1262,30 @@
   };
 
   // ---- team chooser ------------------------------------------------------
-  // The picker sets My team, or with pickFav adds a favorite.
+  // The picker sets My team and closes. With pickFav it edits the favorites
+  // and stays open: favorites show checked, a line counts them, Done closes.
   let pickFav = false;
   const choose = (t) => {
-    if (pickFav) addFav(t);
-    else {
-      setGD({ team: keyOf(t) });
-      toast("Now following the " + t[3]);
-    }
+    if (pickFav) return toggleFav(t);
+    setGD({ team: keyOf(t) });
+    toast("Now following the " + t[3]);
     $("#modal").classList.remove("open");
+  };
+  const picked = (key, cur) => (pickFav ? favKeys.includes(key) : key === cur);
+  // After a favorites change, mark the tiles in place so the list keeps its scroll.
+  const markPicked = () => {
+    document.querySelectorAll("#tiles [data-key]").forEach((b) => {
+      const on = favKeys.includes(b.dataset.key);
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    renderFavCount();
+  };
+  const renderFavCount = () => {
+    const line = $("#favCount");
+    line.hidden = !pickFav;
+    line.textContent = pickFav ? favKeys.length + " of " + favMax() + " favorites" : "";
+    $("#close").textContent = pickFav ? "Done" : "Close";
   };
   let league = "now";
   const renderTiles = () => {
@@ -1078,7 +1301,9 @@
       return;
     }
     for (const t of list) {
-      const tile = el("button", "tile" + (keyOf(t) === cur ? " on" : ""));
+      const tile = el("button", "tile" + (picked(keyOf(t), cur) ? " on" : ""));
+      tile.dataset.key = keyOf(t);
+      if (pickFav) tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
       const img = el("img");
       img.loading = "lazy";
       img.src = logoUrl(t[0], t[1], t[2]);
@@ -1106,6 +1331,7 @@
     } catch (_) {}
     $$tabs(league);
     $("#q").value = "";
+    renderFavCount();
     renderTiles();
     $("#modal").classList.add("open");
     setTimeout(() => $("#q").focus(), 50);
@@ -1138,9 +1364,11 @@
     };
   });
   $("#q").oninput = renderTiles;
-  $("#close").onclick = () => $("#modal").classList.remove("open");
-  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") $("#modal").classList.remove("open"); };
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("#modal").classList.remove("open"); });
+  // Leaving the picker ends favorites mode until the next Add a favorite.
+  const closePicker = () => { pickFav = false; $("#modal").classList.remove("open"); };
+  $("#close").onclick = closePicker;
+  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") closePicker(); };
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("#modal").classList.contains("open")) closePicker(); });
 
   const renderCurrentTeam = () => {
     const t = S ? teamByKey(refKey(S.team)) : null;
@@ -1302,9 +1530,11 @@
     renderCurrentTeam();
     renderMode();
     renderSettings();
+    renderNight();
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderNick();
     renderData();
     renderHealth();
     renderWifi();
@@ -1590,7 +1820,7 @@
   // A release has its own section on the site's changelog, in owner words; a
   // beta has none, so it keeps the manifest's link to its commit.
   const notesLink = (u) =>
-    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://gamedayscoreboard.app/changelog/#v" + u.value : u.release_url;
+    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://install.gameday-scoreboard.com/changelog/#v" + u.value : u.release_url;
   let installing = false;
   let fwFailed = "";     // S.update_failed as the firmware box last drew it
   const renderUpdate = (u) => {
@@ -1724,7 +1954,7 @@
       if (!ev.data) return;
       try {
         const p = JSON.parse(ev.data);
-        if (p.title) $("#devname").textContent = p.title;
+        if (p.title) { pingTitle = p.title; renderNick(); }
         if (p.comment) $("#ver").textContent = p.comment;
       } catch (_) {}
     });
@@ -1739,6 +1969,7 @@
   connect();
   fetchState();
   loadNetworks();
+  probeBackup(true);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();

@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for reporting it. Issues here are public, so leave out Wi-Fi passwords and anything else private.
-        Bought a scoreboard and need help with it? The [support page](https://gamedayscoreboard.app/support/) has the common fixes and the support email.
+        Bought a scoreboard and need help with it? The [support page](https://install.gameday-scoreboard.com/support/) has the common fixes and the support email.
   - type: textarea
     id: what-happened
     attributes:

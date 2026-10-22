@@ -1,14 +1,14 @@
 ---
 title: "Install the firmware"
-description: "Flash the Game Day Scoreboard firmware onto a MoonHub75-pinout board from your browser with the DIY installer, and how updates reach it."
+description: "Flash the Game Day Scoreboard firmware onto a MoonHub75-pinout board from your browser, and how updates reach it."
 sidebar:
   order: 4
 ---
 
-The [DIY installer](https://gamedayscoreboard.app/install/diy/) flashes the prebuilt firmware for the MoonHub75 pinout from your browser. You don't need ESPHome or any other software.
+The [installer](https://install.gameday-scoreboard.com/) flashes the prebuilt firmware for the MoonHub75 pinout from your browser. It's the same installer the Game Day Scoreboard controller uses. You don't need ESPHome or any other software.
 
 :::caution
-Installing erases whatever firmware was on the board. This installer is for boards on the MoonHub75 pinout only. If you have a Game Day Scoreboard controller, use the [main installer](https://gamedayscoreboard.app/) instead.
+Installing erases whatever firmware was on the board. The installer is for boards on the MoonHub75 pinout only. A board with other pins needs its own build; see [Boards](/diy/boards/).
 :::
 
 ## Before you start
@@ -19,11 +19,11 @@ Installing erases whatever firmware was on the board. This installer is for boar
 
 ## Install
 
-1. Open the [DIY installer](https://gamedayscoreboard.app/install/diy/) in Chrome or Edge.
+1. Open the [installer](https://install.gameday-scoreboard.com/) in Chrome or Edge.
 2. Click the picture that matches your panels: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). This sets the layout the scoreboard starts with. The Install button appears once you pick.
 3. Plug the board into the computer over USB.
-4. Click **Install for MoonHub75** and pick the board's port when the browser asks.
-5. When the install finishes, enter your Wi-Fi details in the dialog that follows.
+4. Click **Install Game Day Scoreboard** and pick the board's port when the browser asks.
+5. When the install finishes, click **Next**. The board restarts, and within about half a minute the same window asks for your Wi-Fi.
 
 The two pictures install two builds of the same firmware. The 64x64 choice installs the build from `firmware/gameday.yaml`. The 128x64 choice installs the build from `firmware/gameday-2panel.yaml`, which is the same firmware starting two panels wide. You can change the layout later on the device page either way.
 
@@ -43,14 +43,12 @@ Each build has a variant name, and the variant names the folder the panel reads 
 
 | Variant | Build | Used for | Updates from |
 | --- | --- | --- | --- |
-| `moonhub75` | `firmware/gameday.yaml` | DIY installer, 64x64 choice | `moonhub75` |
-| `moonhub75-2panel` | `firmware/gameday-2panel.yaml` | DIY installer, 128x64 choice | `moonhub75` |
-| `scoreboard75` | `firmware/gameday-scoreboard75.yaml` | The Game Day Scoreboard controller only | `scoreboard75` |
+| `moonhub75` | `firmware/gameday.yaml` | Installer, 64x64 choice | `moonhub75` |
+| `moonhub75-2panel` | `firmware/gameday-2panel.yaml` | Installer, 128x64 choice | `moonhub75` |
+| `scoreboard75` | `firmware/gameday-scoreboard75.yaml` | Test controllers on the scoreboard75 pinout only | `scoreboard75` |
 
 The 128x64 build reads its updates from the `moonhub75` folder too. The panel saves its layout the first time it starts, so that update keeps it two panels wide.
 
 Each release on [GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/releases) also carries the MoonHub75 factory image, `gameday-scoreboard-<version>.factory.bin`, and a zip of each variant's folder.
 
-:::note[Coming in the next release]
-When the release feed can't be read, the panel tries the same files on a second host, updates.gameday-scoreboard.com. A **Follow beta** switch on the device page gets test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.
-:::
+A **Follow beta** switch on the device page gets test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.

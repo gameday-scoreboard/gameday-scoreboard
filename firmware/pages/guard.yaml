@@ -29,14 +29,17 @@ script:
   - id: gd_guard
     mode: restart
     then:
-      # QC lights the panel with Power off too (pages/qc.yaml)
+      # QC lights the panel with Power off and at night too (pages/qc.yaml).
+      # The repaint is for the end of a screen-off night: the driver dropped
+      # every frame while it was at 0 (gd_repaint).
       - if:
           condition:
             lambda: 'return id(power).state || id(qc_active);'
           then:
             - hub75.set_brightness:
                 id: matrix
-                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, !id(qc_active));'
+            - script.execute: gd_repaint
       - lambda: |-
           const uint8_t mark = id(gameday_ctl).guard_mark();
           const int W = lv_disp_get_hor_res(lv_disp_get_default());

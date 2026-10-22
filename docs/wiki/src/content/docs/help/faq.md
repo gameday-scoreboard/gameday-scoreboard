@@ -17,6 +17,10 @@ To keep the board busy, switch to **Favorite teams** with teams from leagues tha
 
 Yes. Between seasons it shows the clock above, with your team's next game when ESPN has one. You can also show the clock page any time: set **Showing** in the Panel card on the device page. See [Brightness and the clock](/using/brightness-and-clock/).
 
+## Can it turn off at night?
+
+Yes. Turn on **Night schedule** in the Panel card on the device page and pick the hours. It can dim the panel to a night brightness or turn the screen off, and a live game for your team or a favorite keeps it bright until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+
 ## Can I use it outside?
 
 The panel is made for indoor use. Keep it, its controller and its power supply out of rain and damp. On a covered patio, put it somewhere out of the wind. It's light, and a gust can knock it over.
@@ -67,10 +71,6 @@ See [Remote](/using/remote/).
 It checks for a new release every six hours, and the device page shows an **Install** button when one is out. If you turn on **Install updates automatically** in the Device card, the panel installs a new release on its own between 3 and 5 AM, never during a live game it's showing. That switch is off unless you turn it on.
 
 Your team and settings stay through an update. See [Updates](/using/updates/).
-
-:::note[Coming in the next release]
-If the update server doesn't answer, the panel checks a second copy of the same files at `updates.gameday-scoreboard.com`.
-:::
 
 ## How fast does support answer?
 

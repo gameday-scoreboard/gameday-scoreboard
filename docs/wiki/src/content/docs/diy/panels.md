@@ -29,7 +29,7 @@ Pixel pitch isn't part of these settings, so a 64x64 panel is driven the same wa
 | One 128x64 panel | One 128x64 panel | Logos at the edges, big scores, records and timeout pips in the middle |
 | Two 64x64 panels side by side | One 128x64 panel (the same choice) | Same as one 128x64 panel |
 
-One firmware drives both layouts. You pick the layout in the [DIY installer](/diy/install/) before you install, and you can change it later on the device page. See [Panel sizes](/using/panel-sizes/).
+One firmware drives both layouts. You pick the layout in the [installer](/diy/install/) before you install, and you can change it later on the device page. See [Panel sizes](/using/panel-sizes/).
 
 ## Chain two 64x64 panels
 
@@ -51,9 +51,7 @@ Power the panels from a 5 V supply rated for them. The panel's listing gives the
 
 A new install starts at about half brightness (128 of 255). Change it with the Brightness setting on the device page.
 
-:::note[Coming in the next release]
 A panel that restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, holds its brightness low so it stays on. A small plug pulses in its top right corner, and every two minutes the bottom line says "Check power supply", until you press Clear on the device page. A panel that runs hot dims itself a step at a time and says "Too warm, dimming" until it cools.
-:::
 
 ## Ribbon cables and wiring checks
 

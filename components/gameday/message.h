@@ -17,6 +17,9 @@ namespace espn {
 
 constexpr size_t kMsgTextMax = 200;  // the saved text, and a banner, in bytes
 constexpr size_t kMsgUrlMax = 160;
+// The panel's nickname ("Living room"), in bytes: about 32 letters, fewer
+// with accents. One line, cleaned like a message.
+constexpr size_t kNickMax = 32;
 constexpr size_t kMsgLineMax = 64;  // one entry from a URL; a longer line is cut
 constexpr uint32_t kMsgChunkLines = 100;  // entries one read keeps
 constexpr uint32_t kMsgPageLines = 4;     // entries on the board at once
@@ -124,6 +127,25 @@ inline std::string message_clean(const std::string &in, size_t max, bool lines) 
     out.resize(cut);
     while (!out.empty() && (out.back() == ' ' || out.back() == '\n'))
       out.pop_back();
+  }
+  return out;
+}
+
+// Text with every byte that isn't part of a valid UTF-8 character left out
+// (stray and cut-off bytes, overlong forms, surrogates), for text the panel
+// hands on to the apps (the nickname) rather than draws: their JSON readers
+// refuse a document with any of those.
+inline std::string utf8_only(const std::string &in) {
+  std::string out;
+  for (size_t i = 0; i < in.size();) {
+    size_t n = detail::utf8_len(in, i);
+    uint32_t cp = detail::utf8_cp(in, i, n);
+    bool ok = n == 1 ? cp < 0x80
+                     : !((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
+                         (cp >= 0xD800 && cp <= 0xDFFF));
+    if (ok)
+      out.append(in, i, n);
+    i += n;
   }
   return out;
 }

@@ -3,7 +3,7 @@
 # free panels in bars only; CI publishes it to the beta channel from the beta
 # branch, never to the flasher or the release manifest.
 substitutions:
-  update_source: "https://gamedayscoreboard.app/firmware/beta/${variant}/manifest.json"
+  update_source: "https://install.gameday-scoreboard.com/firmware/beta/${variant}/manifest.json"
   bar_report_email: "support@gameday-scoreboard.com"
 
 packages:

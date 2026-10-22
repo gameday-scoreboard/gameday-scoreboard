@@ -48,7 +48,7 @@ Issues are public. Leave out Wi-Fi passwords and anything else private.
 Bought a scoreboard and need help with it? The
 [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting
 and the common fixes, and the
-[support page](https://gamedayscoreboard.app/support/) has the support
+[support page](https://install.gameday-scoreboard.com/support/) has the support
 email, which answers faster than an issue.
 
 ## Changing the code
@@ -99,7 +99,7 @@ A fix we want that is only in an ESPHome beta, in order:
 
 ### Setup
 
-- [ESPHome](https://esphome.io/) 2026.10.0b3, the version CI builds with.
+- [ESPHome](https://esphome.io/) 2026.10.0, the version CI builds with.
 - g++ for the host tests.
 - Node and Python 3 for the device page tests.
 

@@ -5,18 +5,15 @@ substitutions:
   # The MAC suffix keeps two panels on one network apart: gameday-2f6a70.local
   name: "gameday"
   friendly_name: "Game Day Scoreboard"
-  version: "2026.10.0"
+  version: "2026.10.1"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
   # Where the panel looks for new releases. A bench build can point it at a
   # test manifest with -s update_source <url>.
-  update_source: "https://gamedayscoreboard.app/firmware/${variant}/manifest.json"
+  update_source: "https://install.gameday-scoreboard.com/firmware/${variant}/manifest.json"
   # Where it looks instead with "Follow beta" on: release firmware built from
   # the beta branch, published there by CI (.github/workflows/build.yml).
-  beta_update_source: "https://gamedayscoreboard.app/firmware/${variant}-beta/manifest.json"
-  # The same files on a second host. When a manifest read fails, the panel
-  # reads the same path here instead (components/gameday/update_mirror.h).
-  update_mirror_host: "https://updates.gameday-scoreboard.com"
+  beta_update_source: "https://install.gameday-scoreboard.com/firmware/${variant}-beta/manifest.json"
 
   display_panel_width: "64"
   display_panel_height: "64"
@@ -151,6 +148,11 @@ esphome:
                 return w != nullptr && w->has_sta() && !id(gd_networks).in_setup() &&
                        (id(gd_networks).count() > 0 || !w->get_sta().get_ssid().empty());
             then:
+              # The Bluetooth advert then tells the app this panel lost its
+              # network rather than being new.
+              - lambda: |-
+                  if (improv_ble::global_improv_component != nullptr)
+                    improv_ble::global_improv_component->set_has_saved_network(true);
               - script.execute: gd_ble_grace
             else:
               - ble.enable:
@@ -196,9 +198,12 @@ packages:
 # accented names (São Paulo, Atlético) draw. Text from outside the panel goes
 # through panel_text() (components/gameday/panel_text.h), which only puts out
 # these characters, so all three sizes carry the same list. A glyph listed
-# here that a font lacks fails the build rather than drawing a box.
+# here that a font lacks fails the build rather than drawing a box. Spleen's
+# 5x8 has its Latin-1 glyphs blank, so 5x8 comes from fonts/spleen-5x8.bdf,
+# where they are drawn.
 font:
   - id: !extend spleen_8
+    file: fonts/spleen-5x8.bdf
     glyphs: &panel_glyphs
       - ' !"#$%&''()*+,-./0123456789:;<=>?@'
       - 'ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`'
@@ -286,8 +291,10 @@ wifi:
         // counter stays parked at zero.
         id(gd_ever_connected) = true;
         id(gd_offline_seconds) = 0;
-        if (improv_ble::global_improv_component != nullptr)
+        if (improv_ble::global_improv_component != nullptr) {
           improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
+          improv_ble::global_improv_component->set_has_saved_network(true);
+        }
         // The network that just worked is the first one tried next boot.
         id(gd_networks).note_connected(wifi::global_wifi_component->get_sta());
         ESP_LOGI("wifi", "Connected. Internal heap free: %u bytes",
@@ -487,9 +494,8 @@ http_request:
   id: http_client
   timeout: 20s
   watchdog_timeout: 30s
-  # ESPN, its logo CDN and GitHub Pages all use Let's Encrypt, and the update
-  # mirror (Cloudflare) Google Trust Services; both are in the ESP-IDF
-  # certificate bundle, so every fetch (including firmware) is verified.
+  # ESPN, its logo CDN and GitHub Pages all use Let's Encrypt, which is in the
+  # ESP-IDF certificate bundle, so every fetch (including firmware) is verified.
   verify_ssl: true
   buffer_size_rx: 2048
 
@@ -584,15 +590,14 @@ gameday:
   http_request_id: http_client
   time_id: ha_time
   panel_layout_id: gd_panels
+  # Kept in the settings backup with the component's own settings.
+  brightness_id: brightness
+  scroll_speed_id: shared_scroll_speed
   # "Follow beta" on the device page switches the update entity between these.
   beta_channel:
     update_id: gd_firmware_update
     stable: ${update_source}
     beta: ${beta_update_source}
-  update_mirror:
-    update_id: gd_firmware_update
-    source: ${update_source}
-    host: ${update_mirror_host}
   on_action:
     - if:
         condition:
@@ -622,6 +627,12 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # Another favorite scored (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "fav_banner";'
+        then:
+          - script.execute: gd_fav_banner
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:

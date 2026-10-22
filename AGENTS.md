@@ -14,14 +14,14 @@ is the short version.
   release builds. Each only names itself and picks a pin map from
   `firmware/controllers/`; everything else is in
   `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
-  gameday.yaml booting two panels wide, offered by the DIY installer.
+  gameday.yaml booting two panels wide, offered by the installer.
   `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.
 - `firmware/gameday-bar.yaml` and `firmware/gameday-scoreboard75-bar.yaml`
   are the bar builds, for the free panels in bars: the same firmware plus
   `firmware/pages/bar.yaml`, which reads the beta channel
-  (`gamedayscoreboard.app/firmware/beta/<variant>/`) and installs from it
+  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`) and installs from it
   on its own at night. CI publishes them only from `beta`. Release
   firmware never installs anything unless the owner turns on "Install
   updates automatically".
@@ -52,7 +52,7 @@ is the short version.
 
 ## Build and test
 
-- ESPHome 2026.10.0b3, the version CI pins (`ESPHOME_VERSION` in
+- ESPHome 2026.10.0, the version CI pins (`ESPHOME_VERSION` in
   `.github/workflows/build.yml`). Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
