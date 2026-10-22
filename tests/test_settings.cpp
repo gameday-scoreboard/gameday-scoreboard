@@ -280,28 +280,6 @@ void test_left_out() {
   refused(R"({"schema":1,"brightness":"900"})", "brightness as text on any build");
 }
 
-// Counts what the reply allocates through the hook the firmware points at PSRAM.
-struct CountingAllocator : ArduinoJson::Allocator {
-  int calls = 0;
-  int live = 0;
-  void *allocate(size_t size) override {
-    calls++;
-    live++;
-    return malloc(size);
-  }
-  void deallocate(void *ptr) override {
-    if (ptr != nullptr)
-      live--;
-    free(ptr);
-  }
-  void *reallocate(void *ptr, size_t size) override {
-    if (ptr == nullptr) {
-      calls++;
-      live++;
-    }
-    return realloc(ptr, size);
-  }
-};
 // Playlists come back by name and team, as lists= text in the order given.
 void test_playlists() {
   SettingsImport in = import(R"({"schema":1,"lists":[{"n":"Pros","t":["nfl:6","mlb:999999"]},{"n":" ; ","t":["nfl:6"]},
@@ -354,6 +332,29 @@ void test_fullest_fits() {
   SCHECK(bytes <= kSettingsMaxBytes, "the fullest backup is %zu bytes, past kSettingsMaxBytes (%zu)", bytes,
          kSettingsMaxBytes);
 }
+
+// Counts what the reply allocates through the hook the firmware points at PSRAM.
+struct CountingAllocator : ArduinoJson::Allocator {
+  int calls = 0;
+  int live = 0;
+  void *allocate(size_t size) override {
+    calls++;
+    live++;
+    return malloc(size);
+  }
+  void deallocate(void *ptr) override {
+    if (ptr != nullptr)
+      live--;
+    free(ptr);
+  }
+  void *reallocate(void *ptr, size_t size) override {
+    if (ptr == nullptr) {
+      calls++;
+      live++;
+    }
+    return realloc(ptr, size);
+  }
+};
 
 void test_reply() {
   SettingsImport in = import(R"({"schema":1,"panels":1,"sparkle":1})");
