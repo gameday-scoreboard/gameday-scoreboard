@@ -861,6 +861,10 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 128
+    # Into flash at once, like every other setting (the number saves its
+    # own value after this runs, so the write waits for the next loop).
+    set_action:
+      - lambda: 'id(gameday_ctl).sync_soon();'
     on_value:
       then:
         - if:
@@ -881,6 +885,8 @@ number:
     restore_value: true
     initial_value: 5
     entity_category: config
+    set_action:
+      - lambda: 'id(gameday_ctl).sync_soon();'
 
 button:
   - platform: template

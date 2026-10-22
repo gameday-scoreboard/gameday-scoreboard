@@ -661,14 +661,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   });
   const rotateInput = $("#rotate");
   rotateInput.onchange = () => {
-    const v = Math.min(30, Math.max(1, Number(rotateInput.value) || 1));
+    const v = Math.min(30, Math.max(1, Math.round(Number(rotateInput.value)) || 1));
     rotateInput.value = v;
     setGD({ rotate: v });
   };
   // Favorite teams mode settings (mode 4).
   const lockonInput = $("#lockon");
   lockonInput.onchange = () => {
-    const v = Math.min(120, Math.max(5, Number(lockonInput.value) || 15));
+    const v = Math.min(120, Math.max(5, Math.round(Number(lockonInput.value)) || 15));
     lockonInput.value = v;
     setGD({ lockon: v });
   };
@@ -689,7 +689,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const liveCollide = $("#liveCollide");
   liveCollide.onchange = () => setGD({ collide: liveCollide.value });
   favRotate.onchange = () => {
-    const v = Math.min(30, Math.max(1, Number(favRotate.value) || 1));
+    const v = Math.min(30, Math.max(1, Math.round(Number(favRotate.value)) || 1));
     favRotate.value = v;
     setGD({ rotate: v });
   };

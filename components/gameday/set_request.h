@@ -218,9 +218,26 @@ struct SetOp {
   uint32_t ymd{0};
 };
 
+// A whole number, the whole value: an optional minus and up to six digits.
+// "abc", "", "5x" and "1.5" are refused rather than read as 0 or 5.
+inline bool parse_whole_int(const std::string &v, int &out) {
+  size_t i = !v.empty() && v[0] == '-' ? 1 : 0;
+  if (v.size() == i || v.size() - i > 6)
+    return false;
+  int n = 0;
+  for (size_t k = i; k < v.size(); k++) {
+    if (v[k] < '0' || v[k] > '9')
+      return false;
+    n = n * 10 + (v[k] - '0');
+  }
+  out = i ? -n : n;
+  return true;
+}
+
 // Decodes one key=value from the request. False when the key is unknown or
 // the value is refused: the firmware logs it and changes nothing. Switches
-// are on for "1" only; numbers read like atoi, so "abc" is 0.
+// are on for "1" only. The mode and the minute and second settings take a
+// whole number only (parse_whole_int); the other numbers read like atoi.
 inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, size_t fav_max) {
   op = SetOp{};
   auto on = [&](SetKind kind) {
@@ -236,22 +253,27 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "mode") {
     op.kind = SetKind::MODE;
-    op.value = atoi(v.c_str());
-    return op.value >= 0 && op.value < kModeCount;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value < kModeCount;
   }
   if (k == "rotate") {
     op.kind = SetKind::ROTATE;
-    op.value = clamp_rotate_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_rotate_minutes(op.value);
     return true;
   }
   if (k == "lockon") {
     op.kind = SetKind::LOCKON;
-    op.value = clamp_lockon_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_lockon_minutes(op.value);
     return true;
   }
   if (k == "release") {
     op.kind = SetKind::RELEASE;
-    op.value = clamp_release_seconds(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_release_seconds(op.value);
     return true;
   }
   if (k == "panels") {

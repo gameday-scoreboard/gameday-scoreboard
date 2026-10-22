@@ -20,12 +20,14 @@
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
     {"name": "mode past Live games is refused", "set": [["mode", "6"]], "expect": {"mode": 0}},
     {"name": "negative mode is refused", "start": {"mode": 4}, "set": [["mode", "-1"]], "expect": {"mode": 4}},
-    {"name": "mode reads like atoi, so text is My team", "start": {"mode": 4}, "set": [["mode", "abc"]], "expect": {"mode": 0}},
+    {"name": "mode that isn't a number is refused", "start": {"mode": 4}, "set": [["mode", "abc"]], "expect": {"mode": 4}},
+    {"name": "mode with trailing text is refused", "start": {"mode": 4}, "set": [["mode", "1x"]], "expect": {"mode": 4}},
 
     {"name": "rotate in range", "set": [["rotate", "15"]], "expect": {"rotate": 15}},
     {"name": "rotate below 1 clamps up", "start": {"rotate": 10}, "set": [["rotate", "0"]], "expect": {"rotate": 1}},
     {"name": "rotate above 30 clamps down", "set": [["rotate", "31"]], "expect": {"rotate": 30}},
-    {"name": "empty rotate is the minimum", "start": {"rotate": 10}, "set": [["rotate", ""]], "expect": {"rotate": 1}},
+    {"name": "empty rotate is refused", "start": {"rotate": 10}, "set": [["rotate", ""]], "expect": {"rotate": 10}},
+    {"name": "rotate that isn't a number is refused", "start": {"rotate": 10}, "set": [["rotate", "abc"]], "expect": {"rotate": 10}},
 
     {"name": "lockon in range", "set": [["lockon", "60"]], "expect": {"lockon": 60}},
     {"name": "lockon below 5 clamps up", "set": [["lockon", "4"]], "expect": {"lockon": 5}},

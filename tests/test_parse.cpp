@@ -27,6 +27,7 @@
 #include "recap.h"
 #include "score_log.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
 #include "wifi_history.h"
@@ -798,6 +799,16 @@ static void test_status_text() {
   CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
   CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
   CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
+  // ESPN writes the yards with no thousands separator today (pinned from the
+  // recorded document below); one written "1,381" reads the same.
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1,381 YDS, 9 TD, 3 INT"),
+           std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "12,345 YDS"), std::string("Prescott 12,345 yds"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "-- YDS"), std::string(""));
+  {
+    std::string raw = slurp("fixtures/event_nfl_pre_dal.json");
+    CHECK(raw.find("\"112/185, 1408 YDS, 10 TD, 3 INT\"") != std::string::npos);
+  }
   // Pre-game on a single panel: both records after the kickoff, the leaders
   // after the odds, and the leaders switch takes only the leaders away
   GameSnapshot pr = live(0, 0, GameState::PRE);
@@ -842,6 +853,19 @@ static void test_status_text() {
 // The words for an empty board. "No upcoming game" (the empty answer) is only
 // right once ESPN said so; until then a failed read is ESPN out of reach.
 static void test_no_game_text() {
+  // Favorites: ESPN said "no game" only once every favorite's read answered.
+  // An off-season first favorite read before ESPN went away says nothing of
+  // the three unread ones, so the board still says Can't reach ESPN.
+  CHECK(!no_game_said(4, 1, true));
+  CHECK_EQ(no_game_text(true, false, no_game_said(4, 1, true), 2), std::string("Can't reach ESPN"));
+  CHECK(no_game_said(4, 4, false));
+  CHECK_EQ(no_game_text(true, false, no_game_said(4, 4, false), 2), std::string(""));
+  CHECK(no_game_said(0, 0, true));  // My team, and the Live fallback's card
+  CHECK(!no_game_said(0, 0, false));
+  // The miss count stops at 255 instead of wrapping to "ESPN answered".
+  CHECK_EQ(miss_count_after(0), (uint8_t) 1);
+  CHECK_EQ(miss_count_after(254), (uint8_t) 255);
+  CHECK_EQ(miss_count_after(255), (uint8_t) 255);
   // No clock yet: nothing can have been read, whatever else is true
   CHECK_EQ(no_game_text(false, false, false, 0), std::string("Getting ready"));
   CHECK_EQ(no_game_text(false, true, true, 5), std::string("Getting ready"));
@@ -4735,6 +4759,36 @@ static void test_message() {
   CHECK(msg_turn(true, true, true, kMsgPageMs, 0, kMsgPageMs) == MsgTurn::NEXT);
 }
 
+// A settings change writes flash at once, except while a /gameday/set request
+// or a settings restore applies its keys: those fold into one write when the
+// outermost batch ends.
+static void test_prefs_sync() {
+  PrefsSyncGate g;
+  CHECK(g.request());  // a lone change writes now
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(g.batching());
+  CHECK(!g.request());  // inside a request: owed, not written yet
+  CHECK(!g.request());
+  CHECK(g.end());  // one write for the whole request
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(!g.end());  // a request that changed nothing writes nothing
+  CHECK(g.request());  // and the gate is open again
+  // A restore runs the set keys inside its own batch: the inner end owes
+  // nothing yet, the outer one writes once.
+  g.begin();
+  g.begin();
+  CHECK(!g.request());
+  CHECK(!g.end());
+  CHECK(g.batching());
+  CHECK(!g.request());
+  CHECK(g.end());
+  CHECK(!g.batching());
+  CHECK(!g.end());  // an extra end is harmless
+  CHECK(g.request());
+}
+
 static void test_panel_text() {
   using esphome::gameday::panel_text;
   // An iPhone hotspot name (backlog #144)
@@ -5707,6 +5761,7 @@ int main() {
   test_offseason();
   test_countdown();
   test_panel_text();
+  test_prefs_sync();
   test_message();
   test_wifi_history();
   test_ha_events();

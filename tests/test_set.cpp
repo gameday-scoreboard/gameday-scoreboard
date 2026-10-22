@@ -394,7 +394,11 @@ void test_parse_set() {
 
   SCHECK(parse_set("rotate", "-5", op, kFavMax) && op.value == kRotateMinMinutes, "rotate -5");
   SCHECK(parse_set("rotate", "999", op, kFavMax) && op.value == kRotateMaxMinutes, "rotate 999");
-  SCHECK(parse_set("lockon", "", op, kFavMax) && op.value == kLockonMinMinutes, "lockon empty");
+  SCHECK(!parse_set("lockon", "", op, kFavMax), "lockon empty is refused");
+  SCHECK(!parse_set("release", "60s", op, kFavMax), "release with trailing text is refused");
+  SCHECK(!parse_set("mode", "abc", op, kFavMax), "mode text is refused, not My team");
+  SCHECK(!parse_set("mode", "1.5", op, kFavMax), "mode 1.5 is refused");
+  SCHECK(!parse_set("rotate", "9999999", op, kFavMax), "rotate past six digits is refused");
   SCHECK(parse_set("release", "100000", op, kFavMax) && op.value == kReleaseMaxSeconds, "release 100000");
   SCHECK(parse_set("mode", "0", op, kFavMax) && op.value == 0, "mode 0");
   SCHECK(parse_set("mode", "5", op, kFavMax) && op.value == 5, "mode 5");

@@ -315,6 +315,11 @@ test("mode pills post the mode and swap the settings bar", async ({ page, reques
   await page.locator("#rotate").press("Enter");
   await expectSet(request, { rotate: "30" }); // the page clamps to 1..30
   await expect(page.locator("#rotate")).toHaveValue("30");
+  // A decimal goes as a whole number: the panel refuses anything else.
+  await page.locator("#rotate").fill("7.6");
+  await page.locator("#rotate").press("Enter");
+  await expectSet(request, { rotate: "8" });
+  await expect(page.locator("#rotate")).toHaveValue("8");
 
   await page.locator('#modes button[data-mode="0"]').click();
   await expectSet(request, { mode: "0" });
