@@ -5373,6 +5373,35 @@ static void test_fav_action() {
   CHECK_EQ(fav_score_banner(q, q2), std::string(""));
 }
 
+// The boot preview's logo URL (team_logo_url) is the one ESPN's own game
+// document names, for both sides, so the logo cache downloads each logo once.
+// The single-event documents carry the scoreboard's event object as is.
+static void test_logo_url_matches_game() {
+  struct Case {
+    League league;
+    Sport sport;
+    const char *file;
+    uint32_t team;
+  };
+  const Case cases[] = {
+      {League::MLB, Sport::BASEBALL, "fixtures/event_mlb_final.json", kWhiteSox},
+      {League::MLB, Sport::BASEBALL, "fixtures/event_mlb_pre.json", kBrewers},
+      {League::NBA, Sport::BASKETBALL, "fixtures/event_nba_final.json", kPacers},
+      {League::WNBA, Sport::BASKETBALL, "fixtures/event_wnba_final.json", kDream},
+      {League::MCBB, Sport::BASKETBALL, "fixtures/event_mcbb_final.json", kUConn},
+      {League::EPL, Sport::SOCCER, "fixtures/event_epl_final.json", kArsenal},
+      {League::MLS, Sport::SOCCER, "fixtures/event_mls_final.json", kMiami},
+  };
+  for (const auto &c : cases) {
+    GameSnapshot s;
+    std::string json = slurp(c.file);
+    CHECK(parse_event_str(json, c.sport, c.team, s, root_id(json)));
+    CHECK(!s.team_logo.empty() && !s.opp_logo.empty());
+    CHECK_EQ(team_logo_url(c.league, s.team_id, s.team_abbr.c_str()), s.team_logo);
+    CHECK_EQ(team_logo_url(c.league, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
+  }
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -5434,6 +5463,7 @@ int main() {
   test_nba_splash();
   test_mcbb_urls();
   test_mcbb();
+  test_logo_url_matches_game();
   checks++;
   failures += run_football_golden();
   test_logo_lru();
