@@ -381,9 +381,10 @@ std::string leader_line(const std::string &short_name, const std::string &displa
       break;
     start = comma + 2;
   }
-  if (name.empty() || with_commas(yards).empty())
+  std::string yds = with_commas(yards);
+  if (name.empty() || yds.empty())
     return "";
-  std::string out = name + " " + with_commas(yards) + " yds";
+  std::string out = name + " " + yds + " yds";
   if (!tds.empty())
     out += " " + tds + " TD";
   return out;

@@ -201,7 +201,7 @@ def atoi(v):
 
 def whole_int(v):
     # set_request.h parse_whole_int: an optional minus and up to six digits, nothing else
-    return re.fullmatch(r"-?\d{1,6}", v) is not None
+    return re.fullmatch(r"-?[0-9]{1,6}", v) is not None
 
 
 def clamp(v, lo, hi):
