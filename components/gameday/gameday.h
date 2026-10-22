@@ -39,6 +39,7 @@
 #include "recap.h"
 #include "score_log.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
@@ -311,6 +312,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool auto_update() const { return this->prefs6_.auto_update != 0; }
 #endif
   void set_auto_update(bool on);
+  // Brightness and Scroll Speed (template numbers that save their own value
+  // after their set_action runs) write flash on the next loop.
+  void sync_soon() {
+    this->defer("prefs_sync", [this]() { this->sync_prefs_(); });
+  }
   // Heat and power protection (guard.h). guard_brightness() is what the
   // display gets for the owner's Brightness, after the night schedule
   // (night.h) unless night is false (the QC screen); it runs from on_boot
@@ -568,6 +574,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
   void save_prefs_();
+  // Writes every saved setting to flash now, unless a batch (apply_ops_, a
+  // settings restore) is still applying its keys (prefs_sync.h). Call after
+  // an owner's change.
+  void sync_prefs_();
+  // Ends a batch, writing flash once if anything in it was saved.
+  void end_sync_batch_();
+  ::espn::PrefsSyncGate sync_gate_;
   void publish_selects_();
   void publish_team_select_(const std::string &option);
   void apply_timezone_();

@@ -9,6 +9,10 @@ Every panel serves its own web page. Open it in a browser on any phone or comput
 
 The page is plain HTML built into the firmware, so there is nothing to install and no account. It works with no internet connection except for two things your browser reads from ESPN itself: the team logos and the **On now** list. The Game Day app shows the same settings, so a change in one shows up in the other.
 
+:::note[Coming in the next release]
+A change is saved on the panel the moment you make it, from the page, the app, Home Assistant or the remote, so you can unplug the panel right after and it comes back with the change.
+:::
+
 ## The live board
 
 The top of the page mirrors the panel: both logos, the score, the game clock, down and distance or the count and outs, timeout pips, the ticker line and the last play. A label above it says **UPCOMING**, **LIVE**, **FINAL** or **NO GAME**, and bowl and playoff games show their name, like "Rose Bowl", under the score. When the panel splashes a score, the page shows the same words for a few seconds.
