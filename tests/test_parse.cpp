@@ -1145,6 +1145,32 @@ static void test_favorites() {
   // a pin on an empty slot is ignored
   c = pick_favorite(two, T + 5000, r, 0, T, 3);
   CHECK_EQ(c.index, 0);
+
+  // a playlist: only its own teams cycle while idle, and the rules relax
+  // inside it, never out to the other favorites
+  std::vector<FavGame> list = idle;
+  list[0].in_list = false;
+  list[3].in_list = false;
+  c = pick_favorite(list, T, r, -1, 0, -1);
+  CHECK_EQ(c.index, 2);
+  c = pick_favorite(list, T + 10, r, 2, T, -1);
+  CHECK_EQ(c.index, 2);  // the only one in the playlist comes round again
+  r.today_only = true;
+  r.day_start = T - 3600;
+  r.day_end = T + 3600;
+  c = pick_favorite(list, T, r, -1, 0, -1);
+  CHECK_EQ(c.index, 2);  // today only would leave nothing, so it relaxes
+  r.today_only = false;
+  std::vector<FavGame> out = {fav(GameState::PRE, T + 86400), FavGame{}};
+  out[0].in_list = false;
+  c = pick_favorite(out, T, r, -1, 0, -1);
+  CHECK_EQ(c.index, -1);  // no card in the playlist: none from outside it
+  // a favorite outside the playlist still locks on near its kickoff
+  std::vector<FavGame> takes = {fav(GameState::PRE, T + 86400), fav(GameState::IN, T - 600)};
+  takes[1].in_list = false;
+  c = pick_favorite(takes, T, r, 0, T, -1);
+  CHECK_EQ(c.index, 1);
+  CHECK(c.locked);
 }
 
 // A schedule parsed from the team endpoint does not know its own league, so
@@ -1155,6 +1181,10 @@ static void test_followed_favorite() {
   const int64_t T = 1000000;
   CHECK_EQ(followed_favorite({}), -1);
   CHECK_EQ(followed_favorite({FavGame{}, FavGame{}}), -1);
+  // Only the playlist being played: the sooner kickoff outside it doesn't count
+  std::vector<FavGame> list = {fav(GameState::PRE, T + 86400), fav(GameState::PRE, T + 3 * 86400)};
+  list[0].in_list = false;
+  CHECK_EQ(followed_favorite(list), 1);
   // The next kickoff, whatever its slot
   CHECK_EQ(followed_favorite({fav(GameState::PRE, T + 3 * 86400), FavGame{}, fav(GameState::PRE, T + 86400),
                               fav(GameState::PRE, T + 2 * 86400)}),
@@ -5343,6 +5373,35 @@ static void test_fav_action() {
   CHECK_EQ(fav_score_banner(q, q2), std::string(""));
 }
 
+// The boot preview's logo URL (team_logo_url) is the one ESPN's own game
+// document names, for both sides, so the logo cache downloads each logo once.
+// The single-event documents carry the scoreboard's event object as is.
+static void test_logo_url_matches_game() {
+  struct Case {
+    League league;
+    Sport sport;
+    const char *file;
+    uint32_t team;
+  };
+  const Case cases[] = {
+      {League::MLB, Sport::BASEBALL, "fixtures/event_mlb_final.json", kWhiteSox},
+      {League::MLB, Sport::BASEBALL, "fixtures/event_mlb_pre.json", kBrewers},
+      {League::NBA, Sport::BASKETBALL, "fixtures/event_nba_final.json", kPacers},
+      {League::WNBA, Sport::BASKETBALL, "fixtures/event_wnba_final.json", kDream},
+      {League::MCBB, Sport::BASKETBALL, "fixtures/event_mcbb_final.json", kUConn},
+      {League::EPL, Sport::SOCCER, "fixtures/event_epl_final.json", kArsenal},
+      {League::MLS, Sport::SOCCER, "fixtures/event_mls_final.json", kMiami},
+  };
+  for (const auto &c : cases) {
+    GameSnapshot s;
+    std::string json = slurp(c.file);
+    CHECK(parse_event_str(json, c.sport, c.team, s, root_id(json)));
+    CHECK(!s.team_logo.empty() && !s.opp_logo.empty());
+    CHECK_EQ(team_logo_url(c.league, s.team_id, s.team_abbr.c_str()), s.team_logo);
+    CHECK_EQ(team_logo_url(c.league, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
+  }
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -5404,6 +5463,7 @@ int main() {
   test_nba_splash();
   test_mcbb_urls();
   test_mcbb();
+  test_logo_url_matches_game();
   checks++;
   failures += run_football_golden();
   test_logo_lru();

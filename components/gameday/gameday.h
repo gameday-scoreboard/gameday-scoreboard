@@ -34,6 +34,7 @@
 #include "line_score.h"
 #include "message.h"
 #include "night.h"
+#include "playlists.h"
 #include "offseason.h"
 #include "recap.h"
 #include "score_log.h"
@@ -118,7 +119,7 @@ struct UpdateFields {
   std::string next_line;
 };
 
-enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE };
+enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, PLAYLIST };
 
 // PSRAM text (logo_cache.h's allocator): the message card's list.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
@@ -153,6 +154,8 @@ class GamedaySelect : public select::Select, public Component {
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //                                    beta=0/1 (follow the beta channel; release builds only)
+//                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
+//                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
@@ -189,6 +192,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_team_select(select::Select *s) { this->team_select_ = s; }
   void set_timezone_select(select::Select *s) { this->timezone_select_ = s; }
   void set_mode_select(select::Select *s) { this->mode_select_ = s; }
+  void set_playlist_select(select::Select *s) { this->playlist_select_ = s; }
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
   }
@@ -205,6 +209,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string hostname() const;  // the device name, with its MAC suffix
   // Favorites: the first four slots are the remote's numbered buttons.
   void press_favorite(uint8_t slot);
+  // Playlists (playlists.h): the Home Assistant select's option, a name or
+  // "All favorites".
+  void select_playlist(const std::string &option);
   void set_rotate_minutes(int minutes);
   int rotate_minutes() const { return this->prefs2_.rotate_minutes; }
   // Favorite Teams mode timing (see favorites.h for the rules).
@@ -369,6 +376,19 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_favorites_(const std::vector<std::pair<uint8_t, uint32_t>> &list);
   // live_before: live_leagues_() from before the change.
   void favorites_changed_(bool first_pick, const std::vector<League> &live_before);
+  // The favorites in list order, empty slots included, for playlists.h.
+  std::vector<::espn::TeamRef> fav_refs_all_() const;
+  // Moves each playlist's teams to where the favorites list put them (before:
+  // fav_refs_all_() from before the change). No save.
+  void remap_lists_(const std::vector<::espn::TeamRef> &before);
+  // keep: the playlist playing after the change (list= sent with lists=), or
+  // -1 to keep the one playing by its name.
+  void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = -1);
+  // n: 1 to the playlist count, 0 = every favorite.
+  void set_active_list_(uint8_t n, bool announce);
+  std::string list_name_(uint8_t n) const;  // n = 1..count
+  bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist
+  void publish_playlist_select_();
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
   void put_fav_(uint8_t i, uint8_t league, uint32_t id);  // no save
@@ -535,6 +555,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static constexpr uint8_t TICK8_NOLEADERS = 4;
   static constexpr uint8_t LIVE8_RANDOM = 1;  // "Pick the best game" off: a random game, as before
   void set_ticker8_(uint8_t f, bool on);
+  // Playlists (playlists.h): a name and a mask over the favorites each. Its
+  // size is fixed for the same reason as Prefs7's.
+  struct Prefs9 {
+    uint8_t active;  // the playlist Favorite teams plays, 1..count; 0 = every favorite
+    uint8_t count;
+    uint16_t mask[::espn::kListMax];                       // bit i = favorite i
+    char name[::espn::kListMax][::espn::kListNameMax];  // no terminator when full
+    uint8_t spare[2];
+  } __attribute__((packed));
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
@@ -747,6 +776,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject pref2_;
   Prefs2 prefs2_{};
   select::Select *mode_select_{nullptr};
+  select::Select *playlist_select_{nullptr};
   ESPPreferenceObject pref3_;
   Prefs3 prefs3_{};
   ESPPreferenceObject pref4_;
@@ -811,6 +841,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs7 prefs7_{};
   ESPPreferenceObject pref8_;
   Prefs8 prefs8_{};
+  ESPPreferenceObject pref9_;
+  Prefs9 prefs9_{};
+  // The select's options point into these, so they live as long as it does.
+  std::vector<std::string> playlist_options_;
   // The team endpoint's answer for the saved team (startup.h), so a boot can
   // skip that read and go straight to the scoreboard.
   ESPPreferenceObject team_cache_pref_;
