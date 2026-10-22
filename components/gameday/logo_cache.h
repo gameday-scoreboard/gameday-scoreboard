@@ -47,7 +47,8 @@ class LogoCache {
   // The two URLs about to be shown. They and the two before them are never
   // dropped, so nothing LVGL may still point at is freed.
   void pin(const std::string &team, const std::string &opponent);
-  // Decodes finished downloads and retries failed logos that are on screen.
+  // Decodes finished downloads, retries failed logos that are on screen and
+  // starts the logo task again if it could not start.
   // True when at least one logo became ready.
   bool loop();
   // Logo bytes downloaded since boot, any task.
@@ -57,6 +58,15 @@ class LogoCache {
   using Bytes = std::vector<uint8_t, PsramAllocator<uint8_t>>;
   using Url = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
 
+  // ESPHome's RuntimeImage (2026.10) keeps its decoder after a decode so the
+  // next one can reuse it. A cached logo is decoded once, and a PNG decoder
+  // holds about 44 KB of PSRAM (pngle's inflate dictionary), so it goes with
+  // the decode.
+  struct Logo : runtime_image::RuntimeImage {
+    using RuntimeImage::RuntimeImage;
+    void drop_decoder() { this->decoder_.reset(); }
+  };
+
   enum class State : uint8_t { QUEUED, LOADING, DOWNLOADED, READY, FAILED };
   struct Entry {
     static void *operator new(size_t size) { return psram_alloc(size); }
@@ -64,7 +74,7 @@ class LogoCache {
 
     Url url;
     Bytes body;  // the PNG, from the task to the main loop
-    std::optional<runtime_image::RuntimeImage> image;
+    std::optional<Logo> image;
     State state{State::QUEUED};
     uint8_t fails{0};  // failures in a row, for the wait
     uint32_t used_ms{0};
@@ -75,11 +85,11 @@ class LogoCache {
   static void task_(void *arg);
   void run_();
   bool download_(const std::string &url, Bytes &body, bool &throttled, uint32_t &retry_after_ms);
-  bool decode_(std::optional<runtime_image::RuntimeImage> &image, const Bytes &body);
+  bool decode_(std::optional<Logo> &image, const Bytes &body);
   void make_room_();
   void start_task_();
   bool pinned_url_(std::string_view url) const;
-  void retry_pinned_(uint32_t now);
+  void retry_(uint32_t now);
 
   http_request::HttpRequestComponent *http_{nullptr};
   // Guards entries_ and every Entry's state and body.
@@ -88,6 +98,7 @@ class LogoCache {
   std::string pinned_[4];  // current pair, then the pair before
   uint32_t retry_check_ms_{0};
   bool task_running_{false};
+  uint16_t start_fails_{0};  // failed task starts in a row
   std::atomic<bool> downloaded_{false};
   std::atomic<uint32_t> bytes_downloaded_{0};
 };
