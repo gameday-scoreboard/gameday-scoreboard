@@ -30,7 +30,7 @@ The two logos sit side by side at the top, with the abbreviations and scores sta
 A single panel has no room for the records, the timeout pips, the red card marks or the situation row, so down and distance, the count and the soccer goals are in the ticker only, when their switches are on. See [The ticker](/using/ticker/).
 
 :::note[Coming in the next release]
-Before a game, a single panel's ticker shows both teams' records after the kickoff time, since the board has no room for them. A 128x64 board keeps them under the logos and leaves them out of the ticker.
+Before a game, a single panel's ticker shows both teams' records after the kickoff time (after the playoff series in baseball, basketball and hockey when there is one), since the board has no room for them. A 128x64 board keeps them under the logos and leaves them out of the ticker.
 :::
 
 The off-season clock shows the date under the time, and the next game goes in the ticker. During setup, the QR code and the words take turns on the screen.
