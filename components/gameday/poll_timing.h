@@ -78,6 +78,11 @@ struct Backoff {
   }
 };
 
+// The count of failed reads in a row after one more. It stops at 255 instead
+// of wrapping to 0, which would read as "ESPN answered" after about 42 hours
+// of outage.
+inline uint8_t miss_count_after(uint8_t misses) { return misses < 255 ? (uint8_t) (misses + 1) : misses; }
+
 // Whether a soccer cup job (one cup's team read, then the game poll when the
 // pick moved) must back off. A poll is the job's last read, so its result
 // decides. Without one, a failed or refused cup read backs off.

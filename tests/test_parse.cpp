@@ -851,6 +851,19 @@ static void test_status_text() {
 // The words for an empty board. "No upcoming game" (the empty answer) is only
 // right once ESPN said so; until then a failed read is ESPN out of reach.
 static void test_no_game_text() {
+  // Favorites: ESPN said "no game" only once every favorite's read answered.
+  // An off-season first favorite read before ESPN went away says nothing of
+  // the three unread ones, so the board still says Can't reach ESPN.
+  CHECK(!no_game_said(4, 1, true));
+  CHECK_EQ(no_game_text(true, false, no_game_said(4, 1, true), 2), std::string("Can't reach ESPN"));
+  CHECK(no_game_said(4, 4, false));
+  CHECK_EQ(no_game_text(true, false, no_game_said(4, 4, false), 2), std::string(""));
+  CHECK(no_game_said(0, 0, true));  // My team, and the Live fallback's card
+  CHECK(!no_game_said(0, 0, false));
+  // The miss count stops at 255 instead of wrapping to "ESPN answered".
+  CHECK_EQ(miss_count_after(0), (uint8_t) 1);
+  CHECK_EQ(miss_count_after(254), (uint8_t) 255);
+  CHECK_EQ(miss_count_after(255), (uint8_t) 255);
   // No clock yet: nothing can have been read, whatever else is true
   CHECK_EQ(no_game_text(false, false, false, 0), std::string("Getting ready"));
   CHECK_EQ(no_game_text(false, true, true, 5), std::string("Getting ready"));
