@@ -166,6 +166,24 @@ at once (the bar build's `bar` next to `beta`, favorites rows next to the
 team's upcoming games, a reason for an empty board next to a live game).
 `wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
 /gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
-(`demo` and `demo_stop` only in demo builds). `test_api.cpp` fails when the
-firmware and these files disagree, and the companion app's tests read them,
-so a firmware change to the API updates them in the same PR.
+(`demo` and `demo_stop` only in demo builds). `settings.json` is `GET
+/gameday/settings`, the backup, and `crash.json` is `GET /gameday/crash`, the
+crash report `scripts/crash_report.py` and the help desk read.
+
+The key lists say which keys exist; two more files say what they hold.
+`types.json` gives the JSON type of every key in `state.json`, `wifi.json`,
+`settings.json` and `crash.json` (`bool`, `int`, `number`, `string`, `object`,
+`array`, or a list like `["int", "null"]`), with `favs[]` for an array's
+elements. `set_forms.json` gives every `POST /gameday/set` parameter's form,
+like `HH:MM` or `league:id`, with values the firmware takes (`ok`) and
+refuses (`bad`). `test_api.cpp` fails when a fixture's value doesn't have
+its type, when the firmware's health and wifi objects don't, and when
+`parse_set` disagrees with an `ok` or `bad` value. `python3
+scripts/api_types.py check <panel>` compares a live panel with `types.json`,
+and `python3 scripts/api_types.py seed` rebuilds it from the fixtures.
+
+`test_api.cpp` fails when the firmware and these files disagree, and the
+companion app's tests read them, so a firmware change to the API updates
+them in the same PR. `GET /gameday/heap` (a bench reading) and
+`/gameday/demo` (demo builds only) are not part of the API the apps use and
+have no fixture.
