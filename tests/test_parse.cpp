@@ -26,6 +26,7 @@
 #include "recap.h"
 #include "score_log.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
 #include "wifi_history.h"
@@ -4488,6 +4489,36 @@ static void test_message() {
   CHECK(msg_turn(true, true, true, kMsgPageMs, 0, kMsgPageMs) == MsgTurn::NEXT);
 }
 
+// A settings change writes flash at once, except while a /gameday/set request
+// or a settings restore applies its keys: those fold into one write when the
+// outermost batch ends.
+static void test_prefs_sync() {
+  PrefsSyncGate g;
+  CHECK(g.request());  // a lone change writes now
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(g.batching());
+  CHECK(!g.request());  // inside a request: owed, not written yet
+  CHECK(!g.request());
+  CHECK(g.end());  // one write for the whole request
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(!g.end());  // a request that changed nothing writes nothing
+  CHECK(g.request());  // and the gate is open again
+  // A restore runs the set keys inside its own batch: the inner end owes
+  // nothing yet, the outer one writes once.
+  g.begin();
+  g.begin();
+  CHECK(!g.request());
+  CHECK(!g.end());
+  CHECK(g.batching());
+  CHECK(!g.request());
+  CHECK(g.end());
+  CHECK(!g.batching());
+  CHECK(!g.end());  // an extra end is harmless
+  CHECK(g.request());
+}
+
 static void test_panel_text() {
   using esphome::gameday::panel_text;
   // An iPhone hotspot name (backlog #144)
@@ -5427,6 +5458,7 @@ int main() {
   test_night();
   test_offseason();
   test_panel_text();
+  test_prefs_sync();
   test_message();
   test_wifi_history();
   test_ha_events();
