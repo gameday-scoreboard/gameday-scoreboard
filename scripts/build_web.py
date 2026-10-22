@@ -21,10 +21,10 @@ DEMO_BUNDLE = ROOT / "firmware" / "web" / "bundle-demo.js"
 TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
 LEAGUES_H = ROOT / "components" / "gameday" / "leagues.h"
 # One kLeagues row: enum, key, path, prefix, logo dir, then the sport and the
-# per_event, season_list and logo_by_id flags.
+# season_list and logo_by_id flags.
 LEAGUE_RE = re.compile(
     r'\{League::(\w+),\s*"(\w+)",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)",\s*Sport::\w+,'
-    r"\s*(?:true|false),\s*(?:true|false),\s*(true|false),"
+    r"\s*(?:true|false),\s*(true|false),"
 )
 # One row of app.js's LEAGUES table, the fields it copies from leagues.h.
 JS_LEAGUE_RE = re.compile(r'^\s*(\w+): \{ prefix: "([^"]*)",.*?path: "([^"]*)", logo: "([^"]*)", byId: (true|false)', re.M)

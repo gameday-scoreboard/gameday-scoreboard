@@ -78,6 +78,18 @@ struct Backoff {
   }
 };
 
+// After a My team game poll failed: read the team endpoint again now instead
+// of backing off. Yes when the game came from the boot cache and no poll has
+// confirmed it, or when ESPN answered but didn't serve the game (gone: a 404,
+// another game's document, one the parser rejects), once per game (again:
+// the team was already read again for this one and named it anyway). Never
+// on a refusal (403 or 429), which every read waits out.
+inline bool reread_team_after_poll(bool cache_unconfirmed, bool gone, bool throttled, bool again) {
+  if (throttled)
+    return false;
+  return cache_unconfirmed || (gone && !again);
+}
+
 // Whether a soccer cup job (one cup's team read, then the game poll when the
 // pick moved) must back off. A poll is the job's last read, so its result
 // decides. Without one, a failed or refused cup read backs off.

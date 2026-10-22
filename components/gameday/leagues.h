@@ -21,30 +21,29 @@ struct LeagueInfo {
   const char *prefix;    // Home Assistant team options and logs: "NFL"
   const char *logo_dir;  // a.espncdn.com/i/teamlogos/<dir>/500/...
   Sport sport;
-  bool per_event;      // poll scoreboard/<event id>, not the day's whole slate
   bool season_list;    // the team schedule is small enough for the Up next list
   bool logo_by_id;     // logo files are named by team id, not abbreviation
   uint8_t linger_min;  // a final stays on the board this long before the next game
 };
 
 constexpr LeagueInfo kLeagues[] = {
-    {League::NFL, "nfl", "football/nfl", "NFL", "nfl", Sport::FOOTBALL, true, true, false, 30},
-    {League::NCAA, "ncaa", "football/college-football", "NCAAF", "ncaa", Sport::FOOTBALL, true, true, true, 30},
+    {League::NFL, "nfl", "football/nfl", "NFL", "nfl", Sport::FOOTBALL, true, false, 30},
+    {League::NCAA, "ncaa", "football/college-football", "NCAAF", "ncaa", Sport::FOOTBALL, true, true, 30},
     // A regular-season team schedule is ~2.7 MB, so no Up next list. Game 2
     // of a doubleheader can start half an hour after game 1: short linger.
-    {League::MLB, "mlb", "baseball/mlb", "MLB", "mlb", Sport::BASEBALL, true, false, false, 10},
+    {League::MLB, "mlb", "baseball/mlb", "MLB", "mlb", Sport::BASEBALL, false, false, 10},
     // Soccer logos are named by team id. Up next is the league's own fixture
     // list (~100-280 KB); cup games come from the kCups reads below.
-    {League::MLS, "mls", "soccer/usa.1", "MLS", "soccer", Sport::SOCCER, true, true, true, 30},
-    {League::EPL, "epl", "soccer/eng.1", "EPL", "soccer", Sport::SOCCER, true, true, true, 30},
+    {League::MLS, "mls", "soccer/usa.1", "MLS", "soccer", Sport::SOCCER, true, true, 30},
+    {League::EPL, "epl", "soccer/eng.1", "EPL", "soccer", Sport::SOCCER, true, true, 30},
     // An 82-game NBA season schedule is ~1 MB (WNBA ~840 KB): no Up next list.
-    {League::NBA, "nba", "basketball/nba", "NBA", "nba", Sport::BASKETBALL, true, false, false, 30},
-    {League::WNBA, "wnba", "basketball/wnba", "WNBA", "wnba", Sport::BASKETBALL, true, false, false, 30},
+    {League::NBA, "nba", "basketball/nba", "NBA", "nba", Sport::BASKETBALL, false, false, 30},
+    {League::WNBA, "wnba", "basketball/wnba", "WNBA", "wnba", Sport::BASKETBALL, false, false, 30},
     // A college season schedule is ~570 KB. Its teams are left out of Home
     // Assistant's team select (__init__.py).
-    {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, true, false, true, 30},
+    {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
-    {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, true, false, false, 30},
+    {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
 };
 
 constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);
