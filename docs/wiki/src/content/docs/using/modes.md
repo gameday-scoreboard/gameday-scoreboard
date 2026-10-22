@@ -45,6 +45,10 @@ Live games follows the best game on instead of a random one, with the **Pick the
 
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
 
+:::note[Coming in the next release]
+A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends, as late games in the other sports already did. Before, a football game still on at midnight Eastern dropped out of Live games.
+:::
+
 ### Favorites take over
 
 Turn on **Favorites take over** under **Switch every** and a game one of your [favorites](/using/favorites/) is playing gets the panel while it's on, whatever else is live. Live games carries on as usual the rest of the time. Your favorites can be from any sport, like the Cowboys, Mavericks, Stars and Rangers on one list.

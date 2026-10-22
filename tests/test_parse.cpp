@@ -3153,7 +3153,10 @@ static void test_recap() {
   // Days, Eastern like scan_url()
   int32_t sat = espn_day(parse_iso8601_z("2025-12-06T21:00Z"), NCAA);
   CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T01:00Z"), NCAA), sat);  // 8 PM Eastern Saturday
-  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T06:00Z"), NCAA), sat + 1);
+  // 1 AM Eastern, a 10:30 PM West Coast kickoff still on: still Saturday's
+  // scoreboard, which is the only one that lists it. 5 AM is Sunday.
+  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T06:00Z"), NCAA), sat);
+  CHECK_EQ(espn_day(parse_iso8601_z("2025-12-07T10:00Z"), NCAA), sat + 1);
   CHECK(scan_url(League::NCAA, espn_day_epoch(sat)).find("dates=20251206") != std::string::npos);
   CHECK_EQ(recap_day_word(sat, sat), std::string("Today's"));
   CHECK_EQ(recap_day_word(sat, sat + 1), std::string("Yesterday's"));
@@ -3471,23 +3474,22 @@ static void test_later_today() {
     CHECK_EQ(next, one[0].kickoff_epoch);
   }
 
-  // Days per sport. Thursday 10/15 2026, Eastern daylight time: at 1 AM
-  // Friday football has turned over and the other leagues have not (a West
-  // Coast game ending then is still Thursday's); by 5 AM all of them have.
+  // Days per sport. Thursday 10/15 2026, Eastern daylight time: at 1 AM and
+  // 4 AM Friday no league has turned over (a West Coast game ending then is
+  // still Thursday's, football included); by 5 AM all of them have.
   int64_t noon = parse_iso8601_z("2026-10-15T16:00Z");
   int64_t one_am = parse_iso8601_z("2026-10-16T05:00Z");
   int64_t four_am = parse_iso8601_z("2026-10-16T08:00Z");
   int64_t five_am = parse_iso8601_z("2026-10-16T09:00Z");
   for (const auto &info : kLeagues) {
     uint8_t l = (uint8_t) info.league;
-    bool football = info.sport == Sport::FOOTBALL;
     int32_t thu = espn_day(noon, l);
     CHECK_EQ(espn_day(espn_day_epoch(thu), l), thu);
-    CHECK_EQ(espn_day(one_am, l), football ? thu + 1 : thu);
-    CHECK_EQ(espn_day(four_am, l), football ? thu + 1 : thu);
+    CHECK_EQ(espn_day(one_am, l), thu);
+    CHECK_EQ(espn_day(four_am, l), thu);
     CHECK_EQ(espn_day(five_am, l), thu + 1);
     // The same day the scan reads at that moment
-    CHECK(scan_url(info.league, one_am).find(football ? "dates=20261016" : "dates=20261015") != std::string::npos);
+    CHECK(scan_url(info.league, one_am).find("dates=20261015") != std::string::npos);
     CHECK(scan_url(info.league, five_am).find("dates=20261016") != std::string::npos);
   }
   const int32_t thu = espn_day(noon, NBA);
@@ -3510,13 +3512,14 @@ static void test_later_today() {
   hd.league = MLB;
   hd.day = thu - 5;
   CHECK_EQ(recap_header(hd, noon), std::string("Saturday's MLB scores"));
-  // At 1 AM Friday a late NBA final is still today's; Thursday's college
-  // game is yesterday's
+  // At 1 AM Friday a late NBA final is still today's, and so is a late
+  // college game's; by 5 AM both are yesterday's
   hd.league = NBA;
   hd.day = thu;
   CHECK_EQ(recap_header(hd, one_am), std::string("Today's NBA scores"));
   hd.league = NCAA;
-  CHECK_EQ(recap_header(hd, one_am), std::string("Yesterday's college scores"));
+  CHECK_EQ(recap_header(hd, one_am), std::string("Today's college scores"));
+  CHECK_EQ(recap_header(hd, five_am), std::string("Yesterday's college scores"));
   Pending tv = mkpending(NHL, 99, 0, "BOS");
   tv.tv = "ESPN+";
   CHECK_EQ(recap_later_ticker(tv, "Today 7:00 PM"), std::string("Later today's NHL games | Today 7:00 PM | ESPN+"));

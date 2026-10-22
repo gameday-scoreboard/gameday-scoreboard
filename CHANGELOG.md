@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends. Before, a football game still on at midnight Eastern dropped out of Live games, and with your team saved the panel went back to your team's card.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.

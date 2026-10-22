@@ -251,14 +251,12 @@ std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch,
 // Every game of the day for one league. top25: men's college basketball
 // reads only ESPN's Top 25 slate (the no-team panel), not all of Division I.
 std::string scan_url(League league, int64_t now_epoch, bool top25 = false);
-// How far behind UTC the day scan_url() reads turns over. Football uses the
-// Eastern date. The other leagues play past midnight Eastern on the West
-// Coast (ESPN lists those games under the day they started, and rejects date
-// ranges), and none start between midnight and 6 AM Eastern: their day turns
-// over at 4 AM Eastern instead.
-inline int64_t scan_day_shift(League league) {
-  return league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
-}
+// How far behind UTC the day scan_url() reads turns over: 4 AM Eastern, for
+// every league. ESPN lists a game under the Eastern date it started on, keeps
+// it off the next date while it is on, and rejects date ranges. West Coast
+// games run past midnight Eastern (a 10:30 PM college kickoff ends near
+// 2 AM), and no league starts a game between midnight and 6 AM Eastern.
+inline int64_t scan_day_shift(League) { return 9 * 3600; }
 // One game on its own, 8 to 20 KB, where the day's scoreboard it sits in is
 // up to 260 KB (NFL) or 750 KB (college). A LeagueInfo::per_event league
 // polls this.

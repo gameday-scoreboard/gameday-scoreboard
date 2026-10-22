@@ -46,15 +46,14 @@ template<class T> struct RecapAllocator {
 template<class T> using RecapList = std::vector<T, RecapAllocator<T>>;
 
 // A day the way ESPN's scoreboard `dates=` parameter counts it for a league:
-// US Eastern, shifted like scan_url() (5 h for football, 9 h for the rest),
-// so a West Coast game that ends at 1 AM Eastern lands on the day it started.
+// US Eastern, shifted like scan_url() (to 4 AM Eastern), so a West Coast
+// game that ends at 1 AM Eastern lands on the day it started.
 inline int32_t espn_day(int64_t epoch, uint8_t league) {
   int64_t s = epoch - scan_day_shift((League) league);
   return (int32_t) (s >= 0 ? s / 86400 : (s - 86399) / 86400);
 }
 
-// Back to an epoch inside that day (noon Eastern), for scan_url(). Noon is
-// inside the day for either shift.
+// Back to an epoch inside that day (noon Eastern), for scan_url().
 inline int64_t espn_day_epoch(int32_t day) { return (int64_t) day * 86400 + 17 * 3600; }
 
 // One game day of one league, newest day first in a list: its finals, and
