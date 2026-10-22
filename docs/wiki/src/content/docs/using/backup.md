@@ -5,10 +5,6 @@ sidebar:
   order: 18
 ---
 
-:::note[Coming in the next release]
-Everything on this page arrives with the next firmware release.
-:::
-
 Your teams, favorites, ticker switches and the rest take a while to set up. Save them to a file once, and after a factory reset, a replacement panel or a second panel for another room, load the file and the panel picks up where it was.
 
 ## Save a backup
@@ -30,6 +26,7 @@ If the backup has a different panel layout (one 64x64 panel against a 128x64 one
 
 ## What's in the file
 
+- The panel's **Nickname**. A backup loaded onto a second panel gives it the same nickname, so rename that one afterwards.
 - Your team and what the panel shows: **My team**, **Favorite teams** or **Live games**
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
