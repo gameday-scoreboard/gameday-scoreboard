@@ -19,6 +19,10 @@ Far from kickoff the panel checks the game every 15 minutes, and every minute in
 
 Your team is always on the left of the board.
 
+:::note[Coming in the next release]
+Before the game, the board takes turns with a big countdown to kickoff in your team's colors, like "2d 14h". See [Countdowns](/using/countdowns/).
+:::
+
 ### When your team has no game coming
 
 Between seasons the board shows a clock in your team's colors instead of an empty scoreboard. Under the time is the next game once it's on the schedule, like "Next: at PHI Mar 26 7:05 PM", or the date until then. On a single 64x64 panel the next game goes in the ticker, since there is no room for it under the time.

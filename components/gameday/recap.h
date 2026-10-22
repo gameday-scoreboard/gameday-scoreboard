@@ -13,37 +13,16 @@
 #include <string>
 #include <vector>
 
-#ifdef ESP_PLATFORM
-#include <esp_heap_caps.h>
-#endif
-
 #include "espn_parse.h"
+#include "psram.h"
 
 namespace espn {
 
 // The rotation's finals and games to come live in PSRAM on the panel. A
 // panel with no team keeps every league's, up to kRecapCap a day each, about
 // 200 bytes a game with its short strings stored inline: more than internal
-// RAM can spare. The host tests use the plain heap.
-template<class T> struct RecapAllocator {
-  using value_type = T;
-  RecapAllocator() = default;
-  template<class U> RecapAllocator(const RecapAllocator<U> &) {}
-  T *allocate(size_t n) {
-#ifdef ESP_PLATFORM
-    void *p = heap_caps_malloc_prefer(n * sizeof(T), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-#else
-    void *p = malloc(n * sizeof(T));
-#endif
-    if (p == nullptr)
-      abort();  // as operator new does with exceptions off
-    return static_cast<T *>(p);
-  }
-  void deallocate(T *p, size_t) { free(p); }  // ESP-IDF's free takes either heap
-  template<class U> bool operator==(const RecapAllocator<U> &) const { return true; }
-  template<class U> bool operator!=(const RecapAllocator<U> &) const { return false; }
-};
-template<class T> using RecapList = std::vector<T, RecapAllocator<T>>;
+// RAM can spare.
+template<class T> using RecapList = std::vector<T, PsramAllocator<T>>;
 
 // A day the way ESPN's scoreboard `dates=` parameter counts it for a league:
 // US Eastern, shifted like scan_url() (to 4 AM Eastern), so a West Coast

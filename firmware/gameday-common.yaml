@@ -215,6 +215,12 @@ font:
     glyphs: *panel_glyphs
   - id: !extend spleen_16
     glyphs: *panel_glyphs
+  # The countdown card's big digits on a wide board (gameday-live.yaml), cut
+  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today".
+  - file: "https://github.com/fcambus/spleen/raw/refs/tags/2.1.0/spleen-16x32.bdf"
+    id: spleen_32
+    size: 32
+    glyphs: ["0123456789 Tadhmoy"]
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -538,6 +544,16 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
+  # The countdown card's target and end (epoch seconds, countdown.h), from the
+  # latest board update, so the page counts down once a second by itself.
+  - id: gd_countdown_at
+    type: int64_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_countdown_end
+    type: int64_t
+    restore_value: no
+    initial_value: '0'
   # The logos the board wants right now, from the latest board update.
   - id: gd_team_logo_url
     type: std::string
@@ -726,6 +742,9 @@ gameday:
         };
         put(id(gd_team_score), x.ha_team_score);
         put(id(gd_opp_score), x.ha_opp_score);
+    - lambda: |-
+        id(gd_countdown_at) = x.countdown_at;
+        id(gd_countdown_end) = x.countdown_end;
     # The board gets the text through panel_text() so a character the fonts
     # lack never draws as a box; Home Assistant keeps the original above.
     - script.execute:
@@ -761,6 +780,7 @@ gameday:
         opp_marks: !lambda 'return x.opp_marks;'
         message: !lambda 'return gameday::panel_text(x.message);'
         clock_card: !lambda 'return x.clock;'
+        countdown_card: !lambda 'return x.countdown_at != 0;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'

@@ -42,6 +42,7 @@ tests/fixtures/set_cases.json, the table the firmware's host tests also
 check, through apply_set, so the mock can't drift from the panel.
 """
 import copy
+import datetime
 import itertools
 import json
 import os
@@ -84,6 +85,8 @@ FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
                          re.M)[1])
 FIXTURE = REPO / "tests/fixtures/set_cases.json"
+COUNTDOWN_NAME_MAX = int(re.search(r"kCountdownNameMax = (\d+);",
+                                   (REPO / "components/gameday/countdown.h").read_text(encoding="utf-8"))[1])
 # The settings backup's key types and export order (settings_doc.h).
 SETTINGS_H = (REPO / "components/gameday/settings_doc.h").read_text(encoding="utf-8")
 
@@ -118,7 +121,7 @@ INITIAL = {
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
-    "autoupd": False, "beta": False,
+    "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
@@ -387,6 +390,14 @@ def apply_set(kv):
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
                 STATE["panels"] = atoi(v)
+        elif k == "countdown":
+            STATE["countdown"] = v == "1"
+        elif k == "cdname":
+            STATE["cdname"] = countdown_name(v)
+        elif k == "cddate":
+            day = countdown_date(v)
+            if day is not None:
+                STATE["cddate"] = day
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
         elif k == "nick":
@@ -472,7 +483,9 @@ def import_settings(doc):
         return fail("Not a settings backup.")
     if doc["schema"] > SETTINGS_SCHEMA:
         return fail("This backup is from newer firmware. Update the panel, then restore it.")
-    kv, skipped, favs, numbers = [], [], None, {}
+    kv, skipped, kept, favs, numbers = [], [], [], None, {}
+    # The nickname and layout come back only onto the panel the file is from.
+    same_panel = isinstance(doc.get("name"), str) and doc["name"] == STATE.get("name")
     ranges = {"rotate": ("kRotateMinMinutes", "kRotateMaxMinutes"), "lockon": ("kLockonMinMinutes", "kLockonMaxMinutes"),
               "release": ("kReleaseMinSeconds", "kReleaseMaxSeconds")}
     for k in SET_KEYS:
@@ -526,6 +539,10 @@ def import_settings(doc):
             if lo is not None and not lo <= v <= hi:
                 skipped.append(f"{k}={v}")
                 continue
+            if k == "panels" and not same_panel:
+                if v != STATE.get("panels"):
+                    kept.append(k)
+                continue
             kv.append((k, str(v)))
         elif kind == "Text":
             if not isinstance(v, str):
@@ -538,9 +555,12 @@ def import_settings(doc):
                     skipped.append(f"{k}={v}")
                     continue
                 kv.append((k, v if r == 1 else "none"))
-            elif k == "tz" and timezone_index(v) < 0:
-                skipped.append(f"tz={v}")
-            elif (k == "msgurl" and not msg_url_ok(v)) or (k in ("nightstart", "nightend") and not night_time(v)):
+            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)):
+                skipped.append(f"{k}={v}")
+            elif k == "nick" and not same_panel:
+                if v != STATE.get("nick", ""):
+                    kept.append(k)
+            elif k in ("nightstart", "nightend") and not night_time(v):
                 return fail(k + " isn't a value the panel takes.")
             else:
                 kv.append((k, v))
@@ -593,7 +613,26 @@ def import_settings(doc):
     apply_set([p for p in kv if SET_KEYS.index(p[0]) > SET_KEYS.index("favs")])
     for ent, value in numbers.items():
         entity(ent)["value"] = entity(ent)["state"] = str(value)
-    return 200, {"ok": True, "restart": restart, "skipped": skipped}
+    return 200, {"ok": True, "restart": restart, "skipped": skipped, "kept": kept}
+
+
+def countdown_name(v):
+    """countdown.h's countdown_name(): trimmed, no control characters, at most kCountdownNameMax bytes."""
+    raw = "".join(c for c in v if c >= " " and c != "\x7f").strip(" ").encode("utf-8")
+    return raw[:COUNTDOWN_NAME_MAX].decode("utf-8", "ignore").rstrip(" ")
+
+
+def countdown_date(v):
+    """countdown.h's parse_countdown_date(): "" for none, the day as given, or None when refused."""
+    if v in ("", "none"):
+        return ""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+        return None
+    try:
+        day = datetime.date.fromisoformat(v)
+    except ValueError:
+        return None
+    return v if 2020 <= day.year <= 2099 else None
 
 
 def selftest():
