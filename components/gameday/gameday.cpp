@@ -355,6 +355,9 @@ void GamedayComponent::setup() {
   this->apply_timezone_();
   if (this->time_ != nullptr)
     this->time_->add_on_time_sync_callback([this]() {
+      // After a power cut the clock starts here: the night schedule
+      // applies now, not at the next tick.
+      this->night_tick_();
       if (!this->clock_approx_)
         return;
       ESP_LOGI(TAG, "Time server answered: clock no longer approximate");
@@ -369,6 +372,10 @@ void GamedayComponent::setup() {
   if (this->base_ != nullptr)
     this->base_->add_handler(this);
   this->schedule_next_(3000);
+  // A restart keeps the clock, and the nightly update restarts inside the
+  // default hours: the boot screen goes to the night's brightness on the
+  // first loop rather than at full brightness until the first tick, 10 s on.
+  this->defer([this]() { this->night_tick_(); });
 }
 
 std::string GamedayComponent::hostname() const { return std::string(App.get_name().c_str()); }
@@ -4514,6 +4521,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
     }
   }
+  if (::espn::night_keep_hours(night, this->night_))
+    ESP_LOGW(TAG, "Night schedule: start and end can't be the same time; keeping %s to %s",
+             ::espn::night_clock12(night.start).c_str(), ::espn::night_clock12(night.end).c_str());
   this->set_night_(night);
   if (msg_keys != 0 || msg_every >= 0)
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
