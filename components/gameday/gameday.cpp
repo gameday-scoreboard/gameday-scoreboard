@@ -1265,6 +1265,11 @@ void GamedayComponent::loop() {
         this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
           this->msg_fail_ms_ = this->gave_up_ms_;
+        // need_scan, like need_msg, was set before the task started, so the
+        // abandoned task can't have changed it.
+        if (this->job_.need_scan)
+          this->live_started_ms_ =
+              ::espn::live_clock_after_failed_scan(this->live_started_ms_, this->live_fallback_, this->recap_on_);
         // Wait a full retry before starting another worker rather than
         // stacking a second one on top of a task that may still be alive.
         this->schedule_next_(RETRY_INTERVAL);
@@ -2385,9 +2390,8 @@ void GamedayComponent::start_job_() {
       this->start_worker_();
       return;
     }
-    uint32_t since = now - this->live_started_ms_;
-    if (this->live_started_ms_ != 0 && since < this->live_rescan_ms_ && !take_due) {
-      this->schedule_next_(this->live_rescan_ms_ - since);
+    if (!::espn::live_rescan_due(now, this->live_started_ms_, this->live_rescan_ms_, take_due)) {
+      this->schedule_next_(this->live_rescan_ms_ - (now - this->live_started_ms_));
       return;
     }
     j.need_scan = true;
@@ -2398,13 +2402,13 @@ void GamedayComponent::start_job_() {
   if (this->live_mode_()) {
     // Inside the fallback live_started_ms_ times the rescan instead of the
     // rotate: the board is on the owner's own team until a game kicks off.
-    bool rescan_due =
-        this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= this->live_rescan_ms_ || take_due;
+    bool rescan_due = ::espn::live_rescan_due(now, this->live_started_ms_, this->live_rescan_ms_, take_due);
     if (!this->live_fallback_ || rescan_due) {
       if (this->live_fallback_) {
         j.need_scan = true;
-        // Stamped here, not when the scan lands, so a failed scan does not
-        // fire another one on the retry a minute later.
+        // Stamped here, so a scan that finds nothing live again starts the
+        // next wait. A failed scan clears it (apply_job_) and retries on the
+        // back-off.
         this->live_started_ms_ = now == 0 ? 1 : now;
       } else {
         // Picking the best game: only at a break in this one, never in the
@@ -2686,8 +2690,9 @@ void GamedayComponent::apply_job_() {
   if (j.need_scan) {
     if (!j.scan_ok && j.live.empty()) {
       this->misses_++;
-      if (this->recap_on_)
-        this->live_started_ms_ = 0;  // retry the scan, not the long wait
+      // Retry the scan, not the long wait.
+      this->live_started_ms_ =
+          ::espn::live_clock_after_failed_scan(this->live_started_ms_, this->live_fallback_, this->recap_on_);
       this->drop_team_placeholder_();  // "Looking for a live game", not a bare logo
       this->emit_({});
       this->schedule_next_(this->back_off_());
@@ -3323,28 +3328,15 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
 // forward, only when no game is left today, until a day has a kickoff. Each
 // league counts days its own way (recap.h, espn_day).
 bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
-  const uint8_t done = ::espn::kRecapMaxDays + 1;
   const uint16_t leagues = this->recap_leagues_();
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    int32_t today = ::espn::espn_day(tnow, i);
-    uint8_t &w = this->recap_back_[i];
-    if (w == done && this->recap_back_day_[i] != today && ::espn::recap_count(this->recap_days_, i) == 0)
-      w = 0;  // a new day and still no finals: look again
-    if (w == 0) {
-      if (::espn::recap_count(this->recap_days_, i) >= ::espn::kRecapMinFinals) {
-        w = done;  // today's scan already had enough
-        this->recap_back_day_[i] = today;
-        continue;
-      }
-      w = 1;
-    }
-    if (w <= ::espn::kRecapMaxDays) {
+    if (this->recap_back_[i].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
+                                      j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = false;
       j.recap_league = i;
-      j.recap_day = today - w;
       return true;
     }
   }
@@ -3353,19 +3345,10 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    int32_t today = ::espn::espn_day(tnow, i);
-    uint8_t &w = this->recap_fwd_[i];
-    // Found one and it has kicked off, or found none and it is a new day.
-    if (w == done && this->recap_fwd_next_[i] <= tnow &&
-        (this->recap_fwd_next_[i] != 0 || this->recap_fwd_day_[i] != today))
-      w = 0;
-    if (w == 0)
-      w = 1;
-    if (w <= ::espn::kRecapMaxDays) {
+    if (this->recap_fwd_[i].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[i], tnow, j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = true;
       j.recap_league = i;
-      j.recap_day = today + w;
       return true;
     }
   }
@@ -3374,7 +3357,6 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
 
 void GamedayComponent::apply_recap_job_() {
   Job &j = this->job_;
-  const uint8_t done = ::espn::kRecapMaxDays + 1;
   if (j.recap_league >= ::espn::kLeagueCount)
     return;
   uint8_t i = j.recap_league;
@@ -3388,10 +3370,9 @@ void GamedayComponent::apply_recap_job_() {
   }
   this->clear_backoff_();
   if (j.recap_forward) {
-    if (j.next_kickoff > tnow) {
+    bool found = j.next_kickoff > tnow;
+    if (found) {
       this->recap_fwd_next_[i] = j.next_kickoff;
-      this->recap_fwd_[i] = done;
-      this->recap_fwd_day_[i] = today;
       // The game the Next card names. The scan keeps a college day's ranked
       // games first, so the first kickoff may not be among them.
       this->recap_fwd_match_[i].clear();
@@ -3400,12 +3381,11 @@ void GamedayComponent::apply_recap_job_() {
           this->recap_fwd_match_[i] = ::espn::recap_matchup(p);
           break;  // the first one kept at that time: best ranked, then ESPN's order
         }
-    } else if (++this->recap_fwd_[i] > ::espn::kRecapMaxDays) {
+    }
+    if (!this->recap_fwd_[i].fwd_read(today, found)) {
       ESP_LOGI(TAG, "No %s kickoff in the next week", ::espn::recap_league_word(i));
       this->recap_fwd_next_[i] = 0;
       this->recap_fwd_match_[i].clear();
-      this->recap_fwd_[i] = done;
-      this->recap_fwd_day_[i] = today;
     }
   } else {
     ::espn::RecapDay d;
@@ -3413,13 +3393,10 @@ void GamedayComponent::apply_recap_job_() {
     d.day = j.recap_day;
     d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
-    if (::espn::recap_count(this->recap_days_, i) >= ::espn::kRecapMinFinals ||
-        ++this->recap_back_[i] > ::espn::kRecapMaxDays) {
-      this->recap_back_[i] = done;
-      this->recap_back_day_[i] = today;
+    this->recap_back_[i].back_read(today, ::espn::recap_count(this->recap_days_, i));
+    if (this->recap_back_[i].step == ::espn::RecapWalk::kDone)
       ESP_LOGI(TAG, "Recent %s finals: %u", ::espn::recap_league_word(i),
                (unsigned) ::espn::recap_count(this->recap_days_, i));
-    }
   }
   ::espn::recap_trim(this->recap_days_, tnow);
   this->recap_rebuild_();
