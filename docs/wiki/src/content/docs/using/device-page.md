@@ -57,7 +57,7 @@ Settings are grouped in cards. In the order the page shows them:
 | Ticker: **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | Ticker: **Match stats** | Soccer: goals, cards, possession and shots. |
 | Ticker: **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
-| Ticker: **Pre-game odds and TV** | The line, over/under and TV channel before the start, when ESPN has them. |
+| Ticker: **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
 | **Opponent scores too** | Splashes for the other side's scores. Your team's always show. See [Celebrations](#celebrations). |
 | **Panel on** | Turns the panel's lights on or off. |
 | **Brightness** | Panel brightness, 1 to 255. |

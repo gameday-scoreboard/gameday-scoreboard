@@ -9,7 +9,7 @@ NHL games get their own board. This page describes a 128x64 display and notes wh
 
 ## Before the game
 
-The next-game card shows both logos, your team on the left, with the records under them. The ticker carries the puck drop day and time in the panel's timezone, the playoff series when there is one, the betting line, over/under and TV channel when ESPN has them and **Pre-game odds and TV** is on, and the arena.
+The next-game card shows both logos, your team on the left, with the records under them. The ticker carries the puck drop day and time in the panel's timezone, the playoff series when there is one, the betting line, over/under and TV channel when ESPN has them and **Odds, TV and win chance** is on, and the arena.
 
 NHL teams have no Up next list on the device page: their season schedules are too large for the panel to read.
 

@@ -14,7 +14,7 @@ The next-game card shows both logos, your team on the left, with the records und
 - the first pitch day and time in the panel's timezone
 - the series, when ESPN has one
 - the probable starting pitchers for both teams, when ESPN lists both
-- the betting line, over/under and TV channel, when ESPN has them and **Pre-game odds and TV** is on
+- the betting line, over/under and TV channel, when ESPN has them and **Odds, TV and win chance** is on
 - the ballpark
 
 MLB has no Up next list on the device page: a team's season schedule is too large for the panel to read.

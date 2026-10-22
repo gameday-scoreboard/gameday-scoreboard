@@ -34,9 +34,13 @@ The Ticker card on the device page has a switch for each part. All of them start
 | **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | **Match stats** | Soccer: goals, cards, possession and shots. |
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. A very long play is cut short. |
-| **Pre-game odds and TV** | The line, over/under and TV channel before the start, in every league, when ESPN has them. |
+| **Odds, TV and win chance** | The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, the win chance during the game. |
 
-In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Pre-game odds and TV** also adds ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Odds, TV and win chance** shows ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+
+:::note[Coming in the next release]
+Until then the device page calls this switch **Pre-game odds and TV**. It's the same switch.
+:::
 
 A **Pre-game season leaders** switch, on to start, adds football's passing leaders before kickoff. Like the situation switches, it shows only on a panel that follows football.
 
