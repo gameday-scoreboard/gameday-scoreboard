@@ -123,6 +123,10 @@
       <div class="livectls">
         <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
         <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button></div>
+        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button></div>
+        <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
+          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+        </select></div>
       </div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
@@ -231,6 +235,13 @@
           <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
         </div>
+        <div id="backup" hidden>
+          <div class="sub">Backup</div>
+          <p class="hint">Save this panel's settings to a file, then load them back after a reset or onto another panel. Wi-Fi networks and the WizMote pairing aren't in the file.</p>
+          <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
+          <input type="file" id="bkFile" accept=".json,application/json" hidden>
+          <p class="hint" id="bkNote" role="status" hidden></p>
+        </div>
       </div>
       <div class="card">
         <h2>Device</h2>
@@ -297,6 +308,7 @@
         <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
         <button class="btn" id="close">Close</button>
       </div>
+      <div class="favcount" id="favCount" role="status" hidden></div>
       <div class="tiles" id="tiles" role="tabpanel"></div>
     </div>
   </div>
@@ -352,7 +364,7 @@
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
@@ -622,6 +634,9 @@
     showFavRotate();
     setGD({ collide: collideSelect.value });
   };
+  // Live games' Favorites take over uses the same rule.
+  const liveCollide = $("#liveCollide");
+  liveCollide.onchange = () => setGD({ collide: liveCollide.value });
   favRotate.onchange = () => {
     const v = Math.min(30, Math.max(1, Number(favRotate.value) || 1));
     favRotate.value = v;
@@ -646,12 +661,16 @@
     const auto = liveAuto();
     // With nothing live the device shows the saved team's card, or with no
     // team a rotation of recent finals, and keeps scanning.
-    $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
-      : S.recap ? "No live game right now, showing recent finals"
-        : S.best ? "Following the best game on" : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? ""
-      : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
-        : "Moves on when it ends, or after Switch every. ")
+    // Favorites take over: a favorite's game in progress has the panel.
+    const lock = S.favlock && S.favlock.id ? S.favlock : null;
+    $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
+      : S.fallback ? "No live game right now, showing your team until one starts"
+        : S.recap ? "No live game right now, showing recent finals"
+          : S.best ? "Following the best game on" : "Following a random game in progress";
+    $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
+      : S.fallback || S.recap ? ""
+        : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
+          : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
@@ -696,6 +715,8 @@
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
     }
+    $("#liveCollideRow").hidden = !S.favtake;
+    if (document.activeElement !== liveCollide) liveCollide.value = String(S.collide || 0);
     if (favs) {
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);
@@ -757,9 +778,14 @@
     if (!favKeys.length) host.appendChild(el("p", "hint", "No favorites yet."));
     $("#favAdd").hidden = favKeys.length >= favMax();
   };
-  const addFav = (t) => {
+  // The favorites picker stays open: a tap adds a team, or takes out one
+  // already in the list (checked).
+  const toggleFav = (t) => {
     const key = keyOf(t);
-    if (favKeys.includes(key)) return toast(t[3] + " is already a favorite");
+    if (favKeys.includes(key)) {
+      postFavs(favKeys.filter((k) => k !== key));
+      return toast("Removed the " + t[3]);
+    }
     if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
@@ -771,6 +797,7 @@
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
       renderFavs();
+      if (pickFav && $("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
@@ -925,6 +952,74 @@
     });
   };
 
+  // ---- settings backup ---------------------------------------------------------
+  // GET /gameday/settings is the file; POST takes one back, checked whole on
+  // the panel before anything changes. Firmware without it answers 404 and the
+  // section stays hidden.
+  const BACKUP_MAX = 4096;
+  const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
+  const probeBackup = async (retry) => {
+    try {
+      const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
+      // Only a 404 is firmware without it; a 500 is a panel still starting.
+      if (r.status === 404) $("#backup").hidden = true;
+      else if (r.ok) $("#backup").hidden = false;
+      else if (retry) setTimeout(() => probeBackup(false), 5000);
+      return r.ok ? await r.json() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  $("#bkExport").onclick = async () => {
+    const doc = await probeBackup();
+    if (!doc) { toast("Device did not respond. Try again."); return; }
+    const day = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const a = el("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    backupNote("Saved " + name + ".");
+  };
+  $("#bkImport").onclick = () => { $("#bkFile").value = ""; $("#bkFile").click(); };
+  $("#bkFile").onchange = async () => {
+    const f = $("#bkFile").files[0];
+    if (!f) return;
+    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    const text = await f.text();
+    let doc;
+    try { doc = JSON.parse(text); } catch (_) { doc = null; }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
+      backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const from = typeof doc.name === "string" && S && doc.name !== S.name ? " (saved from " + doc.name + ")" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are.")) return;
+    let r, j;
+    try {
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
+    const left = (j.skipped || []).join(", ");
+    backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    if (j.restart) {
+      waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
+      toBoard();
+      return;
+    }
+    toast("Settings restored");
+    scheduleState(APPLY_MS + 100);
+  };
+
   // ---- controls --------------------------------------------------------
   const controlDefs = [
     { name: "Power", into: "#panelCtls", label: "Panel on" },
@@ -1074,9 +1169,13 @@
       const card = el("div", "game" + (g.state === "in" ? " live" : ""));
       const mkSide = (s) => {
         const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && keyOf(t) === cur ? " on" : ""));
+        const b = el("button", "side" + (t && picked(keyOf(t), cur) ? " on" : ""));
         b.disabled = !t;
-        b.title = t ? "Follow the " + t[3] : "Not in the team list";
+        b.title = t ? (pickFav ? t[3] : "Follow the " + t[3]) : "Not in the team list";
+        if (t) {
+          b.dataset.key = keyOf(t);
+          if (pickFav) b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+        }
         const img = el("img");
         img.loading = "lazy";
         img.src = logoUrl(g.league, s.id, s.abbr);
@@ -1089,7 +1188,7 @@
         b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
         b.onclick = () => {
           if (!t) return;
-          if (pickFav) return choose(t);
+          if (pickFav) return toggleFav(t);
           setGD({ team: keyOf(t) });
           toast("Now following the " + t[3]);
           $("#modal").classList.remove("open");
@@ -1107,15 +1206,30 @@
   };
 
   // ---- team chooser ------------------------------------------------------
-  // The picker sets My team, or with pickFav adds a favorite.
+  // The picker sets My team and closes. With pickFav it edits the favorites
+  // and stays open: favorites show checked, a line counts them, Done closes.
   let pickFav = false;
   const choose = (t) => {
-    if (pickFav) addFav(t);
-    else {
-      setGD({ team: keyOf(t) });
-      toast("Now following the " + t[3]);
-    }
+    if (pickFav) return toggleFav(t);
+    setGD({ team: keyOf(t) });
+    toast("Now following the " + t[3]);
     $("#modal").classList.remove("open");
+  };
+  const picked = (key, cur) => (pickFav ? favKeys.includes(key) : key === cur);
+  // After a favorites change, mark the tiles in place so the list keeps its scroll.
+  const markPicked = () => {
+    document.querySelectorAll("#tiles [data-key]").forEach((b) => {
+      const on = favKeys.includes(b.dataset.key);
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    renderFavCount();
+  };
+  const renderFavCount = () => {
+    const line = $("#favCount");
+    line.hidden = !pickFav;
+    line.textContent = pickFav ? favKeys.length + " of " + favMax() + " favorites" : "";
+    $("#close").textContent = pickFav ? "Done" : "Close";
   };
   let league = "now";
   const renderTiles = () => {
@@ -1131,7 +1245,9 @@
       return;
     }
     for (const t of list) {
-      const tile = el("button", "tile" + (keyOf(t) === cur ? " on" : ""));
+      const tile = el("button", "tile" + (picked(keyOf(t), cur) ? " on" : ""));
+      tile.dataset.key = keyOf(t);
+      if (pickFav) tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
       const img = el("img");
       img.loading = "lazy";
       img.src = logoUrl(t[0], t[1], t[2]);
@@ -1159,6 +1275,7 @@
     } catch (_) {}
     $$tabs(league);
     $("#q").value = "";
+    renderFavCount();
     renderTiles();
     $("#modal").classList.add("open");
     setTimeout(() => $("#q").focus(), 50);
@@ -1191,9 +1308,11 @@
     };
   });
   $("#q").oninput = renderTiles;
-  $("#close").onclick = () => $("#modal").classList.remove("open");
-  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") $("#modal").classList.remove("open"); };
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("#modal").classList.remove("open"); });
+  // Leaving the picker ends favorites mode until the next Add a favorite.
+  const closePicker = () => { pickFav = false; $("#modal").classList.remove("open"); };
+  $("#close").onclick = closePicker;
+  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") closePicker(); };
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("#modal").classList.contains("open")) closePicker(); });
 
   const renderCurrentTeam = () => {
     const t = S ? teamByKey(refKey(S.team)) : null;
@@ -1793,6 +1912,7 @@
   connect();
   fetchState();
   loadNetworks();
+  probeBackup(true);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();

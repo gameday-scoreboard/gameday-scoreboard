@@ -28,7 +28,6 @@
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
-#include "update_mirror.h"
 #include "wifi_history.h"
 
 using namespace espn;
@@ -3901,48 +3900,6 @@ static void test_auto_update() {
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
-static void test_update_mirror() {
-  // On the primary: nothing until a read or install fails.
-  MirrorInputs in;
-  in.clock_valid = true;
-  CHECK(mirror_step(in) == MirrorStep::NONE);
-  in.answered = true;  // a good read on the primary is none of the mirror's business
-  CHECK(mirror_step(in) == MirrorStep::NONE);
-  in.error = true;
-  CHECK(mirror_step(in) == MirrorStep::TRY_MIRROR);
-  // The boot check, before the clock is set, fails TLS everywhere: no mirror read.
-  in.clock_valid = false;
-  CHECK(mirror_step(in) == MirrorStep::NO_CLOCK);
-  in.error = false;
-  CHECK(mirror_step(in) == MirrorStep::NONE);
-
-  // On the mirror, its read in flight (the error was cleared to start it).
-  MirrorInputs m;
-  m.on_mirror = true;
-  CHECK(mirror_step(m) == MirrorStep::NONE);
-  m.waited_ms = kMirrorWaitMs - 1;
-  CHECK(mirror_step(m) == MirrorStep::NONE);
-  m.waited_ms = kMirrorWaitMs;
-  CHECK(mirror_step(m) == MirrorStep::TIMED_OUT);
-  m.waited_ms = 5000;
-  m.answered = true;
-  CHECK(mirror_step(m) == MirrorStep::ANSWERED);
-  m.answered = false;
-  m.error = true;
-  CHECK(mirror_step(m) == MirrorStep::FAILED);
-  m.answered = true;  // an error wins: a failed read publishes nothing
-  CHECK(mirror_step(m) == MirrorStep::FAILED);
-  m.waited_ms = kMirrorWaitMs * 2;
-  CHECK(mirror_step(m) == MirrorStep::FAILED);
-  // millis() wraps every 49 days; the unsigned difference still counts up.
-  uint32_t since = 0xFFFFF000u;
-  uint32_t now = since + kMirrorWaitMs;
-  m = MirrorInputs{};
-  m.on_mirror = true;
-  m.waited_ms = now - since;
-  CHECK(mirror_step(m) == MirrorStep::TIMED_OUT);
-}
-
 static void test_update_mark() {
   UpdateMark m{};
   CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
@@ -5172,6 +5129,81 @@ static GameSnapshot live_snap(Sport sport, int period, const char *clock, int us
   return g;
 }
 
+// Favorites take over in Live games (favorites.h).
+static LiveGame take_lg(League l, uint32_t away, uint32_t home, const char *id) {
+  LiveGame g;
+  g.league = (uint8_t) l;
+  g.event_id = id;
+  g.away_id = away;
+  g.home_id = home;
+  return g;
+}
+
+static void test_take_over() {
+  // Cowboys, Mavericks, Stars: ids are per league, so NBA team 6 isn't the Cowboys.
+  std::vector<FavRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 9}};
+  std::vector<LiveGame> live = {take_lg(League::NFL, 21, 13, "phi-lv"), take_lg(League::NBA, 2, 6, "bos-dal"),
+                                take_lg(League::NHL, 9, 4, "dal-chi"), take_lg(League::NFL, 19, 6, "nyg-dal")};
+  CHECK_EQ(live_fav_rank(live[0], favs), -1);
+  CHECK_EQ(live_fav_rank(live[1], favs), 1);  // the Mavericks at home
+  CHECK_EQ(live_fav_rank(live[2], favs), 2);  // the Stars away
+  CHECK_EQ(live_fav_rank(live[3], favs), 0);
+  CHECK_EQ(live_fav_rank(take_lg(League::NBA, 19, 7, "x"), favs), -1);
+  CHECK_EQ(live_fav_rank(take_lg(League::MLB, 6, 1, "x"), favs), -1);  // MLB 6 isn't a favorite
+
+  // Stick: the favorite highest in the list, whatever is up now.
+  CHECK_EQ(take_over_pick(live, favs, "", false, false), 3);
+  CHECK_EQ(take_over_pick(live, favs, "bos-dal", false, false), 3);
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", false, false), 3);
+  // Its game ended (the scan may still list it): the next favorite's.
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", true, false), 1);
+  // No favorite on: the rotation picks.
+  std::vector<LiveGame> others = {live[0], take_lg(League::NBA, 19, 7, "x")};
+  CHECK_EQ(take_over_pick(others, favs, "", false, false), -1);
+  CHECK_EQ(take_over_pick(others, {}, "", false, true), -1);
+  CHECK_EQ(take_over_pick({}, favs, "", false, false), -1);
+
+  // Alternate: the next favorite's game in list order, wrapping.
+  CHECK_EQ(take_over_pick(live, favs, "", false, true), 3);         // not on one yet: the highest
+  CHECK_EQ(take_over_pick(live, favs, "phi-lv", false, true), 3);   // on another game: the highest
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", false, true), 1);  // Cowboys, then Mavericks
+  CHECK_EQ(take_over_pick(live, favs, "bos-dal", false, true), 2);  // then Stars
+  CHECK_EQ(take_over_pick(live, favs, "dal-chi", false, true), 3);  // and back to the Cowboys
+  // A lone favorite's game stays up.
+  std::vector<LiveGame> one = {live[0], live[2]};
+  CHECK_EQ(take_over_pick(one, favs, "dal-chi", false, true), 1);
+  CHECK_EQ(take_over_pick(one, favs, "dal-chi", true, true), -1);  // and when it ends, nothing
+  // Two favorites in one game count once.
+  std::vector<FavRef> rivals = {{(uint8_t) League::NFL, 19}, {(uint8_t) League::NFL, 6}};
+  std::vector<LiveGame> derby = {live[0], live[3]};
+  CHECK_EQ(take_over_pick(derby, rivals, "nyg-dal", false, true), 1);
+  CHECK_EQ(live_fav_rank(live[3], rivals), 0);
+
+  // The kickoff scan: at the kickoff, then every 2 minutes while ESPN still
+  // says "pre", every 10 after 20 minutes late.
+  const int64_t k = 1'800'000'000;
+  CHECK_EQ(take_over_rescan_at(k - 3600, 0), (int64_t) 0);
+  CHECK_EQ(take_over_rescan_at(k - 3600, k), k);
+  CHECK_EQ(take_over_rescan_at(k, k), k + 120);
+  CHECK_EQ(take_over_rescan_at(k + 19 * 60, k), k + 19 * 60 + 120);
+  CHECK_EQ(take_over_rescan_at(k + 20 * 60, k), k + 20 * 60 + 600);
+
+  // The scan reports the earliest favorite kickoff it saw, per league's ids.
+  std::string nfl = slurp("fixtures/scoreboard_nfl.json");
+  std::vector<LiveGame> games;
+  int64_t next = 0, fav_next = -1;
+  std::vector<uint32_t> cowboys = {6};
+  CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &cowboys, &fav_next));
+  CHECK_EQ(fav_next, parse_iso8601_z("2026-09-14T00:20Z"));  // NYG @ DAL, Sunday night
+  CHECK_EQ(next, parse_iso8601_z("2026-09-10T00:20Z"));      // the week's first game
+  std::vector<uint32_t> two = {6, 25};
+  CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &two, &fav_next));
+  CHECK_EQ(fav_next, parse_iso8601_z("2026-09-11T00:35Z"));  // the 49ers come first
+  std::vector<uint32_t> nobody = {9999};
+  CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &nobody, &fav_next));
+  CHECK_EQ(fav_next, (int64_t) 0);
+}
+
 static void test_fav_action() {
   // Football: the red zone at any score, the last two minutes of the 4th or
   // overtime only when it is a one-score game.
@@ -5333,6 +5365,7 @@ int main() {
   test_color();
   test_favorites();
   test_fav_action();
+  test_take_over();
   test_followed_favorite();
   test_schedule_league();
   test_schedule_due();
@@ -5385,7 +5418,6 @@ int main() {
   test_backoff();
   test_cup_backoff();
   test_auto_update();
-  test_update_mirror();
   test_update_mark();
   test_boot_log();
   test_health_json();
