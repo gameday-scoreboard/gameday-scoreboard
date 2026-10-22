@@ -1,0 +1,9 @@
+{
+  "variant": "moonhub75",
+  "count": 2,
+  "reason": "crash",
+  "time": 1792000000,
+  "version": "2026.10.1",
+  "build_time": 1791990000,
+  "report": "Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.\nBacktrace: 0x42012345:0x3fcebd20 0x42054321:0x3fcebd40"
+}

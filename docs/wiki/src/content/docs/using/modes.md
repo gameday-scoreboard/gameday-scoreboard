@@ -75,7 +75,13 @@ What the panel shows depends on whether you have a team:
 - **With a team picked**, it shows your team's card, the same as My team, with a line like "No live NFL games, showing DAL" at the front of the ticker. It keeps looking, and switches to a live game when one starts.
 - **With no team picked**, it rotates through the games still to come today under **Later today**, each with both logos, the start time and the TV channel, then the latest final scores for every league it follows, under headers like "Yesterday's NHL scores". When no game is left today, a "Next" card names the next matchup and its time, like "Next: BOS at NYR Thu 6:00 PM". A game drops off the Later today list once it starts.
 
-The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours. When there has been no game in the last week and none is coming, the board shows a gray clock and the ticker says "No live games right now".
+The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours.
+
+:::note[Coming in the next release]
+A check that fails, on a slow or dropped connection, is tried again within a few minutes instead of waiting for that kickoff.
+:::
+
+When there has been no game in the last week and none is coming, the board shows a gray clock and the ticker says "No live games right now".
 
 A change to the leagues, or to the favorites they follow, takes effect right away, instead of leaving the old leagues' final scores up until the next check.
 
