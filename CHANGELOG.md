@@ -24,9 +24,6 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 - Pick the best game counts a soccer match as at a break from the 45th minute to halftime and from the 90th minute on, so a dull match no longer holds the panel for a whole half. It also looks once per break, so a hockey intermission or a quarter break costs one look instead of one every Switch every minutes, which is most of what a panel with no team picked reads.
 - Favorites take over with Stick with the higher team checks every Switch every minutes (at least every 5) for a higher favorite whose game started without a set time. With Alternate, the switch comes only every Switch every minutes, not also when another favorite's game is about to start.
-
-## Unreleased
-
 - Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
 
 ## v2026.10.1
