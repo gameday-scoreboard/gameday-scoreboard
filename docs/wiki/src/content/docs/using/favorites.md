@@ -9,9 +9,9 @@ Favorite teams lets the panel follow up to 16 teams from any league, in the orde
 
 ## Setting up your list
 
-On the device page, open the **Favorites** card and tap **Add a favorite**. The team chooser opens and stays open, so you can add several teams in one go: tap a team to add it to the end of the list. Teams already in your list show checked, and tapping a checked team takes it out again. A line at the top counts them, like **5 of 16 favorites**; once the list is full, the chooser says so. Tap **Done** when you're finished.
+On the device page, open the **Favorites** card and tap **Add a favorite**. The team chooser opens and stays open, so you can add several teams in one go: tap a team to add it to the end of the list. Teams already in your list show a check mark, and tapping a checked team takes it out again. A line at the top counts them, like **5 of 16 favorites**; once the list is full, the chooser says so. Tap **Done** when you're finished.
 
-Back in the **Favorites** card, each row has buttons to move the team up or down and to remove it. The Game Day app edits the same list the same way. **Change team** for My team still closes as soon as you pick.
+Back in the **Favorites** card, each row has buttons to move the team up or down and to remove it. The Game Day app edits the same list. **Change team** for My team still closes as soon as you pick.
 
 The order is the priority. Higher teams win when two games clash (unless you choose **Alternate**, below), and the first four are buttons 1 to 4 on a WizMote remote. The page marks those four with their button number.
 

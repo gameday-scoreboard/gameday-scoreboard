@@ -1223,9 +1223,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     };
   });
   $("#q").oninput = renderTiles;
-  $("#close").onclick = () => $("#modal").classList.remove("open");
-  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") $("#modal").classList.remove("open"); };
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("#modal").classList.remove("open"); });
+  // Leaving the picker ends favorites mode until the next Add a favorite.
+  const closePicker = () => { pickFav = false; $("#modal").classList.remove("open"); };
+  $("#close").onclick = closePicker;
+  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") closePicker(); };
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("#modal").classList.contains("open")) closePicker(); });
 
   const renderCurrentTeam = () => {
     const t = S ? teamByKey(refKey(S.team)) : null;

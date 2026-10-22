@@ -225,6 +225,12 @@ button { font: inherit; color: inherit; }
 }
 .tile:hover { border-color: #3a4556; background: #0e131b; }
 .tile.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+/* A check on the chosen team, and on every favorite while adding favorites */
+.tile, .game .side { position: relative; }
+.tile.on::after, .game .side.on::after {
+  content: "\2713"; position: absolute; top: 4px; right: 6px;
+  color: var(--gold); font-size: 13px; font-weight: 700; line-height: 1;
+}
 .tile img { width: 44px; height: 44px; object-fit: contain; }
 .tile .n { font-size: 12px; line-height: 1.2; color: #d6dde7; }
 .tile .a { font-size: 10px; color: var(--muted); letter-spacing: .08em; }
