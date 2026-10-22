@@ -10,9 +10,10 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks
+all: build/test_parse build/test_networks build/test_api
 	./build/test_parse
 	./build/test_networks
+	./build/test_api
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
@@ -23,6 +24,13 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
+
+# The device API (/gameday/state, set, action, wifi) against fixtures/api/,
+# which the companion app's tests read. It reads gameday.cpp's source when it
+# runs, so a change there needs no rebuild.
+build/test_api: test_api.cpp ../components/gameday/set_request.h ../components/gameday/health.h ../components/gameday/guard.h ../components/gameday/wifi_history.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_api.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the
