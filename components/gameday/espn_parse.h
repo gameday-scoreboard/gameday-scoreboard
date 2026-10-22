@@ -258,8 +258,7 @@ std::string scan_url(League league, int64_t now_epoch, bool top25 = false);
 // 2 AM), and no league starts a game between midnight and 6 AM Eastern.
 inline int64_t scan_day_shift(League) { return 9 * 3600; }
 // One game on its own, 8 to 20 KB, where the day's scoreboard it sits in is
-// up to 260 KB (NFL) or 750 KB (college). A LeagueInfo::per_event league
-// polls this.
+// up to 260 KB (NFL) or 750 KB (college). Every league polls this.
 std::string event_url(League league, const std::string &event_id);
 // One day's scoreboard for finding a team's next game (Eastern date of
 // day_epoch). College football and men's college basketball read the team's

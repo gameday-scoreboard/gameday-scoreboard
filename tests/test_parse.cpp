@@ -26,6 +26,7 @@
 #include "recap.h"
 #include "score_log.h"
 #include "poll_timing.h"
+#include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
 #include "wifi_history.h"
@@ -1442,7 +1443,7 @@ static void test_mlb_urls() {
   CHECK_EQ(team_logo_url(League::MLB, 15, "ATL"),
            std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/mlb/500-dark/scoreboard/atl.png&w=64&h=64"));
   CHECK_EQ(std::string(league_key(League::MLB)), std::string("mlb"));
-  CHECK(league_by_key("mlb") != nullptr && league_by_key("mlb")->per_event);
+  CHECK(league_by_key("mlb") != nullptr);
   CHECK(league_by_key("cfl") == nullptr);
   // A West Coast game still on at 2:30 AM Eastern is listed under the day it
   // started; the next morning's scan moves on to the new day.
@@ -1707,7 +1708,7 @@ static void test_soccer_urls() {
            std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500-dark/20232.png&w=64&h=64"));
   CHECK_EQ(std::string(league_key(League::EPL)), std::string("epl"));
   CHECK_EQ(std::string(league_key(League::MLS)), std::string("mls"));
-  CHECK(league_by_key("epl") != nullptr && league_by_key("epl")->per_event && league_by_key("epl")->season_list);
+  CHECK(league_by_key("epl") != nullptr && league_by_key("epl")->season_list);
   CHECK(league_by_key("mls") != nullptr && league_by_key("mls")->logo_by_id);
   CHECK(league_sport(League::EPL) == Sport::SOCCER);
   CHECK(league_sport(League::MLS) == Sport::SOCCER);
@@ -2105,7 +2106,7 @@ static void test_nba_urls() {
   CHECK_EQ(std::string(league_key(League::WNBA)), std::string("wnba"));
   for (const char *key : {"nba", "wnba"}) {
     const LeagueInfo *l = league_by_key(key);
-    CHECK(l != nullptr && l->per_event && !l->season_list && l->linger_min == 30);
+    CHECK(l != nullptr && !l->season_list && l->linger_min == 30);
     CHECK(l != nullptr && l->sport == Sport::BASKETBALL);
   }
   int nba = 0, wnba = 0;
@@ -2327,7 +2328,7 @@ static void test_mcbb_urls() {
   CHECK_EQ(team_logo_url(League::MCBB, 130, "MICH"),
            std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/130.png&w=64&h=64"));
   const LeagueInfo *l = league_by_key("mcbb");
-  CHECK(l != nullptr && l->per_event && !l->season_list && l->logo_by_id && l->sport == Sport::BASKETBALL);
+  CHECK(l != nullptr && !l->season_list && l->logo_by_id && l->sport == Sport::BASKETBALL);
   CHECK_EQ(std::string(league_path(League::MCBB)), std::string("mens-college-basketball"));
   int n = 0;
   for (size_t i = 0; i < kTeamCount; i++) {
@@ -2425,7 +2426,7 @@ static void test_nhl_urls() {
            std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/nhl/500-dark/scoreboard/utah.png&w=64&h=64"));
   CHECK_EQ(std::string(league_key(League::NHL)), std::string("nhl"));
   const LeagueInfo *nhl = league_by_key("nhl");
-  CHECK(nhl != nullptr && nhl->per_event && !nhl->season_list && nhl->linger_min == 30);
+  CHECK(nhl != nullptr && !nhl->season_list && nhl->linger_min == 30);
   CHECK(league_sport(League::NHL) == Sport::HOCKEY);
   int count = 0;
   for (size_t i = 0; i < kTeamCount; i++) {
@@ -3863,6 +3864,22 @@ static void test_backoff() {
   CHECK(!is_throttle_status(503));
 }
 
+// After a My team game poll failed: read the team again now, or back off.
+static void test_reread_after_poll() {
+  // A transport failure (timeout, 5xx): back off, as before.
+  CHECK(!reread_team_after_poll(false, false, false, false));
+  // ESPN served no such game (a 404, another game's document): read the team
+  // once; if it names the same game again, back off.
+  CHECK(reread_team_after_poll(false, true, false, false));
+  CHECK(!reread_team_after_poll(false, true, false, true));
+  // The boot cache's game didn't poll: read the team, whatever the failure.
+  CHECK(reread_team_after_poll(true, false, false, false));
+  CHECK(reread_team_after_poll(true, true, false, true));
+  // A refusal waits out the back-off in every case.
+  CHECK(!reread_team_after_poll(true, true, true, false));
+  CHECK(!reread_team_after_poll(false, true, true, false));
+}
+
 static void test_cup_backoff() {
   // A cup job backs off when its last read failed or was refused.
   CHECK(cup_read_backs_off(true, true, false, false));   // the poll failed
@@ -4658,6 +4675,36 @@ static void test_message() {
   CHECK(msg_turn(true, true, true, kMsgPageMs, 2, kMsgPageMs) == MsgTurn::HIDE);
   CHECK(msg_turn(true, true, false, 0, 0, kMsgPageMs) == MsgTurn::SHOW);
   CHECK(msg_turn(true, true, true, kMsgPageMs, 0, kMsgPageMs) == MsgTurn::NEXT);
+}
+
+// A settings change writes flash at once, except while a /gameday/set request
+// or a settings restore applies its keys: those fold into one write when the
+// outermost batch ends.
+static void test_prefs_sync() {
+  PrefsSyncGate g;
+  CHECK(g.request());  // a lone change writes now
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(g.batching());
+  CHECK(!g.request());  // inside a request: owed, not written yet
+  CHECK(!g.request());
+  CHECK(g.end());  // one write for the whole request
+  CHECK(!g.batching());
+  g.begin();
+  CHECK(!g.end());  // a request that changed nothing writes nothing
+  CHECK(g.request());  // and the gate is open again
+  // A restore runs the set keys inside its own batch: the inner end owes
+  // nothing yet, the outer one writes once.
+  g.begin();
+  g.begin();
+  CHECK(!g.request());
+  CHECK(!g.end());
+  CHECK(g.batching());
+  CHECK(!g.request());
+  CHECK(g.end());
+  CHECK(!g.batching());
+  CHECK(!g.end());  // an extra end is harmless
+  CHECK(g.request());
 }
 
 static void test_panel_text() {
@@ -5621,6 +5668,7 @@ int main() {
   test_later_today();
   test_backoff();
   test_cup_backoff();
+  test_reread_after_poll();
   test_auto_update();
   test_update_mark();
   test_boot_log();
@@ -5631,6 +5679,7 @@ int main() {
   test_night();
   test_offseason();
   test_panel_text();
+  test_prefs_sync();
   test_message();
   test_wifi_history();
   test_ha_events();
