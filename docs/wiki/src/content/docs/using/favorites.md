@@ -55,7 +55,7 @@ A playlist is a group of your favorites with a name, like your football teams or
 
 - The **Playlists** card on the device page makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
 - **One per sport** makes a playlist for each sport among your favorites, named Football, Baseball, Basketball, Hockey and Soccer. It skips a sport that already has a playlist by that name.
-- Up to 16 playlists. A name is up to 16 characters.
+- Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
 - **Playing**, under **Favorite teams** on the device page, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
 
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.

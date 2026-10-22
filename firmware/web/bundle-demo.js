@@ -839,7 +839,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
-  const cleanName = (v) => v.replace(/[;=]/g, "").replace(/\s+/g, " ").trim().slice(0, 16);
+  // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
+  const cleanName = (v) => {
+    let out = "", bytes = 0;
+    for (const ch of v.replace(/[;=]/g, "").replace(/\s+/g, " ").trim()) {
+      bytes += new TextEncoder().encode(ch).length;
+      if (bytes > 16) break;
+      out += ch;
+    }
+    return out.trim();
+  };
   const SPORTS = [["Football", ["nfl", "ncaa"]], ["Baseball", ["mlb"]], ["Basketball", ["nba", "wnba", "mcbb"]],
     ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
   const listMax = () => (S && S.listmax) || 16;

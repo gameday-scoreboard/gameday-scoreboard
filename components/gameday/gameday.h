@@ -388,7 +388,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Moves each playlist's teams to where the favorites list put them (before:
   // fav_refs_all_() from before the change). No save.
   void remap_lists_(const std::vector<::espn::TeamRef> &before);
-  void set_lists_(const std::vector<::espn::ListDef> &lists);
+  // keep: the playlist playing after the change (list= sent with lists=), or
+  // -1 to keep the one playing by its name.
+  void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = -1);
   // n: 1 to the playlist count, 0 = every favorite.
   void set_active_list_(uint8_t n, bool announce);
   std::string list_name_(uint8_t n) const;  // n = 1..count

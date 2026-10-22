@@ -307,6 +307,9 @@ def night_time(v):
 
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
+    # apply_ops_: list= with lists= names the playlist playing after the change.
+    with_lists = any(k == "lists" for k, _ in kv)
+    keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
     for k, v in kv:
         before = fav_refs()
         if k == "team":
@@ -349,9 +352,11 @@ def apply_set(kv):
             active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] else ""
             STATE["lists"] = parse_lists(v)
             STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
+            if 0 <= keep_list <= len(STATE["lists"]):
+                STATE["list"] = keep_list
         elif k == "list":
-            # set_active_list_() plays it in Favorite teams.
-            if v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
+            # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it.
+            if not with_lists and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
                 STATE["list"] = atoi(v)
                 STATE["mode"] = 4
         elif k in ("today", "jump", "banner", "favtake"):

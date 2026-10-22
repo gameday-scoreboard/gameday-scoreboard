@@ -174,7 +174,7 @@ void remap(Settings &s, const std::vector<TeamRef> &before) {
     l.second = remap_mask(l.second, before, fav_refs(s));
 }
 
-void apply(Settings &s, const SetOp &op) {
+void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
   std::vector<TeamRef> before = fav_refs(s);
   switch (op.kind) {
     case SetKind::TEAM:
@@ -199,7 +199,8 @@ void apply(Settings &s, const SetOp &op) {
       remap(s, before);
       break;
     case SetKind::LISTS: {
-      // set_lists_: the one being played stays chosen by its name.
+      // set_lists_: the one being played stays chosen by its name, or by
+      // list= in the same request.
       std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
       s.lists.clear();
       s.list = 0;
@@ -208,12 +209,14 @@ void apply(Settings &s, const SetOp &op) {
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
+      if (keep_list >= 0 && keep_list <= (int) s.lists.size())
+        s.list = keep_list;
       break;
     }
     case SetKind::LIST:
       // set_active_list_ switches to Favorite teams; a number past the last
-      // playlist is refused.
-      if (op.value <= (int) s.lists.size()) {
+      // playlist is refused. With lists= set_lists_ took it.
+      if (!with_lists && op.value <= (int) s.lists.size()) {
         s.list = op.value;
         s.mode = (int) Mode::FAVORITES;
       }
@@ -332,10 +335,22 @@ void test_fixture_cases() {
           kv.emplace_back(key, p[1].as<const char *>());
     int status = kv.empty() ? 400 : 200;
     SCHECK(status == (c["status"] | 200), "%s: status %d", name, status);
-    SetOp op;
-    for (const auto &p : kv)
+    std::vector<SetOp> ops;
+    for (const auto &p : kv) {
+      SetOp op;
       if (parse_set(p.first, p.second, op, kFavMax))
-        apply(s, op);
+        ops.push_back(op);
+    }
+    // apply_ops_: list= with lists= names the playlist playing after the change.
+    bool with_lists = false;
+    int keep_list = -1;
+    for (const auto &op : ops) {
+      with_lists = with_lists || op.kind == SetKind::LISTS;
+      if (op.kind == SetKind::LIST)
+        keep_list = op.value;
+    }
+    for (const auto &op : ops)
+      apply(s, op, with_lists, keep_list);
     JsonDocument got;
     state_doc(s, got);
     for (JsonPairConst e : c["expect"].as<JsonObjectConst>()) {

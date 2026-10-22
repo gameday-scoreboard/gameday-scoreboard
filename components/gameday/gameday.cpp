@@ -523,9 +523,10 @@ bool GamedayComponent::fav_in_list_(size_t i) const {
   return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
 }
 
-void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists) {
+void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
   std::string active_name = this->list_name_(this->prefs9_.active);
-  uint16_t active_mask = this->prefs9_.active != 0 ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
+  bool was_active = this->prefs9_.active != 0;
+  uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
@@ -534,18 +535,24 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists) {
     p.mask[n] = ::espn::list_mask(lists[n].teams, favs);
   }
   // The playlist being played stays chosen by its name; with that name gone
-  // it is every favorite. A page that renames it sends list= after lists=.
+  // it is every favorite. keep (list= in the same request, as a rename sends
+  // it) names it instead.
   this->prefs9_ = p;
   uint8_t active = 0;
-  for (uint8_t n = 1; n <= p.count && !active_name.empty(); n++)
-    if (this->list_name_(n) == active_name)
-      active = n;
+  if (keep >= 0 && keep <= p.count) {
+    active = (uint8_t) keep;
+  } else {
+    for (uint8_t n = 1; n <= p.count && !active_name.empty(); n++)
+      if (this->list_name_(n) == active_name)
+        active = n;
+  }
   this->prefs9_.active = active;
   this->pref9_.save(&this->prefs9_);
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
   uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
-  if (this->favorites_mode_() && (active_name != this->list_name_(active) || mask != active_mask))
+  // A rename alone plays the same teams, so the board stays as it is.
+  if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask))
     this->set_active_list_(active, false);  // other teams play now: pick again
   else
     this->rebuild_state_(&this->last_fields_);
@@ -4385,6 +4392,15 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
+  // list= with lists= names the playlist playing after the change (a rename
+  // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
+  bool with_lists = false;
+  int keep_list = -1;
+  for (const auto &op : ops) {
+    with_lists = with_lists || op.kind == ::espn::SetKind::LISTS;
+    if (op.kind == ::espn::SetKind::LIST)
+      keep_list = op.value;
+  }
   for (const auto &op : ops) {
     switch (op.kind) {
       case ::espn::SetKind::TEAM:
@@ -4436,9 +4452,11 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         this->set_favorite_(op.slot, op.team.league, op.team.id);
         break;
       case ::espn::SetKind::LISTS:
-        this->set_lists_(::espn::parse_lists(op.text, FAV_MAX));
+        this->set_lists_(::espn::parse_lists(op.text, FAV_MAX), keep_list);
         break;
       case ::espn::SetKind::LIST:
+        if (with_lists)
+          break;  // set_lists_ took it
         if (op.value > this->prefs9_.count)
           ESP_LOGW(TAG, "No playlist %d", op.value);
         else
