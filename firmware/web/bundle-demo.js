@@ -188,7 +188,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="card">
         <h2>Panel</h2>
         <div id="nickRow" hidden>
-          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's network name.</small></label>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
         <div id="panelCtls"></div>
@@ -934,13 +934,20 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
 
   // ---- nickname: the header, the tab title and the box ---------------------------
-  const baseTitle = document.title || "Game Day Scoreboard";
   let pingTitle = "";  // the device's own name, from the event stream
   let nickSeen = null;
+  // ESPHome's own page script names the tab after the device on each of its
+  // pings; while there is a nickname the tab keeps it.
+  let nickTitle = "";
+  new MutationObserver(() => {
+    if (nickTitle && document.title !== nickTitle) document.title = nickTitle;
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
   const renderNick = () => {
     const nick = (S && S.nick) || "";
-    $("#devname").textContent = nick || pingTitle || "connecting";
-    document.title = nick ? nick + " · Game Day Scoreboard" : baseTitle;
+    $("#devname").textContent = nick || pingTitle || (S && S.name) || "connecting";
+    nickTitle = nick ? nick + " · Game Day Scoreboard" : "";
+    const title = nickTitle || pingTitle || "Game Day Scoreboard";
+    if (document.title !== title) document.title = title;
     // Older firmware has no nickname.
     $("#nickRow").hidden = !S || S.nick === undefined;
     const input = $("#nick");

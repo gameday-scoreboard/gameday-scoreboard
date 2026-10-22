@@ -299,7 +299,7 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "nick") {
     op.kind = SetKind::NICK;
-    op.text = message_clean(v, kNickMax, false);
+    op.text = message_clean(utf8_only(v), kNickMax, false);
     return true;
   }
   if (k == "msgurl") {

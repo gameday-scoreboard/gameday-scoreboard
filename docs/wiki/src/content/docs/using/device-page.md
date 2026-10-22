@@ -84,7 +84,7 @@ Live games also has a **Favorites take over** switch, off to start. On, a game o
 :::
 
 :::note[Coming in the next release]
-The Panel card starts with a **Nickname** box. Give each panel a name, like "Living room" or "Garage", so you can tell them apart. The page's header and the browser tab show it, and so does the Game Day app's list of panels. Up to 32 characters (fewer with accents); emoji are left out. Clear the box to go back to the `gameday-xxxxxx` name. The nickname doesn't change the panel's network name, its address, its Wi-Fi hotspot or its name in Home Assistant.
+The Panel card starts with a **Nickname** box. Give each panel a name, like "Living room" or "Garage", so you can tell them apart. The page's header and the browser tab show it, and so does the panel list in the iPhone app. Up to 32 characters (fewer with accents); emoji are left out. Clear the box to go back to the panel's own name. The nickname doesn't change the panel's network name, its address, its Wi-Fi hotspot or its name in Home Assistant.
 :::
 
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).

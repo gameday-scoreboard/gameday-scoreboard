@@ -3903,7 +3903,7 @@ void GamedayComponent::load_nick_() {
   if (!this->nick_pref_.load(&p))
     return;  // never named
   p.text[sizeof(p.text) - 1] = '\0';
-  this->nick_ = ::espn::message_clean(p.text, ::espn::kNickMax, false);
+  this->nick_ = ::espn::message_clean(::espn::utf8_only(p.text), ::espn::kNickMax, false);
 }
 
 void GamedayComponent::set_nick_(const std::string &nick) {

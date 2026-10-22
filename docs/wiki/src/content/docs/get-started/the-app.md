@@ -15,7 +15,7 @@ The Game Day app is the companion app for your panel, for iPhone and Android. It
 - **Changes the panel's settings**: the ticker, celebrations, favorites, brightness, the remote and the rest. The app's screens follow the device page's cards, so a setting is in the same place in both.
 
 :::note[Coming in the next release]
-With more than one panel, give each a **Nickname** in its settings, like "Living room". The panel list shows the nicknames, with each panel online or offline, and you can drag the list into your own order. The nickname is saved on the panel, so every phone and the device page see the same name. The order is kept on each phone.
+On iPhone, give each panel a **Nickname** in its Panel settings, like "Living room". The panel list shows the nicknames, with each panel online or offline, and **Edit** lets you drag the list into your own order. The nickname is saved on the panel, so every phone and the device page see the same name. The order is kept on each phone.
 :::
 
 ## If the app doesn't list your panel

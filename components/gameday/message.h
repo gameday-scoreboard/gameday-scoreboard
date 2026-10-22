@@ -131,6 +131,25 @@ inline std::string message_clean(const std::string &in, size_t max, bool lines) 
   return out;
 }
 
+// Text with every byte that isn't part of a valid UTF-8 character left out
+// (stray and cut-off bytes, overlong forms, surrogates), for text the panel
+// hands on to the apps (the nickname) rather than draws: their JSON readers
+// refuse a document with any of those.
+inline std::string utf8_only(const std::string &in) {
+  std::string out;
+  for (size_t i = 0; i < in.size();) {
+    size_t n = detail::utf8_len(in, i);
+    uint32_t cp = detail::utf8_cp(in, i, n);
+    bool ok = n == 1 ? cp < 0x80
+                     : !((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
+                         (cp >= 0xD800 && cp <= 0xDFFF));
+    if (ok)
+      out.append(in, i, n);
+    i += n;
+  }
+  return out;
+}
+
 // An address the panel can read the list from: http or https, no spaces or
 // control characters, at most kMsgUrlMax bytes. "" is allowed (no list).
 inline bool msg_url_ok(const std::string &url) {
