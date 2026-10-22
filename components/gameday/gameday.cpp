@@ -1181,6 +1181,12 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     this->game_ = e.game;
     ::espn::Splash splash = ::espn::decide_splash(this->prev_, this->game_, this->opponent_splashes(), false);
     this->emit_(splash);
+  } else if (!switched && this->fav_shown_ < 0) {
+    // No favorite has a card (every game past the season horizon): the
+    // off-season clock's turn once the last one is read, as fav_no_event_.
+    this->emit_({});
+    if (this->last_fields_.clock)
+      this->mark_board_ready_();
   } else if (!switched) {
     this->rebuild_state_(&this->last_fields_);  // the page's list of favorites' games
   }
@@ -2394,6 +2400,11 @@ uint32_t GamedayComponent::interval_for_phase_() const {
       int64_t now = (int64_t) this->time_->timestamp_now();
       int64_t until = this->game_.kickoff_epoch - now;
       ms = until <= PRE_NEAR_SECONDS && !this->game_.time_tbd ? PRE_NEAR_INTERVAL : PRE_FAR_INTERVAL;
+      // Past the season horizon the board is the off-season clock, which a
+      // poll can't change: the schedule's own six hours catch a new date.
+      if (::espn::off_season(GameState::PRE, this->game_.kickoff_epoch, now,
+                             ::espn::season_horizon(this->game_.sport)))
+        ms = SCHEDULE_INTERVAL;
       break;
     }
     default:
@@ -3361,20 +3372,36 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
     if (!this->recap_on_ || !this->recap_cards_.empty())
       return;
   } else if (this->favorites_mode_()) {
-    // Every favorite in the playlist has been read, and none has a game.
-    const FavEntry *first = nullptr;
+    // A favorite's game locked on has the board, playlist or not (a favorite
+    // outside the playlist still takes the panel near its kickoff).
+    if (this->fav_locked_)
+      return;
+    // Every favorite in the playlist has been read, and each is between
+    // seasons: no game, or the next one past the season horizon (often next
+    // season's opener). The Next line is the soonest of those games.
+    int64_t tnow = (int64_t) this->time_->timestamp_now();
+    const FavEntry *first = nullptr, *next = nullptr;
     for (const auto &e : this->fav_) {
       if (!this->fav_in_list_(e.slot - 1))
         continue;
-      if (!e.sched.valid || !e.sched.event_id.empty())
-        return;
       if (first == nullptr)
         first = &e;
+      bool polled = e.game.valid && e.game.event_id == e.sched.event_id;
+      int64_t kick = polled ? e.game.kickoff_epoch : e.sched.kickoff_epoch;
+      if (::espn::fav_off_season(e.sched.valid, !e.sched.event_id.empty(), polled, e.game.state, kick, tnow,
+                                 ::espn::season_horizon(::espn::league_sport(e.team->league))) != 1)
+        return;
+      if (polled && e.game.state == GameState::PRE && e.game.kickoff_epoch > 0 &&
+          (next == nullptr || e.game.kickoff_epoch < next->game.kickoff_epoch))
+        next = &e;
     }
     if (first == nullptr)
       return;
-    team = first->team;
-    color = first->sched.team_color;
+    const FavEntry &shown = next != nullptr ? *next : *first;
+    team = shown.team;
+    color = shown.game.valid ? shown.game.team_color : shown.sched.team_color;
+    if (next != nullptr)
+      this->clock_next_line_(f, next->game);
   } else {
     if (team == nullptr)
       return;
@@ -3387,19 +3414,23 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
                             ::espn::season_horizon(::espn::league_sport(team->league))))
       return;
     color = g.valid ? g.team_color : this->schedule_.team_color;
-    if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0) {
-      int64_t at = g.time_tbd ? ::espn::tbd_day_epoch(g.kickoff_epoch) : g.kickoff_epoch;
-      struct tm kick = ESPTime::from_epoch_local((time_t) at).to_c_tm();
-      struct tm now = this->time_->now().to_c_tm();
-      std::string ours = panel_text(g.team_abbr), opp = panel_text(g.opp_abbr);
-      f.next_line = ::espn::next_line(ours, opp, g.team_home, kick, now, "\n", g.time_tbd);
-      // The ticker carries it on both layouts, since a single panel has no
-      // room for it under the time.
-      f.status_text = ::espn::next_line(ours, opp, g.team_home, kick, now, " ", g.time_tbd);
-    }
+    if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0)
+      this->clock_next_line_(f, g);
   }
   f.clock = true;
   f.team_color = ::espn::clock_color(team != nullptr, ::espn::parse_color(color));
+}
+
+// The clock's "Next: DAL vs PHI" and kickoff, for a game still ahead.
+void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) {
+  int64_t at = g.time_tbd ? ::espn::tbd_day_epoch(g.kickoff_epoch) : g.kickoff_epoch;
+  struct tm kick = ESPTime::from_epoch_local((time_t) at).to_c_tm();
+  struct tm now = this->time_->now().to_c_tm();
+  std::string ours = panel_text(g.team_abbr), opp = panel_text(g.opp_abbr);
+  f.next_line = ::espn::next_line(ours, opp, g.team_home, kick, now, "\n", g.time_tbd);
+  // The ticker carries it on both layouts, since a single panel has no
+  // room for it under the time.
+  f.status_text = ::espn::next_line(ours, opp, g.team_home, kick, now, " ", g.time_tbd);
 }
 
 // The countdown card (countdown.h). Never over a game in progress, a locked
