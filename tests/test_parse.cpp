@@ -797,6 +797,16 @@ static void test_status_text() {
   CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
   CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
   CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
+  // ESPN writes the yards with no thousands separator today (pinned from the
+  // recorded document below); one written "1,381" reads the same.
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1,381 YDS, 9 TD, 3 INT"),
+           std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "12,345 YDS"), std::string("Prescott 12,345 yds"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "-- YDS"), std::string(""));
+  {
+    std::string raw = slurp("fixtures/event_nfl_pre_dal.json");
+    CHECK(raw.find("\"112/185, 1408 YDS, 10 TD, 3 INT\"") != std::string::npos);
+  }
   // Pre-game on a single panel: both records after the kickoff, the leaders
   // after the odds, and the leaders switch takes only the leaders away
   GameSnapshot pr = live(0, 0, GameState::PRE);
