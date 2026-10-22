@@ -195,8 +195,6 @@ void GamedaySelect::control(const std::string &value) {
     this->parent_->select_team(value);
   else if (this->type_ == SelectType::MODE)
     this->parent_->select_mode(value);
-  else if (this->type_ == SelectType::FAVORITE)
-    this->parent_->select_favorite(this->slot_, value);
   else
     this->parent_->select_timezone(value);
 }
@@ -400,28 +398,6 @@ std::string GamedayComponent::favorite_option_(uint8_t slot) const {
   return "None";
 }
 
-void GamedayComponent::select_favorite(uint8_t slot, const std::string &option) {
-  if (slot < 1 || slot > FAV_MAX)
-    return;
-  uint8_t league = 0;
-  uint32_t id = 0;
-  if (option != "None") {
-    for (size_t i = 0; i < ::espn::kTeamCount; i++) {
-      const auto &t = ::espn::kTeams[i];
-      if (::espn::team_option(t) == option) {
-        league = (uint8_t) t.league;
-        id = t.espn_id;
-        break;
-      }
-    }
-    if (id == 0) {
-      ESP_LOGW(TAG, "Unknown favorite '%s'", option.c_str());
-      return;
-    }
-  }
-  this->set_favorite_(slot, league, id);
-}
-
 void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) {
   if (slot < 1 || slot > FAV_MAX)
     return;
@@ -433,8 +409,6 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
     this->pref7_.save(&this->prefs7_);
   bool first_pick = id != 0 && this->mark_setup_done_();
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
-  if (slot <= 4 && this->favorite_selects_[slot - 1] != nullptr)
-    this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
   this->favorites_changed_(first_pick, live_before);
 }
 
@@ -450,9 +424,6 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   this->pref7_.save(&this->prefs7_);
   bool first_pick = any && this->mark_setup_done_();
   ESP_LOGI(TAG, "Favorites: %u team(s)", (unsigned) list.size());
-  for (uint8_t slot = 1; slot <= 4; slot++)
-    if (this->favorite_selects_[slot - 1] != nullptr)
-      this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
   this->favorites_changed_(first_pick, live_before);
 }
 
@@ -546,9 +517,6 @@ void GamedayComponent::publish_selects_() {
     this->timezone_select_->publish_state(::espn::kTimezones[this->prefs_.tz_index].name);
   if (this->mode_select_ != nullptr)
     this->mode_select_->publish_state(MODE_OPTIONS[this->prefs2_.mode]);
-  for (uint8_t slot = 1; slot <= 4; slot++)
-    if (this->favorite_selects_[slot - 1] != nullptr)
-      this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
 }
 
 void GamedayComponent::select_mode(const std::string &option) {
