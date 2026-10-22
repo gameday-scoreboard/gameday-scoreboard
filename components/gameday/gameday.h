@@ -710,6 +710,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     this->last_good_ms_ = millis() == 0 ? 1 : millis();
     this->clear_backoff_();
   }
+  // A read failed: one more in the run the ticker and the page report.
+  void count_miss_() { this->misses_ = ::espn::miss_count_after(this->misses_); }
   // A read failed: start the next, longer wait (poll_timing.h) and return it.
   uint32_t back_off_();
   // ESPN answered: the next failure starts the backoff over.

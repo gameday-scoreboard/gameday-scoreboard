@@ -937,7 +937,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     this->fav_poll_ms_ = now == 0 ? 1 : now;
   if (j.need_schedule) {
     if (!j.schedule_ok) {
-      this->misses_++;
+      this->count_miss_();
       this->emit_({});  // the miss shows on the ticker and the page, as in My team
       this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
       this->schedule_next_(0);
@@ -973,7 +973,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     }
   }
   if (!j.game_ok) {
-    this->misses_++;
+    this->count_miss_();
     this->emit_({});
     this->back_off_();
     this->schedule_next_(0);
@@ -2528,7 +2528,7 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_scan) {
     if (!j.scan_ok && j.live.empty()) {
-      this->misses_++;
+      this->count_miss_();
       if (this->recap_on_)
         this->live_started_ms_ = 0;  // retry the scan, not the long wait
       this->drop_team_placeholder_();  // "Looking for a live game", not a bare logo
@@ -2712,7 +2712,7 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_schedule) {
     if (!j.schedule_ok) {
-      this->misses_++;
+      this->count_miss_();
       this->drop_team_placeholder_();
       this->emit_({});
       this->schedule_next_(this->back_off_());
@@ -2746,7 +2746,7 @@ void GamedayComponent::apply_job_() {
     }
   }
   if (!j.game_ok) {
-    this->misses_++;
+    this->count_miss_();
     if (this->cache_unconfirmed_ && !j.throttled) {
       // ESPN has no such game any more, or the read failed: the cache may be
       // wrong, so read the team endpoint now, not in six hours.
@@ -2843,7 +2843,7 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
     this->emit_({});
     this->mark_board_ready_();
   } else if (j.polled && !j.game_ok) {
-    this->misses_++;
+    this->count_miss_();
     this->drop_team_placeholder_();
     this->emit_({});
   } else if (j.polled) {
@@ -2869,7 +2869,16 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
 std::string GamedayComponent::no_game_why_() const {
   if (this->game_.valid || this->demo_playing_())
     return "";
-  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_,
+  size_t favs = 0, read = 0;
+  if (this->favorites_mode_()) {
+    favs = this->fav_.size();
+    for (const auto &e : this->fav_)
+      read += e.sched.valid ? 1 : 0;
+  }
+  // The Live fallback shows the saved team's card, which says why it is
+  // empty like My team does.
+  return ::espn::no_game_text(this->clock_set_(), this->live_mode_() && !this->live_fallback_,
+                              ::espn::no_game_said(favs, read, this->no_game_confirmed_), this->misses_,
                               this->captive_);
 }
 
@@ -2975,6 +2984,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // Before the Live mode prefixes, so a fallback team's Next line keeps "No
   // live X games, showing CHI |" in front of it.
   this->clock_fields_(f);
+  std::string showing;  // the Live fallback's "No live X games, showing DAL | "
   if (this->live_mode_() && !this->demo_playing_()) {
     std::string league_word = this->live_word_();
     const ::espn::Team *saved = this->current_team_();
@@ -2988,7 +2998,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_team_score = f.ha_opp_score = -1;
       f.message = this->recap_message_;
     } else if (this->live_fallback_ && saved != nullptr) {
-      std::string showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
+      showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
       f.status_text = showing + f.status_text;
       f.ha_status_text = showing + f.ha_status_text;
     } else if (!g.valid || g.state == GameState::NOT_FOUND) {
@@ -3003,8 +3013,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // once ESPN itself has said so; before that it would be a guess.
   std::string why = this->no_game_why_();
   if (!why.empty()) {
-    f.status_text = why;
-    f.ha_status_text = why;
+    f.status_text = showing + why;
+    f.ha_status_text = showing + why;
     f.message = why;
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
