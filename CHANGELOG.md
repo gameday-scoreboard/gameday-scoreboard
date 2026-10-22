@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- In a Live mode with your team on the board between games, a look for live games that fails (a slow or dropped connection) is tried again within a few minutes. Before, the panel waited for the next kickoff it knew of, up to 3 hours, and could miss the start of a game.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
