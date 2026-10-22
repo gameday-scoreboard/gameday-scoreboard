@@ -2928,6 +2928,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.soccer_stats = this->ticker_soccer_stats();
   opts.last_play = this->ticker_last_play();
   opts.odds = this->ticker_odds();
+  opts.leaders = this->ticker_leaders();
+  // Changing the panel count restarts the panel, so this holds until then.
+  opts.records = this->panels_ != nullptr && this->panels_->cols() == 1;
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
     if (!s.valid || s.state != GameState::PRE || s.kickoff_epoch <= 0 || this->time_ == nullptr)
@@ -3490,6 +3493,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["match"] = this->ticker_soccer_stats();
   doc["play"] = this->ticker_last_play();
   doc["odds"] = this->ticker_odds();
+  doc["leaders"] = this->ticker_leaders();
   doc["opp"] = this->opponent_splashes();
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
@@ -4240,6 +4244,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::ODDS:
         this->set_ticker_odds(op.on);
+        break;
+      case ::espn::SetKind::LEADERS:
+        this->set_ticker_leaders(op.on);
         break;
       case ::espn::SetKind::OPP:
         this->set_opponent_splashes(op.on);

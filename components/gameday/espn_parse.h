@@ -132,6 +132,9 @@ struct GameSnapshot {
   uint8_t team_lines[kLinesMax]{}, opp_lines[kLinesMax]{};
   uint8_t team_line_count{0}, opp_line_count{0};
   std::string headline;  // ESPN's story line on a final, "" when it has none
+  // Football's season leader for each side, ready for the pre-game ticker
+  // ("Prescott 1,381 yds 9 TD"); "" when ESPN lists none.
+  std::string team_leader, opp_leader;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};
@@ -228,6 +231,10 @@ struct TickerOptions {
   bool soccer_stats{true};    // goals, cards, possession and shots
   bool last_play{true};
   bool odds{true};
+  bool leaders{true};  // the season leaders before kickoff (football)
+  // Both records before the start, for a board too narrow to show them
+  // under the logos (one 64-wide panel, pages/gameday-live.yaml).
+  bool records{false};
 };
 
 struct Splash {
@@ -384,6 +391,13 @@ namespace detail {
 // Ticker helpers shared by the sport files.
 void add_part(std::string &out, const std::string &part);
 std::string records_line(const GameSnapshot &s);
+// Both records as one pre-game part, ours first: "DAL 2-3, GB 3-2". A side
+// with no record is left out; "" when neither has one.
+std::string pregame_records(const GameSnapshot &s);
+// A football leader for the ticker from ESPN's short name and stat line:
+// "D. Prescott" + "129/192, 1381 YDS, 9 TD, 3 INT" gives "Prescott 1,381 yds
+// 9 TD". "" when the line has no yards.
+std::string leader_line(const std::string &short_name, const std::string &display_value);
 // The pre-game betting parts when the ticker shows odds: the line, the
 // over/under and the TV listing. Soccer builds its own line.
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);

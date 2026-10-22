@@ -866,6 +866,22 @@ test("favorites and switches keep each tap through a slow re-read", async ({ pag
   expect([st.opp, st.down]).toEqual([false, false]);
 });
 
+test("pre-game leaders switch: football panels only, posts leaders", async ({ page, request }) => {
+  const sw = page.getByRole("switch", { name: "Pre-game season leaders", exact: true });
+  await reset(request, {});
+  await page.goto("/");
+  await expect(sw).toBeChecked();
+  await sw.click();
+  await expectSet(request, { leaders: "0" });
+  await expect(sw).not.toBeChecked();
+  expect((await deviceState(request)).leaders).toBe(false);
+
+  // No football team or favorite: no football leaders to turn off.
+  await reset(request, { team: { l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, favs: [{}, {}, {}, {}] });
+  await page.reload();
+  await expect(sw).toBeHidden();
+});
+
 test("situation switches: one per sport the panel follows, each posting its own key", async ({ page, request }) => {
   const sw = (name) => page.getByRole("switch", { name, exact: true });
   // Nothing picked yet: every sport's switch.

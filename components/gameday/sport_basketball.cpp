@@ -7,6 +7,7 @@ namespace espn {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
 namespace detail {
@@ -90,6 +91,8 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
     case GameState::PRE:
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
+      if (o.records)
+        add_part(out, pregame_records(s));
       add_odds(out, s, o);
       add_part(out, s.venue);
       return out;
