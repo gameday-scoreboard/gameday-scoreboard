@@ -119,7 +119,7 @@ struct UpdateFields {
   std::string next_line;
 };
 
-enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, FAVORITE, PLAYLIST };
+enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, PLAYLIST };
 
 // PSRAM text (logo_cache.h's allocator): the message card's list.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
@@ -135,13 +135,11 @@ using ::espn::parse_team_ref;
 class GamedaySelect : public select::Select, public Component {
  public:
   void set_type(SelectType type) { this->type_ = type; }
-  void set_slot(uint8_t slot) { this->slot_ = slot; }
   void set_parent(GamedayComponent *parent) { this->parent_ = parent; }
 
  protected:
   void control(const std::string &value) override;
   SelectType type_{SelectType::TEAM};
-  uint8_t slot_{0};
   GamedayComponent *parent_{nullptr};
 };
 
@@ -195,10 +193,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_timezone_select(select::Select *s) { this->timezone_select_ = s; }
   void set_mode_select(select::Select *s) { this->mode_select_ = s; }
   void set_playlist_select(select::Select *s) { this->playlist_select_ = s; }
-  void set_favorite_select(uint8_t slot, select::Select *s) {
-    if (slot >= 1 && slot <= 4)
-      this->favorite_selects_[slot - 1] = s;
-  }
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
   }
@@ -213,8 +207,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void select_timezone(const std::string &option);
   void select_mode(const std::string &option);
   std::string hostname() const;  // the device name, with its MAC suffix
-  // Favorites: four team slots for the remote's numbered buttons.
-  void select_favorite(uint8_t slot, const std::string &option);
+  // Favorites: the first four slots are the remote's numbered buttons.
   void press_favorite(uint8_t slot);
   // Playlists (playlists.h): the Home Assistant select's option, a name or
   // "All favorites".
@@ -739,6 +732,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     this->last_good_ms_ = millis() == 0 ? 1 : millis();
     this->clear_backoff_();
   }
+  // A read failed: one more in the run the ticker and the page report.
+  void count_miss_() { this->misses_ = ::espn::miss_count_after(this->misses_); }
   // A read failed: start the next, longer wait (poll_timing.h) and return it.
   uint32_t back_off_();
   // ESPN answered: the next failure starts the backoff over.
@@ -784,7 +779,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs2 prefs2_{};
   select::Select *mode_select_{nullptr};
   select::Select *playlist_select_{nullptr};
-  select::Select *favorite_selects_[4]{nullptr, nullptr, nullptr, nullptr};
   ESPPreferenceObject pref3_;
   Prefs3 prefs3_{};
   ESPPreferenceObject pref4_;
@@ -951,15 +945,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
   static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League. walk: next day back (or ahead) to read,
-  // 1 to kRecapMaxDays; 0 not started; kRecapMaxDays + 1 done. walk_day:
-  // the league's ESPN day a walk finished, so a fruitless one is tried again
-  // the next day rather than every scan. fwd_match: "BOS at NYR", the first
-  // game on the day the forward walk found.
-  uint8_t recap_back_[::espn::kLeagueCount]{};
-  int32_t recap_back_day_[::espn::kLeagueCount]{};
-  uint8_t recap_fwd_[::espn::kLeagueCount]{};
-  int32_t recap_fwd_day_[::espn::kLeagueCount]{};
+  // Per league, indexed by League: the walks back and forward (recap.h,
+  // RecapWalk), the kickoff the forward walk found (0 for none) and its
+  // fwd_match: "BOS at NYR", the first game on that day.
+  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
   int64_t recap_fwd_next_[::espn::kLeagueCount]{};
   std::string recap_fwd_match_[::espn::kLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any

@@ -72,9 +72,10 @@ class LogoCache {
   using Bytes = std::vector<uint8_t, PsramAllocator<uint8_t>>;
   using Url = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
 
-  // ESPHome's RuntimeImage keeps its decoder after a decode so the next one
-  // can reuse it. A cached logo is decoded once, and a PNG decoder holds about
-  // 44 KB of PSRAM (pngle's inflate dictionary), so it goes with the decode.
+  // ESPHome's RuntimeImage (2026.10) keeps its decoder after a decode so the
+  // next one can reuse it. A cached logo is decoded once, and a PNG decoder
+  // holds about 44 KB of PSRAM (pngle's inflate dictionary), so it goes with
+  // the decode.
   struct Logo : runtime_image::RuntimeImage {
     using RuntimeImage::RuntimeImage;
     void drop_decoder() { this->decoder_.reset(); }
