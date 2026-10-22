@@ -16,6 +16,10 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 | At a break | Halftime in football, the hits and errors between half innings in baseball, the series or records in basketball and hockey, and the goals, cards and stats at half time in soccer. |
 | After the final | "Final" with the records, or the sport's result line, like hits and errors in baseball or the goals in soccer. |
 
+:::note[Coming in the next release]
+Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", as football's does with a bowl or playoff name.
+:::
+
 Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds. On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
 
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.

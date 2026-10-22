@@ -168,6 +168,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
+      <div class="card" id="cdCard" hidden>
+        <h2>Between games</h2>
+        <p class="hint">What the panel shows while no game is on.</p>
+        <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+        <div class="sub">Your own countdown</div>
+        <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
+        <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
+        <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
+        <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+      </div>
       <div class="card" id="msgCard" hidden>
         <h2>Message</h2>
         <div class="sub">Banner</div>
@@ -190,7 +200,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="card">
         <h2>Panel</h2>
         <div id="nickRow" hidden>
-          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the iPhone app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
         <div id="panelCtls"></div>
@@ -380,6 +390,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
+    countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
@@ -776,6 +787,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
+  // The custom countdown: the name and the day post on their own, as they change.
+  const cdName = $("#cdname");
+  const cdDate = $("#cddate");
+  cdName.onchange = () => setGD({ cdname: cdName.value.trim() });
+  cdDate.onchange = () => setGD({ cddate: cdDate.value || "none" });
+  $("#cdClear").onclick = () => setGD({ cdname: "", cddate: "none" });
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
@@ -982,6 +999,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
     });
+    // Firmware from before the countdown card leaves these out.
+    $("#cdCard").hidden = S.countdown === undefined;
+    if (document.activeElement !== cdName) cdName.value = S.cdname || "";
+    if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
+    $("#cdClear").hidden = !S.cdname && !S.cddate;
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
@@ -1199,8 +1221,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       backupNote("That file isn't a settings backup.");
       return;
     }
-    const from = typeof doc.name === "string" && S && doc.name !== S.name ? " (saved from " + doc.name + ")" : "";
-    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are.")) return;
+    const other = !!S && doc.name !== S.name;
+    const from = other && typeof doc.name === "string" ? " (saved from " + doc.name + ")" : "";
+    const own = other ? ", and so do this panel's nickname and layout" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are" + own + ".")) return;
     let r, j;
     try {
       r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
@@ -1211,7 +1235,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
     const left = (j.skipped || []).join(", ");
-    backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    const kept = (j.kept || []).map((k) => ({ nick: "nickname", panels: "panel layout" })[k] || k).join(" and ");
+    backupNote("Restored." + (kept ? " This panel kept its own " + kept + "." : "") +
+      (left ? " This panel's firmware doesn't have: " + left + "." : ""));
     if (j.restart) {
       waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
       toBoard();
