@@ -1265,6 +1265,11 @@ void GamedayComponent::loop() {
         this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
           this->msg_fail_ms_ = this->gave_up_ms_;
+        // need_scan, like need_msg, was set before the task started, so the
+        // abandoned task can't have changed it.
+        if (this->job_.need_scan)
+          this->live_started_ms_ =
+              ::espn::live_clock_after_failed_scan(this->live_started_ms_, this->live_fallback_, this->recap_on_);
         // Wait a full retry before starting another worker rather than
         // stacking a second one on top of a task that may still be alive.
         this->schedule_next_(RETRY_INTERVAL);
@@ -2383,9 +2388,8 @@ void GamedayComponent::start_job_() {
       this->start_worker_();
       return;
     }
-    uint32_t since = now - this->live_started_ms_;
-    if (this->live_started_ms_ != 0 && since < this->live_rescan_ms_ && !take_due) {
-      this->schedule_next_(this->live_rescan_ms_ - since);
+    if (!::espn::live_rescan_due(now, this->live_started_ms_, this->live_rescan_ms_, take_due)) {
+      this->schedule_next_(this->live_rescan_ms_ - (now - this->live_started_ms_));
       return;
     }
     j.need_scan = true;
@@ -2396,13 +2400,13 @@ void GamedayComponent::start_job_() {
   if (this->live_mode_()) {
     // Inside the fallback live_started_ms_ times the rescan instead of the
     // rotate: the board is on the owner's own team until a game kicks off.
-    bool rescan_due =
-        this->live_started_ms_ == 0 || (now - this->live_started_ms_) >= this->live_rescan_ms_ || take_due;
+    bool rescan_due = ::espn::live_rescan_due(now, this->live_started_ms_, this->live_rescan_ms_, take_due);
     if (!this->live_fallback_ || rescan_due) {
       if (this->live_fallback_) {
         j.need_scan = true;
-        // Stamped here, not when the scan lands, so a failed scan does not
-        // fire another one on the retry a minute later.
+        // Stamped here, so a scan that finds nothing live again starts the
+        // next wait. A failed scan clears it (apply_job_) and retries on the
+        // back-off.
         this->live_started_ms_ = now == 0 ? 1 : now;
       } else {
         // Picking the best game: only at a break in this one, never in the
@@ -2684,8 +2688,9 @@ void GamedayComponent::apply_job_() {
   if (j.need_scan) {
     if (!j.scan_ok && j.live.empty()) {
       this->misses_++;
-      if (this->recap_on_)
-        this->live_started_ms_ = 0;  // retry the scan, not the long wait
+      // Retry the scan, not the long wait.
+      this->live_started_ms_ =
+          ::espn::live_clock_after_failed_scan(this->live_started_ms_, this->live_fallback_, this->recap_on_);
       this->drop_team_placeholder_();  // "Looking for a live game", not a bare logo
       this->emit_({});
       this->schedule_next_(this->back_off_());
