@@ -3312,28 +3312,15 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
 // forward, only when no game is left today, until a day has a kickoff. Each
 // league counts days its own way (recap.h, espn_day).
 bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
-  const uint8_t done = ::espn::kRecapMaxDays + 1;
   const uint16_t leagues = this->recap_leagues_();
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    int32_t today = ::espn::espn_day(tnow, i);
-    uint8_t &w = this->recap_back_[i];
-    if (w == done && this->recap_back_day_[i] != today && ::espn::recap_count(this->recap_days_, i) == 0)
-      w = 0;  // a new day and still no finals: look again
-    if (w == 0) {
-      if (::espn::recap_count(this->recap_days_, i) >= ::espn::kRecapMinFinals) {
-        w = done;  // today's scan already had enough
-        this->recap_back_day_[i] = today;
-        continue;
-      }
-      w = 1;
-    }
-    if (w <= ::espn::kRecapMaxDays) {
+    if (this->recap_back_[i].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
+                                      j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = false;
       j.recap_league = i;
-      j.recap_day = today - w;
       return true;
     }
   }
@@ -3342,19 +3329,10 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    int32_t today = ::espn::espn_day(tnow, i);
-    uint8_t &w = this->recap_fwd_[i];
-    // Found one and it has kicked off, or found none and it is a new day.
-    if (w == done && this->recap_fwd_next_[i] <= tnow &&
-        (this->recap_fwd_next_[i] != 0 || this->recap_fwd_day_[i] != today))
-      w = 0;
-    if (w == 0)
-      w = 1;
-    if (w <= ::espn::kRecapMaxDays) {
+    if (this->recap_fwd_[i].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[i], tnow, j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = true;
       j.recap_league = i;
-      j.recap_day = today + w;
       return true;
     }
   }
@@ -3363,7 +3341,6 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
 
 void GamedayComponent::apply_recap_job_() {
   Job &j = this->job_;
-  const uint8_t done = ::espn::kRecapMaxDays + 1;
   if (j.recap_league >= ::espn::kLeagueCount)
     return;
   uint8_t i = j.recap_league;
@@ -3377,10 +3354,9 @@ void GamedayComponent::apply_recap_job_() {
   }
   this->clear_backoff_();
   if (j.recap_forward) {
-    if (j.next_kickoff > tnow) {
+    bool found = j.next_kickoff > tnow;
+    if (found) {
       this->recap_fwd_next_[i] = j.next_kickoff;
-      this->recap_fwd_[i] = done;
-      this->recap_fwd_day_[i] = today;
       // The game the Next card names. The scan keeps a college day's ranked
       // games first, so the first kickoff may not be among them.
       this->recap_fwd_match_[i].clear();
@@ -3389,12 +3365,11 @@ void GamedayComponent::apply_recap_job_() {
           this->recap_fwd_match_[i] = ::espn::recap_matchup(p);
           break;  // the first one kept at that time: best ranked, then ESPN's order
         }
-    } else if (++this->recap_fwd_[i] > ::espn::kRecapMaxDays) {
+    }
+    if (!this->recap_fwd_[i].fwd_read(today, found)) {
       ESP_LOGI(TAG, "No %s kickoff in the next week", ::espn::recap_league_word(i));
       this->recap_fwd_next_[i] = 0;
       this->recap_fwd_match_[i].clear();
-      this->recap_fwd_[i] = done;
-      this->recap_fwd_day_[i] = today;
     }
   } else {
     ::espn::RecapDay d;
@@ -3402,13 +3377,10 @@ void GamedayComponent::apply_recap_job_() {
     d.day = j.recap_day;
     d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
-    if (::espn::recap_count(this->recap_days_, i) >= ::espn::kRecapMinFinals ||
-        ++this->recap_back_[i] > ::espn::kRecapMaxDays) {
-      this->recap_back_[i] = done;
-      this->recap_back_day_[i] = today;
+    this->recap_back_[i].back_read(today, ::espn::recap_count(this->recap_days_, i));
+    if (this->recap_back_[i].step == ::espn::RecapWalk::kDone)
       ESP_LOGI(TAG, "Recent %s finals: %u", ::espn::recap_league_word(i),
                (unsigned) ::espn::recap_count(this->recap_days_, i));
-    }
   }
   ::espn::recap_trim(this->recap_days_, tnow);
   this->recap_rebuild_();
