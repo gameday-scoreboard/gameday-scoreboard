@@ -1,6 +1,6 @@
 # The bar build: the real scoreboard firmware for the free panels in bars,
 # plus the beta channel. Included only by the *-bar.yaml top-level files,
-# which point the updater at gamedayscoreboard.app/firmware/beta/<variant>/
+# which point the updater at install.gameday-scoreboard.com/firmware/beta/<variant>/
 # (published from the beta branch, see .github/workflows/build.yml).
 #
 # Unlike release firmware it installs updates on its own, with no setting:
@@ -18,6 +18,8 @@ esphome:
 gameday:
   bar:
     report_email: "${bar_report_email}"
+  # Always on the bar channel; there is no "Follow beta".
+  beta_channel: !remove
 
 # Read the beta manifest every 15 minutes instead of every 6 hours, so an
 # "Install now" reaches the bar within a quarter hour.

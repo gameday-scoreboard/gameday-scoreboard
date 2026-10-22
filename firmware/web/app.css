@@ -130,6 +130,13 @@ button { font: inherit; color: inherit; }
 .card .sub { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
 .card .sub:first-of-type { margin-top: 4px; }
 .ctl .val { color: var(--muted); font-size: 12px; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+.card p.weak { color: var(--gold); font-size: 13px; margin: 4px 0 8px; }
+.spark { padding: 6px 0 9px; border-top: 1px solid #1a2029; }
+.spark svg { display: block; width: 100%; height: 48px; background: var(--panel-2); border-radius: 6px; }
+.spark .ln { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark .th { fill: none; stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 3; opacity: .6; }
+.spark .gap { fill: none; stroke: var(--red); stroke-width: 1.5; }
+.sparklbl { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 3px; }
 .ctl input[type=range] { width: 46%; accent-color: var(--accent); }
 .ctl select {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 55%;
@@ -144,6 +151,19 @@ button { font: inherit; color: inherit; }
 .sw.on { background: var(--accent); }
 .sw.on::after { left: 21px; background: #fff; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* message card: text boxes */
+.card .field {
+  display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 8px 10px; font: inherit; font-size: 14px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+}
+.card textarea.field { resize: vertical; min-height: 44px; }
+.card .field:focus, .ctl input.num:focus { outline: none; border-color: var(--accent); }
+.ctl input.num {
+  width: 64px; text-align: center; font: inherit; font-size: 14px; padding: 6px 8px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+}
+.card label.fl { display: block; font-size: 14px; margin: 4px 0 6px; }
+.card label.fl small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
 /* panel picker */
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .panelpick {
@@ -197,6 +217,7 @@ button { font: inherit; color: inherit; }
 .tabs { display: flex; gap: 6px; }
 .tabs button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
 .tabs button.on { background: var(--accent); border-color: var(--accent); color: #041022; font-weight: 700; }
+.favcount { color: var(--muted); font-size: 13px; padding: 0 2px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin-top: 10px; }
 .tile {
   background: #0a0d12; border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 8px;
@@ -204,6 +225,12 @@ button { font: inherit; color: inherit; }
 }
 .tile:hover { border-color: #3a4556; background: #0e131b; }
 .tile.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+/* A check on the chosen team, and on every favorite while adding favorites */
+.tile, .game .side { position: relative; }
+.tile.on::after, .game .side.on::after {
+  content: "\2713"; position: absolute; top: 4px; right: 6px;
+  color: var(--gold); font-size: 13px; font-weight: 700; line-height: 1;
+}
 .tile img { width: 44px; height: 44px; object-fit: contain; }
 .tile .n { font-size: 12px; line-height: 1.2; color: #d6dde7; }
 .tile .a { font-size: 10px; color: var(--muted); letter-spacing: .08em; }
@@ -258,12 +285,19 @@ button { font: inherit; color: inherit; }
 .modes button:hover { border-color: #3a4556; }
 .modes button.on { background: var(--accent); border-color: var(--accent); color: #041022; font-weight: 700; }
 .modes + .teambar { margin-top: 8px; }
+.guardbar { border-color: #c96a00; }
+.guardbar .name { color: #ffab40; white-space: normal; }
+.guardbar.power { border-color: #b02a2a; }
+.guardbar.power .name { color: #ff8a8a; }
+.nightbar { border-color: #3b4a7a; }
+.nightbar .name { color: #a9b8ff; white-space: normal; }
+.ctl input.num.time { width: auto; }
 .livebar .stepper { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--muted); }
 .favbar { align-items: flex-start; }
-.favbar .favctls { display: flex; flex-direction: column; gap: 8px; flex: none; }
+.favbar .favctls, .livebar .livectls { display: flex; flex-direction: column; gap: 8px; flex: none; }
 .favbar .stepper, .livebar .stepper { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
 .favbar .stepper label { min-width: 118px; }
-.favbar .stepper select, .favbar .stepper input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; }
+.favbar .stepper select, .favbar .stepper input, .livebar .stepper select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; }
 .favbar .stepper input { width: 58px; text-align: center; }
 .favmove { display: inline-flex; gap: 4px; margin-left: 6px; flex: none; }
 .favmove button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text); width: 26px; height: 26px; cursor: pointer; font-size: 9px; padding: 0; }

@@ -1,0 +1,51 @@
+name: Docs updated
+
+# A change to the firmware or the components has to come with a docs change,
+# so the guides don't drift from what the panel does. Applies to PRs into dev
+# only; the promotion PRs into beta and main carry changes that already
+# passed here. The generated web bundles don't count as a firmware change.
+#
+# A PR that changes nothing an owner or a DIY builder can see (a refactor, a
+# test, a build fix) skips the check with the label "docs: not needed".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: Docs updated with the firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check for a docs change
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, '|') }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          firmware=$(grep -E '^(firmware|components)/' <<<"$changed" \
+            | grep -vE '^firmware/web/(bundle|bundle-demo)\.js$' || true)
+          if [ -z "$firmware" ]; then
+            echo "No firmware or component change, so no docs change is needed."
+            exit 0
+          fi
+          echo "Firmware changes:"
+          echo "$firmware"
+          if grep -q '^docs/wiki/src/content/docs/' <<<"$changed"; then
+            echo "This PR also changes the docs."
+            exit 0
+          fi
+          if tr '|' '\n' <<<"$LABELS" | grep -qxF 'docs: not needed'; then
+            echo "Labeled 'docs: not needed', so the docs check is skipped."
+            exit 0
+          fi
+          echo "::error::This PR changes the firmware but not the docs. Add or update a page under docs/wiki/src/content/docs/, or add the label 'docs: not needed' if nothing an owner or DIY builder can see changed."
+          exit 1

@@ -7,18 +7,28 @@
 #include <vector>
 
 #include "auto_update.h"
+#include "night.h"
 #include "badge.h"
+#include "best_game.h"
+#include "captive.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "guard.h"
+#include "ha_events.h"
+#include "health.h"
+#include "line_score.h"
 #include "logo_lru.h"
+#include "message.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
+#include "score_log.h"
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
+#include "wifi_history.h"
 
 using namespace espn;
 
@@ -90,6 +100,31 @@ static void test_iso() {
   CHECK_EQ(parse_iso8601_z("2026-09-05T19:30Z"), (int64_t) 1788636600);
   CHECK_EQ(parse_iso8601_z("2026-09-10T00:20:00Z"), (int64_t) 1788999600);
   CHECK_EQ(parse_iso8601_z("garbage"), (int64_t) 0);
+  // HTTP Date headers, as ESPN sends them.
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 GMT"), (int64_t) 1792280369);
+  CHECK_EQ(parse_http_date("Sat, 05 Sep 2026 19:30:00 GMT"), (int64_t) 1788636600);
+  CHECK_EQ(parse_http_date("Sun, 01 Mar 2048 00:00:00 GMT"), (int64_t) 2466633600);
+  CHECK_EQ(parse_http_date(""), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 23:39:29 UTC"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Okt 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 7 Oct 2026 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2026 24:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat, 17 Oct 2O26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), (int64_t) 0);  // outside 2020 to 2099
+  CHECK_EQ(parse_http_date("Saturday, 17-Oct-26 23:39:29 GMT"), (int64_t) 0);
+  CHECK_EQ(parse_http_date("Sat Oct 17 23:39:29 2026"), (int64_t) 0);
+  // Fields too long or out of range read as no date instead of overflowing
+  // (found by fuzz_espn).
+  CHECK_EQ(parse_iso8601_z("2026-10-17T999999999:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-999999999-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-2147483647T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T19:999999999Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2147483647-10-17T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-13-01T19:30Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T24:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("2026-10-17T-1:00Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("1969-12-31T23:59Z"), (int64_t) 0);
+  CHECK_EQ(parse_iso8601_z("9999-12-31T23:59:59Z"), (int64_t) 253402300799);
 }
 
 static void test_team_parse() {
@@ -152,6 +187,21 @@ static void test_scoreboard_live() {
   CHECK(s.last_play.rfind("End of 3rd quarter", 0) == 0);
   CHECK(!s.completed);
 
+  // The drive comes with a touchdown or field goal only: TEX's field goal
+  // carries it, ME @ APP's rushing touchdown too, the failed two-point try
+  // after FUR's touchdown (scoreValue 0) doesn't.
+  GameSnapshot fg;
+  CHECK(parse_scoreboard_str(json, "401856667", 251, fg));
+  CHECK_EQ(fg.drive, std::string("12 plays, 50 yards, 5:48"));
+  CHECK_EQ((int) fg.team_win_pct, 99);  // 0.999 home, never 100
+  GameSnapshot td;
+  CHECK(parse_scoreboard_str(json, "401866627", 2026, td));
+  CHECK_EQ(td.drive, std::string("3 plays, 68 yards, 1:16"));
+  GameSnapshot two;
+  CHECK(parse_scoreboard_str(json, "401856666", 231, two));
+  CHECK(two.drive.empty());
+  CHECK_EQ((int) two.team_win_pct, -1);  // no probability on that play
+
   // Same event from Oregon's side flips everything
   GameSnapshot o;
   CHECK(parse_scoreboard_str(json, kLiveEvent, kOregon, o));
@@ -186,6 +236,10 @@ static void test_event_live() {
   CHECK_EQ(s.venue, std::string("AmFirst Stadium"));
   CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-10-14T00:00Z"));
   CHECK(s.last_play.find("J.Kohl pass complete") != std::string::npos);
+  // JXST is home at 0.9567; a plain catch doesn't repeat its drive.
+  CHECK_EQ((int) s.team_win_pct, 4);
+  CHECK_EQ(win_chance(s), std::string("JXST 96% to win"));
+  CHECK(s.drive.empty());
 
   GameSnapshot x;
   CHECK(!parse_event_str(json, Sport::FOOTBALL, kSeahawks, x, "401871053"));  // not our game
@@ -206,6 +260,37 @@ static void test_event_live() {
   CHECK(sea.completed);
   CHECK(sea.team_winner);
   CHECK_EQ(sea.game_name, std::string("Super Bowl LX"));
+
+  // Records and season leaders for the pre-game ticker, from both sides of one game
+  GameSnapshot dal;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 6, dal, "401873007"));
+  CHECK(dal.state == GameState::PRE);
+  CHECK_EQ(dal.team_record, std::string("2-3"));
+  CHECK_EQ(dal.opp_record, std::string("3-2"));
+  CHECK_EQ(dal.team_leader, std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(dal.opp_leader, std::string("Love 1,408 yds 10 TD"));
+  // A 128-wide board shows the records under the logos; one 64-wide panel
+  // has no room, so its ticker carries them
+  TickerOptions wide;
+  CHECK_EQ(status_text(dal, wide, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | "
+                       "Lambeau Field"));
+  TickerOptions narrow;
+  narrow.records = true;
+  CHECK_EQ(status_text(dal, narrow, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | "
+                       "Love 1,408 yds 10 TD | Lambeau Field"));
+  TickerOptions no_leaders = narrow;
+  no_leaders.leaders = false;
+  CHECK_EQ(status_text(dal, no_leaders, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | Lambeau Field"));
+  GameSnapshot gb;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 9, gb, "401873007"));
+  CHECK_EQ(gb.team_leader, std::string("Love 1,408 yds 10 TD"));
+  CHECK_EQ(gb.opp_leader, std::string("Prescott 1,381 yds 9 TD"));
+  // A passing line with no touchdowns ("42/64, 409 YDS, 3 INT")
+  CHECK_EQ(chi.team_leader, std::string("Bagent 409 yds"));
+  CHECK_EQ(chi.opp_leader, std::string("Penix Jr. 719 yds 3 TD"));
 }
 
 static bool same_snapshot(const GameSnapshot &a, const GameSnapshot &b) {
@@ -308,6 +393,301 @@ static GameSnapshot live(int us, int them, GameState st = GameState::IN) {
   return s;
 }
 
+// Live games' best-game pick and the upset alert (best_game.h).
+static LiveGame lg(League l, int away, int home, int period, int clock, uint8_t away_rank = 99,
+                   uint8_t home_rank = 99, const char *id = "1") {
+  LiveGame g;
+  g.league = (uint8_t) l;
+  g.event_id = id;
+  g.away_score = (int16_t) away;
+  g.home_score = (int16_t) home;
+  g.period = (uint8_t) period;
+  g.clock_s = clock;
+  g.away_rank = away_rank;
+  g.home_rank = home_rank;
+  return g;
+}
+
+static void test_best_game() {
+  // The scan reads where each game stands.
+  std::string json = slurp("fixtures/scoreboard_ncaa_live.json");
+  std::vector<LiveGame> games;
+  CHECK(parse_live_games(json, games));
+  const LiveGame *ore = nullptr;
+  for (auto &g : games) {
+    g.league = (uint8_t) League::NCAA;
+    if (g.event_id == kLiveEvent)
+      ore = &g;
+  }
+  CHECK(ore != nullptr);
+  if (ore != nullptr) {
+    CHECK_EQ((int) ore->away_score, 24);
+    CHECK_EQ((int) ore->home_score, 24);
+    CHECK_EQ((int) ore->period, 4);
+    CHECK_EQ((int) ore->clock_s, 900);
+    CHECK_EQ((int) ore->away_rank, 99);
+    CHECK_EQ((int) ore->home_rank, 2);
+  }
+  // #2 Oregon tied with Boise State in the 4th beats the blowouts and the
+  // closer games still in the 3rd.
+  CHECK_EQ(games[best_live_game(games, "")].event_id, std::string(kLiveEvent));
+  // The same holds with finals and pending asked for (the no-team scan).
+  std::vector<LiveGame> again;
+  std::vector<Final> finals;
+  std::vector<Pending> pending;
+  int64_t next = 0;
+  CHECK(parse_live_games(json, again, &next, &finals, &pending));
+  CHECK_EQ(again.size(), games.size());
+  for (size_t i = 0; i < again.size() && i < games.size(); i++)
+    CHECK_EQ((int) again[i].home_score, (int) games[i].home_score);
+
+  CHECK_EQ(clock_seconds("8:27"), 507);
+  CHECK_EQ(clock_seconds("12.3"), 12);
+  CHECK_EQ(clock_seconds("65'"), 3900);
+  CHECK_EQ(clock_seconds("90'+3'"), 5400);
+  CHECK_EQ(clock_seconds(""), -1);
+  CHECK_EQ(clock_seconds("99999999999:00"), -1);
+  CHECK_EQ(clock_seconds("1:99999999999"), -1);
+  // An over/under far past int's range prints as a decimal (the fuzzer's find).
+  JsonDocument ou;
+  deserializeJson(ou, "[44, 47.5, 2.14748e10]");
+  CHECK_EQ(espn::detail::format_over_under(ou[0]), std::string("44"));
+  CHECK_EQ(espn::detail::format_over_under(ou[1]), std::string("47.5"));
+  CHECK(espn::detail::format_over_under(ou[2]).find('.') != std::string::npos);
+
+  CHECK_EQ(game_progress(League::NCAA, 4, 900), 750);
+  CHECK_EQ(game_progress(League::NFL, 1, 900), 0);
+  CHECK_EQ(game_progress(League::NFL, 4, 0), 1000);
+  CHECK_EQ(game_progress(League::NBA, 3, 507), 573);
+  CHECK_EQ(game_progress(League::MCBB, 2, 600), 750);
+  CHECK_EQ(game_progress(League::MLB, 7, 0), 777);
+  CHECK_EQ(game_progress(League::EPL, 1, 1500), 277);
+  CHECK_EQ(game_progress(League::NHL, 4, 300), 1000);
+  CHECK_EQ(game_progress(League::NFL, 0, 0), 0);
+  CHECK(in_overtime(League::NFL, 5));
+  CHECK(!in_overtime(League::MCBB, 2));
+  CHECK(in_overtime(League::MLB, 10));
+
+  // Upset alert: the better-ranked side trails late.
+  CHECK(upset_alert(lg(League::NCAA, 24, 21, 4, 600, 99, 2)));
+  CHECK(!upset_alert(lg(League::NCAA, 21, 24, 4, 600, 99, 2)));  // the ranked side leads
+  CHECK(!upset_alert(lg(League::NCAA, 24, 24, 4, 600, 99, 2)));  // tied
+  CHECK(!upset_alert(lg(League::NCAA, 24, 21, 3, 600, 99, 2)));  // not late yet
+  CHECK(upset_alert(lg(League::NCAA, 27, 24, 5, -1, 99, 2)));    // overtime
+  CHECK(upset_alert(lg(League::NCAA, 17, 20, 4, 300, 3, 18)));   // #3 trails #18
+  CHECK(!upset_alert(lg(League::NCAA, 20, 17, 4, 300, 3, 18)));
+  CHECK(!upset_alert(lg(League::MCBB, 70, 60, 2, 660, 99, 5)));  // 11 minutes left
+  CHECK(upset_alert(lg(League::MCBB, 70, 60, 2, 540, 99, 5)));   // 9 minutes left
+  CHECK(!upset_alert(lg(League::NBA, 100, 90, 4, 60)));          // no ranks in the pros
+
+  // Close beats lopsided, late beats early, overtime beats regulation.
+  int tie_late = live_interest(lg(League::NFL, 21, 21, 4, 120));
+  int tie_early = live_interest(lg(League::NFL, 7, 7, 1, 600));
+  int blowout = live_interest(lg(League::NFL, 35, 3, 4, 120));
+  int one_score = live_interest(lg(League::NFL, 17, 21, 4, 120));
+  int ot = live_interest(lg(League::NFL, 24, 24, 5, 400));
+  CHECK(tie_late > tie_early);
+  CHECK(tie_late > one_score);
+  CHECK(one_score > blowout);
+  CHECK(ot > tie_late);
+  CHECK_EQ(blowout, 0);
+  // An AP rank and an upset add on.
+  CHECK(live_interest(lg(League::NCAA, 14, 14, 2, 300, 99, 4)) > live_interest(lg(League::NCAA, 14, 14, 2, 300)));
+  CHECK(live_interest(lg(League::NCAA, 28, 10, 4, 300, 99, 4)) > tie_late);  // #4 down 18 late
+  CHECK(live_interest(lg(League::NHL, 2, 2, 3, 300)) > live_interest(lg(League::NHL, 4, 1, 3, 300)));
+  CHECK(live_interest(lg(League::MLB, 3, 3, 9, 0)) > live_interest(lg(League::MLB, 3, 3, 3, 0)));
+
+  // The game on the board keeps it against a near tie, not a clearly better one.
+  std::vector<LiveGame> two = {lg(League::NFL, 17, 21, 4, 120, 99, 99, "a"), lg(League::NFL, 21, 21, 4, 120, 99, 99, "b")};
+  CHECK_EQ(two[best_live_game(two, "")].event_id, std::string("b"));
+  CHECK_EQ(two[best_live_game(two, "a")].event_id, std::string("b"));  // 75 x 3 is well short of a tie's 300
+  two[0] = lg(League::NFL, 21, 21, 4, 150, 99, 99, "a");
+  CHECK_EQ(two[best_live_game(two, "a")].event_id, std::string("a"));
+  // A game the board saw end goes last, even when the scan still lists it.
+  two[0] = lg(League::NFL, 21, 21, 4, 0, 99, 99, "a");
+  CHECK_EQ(two[best_live_game(two, "a", true)].event_id, std::string("b"));
+  std::vector<LiveGame> one = {two[0]};
+  CHECK_EQ(best_live_game(one, "a", true), (size_t) 0);
+  std::vector<LiveGame> empty;
+  CHECK_EQ(best_live_game(empty, ""), (size_t) 0);
+
+  // Breaks in play: the only time the pick moves off the game on the board.
+  GameSnapshot s = live(14, 10);
+  for (const char *d : {"End of 3rd", "End 5th", "Mid 7th", "Halftime", "HT", "End of 1st Quarter"}) {
+    s.short_detail = d;
+    CHECK(at_break(s));
+  }
+  for (const char *d : {"8:27 - 3rd", "Top 7th", "Bot 3rd", "25'", "0:00 - 2nd", ""}) {
+    s.short_detail = d;
+    CHECK(!at_break(s));
+  }
+  CHECK(at_break(live(14, 10, GameState::POST)));
+  CHECK(at_break(GameSnapshot{}));
+
+  // A poll of the followed game, the away side as team, checked for an upset.
+  GameSnapshot p = live(24, 21);
+  p.period = 4;
+  p.display_clock = "4:12";
+  LiveGame v = live_view(p, (uint8_t) League::NCAA, 99, 2);
+  CHECK_EQ((int) v.clock_s, 252);
+  CHECK_EQ((int) v.away_score, 24);
+  CHECK(upset_alert(v));
+  CHECK(!upset_alert(live_view(p, (uint8_t) League::NCAA, 2, 99)));
+}
+
+// Home Assistant's score and final events (ha_events.h).
+static void test_ha_events() {
+  HaTracker t;
+  // The first read of a game fires nothing, a repeat of it nothing either.
+  CHECK(t.update(live(7, 0), false).empty());
+  CHECK(t.update(live(7, 0), false).empty());
+  // A field goal for us, then a touchdown for them.
+  auto e = t.update(live(10, 0), false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].team, std::string("DAL"));
+  CHECK_EQ(e[0].opponent, std::string("PHI"));
+  CHECK_EQ(e[0].play, std::string("field_goal"));
+  CHECK_EQ(e[0].points, 3);
+  CHECK_EQ(e[0].team_score, 10);
+  CHECK_EQ(e[0].opponent_score, 0);
+  CHECK_EQ(e[0].sport, std::string("football"));
+  CHECK(e[0].my_team);
+  e = t.update(live(10, 7), false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].team, std::string("PHI"));
+  CHECK_EQ(e[0].play, std::string("touchdown"));
+  CHECK_EQ(e[0].team_score, 7);
+  CHECK_EQ(e[0].opponent_score, 10);
+  CHECK(!e[0].my_team);
+  // Both sides between two reads, ours first; a score taken back fires nothing.
+  e = t.update(live(12, 8), false);
+  CHECK_EQ(e.size(), (size_t) 2);
+  CHECK_EQ(e[0].play, std::string("two_point"));
+  CHECK_EQ(e[1].play, std::string("extra_point"));
+  CHECK(t.update(live(10, 8), false).empty());
+  // A score on the last play comes with the final.
+  e = t.update(live(13, 8, GameState::POST), false);
+  CHECK_EQ(e.size(), (size_t) 2);
+  CHECK_EQ(e[0].play, std::string("field_goal"));
+  CHECK_EQ(e[1].play, std::string("final"));
+  CHECK_EQ(e[1].team, std::string("DAL"));
+  CHECK_EQ(e[1].result, std::string("win"));
+  CHECK_EQ(e[1].winner, std::string("DAL"));
+  CHECK(e[1].my_team);
+  CHECK(t.update(live(13, 8, GameState::POST), false).empty());  // once
+
+  // A suspended game goes to post without completed: no final.
+  HaTracker s;
+  s.update(live(3, 0), false);
+  GameSnapshot sus = live(3, 0, GameState::POST);
+  sus.completed = false;
+  CHECK(s.update(sus, false).empty());
+  // A game first seen as a final, or before kickoff, fires nothing.
+  HaTracker f;
+  CHECK(f.update(live(20, 3, GameState::POST), false).empty());
+  HaTracker pre;
+  CHECK(pre.update(live(0, 0, GameState::PRE), false).empty());
+  CHECK(pre.update(live(0, 0), false).empty());
+
+  // The Live modes: nobody's team. The final names the left side.
+  HaTracker n;
+  n.update(live(0, 0), true);
+  e = n.update(live(6, 0), true);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK(!e[0].my_team);
+  e = n.update(live(6, 9, GameState::POST), true);
+  CHECK_EQ(e.size(), (size_t) 2);
+  CHECK_EQ(e[1].result, std::string("loss"));
+  CHECK_EQ(e[1].winner, std::string("PHI"));
+  CHECK(!e[1].my_team);
+
+  // Two games alternating on the board each keep their own last read.
+  HaTracker a;
+  GameSnapshot g2 = live(0, 0);
+  g2.event_id = "2";
+  g2.team_abbr = "KC";
+  g2.opp_abbr = "BUF";
+  a.update(live(0, 0), false);
+  a.update(g2, false);
+  CHECK_EQ(a.update(live(7, 0), false).size(), (size_t) 1);
+  g2.opp_score = 3;
+  e = a.update(g2, false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].team, std::string("BUF"));
+  // The same game read from the other side doesn't fire.
+  GameSnapshot flip = live(0, 7);
+  flip.team_abbr = "PHI";
+  flip.opp_abbr = "DAL";
+  CHECK(a.update(flip, false).empty());
+
+  // The game followed least recently is the one forgotten: game 2, read
+  // again in the middle of twelve other games, is still known; game 1 isn't.
+  for (int i = 3; i <= 8; i++) {
+    GameSnapshot o = live(0, 0);
+    o.event_id = std::to_string(i);
+    a.update(o, false);
+  }
+  a.update(g2, false);
+  for (int i = 9; i <= 14; i++) {
+    GameSnapshot o = live(0, 0);
+    o.event_id = std::to_string(i);
+    a.update(o, false);
+  }
+  g2.opp_score = 6;
+  CHECK_EQ(a.update(g2, false).size(), (size_t) 1);
+  CHECK(a.update(live(14, 0), false).empty());  // a first read again
+
+  // Other sports' plays.
+  HaTracker b;
+  GameSnapshot mlb = live(1, 0);
+  mlb.sport = Sport::BASEBALL;
+  b.update(mlb, false);
+  mlb.team_score = 3;
+  mlb.mlb.play_type = "Home Run";
+  e = b.update(mlb, false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].play, std::string("home_run"));
+  CHECK_EQ(e[0].points, 2);
+  CHECK_EQ(e[0].sport, std::string("baseball"));
+  mlb.mlb.play_type = "Single";
+  mlb.last_play = "Smith singled to left, Jones scored.";
+  mlb.opp_score = 1;
+  CHECK_EQ(b.update(mlb, false)[0].play, std::string("run"));
+  HaTracker nhl;
+  GameSnapshot h = live(0, 0);
+  h.sport = Sport::HOCKEY;
+  nhl.update(h, false);
+  h.opp_score = 1;
+  CHECK_EQ(nhl.update(h, false)[0].play, std::string("goal"));
+  HaTracker nba;
+  GameSnapshot bb = live(50, 48);
+  bb.sport = Sport::BASKETBALL;
+  nba.update(bb, false);
+  bb.team_score = 53;
+  CHECK_EQ(nba.update(bb, false)[0].play, std::string("score"));
+  // A level soccer game decided on penalties.
+  HaTracker soc;
+  GameSnapshot fc = live(1, 1);
+  fc.sport = Sport::SOCCER;
+  soc.update(fc, false);
+  fc.state = GameState::POST;
+  fc.completed = true;
+  fc.soc.team_shootout = 3;
+  fc.soc.opp_shootout = 4;
+  e = soc.update(fc, false);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].result, std::string("loss"));
+  CHECK_EQ(e[0].winner, std::string("PHI"));
+  fc.soc.team_shootout = fc.soc.opp_shootout = -1;
+  HaTracker draw;
+  fc.state = GameState::IN;
+  draw.update(fc, false);
+  fc.state = GameState::POST;
+  e = draw.update(fc, false);
+  CHECK_EQ(e[0].result, std::string("draw"));
+  CHECK_EQ(e[0].winner, std::string(""));
+}
+
 static void test_splash() {
   CHECK_EQ(decide_splash(live(0, 0), live(6, 0), true).text, std::string("TOUCHDOWN!"));
   CHECK_EQ(decide_splash(live(0, 0), live(7, 0), true).text, std::string("TOUCHDOWN!"));
@@ -370,6 +750,25 @@ static void test_status_text() {
   std::string t = status_text(s, only_play, "");
   CHECK_EQ(t.size(), (size_t) 160);
   CHECK(t.substr(157) == "...");
+  // A scoring play's drive follows Last play; the win chance follows Odds.
+  GameSnapshot sc = live(10, 7);
+  sc.last_play = "G.Spetic field goal GOOD";
+  sc.drive = "12 plays, 50 yards, 5:48";
+  sc.team_win_pct = 72;
+  CHECK_EQ(status_text(sc, only_play, ""),
+           std::string("G.Spetic field goal GOOD | Drive: 12 plays, 50 yards, 5:48 | DAL 72% to win"));
+  TickerOptions play_no_odds = only_play;
+  play_no_odds.odds = false;
+  CHECK_EQ(status_text(sc, play_no_odds, ""), std::string("G.Spetic field goal GOOD | Drive: 12 plays, 50 yards, 5:48"));
+  TickerOptions odds_only = only_play;
+  odds_only.last_play = false;
+  CHECK_EQ(status_text(sc, odds_only, ""), std::string("DAL 72% to win"));
+  sc.team_win_pct = 31;  // the other side is ahead in the model
+  CHECK_EQ(win_chance(sc), std::string("PHI 69% to win"));
+  sc.team_win_pct = 50;
+  CHECK_EQ(win_chance(sc), std::string("DAL 50% to win"));
+  sc.team_win_pct = -1;
+  CHECK_EQ(status_text(sc, odds_only, ""), std::string("In Progress"));
   // Halftime
   GameSnapshot h = live(14, 7);
   h.short_detail = "Halftime";
@@ -391,6 +790,32 @@ static void test_status_text() {
   CHECK_EQ(status_text(p, no_odds, "Sun 5:30 PM"), std::string("Super Bowl LX | Sun 5:30 PM | Lumen Field"));
   p.game_name = p.venue = "Rose Bowl";
   CHECK_EQ(status_text(p, no_odds, "Thu 3:00 PM"), std::string("Rose Bowl | Thu 3:00 PM"));
+  // Leader lines: last name, yards with a comma, touchdowns when there are any
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1381 YDS, 9 TD, 3 INT"), std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(espn::detail::leader_line("M. Penix Jr.", "52/77, 719 YDS, 3 TD, 1 INT"), std::string("Penix Jr. 719 yds 3 TD"));
+  CHECK_EQ(espn::detail::leader_line("B. Robinson", "102 CAR, 580 YDS, 4 TD"), std::string("Robinson 580 yds 4 TD"));
+  CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
+  CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
+  CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
+  // Pre-game on a single panel: both records after the kickoff, the leaders
+  // after the odds, and the leaders switch takes only the leaders away
+  GameSnapshot pr = live(0, 0, GameState::PRE);
+  pr.team_record = "2-3";
+  pr.opp_record = "3-2";
+  pr.team_leader = "Prescott 1,381 yds 9 TD";
+  pr.opp_leader = "Love 1,408 yds 10 TD";
+  pr.venue = "Lambeau Field";
+  CHECK_EQ(status_text(pr, no_odds, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | Lambeau Field"));
+  TickerOptions narrow = no_odds;
+  narrow.records = true;
+  CHECK_EQ(status_text(pr, narrow, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | DAL 2-3, PHI 3-2 | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | Lambeau Field"));
+  TickerOptions no_leaders = narrow;
+  no_leaders.leaders = false;
+  CHECK_EQ(status_text(pr, no_leaders, "Sun 7:20 PM"), std::string("Sun 7:20 PM | DAL 2-3, PHI 3-2 | Lambeau Field"));
+  pr.opp_record = "";
+  CHECK_EQ(status_text(pr, no_leaders, "Sun 7:20 PM"), std::string("Sun 7:20 PM | DAL 2-3 | Lambeau Field"));
   // Post
   GameSnapshot f = live(21, 20, GameState::POST);
   f.team_record = "3-0";
@@ -430,6 +855,64 @@ static void test_no_game_text() {
   // Live modes keep their own "Looking for a live game"
   CHECK_EQ(no_game_text(true, true, false, 1), std::string(""));
   CHECK_EQ(no_game_text(true, true, false, 3), std::string(""));
+  // A sign-in Wi-Fi says so in place of all of them, live modes too
+  CHECK_EQ(no_game_text(false, false, false, 0, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, true, false, 1, true), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(true, false, false, 2, false), std::string("Can't reach ESPN"));
+}
+
+// The plain HTTP read of ESPN after joining Wi-Fi (captive.h). Only a clear
+// portal answer is a sign-in network; anything ESPN could have sent is not.
+static void test_captive() {
+  // ESPN today: 200, JSON, "{}"
+  CHECK(classify_probe(200, "", "application/json;charset=UTF-8", "{}") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "  \r\n[1]") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "application/json", "") == Probe::OPEN);
+  CHECK(classify_probe(200, "", "", "\xEF\xBB\xBF{\"a\":1}") == Probe::OPEN);
+  // ESPN's JSON error for a URL it no longer knows still means ESPN answered
+  CHECK(classify_probe(404, "", "application/json", "{\"code\":404}") == Probe::OPEN);
+  // Portals: a redirect to their sign-in page, over HTTP or HTTPS
+  CHECK(classify_probe(302, "http://192.168.10.1:8002/index.php?zone=guest", "text/html", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "https://login.hotelwifi.example/portal?mac=aa:bb", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(307, "HTTPS://Splash.Example.NET/", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(301, "http://user@portal.example/x", "", "") == Probe::CAPTIVE);
+  // or their page in ESPN's place, or the status made for it
+  CHECK(classify_probe(200, "", "text/html", "<!DOCTYPE html><html><head><title>Sign in") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "", "\n  <html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(200, "", "text/html; charset=utf-8", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "text/html", "<html>") == Probe::CAPTIVE);
+  CHECK(classify_probe(511, "", "", "") == Probe::CAPTIVE);
+  // ESPN sending plain HTTP on to HTTPS one day is still ESPN
+  CHECK(classify_probe(301, "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/6/record", "", "") ==
+        Probe::OPEN);
+  CHECK(classify_probe(302, "https://secure.espn.com:443/x", "", "") == Probe::OPEN);
+  CHECK(classify_probe(302, "https://espn.com", "", "") == Probe::OPEN);
+  // but a host that only ends in the same letters is not
+  CHECK(classify_probe(302, "http://notespn.com/login", "", "") == Probe::CAPTIVE);
+  CHECK(classify_probe(302, "http://espn.com.portal.example/login", "", "") == Probe::CAPTIVE);
+  // Proves nothing: no answer, a relative or missing redirect, an error page
+  // (ESPN's own Akamai "Access Denied" is HTML), an empty or odd body
+  CHECK(classify_probe(0, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(-1, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "/login", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(302, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(403, "", "text/html", "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>") == Probe::UNKNOWN);
+  CHECK(classify_probe(503, "", "text/html", "<html>") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "", "") == Probe::UNKNOWN);
+  CHECK(classify_probe(200, "", "text/plain", "OK") == Probe::UNKNOWN);
+  CHECK(classify_probe(204, "", "", "") == Probe::UNKNOWN);
+
+  // When to probe: once per join
+  CHECK(probe_due(false, false, false, 0));
+  CHECK(probe_due(false, true, true, 0));
+  CHECK(!probe_due(true, false, false, 10 * 60 * 1000));
+  // again every minute on a sign-in network
+  CHECK(!probe_due(true, true, false, kProbeCaptiveRecheckMs - 1));
+  CHECK(probe_due(true, true, false, kProbeCaptiveRecheckMs));
+  // every two while reads fail on one that looked open
+  CHECK(!probe_due(true, false, true, kProbeFailingRecheckMs - 1));
+  CHECK(probe_due(true, false, true, kProbeFailingRecheckMs));
 }
 
 static struct tm mk(int year, int yday, int wday, int hour, int min, int mon = 8, int mday = 5) {
@@ -450,6 +933,11 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(2026, 248, 0, 12, 0), now), std::string("Tomorrow 12:00 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 251, 3, 19, 20), now), std::string("Wed 7:20 PM"));
   CHECK_EQ(kickoff_label(mk(2026, 256, 1, 0, 5, 8, 14), now), std::string("Sep 14 12:05 AM"));
+  // ESPTime{}.to_c_tm(), what the panel gets for an epoch it can't convert:
+  // no label rather than a read before the month table (found by fuzz_espn).
+  CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
+  // A year far enough out to overflow the day count in int.
+  CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
 }
 
 static void test_upcoming() {
@@ -529,6 +1017,12 @@ static void test_live_games() {
            std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
                        "?groups=50&limit=300&dates=20260214"));
   CHECK(scan_url(League::NBA, 0).find("groups=") == std::string::npos);
+  // A panel with no team picked reads college basketball's Top 25 slate.
+  CHECK_EQ(scan_url(League::MCBB, parse_iso8601_z("2026-02-14T20:00Z"), true),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+                       "?dates=20260214"));
+  CHECK(scan_url(League::NCAA, 0, true).find("groups=80") != std::string::npos);
+  CHECK_EQ(scan_url(League::NHL, 0, true), scan_url(League::NHL, 0));
   // neutral splashes name both sides
   CHECK_EQ(decide_splash(live(0, 0), live(6, 0), true, true).text, std::string("DAL TOUCHDOWN"));
   CHECK_EQ(decide_splash(live(0, 0), live(0, 3), true, true).text, std::string("PHI FIELD GOAL"));
@@ -1426,6 +1920,10 @@ static void test_soccer_text_helpers() {
   CHECK_EQ(soccer_board_record("6-10-12"), std::string("6-10-12"));
   CHECK_EQ(soccer_board_record("12-10-12"), std::string("46 pts"));  // too wide under a logo
   CHECK_EQ(soccer_board_record(""), std::string(""));
+  CHECK_EQ(soccer_board_record("999-999-999"), std::string("3996 pts"));
+  // A count past three digits (the fuzzer's 1068893704 overflowed 3 * w).
+  CHECK_EQ(soccer_board_record("1068893704-1-1"), std::string("1068893704-1-1"));
+  CHECK_EQ(soccer_board_record("12-2147483648-1"), std::string("12-2147483648-1"));
 }
 
 // A club's next game across its league and cups (team endpoints recorded
@@ -1679,10 +2177,15 @@ static void test_nba_pre_post() {
   CHECK_EQ(p.over_under, std::string("216.5"));
   CHECK_EQ(p.tv, std::string("NBA TV"));
   TickerOptions o;
-  CHECK_EQ(status_text(p, o, "Today 10:00 PM"), std::string("Today 10:00 PM | POR -14.5 | O/U 216.5 | NBA TV | Moda Center"));
+  CHECK_EQ(status_text(p, o, "Today 10:00 PM"),
+           std::string("Today 10:00 PM | POR -14.5 | O/U 216.5 | NBA TV | Moda Center"));
   TickerOptions no_odds;
   no_odds.odds = false;
   CHECK_EQ(status_text(p, no_odds, ""), std::string("10/7 - 10:00 PM EDT | Moda Center"));
+  // A single 64-wide panel has no room for the records, so the ticker carries them
+  TickerOptions narrow = no_odds;
+  narrow.records = true;
+  CHECK_EQ(status_text(p, narrow, ""), std::string("10/7 - 10:00 PM EDT | POR 0-0, GS 1-1 | Moda Center"));
   CHECK_EQ(basketball_series(p), std::string(""));
 
   GameSnapshot f = hoops_event("fixtures/event_nba_final.json", kPacers);
@@ -1949,10 +2452,14 @@ static void test_nhl_pre_post() {
   CHECK_EQ(p.over_under, std::string("6.5"));
   CHECK_EQ(p.tv, std::string("ESPN+"));
   TickerOptions o;
-  CHECK_EQ(status_text(p, o, "Today 10:00 PM"), std::string("Today 10:00 PM | EDM -135 | O/U 6.5 | ESPN+ | Honda Center"));
+  CHECK_EQ(status_text(p, o, "Today 10:00 PM"),
+           std::string("Today 10:00 PM | EDM -135 | O/U 6.5 | ESPN+ | Honda Center"));
   TickerOptions no_odds;
   no_odds.odds = false;
   CHECK_EQ(status_text(p, no_odds, ""), std::string("10/7 - 10:00 PM EDT | Honda Center"));
+  TickerOptions narrow = no_odds;
+  narrow.records = true;
+  CHECK_EQ(status_text(p, narrow, ""), std::string("10/7 - 10:00 PM EDT | EDM 2-0-1, ANA 2-0-0 | Honda Center"));
 
   // Tonight's final, and the win splash from the intermission document of the same game
   GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
@@ -1988,7 +2495,8 @@ static void test_nhl_pre_post() {
   GameSnapshot pre = po;
   pre.state = GameState::PRE;
   pre.odds = pre.over_under = pre.tv = "";
-  CHECK_EQ(status_text(pre, o, "Today 7:00 PM"), std::string("Today 7:00 PM | CAR leads series 2-0 | Lenovo Center"));
+  CHECK_EQ(status_text(pre, o, "Today 7:00 PM"),
+           std::string("Today 7:00 PM | CAR leads series 2-0 | Lenovo Center"));
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_nhl_live.json"), Sport::HOCKEY, kPenguins, x));  // not in it
@@ -3482,6 +3990,310 @@ static bool panel_drawable(const std::string &s) {
   return true;
 }
 
+static void test_boot_log() {
+  const int64_t now = 1792000000;  // 2026-10-16
+  const uint32_t build_a = 111, build_b = 222;
+  // RTC memory after a power cut is noise; the log starts over.
+  BootLog log;
+  memset(&log, 0xA5, sizeof(log));
+  CHECK(!boot_log_valid(log));
+  CHECK(boot_log_start(log, kResetPowerOn, build_a, 0) == Restart::POWER);
+  CHECK(boot_log_valid(log));
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  CHECK_EQ(boot_log_fault_ago(log, now, 50), (int64_t) -1);
+
+  // A crash: kept, and as old as the uptime while it's this start.
+  CHECK(boot_log_start(log, kResetPanic, build_a, now) == Restart::CRASH);
+  CHECK_EQ(log.boots, 2u);
+  CHECK(log.fault == (uint8_t) Restart::CRASH);
+  CHECK_EQ(boot_log_fault_ago(log, now + 600, 600), (int64_t) 600);
+  // The owner presses Reboot: the start says restart, the crash stays.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetSoftware, build_a, now + 3600) == Restart::RESTART);
+  CHECK(log.fault == (uint8_t) Restart::CRASH);
+  CHECK_EQ(boot_log_fault_ago(log, now + 7200, 3600), (int64_t) 7200);
+  // Without a clock, an earlier fault's age isn't known.
+  CHECK_EQ(boot_log_fault_ago(log, 0, 3600), (int64_t) -1);
+
+  // The S3 sometimes reports esp_restart() as a watchdog; the mark says not.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::RESTART);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::WATCHDOG);  // unmarked
+  CHECK(log.fault == (uint8_t) Restart::WATCHDOG);
+
+  // A planned restart into a different build is an update, either way.
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::UPDATE);
+  boot_log_planned(log);
+  CHECK(boot_log_start(log, kResetWdt, build_a, now) == Restart::UPDATE);
+  // An unmarked software reset is still a restart, and the mark is used once.
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::RESTART);
+  CHECK_EQ((int) log.planned, 0);
+
+  // A brownout at a start with no clock yet gets its time once it's set.
+  CHECK(boot_log_start(log, kResetBrownout, build_b, 0) == Restart::BROWNOUT);
+  CHECK_EQ(log.fault_at, (int64_t) 0);
+  boot_log_clock(log, 1000);  // not a real time
+  CHECK_EQ(log.fault_at, (int64_t) 0);
+  boot_log_clock(log, now);
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  boot_log_clock(log, now + 5);  // only the first
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now + 60) == Restart::RESTART);
+  boot_log_clock(log, now + 60);  // not this start's fault
+  CHECK_EQ(log.fault_at, (int64_t) now);
+  CHECK_EQ(boot_log_fault_ago(log, now + 90, 30), (int64_t) 90);
+  CHECK(boot_log_start(log, kResetPowerGlitch, build_b, now) == Restart::BROWNOUT);
+
+  // Power: a log that survived it is cleared anyway, faults and all.
+  CHECK(boot_log_start(log, kResetPowerOn, build_b, now) == Restart::POWER);
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  // A flipped bit and the log starts over.
+  CHECK(boot_log_start(log, kResetPanic, build_b, now) == Restart::CRASH);
+  log.boots ^= 4;
+  CHECK(!boot_log_valid(log));
+  CHECK_EQ(boot_log_fault_ago(log, now, 10), (int64_t) -1);
+  CHECK(boot_log_start(log, kResetSoftware, build_b, now) == Restart::RESTART);
+  CHECK_EQ(log.boots, 1u);
+  CHECK_EQ((int) log.fault, 0);
+  memset(&log, 0, sizeof(log));
+  boot_log_planned(log);  // no effect on an invalid log
+  CHECK(!boot_log_valid(log));
+
+  CHECK(classify_restart(kResetTaskWdt, true, false) == Restart::WATCHDOG);
+  CHECK(classify_restart(kResetIntWdt, false, false) == Restart::WATCHDOG);
+  CHECK(classify_restart(kResetCpuLockup, false, false) == Restart::CRASH);
+  CHECK(classify_restart(kResetUsb, false, false) == Restart::USB);
+  CHECK(classify_restart(kResetExternal, false, false) == Restart::POWER);
+  CHECK(classify_restart(kResetDeepSleep, false, false) == Restart::OTHER);
+  CHECK(classify_restart(99, false, false) == Restart::OTHER);
+  CHECK_EQ(std::string(restart_key(Restart::BROWNOUT)), std::string("brownout"));
+  CHECK_EQ(std::string(restart_key(Restart::OTHER)), std::string("other"));
+}
+
+static void test_health_json() {
+  Health h{};
+  h.uptime_s = 7260;
+  h.start = Restart::RESTART;
+  h.boots = 3;
+  h.fault = Restart::BROWNOUT;
+  h.fault_ago = 9000;
+  h.heap_kb = 143.24f;
+  h.block_kb = 40.0f;
+  h.psram_kb = 4100.5f;
+  h.wifi = true;
+  h.rssi = -58;
+  h.espn_status = 200;
+  h.espn_ago = 9;
+  h.version = "2026.10.0";
+  h.built = 1792285260;  // 2026-10-18 1:01 AM UTC
+  h.channel = "beta";
+  char buf[512];
+  int n = health_json(buf, sizeof(buf), h);
+  CHECK(n > 0 && n < (int) sizeof(buf));
+  CHECK_EQ(std::string(buf),
+           std::string("{\"up\":7260,\"start\":\"restart\",\"boots\":3,\"fault\":\"brownout\",\"fault_ago\":9000,"
+                       "\"heap_kb\":143.2,\"block_kb\":40.0,\"psram_kb\":4100.5,\"rssi\":-58,\"espn\":200,"
+                       "\"espn_ago\":9,\"version\":\"2026.10.0\",\"built\":1792285260,"
+                       "\"channel\":\"beta\"}"));
+  // Parses, and the optional keys go when they mean nothing.
+  JsonDocument doc;
+  CHECK(!deserializeJson(doc, buf));
+  CHECK_EQ(doc["rssi"].as<int>(), -58);
+  h.fault_ago = -1;
+  h.wifi = false;
+  h.espn_ago = -1;
+  health_json(buf, sizeof(buf), h);
+  doc.clear();
+  CHECK(!deserializeJson(doc, buf));
+  CHECK_EQ(std::string(doc["fault"].as<const char *>()), std::string("brownout"));
+  CHECK(doc["fault_ago"].isNull());
+  CHECK(doc["rssi"].isNull());
+  CHECK(doc["espn"].isNull());
+  h.fault = Restart::NONE;
+  h.espn_status = 0;  // no answer
+  h.espn_ago = 30;
+  health_json(buf, sizeof(buf), h);
+  doc.clear();
+  CHECK(!deserializeJson(doc, buf));
+  CHECK(doc["fault"].isNull());
+  CHECK_EQ(doc["espn"].as<int>(), 0);
+  CHECK_EQ(doc["espn_ago"].as<int>(), 30);
+}
+
+static void test_heat_guard() {
+  HeatGuard g;
+  uint32_t t = 1000;
+  CHECK(!g.feed(NAN, t));
+  CHECK(!g.feed(60.0f, t));
+  CHECK_EQ((int) g.step, 0);
+  // The first hot reading steps down at once, then one step per kHotStepMs.
+  CHECK(g.feed(kHotC, t += 15000));
+  CHECK_EQ((int) g.step, 1);
+  CHECK(!g.feed(kHotC + 1, t += kHotStepMs - 1));
+  CHECK(g.feed(kHotC + 1, t += 1));
+  CHECK_EQ((int) g.step, 2);
+  CHECK(g.feed(kHotC + 1, t += kHotStepMs));
+  CHECK(!g.feed(kHotC + 1, t += kHotStepMs));  // already the dimmest
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  // Between the two limits it holds, however long.
+  CHECK(!g.feed(kCoolC + 1, t += 10 * kCoolStepMs));
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  // Under kCoolC it waits a whole kCoolStepMs before each step back.
+  CHECK(!g.feed(kCoolC - 1, t += 15000));
+  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 15001));
+  CHECK(g.feed(kCoolC - 1, t += 15001));
+  CHECK_EQ((int) g.step, (int) kHeatSteps - 1);
+  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 1));
+  CHECK(g.feed(kCoolC - 1, t += 1));
+  // Warm again in between restarts the wait.
+  CHECK(!g.feed(kCoolC, t += kCoolStepMs));
+  CHECK(!g.feed(kCoolC - 1, t += 15000));
+  CHECK_EQ((int) g.step, 1);
+  CHECK(g.feed(kCoolC - 1, t += kCoolStepMs));
+  CHECK_EQ((int) g.step, 0);
+  CHECK(!g.feed(20.0f, t += kCoolStepMs));
+  // Past the floor it goes straight to the dimmest step.
+  CHECK(g.feed(kHotFloorC, t += 15000));
+  CHECK_EQ((int) g.step, (int) kHeatSteps);
+  CHECK(g.last_c == kHotFloorC);
+  // millis() wrapping doesn't stall it.
+  HeatGuard w;
+  uint32_t m = 0xFFFFFFFFu - 1000;
+  CHECK(w.feed(kHotC, m));
+  CHECK(w.feed(kHotC, m + kHotStepMs));
+  CHECK_EQ((int) w.step, 2);
+}
+
+static void test_power_log() {
+  PowerLog log{};
+  CHECK(!power_log_start(log, false));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ(log.brownouts, 1u);
+  CHECK_EQ((int) log.capped, 0);
+  // A settled run ends the streak; the count stays.
+  CHECK(power_log_settled(log));
+  CHECK(!power_log_settled(log));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ((int) log.capped, 0);
+  // Two in a row cap it, and power cuts in between don't count either way.
+  CHECK(!power_log_start(log, false));
+  CHECK(power_log_start(log, true));
+  CHECK_EQ((int) log.capped, 1);
+  CHECK_EQ(log.brownouts, 3u);
+  // Settling doesn't lift the cap; only the owner does.
+  CHECK(power_log_settled(log));
+  CHECK_EQ((int) log.capped, 1);
+  CHECK(power_log_clear(log));
+  CHECK(!power_log_clear(log));
+  CHECK_EQ((int) log.capped, 0);
+  CHECK_EQ(log.brownouts, 3u);
+  // The streak doesn't wrap.
+  log.streak = 255;
+  power_log_start(log, true);
+  CHECK_EQ((int) log.streak, 255);
+}
+
+static void test_guarded_brightness() {
+  CHECK_EQ((int) guarded_brightness(128, 0, false), 128);
+  CHECK_EQ((int) guarded_brightness(255, 0, false), 255);
+  CHECK_EQ((int) guarded_brightness(200, 1, false), 140);
+  CHECK_EQ((int) guarded_brightness(200, kHeatSteps, false), 50);
+  CHECK_EQ((int) guarded_brightness(200, 9, false), 50);  // past the last step
+  CHECK_EQ((int) guarded_brightness(200, 0, true), (int) kPowerCap);
+  CHECK_EQ((int) guarded_brightness(40, 0, true), 40);  // already under the cap
+  CHECK_EQ((int) guarded_brightness(255, kHeatSteps, true), (int) kPowerCap);
+  CHECK_EQ((int) guarded_brightness(1, kHeatSteps, true), 1);  // never off
+  CHECK(guard_mark(0, false) == GuardMark::NONE);
+  CHECK(guard_mark(2, false) == GuardMark::HEAT);
+  CHECK(guard_mark(2, true) == GuardMark::POWER);
+
+  char buf[96];
+  PowerLog log{};
+  log.brownouts = 4;
+  log.capped = 1;
+  guard_json_keys(buf, sizeof(buf), 47.25f, 2, log);
+  CHECK_EQ(std::string(buf), std::string(",\"temp\":47.2,\"heat\":2,\"brownouts\":4,\"power\":\"capped\""));
+  log.capped = 0;
+  guard_json_keys(buf, sizeof(buf), NAN, 0, log);
+  CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
+}
+
+static void test_night() {
+  // Times as the page's fields send them
+  CHECK_EQ(night_parse_time("23:00"), 23 * 60);
+  CHECK_EQ(night_parse_time("7:05"), 7 * 60 + 5);
+  CHECK_EQ(night_parse_time("00:00"), 0);
+  CHECK_EQ(night_parse_time("23:59"), 23 * 60 + 59);
+  CHECK_EQ(night_parse_time("24:00"), -1);
+  CHECK_EQ(night_parse_time("12:60"), -1);
+  CHECK_EQ(night_parse_time("12:5"), -1);
+  CHECK_EQ(night_parse_time("123:00"), -1);
+  CHECK_EQ(night_parse_time(":30"), -1);
+  CHECK_EQ(night_parse_time("1a:00"), -1);
+  CHECK_EQ(night_parse_time("11 PM"), -1);
+  CHECK_EQ(night_parse_time(""), -1);
+  CHECK_EQ(night_time_text(7 * 60), std::string("07:00"));
+  CHECK_EQ(night_time_text(23 * 60 + 30), std::string("23:30"));
+  CHECK_EQ(night_clock12(7 * 60), std::string("7:00 AM"));
+  CHECK_EQ(night_clock12(0), std::string("12:00 AM"));
+  CHECK_EQ(night_clock12(12 * 60 + 5), std::string("12:05 PM"));
+  CHECK_EQ(night_clock12(23 * 60 + 30), std::string("11:30 PM"));
+
+  // Across midnight, and inside one day
+  CHECK(night_window(23 * 60, 7 * 60, 23 * 60));
+  CHECK(night_window(23 * 60, 7 * 60, 2 * 60));
+  CHECK(!night_window(23 * 60, 7 * 60, 7 * 60));  // over at the end minute
+  CHECK(!night_window(23 * 60, 7 * 60, 12 * 60));
+  CHECK(night_window(60, 6 * 60, 3 * 60));
+  CHECK(!night_window(60, 6 * 60, 23 * 60));
+  CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+
+  NightPrefs p = night_defaults();
+  CHECK(!p.on);
+  CHECK_EQ((int) p.start, 23 * 60);
+  CHECK_EQ((int) p.end, 7 * 60);
+  CHECK(!p.screen_off);
+  CHECK_EQ((int) p.level, (int) kNightLevelDefault);
+  const int late = 2 * 60;
+  CHECK(night_state(p, true, late, false) == Night::DAY);  // off out of the box
+  p.on = 1;
+  CHECK(night_state(p, true, late, false) == Night::DIM);
+  CHECK(night_state(p, true, 12 * 60, false) == Night::DAY);
+  CHECK(night_state(p, false, late, false) == Night::DAY);  // no clock yet: never dark
+  CHECK(night_state(p, true, late, true) == Night::GAME);
+  p.screen_off = 1;
+  CHECK(night_state(p, true, late, false) == Night::DARK);
+  CHECK(night_state(p, true, late, true) == Night::GAME);  // a live game lights it
+
+  p.level = 20;
+  CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
+  CHECK_EQ((int) night_brightness(128, Night::DARK, p), 0);
+  CHECK_EQ((int) night_brightness(128, Night::GAME, p), 128);
+  CHECK_EQ((int) night_brightness(128, Night::DAY, p), 128);
+  // Heat and power still hold the night level down
+  CHECK_EQ((int) guarded_brightness(night_brightness(128, Night::DIM, p), kHeatSteps, false), 5);
+  CHECK_EQ(std::string(night_word(Night::DAY)), std::string(""));
+  CHECK_EQ(std::string(night_word(Night::DARK)), std::string("off"));
+
+  // A damaged blob goes back to the defaults field by field
+  NightPrefs bad{};
+  bad.on = 7;
+  bad.start = 5000;
+  bad.end = 6 * 60;
+  bad.screen_off = 9;
+  bad.level = 0;
+  night_sanitize(bad);
+  CHECK_EQ((int) bad.on, 1);
+  CHECK_EQ((int) bad.start, (int) kNightStartDefault);
+  CHECK_EQ((int) bad.end, 6 * 60);
+  CHECK_EQ((int) bad.screen_off, 1);
+  CHECK_EQ((int) bad.level, (int) kNightLevelDefault);
+  static_assert(sizeof(NightPrefs) == 10, "NightPrefs is saved in flash: its size can't change");
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -3542,6 +4354,138 @@ static void test_offseason() {
   CHECK_EQ(clock_color(true, 0x002A5C), (uint32_t) 0x0057C0);
   CHECK_EQ(clock_color(true, 0x000000), (uint32_t) 0xFFFFFF);
   CHECK_EQ(clock_color(true, parse_color("")), (uint32_t) 0xFFFFFF);  // a team with no color from ESPN
+}
+
+// Reads text through MsgReader in pieces of `step` bytes, as a socket hands it over.
+static MsgReader<std::string> read_list(const std::string &file, uint32_t from, uint32_t max, size_t step) {
+  MsgReader<std::string> r(from, max);
+  bool more = true;
+  for (size_t i = 0; i < file.size() && more; i += step)
+    more = r.feed(file.data() + i, std::min(step, file.size() - i));
+  if (more)
+    r.finish();
+  return r;
+}
+
+static void test_message() {
+  // Cleaning: the saved text keeps its lines, a list entry is one line.
+  CHECK_EQ(message_clean("  Wings $5 \r\n\n\tPints $3  \n", kMsgTextMax, true), std::string("Wings $5\nPints $3"));
+  CHECK_EQ(message_clean("a\nb", kMsgTextMax, false), std::string("a b"));
+  CHECK_EQ(message_clean("Happy birthday \xF0\x9F\x8E\x82 Sam", kMsgTextMax, true), std::string("Happy birthday Sam"));
+  CHECK_EQ(message_clean("\xE2\x9D\xA4\xEF\xB8\x8F Go team", kMsgTextMax, true), std::string("Go team"));
+  CHECK_EQ(message_clean("\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x8D\xB3", kMsgTextMax, true), std::string(""));
+  CHECK_EQ(message_clean("bell\x07 rings", kMsgTextMax, true), std::string("bell rings"));
+  // Latin-1 and the rest stay for panel_text() to map.
+  CHECK_EQ(message_clean("Jos\xC3\xA9\xE2\x80\x99s", kMsgTextMax, true), std::string("Jos\xC3\xA9\xE2\x80\x99s"));
+  // Cut at the cap, never inside a character, and no trailing space.
+  CHECK_EQ(message_clean("abc\xC3\xA9", 4, true), std::string("abc"));
+  CHECK_EQ(message_clean("ab cd", 3, true), std::string("ab"));
+  CHECK_EQ(message_clean(std::string(300, 'x'), kMsgTextMax, true).size(), kMsgTextMax);
+  // A broken byte is kept for panel_text() to turn into '?'.
+  CHECK_EQ(message_clean("a\x80" "b", kMsgTextMax, true), std::string("a\x80" "b"));
+
+  CHECK(msg_url_ok(""));
+  CHECK(msg_url_ok("http://192.168.1.20/names.txt"));
+  CHECK(msg_url_ok("https://gist.githubusercontent.com/x/raw/plates.txt"));
+  CHECK(!msg_url_ok("https://"));
+  CHECK(!msg_url_ok("ftp://example.com/a.txt"));
+  CHECK(!msg_url_ok("example.com/a.txt"));
+  CHECK(!msg_url_ok("http://exa mple.com/"));
+  CHECK(!msg_url_ok("http://example.com/\xC3\xA9"));
+  CHECK(!msg_url_ok("http://" + std::string(kMsgUrlMax, 'a')));
+
+  CHECK_EQ(clamp_say_secs(0), kSayDefaultSecs);
+  CHECK_EQ(clamp_say_secs(-4), kSayDefaultSecs);
+  CHECK_EQ(clamp_say_secs(30), 30);
+  CHECK_EQ(clamp_say_secs(100000), kSaySecsMax);
+  CHECK_EQ(clamp_msg_every(-1), 0);
+  CHECK_EQ(clamp_msg_every(99), kMsgEveryMax);
+
+  std::string list = "Ann\nBo\nCy\nDee\nEd";
+  CHECK_EQ(msg_count(list), 5u);
+  CHECK_EQ(msg_count(std::string()), 0u);
+  CHECK_EQ(msg_entries(list, 0, 2), std::string("Ann\nBo"));
+  CHECK_EQ(msg_entries(list, 3, 4), std::string("Dee\nEd"));
+  CHECK_EQ(msg_entries(list, 5, 4), std::string(""));
+
+  // The reader: every piece size gives the same list.
+  std::string file = "\xEF\xBB\xBFJane Doe\r\n\r\n  John Smith  \r\n# not a comment\nZo\xC3\xAB\n" + std::string(100, 'L') + "\nlast";
+  for (size_t step : {1, 3, 7, 512}) {
+    auto r = read_list(file, 0, kMsgChunkLines, step);
+    CHECK(r.eof());
+    CHECK_EQ(r.kept(), 6u);
+    CHECK_EQ(msg_entries(r.list(), 0, 4), std::string("Jane Doe\nJohn Smith\n# not a comment\nZo\xC3\xAB"));
+    CHECK_EQ(msg_entries(r.list(), 4, 1), std::string(kMsgLineMax, 'L'));
+    CHECK_EQ(msg_entries(r.list(), 5, 1), std::string("last"));
+  }
+  // A window into a long list: entries 250-349 of 1000, and it stops reading
+  // as soon as it has them.
+  std::string names;
+  for (int i = 0; i < 1000; i++)
+    names += "Name " + std::to_string(i) + "\n";
+  auto w = read_list(names, 250, kMsgChunkLines, 64);
+  CHECK(!w.eof());
+  CHECK(w.full());
+  CHECK_EQ(w.seen(), 350u);
+  CHECK_EQ(msg_entries(w.list(), 0, 1), std::string("Name 250"));
+  CHECK_EQ(msg_entries(w.list(), 99, 1), std::string("Name 349"));
+  CHECK(w.bytes() < names.size() / 2);
+  // The last window runs to the end.
+  auto tail = read_list(names, 950, kMsgChunkLines, 64);
+  CHECK(tail.eof());
+  CHECK_EQ(tail.kept(), 50u);
+  // A window past the end keeps nothing.
+  auto past = read_list(names, 5000, kMsgChunkLines, 64);
+  CHECK(past.eof());
+  CHECK_EQ(past.kept(), 0u);
+  CHECK_EQ(past.seen(), 1000u);
+
+  // Paging: a short list from the top, wrapping round.
+  MsgPage p = msg_next_page(0, 0, 5, true, false, kMsgPageLines);
+  CHECK(!p.read);
+  CHECK_EQ(p.first, 0u);
+  CHECK_EQ(p.count, 4u);
+  CHECK_EQ(p.next, 4u);
+  p = msg_next_page(4, 0, 5, true, false, kMsgPageLines);
+  CHECK_EQ(p.count, 1u);
+  CHECK_EQ(p.next, 0u);  // back to the top
+  // Stale at the top: read it again.
+  p = msg_next_page(0, 0, 5, true, true, kMsgPageLines);
+  CHECK(p.read);
+  CHECK_EQ(p.next, 0u);
+  // Not stale in the middle: keep going.
+  p = msg_next_page(4, 0, 5, true, true, kMsgPageLines);
+  CHECK(!p.read);
+  // A long list: the window ends, read the next one from where it stopped.
+  p = msg_next_page(96, 0, 100, false, false, kMsgPageLines);
+  CHECK_EQ(p.count, 4u);
+  CHECK_EQ(p.next, 100u);
+  p = msg_next_page(100, 0, 100, false, false, kMsgPageLines);
+  CHECK(p.read);
+  CHECK_EQ(p.next, 100u);
+  // The last window of a long list ends: back to the top, which needs a read.
+  p = msg_next_page(950, 900, 50, true, false, kMsgPageLines);
+  CHECK(p.read);
+  CHECK_EQ(p.next, 0u);
+  // Nothing read yet.
+  p = msg_next_page(0, 0, 0, false, false, kMsgPageLines);
+  CHECK(p.read);
+  // An empty file: nothing to show until it is stale.
+  p = msg_next_page(0, 0, 0, true, false, kMsgPageLines);
+  CHECK(!p.read);
+  CHECK_EQ(p.count, 0u);
+  CHECK(msg_next_page(0, 0, 0, true, true, kMsgPageLines).read);
+
+  // Turns: every 2 minutes for a page, or holding the board.
+  CHECK(msg_turn(false, true, false, 999999, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(false, true, true, 0, 2, kMsgPageMs) == MsgTurn::HIDE);
+  CHECK(msg_turn(true, false, true, 0, 2, kMsgPageMs) == MsgTurn::HIDE);  // a game went live
+  CHECK(msg_turn(true, true, false, 119999, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, true, false, 120000, 2, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, true, kMsgPageMs - 1, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, 2, kMsgPageMs) == MsgTurn::HIDE);
+  CHECK(msg_turn(true, true, false, 0, 0, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, 0, kMsgPageMs) == MsgTurn::NEXT);
 }
 
 static void test_panel_text() {
@@ -3745,6 +4689,660 @@ static void test_tbd_kickoff() {
   CHECK(!team_cache_load(c, League::NCAA, kIowa, placeholder - 5 * 86400 + 60, back));
 }
 
+static void test_wifi_history() {
+  CHECK(wifi_cause(200) == WifiCause::SIGNAL);  // beacon timeout
+  CHECK(wifi_cause(3) == WifiCause::ROUTER);    // deauth from the router
+  CHECK(wifi_cause(206) == WifiCause::ROUTER);  // the router restarted
+  CHECK(wifi_cause(15) == WifiCause::PASSWORD);
+  CHECK(wifi_cause(207) == WifiCause::ROAM);
+  CHECK(wifi_cause(8) == WifiCause::PANEL);
+  CHECK(wifi_cause(1) == WifiCause::OTHER);
+  CHECK_EQ(std::string(wifi_cause_key(WifiCause::PASSWORD)), std::string("password"));
+
+  static int8_t rssi[kWifiMinutes];
+  static WifiDrop drops[kWifiDrops];
+
+  // No buffers (no PSRAM): no history, only the total.
+  WifiHistory none;
+  none.sample(0, true, -60);
+  none.up(0);
+  none.down(10, WifiCause::SIGNAL);
+  none.up(15);
+  CHECK_EQ(none.json(20, true, -60), std::string("{\"rssi\":-60,\"step\":300,\"hist\":[],\"weak\":false,"
+                                                 "\"drops\":1,\"day\":0,\"causes\":{}}"));
+
+  // A panel that drops all the time still answers whole JSON.
+  {
+    static int8_t r2[kWifiMinutes];
+    static WifiDrop d2[kWifiDrops];
+    WifiHistory flap;
+    flap.attach(r2, d2);
+    for (uint32_t i = 0; i < 1000000; i++) {
+      flap.up(i * 2);
+      flap.down(i * 2 + 1, WifiCause::OTHER);
+    }
+    std::string fj = flap.json(2000000, false, -127);
+    CHECK(fj.find("\"weak\":false,\"drops\":1000000,\"day\":64,\"causes\":{\"other\":64},\"last\":\"other\",\"last_ago\":1}") !=
+          std::string::npos);
+    CHECK(fj.back() == '}');
+  }
+
+  // A minute keeps the mean of its readings; a minute off Wi-Fi keeps 0.
+  WifiHistory h;
+  h.attach(rssi, drops);
+  h.up(0);
+  h.sample(0, true, -60);
+  h.sample(10, true, -62);
+  h.sample(20, true, -65);
+  CHECK_EQ(h.minutes(), 0u);
+  h.sample(60, false, -127);
+  CHECK_EQ(h.minutes(), 1u);
+  CHECK_EQ((int) rssi[0], -62);
+  h.sample(120, true, -70);
+  CHECK_EQ((int) rssi[1], 0);
+  CHECK_EQ(h.json(130, false, -127), std::string("{\"step\":300,\"hist\":[-62],\"weak\":false,"
+                                                  "\"drops\":0,\"day\":0,\"causes\":{}}"));
+
+  // A loop that stalled past several minutes fills them in as off Wi-Fi.
+  h.sample(400, true, -70);
+  CHECK_EQ(h.minutes(), 6u);
+  CHECK_EQ((int) rssi[2], -70);
+  CHECK_EQ((int) rssi[3], 0);
+  // Points end at the newest minute: [-62] then [off, -70, off, off, off]
+  CHECK(h.json(400, true, -70).find("\"hist\":[-62,-70]") != std::string::npos);
+
+  // Drops: the cause, how long it lasted, and the panel leaving on purpose
+  // or a roam not counted as trouble.
+  h.down(1000, WifiCause::SIGNAL);
+  std::string j = h.json(1010, false, -127);
+  CHECK(j.find("\"drops\":1,\"day\":1,\"causes\":{\"signal\":1},\"last\":\"signal\",\"last_ago\":10}") !=
+        std::string::npos);
+  h.up(1042);
+  CHECK(h.json(1100, true, -60).find("\"last_ago\":100,\"last_down\":42}") != std::string::npos);
+  h.up(1050);  // already up
+  CHECK(h.json(1100, true, -60).find("\"last_down\":42}") != std::string::npos);
+  h.down(1200, WifiCause::PANEL);
+  h.up(1210);
+  h.down(1300, WifiCause::ROAM);
+  h.up(1301);
+  h.down(1400, WifiCause::ROUTER);
+  h.down(1401, WifiCause::SIGNAL);  // already down: the first cause stands
+  h.up(1460);
+  CHECK_EQ(h.total(), 2u);
+  j = h.json(1500, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":2,\"causes\":{\"signal\":1,\"router\":1,\"roam\":1},"
+               "\"last\":\"router\",\"last_ago\":100,\"last_down\":60}") != std::string::npos);
+  // A day later the drops are history: still in the total, out of the day.
+  j = h.json(1400 + 24 * 3600, true, -60);
+  CHECK(j.find("\"drops\":2,\"day\":0,\"causes\":{},\"last\":\"router\"") != std::string::npos);
+
+  // The weak-signal hint: a median under -75 dBm over the last half hour,
+  // from at least ten minutes on Wi-Fi.
+  WifiHistory w;
+  w.attach(rssi, drops);
+  uint32_t t = 0;
+  // n minutes of one reading each, then a reading-less sample that closes
+  // the last of them
+  auto run = [&](int n, bool on, int8_t v) {
+    for (int m = 0; m < n; m++, t += 60)
+      w.sample(t, on, v);
+    w.sample(t, false, -127);
+  };
+  run(9, true, -80);
+  CHECK(!w.weak());  // nine minutes so far
+  run(1, true, -80);
+  CHECK(w.weak());
+  run(9, true, -60);
+  CHECK(w.weak());  // 10 weak of 19
+  run(2, true, -60);
+  CHECK(!w.weak());  // 10 weak of 21
+  run(30, true, -60);
+  CHECK(!w.weak());
+  run(25, false, -127);
+  run(5, true, -80);
+  CHECK(!w.weak());  // five readings in the last half hour: too few to say
+  run(30, false, -127);
+  CHECK(!w.weak());  // off Wi-Fi: no readings, no hint
+  CHECK(w.json(t, false, -127).find("-80,null,null,null,null,null,null]") != std::string::npos);
+
+  // The ring holds a day: after 25 hours the JSON has 288 points.
+  WifiHistory d;
+  d.attach(rssi, drops);
+  for (uint32_t m = 0; m <= 25 * 60; m++)
+    d.sample(m * 60, true, (int8_t) (m < 24 * 60 ? -50 : -77));
+  CHECK_EQ(d.minutes(), 25u * 60);
+  j = d.json(25 * 3600, true, -77);
+  size_t points = 1;
+  for (char c : j.substr(j.find("\"hist\":["), j.find(']') - j.find("\"hist\":[")))
+    if (c == ',')
+      points++;
+  CHECK_EQ(points, (size_t) (kWifiMinutes / kWifiStep));
+  CHECK(j.find(",-77]") != std::string::npos);
+  CHECK(d.weak());
+}
+
+// The line score at halftime and the final (line_score.h), from the recorded
+// single-event documents.
+static void test_line_score() {
+  // NHL final, WSH 5-3 over PIT, read as Washington's panel
+  GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
+  CHECK_EQ((int) f.team_line_count, 3);
+  CHECK_EQ((int) f.team_lines[0], 2);
+  CHECK_EQ((int) f.opp_lines[2], 0);
+  {
+    // A period value past int's range (found by the fuzzer) is capped, not cast
+    std::string json = slurp("fixtures/event_nhl_final.json");
+    const std::string first = "\"linescores\":[{\"value\":2.0,";
+    size_t at = json.find(first);
+    CHECK(at != std::string::npos);
+    json.replace(at, first.size(), "\"linescores\":[{\"value\":1.40187e+10,");
+    GameSnapshot big;
+    CHECK(parse_event_str(json, Sport::HOCKEY, kCapitals, big, root_id(json)));
+    CHECK(big.team_lines[0] == 255 || big.opp_lines[0] == 255);
+  }
+  CHECK(line_score_due(f));
+  LineScoreText t = line_score_text(f, 128);
+  CHECK_EQ((int) t.font, 12);
+  CHECK(!t.columns);
+  CHECK_EQ((int) t.abbr_cols, 4);
+  CHECK_EQ(t.head, std::string(" 1  2  3  T"));
+  CHECK_EQ(t.body, std::string(" 2  2  1  5\n 1  2  0  3"));
+  CHECK_EQ(t.title, std::string("Final"));
+  t = line_score_text(f, 64);
+  CHECK_EQ((int) t.font, 8);
+  CHECK(t.columns);
+  CHECK_EQ(t.body, std::string("1     2    1\n2     2    2\n3     1    0\nT     5    3"));
+
+  // A regular-season shootout: periods 4 and 5 fold into one SO column
+  GameSnapshot so = nhl_event("fixtures/event_nhl_final_so.json", kPenguins);
+  t = line_score_text(so, 128);
+  CHECK_EQ(t.head, std::string(" 1  2  3 SO  T"));
+  CHECK_EQ(t.body, std::string(" 1  1  2  0  4\n 1  0  3  1  5"));
+  CHECK_EQ(t.title, std::string("Final/SO"));
+  t = line_score_text(so, 64);
+  CHECK_EQ(t.body, std::string("1     1    1\n2     1    0\n3     2    3\nSO    0    1\nT     4    5"));
+
+  // Live hockey is not halftime: no line score
+  GameSnapshot live = nhl_event("fixtures/event_nhl_live.json", kAvalanche);
+  CHECK(!line_score_due(live));
+  CHECK_EQ((int) line_score_text(live, 128).font, 0);
+
+  // WNBA halftime: the quarters still to play are blank
+  GameSnapshot h = hoops_event("fixtures/event_wnba_half.json", kLiberty);
+  CHECK(at_halftime(h));
+  CHECK(line_score_due(h));
+  t = line_score_text(h, 128);
+  CHECK_EQ((int) t.font, 12);
+  CHECK_EQ(t.head, std::string(" 1  2  3  4   T"));
+  CHECK_EQ(t.body, std::string("26 28        54\n26 30        56"));
+  CHECK_EQ(t.title, std::string("Halftime"));
+  t = line_score_text(h, 64);
+  CHECK_EQ(t.body, std::string("1H   54   56\n2H          \nT    54   56"));
+
+  // MLB final, CLE 9-3 at CHW: innings in threes, then R H E
+  GameSnapshot m = mlb_event("fixtures/event_mlb_final.json", kWhiteSox);
+  t = line_score_text(m, 128);
+  CHECK_EQ((int) t.font, 8);
+  CHECK_EQ(t.head, std::string("123 456 789  R  H E"));
+  CHECK_EQ(t.body.substr(0, t.body.find('\n')), std::string("100 101 000  3  " + std::to_string(m.mlb.team_hits) +
+                                                             " " + std::to_string(m.mlb.team_errors)));
+  t = line_score_text(m, 64);
+  CHECK_EQ(t.body.substr(0, 12), std::string("R     3    9"));
+
+  // The home side ahead after the top of the 9th never bats in it: an x
+  GameSnapshot x = m;
+  x.team_line_count = 8;
+  t = line_score_text(x, 128);
+  CHECK_EQ(t.body.substr(0, 12), std::string("100 101 00x "));
+  // Extra innings that no longer fit in threes, then a 10-run inning
+  GameSnapshot ex = m;
+  ex.team_line_count = ex.opp_line_count = 12;
+  t = line_score_text(ex, 128);
+  CHECK_EQ(t.head.substr(0, 13), std::string("123456789012 "));
+  ex.opp_lines[2] = 11;
+  t = line_score_text(ex, 128);
+  CHECK(t.head.find("R") != std::string::npos);
+  CHECK((int) (t.abbr_cols + t.head.size()) * 5 <= 128);
+
+  // Football final with overtime folded into one column, at 128 in the small font
+  GameSnapshot sea;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_super_bowl.json"), Sport::FOOTBALL, 26, sea, "401772988"));
+  t = line_score_text(sea, 128);
+  CHECK_EQ(t.head, std::string(" 1  2  3  4   T"));
+  CHECK_EQ(t.body, std::string(" 3  6  3 17  29\n 0  0  0 13  13"));
+  GameSnapshot ot = sea;
+  ot.team_line_count = ot.opp_line_count = 6;
+  ot.team_lines[4] = 0;
+  ot.team_lines[5] = 6;
+  ot.opp_lines[4] = 3;
+  ot.opp_lines[5] = 0;
+  t = line_score_text(ot, 128);
+  CHECK_EQ(t.head, std::string(" 1  2  3  4 OT   T"));
+  CHECK_EQ((int) t.font, 8);  // an OT column takes the small font
+  t = line_score_text(ot, 64);
+  CHECK_EQ(t.body, std::string("1H    9    0\n2H   20   13\nOT    6    3\nT    29   13"));
+
+  // A soccer final has no line score
+  GameSnapshot epl;
+  CHECK(parse_event_str(slurp("fixtures/event_epl_final.json"), Sport::SOCCER, 359, epl, ""));
+  CHECK(!line_score_due(epl));
+  CHECK_EQ(epl.headline, std::string("Guimar\xc3\xa3" "es stunner helps Arsenal keep perfect start"));
+  CHECK_EQ(so.headline, std::string("Blake's shootout goal rescues Hurricanes in 5-4 win over Penguins"));
+  CHECK_EQ(f.headline, std::string(""));
+}
+
+// A live football snapshot for the scoring log, DAL (away, ours) at PHI.
+static GameSnapshot log_read(int us, int them, int period, const char *clock, const char *type = "",
+                             int value = 0, uint32_t team = 0, const char *who = "", int yards = 0,
+                             const char *text = "") {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::IN;
+  g.event_id = "401";
+  g.team_abbr = "DAL";
+  g.opp_abbr = "PHI";
+  g.team_id = 6;
+  g.opp_id = 21;
+  g.team_score = us;
+  g.opp_score = them;
+  g.period = period;
+  g.display_clock = clock;
+  g.play_type = type;
+  g.play_value = (int8_t) value;
+  g.play_team = team;
+  g.play_athlete = who;
+  g.play_yards = (int16_t) yards;
+  g.last_play = text;
+  return g;
+}
+
+static void test_score_log() {
+  CHECK_EQ(espn::detail::last_name("J. Grier"), std::string("Grier"));
+  CHECK_EQ(espn::detail::last_name("O. Mabson II"), std::string("Mabson II"));
+  CHECK_EQ(espn::detail::last_name("G.Kittle"), std::string("Kittle"));
+  CHECK_EQ(espn::detail::pass_target("(Shotgun) B.Purdy pass short left to G.Kittle for 11 yards, TOUCHDOWN."),
+           std::string("Kittle"));
+  CHECK_EQ(espn::detail::pass_target("(00:38) No Huddle-Shotgun #17 J.Kohl pass complete short right to #4 J.Resar "
+                               "caught at FIU31, for 6 yards"),
+           std::string("Resar"));
+  CHECK_EQ(espn::detail::pass_target("#13 J.Grier rush left for 28 yards gain to the MNE00 TOUCHDOWN"), std::string(""));
+
+  ScoreLog log;
+  // The first read of a game logs nothing; repeats add nothing.
+  log.update(log_read(0, 0, 1, "15:00"));
+  log.update(log_read(0, 0, 1, "15:00"));
+  CHECK(log.lines("401").empty());
+  // A touchdown pass seen as the last play, then the extra point finishes its line
+  log.update(log_read(6, 0, 1, "7:12", "Passing Touchdown", 6, 6, "B. Smith", 12,
+                      "(Shotgun) D.Prescott pass short right to C.Lamb for 12 yards, TOUCHDOWN."));
+  log.update(log_read(6, 0, 1, "7:12", "Passing Touchdown", 6, 6, "B. Smith", 12));
+  CHECK_EQ(log.lines("401").size(), (size_t) 1);
+  CHECK_EQ(log.lines("401")[0], std::string("Q1 7:12 Lamb 12 yd pass, DAL 6-0"));
+  log.update(log_read(7, 0, 1, "7:12", "Extra Point Good", 1, 6, "B. Aubrey"));
+  CHECK_EQ(log.lines("401").size(), (size_t) 1);
+  CHECK_EQ(log.lines("401")[0], std::string("Q1 7:12 Lamb 12 yd pass, DAL 7-0"));
+  // Their field goal; a touchdown run with the try already in (NFL text)
+  log.update(log_read(7, 3, 2, "11:02", "Field Goal Good", 3, 21, "J. Elliott", 48));
+  log.update(log_read(7, 10, 2, "3:40", "Rushing Touchdown", 7, 21, "S. Barkley", 28));
+  // A read that missed the play: the score alone
+  log.update(log_read(14, 10, 3, "9:00", "Kickoff", 0, 21));
+  // Both sides between reads: neither is described
+  log.update(log_read(17, 12, 4, "5:00", "Safety", 2, 6));
+  // A safety right after a touchdown does not finish the touchdown's line
+  log.update(log_read(23, 12, 4, "4:00", "Rushing Touchdown", 6, 6, "J. Williams", 1));
+  log.update(log_read(23, 14, 4, "3:50", "Safety", 2, 21, "N. Smith"));
+  // Overtime, and a final whose score came with it
+  GameSnapshot fin = log_read(26, 14, 5, "6:01", "Field Goal Good", 3, 6, "B. Aubrey", 33);
+  fin.state = GameState::POST;
+  log.update(fin);
+  std::vector<std::string> l = log.lines("401");
+  CHECK_EQ(l.size(), (size_t) 9);
+  if (l.size() == 9) {
+    CHECK_EQ(l[1], std::string("Q2 11:02 Elliott 48 yd FG, PHI 3-7"));
+    CHECK_EQ(l[2], std::string("Q2 3:40 Barkley 28 yd run, PHI 10-7"));
+    CHECK_EQ(l[3], std::string("Q3 9:00 DAL TD, DAL 14-10"));
+    CHECK_EQ(l[4], std::string("Q4 5:00 DAL FG, DAL 17-12"));
+    CHECK_EQ(l[5], std::string("Q4 5:00 PHI safety, PHI 12-17"));
+    CHECK_EQ(l[6], std::string("Q4 4:00 Williams 1 yd run, DAL 23-12"));
+    CHECK_EQ(l[7], std::string("Q4 3:50 Safety, PHI 14-23"));
+    CHECK_EQ(l[8], std::string("OT 6:01 Aubrey 33 yd FG, DAL 26-14"));
+  }
+
+  // A second game, then a third: the first is forgotten, the second kept
+  GameSnapshot other = log_read(0, 0, 1, "15:00");
+  other.event_id = "402";
+  log.update(other);
+  other.team_score = 3;
+  log.update(other);
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  CHECK_EQ(log.lines("401").size(), (size_t) 9);
+  GameSnapshot third = other;
+  third.event_id = "403";
+  log.update(third);
+  CHECK(log.lines("401").empty());
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  // A final read for the first time (the finals rotation) takes no slot
+  GameSnapshot rot = other;
+  rot.event_id = "404";
+  rot.state = GameState::POST;
+  log.update(rot);
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  // The same game from the other side (two favorites) keeps its scores straight
+  GameSnapshot flip = other;
+  std::swap(flip.team_abbr, flip.opp_abbr);
+  std::swap(flip.team_score, flip.opp_score);
+  std::swap(flip.team_id, flip.opp_id);
+  log.update(flip);
+  CHECK_EQ(log.lines("402").size(), (size_t) 1);
+  // Only the latest twelve lines stay
+  for (int i = 1; i <= 14; i++) {
+    other.team_score = 3 + 3 * i;
+    log.update(other);
+  }
+  l = log.lines("402");
+  CHECK_EQ(l.size(), ScoreLog::kLines);
+  CHECK_EQ(l.back(), std::string("Q1 15:00 DAL FG, DAL 45-0"));
+
+  // Hockey: the scorer when the last play is the goal; the shootout
+  ScoreLog hl;
+  GameSnapshot hk = log_read(0, 0, 1, "20:00");
+  hk.sport = Sport::HOCKEY;
+  hl.update(hk);
+  hk.team_score = 1;
+  hk.period = 2;
+  hk.display_clock = "12:04";
+  hk.play_type = "Goal";
+  hk.play_value = 1;
+  hk.play_team = 6;
+  hk.play_athlete = "S. Crosby";
+  hl.update(hk);
+  hk.opp_score = 1;
+  hk.period = 3;
+  hk.display_clock = "1:10";
+  hk.play_value = 0;
+  hl.update(hk);
+  hk.team_score = 2;
+  hk.period = 5;
+  hk.state = GameState::POST;
+  hl.update(hk);
+  l = hl.lines("401");
+  CHECK_EQ(l.size(), (size_t) 3);
+  if (l.size() == 3) {
+    CHECK_EQ(l[0], std::string("P2 12:04 Crosby goal, DAL 1-0"));
+    CHECK_EQ(l[1], std::string("P3 1:10 PHI goal, PHI 1-1"));
+    CHECK_EQ(l[2], std::string("SO DAL wins shootout, DAL 2-1"));
+  }
+
+  // Baseball: ESPN's play text, trimmed, with the half inning
+  ScoreLog bl;
+  GameSnapshot b = log_read(0, 0, 6, "0:00");
+  b.sport = Sport::BASEBALL;
+  b.short_detail = "Top 6th";
+  bl.update(b);
+  b.team_score = 2;
+  b.play_value = 2;
+  b.play_team = 6;
+  b.last_play = "Mesa Jr. homered to right center (401 feet), Caminero scored.";
+  bl.update(b);
+  b.opp_score = 1;
+  b.short_detail = "Bot 6th";
+  b.play_value = 0;
+  bl.update(b);
+  l = bl.lines("401");
+  CHECK_EQ(l.size(), (size_t) 2);
+  if (l.size() == 2) {
+    CHECK_EQ(l[0], std::string("T6 Mesa Jr. homered to right center, Caminero scored, DAL 2-0"));
+    CHECK_EQ(l[1], std::string("B6 PHI 1 run, PHI 1-2"));
+  }
+
+  // Basketball keeps no log
+  ScoreLog nl;
+  GameSnapshot n = log_read(0, 0, 1, "12:00");
+  n.sport = Sport::BASKETBALL;
+  nl.update(n);
+  n.team_score = 2;
+  nl.update(n);
+  CHECK(nl.lines("401").empty());
+
+  // The ticker: headline and log after the first part
+  CHECK_EQ(with_score_log("Final | DAL 5-2, PHI 4-3", "Cowboys win it", {"Q1 DAL TD, DAL 7-0"}),
+           std::string("Final | Cowboys win it | Q1 DAL TD, DAL 7-0 | DAL 5-2, PHI 4-3"));
+  CHECK_EQ(with_score_log("Halftime", "", {"Q1 DAL TD, DAL 7-0"}), std::string("Halftime | Q1 DAL TD, DAL 7-0"));
+  CHECK_EQ(with_score_log("Final | X", "", {}), std::string("Final | X"));
+  CHECK_EQ(with_score_log("Final", "Guimar\xc3\xa3" "es stunner", {}), std::string("Final | Guimaraes stunner"));
+}
+
+// Favorites' Jump to the action and the banner when another favorite scores.
+static GameSnapshot live_snap(Sport sport, int period, const char *clock, int us, int them) {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::IN;
+  g.event_id = "1";
+  g.sport = sport;
+  g.period = period;
+  g.display_clock = clock;
+  g.team_abbr = "KC";
+  g.opp_abbr = "LV";
+  g.team_score = us;
+  g.opp_score = them;
+  g.short_detail = std::string(clock) + " - " + std::to_string(period) + "th";
+  return g;
+}
+
+// Favorites take over in Live games (favorites.h).
+static LiveGame take_lg(League l, uint32_t away, uint32_t home, const char *id) {
+  LiveGame g;
+  g.league = (uint8_t) l;
+  g.event_id = id;
+  g.away_id = away;
+  g.home_id = home;
+  return g;
+}
+
+static void test_take_over() {
+  // Cowboys, Mavericks, Stars: ids are per league, so NBA team 6 isn't the Cowboys.
+  std::vector<FavRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 9}};
+  std::vector<LiveGame> live = {take_lg(League::NFL, 21, 13, "phi-lv"), take_lg(League::NBA, 2, 6, "bos-dal"),
+                                take_lg(League::NHL, 9, 4, "dal-chi"), take_lg(League::NFL, 19, 6, "nyg-dal")};
+  CHECK_EQ(live_fav_rank(live[0], favs), -1);
+  CHECK_EQ(live_fav_rank(live[1], favs), 1);  // the Mavericks at home
+  CHECK_EQ(live_fav_rank(live[2], favs), 2);  // the Stars away
+  CHECK_EQ(live_fav_rank(live[3], favs), 0);
+  CHECK_EQ(live_fav_rank(take_lg(League::NBA, 19, 7, "x"), favs), -1);
+  CHECK_EQ(live_fav_rank(take_lg(League::MLB, 6, 1, "x"), favs), -1);  // MLB 6 isn't a favorite
+
+  // Stick: the favorite highest in the list, whatever is up now.
+  CHECK_EQ(take_over_pick(live, favs, "", false, false), 3);
+  CHECK_EQ(take_over_pick(live, favs, "bos-dal", false, false), 3);
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", false, false), 3);
+  // Its game ended (the scan may still list it): the next favorite's.
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", true, false), 1);
+  // No favorite on: the rotation picks.
+  std::vector<LiveGame> others = {live[0], take_lg(League::NBA, 19, 7, "x")};
+  CHECK_EQ(take_over_pick(others, favs, "", false, false), -1);
+  CHECK_EQ(take_over_pick(others, {}, "", false, true), -1);
+  CHECK_EQ(take_over_pick({}, favs, "", false, false), -1);
+
+  // Alternate: the next favorite's game in list order, wrapping.
+  CHECK_EQ(take_over_pick(live, favs, "", false, true), 3);         // not on one yet: the highest
+  CHECK_EQ(take_over_pick(live, favs, "phi-lv", false, true), 3);   // on another game: the highest
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", false, true), 1);  // Cowboys, then Mavericks
+  CHECK_EQ(take_over_pick(live, favs, "bos-dal", false, true), 2);  // then Stars
+  CHECK_EQ(take_over_pick(live, favs, "dal-chi", false, true), 3);  // and back to the Cowboys
+  // A lone favorite's game stays up.
+  std::vector<LiveGame> one = {live[0], live[2]};
+  CHECK_EQ(take_over_pick(one, favs, "dal-chi", false, true), 1);
+  CHECK_EQ(take_over_pick(one, favs, "dal-chi", true, true), -1);  // and when it ends, nothing
+  // Two favorites in one game count once.
+  std::vector<FavRef> rivals = {{(uint8_t) League::NFL, 19}, {(uint8_t) League::NFL, 6}};
+  std::vector<LiveGame> derby = {live[0], live[3]};
+  CHECK_EQ(take_over_pick(derby, rivals, "nyg-dal", false, true), 1);
+  CHECK_EQ(live_fav_rank(live[3], rivals), 0);
+
+  // The kickoff scan: at the kickoff, then every 2 minutes while ESPN still
+  // says "pre", every 10 after 20 minutes late.
+  const int64_t k = 1'800'000'000;
+  CHECK_EQ(take_over_rescan_at(k - 3600, 0), (int64_t) 0);
+  CHECK_EQ(take_over_rescan_at(k - 3600, k), k);
+  CHECK_EQ(take_over_rescan_at(k, k), k + 120);
+  CHECK_EQ(take_over_rescan_at(k + 19 * 60, k), k + 19 * 60 + 120);
+  CHECK_EQ(take_over_rescan_at(k + 20 * 60, k), k + 20 * 60 + 600);
+
+  // The scan reports the earliest favorite kickoff it saw, per league's ids.
+  std::string nfl = slurp("fixtures/scoreboard_nfl.json");
+  std::vector<LiveGame> games;
+  int64_t next = 0, fav_next = -1;
+  std::vector<uint32_t> cowboys = {6};
+  CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &cowboys, &fav_next));
+  CHECK_EQ(fav_next, parse_iso8601_z("2026-09-14T00:20Z"));  // NYG @ DAL, Sunday night
+  CHECK_EQ(next, parse_iso8601_z("2026-09-10T00:20Z"));      // the week's first game
+  std::vector<uint32_t> two = {6, 25};
+  CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &two, &fav_next));
+  CHECK_EQ(fav_next, parse_iso8601_z("2026-09-11T00:35Z"));  // the 49ers come first
+  std::vector<uint32_t> nobody = {9999};
+  CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &nobody, &fav_next));
+  CHECK_EQ(fav_next, (int64_t) 0);
+}
+
+static void test_fav_action() {
+  // Football: the red zone at any score, the last two minutes of the 4th or
+  // overtime only when it is a one-score game.
+  GameSnapshot f = live_snap(Sport::FOOTBALL, 2, "8:00", 0, 28);
+  CHECK(!in_action(f, League::NFL));
+  f.is_red_zone = true;
+  CHECK(in_action(f, League::NFL));
+  f = live_snap(Sport::FOOTBALL, 4, "1:59", 21, 14);
+  CHECK(in_action(f, League::NFL));
+  CHECK(in_action(f, League::NCAA));
+  f.display_clock = "2:01";
+  CHECK(!in_action(f, League::NFL));
+  f = live_snap(Sport::FOOTBALL, 2, "1:00", 21, 14);
+  CHECK(!in_action(f, League::NFL));  // the end of the first half is not the action
+  f = live_snap(Sport::FOOTBALL, 4, "1:00", 30, 14);
+  CHECK(!in_action(f, League::NFL));  // two scores up
+  f = live_snap(Sport::FOOTBALL, 5, "6:00", 17, 17);
+  CHECK(!in_action(f, League::NFL));
+  f.display_clock = "0:45";
+  CHECK(in_action(f, League::NFL));
+  f.short_detail = "End of 4th";
+  CHECK(!in_action(f, League::NFL));  // a break in play
+  f.short_detail = "0:45 - OT";
+  f.state = GameState::POST;
+  CHECK(!in_action(f, League::NFL));
+
+  // Baseball: the bases loaded during a half inning, whatever the score.
+  GameSnapshot b = live_snap(Sport::BASEBALL, 7, "", 1, 9);
+  b.mlb.half = Half::TOP;
+  b.mlb.bases = Baseball::FIRST | Baseball::THIRD;
+  CHECK(!in_action(b, League::MLB));
+  b.mlb.bases |= Baseball::SECOND;
+  CHECK(in_action(b, League::MLB));
+  b.mlb.half = Half::MID;
+  CHECK(!in_action(b, League::MLB));
+
+  // Basketball: the last two minutes of the last period (a college game has
+  // two halves) or overtime, within six.
+  GameSnapshot h = live_snap(Sport::BASKETBALL, 4, "1:30", 100, 95);
+  CHECK(in_action(h, League::NBA));
+  h.team_score = 110;
+  CHECK(!in_action(h, League::NBA));
+  h = live_snap(Sport::BASKETBALL, 2, "0:58", 70, 70);
+  h.nba.regulation = 2;
+  CHECK(in_action(h, League::MCBB));
+  h.nba.regulation = 4;
+  CHECK(!in_action(h, League::NBA));  // only the 2nd quarter
+  GameSnapshot ot = hoops_event("fixtures/event_wnba_ot.json", kDream);
+  CHECK(in_action(ot, League::WNBA));  // 20.8 left in overtime
+
+  // Hockey: the last two minutes of the 3rd or overtime, within a goal.
+  GameSnapshot k = live_snap(Sport::HOCKEY, 3, "1:10", 2, 3);
+  CHECK(in_action(k, League::NHL));
+  k.team_score = 1;
+  CHECK(!in_action(k, League::NHL));
+  k = live_snap(Sport::HOCKEY, 2, "1:10", 2, 3);
+  CHECK(!in_action(k, League::NHL));
+
+  // Soccer: from the 88th minute of the second half on, stoppage and extra
+  // time included, within a goal.
+  GameSnapshot s = soccer_event("fixtures/event_soccer_stoppage.json", kInter);
+  CHECK(in_action(s, League::MLS));  // 2-1 at 90'+2'
+  GameSnapshot m = live_snap(Sport::SOCCER, 2, "87'", 1, 1);
+  CHECK(!in_action(m, League::EPL));
+  m.display_clock = "88'";
+  CHECK(in_action(m, League::EPL));
+  m.display_clock = "105'";
+  m.period = 3;
+  CHECK(in_action(m, League::EPL));
+  m = live_snap(Sport::SOCCER, 1, "45'+2'", 0, 0);
+  CHECK(!in_action(m, League::EPL));
+
+  // Jump to the action: the game at its action goes up in place of the
+  // pick, stays up while the action lasts, then the board goes back.
+  auto g = [](bool action) {
+    FavGame x;
+    x.valid = true;
+    x.state = GameState::IN;
+    x.action = action;
+    return x;
+  };
+  std::vector<FavGame> games = {g(false), g(false), g(false)};
+  CHECK_EQ(action_favorite(games, 0, 0), -1);
+  games[2].action = true;
+  CHECK_EQ(action_favorite(games, 0, 0), 2);
+  games[1].action = true;
+  CHECK_EQ(action_favorite(games, 0, 2), 2);  // already up for its action: stays
+  CHECK_EQ(action_favorite(games, 0, 0), 1);  // else the first slot at its action
+  games[0].action = true;
+  CHECK_EQ(action_favorite(games, 0, 2), -1);  // the pick is at its action itself
+  games = {g(false), g(false), g(false)};
+  CHECK_EQ(action_favorite(games, 0, 2), -1);  // action over: back to the pick
+  games[1].action = true;
+  games[1].state = GameState::POST;
+  CHECK_EQ(action_favorite(games, 0, 0), -1);  // a final is never the action
+  CHECK_EQ(action_favorite({}, -1, -1), -1);
+
+  // The banner when another favorite scores: the favorite's score first.
+  GameSnapshot a = live_snap(Sport::FOOTBALL, 3, "8:00", 14, 17);
+  GameSnapshot a2 = a;
+  a2.team_score = 21;
+  CHECK_EQ(fav_score_banner(a, a2), std::string("KC TD, 21-17"));
+  a2.team_score = 20;
+  CHECK_EQ(fav_score_banner(a, a2), std::string("KC TD, 20-17"));
+  a2.team_score = 17;
+  CHECK_EQ(fav_score_banner(a, a2), std::string("KC FG, 17-17"));
+  a2.team_score = 15;
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));  // a safety, or the extra point after a TD
+  a2.team_score = 14;
+  a2.opp_score = 24;
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));  // only the favorite's own scores
+  a2 = a;
+  a2.team_score = 21;
+  a2.state = GameState::POST;
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));
+  GameSnapshot pre = a;
+  pre.state = GameState::PRE;
+  CHECK_EQ(fav_score_banner(pre, a), std::string(""));  // the first poll since kickoff is the baseline
+  a2 = a;
+  a2.team_score = 21;
+  a2.event_id = "2";
+  CHECK_EQ(fav_score_banner(a, a2), std::string(""));
+
+  GameSnapshot r = live_snap(Sport::BASEBALL, 5, "", 2, 2), r2 = r;
+  r2.team_score = 3;
+  CHECK_EQ(fav_score_banner(r, r2), std::string("KC RUN, 3-2"));
+  r2.team_score = 5;
+  CHECK_EQ(fav_score_banner(r, r2), std::string("KC 3 RUNS, 5-2"));
+  r2.mlb.play_type = "Home Run";
+  CHECK_EQ(fav_score_banner(r, r2), std::string("KC HR, 5-2"));
+  GameSnapshot q = live_snap(Sport::SOCCER, 2, "60'", 0, 1), q2 = q;
+  q2.team_score = 1;
+  CHECK_EQ(fav_score_banner(q, q2), std::string("KC GOAL, 1-1"));
+  q.sport = q2.sport = Sport::HOCKEY;
+  CHECK_EQ(fav_score_banner(q, q2), std::string("KC GOAL, 1-1"));
+  q.sport = q2.sport = Sport::BASKETBALL;
+  CHECK_EQ(fav_score_banner(q, q2), std::string(""));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -3757,6 +5355,7 @@ int main() {
   test_splash();
   test_status_text();
   test_no_game_text();
+  test_captive();
   test_ha_status_text();
   test_short_game_name();
   test_kickoff_label();
@@ -3765,6 +5364,8 @@ int main() {
   test_clock_text();
   test_color();
   test_favorites();
+  test_fav_action();
+  test_take_over();
   test_followed_favorite();
   test_schedule_league();
   test_schedule_due();
@@ -3818,8 +5419,20 @@ int main() {
   test_cup_backoff();
   test_auto_update();
   test_update_mark();
+  test_boot_log();
+  test_health_json();
+  test_heat_guard();
+  test_power_log();
+  test_guarded_brightness();
+  test_night();
   test_offseason();
   test_panel_text();
+  test_message();
+  test_wifi_history();
+  test_ha_events();
+  test_line_score();
+  test_score_log();
+  test_best_game();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

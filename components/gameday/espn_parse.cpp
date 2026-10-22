@@ -124,7 +124,7 @@ std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch,
   return url;
 }
 
-std::string scan_url(League league, int64_t now_epoch) {
+std::string scan_url(League league, int64_t now_epoch, bool top25) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
   civil_from_epoch(now_epoch - scan_day_shift(league), y, m, d);
@@ -133,7 +133,7 @@ std::string scan_url(League league, int64_t now_epoch) {
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
-  else if (league == League::MCBB)
+  else if (league == League::MCBB && !top25)
     snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
@@ -334,6 +334,57 @@ std::string records_line(const GameSnapshot &s) {
   return out;
 }
 
+std::string pregame_records(const GameSnapshot &s) {
+  std::string out;
+  if (!s.team_record.empty())
+    out = s.team_abbr + " " + s.team_record;
+  if (!s.opp_record.empty())
+    out += (out.empty() ? "" : ", ") + s.opp_abbr + " " + s.opp_record;
+  return out;
+}
+
+// "1381" to "1,381"
+static std::string with_commas(const std::string &digits) {
+  std::string out;
+  size_t n = digits.size();
+  for (size_t i = 0; i < n; i++) {
+    if (i > 0 && (n - i) % 3 == 0)
+      out += ',';
+    out += digits[i];
+  }
+  return out;
+}
+
+std::string leader_line(const std::string &short_name, const std::string &display_value) {
+  // "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix.
+  std::string name = short_name;
+  while (name.size() > 3 && name[1] == '.' && name[2] == ' ')
+    name.erase(0, 3);
+  std::string yards, tds;
+  size_t start = 0;
+  while (start <= display_value.size()) {
+    size_t comma = display_value.find(", ", start);
+    std::string tok = display_value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    size_t sp = tok.find(' ');
+    if (sp != std::string::npos) {
+      std::string num = tok.substr(0, sp), unit = tok.substr(sp + 1);
+      if (unit == "YDS")
+        yards = num;
+      else if (unit == "TD")
+        tds = num;
+    }
+    if (comma == std::string::npos)
+      break;
+    start = comma + 2;
+  }
+  if (name.empty() || yards.empty())
+    return "";
+  std::string out = name + " " + with_commas(yards) + " yds";
+  if (!tds.empty())
+    out += " " + tds + " TD";
+  return out;
+}
+
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
   if (!o.odds)
     return;
@@ -356,9 +407,12 @@ void add_last_play(std::string &out, std::string play) {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+  if (captive)
+    return "Wi-Fi needs a sign-in";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)
@@ -384,7 +438,13 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     case GameState::PRE:
       add_part(out, s.game_name);
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
+      if (o.records)
+        add_part(out, pregame_records(s));
       add_odds(out, s, o);
+      if (o.leaders) {
+        add_part(out, s.team_leader);
+        add_part(out, s.opp_leader);
+      }
       if (s.venue != s.game_name)  // "Rose Bowl | ... | Rose Bowl"
         add_part(out, s.venue);
       return out;
@@ -406,11 +466,25 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play)
+  if (o.last_play) {
     add_last_play(out, s.last_play);
+    if (!s.drive.empty())
+      add_part(out, "Drive: " + s.drive);
+  }
+  if (o.odds)
+    add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+std::string win_chance(const GameSnapshot &s) {
+  if (s.team_win_pct < 1)
+    return "";
+  // The side ahead in ESPN's model, so the number is always 50 or more.
+  bool ours = s.team_win_pct >= 50;
+  int pct = ours ? s.team_win_pct : 100 - s.team_win_pct;
+  return (ours ? s.team_abbr : s.opp_abbr) + " " + std::to_string(pct) + "% to win";
 }
 
 std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local) {
@@ -519,30 +593,29 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
   static const char *kDays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char *kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-  int now_day = now_local.tm_year * 366 + now_local.tm_yday;
-  int kick_day = kick_local.tm_year * 366 + kick_local.tm_yday;
-  int diff = kick_day - now_day;
+  // An ESPTime the panel couldn't convert comes out with month and weekday
+  // -1: no kickoff time to show.
+  if (kick_local.tm_mon < 0 || kick_local.tm_mon > 11 || kick_local.tm_wday < 0 || kick_local.tm_wday > 6)
+    return "";
+  int64_t now_day = (int64_t) now_local.tm_year * 366 + now_local.tm_yday;
+  int64_t kick_day = (int64_t) kick_local.tm_year * 366 + kick_local.tm_yday;
+  int64_t diff = kick_day - now_day;
   std::string when;
   if (diff == 0)
     when = "Today";
   else if (diff == 1)
     when = "Tomorrow";
   else if (diff > 1 && diff < 7)
-    when = kDays[kick_local.tm_wday % 7];
+    when = kDays[kick_local.tm_wday];
   else {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon % 12], kick_local.tm_mday);
+    snprintf(buf, sizeof(buf), "%s %d", kMonths[kick_local.tm_mon], kick_local.tm_mday);
     when = buf;
   }
   return when + " " + (time_tbd ? std::string("TBD") : clock_12h(kick_local));
 }
 
-// "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).
-int64_t parse_iso8601_z(const std::string &s) {
-  int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
-  int n = sscanf(s.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &sec);
-  if (n < 5)
-    return 0;
+static int64_t epoch_from_civil(int y, int mo, int d, int h, int mi, int sec) {
   // days from civil (Howard Hinnant's algorithm)
   int yy = y - (mo <= 2 ? 1 : 0);
   int64_t era = (yy >= 0 ? yy : yy - 399) / 400;
@@ -551,6 +624,45 @@ int64_t parse_iso8601_z(const std::string &s) {
   int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
   int64_t days = era * 146097 + doe - 719468;
   return days * 86400 + h * 3600 + mi * 60 + sec;
+}
+
+// "2026-09-05T19:30Z" or "2026-09-05T19:30:00Z" (ESPN always sends UTC).
+// The field widths keep a run of digits from overflowing an int, and a date
+// out of range reads as no date, like garbage does.
+int64_t parse_iso8601_z(const std::string &s) {
+  int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
+  int n = sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &sec);
+  if (n < 5 || y < 1970 || mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59 ||
+      sec < 0 || sec > 60)
+    return 0;
+  return epoch_from_civil(y, mo, d, h, mi, sec);
+}
+
+int64_t parse_http_date(const std::string &s) {
+  static const char *const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  // "Sat, 17 Oct 2026 23:39:29 GMT": fixed width, so check it by position.
+  if (s.size() != 29 || s[3] != ',' || s[4] != ' ' || s[7] != ' ' || s[11] != ' ' || s[16] != ' ' ||
+      s[19] != ':' || s[22] != ':' || s.compare(25, 4, " GMT") != 0)
+    return 0;
+  auto num = [&s](size_t at, size_t len) {
+    int v = 0;
+    for (size_t i = at; i < at + len; i++) {
+      if (s[i] < '0' || s[i] > '9')
+        return -1;
+      v = v * 10 + (s[i] - '0');
+    }
+    return v;
+  };
+  int mo = 0;
+  for (int i = 0; i < 12; i++)
+    if (s.compare(8, 3, kMonths[i]) == 0)
+      mo = i + 1;
+  int d = num(5, 2), y = num(12, 4), h = num(17, 2), mi = num(20, 2), sec = num(23, 2);
+  if (mo == 0 || d < 1 || d > 31 || y < 2020 || y > 2099 || h < 0 || h > 23 || mi < 0 || mi > 59 || sec < 0 ||
+      sec > 60)
+    return 0;
+  return epoch_from_civil(y, mo, d, h, mi, sec);
 }
 
 static std::string period_name(int period) {

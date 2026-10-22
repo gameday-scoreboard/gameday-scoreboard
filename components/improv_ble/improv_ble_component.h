@@ -1,9 +1,10 @@
 #pragma once
 
-// Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble
+// Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
-// the password out of the log, and goes back to the saved network after a failed handover.
+// the password out of the log, goes back to the saved network after a failed handover,
+// and says in the advert whether the panel has a saved network.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "esphome/core/component.h"
@@ -79,6 +80,9 @@ class ImprovBLEComponent final : public Component,
   // GAMEDAY: begin
   // The network to go back to after a failed handover. Set on every Wi-Fi connect.
   void remember_sta(const wifi::WiFiAP &ap) { this->last_connected_sta_ = ap; }
+  // Advertised so the app can tell a panel that lost its network from a new one.
+  // Set from on_boot and on every Wi-Fi connect.
+  void set_has_saved_network(bool saved);
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }
@@ -109,6 +113,7 @@ class ImprovBLEComponent final : public Component,
   // one fails, so a wrong password does not leave the panel with none.
   wifi::WiFiAP restore_sta_;
   wifi::WiFiAP last_connected_sta_;  // see remember_sta()
+  bool has_saved_network_{false};    // see set_has_saved_network()
   // GAMEDAY: end
 
   BLEService *service_{nullptr};

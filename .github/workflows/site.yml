@@ -91,6 +91,8 @@ jobs:
           echo "release $TAG"
           mkdir -p site/firmware
           cp -r docs/site/. site/
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-pre-releases --json tagName,publishedAt > /tmp/releases.json
+          python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json
           ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           RUN=""
           for v in moonhub75 moonhub75-2panel scoreboard75; do
@@ -112,6 +114,8 @@ jobs:
           # Releases up to v2026.10.0 carry the ESPHome project name.
           ./scripts/set_manifest_name.sh site/firmware
           sed -i "s/__VERSION__/${TAG}/g" site/index.html
+          # Support's FAQPage JSON-LD, sitemap.xml and robots.txt.
+          python3 scripts/site_seo.py build site
           ls -laR site
       - uses: actions/upload-pages-artifact@v5
         with:

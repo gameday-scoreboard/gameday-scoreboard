@@ -4,6 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Support - Game Day Scoreboard</title>
+  <meta name="description" content="Fixes for Wi-Fi, an app that can't find the panel, a half-blank board, resets and firmware updates, and how to reach support by email.">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/support/">
+  <meta property="og:site_name" content="Game Day Scoreboard">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Support - Game Day Scoreboard">
+  <meta property="og:description" content="Fixes for Wi-Fi, an app that can't find the panel, a half-blank board, resets and firmware updates, and how to reach support by email.">
+  <meta property="og:url" content="https://install.gameday-scoreboard.com/support/">
+  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@GameDayScore">
+  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <!-- The FAQPage JSON-LD for these cards is added at deploy (scripts/site_seo.py). -->
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
@@ -39,7 +55,7 @@
     <h2>I don't have an iPhone</h2>
     <p>You can set the panel up from any phone or laptop through its own hotspot. While the panel shows SETUP, join the Wi-Fi network it names, like <code>Game Day 2f6a70</code>, and a setup page opens. Pick your Wi-Fi network, enter the password and save.</p>
     <p>Once it's on your Wi-Fi, the panel shows its address. Open that in a browser to pick your team and everything else the app would set.</p>
-    <p class="note">More on the hotspot in <a href="/setup/">Setup</a>.</p>
+    <p class="note">More on the hotspot in <a href="https://app.gameday-scoreboard.com/setup/">Setup</a>.</p>
   </div>
 
   <div class="card">
@@ -54,18 +70,19 @@
 
   <div class="card">
     <h2>I need to reset Wi-Fi</h2>
-    <p>Hold the controller's boot button for 10 seconds. The screen warns you first, with 5 seconds to let go if you didn't mean to. Once it resets, the panel forgets its network and restarts into setup mode; your team, favorites and other settings stay as they were.</p>
-    <p class="note">A shorter hold (about 1.5 seconds) just shows the panel's address again, without resetting anything.</p>
+    <p>Hold the button on the controller. At 5 seconds the screen starts counting down, and at 10 seconds it says <strong>Release to reset Wi-Fi</strong>. Let go then. Nothing resets while you hold it, and letting go before 10 seconds resets nothing. Once it resets, the panel restarts into setup mode for 15 minutes, so you can set it up on a new network from the Game Day app or its hotspot. Your team, favorites and other settings stay as they were. Changed your mind? Unplug the panel and plug it back in, and it rejoins the Wi-Fi it already knows. It does that on its own after the 15 minutes too.</p>
+    <p class="note">A shorter hold (about 1.5 seconds) just shows the panel's address again, without resetting anything. Held past 20 seconds, the button moves on to a factory reset (below).</p>
   </div>
 
   <div class="card">
     <h2>Start over from scratch</h2>
-    <p><strong>Factory reset</strong> on the panel's page erases everything: Wi-Fi, team, favorites and settings. The panel restarts into setup the way it came out of the box.</p>
+    <p><strong>Factory reset</strong> on the panel's page erases everything: Wi-Fi, team, favorites and settings. The panel restarts into setup the way it came out of the box. Do this before you sell or give the panel away.</p>
+    <p>No app and no page? Hold the button on the controller. The screen counts down past <strong>Release to reset Wi-Fi</strong>, and at 20 seconds it says <strong>Release to erase all</strong>. Let go then for the factory reset. Changed your mind? Keep holding: at 30 seconds it says <strong>Release to cancel</strong>, and letting go then erases nothing.</p>
   </div>
 
   <div class="card">
     <h2>My team's season is over</h2>
-    <p>Between seasons the panel shows your team's next game once the schedule is out, which can be months away, or <strong>No upcoming game</strong> until then. Nothing is wrong with it; it picks the next season up on its own.</p>
+    <p>Between seasons the panel shows a clock in your team's colors. Under the time is your team's next game once it's on the schedule, like <strong>Next: at PHI Mar 26 7:05 PM</strong>, or the date until then. Nothing is wrong with it; it picks the next season up on its own.</p>
     <p>To keep the board busy, open the panel's page and switch to <strong>Favorite teams</strong> with teams from leagues that are in season, or to <strong>Live games</strong> for whatever is on right now.</p>
   </div>
 
@@ -86,8 +103,9 @@
 
   <div class="card">
     <h2>Something else</h2>
-    <p>Email <a href="mailto:support@gameday-scoreboard.com">support@gameday-scoreboard.com</a>. Say what the panel or the app was doing, and include the firmware version from the panel's page if you can.</p>
+    <p>Email <a href="mailto:support@gameday-scoreboard.com">support@gameday-scoreboard.com</a>. Say what the panel or the app was doing, and include the firmware version from the panel's page if you can. We reply within one business day.</p>
     <p class="note">Built your own and found a bug? GitHub issues work too: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/issues">github.com/gameday-scoreboard/gameday-scoreboard/issues</a>.</p>
+    <p class="note">The full guide to setup, every setting, each sport and more fixes is at <a href="https://docs.gameday-scoreboard.com/">docs.gameday-scoreboard.com</a>.</p>
   </div>
 
   <footer>

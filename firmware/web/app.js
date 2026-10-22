@@ -2,7 +2,8 @@
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
 //   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
-//   POST /gameday/action?do=name  refresh
+//   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
+//                                 say&text=...&secs=N (the banner)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -94,6 +95,15 @@
       <div class="splash" id="splash"></div>
     </section>
 
+    <div class="teambar guardbar" id="guard" role="status" hidden>
+      <div class="cur"><div><div class="name" id="guardName"></div><div class="lg" id="guardText"></div></div></div>
+      <button class="btn" id="guardClear" hidden>Clear</button>
+    </div>
+
+    <div class="teambar nightbar" id="nightbar" role="status" hidden>
+      <div class="cur"><div><div class="name" id="nightName"></div><div class="lg" id="nightText"></div></div></div>
+    </div>
+
     <section class="upnext" id="upnext" hidden>
       <div class="uh">Up next</div>
       <div class="ul" id="upnextList"></div>
@@ -110,7 +120,14 @@
     </div>
     <div class="teambar livebar" id="livebar" hidden>
       <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
-      <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+      <div class="livectls">
+        <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button></div>
+        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button></div>
+        <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
+          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+        </select></div>
+      </div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
@@ -135,7 +152,8 @@
           <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl" data-sport="football"><label>Pre-game season leaders<small>Football: before kickoff, each team's passing leader with yards and touchdowns.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -145,14 +163,48 @@
           <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
+      <div class="card" id="msgCard" hidden>
+        <h2>Message</h2>
+        <div class="sub">Banner</div>
+        <p class="hint">Your words over whatever the panel shows, for a few seconds.</p>
+        <textarea id="sayText" class="field" rows="2" maxlength="200" placeholder="Pizza's here!" aria-label="Banner text"></textarea>
+        <div class="ctl"><label for="saySecs">Seconds on screen</label><input type="number" id="saySecs" class="num" min="1" max="600" step="1" value="10"></div>
+        <div class="actions"><button class="btn primary" id="sayGo">Show</button><button class="btn" id="sayStop">Take down</button></div>
+        <div class="sub">Message card</div>
+        <p class="hint">Takes turns with the scoreboard between games, and steps aside when a game is live. Nothing shows until you add text or a list.</p>
+        <textarea id="msgText" class="field" rows="3" maxlength="200" placeholder="One per line, like Wings $5 till 7" aria-label="Message card text"></textarea>
+        <label class="fl" for="msgUrl">Or a list from a web address<small>A plain text file, one entry per line, like a list of names. The panel reads it a page at a time, so it can be long. When there is an address, the card shows the list.</small></label>
+        <input type="url" id="msgUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
+        <p class="hint" id="msgRead" hidden></p>
+        <div class="ctl"><label for="msgEvery">Show it</label><select id="msgEvery">
+          <option value="0">Whenever no game is on</option><option value="1">Every minute</option><option value="2">Every 2 minutes</option>
+          <option value="5">Every 5 minutes</option><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option>
+        </select></div>
+        <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
+      </div>
       <div class="card">
         <h2>Panel</h2>
+        <div id="nickRow" hidden>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
+          <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
+        </div>
         <div id="panelCtls"></div>
+        <div id="nightCtls" hidden>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div id="nightSet" hidden>
+            <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
+            <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
+            <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
+            <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>Favorites</h2>
         <p class="hint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
         <div class="ctl"><label>Only today's games<small>The playlist skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+        <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
+        <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
         <div id="favCtls"></div>
         <button class="btn" id="favAdd">Add a favorite</button>
       </div>
@@ -187,6 +239,13 @@
           <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
         </div>
+        <div id="backup" hidden>
+          <div class="sub">Backup</div>
+          <p class="hint">Save this panel's settings to a file, then load them back after a reset or onto another panel. Wi-Fi networks and the WizMote pairing aren't in the file.</p>
+          <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
+          <input type="file" id="bkFile" accept=".json,application/json" hidden>
+          <p class="hint" id="bkNote" role="status" hidden></p>
+        </div>
       </div>
       <div class="card">
         <h2>Device</h2>
@@ -198,6 +257,10 @@
         <div class="ctl" id="autoupdRow" hidden>
           <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
           <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
+        </div>
+        <div class="ctl" id="betaRow" hidden>
+          <label>Follow beta<small>Get test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.</small></label>
+          <button class="sw" data-set="beta" aria-label="Follow beta"></button>
         </div>
         <div class="ctl" id="barRow" hidden>
           <label>Bar beta<small>This panel installs test versions on its own, between 3 and 5 AM and never during a live game.</small></label>
@@ -211,7 +274,25 @@
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+        <div class="sub">Diagnostics</div>
+        <div id="health" hidden>
+          <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+          <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+          <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+          <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>Above 75 C the panel dims until it cools</small></label><span class="val" id="hTemp"></span></div>
+          <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
+          <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+          <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+        </div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+        <div id="wifiDiag" hidden>
+          <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+          <div class="spark" id="wifiSparkBox" hidden>
+            <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+            <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+          </div>
+          <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+        </div>
         <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
         <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
       </div>
@@ -231,6 +312,7 @@
         <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
         <button class="btn" id="close">Close</button>
       </div>
+      <div class="favcount" id="favCount" role="status" hidden></div>
       <div class="tiles" id="tiles" role="tabpanel"></div>
     </div>
   </div>
@@ -284,11 +366,14 @@
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1",
+    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    best: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
+    msg: String, msgurl: String, msgevery: Number, nick: String,
+    night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -387,9 +472,10 @@
     setQueue = run;
     return run;
   };
-  const doAction = async (name) => {
+  const doAction = async (name, params) => {
     try {
-      const r = await fetch("/gameday/action?do=" + encodeURIComponent(name), { method: "POST" });
+      const extra = params ? "&" + qs(params) : "";
+      const r = await fetch("/gameday/action?do=" + encodeURIComponent(name) + extra, { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
     } catch (e) {
       toast("Device did not respond (" + (e.message || "network") + ")");
@@ -464,7 +550,12 @@
     const msg = $("#msg");
     // misses is top level in the state document, not in game. Three in a row is
     // where the firmware adds "no update" to the ticker, with or without a game.
-    $("#stale").classList.toggle("on", ((S && S.misses) || 0) >= 3);
+    // captive: the panel's Wi-Fi answered with a sign-in page, which the
+    // panel can't get past, so say how to fix it rather than "data stale".
+    const captive = !!(S && S.captive);
+    const stale = $("#stale");
+    stale.textContent = captive ? "Wi-Fi needs a sign-in" : "data stale";
+    stale.classList.toggle("on", captive || ((S && S.misses) || 0) >= 3);
     // Bowl or playoff name, when ESPN gives the game one
     const gname = $("#gname");
     gname.textContent = (g && g.s !== "NOT_FOUND" && g.gn) || "";
@@ -478,7 +569,11 @@
       const favMode = mode === "4" && S && (S.favs || []).some(refKey);
       // With no team picked the panel runs the live board, unless Favorites has teams.
       const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
+      // why is the panel's own reason ("Can't reach ESPN", "Getting ready"),
+      // sent only when its board says something other than its default.
       msg.textContent = !g ? "Waiting for the first fetch"
+        : captive ? "This Wi-Fi needs a sign-in. Use a home network or a hotspot."
+        : g.why ? g.why
         : favMode ? "None of your favorites has a game coming up"
           : liveMode ? "No live games right now" : "No upcoming game for this team";
       $("#clock").innerHTML = "&nbsp;";
@@ -543,6 +638,9 @@
     showFavRotate();
     setGD({ collide: collideSelect.value });
   };
+  // Live games' Favorites take over uses the same rule.
+  const liveCollide = $("#liveCollide");
+  liveCollide.onchange = () => setGD({ collide: liveCollide.value });
   favRotate.onchange = () => {
     const v = Math.min(30, Math.max(1, Number(favRotate.value) || 1));
     favRotate.value = v;
@@ -567,10 +665,16 @@
     const auto = liveAuto();
     // With nothing live the device shows the saved team's card, or with no
     // team a rotation of recent finals, and keeps scanning.
-    $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
-      : S.recap ? "No live game right now, showing recent finals"
-        : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after Switch every. ")
+    // Favorites take over: a favorite's game in progress has the panel.
+    const lock = S.favlock && S.favlock.id ? S.favlock : null;
+    $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
+      : S.fallback ? "No live game right now, showing your team until one starts"
+        : S.recap ? "No live game right now, showing recent finals"
+          : S.best ? "Following the best game on" : "Following a random game in progress";
+    $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
+      : S.fallback || S.recap ? ""
+        : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
+          : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
@@ -615,6 +719,8 @@
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
     }
+    $("#liveCollideRow").hidden = !S.favtake;
+    if (document.activeElement !== liveCollide) liveCollide.value = String(S.collide || 0);
     if (favs) {
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);
@@ -676,9 +782,14 @@
     if (!favKeys.length) host.appendChild(el("p", "hint", "No favorites yet."));
     $("#favAdd").hidden = favKeys.length >= favMax();
   };
-  const addFav = (t) => {
+  // The favorites picker stays open: a tap adds a team, or takes out one
+  // already in the list (checked).
+  const toggleFav = (t) => {
     const key = keyOf(t);
-    if (favKeys.includes(key)) return toast(t[3] + " is already a favorite");
+    if (favKeys.includes(key)) {
+      postFavs(favKeys.filter((k) => k !== key));
+      return toast("Removed the " + t[3]);
+    }
     if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
@@ -690,6 +801,7 @@
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
       renderFavs();
+      if (pickFav && $("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
@@ -705,6 +817,11 @@
     });
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
+    // Older firmware and the bar and demo builds have no beta to follow.
+    $("#betaRow").hidden = S.beta === undefined;
+    // The rollback line in the firmware box reads this document, which can
+    // land after the update entity does.
+    if ((S.update_failed || "") !== fwFailed && ents[byName["Firmware"]]) renderUpdate(ents[byName["Firmware"]]);
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -714,6 +831,140 @@
     }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
+    renderMsg();
+  };
+
+  // ---- night schedule (components/gameday/night.h) ---------------------------
+  // Times come as "23:00". 12-hour for people: "11 PM", "7:30 AM", and with
+  // full set the minutes always show, "7:00 AM".
+  const clock12 = (hhmm, full) => {
+    const [h, m] = String(hhmm || "0:0").split(":").map(Number);
+    const mm = String(m || 0).padStart(2, "0");
+    return ((h % 12) || 12) + (full || m ? ":" + mm : "") + (h < 12 ? " AM" : " PM");
+  };
+  const nightStart = $("#nightStart");
+  const nightEnd = $("#nightEnd");
+  const nightLevel = $("#nightLevel");
+  const nightTime = (input, key, other) => {
+    input.onchange = () => {
+      if (!input.value) { input.value = S[key]; return; }
+      if (input.value === S[key]) return;
+      if (input.value === other.value) {
+        toast("The night has to end at a different time than it starts");
+        input.value = S[key];
+        return;
+      }
+      setGD({ [key]: input.value });
+    };
+  };
+  nightTime(nightStart, "nightstart", nightEnd);
+  nightTime(nightEnd, "nightend", nightStart);
+  nightLevel.oninput = () => ($("#nightLevelVal").textContent = nightLevel.value);
+  nightLevel.onchange = () => setGD({ nightlevel: nightLevel.value });
+  const renderNight = () => {
+    if (!S) return;
+    // Older firmware has no night schedule.
+    $("#nightCtls").hidden = S.night === undefined;
+    $("#nightbar").hidden = !S.night_now;
+    if (S.night === undefined) return;
+    $("#nightSet").hidden = !S.night;
+    if (document.activeElement !== nightStart) nightStart.value = S.nightstart;
+    if (document.activeElement !== nightEnd) nightEnd.value = S.nightend;
+    if (document.activeElement !== nightLevel) {
+      nightLevel.value = S.nightlevel;
+      $("#nightLevelVal").textContent = S.nightlevel;
+    }
+    const hours = "between " + clock12(S.nightstart) + " and " + clock12(S.nightend);
+    $("#nightLevelRow").hidden = !S.nightscreen;
+    $("#nightLevelHint").textContent = "How bright the panel is " + hours + ".";
+    $("#nightScreenHint").textContent = S.nightscreen ? "On at the night brightness below." : "Off: the screen goes dark " + hours + ".";
+    // A dark or dim panel that doesn't look broken
+    const until = clock12(S.nightend, true);
+    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
+    $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
+      : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
+        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
+  };
+
+  // ---- message: the banner and the message card ---------------------------------
+  // The boxes take the panel's text when it changes there, never while
+  // someone is typing in them.
+  const msgSeen = { msg: null, msgurl: null, msgevery: null };
+  const fillField = (input, key) => {
+    const v = String(S[key] || (key === "msgevery" ? 0 : ""));
+    if (v === msgSeen[key] || document.activeElement === input) return;
+    msgSeen[key] = v;
+    input.value = v;
+  };
+  const renderMsg = () => {
+    // Older firmware has no message card.
+    $("#msgCard").hidden = S.msg === undefined;
+    if (S.msg === undefined) return;
+    fillField($("#msgText"), "msg");
+    fillField($("#msgUrl"), "msgurl");
+    fillField($("#msgEvery"), "msgevery");
+    const read = S.msgread;
+    const line = $("#msgRead");
+    line.hidden = !S.msgurl;
+    if (!S.msgurl) return;
+    if (!read || read.status === undefined) line.textContent = "Not read yet. The panel reads it when the card's turn comes.";
+    else if (read.status === 0) line.textContent = "The panel couldn't reach that address. It tries again in a few minutes.";
+    else if (read.status !== 200) line.textContent = "That address answered with an error (HTTP " + read.status + "). It tries again in a few minutes.";
+    else if (read.entries !== undefined) line.textContent = "The list has " + read.entries + (read.entries === 1 ? " entry." : " entries.");
+    else line.textContent = "Reading the list a page at a time.";
+  };
+  $("#sayGo").onclick = () => {
+    const text = $("#sayText").value.trim();
+    if (!text) return toast("Type the banner first");
+    const secs = Math.min(600, Math.max(1, Number($("#saySecs").value) || 10));
+    $("#saySecs").value = secs;
+    doAction("say", { text, secs });
+    toast("Banner up for " + secs + " s");
+  };
+  $("#sayStop").onclick = () => doAction("say", { text: "" });
+  $("#msgSave").onclick = () => {
+    const url = $("#msgUrl").value.trim();
+    if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The list's address starts with http:// or https://");
+    msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
+    setGD({ msg: $("#msgText").value, msgurl: url, msgevery: $("#msgEvery").value });
+    toast(url || $("#msgText").value.trim() ? "Message card saved" : "Message card off");
+  };
+  $("#msgClear").onclick = () => {
+    $("#msgText").value = "";
+    $("#msgUrl").value = "";
+    msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
+    setGD({ msg: "", msgurl: "" });
+    toast("Message card off");
+  };
+
+  // ---- nickname: the header, the tab title and the box ---------------------------
+  let pingTitle = "";  // the device's own name, from the event stream
+  let nickSeen = null;
+  // ESPHome's own page script names the tab after the device on each of its
+  // pings; while there is a nickname the tab keeps it.
+  let nickTitle = "";
+  new MutationObserver(() => {
+    if (nickTitle && document.title !== nickTitle) document.title = nickTitle;
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
+  const renderNick = () => {
+    const nick = (S && S.nick) || "";
+    $("#devname").textContent = nick || pingTitle || (S && S.name) || "connecting";
+    nickTitle = nick ? nick + " · Game Day Scoreboard" : "";
+    const title = nickTitle || pingTitle || "Game Day Scoreboard";
+    if (document.title !== title) document.title = title;
+    // Older firmware has no nickname.
+    $("#nickRow").hidden = !S || S.nick === undefined;
+    const input = $("#nick");
+    if (nick === nickSeen || document.activeElement === input) return;
+    nickSeen = nick;
+    input.value = nick;
+  };
+  $("#nick").onchange = () => {
+    const nick = $("#nick").value.trim();
+    $("#nick").value = nick;
+    nickSeen = null;
+    setGD({ nick });
+    toast(nick ? "Nickname saved" : "Nickname cleared");
   };
 
   // ---- panel picker ------------------------------------------------------------
@@ -735,6 +986,74 @@
     });
   };
 
+  // ---- settings backup ---------------------------------------------------------
+  // GET /gameday/settings is the file; POST takes one back, checked whole on
+  // the panel before anything changes. Firmware without it answers 404 and the
+  // section stays hidden.
+  const BACKUP_MAX = 4096;
+  const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
+  const probeBackup = async (retry) => {
+    try {
+      const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
+      // Only a 404 is firmware without it; a 500 is a panel still starting.
+      if (r.status === 404) $("#backup").hidden = true;
+      else if (r.ok) $("#backup").hidden = false;
+      else if (retry) setTimeout(() => probeBackup(false), 5000);
+      return r.ok ? await r.json() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  $("#bkExport").onclick = async () => {
+    const doc = await probeBackup();
+    if (!doc) { toast("Device did not respond. Try again."); return; }
+    const day = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const a = el("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    backupNote("Saved " + name + ".");
+  };
+  $("#bkImport").onclick = () => { $("#bkFile").value = ""; $("#bkFile").click(); };
+  $("#bkFile").onchange = async () => {
+    const f = $("#bkFile").files[0];
+    if (!f) return;
+    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    const text = await f.text();
+    let doc;
+    try { doc = JSON.parse(text); } catch (_) { doc = null; }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
+      backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const from = typeof doc.name === "string" && S && doc.name !== S.name ? " (saved from " + doc.name + ")" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are.")) return;
+    let r, j;
+    try {
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
+    const left = (j.skipped || []).join(", ");
+    backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    if (j.restart) {
+      waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
+      toBoard();
+      return;
+    }
+    toast("Settings restored");
+    scheduleState(APPLY_MS + 100);
+  };
+
   // ---- controls --------------------------------------------------------
   const controlDefs = [
     { name: "Power", into: "#panelCtls", label: "Panel on" },
@@ -746,10 +1065,10 @@
     { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
     { name: "Check for Updates", into: "#actions", label: "Check for updates" },
     // restart: "" waits for the panel to come back; otherwise the panel
-    // restarts into setup (both resets forget the Wi-Fi) and this says why.
+    // restarts into setup and this says why.
     { name: "Reboot", into: "#actions", label: "Reboot", danger: true, restart: "" },
     { name: "Reset Wi-Fi", into: "#actions", label: "Reset Wi-Fi", danger: true,
-      restart: "The panel forgot its Wi-Fi and is restarting into setup, so this page won't reconnect. Its settings are kept." },
+      restart: "The panel is restarting into Wi-Fi setup for 15 minutes, so this page won't reconnect. Its settings are kept, and unplugging it and plugging it back in takes it back to the Wi-Fi it already knows." },
     { name: "Factory Reset", into: "#actions", label: "Factory reset", danger: true,
       restart: "The panel is restarting into setup with everything erased, so this page won't reconnect." },
   ];
@@ -884,9 +1203,13 @@
       const card = el("div", "game" + (g.state === "in" ? " live" : ""));
       const mkSide = (s) => {
         const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && keyOf(t) === cur ? " on" : ""));
+        const b = el("button", "side" + (t && picked(keyOf(t), cur) ? " on" : ""));
         b.disabled = !t;
-        b.title = t ? "Follow the " + t[3] : "Not in the team list";
+        b.title = t ? (pickFav ? t[3] : "Follow the " + t[3]) : "Not in the team list";
+        if (t) {
+          b.dataset.key = keyOf(t);
+          if (pickFav) b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+        }
         const img = el("img");
         img.loading = "lazy";
         img.src = logoUrl(g.league, s.id, s.abbr);
@@ -899,7 +1222,7 @@
         b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
         b.onclick = () => {
           if (!t) return;
-          if (pickFav) return choose(t);
+          if (pickFav) return toggleFav(t);
           setGD({ team: keyOf(t) });
           toast("Now following the " + t[3]);
           $("#modal").classList.remove("open");
@@ -917,15 +1240,30 @@
   };
 
   // ---- team chooser ------------------------------------------------------
-  // The picker sets My team, or with pickFav adds a favorite.
+  // The picker sets My team and closes. With pickFav it edits the favorites
+  // and stays open: favorites show checked, a line counts them, Done closes.
   let pickFav = false;
   const choose = (t) => {
-    if (pickFav) addFav(t);
-    else {
-      setGD({ team: keyOf(t) });
-      toast("Now following the " + t[3]);
-    }
+    if (pickFav) return toggleFav(t);
+    setGD({ team: keyOf(t) });
+    toast("Now following the " + t[3]);
     $("#modal").classList.remove("open");
+  };
+  const picked = (key, cur) => (pickFav ? favKeys.includes(key) : key === cur);
+  // After a favorites change, mark the tiles in place so the list keeps its scroll.
+  const markPicked = () => {
+    document.querySelectorAll("#tiles [data-key]").forEach((b) => {
+      const on = favKeys.includes(b.dataset.key);
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    renderFavCount();
+  };
+  const renderFavCount = () => {
+    const line = $("#favCount");
+    line.hidden = !pickFav;
+    line.textContent = pickFav ? favKeys.length + " of " + favMax() + " favorites" : "";
+    $("#close").textContent = pickFav ? "Done" : "Close";
   };
   let league = "now";
   const renderTiles = () => {
@@ -941,7 +1279,9 @@
       return;
     }
     for (const t of list) {
-      const tile = el("button", "tile" + (keyOf(t) === cur ? " on" : ""));
+      const tile = el("button", "tile" + (picked(keyOf(t), cur) ? " on" : ""));
+      tile.dataset.key = keyOf(t);
+      if (pickFav) tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
       const img = el("img");
       img.loading = "lazy";
       img.src = logoUrl(t[0], t[1], t[2]);
@@ -952,6 +1292,10 @@
       tile.onclick = () => choose(t);
       tiles.appendChild(tile);
     }
+  };
+  $("#guardClear").onclick = async () => {
+    await doAction("power_ok");
+    scheduleState(300);
   };
   $("#pick").onclick = () => openPicker(false);
   $("#favAdd").onclick = () => openPicker(true);
@@ -965,6 +1309,7 @@
     } catch (_) {}
     $$tabs(league);
     $("#q").value = "";
+    renderFavCount();
     renderTiles();
     $("#modal").classList.add("open");
     setTimeout(() => $("#q").focus(), 50);
@@ -997,9 +1342,11 @@
     };
   });
   $("#q").oninput = renderTiles;
-  $("#close").onclick = () => $("#modal").classList.remove("open");
-  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") $("#modal").classList.remove("open"); };
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("#modal").classList.remove("open"); });
+  // Leaving the picker ends favorites mode until the next Add a favorite.
+  const closePicker = () => { pickFav = false; $("#modal").classList.remove("open"); };
+  $("#close").onclick = closePicker;
+  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") closePicker(); };
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("#modal").classList.contains("open")) closePicker(); });
 
   const renderCurrentTeam = () => {
     const t = S ? teamByKey(refKey(S.team)) : null;
@@ -1105,7 +1452,7 @@
       const txt = el("div", "ut");
       const name = n.t.abbr + (n.oa ? " vs " + n.oa : "");
       txt.appendChild(el("div", "n", name));
-      let when = "No game scheduled";
+      let when = n.none ? "No game scheduled" : "Not checked yet";
       if (n.s === "IN") when = n.ts + " - " + n.os + (n.detail ? " · " + n.detail : "");
       else if (n.s === "POST") when = endedAs(n) === "Final" ? "Final " + n.ts + " - " + n.os : endedAs(n);
       else if (n.s === "PRE") when = kickLabel(n.kick, n.tbd) + (n.tv ? " · " + n.tv : "");
@@ -1161,10 +1508,14 @@
     renderCurrentTeam();
     renderMode();
     renderSettings();
+    renderNight();
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderNick();
     renderData();
+    renderHealth();
+    renderWifi();
   };
 
   const renderData = () => {
@@ -1173,6 +1524,133 @@
     const size = kb < 1000 ? kb + " KB" : (kb / 1000).toFixed(kb < 100000 ? 1 : 0) + " MB";
     const reads = S.espn_reads || 0;
     $("#espnData").textContent = size + " in " + reads + (reads === 1 ? " read" : " reads");
+  };
+
+  // The health block (components/gameday/health.h). Firmware before it sends
+  // none, and the rows stay hidden.
+  const RESTARTS = {
+    power: "Power on", restart: "Restart", update: "Update", crash: "Crash", watchdog: "Froze (watchdog)",
+    brownout: "Power dip (brownout)", usb: "USB reset",
+  };
+  const restartName = (k) => RESTARTS[k] || "Other";
+  // The Wi-Fi history (components/gameday/wifi_history.h). Firmware before it
+  // sends none, and the rows stay hidden.
+  const WIFI_CAUSES = {
+    signal: "signal lost", router: "dropped by the router", password: "sign-in refused",
+    roam: "moved to another access point", other: "other",
+  };
+  const span = (s) => {
+    if (s < 60) return s + " s";
+    const m = Math.round(s / 60);
+    if (m < 60) return m + " min";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+    return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
+  };
+  const renderHealth = () => {
+    const h = S && S.health;
+    $("#health").hidden = !h;
+    if (!h) return;
+    $("#hStart").textContent = restartName(h.start) + ", " + span(h.up) + " ago";
+    $("#hBoots").textContent = h.boots > 1 ? "Start " + h.boots + " since the power came on" : "";
+    $("#hFault").textContent = !h.fault ? "None"
+      : restartName(h.fault) + (h.fault_ago != null ? ", " + span(h.fault_ago) + " ago" : "");
+    $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
+    $("#hEspn").textContent = h.espn == null ? "None yet"
+      : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
+    const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
+    // The build time comes in Unix seconds; shown in the browser's own time
+    const b = h.built ? new Date(h.built * 1000) : null;
+    const builtText = b ? b.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
+      b.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
+    // Live here, so they no longer wait on the RSSI and heap sensors, which
+    // are off until someone turns them on in Home Assistant. The Wi-Fi
+    // object, when there is one, fills in the signal.
+    if (!S.wifi) $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
+    $("#psram").textContent = h.psram_kb ? Math.round(h.psram_kb) + " KiB" : "";
+    renderGuard(h);
+  };
+
+  // Heat and power protection (components/gameday/guard.h). heat is the
+  // dimming step, power "capped" after two brownout restarts in a row.
+  const HEAT_PERCENT = [100, 70, 45, 25];
+  const renderGuard = (h) => {
+    const hasGuard = h && h.heat != null;
+    $("#hTempRow").hidden = !hasGuard || h.temp == null;
+    $("#hPowerRow").hidden = !hasGuard;
+    const capped = hasGuard && h.power === "capped";
+    const hot = hasGuard && h.heat > 0;
+    $("#guard").hidden = !capped && !hot;
+    $("#guard").classList.toggle("power", capped);
+    if (!hasGuard) return;
+    const pct = HEAT_PERCENT[Math.min(h.heat, HEAT_PERCENT.length - 1)];
+    if (h.temp != null) $("#hTemp").textContent = Math.round(h.temp) + " C" + (hot ? ", dimmed to " + pct + "%" : "");
+    $("#hPower").textContent = (h.brownouts || 0) + (capped ? ", brightness capped" : "");
+    $("#guardClear").hidden = !capped;
+    if (capped) {
+      $("#guardName").textContent = "Check the power supply";
+      $("#guardText").textContent = "The panel restarted twice in a row because its power dipped, so its brightness is held down. "
+        + "Use the power supply that came with it, not a phone charger or a USB port, then press Clear.";
+    } else if (hot) {
+      $("#guardName").textContent = "Too warm, dimming";
+      $("#guardText").textContent = "The panel is running hot, so it is at " + pct + "% of its brightness until it cools. "
+        + "Keep it out of direct sun and give it some air behind it.";
+    }
+  };
+  // The history across the full width (a day at most), newest at the right,
+  // gaps where the panel was off Wi-Fi (a red tick along the bottom). -95 to
+  // -35 dBm bottom to top.
+  const drawSpark = (svg, hist, step) => {
+    const W = hist.length, H = 48, NS = "http://www.w3.org/2000/svg";
+    const y = (v) => (H - 2 - (Math.min(-35, Math.max(-95, v)) + 95) / 60 * (H - 4)).toFixed(1);
+    let d = "", gaps = "", lo = 0, hi = -127, weak = 0, n = 0;
+    hist.forEach((v, i) => {
+      const x = i;
+      if (v == null) { gaps += "M" + x + " " + (H - 3) + "V" + H; return; }
+      d += (i > 0 && hist[i - 1] != null ? "L" : "M") + x + " " + y(v);
+      if (i === hist.length - 1 || hist[i + 1] == null) d += "h0.01";  // a lone point still shows
+      lo = Math.min(lo, v); hi = Math.max(hi, v); n++;
+      if (v < -75) weak++;
+    });
+    const path = (cls, p) => {
+      const e = document.createElementNS(NS, "path");
+      e.setAttribute("class", cls);
+      e.setAttribute("d", p);
+      e.setAttribute("vector-effect", "non-scaling-stroke");
+      return e;
+    };
+    svg.setAttribute("viewBox", "0 0 " + (W - 1) + " " + H);
+    svg.replaceChildren(path("th", "M0 " + y(-75) + "H" + W));
+    if (gaps) svg.appendChild(path("gap", gaps));
+    if (d) svg.appendChild(path("ln", d));
+    svg.setAttribute("aria-label", n ? "Signal over the last " + span(W * step) + ": " + lo + " to " + hi
+      + " dBm" + (weak ? ", weak for " + span(weak * step) : "") : "No signal readings yet");
+  };
+  const renderWifi = () => {
+    const w = S && S.wifi;
+    $("#wifiDiag").hidden = !w;
+    if (!w) return;
+    $("#rssi").textContent = w.rssi != null ? w.rssi + " dBm" : "Not connected";
+    $("#wifiWeak").hidden = !w.weak;
+    const hist = w.hist || [], step = w.step || 300;
+    $("#wifiSparkBox").hidden = hist.length < 2;
+    if (hist.length >= 2) {
+      drawSpark($("#wifiSpark"), hist, step);
+      $("#wifiFrom").textContent = (hist.length * step >= 86400 ? "24 h" : span(hist.length * step)) + " ago";
+    }
+    // Up less than a day (by the history), every drop since start is in the day.
+    const day = hist.length > 0 && hist.length * step < 86400;
+    const count = day ? w.drops : w.day;
+    $("#wifiDrops").textContent = (count || "None") + (count ? (day ? " since start" : " in 24 h") : "");
+    const causes = Object.entries(w.causes || {}).filter(([k]) => k !== "roam");
+    let line = "";
+    if (w.last) {
+      line = "Last: " + (WIFI_CAUSES[w.last] || "other") + ", " + span(w.last_ago) + " ago"
+        + (w.last_down != null ? ", back in " + span(w.last_down) : "");
+      if (causes.length > 1) line += ". " + causes.map(([k, c]) => c + " " + (WIFI_CAUSES[k] || k)).join(", ");
+    }
+    $("#wifiLast").textContent = line;
   };
 
   // After an install the device reboots. The event stream only retries every
@@ -1281,12 +1759,14 @@
     fwDetailInflight = false;
   };
 
-  // true if a is newer than b, false if older, null if either is unreadable
+  // true if a is newer than b, false if older, null if either is unreadable.
+  // A beta's build number ("2026.10.0-beta.812") counts as a fourth part, as
+  // in the firmware (auto_update.h), so a beta is newer than its plain number.
   const isNewer = (a, b) => {
-    const parse = (v) => String(v || "").replace(/^v/, "").split(".").map((n) => parseInt(n, 10));
+    const parse = (v) => String(v || "").replace(/^v/, "").replace("-beta.", ".").split(".").map((n) => parseInt(n, 10));
     const pa = parse(a), pb = parse(b);
     if (pa.length < 3 || pb.length < 3 || pa.some(isNaN) || pb.some(isNaN)) return null;
-    for (let i = 0; i < 3; i++) { if (pa[i] !== pb[i]) return pa[i] > pb[i]; }
+    for (let i = 0; i < 4; i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x > y; }
     return false;
   };
 
@@ -1315,7 +1795,12 @@
       })
       .catch(() => {});
   };
+  // A release has its own section on the site's changelog, in owner words; a
+  // beta has none, so it keeps the manifest's link to its commit.
+  const notesLink = (u) =>
+    /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://install.gameday-scoreboard.com/changelog/#v" + u.value : u.release_url;
   let installing = false;
+  let fwFailed = "";     // S.update_failed as the firmware box last drew it
   const renderUpdate = (u) => {
     const box = $("#fw");
     box.hidden = false;
@@ -1325,6 +1810,7 @@
     const btn = $("#fwInstall");
     const sub = $("#fwSub");
     btn.hidden = true;
+    fwFailed = (S && S.update_failed) || "";
     if (st.includes("INSTALLING") || installing) {
       $("#fwText").textContent = "Installing " + (latest || "update");
       sub.textContent = "Keep the panel powered. It reboots when done and this page reconnects.";
@@ -1333,12 +1819,21 @@
       $("#fwText").textContent = "You're ahead of the latest release, " + cur;
       sub.textContent = "The newest published version is " + latest + ". Nothing to install.";
     } else if (st.includes("AVAILABLE")) {
-      $("#fwText").textContent = "Update available: " + latest;
-      sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+      // The panel rolled back from this very version (a crash in its first
+      // minute); it won't install it on its own again, but Install still tries.
+      const failed = !!(S && S.update_failed && S.update_failed === u.value);
+      if (failed) {
+        $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
+        sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+      } else {
+        $("#fwText").textContent = "Update available: " + latest;
+        sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+      }
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
       btn.onclick = () => {
-        if (!confirm("Install " + latest + " now? The panel will reboot.")) return;
+        const ask = failed ? "Try " + latest + " again? It didn't take last time. The panel will reboot." : "Install " + latest + " now? The panel will reboot.";
+        if (!confirm(ask)) return;
         installing = true;
         renderUpdate(u);
         post(u.id, "install");
@@ -1352,9 +1847,10 @@
       $("#fwText").textContent = "Firmware " + cur;
       sub.textContent = "Not checked yet. It checks a few seconds after the clock syncs, or tap Check for updates.";
     }
-    if (u.release_url && !st.includes("INSTALLING")) {
+    const notesUrl = notesLink(u);
+    if (notesUrl && !st.includes("INSTALLING")) {
       const a = el("a", null, "Release notes");
-      a.href = u.release_url;
+      a.href = notesUrl;
       a.target = "_blank";
       a.rel = "noopener";
       sub.appendChild(document.createTextNode(sub.textContent ? " " : ""));
@@ -1421,8 +1917,8 @@
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
-      case "Free Heap (PSRAM)": $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
+      case "RSSI": if (!(S && (S.wifi || S.health))) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "Free Heap (PSRAM)": if (!(S && S.health)) $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };
 
@@ -1436,7 +1932,7 @@
       if (!ev.data) return;
       try {
         const p = JSON.parse(ev.data);
-        if (p.title) $("#devname").textContent = p.title;
+        if (p.title) { pingTitle = p.title; renderNick(); }
         if (p.comment) $("#ver").textContent = p.comment;
       } catch (_) {}
     });
@@ -1451,6 +1947,7 @@
   connect();
   fetchState();
   loadNetworks();
+  probeBackup(true);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();

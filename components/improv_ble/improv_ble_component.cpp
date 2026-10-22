@@ -1,7 +1,8 @@
-// Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble
+// Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
-// the password out of the log, and goes back to the saved network after a failed handover.
+// the password out of the log, goes back to the saved network after a failed handover,
+// and says in the advert whether the panel has a saved network.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "improv_ble_component.h"
@@ -58,6 +59,15 @@ static constexpr uint32_t NETWORKS_SCAN_TIMEOUT_MS = 10000;
 // replaces the last one. Leave the phone time to receive each before the next.
 static constexpr uint32_t NETWORKS_SEND_INTERVAL_MS = 100;
 static constexpr size_t NETWORKS_MAX = 20;
+// GAMEDAY: end
+
+// GAMEDAY: begin (saved-network flag in the advert)
+// The last reserved service data byte. Bit 7 says this firmware fills the
+// byte, so the app can tell "no saved network" from older firmware that
+// leaves it 0. Bit 0 says the panel has a saved network it is trying to reach.
+static constexpr uint8_t ADV_FLAGS_INDEX = 7;
+static constexpr uint8_t ADV_FLAGS_PRESENT = 0x80;
+static constexpr uint8_t ADV_FLAG_SAVED_NETWORK = 0x01;
 // GAMEDAY: end
 
 ImprovBLEComponent::ImprovBLEComponent() { global_improv_component = this; }
@@ -560,10 +570,26 @@ void ImprovBLEComponent::advertise_service_data_() {
 
   service_data[3] = capabilities;
   // service_data[4-7] are already 0 (Reserved)
+  // GAMEDAY: begin
+  service_data[ADV_FLAGS_INDEX] = ADV_FLAGS_PRESENT | (this->has_saved_network_ ? ADV_FLAG_SAVED_NETWORK : 0);
+  // GAMEDAY: end
 
   // Atomically set service data and disable name in advertising
   esp32_ble::global_ble->advertising_set_service_data_and_name(std::span<const uint8_t>(service_data), false);
 }
+
+// GAMEDAY: begin
+void ImprovBLEComponent::set_has_saved_network(bool saved) {
+  if (this->has_saved_network_ == saved)
+    return;
+  this->has_saved_network_ = saved;
+  ESP_LOGD(TAG, "Advertising saved network: %s", YESNO(saved));
+  // Already advertising: send the new flag now rather than at the next state change
+  if (this->state_ != improv::STATE_STOPPED && this->state_ != improv::STATE_PROVISIONED &&
+      !this->advertising_device_name_)
+    this->advertise_service_data_();
+}
+// GAMEDAY: end
 
 void ImprovBLEComponent::update_advertising_type_() {
   uint32_t now = App.get_loop_component_start_time();

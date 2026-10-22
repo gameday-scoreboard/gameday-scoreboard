@@ -3,7 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Game Day Scoreboard installer</title>
+  <title>Game Day Scoreboard: your team's live score on an LED panel</title>
+  <meta name="description" content="Install Game Day Scoreboard from your browser. It shows your team's live score, game clock and next game on a HUB75 LED panel over Wi-Fi.">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/">
+  <meta property="og:site_name" content="Game Day Scoreboard">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Game Day Scoreboard: your team's live score on an LED panel">
+  <meta property="og:description" content="Install Game Day Scoreboard from your browser. It shows your team's live score, game clock and next game on a HUB75 LED panel over Wi-Fi.">
+  <meta property="og:url" content="https://install.gameday-scoreboard.com/">
+  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@GameDayScore">
+  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Game Day Scoreboard",
+    "description": "A 128x64 LED scoreboard for your wall that shows your team's live score, game clock and next game over Wi-Fi.",
+    "brand": { "@type": "Brand", "name": "Game Day Scoreboard" },
+    "image": "https://install.gameday-scoreboard.com/media/og.jpg",
+    "url": "https://gameday-scoreboard.com/products/game-day-scoreboard",
+    "offers": {
+      "@type": "Offer",
+      "url": "https://gameday-scoreboard.com/products/game-day-scoreboard",
+      "price": "179.00",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/OutOfStock"
+    }
+  }
+  </script>
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
@@ -30,6 +63,14 @@
     footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
     .demo { display: block; width: 100%; border-radius: 12px; border: 1px solid #262e38; background: #000; margin: 0 0 6px; }
     .demo-note { margin: 0 0 28px; }
+    .signup { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
+    .signup input[type=email] { flex: 1 1 220px; min-width: 0; font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #262e38; background: #0b0f14; color: #e6edf3; }
+    .signup button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 8px; border: 0; background: #f2b632; color: #0b0f14; cursor: pointer; }
+    .signup button[disabled] { opacity: 0.6; }
+    .signup[hidden] { display: none; }
+    .signup-msg { margin: 0 0 12px; }
+    .signup-msg:empty { display: none; }
+    .sr, .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   </style>
   <!-- Pinned with an integrity hash. To move versions: fetch the new file, compute
        sha384 (openssl dgst -sha384 -binary | openssl base64 -A) and update both. -->
@@ -44,6 +85,20 @@
 
   <video class="demo" src="media/demo.mp4" autoplay muted loop playsinline preload="metadata"></video>
   <p class="note demo-note">What it looks like during a game: a scripted game recorded on a panel, with the real celebrations.</p>
+
+  <div class="card" id="signup">
+    <h2>Get one when they're ready</h2>
+    <p>Ready-made Game Day Scoreboards go on sale soon. Leave your email and we'll tell you the day you can order.</p>
+    <form class="signup" method="post" action="https://support.gameday-scoreboard.com/signup">
+      <input type="hidden" name="page" value="/">
+      <label for="signup-email" class="sr">Email</label>
+      <input type="email" id="signup-email" name="email" required maxlength="200" autocomplete="email" placeholder="you@example.com">
+      <button>Join the launch list</button>
+      <div class="trap" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    </form>
+    <p class="signup-msg" role="status" aria-live="polite"></p>
+    <p class="note">One email when it's ready to order, plus the odd launch update. Every email has an unsubscribe link. Our store on Shopify keeps the list; see <a href="/privacy/#launch-list">Privacy</a>.</p>
+  </div>
 
   <div class="card">
     <h2>1. Install</h2>
@@ -80,7 +135,7 @@
         }));
       })();
     </script>
-    <p class="note">For the Game Day Scoreboard controller and any ESP32-S3 HUB75 controller on the <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> pinout with 16MB flash and octal PSRAM. Have a test controller on the scoreboard75 pinout? Use the <a href="/install/scoreboard75/">scoreboard75 installer</a>.</p>
+    <p class="note">For the Game Day Scoreboard controller and any ESP32-S3 HUB75 controller on the <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> pinout with 16MB flash and octal PSRAM. Have a test controller on the scoreboard75 pinout? Use the <a href="/install/scoreboard75/">scoreboard75 installer</a>. Using another board? See <a href="/diy/">Runs on your own panel</a>.</p>
     <p class="note">Installing replaces whatever firmware was on the controller. WiFi comes next, in the same window.</p>
   </div>
 
@@ -96,7 +151,7 @@
       <li>Tap <strong>Change team</strong> and pick from the logos, a tab per league, or use the <strong>On now</strong> tab to jump into a game that's already playing.</li>
       <li>Two panels side by side? In the <strong>Setup</strong> card, click the two-panel picture. The matrix restarts using both.</li>
       <li>The timezone follows the phone or computer you opened the page on, so kickoff times read right without setting anything.</li>
-      <li>Optional: the ticker parts, opponent celebrations, up to 16 favorite teams (the first four on a WizMote remote), or <strong>Live games</strong>, which follows a random game in progress in the leagues you pick.</li>
+      <li>Optional: the ticker parts, opponent celebrations, up to 16 favorite teams (the first four on a <a href="https://app.gameday-scoreboard.com/setup/#remote">WizMote remote</a>), or <strong>Live games</strong>, which follows a random game in progress in the leagues you pick.</li>
     </ol>
     <p class="note">The panel shows the next game with the line, TV network and start time, switches to the live board at the start, celebrates scores, and lingers on the final. The page mirrors it, lists the next three games in football and soccer, and updates the firmware when a new version is out, by itself if you turn that on. The panel gets its scores from ESPN by itself. No Home Assistant needed, though the device does show up there if you want it.</p>
   </div>
@@ -105,8 +160,33 @@
     Source, issues and the YAML for building it yourself: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard">gameday-scoreboard/gameday-scoreboard</a>.
     Built on <a href="https://github.com/pavlov-net/hub75-studio">hub75-studio</a> and ESPHome.
     <br>
-    <a href="/setup/">Setup</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
+    <a href="https://app.gameday-scoreboard.com/setup/">Setup</a> &middot; <a href="/changelog/">What's new</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
   </footer>
 </main>
+<script>
+  // With JavaScript the thank-you shows in place. Without it, or if the request fails, the form posts as usual
+  // and the browser lands on a thank-you page that links back here.
+  document.querySelectorAll("form.signup").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      if (!window.fetch || !window.URLSearchParams) return;
+      e.preventDefault();
+      var button = form.querySelector("button");
+      var msg = form.parentNode.querySelector(".signup-msg");
+      button.disabled = true;
+      fetch(form.action, { method: "POST", headers: { Accept: "application/json" }, body: new URLSearchParams(new FormData(form)) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) {
+            form.hidden = true;
+            msg.textContent = "You're on the list. We'll email you when it's ready to order.";
+          } else {
+            msg.textContent = j.error || "That didn't go through. Try again.";
+            button.disabled = false;
+          }
+        })
+        .catch(function () { form.submit(); });
+    });
+  });
+</script>
 </body>
 </html>

@@ -114,11 +114,12 @@ inline bool remove(NetworkList &list, const char *ssid) {
 
 // What the list does at boot with ESPHome's one slot, which holds the last
 // network set up through the app or the hotspot page. A blank name is what
-// "Reset Wi-Fi" writes, and empties the list. A slot that hashes as it did
-// when the list last looked is left alone, so a network forgotten since
-// stays forgotten. A changed slot is a new setup, or a panel updating from
-// firmware that kept one network: that network goes to the front, unless
-// the list already has it with the same password, which keeps the order.
+// "Reset Wi-Fi" wrote in older firmware, and empties the list. A slot that
+// hashes as it did when the list last looked is left alone, so a network
+// forgotten since stays forgotten. A changed slot is a new setup, or a
+// panel updating from firmware that kept one network: that network goes to
+// the front, unless the list already has it with the same password, which
+// keeps the order.
 // Returns true when the list changed and needs saving.
 inline bool merge_slot(NetworkList &list, const char *ssid, const char *password) {
   if (ssid == nullptr || ssid[0] == '\0') {
@@ -147,7 +148,7 @@ inline bool merge_slot(NetworkList &list, const char *ssid, const char *password
 // rolled back to one network with one that was not forgotten.
 // Returns nullptr when nothing was removed, and when the list is now empty:
 // the slot then keeps its network, so the panel always has one to join and
-// adds it back once it connects (Reset Wi-Fi is what clears everything).
+// adds it back once it connects (Factory Reset is what clears everything).
 // *removed says whether the network was there.
 inline const Network *forget(NetworkList &list, const char *ssid, bool *removed) {
   *removed = remove(list, ssid);

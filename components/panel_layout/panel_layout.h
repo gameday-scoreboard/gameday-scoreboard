@@ -17,6 +17,7 @@ class PanelLayout : public Component {
   void set_max_cols(uint8_t cols) { this->max_cols_ = cols; }
 
   uint8_t cols() const { return this->cols_; }
+  uint8_t max_cols() const { return this->max_cols_; }
   // Saves the new count and reboots a second later so the page can answer.
   void set_cols(uint8_t cols);
 

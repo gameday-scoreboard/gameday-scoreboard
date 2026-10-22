@@ -113,7 +113,28 @@ struct GameSnapshot {
   std::string last_play, down_distance;
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
+  // Football: how the drive went ("4 plays, 58 yards, 1:36"), only while the
+  // last play is a touchdown or field goal, and our side's chance to win
+  // after the last play (1 to 99), -1 when ESPN gives none.
+  std::string drive;
+  int8_t team_win_pct{-1};
   std::string odds, over_under, tv, venue;
+  // The last play's details, for the scoring log (score_log.h): ESPN's play
+  // type ("Rushing Touchdown", "Field Goal Good"), its points, its yards, the
+  // side's team id and the first player named ("J. Grier").
+  std::string play_type, play_athlete;
+  int8_t play_value{0};
+  int16_t play_yards{0};
+  uint32_t play_team{0};
+  // Each side's points by period, quarter or inning, for the line score
+  // (line_score.h). A period past kLinesMax adds into the last one.
+  static constexpr uint8_t kLinesMax = 16;
+  uint8_t team_lines[kLinesMax]{}, opp_lines[kLinesMax]{};
+  uint8_t team_line_count{0}, opp_line_count{0};
+  std::string headline;  // ESPN's story line on a final, "" when it has none
+  // Football's season leader for each side, ready for the pre-game ticker
+  // ("Prescott 1,381 yds 9 TD"); "" when ESPN lists none.
+  std::string team_leader, opp_leader;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};
@@ -144,6 +165,11 @@ struct LiveGame {
   uint32_t away_id{0};      // shown on the left, like a broadcast
   uint32_t home_id{0};      // for its logo, fetched as soon as the game is picked
   std::string away_abbr, home_abbr;
+  // Where the game stands, for the best-game pick (best_game.h).
+  int16_t away_score{0}, home_score{0};
+  uint8_t period{0};
+  int32_t clock_s{-1};  // ESPN's status clock: left in the period, or soccer's elapsed
+  uint8_t away_rank{99}, home_rank{99};  // AP rank, 99 when unranked
 };
 
 // A finished game from a day's scoreboard, for the finals rotation (recap.h).
@@ -205,6 +231,10 @@ struct TickerOptions {
   bool soccer_stats{true};    // goals, cards, possession and shots
   bool last_play{true};
   bool odds{true};
+  bool leaders{true};  // the season leaders before kickoff (football)
+  // Both records before the start, for a board too narrow to show them
+  // under the logos (one 64-wide panel, pages/gameday-live.yaml).
+  bool records{false};
 };
 
 struct Splash {
@@ -218,7 +248,9 @@ std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
-std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
+// Every game of the day for one league. top25: men's college basketball
+// reads only ESPN's Top 25 slate (the no-team panel), not all of Division I.
+std::string scan_url(League league, int64_t now_epoch, bool top25 = false);
 // How far behind UTC the day scan_url() reads turns over. Football uses the
 // Eastern date. The other leagues play past midnight Eastern on the West
 // Coast (ESPN lists those games under the day they started, and rejects date
@@ -261,12 +293,18 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// "KC 72% to win" for the side ESPN's model favors, "" when it gives no
+// number (football's last play only).
+std::string win_chance(const GameSnapshot &s);
 // The board and ticker with no game on the board, in place of the page's
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
 // be read from ESPN before it), "Can't reach ESPN" while reads fail and
 // ESPN has never said this team has no game. Empty for the default, and in
-// a live mode, which has its own words.
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses);
+// a live mode, which has its own words. captive (captive.h: the Wi-Fi answered
+// with a sign-in page and ESPN has not answered since) wins over all of it,
+// live modes included, since nothing can be read until it ends.
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses,
+                         bool captive = false);
 // Bench only. Every ESPN URL starts with this root; a bench build points
 // it at a host that does not exist to make ESPN unreachable without
 // touching the network. Pass a string literal: only the pointer is kept,
@@ -291,6 +329,10 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
 // Hawaii to central Europe.
 inline int64_t tbd_day_epoch(int64_t placeholder) { return placeholder + 12 * 3600; }
 int64_t parse_iso8601_z(const std::string &s);
+// An HTTP Date header, "Sat, 17 Oct 2026 23:39:29 GMT" (the only form a
+// server may send), as a UTC epoch. 0 when it is anything else or outside
+// 2020 to 2099.
+int64_t parse_http_date(const std::string &s);
 const char *state_name(GameState s);
 // "0:42 2nd" from the raw clock and period. ESPN's pre-formatted shortDetail
 // lags those fields by a poll or two, so it is only used for the states that
@@ -312,6 +354,8 @@ std::string baseball_clock_text(const GameSnapshot &s);
 Splash baseball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
 // The count while a half inning is on ("2-1"), else "".
 std::string baseball_count(const GameSnapshot &s);
+// The latest play is a home run.
+bool baseball_home_run(const GameSnapshot &s);
 // Hockey (sport_hockey.cpp).
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);
@@ -347,6 +391,13 @@ namespace detail {
 // Ticker helpers shared by the sport files.
 void add_part(std::string &out, const std::string &part);
 std::string records_line(const GameSnapshot &s);
+// Both records as one pre-game part, ours first: "DAL 2-3, GB 3-2". A side
+// with no record is left out; "" when neither has one.
+std::string pregame_records(const GameSnapshot &s);
+// A football leader for the ticker from ESPN's short name and stat line:
+// "D. Prescott" + "129/192, 1381 YDS, 9 TD, 3 INT" gives "Prescott 1,381 yds
+// 9 TD". "" when the line has no yards.
+std::string leader_line(const std::string &short_name, const std::string &display_value);
 // The pre-game betting parts when the ticker shows odds: the line, the
 // over/under and the TV listing. Soccer builds its own line.
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);
