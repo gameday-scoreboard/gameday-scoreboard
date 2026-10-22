@@ -40,6 +40,22 @@
   "msgevery": 2,
   "autoupd": false,
   "beta": false,
+  "lists": [
+    {
+      "n": "Sundays",
+      "t": [
+        "nfl:6"
+      ]
+    },
+    {
+      "n": "College",
+      "t": [
+        "ncaa:251",
+        "ncaa:2294"
+      ]
+    }
+  ],
+  "list": 2,
   "panels": 2,
   "brightness": 128,
   "scroll": 5
