@@ -39,6 +39,10 @@ If the backup has a different panel layout (one 64x64 panel against a 128x64 one
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
+:::note[Coming in the next release]
+The file also has your playlists, with their teams and their order, and the one Favorite teams is playing. See [Playlists](/using/favorites/#playlists).
+:::
+
 ## What isn't
 
 - **Wi-Fi networks.** Passwords never leave the panel. A new or reset panel joins Wi-Fi through the Game Day app or its own setup hotspot first, then you restore. See [Wi-Fi](/using/wifi/).
