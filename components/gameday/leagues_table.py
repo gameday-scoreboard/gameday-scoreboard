@@ -13,13 +13,13 @@ LEAGUES_H = Path(__file__).resolve().parent / "leagues.h"
 # LeagueInfo's fields, in order.
 _ROW_RE = re.compile(
     r'\{League::(\w+),\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*Sport::(\w+),'
-    r"\s*(true|false),\s*(true|false),\s*(true|false),\s*(\d+)\}"
+    r"\s*(true|false),\s*(true|false),\s*(\d+)\}"
 )
 
 
 def leagues(text=None):
     """kLeagues rows in order, each a dict: league (the enum name), key, path,
-    prefix, logo_dir, sport, per_event, season_list, logo_by_id, linger_min."""
+    prefix, logo_dir, sport, season_list, logo_by_id, linger_min."""
     if text is None:
         text = LEAGUES_H.read_text(encoding="utf-8")
     start = text.find("kLeagues[] = {")
@@ -29,7 +29,7 @@ def leagues(text=None):
     body = "\n".join(ln for ln in text[start:end].splitlines() if not ln.lstrip().startswith("//"))
     rows = []
     for m in _ROW_RE.finditer(body):
-        lg, key, path, prefix, logo_dir, sport, per_event, season_list, by_id, linger = m.groups()
+        lg, key, path, prefix, logo_dir, sport, season_list, by_id, linger = m.groups()
         rows.append(
             {
                 "league": lg,
@@ -38,7 +38,6 @@ def leagues(text=None):
                 "prefix": prefix,
                 "logo_dir": logo_dir,
                 "sport": sport,
-                "per_event": per_event == "true",
                 "season_list": season_list == "true",
                 "logo_by_id": by_id == "true",
                 "linger_min": int(linger),
