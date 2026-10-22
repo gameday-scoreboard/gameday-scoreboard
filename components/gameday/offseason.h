@@ -36,6 +36,20 @@ inline bool off_season(GameState state, int64_t kickoff_epoch, int64_t now, int6
   return false;
 }
 
+// One favorite, for the Favorites clock: -1 while its team read hasn't
+// answered, 1 between seasons (the same rule as My team, off_season), 0 when
+// it has a card to show. named: the team endpoint named a game. polled: its
+// game was read, with that state and kickoff; before that the kickoff the
+// team endpoint gave counts as a game ahead.
+inline int fav_off_season(bool read, bool named, bool polled, GameState state, int64_t kickoff_epoch, int64_t now,
+                          int64_t horizon_s) {
+  if (!read)
+    return -1;
+  if (!named)
+    return 1;
+  return off_season(polled ? state : GameState::PRE, kickoff_epoch, now, horizon_s) ? 1 : 0;
+}
+
 // "Next: DAL vs PHI" at home, "Next: at PHI" away, then sep and the kickoff
 // ("Mar 26 7:05 PM", or "Mar 26 TBD" with no time yet, when kick_local is
 // from tbd_day_epoch). The board puts the kickoff on its own line; the ticker
