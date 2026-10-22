@@ -51,7 +51,7 @@ Settings are grouped in cards. In the order the page shows them:
 | Leagues (Live games) | The leagues Live games picks from. Until you pick, it follows the leagues of your team and favorites. **Back to automatic** goes back to that. |
 | **Switch every** (Live games) | Moves to another game in progress after this many minutes, 1 to 30. A new panel starts at 1. |
 | **Take over** (Favorite teams) | How many minutes before kickoff a favorite's game takes the panel, 5 to 120. Starts at 15. |
-| **After the final** (Favorite teams) | How long a favorite's final stays up before the playlist moves on, 30 seconds to 60 minutes. Starts at 30 seconds. |
+| **After the final** (Favorite teams) | How long a favorite's final stays up before the panel moves on, 30 seconds to 60 minutes. Starts at 30 seconds. |
 | **Two games at once** (Favorite teams) | **Stick with the higher team** in your list, or **Alternate** between them every set number of minutes. |
 | Ticker: **Down and distance** | Football: the down, yards to go and where the ball is. |
 | Ticker: **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
@@ -64,7 +64,7 @@ Settings are grouped in cards. In the order the page shows them:
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. |
 | **Showing** | The Scoreboard page or the Clock page. |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
-| **Only today's games** | The Favorite teams playlist skips favorites that aren't playing today. |
+| **Only today's games** | Between games, Favorite teams skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
 | **Discovery**, **Unpair remote** | Pairs and unpairs a WizMote remote. See [WizMote remote](/using/remote/). |
 | Matrix | Click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/). |
@@ -78,6 +78,10 @@ The Ticker card has a **Pre-game season leaders** switch, on to start: before ki
 The Favorites card has two more switches: **Jump to the action** (off to start) moves the panel to another favorite's game at its big moment, then back, and **Score banner** (on to start) shows another favorite's score along the bottom for five seconds. See [Favorite teams](/using/favorites/#when-a-game-is-on).
 
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).
+
+:::note[Coming in the next release]
+A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. See [Playlists](/using/favorites/#playlists).
+:::
 
 :::note[Coming in the next release]
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).

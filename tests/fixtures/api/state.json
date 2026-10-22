@@ -36,6 +36,23 @@
     {}
   ],
   "favmax": 16,
+  "lists": [
+    {
+      "n": "Sundays",
+      "f": [
+        0
+      ]
+    },
+    {
+      "n": "College",
+      "f": [
+        1,
+        2
+      ]
+    }
+  ],
+  "list": 2,
+  "listmax": 16,
   "today": false,
   "jump": false,
   "banner": true,

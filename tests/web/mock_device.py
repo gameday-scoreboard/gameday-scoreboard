@@ -68,7 +68,8 @@ SET_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSetKeys\[\] = \{(.*?)\};", 
 MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
 LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
                                              SET_H + MESSAGE_H +
-                                             (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -89,7 +90,7 @@ INITIAL = {
     "team": team("nfl", 6),
     "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False,
@@ -241,6 +242,37 @@ def state_doc():
     return STATE
 
 
+def fav_refs():
+    return [(t["l"], t["id"]) if t else None for t in STATE["favs"]]
+
+
+def remap_lists(before):
+    """remap_lists_(): each playlist keeps its teams wherever the favorites moved them."""
+    after = fav_refs()
+    for pl in STATE["lists"]:
+        teams = [before[i] for i in pl["f"] if i < len(before) and before[i]]
+        pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
+
+
+def parse_lists(v):
+    """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
+    out = []
+    for part in v.split(";") if v else []:
+        if len(out) >= LIMITS["kListMax"]:
+            break
+        name, _eq, refs = part.partition("=")
+        name = message_clean(name.replace("=", ""), LIMITS["kListNameMax"], False)
+        if not name:
+            continue
+        teams = []
+        for r in refs.split(",") if refs else []:
+            ref = parse_team_ref(r)
+            if ref and ref not in teams and len(teams) < FAV_MAX:
+                teams.append(ref)
+        out.append({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams]})
+    return out
+
+
 def night_time(v):
     """night_parse_time() in components/gameday/night.h, as the state document writes it."""
     m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
@@ -252,6 +284,7 @@ def night_time(v):
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
     for k, v in kv:
+        before = fav_refs()
         if k == "team":
             ref = parse_team_ref(v)
             if ref:
@@ -280,11 +313,23 @@ def apply_set(kv):
                     refs.append(ref)
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
             STATE["favs"] = [team(*r) for r in refs] + [{}] * (4 - len(refs))
+            remap_lists(before)
         elif k in ("fav1", "fav2", "fav3", "fav4"):
             ref = parse_team_ref(v)
             if ref is None and v not in ("none", ""):
                 continue
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
+            remap_lists(before)
+        elif k == "lists":
+            # set_lists_(): the playlist being played stays chosen by its name.
+            active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] else ""
+            STATE["lists"] = parse_lists(v)
+            STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
+        elif k == "list":
+            # set_active_list_() plays it in Favorite teams.
+            if v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
+                STATE["list"] = atoi(v)
+                STATE["mode"] = 4
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
         elif k == "live":
