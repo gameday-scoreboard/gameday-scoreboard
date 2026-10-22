@@ -797,6 +797,16 @@ static void test_status_text() {
   CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
   CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
   CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
+  // ESPN writes the yards with no thousands separator today (pinned from the
+  // recorded document below); one written "1,381" reads the same.
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1,381 YDS, 9 TD, 3 INT"),
+           std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "12,345 YDS"), std::string("Prescott 12,345 yds"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "-- YDS"), std::string(""));
+  {
+    std::string raw = slurp("fixtures/event_nfl_pre_dal.json");
+    CHECK(raw.find("\"112/185, 1408 YDS, 10 TD, 3 INT\"") != std::string::npos);
+  }
   // Pre-game on a single panel: both records after the kickoff, the leaders
   // after the odds, and the leaders switch takes only the leaders away
   GameSnapshot pr = live(0, 0, GameState::PRE);
@@ -1224,6 +1234,34 @@ static void test_no_live_rescan() {
   CHECK_EQ(no_live_rescan_ms(now, now - 600, lo, hi), lo);  // due but not under way yet
   CHECK_EQ(no_live_rescan_ms(now, 0, lo, hi), hi);          // nothing left today
   CHECK_EQ(no_live_rescan_ms(0, now + 3600, lo, hi), lo);   // no clock yet
+}
+
+// The scan clock in the Live modes: when the wait for a live game is over,
+// and what a failed scan does to it.
+static void test_live_scan_clock() {
+  const uint32_t min = 60 * 1000, three_h = 3 * 60 * min;
+  // The wait.
+  CHECK(live_rescan_due(5000, 0, three_h, false));                 // no wait running
+  CHECK(!live_rescan_due(5000 + 20 * 1000, 5000, three_h, false));  // 20 s into 3 h
+  CHECK(live_rescan_due(5000 + three_h, 5000, three_h, false));     // over, exactly
+  CHECK(live_rescan_due(5000 + 20 * 1000, 5000, three_h, true));    // a favorite's kickoff
+  CHECK(!live_rescan_due(100, 0xFFFFFF00u, three_h, false));        // across millis()' wrap
+  CHECK(live_rescan_due(three_h, 0xFFFFFF00u, three_h, false));
+
+  // After a failed scan. The saved team's card and the finals rotation start
+  // over, so the retry scans; a followed game keeps its rotate clock.
+  CHECK_EQ(live_clock_after_failed_scan(5000, true, false), (uint32_t) 0);
+  CHECK_EQ(live_clock_after_failed_scan(5000, false, true), (uint32_t) 0);
+  CHECK_EQ(live_clock_after_failed_scan(5000, false, false), (uint32_t) 5000);
+
+  // The fallback's day: a scan at 1:00 finds nothing and waits 3 h for the
+  // next kickoff. At 4:00 the scan fails (stamped at its start). The back-off
+  // retry 20 s later must scan again, not wait until 7:00.
+  uint32_t started = 4 * 60 * min;  // stamped when the 4:00 scan started
+  started = live_clock_after_failed_scan(started, true, false);
+  CHECK(live_rescan_due(4 * 60 * min + 20 * 1000, started, three_h, false));
+  // Before the fix the stamp stayed, and the retry polled the card instead.
+  CHECK(!live_rescan_due(4 * 60 * min + 20 * 1000, 4 * 60 * min, three_h, false));
 }
 
 static void test_schedule_due() {
@@ -3125,6 +3163,78 @@ static Final mkfinal(uint8_t league, int rank, int64_t kick, const char *abbr) {
   return f;
 }
 
+// The finals rotation's walks through ESPN days, one league at a time.
+static void test_recap_walk() {
+  const int32_t mon = 20000;  // any ESPN day
+  int32_t day = 0;
+
+  // Back, on a Monday with no NFL final today: Sunday has 13, so the walk
+  // reads Sunday and stops.
+  RecapWalk back;
+  CHECK(back.back_due(mon, 0, day));
+  CHECK_EQ(day, mon - 1);
+  back.back_read(mon, 13);
+  CHECK_EQ(back.step, RecapWalk::kDone);
+  CHECK(!back.back_due(mon, 13, day));  // done for today
+  CHECK(!back.back_due(mon + 1, 13, day));  // a new day with finals held: still done
+
+  // An empty Sunday (a bye week), then Saturday has three, then Friday one:
+  // four, enough.
+  back = RecapWalk{};
+  CHECK(back.back_due(mon, 0, day) && day == mon - 1);
+  back.back_read(mon, 0);
+  CHECK(back.back_due(mon, 0, day) && day == mon - 2);
+  back.back_read(mon, 3);
+  CHECK(back.back_due(mon, 3, day) && day == mon - 3);
+  back.back_read(mon, 4);
+  CHECK(!back.back_due(mon, 4, day));
+
+  // Today's scan already had enough: no read at all.
+  back = RecapWalk{};
+  CHECK(!back.back_due(mon, 5, day));
+  CHECK_EQ(back.step, RecapWalk::kDone);
+
+  // A week back with nothing: it stops after kRecapMaxDays reads, stays
+  // stopped for the rest of the day, and walks again the next day.
+  back = RecapWalk{};
+  int reads = 0;
+  while (back.back_due(mon, 0, day)) {
+    CHECK_EQ(day, mon - 1 - reads);
+    back.back_read(mon, 0);
+    reads++;
+  }
+  CHECK_EQ(reads, kRecapMaxDays);
+  CHECK(!back.back_due(mon, 0, day));
+  CHECK(back.back_due(mon + 1, 0, day) && day == mon);
+
+  // Forward, no game left today: tomorrow has none, the day after has a
+  // kickoff at 7 PM. The walk stops there until that kickoff passes.
+  const int64_t now = 1792000000, seven_pm = now + 2 * 86400;
+  RecapWalk fwd;
+  CHECK(fwd.fwd_due(mon, 0, now, day) && day == mon + 1);
+  CHECK(fwd.fwd_read(mon, false));
+  CHECK(fwd.fwd_due(mon, 0, now, day) && day == mon + 2);
+  CHECK(fwd.fwd_read(mon, true));
+  CHECK(!fwd.fwd_due(mon, seven_pm, now, day));
+  CHECK(!fwd.fwd_due(mon + 1, seven_pm, now + 86400, day));  // a new day, kickoff still ahead
+  // The kickoff passed: look again from the day it is now.
+  CHECK(fwd.fwd_due(mon + 2, seven_pm, seven_pm + 60, day) && day == mon + 3);
+
+  // A week ahead with no kickoff: it gives up, and tries again tomorrow,
+  // not on every scan today.
+  fwd = RecapWalk{};
+  bool walking = true;
+  int ahead = 0;
+  while (walking && fwd.fwd_due(mon, 0, now, day)) {
+    walking = fwd.fwd_read(mon, false);
+    ahead++;
+  }
+  CHECK(!walking);
+  CHECK_EQ(ahead, kRecapMaxDays);
+  CHECK(!fwd.fwd_due(mon, 0, now + 3600, day));
+  CHECK(fwd.fwd_due(mon + 1, 0, now + 86400, day) && day == mon + 2);
+}
+
 static void test_recap() {
   const uint8_t NFL = (uint8_t) League::NFL, NCAA = (uint8_t) League::NCAA;
   // Finals ride along with the scan only when asked for
@@ -4280,6 +4390,22 @@ static void test_night() {
   CHECK(night_window(60, 6 * 60, 3 * 60));
   CHECK(!night_window(60, 6 * 60, 23 * 60));
   CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+  {
+    // A change to the same start and end keeps the hours the schedule had.
+    NightPrefs now = night_defaults(), next = now;
+    next.start = 23 * 60;
+    next.end = 23 * 60;
+    next.on = 1;
+    CHECK(night_keep_hours(next, now));
+    CHECK_EQ(next.start, now.start);
+    CHECK_EQ(next.end, now.end);
+    CHECK_EQ(next.on, 1);  // the rest of the change stands
+    next.start = 22 * 60;
+    next.end = 6 * 60;
+    CHECK(!night_keep_hours(next, now));
+    CHECK_EQ(next.start, 22 * 60);
+    CHECK_EQ(next.end, 6 * 60);
+  }
 
   NightPrefs p = night_defaults();
   CHECK(!p.on);
@@ -5373,6 +5499,35 @@ static void test_fav_action() {
   CHECK_EQ(fav_score_banner(q, q2), std::string(""));
 }
 
+// The boot preview's logo URL (team_logo_url) is the one ESPN's own game
+// document names, for both sides, so the logo cache downloads each logo once.
+// The single-event documents carry the scoreboard's event object as is.
+static void test_logo_url_matches_game() {
+  struct Case {
+    League league;
+    Sport sport;
+    const char *file;
+    uint32_t team;
+  };
+  const Case cases[] = {
+      {League::MLB, Sport::BASEBALL, "fixtures/event_mlb_final.json", kWhiteSox},
+      {League::MLB, Sport::BASEBALL, "fixtures/event_mlb_pre.json", kBrewers},
+      {League::NBA, Sport::BASKETBALL, "fixtures/event_nba_final.json", kPacers},
+      {League::WNBA, Sport::BASKETBALL, "fixtures/event_wnba_final.json", kDream},
+      {League::MCBB, Sport::BASKETBALL, "fixtures/event_mcbb_final.json", kUConn},
+      {League::EPL, Sport::SOCCER, "fixtures/event_epl_final.json", kArsenal},
+      {League::MLS, Sport::SOCCER, "fixtures/event_mls_final.json", kMiami},
+  };
+  for (const auto &c : cases) {
+    GameSnapshot s;
+    std::string json = slurp(c.file);
+    CHECK(parse_event_str(json, c.sport, c.team, s, root_id(json)));
+    CHECK(!s.team_logo.empty() && !s.opp_logo.empty());
+    CHECK_EQ(team_logo_url(c.league, s.team_id, s.team_abbr.c_str()), s.team_logo);
+    CHECK_EQ(team_logo_url(c.league, s.opp_id, s.opp_abbr.c_str()), s.opp_logo);
+  }
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -5400,6 +5555,7 @@ int main() {
   test_schedule_league();
   test_schedule_due();
   test_no_live_rescan();
+  test_live_scan_clock();
   test_team_cache();
   test_boot_hold();
   test_rotate_minutes();
@@ -5434,6 +5590,7 @@ int main() {
   test_nba_splash();
   test_mcbb_urls();
   test_mcbb();
+  test_logo_url_matches_game();
   checks++;
   failures += run_football_golden();
   test_logo_lru();
@@ -5444,6 +5601,7 @@ int main() {
   test_badge();
   test_demo();
   test_recap();
+  test_recap_walk();
   test_later_today();
   test_backoff();
   test_cup_backoff();
