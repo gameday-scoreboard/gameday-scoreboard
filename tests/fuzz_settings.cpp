@@ -82,7 +82,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   }
   if (doc.is<JsonObjectConst>()) {
     JsonDocument out;
-    settings_from_state(doc.as<JsonObjectConst>(), 128, 5, out);
+    settings_from_state(doc.as<JsonObjectConst>(), 0x1ff, 128, 5, out);
   }
   return 0;
 }

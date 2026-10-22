@@ -49,13 +49,15 @@ If the backup has a different panel layout (one 64x64 panel against a 128x64 one
 
 ## When it won't restore
 
-The panel checks the whole file before it changes anything. If one setting in it is wrong, nothing changes and the page says which one, like **Not restored: mode should be a whole number. Nothing was changed.** That only happens to a file that was edited by hand or damaged; restore an untouched copy instead.
+The panel checks the whole file before it changes anything. If a setting in it has the wrong kind of value, like text where a number goes, or a team or time the panel can't read, nothing changes and the page says which one, like **Not restored: mode should be a whole number. Nothing was changed.** That happens to a file that was edited by hand or damaged; restore an untouched copy instead.
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 
-**This backup is from newer firmware** means the file came from a panel on a later release than this one. [Update the panel](/using/updates/), then restore it.
+**This backup is from newer firmware** means the file came from a panel on a release that saves backups differently. [Update the panel](/using/updates/), then restore it.
 
-A backup from a panel on a later release usually restores fine. If it names a team, a league or a timezone this panel's firmware doesn't have yet, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:363**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
+## When something is left out
+
+A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
 
 ## For scripts and Home Assistant
 
@@ -66,4 +68,4 @@ curl -o backup.json http://gameday-2f6a70.local/gameday/settings
 curl -X POST -H "Content-Type: application/json" --data-binary @backup.json http://gameday-2f6a70.local/gameday/settings
 ```
 
-The restore answers `{"ok":true,"restart":false,"skipped":[]}`, or an `error` with the reason and nothing changed.
+The restore answers `{"ok":true,"restart":false,"skipped":[]}`, or an `error` with the reason and nothing changed. Send it as `application/json`, as above.

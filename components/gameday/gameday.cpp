@@ -4438,7 +4438,9 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
                          : -1;
     int scroll =
         this->scroll_number_ != nullptr && this->scroll_number_->has_state() ? (int) this->scroll_number_->state : -1;
-    ::espn::settings_from_state(in.as<JsonObjectConst>(), brightness, scroll, out);
+    // The live mask isn't in the state (its live list is what the panel scans
+    // now); one 16-bit read, so the web server can take it as it is.
+    ::espn::settings_from_state(in.as<JsonObjectConst>(), this->prefs7_.live_mask, brightness, scroll, out);
     std::string body;
     serializeJson(out, body);
     request->send(200, "application/json", body.c_str());

@@ -357,7 +357,8 @@ def settings_doc():
                 favs.pop()
             out["favs"] = favs
         elif k == "live":
-            out["live"] = [] if s.get("live_auto") else list(s["live"])
+            # Live games' own list, not the state's (every league with no team picked).
+            out["live"] = list(LIVE_LIST[0])
         elif k == "tz":
             out["tz"] = s["tz_name"]
         elif k == "tzauto":
@@ -414,12 +415,10 @@ def import_settings(doc):
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255)}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
-            if k == "panels" and not lo <= v <= hi:
-                return fail(f"panels should be 1 to {MAX_COLS}.")
-            if k == "collide" and not lo <= v <= hi:
-                return fail("collide should be 0 or 1.")
+            # Out of range is left out and listed (newer firmware may take more).
             if lo is not None and not lo <= v <= hi:
-                return fail(k + " is out of range.")
+                skipped.append(f"{k}={v}")
+                continue
             kv.append((k, str(v)))
         elif kind == "Text":
             if not isinstance(v, str):
@@ -447,10 +446,12 @@ def import_settings(doc):
                 skipped += [f"live={e}" for e in v if e not in LEAGUES]
                 kv.append(("live", ",".join(e for e in v if e in LEAGUES)))
                 continue
-            if len(v) > FAV_MAX:
-                return fail(f"favs holds at most {FAV_MAX} teams.")
             favs = []
             for e in v:
+                if len(favs) == FAV_MAX:
+                    if e not in ("", "none"):
+                        skipped.append("favs=" + e)
+                    continue
                 r = team_ref(e)
                 if r == -2:
                     return fail("favs should list teams like nfl:6.")
@@ -464,8 +465,11 @@ def import_settings(doc):
             skipped.append(k)
     for name, ent, lo, hi in (("brightness", "Brightness", 1, 255), ("scroll", "Scroll Speed", 1, 10)):
         if name in doc and doc[name] is not None:
-            if not is_int(doc[name]) or not lo <= doc[name] <= hi:
-                return fail(f"{name} should be {lo} to {hi}.")
+            if not is_int(doc[name]):
+                return fail(name + " should be a whole number.")
+            if not lo <= doc[name] <= hi:
+                skipped.append(f"{name}={doc[name]}")
+                continue
             numbers[ent] = doc[name]
     known = set(SET_KEYS) | {"schema", "version", "name", "brightness", "scroll"}
     skipped += [k for k in doc if k not in known]
@@ -526,6 +530,7 @@ def selftest():
     want = json.loads((api / "settings.json").read_text(encoding="utf-8"))
     reset_state(fixture_state)
     STATE["live"] = fixture_state["live"]
+    LIVE_LIST[0] = []
     entity("Brightness")["value"], entity("Scroll Speed")["value"] = str(want["brightness"]), str(want["scroll"])
     have = settings_doc()
     if have != want or list(have) != list(want):
@@ -537,7 +542,7 @@ def selftest():
         bad += 1
         print(f"FAIL the settings fixture didn't come back whole: {code} {json.dumps(reply)}")
     for doc in ({"schema": 1, "mode": "4"}, {"schema": 2}, {"schema": 1, "favs": ["nfl:6", "nfl:6"]},
-                {"schema": 1, "brightness": 40, "scroll": 0}):
+                {"schema": 1, "brightness": 40, "scroll": "5"}):
         before = json.dumps(STATE, sort_keys=True)
         code, _ = import_settings(doc)
         if code != 400 or json.dumps(STATE, sort_keys=True) != before:

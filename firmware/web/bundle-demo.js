@@ -964,7 +964,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const probeBackup = async () => {
     try {
       const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
-      $("#backup").hidden = !r.ok;
+      // Only a 404 is firmware without it; a 500 is a panel still starting.
+      if (r.status === 404) $("#backup").hidden = true;
+      else if (r.ok) $("#backup").hidden = false;
       return r.ok ? await r.json() : null;
     } catch (_) {
       return null;
@@ -1008,7 +1010,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       toast("Device did not respond. Try again.");
       return;
     }
-    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status) + " Nothing was changed."); return; }
+    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
     const left = (j.skipped || []).join(", ");
     backupNote("Restored." + (left ? " This panel's firmware doesn't have: " + left + "." : ""));
     if (j.restart) {

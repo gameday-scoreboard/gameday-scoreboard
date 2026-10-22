@@ -87,7 +87,7 @@ void test_export() {
   JsonDocument state, fixture, out;
   SCHECK(!deserializeJson(state, slurp("fixtures/api/state.json")), "fixtures/api/state.json doesn't parse");
   SCHECK(!deserializeJson(fixture, slurp("fixtures/api/settings.json")), "fixtures/api/settings.json doesn't parse");
-  settings_from_state(state.as<JsonObjectConst>(), 128, 5, out);
+  settings_from_state(state.as<JsonObjectConst>(), 0, 128, 5, out);
   std::string got, want;
   serializeJson(out, got);
   serializeJson(fixture, want);
@@ -110,11 +110,14 @@ void test_export() {
   }
 
   // No team, an empty slot between two favorites, a live list of its own,
-  // and a build without the numbers or a panel layout.
+  // and a build without the numbers or a panel layout. With no team picked
+  // the state's live list is every league; the backup keeps the panel's own.
   JsonDocument s2, out2;
   deserializeJson(s2, R"({"team":{},"favs":[{"l":"nfl","id":6},{},{"l":"mlb","id":15},{},{}],
-    "live":["mlb","nhl"],"live_auto":false,"panels":0,"tz_name":"US Eastern","tz_auto":false})");
-  settings_from_state(s2.as<JsonObjectConst>(), -1, -1, out2);
+    "live":["nfl","ncaa","mlb","mls","epl","nba","wnba","mcbb","nhl"],"live_auto":false,"panels":0,
+    "tz_name":"US Eastern","tz_auto":false})");
+  uint16_t mask = (uint16_t) ((1u << (uint8_t) League::MLB) | (1u << (uint8_t) League::NHL));
+  settings_from_state(s2.as<JsonObjectConst>(), mask, -1, -1, out2);
   std::string got2;
   serializeJson(out2, got2);
   SCHECK(got2 ==
@@ -186,10 +189,14 @@ void test_favs() {
   refused(R"({"schema":1,"favs":["dallas"]})", "a favorite that isn't a team");
   refused(R"({"schema":1,"favs":"nfl:6"})", "favs as text");
   refused(R"({"schema":1,"favs":[6]})", "favs as numbers");
+  // Past FAV_MAX: the first 16 come back, the rest are listed.
   std::string seventeen = R"({"schema":1,"favs":[)";
-  for (int i = 0; i < 17; i++)
+  for (int i = 0; i < 16; i++)
     seventeen += std::string(i ? "," : "") + "\"\"";
-  refused(seventeen + "]}", "17 favorites");
+  in = import(seventeen + R"(,"nfl:6"]})");
+  f = find(in, SetKind::FAVS);
+  SCHECK(in.error.empty() && f != nullptr && f->teams.size() == 16 && skipped(in, "favs=nfl:6"),
+         "a 17th favorite wasn't left out and listed");
 }
 
 void test_refused() {
@@ -212,22 +219,27 @@ void test_refused() {
   refused(R"({"schema":1,"rotate":2.5})", "a fraction");
   refused(R"({"schema":1,"brightness":"128"})", "brightness as text");
 
-  // Out of range, where a single set would clamp
-  refused(R"({"schema":1,"mode":6})", "mode 6");
-  refused(R"({"schema":1,"mode":-1})", "mode -1");
-  refused(R"({"schema":1,"rotate":0})", "rotate 0");
-  refused(R"({"schema":1,"lockon":121})", "lockon 121");
-  refused(R"({"schema":1,"release":10})", "release 10");
-  refused(R"({"schema":1,"msgevery":31})", "msgevery 31");
-  refused(R"({"schema":1,"nightlevel":0})", "nightlevel 0");
-  refused(R"({"schema":1,"nightlevel":256})", "nightlevel 256");
-  refused(R"({"schema":1,"collide":2})", "collide 2");
-  refused(R"({"schema":1,"panels":3})", "three panels on a build that drives two");
-  refused(R"({"schema":1,"panels":0})", "no panels");
-  refused(R"({"schema":1,"brightness":0})", "brightness 0");
-  refused(R"({"schema":1,"brightness":256})", "brightness 256");
-  refused(R"({"schema":1,"scroll":11})", "scroll 11");
-  refused(R"({"schema":1,"brightness":40,"scroll":0})", "a good brightness with a bad scroll");
+  // Out of range, where a single set would clamp: left out and listed, the
+  // rest applied (newer firmware may take more).
+  const char *const out_of_range[] = {
+      R"({"schema":1,"mode":6,"down":false})",       R"({"schema":1,"mode":-1,"down":false})",
+      R"({"schema":1,"rotate":0,"down":false})",     R"({"schema":1,"lockon":121,"down":false})",
+      R"({"schema":1,"release":10,"down":false})",   R"({"schema":1,"msgevery":31,"down":false})",
+      R"({"schema":1,"nightlevel":0,"down":false})", R"({"schema":1,"nightlevel":256,"down":false})",
+      R"({"schema":1,"collide":2,"down":false})",    R"({"schema":1,"panels":3,"down":false})",
+      R"({"schema":1,"panels":0,"down":false})",     R"({"schema":1,"brightness":0,"down":false})",
+      R"({"schema":1,"brightness":256,"down":false})", R"({"schema":1,"scroll":11,"down":false})"};
+  for (const char *doc : out_of_range) {
+    SettingsImport in = import(doc);
+    SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].kind == SetKind::DOWN && in.skipped.size() == 1 &&
+               in.brightness < 0 && in.scroll < 0 && !in.restart,
+           "out of range wasn't left out alone: %s (error '%s', %zu ops, %zu left out)", doc, in.error.c_str(),
+           in.ops.size(), in.skipped.size());
+  }
+  SCHECK(skipped(import(R"({"schema":1,"mode":6})"), "mode=6"), "mode=6 isn't listed");
+  SCHECK(skipped(import(R"({"schema":1,"scroll":11})"), "scroll=11"), "scroll=11 isn't listed");
+
+  refused(R"({"schema":1,"brightness":40,"scroll":"5"})", "a good brightness with a bad scroll");
 
   // Values the panel doesn't take
   refused(R"({"schema":1,"team":"dallas"})", "a team that isn't one");
@@ -260,12 +272,12 @@ void test_left_out() {
   in = import(R"({"schema":1,"autoupd":true,"beta":true,"panels":2,"brightness":40,"scroll":3,"down":false})", bare);
   SCHECK(in.error.empty() && in.ops.size() == 1 && find(in, SetKind::DOWN) != nullptr, "bare build applied %zu ops",
          in.ops.size());
-  SCHECK(skipped(in, "autoupd") && skipped(in, "beta") && skipped(in, "panels") && skipped(in, "brightness") &&
-             skipped(in, "scroll"),
+  SCHECK(skipped(in, "autoupd") && skipped(in, "beta") && skipped(in, "panels") && skipped(in, "brightness=40") &&
+             skipped(in, "scroll=3"),
          "a bare build didn't list what it can't take");
   SCHECK(in.brightness < 0 && in.scroll < 0 && !in.restart, "a bare build kept numbers it can't set");
   // Still checked when the build can't take them.
-  refused(R"({"schema":1,"brightness":900})", "brightness 900 on any build");
+  refused(R"({"schema":1,"brightness":"900"})", "brightness as text on any build");
 }
 
 void test_reply() {

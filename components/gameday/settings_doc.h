@@ -10,9 +10,11 @@
 // scroll are the Home Assistant numbers of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
-// type or out of range refuses the document. What this firmware doesn't know
-// (a key, a team, a league or a time zone from newer firmware) is left out
-// and listed, so a backup still restores across versions. Wi-Fi networks and
+// type, or text the panel can't read (a team, a time, an address), refuses
+// the document. What this firmware doesn't know or can't take (a key, a team,
+// a league or a time zone from newer firmware, a number out of its range, a
+// favorite past its 16) is left out and listed, so a backup still restores
+// across versions. Wi-Fi networks and
 // the WizMote pairing are not in it.
 // Pure, no ESPHome includes, so the host tests cover it.
 #pragma once
@@ -74,10 +76,12 @@ inline std::string team_ref_text(JsonObjectConst t) {
 
 // The settings document from the state document (GET /gameday/state), which
 // the panel keeps built on its main loop, so the web server never reads a
-// setting while the loop changes it. brightness and scroll are -1 in a build
-// without those numbers. Keys the state leaves out (autoupd and beta in some
-// builds) are left out here too.
-inline void settings_from_state(JsonObjectConst s, int brightness, int scroll, JsonDocument &out) {
+// setting while the loop changes it. live_mask is Live games' own list (0 for
+// automatic): the state's live list is what the panel scans now, every league
+// while no team is picked. brightness and scroll are -1 in a build without
+// those numbers. Keys the state leaves out (autoupd and beta in some builds)
+// are left out here too.
+inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brightness, int scroll, JsonDocument &out) {
   out.clear();
   out["schema"] = kSettingsSchema;
   if (s["version"].is<const char *>())
@@ -112,12 +116,10 @@ inline void settings_from_state(JsonObjectConst s, int brightness, int scroll, J
       for (const auto &f : favs)
         list.add(f);
     } else if (strcmp(k, "live") == 0) {
-      if (!s["live"].is<JsonArrayConst>())
-        continue;
       JsonArray live = out["live"].to<JsonArray>();
-      if (!(s["live_auto"] | false))
-        for (JsonVariantConst l : s["live"].as<JsonArrayConst>())
-          live.add(l);
+      for (const auto &l : kLeagues)
+        if (live_mask & (1u << (uint8_t) l.league))
+          live.add(l.key);
     } else if (strcmp(k, "tz") == 0) {
       if (s["tz_name"].is<const char *>())
         out["tz"] = s["tz_name"];
@@ -219,23 +221,24 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         if (!v.is<int>())
           return detail::settings_fail(out, k + " should be a whole number.");
         int n = v.as<int>();
-        if (k == "panels") {
-          if (target.max_panels == 0) {
-            out.skipped.push_back(k);
-            continue;
-          }
-          if (n < 1 || n > target.max_panels)
-            return detail::settings_fail(out, "panels should be 1 to " + std::to_string(target.max_panels) + ".");
-          out.restart = n != target.panels;
+        if (k == "panels" && target.max_panels == 0) {
+          out.skipped.push_back(k);
+          continue;
         }
-        if (k == "collide" && n != 0 && n != 1)
-          return detail::settings_fail(out, "collide should be 0 or 1.");
-        // Out of range is refused here, not clamped as a single set would.
-        if (!parse_set(k, std::to_string(n), op, target.fav_max) ||
-            ((op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
-              op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL) &&
-             op.value != n))
-          return detail::settings_fail(out, k + " is out of range.");
+        // Out of range is left out and listed, not clamped as a single set
+        // would: newer firmware may take more (another mode, a third panel).
+        bool in_range = k == "panels"    ? n >= 1 && n <= target.max_panels
+                        : k == "collide" ? n == 0 || n == 1
+                                         : true;
+        in_range = in_range && parse_set(k, std::to_string(n), op, target.fav_max);
+        bool clamped = op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
+                       op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL;
+        if (!in_range || (clamped && op.value != n)) {
+          out.skipped.push_back(k + "=" + std::to_string(n));
+          continue;
+        }
+        if (k == "panels")
+          out.restart = n != target.panels;
         break;
       }
       case SettingType::TEXT: {
@@ -282,12 +285,17 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, keys, op, target.fav_max);
           break;
         }
-        // favs, slot by slot: an empty or unknown slot stays empty.
-        if (list.size() > target.fav_max)
-          return detail::settings_fail(out, "favs holds at most " + std::to_string(target.fav_max) + " teams.");
+        // favs, slot by slot: an empty or unknown slot stays empty. Past
+        // this firmware's most (newer firmware may hold more), the rest are
+        // left out and listed.
         op.kind = SetKind::FAVS;
         for (JsonVariantConst e : list) {
           std::string text = e.as<const char *>();
+          if (op.teams.size() == target.fav_max) {
+            if (!text.empty() && text != "none")
+              out.skipped.push_back("favs=" + text);
+            continue;
+          }
           TeamRef t;
           int r = detail::settings_team(text, t);
           if (r == -2)
@@ -317,11 +325,10 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
       continue;
     bool bright = n[0] == 'b';
     int lo = bright ? 1 : kScrollMin, hi = bright ? 255 : kScrollMax;
-    if (!v.is<int>() || v.as<int>() < lo || v.as<int>() > hi)
-      return detail::settings_fail(out, std::string(n) + " should be " + std::to_string(lo) + " to " +
-                                            std::to_string(hi) + ".");
-    if (!(bright ? target.brightness : target.scroll)) {
-      out.skipped.push_back(n);
+    if (!v.is<int>())
+      return detail::settings_fail(out, std::string(n) + " should be a whole number.");
+    if (v.as<int>() < lo || v.as<int>() > hi || !(bright ? target.brightness : target.scroll)) {
+      out.skipped.push_back(std::string(n) + "=" + std::to_string(v.as<int>()));
       continue;
     }
     (bright ? out.brightness : out.scroll) = v.as<int>();
