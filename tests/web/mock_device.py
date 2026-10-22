@@ -42,6 +42,7 @@ tests/fixtures/set_cases.json, the table the firmware's host tests also
 check, through apply_set, so the mock can't drift from the panel.
 """
 import copy
+import datetime
 import itertools
 import json
 import os
@@ -84,6 +85,8 @@ FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
                          re.M)[1])
 FIXTURE = REPO / "tests/fixtures/set_cases.json"
+COUNTDOWN_NAME_MAX = int(re.search(r"kCountdownNameMax = (\d+);",
+                                   (REPO / "components/gameday/countdown.h").read_text(encoding="utf-8"))[1])
 # The settings backup's key types and export order (settings_doc.h).
 SETTINGS_H = (REPO / "components/gameday/settings_doc.h").read_text(encoding="utf-8")
 
@@ -118,7 +121,7 @@ INITIAL = {
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
-    "autoupd": False, "beta": False,
+    "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
@@ -387,6 +390,14 @@ def apply_set(kv):
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
                 STATE["panels"] = atoi(v)
+        elif k == "countdown":
+            STATE["countdown"] = v == "1"
+        elif k == "cdname":
+            STATE["cdname"] = countdown_name(v)
+        elif k == "cddate":
+            day = countdown_date(v)
+            if day is not None:
+                STATE["cddate"] = day
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
         elif k == "nick":
@@ -603,6 +614,25 @@ def import_settings(doc):
     for ent, value in numbers.items():
         entity(ent)["value"] = entity(ent)["state"] = str(value)
     return 200, {"ok": True, "restart": restart, "skipped": skipped, "kept": kept}
+
+
+def countdown_name(v):
+    """countdown.h's countdown_name(): trimmed, no control characters, at most kCountdownNameMax bytes."""
+    raw = "".join(c for c in v if c >= " " and c != "\x7f").strip(" ").encode("utf-8")
+    return raw[:COUNTDOWN_NAME_MAX].decode("utf-8", "ignore").rstrip(" ")
+
+
+def countdown_date(v):
+    """countdown.h's parse_countdown_date(): "" for none, the day as given, or None when refused."""
+    if v in ("", "none"):
+        return ""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+        return None
+    try:
+        day = datetime.date.fromisoformat(v)
+    except ValueError:
+        return None
+    return v if 2020 <= day.year <= 2099 else None
 
 
 def selftest():

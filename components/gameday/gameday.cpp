@@ -325,6 +325,13 @@ void GamedayComponent::setup() {
       this->prefs8_.ticker = TICK8_COUNT | TICK8_MATCH;
     this->pref8_.save(&this->prefs8_);
   }
+  this->countdown_pref_ = global_preferences->make_preference<CountdownPrefs>(fnv1_hash("gameday_countdown_v1"));
+  uint32_t cd_ymd = 0;
+  if (!this->countdown_pref_.load(&this->countdown_) || this->countdown_.off > 1 ||
+      !::espn::parse_countdown_date(::espn::countdown_date_text(this->countdown_.ymd), cd_ymd) ||
+      cd_ymd != this->countdown_.ymd)
+    this->countdown_ = CountdownPrefs{};
+  this->countdown_.name[::espn::kCountdownNameMax] = '\0';
   this->pref9_ = global_preferences->make_preference<Prefs9>(fnv1_hash("gameday_prefs9_v1"));
   if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
       this->prefs9_.active > this->prefs9_.count)
@@ -849,7 +856,8 @@ void GamedayComponent::rebuild_favorites_(bool keep_cards) {
   r.release_s = this->prefs4_.release_seconds;
   r.alternate = this->prefs4_.collide == 1;
   r.rotate_s = (int64_t) this->prefs2_.rotate_minutes * 60;
-  r.dwell_s = 10;
+  r.dwell_s = ::espn::kCountdownTurnS;
+  r.countdown_s = ::espn::kCountdownTurnS;
   r.today_only = this->today_only();
   if (this->time_ != nullptr) {
     ESPTime t = this->time_->now();
@@ -874,6 +882,8 @@ std::vector<::espn::FavGame> GamedayComponent::fav_games_() const {
     // Out of season, a daily sport's next game is weeks away. Football has no
     // horizon: a bye week must not take a team out of the playlist.
     g.horizon_s = ::espn::season_horizon(::espn::league_sport(e.team->league));
+    g.countdown = this->countdown_on() && e.game.valid && e.game.state == GameState::PRE && !e.game.time_tbd &&
+                  e.game.kickoff_epoch > 0;
     g.action = e.action_epoch != 0 && now - e.action_epoch < ::espn::kActionHoldS;
     g.in_list = this->fav_in_list_(e.slot - 1);
     out.push_back(g);
@@ -891,7 +901,7 @@ bool GamedayComponent::fav_choose_(int64_t now_epoch) {
   this->fav_locked_ = c.locked;
   if (this->fav_pinned_ >= 0 && !c.locked && c.index != this->fav_pinned_)
     this->fav_pinned_ = -1;  // the playlist moved past the pinned card
-  if (c.index != this->fav_base_) {
+  if (c.index != this->fav_base_ || c.again) {
     this->fav_base_ = c.index;
     this->fav_base_since_ = now_epoch;
   }
@@ -905,6 +915,8 @@ bool GamedayComponent::fav_choose_(int64_t now_epoch) {
   if (board == this->fav_shown_) {
     if (was_locked != c.locked)
       this->fav_poll_ms_ = 0;
+    if (c.again)
+      this->fav_shown_since_ = now_epoch;  // a new turn, so its countdown comes after the card again
     return false;
   }
   this->fav_shown_ = board;
@@ -1226,6 +1238,7 @@ void GamedayComponent::loop() {
   // The finals rotation turns its cards on its own clock, fetch or no fetch.
   if (this->recap_on_ && !this->demo_playing_())
     this->recap_tick_();
+  this->countdown_tick_();
   if (this->busy_) {
     if (!this->job_done_) {
       // A worker that died without setting job_done_ would block the loop
@@ -1540,6 +1553,36 @@ void GamedayComponent::set_ticker8_(uint8_t f, bool on) {
 }
 
 void GamedayComponent::save_prefs_() { this->pref_.save(&this->prefs_); }
+
+void GamedayComponent::save_countdown_() {
+  this->countdown_pref_.save(&this->countdown_);
+  this->sync_prefs_();
+  this->countdown_tick_ms_ = 0;  // the card turns at the next loop, not up to a second later
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::set_countdown(bool on) {
+  if (on == this->countdown_on())
+    return;
+  this->countdown_.off = on ? 0 : 1;
+  this->save_countdown_();
+}
+
+void GamedayComponent::set_custom_countdown_name(const std::string &name) {
+  std::string n = ::espn::countdown_name(name);
+  if (n == this->countdown_.name)
+    return;
+  memset(this->countdown_.name, 0, sizeof(this->countdown_.name));
+  memcpy(this->countdown_.name, n.data(), n.size());
+  this->save_countdown_();
+}
+
+void GamedayComponent::set_custom_countdown_day(uint32_t ymd) {
+  if (ymd == this->countdown_.ymd)
+    return;
+  this->countdown_.ymd = ymd;
+  this->save_countdown_();
+}
 
 // ESPHome only writes saved preferences to flash from a 60 s timer or a
 // clean shutdown, so a panel unplugged within the minute of a change came
@@ -3169,6 +3212,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // Before the Live mode prefixes, so a fallback team's Next line keeps "No
   // live X games, showing CHI |" in front of it.
   this->clock_fields_(f);
+  this->countdown_fields_(f);
   std::string showing;  // the Live fallback's "No live X games, showing DAL | "
   if (this->live_mode_() && !this->demo_playing_()) {
     std::string league_word = this->live_word_();
@@ -3343,6 +3387,90 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
   }
   f.clock = true;
   f.team_color = ::espn::clock_color(team != nullptr, ::espn::parse_color(color));
+}
+
+// The countdown card (countdown.h). Never over a game in progress, a locked
+// favorite or the demo. My team (and a Live mode's fallback card) turns
+// between the next game and its countdown; Favorites gives a favorite's
+// countdown its own turn after its card; the custom countdown takes the last
+// turn of each minute in every mode.
+::espn::CountdownCard GamedayComponent::countdown_card_(int64_t now) const {
+  using ::espn::CountdownCard;
+  if (this->demo_playing_() || !this->clock_set_() || !this->board_ready_)
+    return CountdownCard::NONE;
+  const GameSnapshot &g = this->game_;
+  if (g.valid && g.state == GameState::IN)
+    return CountdownCard::NONE;
+  int64_t start = this->custom_start_();
+  bool custom = start != 0 && now < start + ::espn::kDayS;
+  bool next = this->countdown_on() && g.valid && g.state == GameState::PRE && !g.time_tbd && g.kickoff_epoch > now;
+  if (this->live_mode_() && !this->live_fallback_)
+    return custom && ::espn::custom_turn(now) ? CountdownCard::CUSTOM : CountdownCard::NONE;
+  if (this->favorites_mode_()) {
+    if (this->fav_locked_)
+      return CountdownCard::NONE;
+    if (custom && ::espn::custom_turn(now))
+      return CountdownCard::CUSTOM;
+    // The second half of the card's turn (favorites.h, countdown_s).
+    return next && this->fav_shown_ >= 0 && now - this->fav_shown_since_ >= ::espn::kCountdownTurnS
+               ? CountdownCard::NEXT
+               : CountdownCard::NONE;
+  }
+  return ::espn::countdown_turn(now, next, custom);
+}
+
+int64_t GamedayComponent::custom_start_() const {
+  uint32_t ymd = this->countdown_.ymd;
+  if (ymd == 0)
+    return 0;
+  ESPTime t{};
+  t.year = ymd / 10000;
+  t.month = ymd / 100 % 100;
+  t.day_of_month = ymd % 100;
+  t.recalc_timestamp_local();
+  return t.timestamp > 0 ? (int64_t) t.timestamp : 0;
+}
+
+void GamedayComponent::countdown_fields_(UpdateFields &f) {
+  this->countdown_shown_ = ::espn::CountdownCard::NONE;
+  if (!f.splash_text.empty() || !this->clock_set_())
+    return;
+  ::espn::CountdownCard c = this->countdown_card_((int64_t) this->time_->timestamp_now());
+  if (c == ::espn::CountdownCard::NONE)
+    return;
+  this->countdown_shown_ = c;
+  const GameSnapshot &g = this->game_;
+  bool has_team = this->current_team_() != nullptr;
+  std::string color = g.valid ? g.team_color : this->schedule_.team_color;
+  if (this->favorites_mode_()) {
+    has_team = true;
+    color = this->fav_[this->fav_shown_ >= 0 ? this->fav_shown_ : 0].sched.team_color;
+  } else if (this->live_mode_() && !this->live_fallback_) {
+    has_team = false;  // the games on the board are anyone's
+  }
+  if (c == ::espn::CountdownCard::NEXT) {
+    f.countdown_at = f.countdown_end = g.kickoff_epoch;
+    f.next_line = ::espn::matchup_line(panel_text(g.team_abbr), panel_text(g.opp_abbr), g.team_home);
+    color = g.team_color;
+  } else {
+    f.countdown_at = this->custom_start_();
+    f.countdown_end = f.countdown_at + ::espn::kDayS;
+    std::string name = panel_text(this->countdown_.name);
+    f.next_line = name.empty() ? ::espn::countdown_day_label(this->countdown_.ymd) : name;
+  }
+  f.clock = false;  // the countdown has the clock card's screen
+  f.team_color = ::espn::clock_color(has_team, ::espn::parse_color(color));
+}
+
+// Once a second: put the card up, or take it down, when its turn changes.
+void GamedayComponent::countdown_tick_() {
+  if (this->countdown_tick_ms_ != 0 && millis() - this->countdown_tick_ms_ < 1000)
+    return;
+  this->countdown_tick_ms_ = millis() == 0 ? 1 : millis();
+  if (!this->clock_set_())
+    return;
+  if (this->countdown_card_((int64_t) this->time_->timestamp_now()) != this->countdown_shown_)
+    this->emit_({});
 }
 
 // ---- finals rotation ------------------------------------------------------------
@@ -3688,6 +3816,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["opp"] = this->opponent_splashes();
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
+  doc["countdown"] = this->countdown_on();
+  doc["cdname"] = (const char *) this->countdown_.name;
+  doc["cddate"] = ::espn::countdown_date_text(this->countdown_.ymd);
   // The night schedule (night.h). night_now is what it is doing: "" (not
   // now), "dim", "off" or "game" (its hours, held off by a live game).
   this->load_night_();
@@ -4510,6 +4641,15 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
       case ::espn::SetKind::BOOTADDR:
         this->set_show_boot_address(op.on);
+        break;
+      case ::espn::SetKind::COUNTDOWN:
+        this->set_countdown(op.on);
+        break;
+      case ::espn::SetKind::CD_NAME:
+        this->set_custom_countdown_name(op.text);
+        break;
+      case ::espn::SetKind::CD_DATE:
+        this->set_custom_countdown_day(op.ymd);
         break;
       case ::espn::SetKind::AUTOUPD:
         this->set_auto_update(op.on);

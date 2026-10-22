@@ -31,6 +31,8 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - A team logo no longer stays blank for the whole game when the panel was too busy to start downloading it; it tries again a second later. The logos the panel keeps also take far less memory, about 3 KB each instead of nearly 50 KB.
 - In a Live mode with your team on the board between games, a look for live games that fails (a slow or dropped connection) is tried again within a few minutes. Before, the panel waited for the next kickoff it knew of, up to 3 hours, and could miss the start of a game.
 - The board says **Can't reach ESPN** in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and in Live games after "No live NFL games, showing CHI" when your team's card can't be read. A panel cut off from ESPN for days keeps saying so instead of switching to "No upcoming game" every couple of days.
+- Between games the panel counts down to the next game in big digits, "2d 14h" and then hours and minutes, in your team's colors, taking turns with the next game's card every 10 seconds. It's on by default; turn it off with **Countdown to the next game** on the device page.
+- Count down to a day of your own, like Christmas or opening day: give it a name and a day on the device page and it takes the last 10 seconds of every minute between games, shows "Today" on the day, and goes away after. Settings backups keep both.
 
 ## v2026.10.1
 

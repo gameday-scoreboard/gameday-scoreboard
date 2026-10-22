@@ -27,6 +27,10 @@ When none of your favorites has a game on, the panel shows each favorite's card 
 - Outside football, a team whose next game is more than 10 days away, or whose last game was more than 10 days ago, drops out as out of season. Football teams never drop out, so a bye week doesn't hide one.
 - If those rules would leave nothing to show, the panel loosens them one at a time, first today only and then the season rule, so it never sits on a blank board while it has cards.
 
+:::note[Coming in the next release]
+A favorite whose next game is still to come gets a second 10 seconds for its countdown, like "2d 14h", before the playlist moves on. See [Countdowns](/using/countdowns/).
+:::
+
 The bar under the mode buttons on the device page says **Cycling through your favorites**.
 
 ## When a game is on

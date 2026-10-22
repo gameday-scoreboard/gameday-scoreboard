@@ -52,11 +52,11 @@ enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
 inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
-                                      "leaders", "night", "nightscreen", "favtake"};
+                                      "leaders", "night", "nightscreen", "favtake", "countdown"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list"};
   static const char *const kText[] = {"team", "fav1", "fav2", "fav3", "fav4", "tz",
-                                      "msg",  "msgurl", "nightstart", "nightend", "nick"};
+                                      "msg",  "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -104,8 +104,9 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
-                                      "nightstart", "nightend", "nightscreen", "nightlevel", "msg",      "msgurl",
-                                      "msgevery", "autoupd",  "beta",     "lists",       "list"};
+                                      "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
+                                      "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
+                                      "lists",    "list"};
   for (const char *k : kKeys) {
     if (strcmp(k, "team") == 0) {
       if (s["team"].is<JsonObjectConst>()) {

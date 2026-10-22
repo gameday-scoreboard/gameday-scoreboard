@@ -44,7 +44,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
 :::note[Coming in the next release]
-The file also has your playlists, with their teams and their order, and the one Favorite teams is playing. See [Playlists](/using/favorites/#playlists).
+The file also has your playlists, with their teams and their order, and the one Favorite teams is playing. See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day.
 :::
 
 ## What isn't

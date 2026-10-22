@@ -11,6 +11,7 @@
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
+#include "countdown.h"
 #include "demo.h"
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
@@ -4391,6 +4392,106 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
 }
 
+static void test_countdown() {
+  const int64_t m = 60, h = 3600, d = 24 * 3600;
+  // Days and hours a day or more out, hours and minutes under a day, then
+  // minutes. Minutes round up, so the last minute reads 1m.
+  CHECK_EQ(countdown_text(2 * d + 14 * h + 30 * m), std::string("2d 14h"));
+  CHECK_EQ(countdown_text(d), std::string("1d 0h"));
+  CHECK_EQ(countdown_text(d - 1), std::string("1d 0h"));
+  CHECK_EQ(countdown_text(d - m), std::string("23h 59m"));
+  CHECK_EQ(countdown_text(14 * h + 5 * m), std::string("14h 05m"));
+  CHECK_EQ(countdown_text(14 * h + 4 * m + 1), std::string("14h 05m"));
+  CHECK_EQ(countdown_text(h), std::string("1h 00m"));
+  CHECK_EQ(countdown_text(45 * m), std::string("45m"));
+  CHECK_EQ(countdown_text(1), std::string("1m"));
+  CHECK_EQ(countdown_text(0), std::string(""));
+  CHECK_EQ(countdown_text(-5), std::string(""));
+  CHECK_EQ(countdown_text(245 * d + 3 * h), std::string("245d 3h"));
+  CHECK_EQ(countdown_text(1000 * d + 3 * h), std::string("1000d"));
+
+  // The card's digits: counting down, "Today" through the custom day, then over.
+  const int64_t at = 1797724800;  // any midnight
+  CHECK_EQ(countdown_card_text(at, at + d, at - 2 * h), std::string("2h 00m"));
+  CHECK_EQ(countdown_card_text(at, at + d, at), std::string("Today"));
+  CHECK_EQ(countdown_card_text(at, at + d, at + d - 1), std::string("Today"));
+  CHECK_EQ(countdown_card_text(at, at + d, at + d), std::string(""));
+  // A kickoff ends the card at once.
+  CHECK_EQ(countdown_card_text(at, at, at), std::string(""));
+
+  CHECK_EQ(matchup_line("DAL", "PHI", true), std::string("DAL vs PHI"));
+  CHECK_EQ(matchup_line("DAL", "PHI", false), std::string("DAL at PHI"));
+  CHECK_EQ(matchup_line("", "PHI", false), std::string("at PHI"));
+  CHECK_EQ(matchup_line("DAL", "", true), std::string("Next game"));
+
+  uint32_t ymd = 1;
+  CHECK(parse_countdown_date("2026-12-25", ymd) && ymd == 20261225u);
+  CHECK(parse_countdown_date("", ymd) && ymd == 0u);
+  CHECK(parse_countdown_date("none", ymd) && ymd == 0u);
+  CHECK(parse_countdown_date("2028-02-29", ymd) && ymd == 20280229u);
+  CHECK(!parse_countdown_date("2027-02-29", ymd));
+  CHECK(!parse_countdown_date("2026-04-31", ymd));
+  CHECK(!parse_countdown_date("2026-13-01", ymd));
+  CHECK(!parse_countdown_date("2026-00-10", ymd));
+  CHECK(!parse_countdown_date("1999-12-31", ymd));
+  CHECK(!parse_countdown_date("2026-1-5", ymd));
+  CHECK(!parse_countdown_date("2026/12/25", ymd));
+  CHECK(!parse_countdown_date("2026-12-2x", ymd));
+  CHECK_EQ(countdown_date_text(20261225), std::string("2026-12-25"));
+  CHECK_EQ(countdown_date_text(20270305), std::string("2027-03-05"));
+  CHECK_EQ(countdown_date_text(0), std::string(""));
+  CHECK_EQ(countdown_day_label(20261225), std::string("Dec 25"));
+  CHECK_EQ(countdown_day_label(20270305), std::string("Mar 5"));
+
+  CHECK_EQ(countdown_name("  Christmas  "), std::string("Christmas"));
+  CHECK_EQ(countdown_name("Line\nbreak"), std::string("Linebreak"));
+  CHECK_EQ(countdown_name("   "), std::string(""));
+  CHECK_EQ(countdown_name("The day the season finally starts"), std::string("The day the season f"));
+  CHECK_EQ(countdown_name("Graduation day Rena\xc3\xa9"), std::string("Graduation day Rena"));
+  CHECK_EQ(countdown_name("Graduation day Ren\xc3\xa9"), std::string("Graduation day Ren\xc3\xa9"));
+  CHECK_EQ(countdown_name("Nineteen characters x"), std::string("Nineteen characters"));
+  CHECK_EQ(countdown_name("Caf\xe9 day"), std::string("Caf day"));
+  CHECK_EQ(countdown_name("Half \xc3"), std::string("Half"));
+  CHECK_EQ(countdown_name("\x80\xbf" "Opening Day"), std::string("Opening Day"));
+
+  // My team: the next game's card and its countdown take 10 s turns, the
+  // custom countdown the last turn of each minute, on the wall clock.
+  const int64_t min0 = 1797724800;  // a whole minute
+  CHECK(countdown_turn(min0, true, false) == CountdownCard::NONE);
+  CHECK(countdown_turn(min0 + 9, true, false) == CountdownCard::NONE);
+  CHECK(countdown_turn(min0 + 10, true, false) == CountdownCard::NEXT);
+  CHECK(countdown_turn(min0 + 19, true, false) == CountdownCard::NEXT);
+  CHECK(countdown_turn(min0 + 20, true, false) == CountdownCard::NONE);
+  CHECK(countdown_turn(min0 + 55, true, false) == CountdownCard::NEXT);
+  CHECK(countdown_turn(min0 + 55, true, true) == CountdownCard::CUSTOM);
+  CHECK(countdown_turn(min0 + 50, false, true) == CountdownCard::CUSTOM);
+  CHECK(countdown_turn(min0 + 49, false, true) == CountdownCard::NONE);
+  CHECK(countdown_turn(min0 + 10, false, false) == CountdownCard::NONE);
+  CHECK(custom_turn(min0 + 59) && !custom_turn(min0 + 60));
+
+  // Favorites: a card with a countdown keeps its turn for both halves.
+  FavRules r;
+  r.dwell_s = kCountdownTurnS;
+  r.countdown_s = kCountdownTurnS;
+  const int64_t T = 1000000;
+  std::vector<FavGame> idle = {fav(GameState::PRE, T + 86400), fav(GameState::PRE, T + 2 * 86400)};
+  idle[0].countdown = true;
+  CHECK_EQ(pick_favorite(idle, T + 10, r, 0, T, -1).index, 0);
+  CHECK_EQ(pick_favorite(idle, T + 19, r, 0, T, -1).index, 0);
+  CHECK_EQ(pick_favorite(idle, T + 20, r, 0, T, -1).index, 1);
+  // One without keeps the plain dwell.
+  CHECK_EQ(pick_favorite(idle, T + 10, r, 1, T, -1).index, 0);
+  CHECK(!pick_favorite(idle, T + 20, r, 0, T, -1).again);
+  // A playlist of one comes back to its own card when the turn is over, and
+  // says so, so the card goes back up before its countdown.
+  std::vector<FavGame> one = {idle[0]};
+  CHECK(!pick_favorite(one, T + 19, r, 0, T, -1).again);
+  FavChoice back = pick_favorite(one, T + 20, r, 0, T, -1);
+  CHECK_EQ(back.index, 0);
+  CHECK(back.again);
+  CHECK(!pick_favorite(one, T + 25, r, 0, T + 20, -1).again);
+}
+
 static void test_night() {
   // Times as the page's fields send them
   CHECK_EQ(night_parse_time("23:00"), 23 * 60);
@@ -5675,6 +5776,7 @@ int main() {
   test_guarded_brightness();
   test_night();
   test_offseason();
+  test_countdown();
   test_panel_text();
   test_prefs_sync();
   test_message();

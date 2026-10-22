@@ -942,6 +942,38 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
+test("between games: the countdown switch is on by default, and the custom countdown posts its name and day", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="countdown"]');
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(sw).toHaveClass(/\bon\b/);
+  await expect(page.locator("#cdClear")).toBeHidden();
+  await sw.click();
+  await expectSet(request, { countdown: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+
+  await page.locator("#cdname").fill("Christmas");
+  await page.locator("#cdname").press("Tab");
+  await expectSet(request, { cdname: "Christmas" });
+  await page.locator("#cddate").fill("2026-12-25");
+  await page.locator("#cddate").dispatchEvent("change");
+  await expectSet(request, { cddate: "2026-12-25" });
+  await expect.poll(async () => (await deviceState(request)).cdname).toBe("Christmas");
+  await expect(page.locator("#cdClear")).toBeVisible();
+  await page.locator("#cdClear").click();
+  await expectSet(request, { cdname: "", cddate: "none" });
+  await expect.poll(async () => (await deviceState(request)).cddate).toBe("");
+  await expect(page.locator("#cdname")).toHaveValue("");
+  await expect(page.locator("#cdClear")).toBeHidden();
+
+  // Firmware from before the card has no such settings.
+  await reset(request, { countdown: null, cdname: null, cddate: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeHidden();
+});
+
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
