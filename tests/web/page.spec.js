@@ -408,7 +408,7 @@ test("the On now tab asks ESPN for every college game, not the Top 25", async ({
   expect(asked.ncaa.get("groups")).toBe("80");
 });
 
-test("the On now tab keeps a late game on today's list until 4 AM Eastern, as the panel does", async ({ page, request }) => {
+test("the On now tab keeps a late game on today's list after midnight Eastern, as the panel does", async ({ page, request }) => {
   // 1:30 AM Eastern on Friday 10/23: a West Coast NBA game from Thursday is
   // still on. Football's day has turned over; the other leagues' hasn't.
   await page.clock.setFixedTime(new Date("2026-10-23T05:30:00Z"));
