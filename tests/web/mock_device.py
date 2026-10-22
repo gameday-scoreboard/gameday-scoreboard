@@ -8,8 +8,8 @@ routes with the response shapes from components/gameday/gameday.cpp:
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS, from a form body or the URL's query
                          (the body first, as ESPHome reads them); 400 when none match.
-                         A URL past 512 bytes answers 414 and a body past the panel's
-                         CONFIG_HTTPD_MAX_REQ_HDR_LEN 400, as the panel's server does
+                         A URL past 512 bytes answers 414 and a body past 1024 bytes
+                         400, as the panel's server does
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
                          power_ok sets health.power back to "ok"; say keeps its cleaned
                          text in "say" for tests to read (the panel has no such key)
@@ -94,11 +94,10 @@ SETTINGS_TYPES = {k: t for t in ("Bool", "Int", "Text", "List") for k in _settin
 SETTINGS_ORDER = _settings_list("kKeys")
 SETTINGS_SCHEMA = int(re.search(r"kSettingsSchema = (\d+);", SETTINGS_H)[1])
 SETTINGS_MAX = int(re.search(r"kSettingsMaxBytes = (\d+);", SETTINGS_H)[1])
-# The panel's web server: ESP-IDF's URL cap (CONFIG_HTTPD_MAX_URI_LEN, left at
-# its default) and the form body cap gameday-common.yaml sets.
+# The panel's web server: ESP-IDF's URL cap (CONFIG_HTTPD_MAX_URI_LEN) and
+# the form body cap (CONFIG_HTTPD_MAX_REQ_HDR_LEN, as ESPHome sets it).
 URI_MAX = 512
-FORM_MAX = int(re.search(r'CONFIG_HTTPD_MAX_REQ_HDR_LEN: "(\d+)"',
-                         (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"))[1])
+FORM_MAX = 1024
 
 
 def team(lg, tid):

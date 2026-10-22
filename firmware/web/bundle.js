@@ -4,8 +4,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
-//   POST /gameday/set key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...),
-//                                 as a form body (or the URL's query, up to 512 bytes)
+//   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
+//   POST /gameday/settings        a settings document as JSON; the playlists go this way
 //   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
 //                                 say&text=...&secs=N (the banner)
 // The ESPHome event stream (/events) still carries the entities that stay
@@ -448,14 +448,25 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (stateAgain) { stateAgain = false; fetchState(); }
   };
   const scheduleState = (ms) => { clearTimeout(stateTimer); stateTimer = setTimeout(fetchState, ms); };
+  // Playlists run to about 5 KB, past the 512 bytes the panel takes in a URL
+  // (and ESPHome reads a form body in one piece, so a long one can arrive cut
+  // short). They go to the settings import instead, which reads a JSON body
+  // whole, as {"schema": 1, "lists": [{"n": "Football", "t": ["nfl:6"]}], "list": 2}.
+  const setRequest = (params) => {
+    if (params.lists === undefined) return ["/gameday/set?" + qs(params), { method: "POST" }];
+    const doc = {
+      schema: 1,
+      lists: String(params.lists).split(";").filter(Boolean).map((p) => {
+        const [n, refs] = p.split("=");
+        return { n, t: (refs || "").split(",").filter(Boolean) };
+      }),
+    };
+    if (params.list !== undefined) doc.list = Number(params.list);
+    return ["/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) }];
+  };
   const postSet = async (params, attempt = 0) => {
     try {
-      // In the body: the panel takes a URL of 512 bytes at most, and the playlists alone can pass that.
-      const r = await fetch("/gameday/set", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: qs(params),
-      });
+      const r = await fetch(...setRequest(params));
       if (!r.ok) throw new Error("HTTP " + r.status);
       return true;
     } catch (e) {

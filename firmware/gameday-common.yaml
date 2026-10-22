@@ -68,11 +68,6 @@ esp32:
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
-      # Also the largest form body POST /gameday/set takes (ESPHome's default
-      # is 1024). Every favorite in all 16 playlists is about 4.9 KB. The
-      # server's buffer grows to the request and nothing more, so a bigger
-      # cap costs no memory until a request needs it.
-      CONFIG_HTTPD_MAX_REQ_HDR_LEN: "6144"
 
 esphome:
   name: "${name}"

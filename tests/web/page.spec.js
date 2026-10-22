@@ -26,8 +26,21 @@ const test = base.test.extend({
 // mock's default, null is firmware without the list.
 const reset = (request, state, fail, wifi) =>
   request.post("/_reset", { data: wifi === undefined ? { state, fail } : { state, fail, wifi } });
+// Playlists post to the settings import (app.js setRequest); a post of only
+// them reads back as the lists= text it stands for, so tests check it like a set.
+const playlistsPost = (p) => {
+  if (p.path !== "/gameday/settings") return null;
+  let d;
+  try { d = JSON.parse(p.body); } catch (_) { return null; }
+  if (!d || !Array.isArray(d.lists) || Object.keys(d).some((k) => !["schema", "lists", "list"].includes(k))) return null;
+  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",")).join(";") };
+  if (d.list !== undefined) q.list = String(d.list);
+  return q;
+};
 const sets = async (request) =>
-  (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/set").map((p) => p.q);
+  (await (await request.get("/_log")).json())
+    .map((p) => (p.path === "/gameday/set" ? p.q : playlistsPost(p)))
+    .filter(Boolean);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
 const deviceState = async (request) => (await request.get("/gameday/state")).json();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -568,8 +581,8 @@ test("One per sport makes a playlist for each sport in the favorites", async ({ 
   await expect(page.locator("#toast")).toHaveText("Every sport in your favorites has a playlist");
 });
 
-// All 16 playlists with every favorite are about 3 KB of form, far past the
-// panel's 512-byte URL; the mock answers a long URL 414 as the panel does.
+// All 16 playlists with every favorite are about 3 KB, far past the panel's
+// 512-byte URL and its 1 KB form body; the mock refuses both as the panel does.
 test("all 16 playlists with every favorite save", async ({ page, request }) => {
   const favs = Array.from({ length: 16 }, (_, i) => ({ l: "nfl", id: i + 1, abbr: "T" + (i + 1), name: "Team " + (i + 1) }));
   const all = Array.from({ length: 16 }, (_, i) => i);
