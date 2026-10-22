@@ -22,6 +22,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
 - A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends. Before, a football game still on at midnight Eastern dropped out of Live games, and with your team saved the panel went back to your team's card.
 
 ## v2026.10.1

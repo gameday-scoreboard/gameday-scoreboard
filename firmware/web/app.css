@@ -303,6 +303,12 @@ button { font: inherit; color: inherit; }
 .favmove button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text); width: 26px; height: 26px; cursor: pointer; font-size: 9px; padding: 0; }
 .favmove button:hover { border-color: #3a4556; }
 .upnext .un.fav.shown { outline: 1px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+.upnext .un.fav.out { opacity: .45; }
+.plist { border-top: 1px solid #1a2029; padding: 4px 0 10px; }
+.plist:first-child { border-top: 0; }
+.plist .ctl { border-top: 0; padding-bottom: 0; }
+.plist .pname { flex: 1; min-width: 0; margin: 0; }
+.plist .pbtn { color: var(--muted); font-size: 12px; flex: none; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 
 /* Wide screens: bigger board, controls side by side */
