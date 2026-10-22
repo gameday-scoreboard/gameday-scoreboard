@@ -57,13 +57,15 @@ WEB = Path(os.environ.get("GAMEDAY_WEB", REPO / "firmware" / "web"))
 
 # Same tables the firmware and scripts/build_web.py read.
 TEAM_RE = re.compile(r'\{League::([A-Z]+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
-LEAGUE_RE = re.compile(r'\{League::[A-Z]+,\s*"([a-z]+)",')
 TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
 TEAMS = {}
 for lg, tid, abbr, name, _ in TEAM_RE.findall((REPO / "components/gameday/teams.h").read_text(encoding="utf-8")):
     TEAMS[(lg.lower(), int(tid))] = (abbr, name)
 # kLeagues order, which is the order the firmware lists live leagues in.
-LEAGUES = LEAGUE_RE.findall((REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"))
+sys.path.insert(0, str(REPO / "components" / "gameday"))
+from leagues_table import leagues  # noqa: E402
+
+LEAGUES = [row["key"] for row in leagues()]
 TZ_TEXT = "\n".join(ln for ln in (REPO / "components/gameday/timezones.h").read_text(encoding="utf-8").splitlines()
                     if not ln.lstrip().startswith("//"))
 TZ_ROWS = TZ_RE.findall(TZ_TEXT)
@@ -199,6 +201,11 @@ def atoi(v):
     return int(m.group()) if m else 0
 
 
+def whole_int(v):
+    # set_request.h parse_whole_int: an optional minus and up to six digits, nothing else
+    return re.fullmatch(r"-?[0-9]{1,6}", v) is not None
+
+
 def clamp(v, lo, hi):
     return min(LIMITS[hi], max(LIMITS[lo], v))
 
@@ -307,6 +314,7 @@ def night_time(v):
 
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
+    hours = (STATE["nightstart"], STATE["nightend"])
     # apply_ops_: list= with lists= names the playlist playing after the change.
     with_lists = any(k == "lists" for k, _ in kv)
     keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
@@ -320,14 +328,17 @@ def apply_set(kv):
             elif v == "none":
                 STATE["team"] = {}
         elif k == "mode":
-            if 0 <= atoi(v) < LIMITS["kModeCount"]:
-                STATE["mode"] = atoi(v)
+            if whole_int(v) and 0 <= int(v) < LIMITS["kModeCount"]:
+                STATE["mode"] = int(v)
         elif k == "rotate":
-            STATE["rotate"] = clamp(atoi(v), "kRotateMinMinutes", "kRotateMaxMinutes")
+            if whole_int(v):
+                STATE["rotate"] = clamp(int(v), "kRotateMinMinutes", "kRotateMaxMinutes")
         elif k == "lockon":
-            STATE["lockon"] = clamp(atoi(v), "kLockonMinMinutes", "kLockonMaxMinutes")
+            if whole_int(v):
+                STATE["lockon"] = clamp(int(v), "kLockonMinMinutes", "kLockonMaxMinutes")
         elif k == "release":
-            STATE["release"] = clamp(atoi(v), "kReleaseMinSeconds", "kReleaseMaxSeconds")
+            if whole_int(v):
+                STATE["release"] = clamp(int(v), "kReleaseMinSeconds", "kReleaseMaxSeconds")
         elif k == "collide":
             STATE["collide"] = 1 if v == "1" else 0
         elif k == "favs":
@@ -394,6 +405,9 @@ def apply_set(kv):
                 STATE[k] = night_time(v)
         elif k == "nightlevel":
             STATE["nightlevel"] = min(255, max(1, atoi(v)))
+    # The same start and end keeps the hours it had (night_keep_hours).
+    if STATE["nightstart"] == STATE["nightend"]:
+        STATE["nightstart"], STATE["nightend"] = hours
 
 
 def entity(name):
@@ -556,6 +570,11 @@ def import_settings(doc):
                 favs.append(ref)
         else:
             skipped.append(k)
+    # The same start and end: the end is left out (settings_doc.h).
+    hours = dict(p for p in kv if p[0] in ("nightstart", "nightend"))
+    if len(hours) == 2 and night_time(hours["nightstart"]) == night_time(hours["nightend"]):
+        kv = [p for p in kv if p[0] != "nightend"]
+        skipped.append("nightend=" + night_time(hours["nightend"]))
     for name, ent, lo, hi in (("brightness", "Brightness", 1, 255), ("scroll", "Scroll Speed", 1, 10)):
         if name in doc and doc[name] is not None:
             if not is_int(doc[name]):

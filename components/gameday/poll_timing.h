@@ -78,6 +78,10 @@ struct Backoff {
   }
 };
 
+// The count of failed reads in a row after one more. It stops at 255 instead
+// of wrapping to 0, which would read as "ESPN answered" after about 42 hours
+// of outage.
+inline uint8_t miss_count_after(uint8_t misses) { return misses < 255 ? (uint8_t) (misses + 1) : misses; }
 // Favorites: the wait between polls of a live favorite while another
 // favorite's game has the board (for Jump to the action and the score
 // banner). `base` while they work; after a failure 5 minutes, doubling up to
