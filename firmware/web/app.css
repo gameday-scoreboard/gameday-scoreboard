@@ -217,6 +217,7 @@ button { font: inherit; color: inherit; }
 .tabs { display: flex; gap: 6px; }
 .tabs button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
 .tabs button.on { background: var(--accent); border-color: var(--accent); color: #041022; font-weight: 700; }
+.favcount { color: var(--muted); font-size: 13px; padding: 0 2px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin-top: 10px; }
 .tile {
   background: #0a0d12; border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 8px;

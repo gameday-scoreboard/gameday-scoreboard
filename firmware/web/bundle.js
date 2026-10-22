@@ -300,6 +300,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
         <button class="btn" id="close">Close</button>
       </div>
+      <div class="favcount" id="favCount" role="status" hidden></div>
       <div class="tiles" id="tiles" role="tabpanel"></div>
     </div>
   </div>
@@ -760,9 +761,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (!favKeys.length) host.appendChild(el("p", "hint", "No favorites yet."));
     $("#favAdd").hidden = favKeys.length >= favMax();
   };
-  const addFav = (t) => {
+  // The favorites picker stays open: a tap adds a team, or takes out one
+  // already in the list (checked).
+  const toggleFav = (t) => {
     const key = keyOf(t);
-    if (favKeys.includes(key)) return toast(t[3] + " is already a favorite");
+    if (favKeys.includes(key)) {
+      postFavs(favKeys.filter((k) => k !== key));
+      return toast("Removed the " + t[3]);
+    }
     if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
@@ -774,6 +780,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
       renderFavs();
+      if (pickFav && $("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
@@ -1077,9 +1084,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       const card = el("div", "game" + (g.state === "in" ? " live" : ""));
       const mkSide = (s) => {
         const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && keyOf(t) === cur ? " on" : ""));
+        const b = el("button", "side" + (t && picked(keyOf(t), cur) ? " on" : ""));
         b.disabled = !t;
-        b.title = t ? "Follow the " + t[3] : "Not in the team list";
+        b.title = t ? (pickFav ? t[3] : "Follow the " + t[3]) : "Not in the team list";
+        if (t) {
+          b.dataset.key = keyOf(t);
+          if (pickFav) b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+        }
         const img = el("img");
         img.loading = "lazy";
         img.src = logoUrl(g.league, s.id, s.abbr);
@@ -1092,7 +1103,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
         b.onclick = () => {
           if (!t) return;
-          if (pickFav) return choose(t);
+          if (pickFav) return toggleFav(t);
           setGD({ team: keyOf(t) });
           toast("Now following the " + t[3]);
           $("#modal").classList.remove("open");
@@ -1110,15 +1121,30 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
 
   // ---- team chooser ------------------------------------------------------
-  // The picker sets My team, or with pickFav adds a favorite.
+  // The picker sets My team and closes. With pickFav it edits the favorites
+  // and stays open: favorites show checked, a line counts them, Done closes.
   let pickFav = false;
   const choose = (t) => {
-    if (pickFav) addFav(t);
-    else {
-      setGD({ team: keyOf(t) });
-      toast("Now following the " + t[3]);
-    }
+    if (pickFav) return toggleFav(t);
+    setGD({ team: keyOf(t) });
+    toast("Now following the " + t[3]);
     $("#modal").classList.remove("open");
+  };
+  const picked = (key, cur) => (pickFav ? favKeys.includes(key) : key === cur);
+  // After a favorites change, mark the tiles in place so the list keeps its scroll.
+  const markPicked = () => {
+    document.querySelectorAll("#tiles [data-key]").forEach((b) => {
+      const on = favKeys.includes(b.dataset.key);
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    renderFavCount();
+  };
+  const renderFavCount = () => {
+    const line = $("#favCount");
+    line.hidden = !pickFav;
+    line.textContent = pickFav ? favKeys.length + " of " + favMax() + " favorites" : "";
+    $("#close").textContent = pickFav ? "Done" : "Close";
   };
   let league = "now";
   const renderTiles = () => {
@@ -1134,7 +1160,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       return;
     }
     for (const t of list) {
-      const tile = el("button", "tile" + (keyOf(t) === cur ? " on" : ""));
+      const tile = el("button", "tile" + (picked(keyOf(t), cur) ? " on" : ""));
+      tile.dataset.key = keyOf(t);
+      if (pickFav) tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
       const img = el("img");
       img.loading = "lazy";
       img.src = logoUrl(t[0], t[1], t[2]);
@@ -1162,6 +1190,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     } catch (_) {}
     $$tabs(league);
     $("#q").value = "";
+    renderFavCount();
     renderTiles();
     $("#modal").classList.add("open");
     setTimeout(() => $("#q").focus(), 50);

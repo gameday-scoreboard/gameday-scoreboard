@@ -508,6 +508,7 @@ test("favorites post the whole list in order on add, move and remove", async ({ 
   await page.locator(".tabs button", { hasText: "MLB" }).click();
   await page.locator("#tiles .tile", { hasText: "New York Yankees" }).click();
   await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,mlb:10" });
+  await page.locator("#close").click();
   await expect(page.locator("#modal")).not.toHaveClass(/open/);
   await expect(rows).toHaveCount(4);
   await expect(rows.nth(3).locator("label")).toHaveText(/^4\. New York Yankees/);
@@ -519,6 +520,65 @@ test("favorites post the whole list in order on add, move and remove", async ({ 
   await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
     /^1\. Houston Texans/, /^2\. Dallas Cowboys/, /^3\. New York Yankees/,
   ]);
+});
+
+test("the favorites picker stays open: checks, a tap adds or takes out, a count, Done", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#favCtls .ctl.fav")).toHaveCount(3);
+  await page.locator("#favAdd").click();
+  await expect(page.locator("#modal")).toHaveClass(/open/);
+  await expect(page.locator("#favCount")).toHaveText("3 of 16 favorites");
+  await expect(page.locator("#close")).toHaveText("Done");
+  await page.locator(".tabs button", { hasText: "NFL" }).click();
+  // Teams already in the list show checked.
+  const dal = page.locator("#tiles .tile", { hasText: "Dallas Cowboys" });
+  await expect(dal).toHaveClass(/\bon\b/);
+  await expect(dal).toHaveAttribute("aria-pressed", "true");
+
+  const gb = page.locator("#tiles .tile", { hasText: "Green Bay Packers" });
+  await expect(gb).toHaveAttribute("aria-pressed", "false");
+  await gb.click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,nfl:9" });
+  await expect(page.locator("#modal")).toHaveClass(/open/);
+  await expect(gb).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#favCount")).toHaveText("4 of 16 favorites");
+  await expect(page.locator("#toast")).toHaveText("Added the Green Bay Packers");
+
+  // A tap on a checked team takes it out.
+  await dal.click();
+  await expectSet(request, { favs: "nfl:34,ncaa:145,nfl:9" });
+  await expect(dal).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#favCount")).toHaveText("3 of 16 favorites");
+  await expect(page.locator("#toast")).toHaveText("Removed the Dallas Cowboys");
+
+  await page.locator("#close").click();
+  await expect(page.locator("#modal")).not.toHaveClass(/open/);
+  await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([/^1\. Houston Texans/, /^2\. Ole Miss/, /^3\. Green Bay Packers/]);
+
+  // Change team still closes on a pick, with no count line.
+  await page.locator("#pick").click();
+  await expect(page.locator("#favCount")).toBeHidden();
+  await expect(page.locator("#close")).toHaveText("Close");
+  await page.locator("#tiles .tile", { hasText: "Green Bay Packers" }).click();
+  await expectSet(request, { team: "nfl:9" });
+  await expect(page.locator("#modal")).not.toHaveClass(/open/);
+});
+
+test("the favorites picker says when the list is full", async ({ page, request }) => {
+  const mlb = (n) => Array.from({ length: n }, (_, i) => ({ l: "mlb", id: i + 1 }));
+  await reset(request, { favs: mlb(15) });
+  await page.goto("/");
+  await page.locator("#favAdd").click();
+  await expect(page.locator("#favCount")).toHaveText("15 of 16 favorites");
+  await page.locator(".tabs button", { hasText: "NFL" }).click();
+  await page.locator("#tiles .tile", { hasText: "Dallas Cowboys" }).click();
+  await expect(page.locator("#favCount")).toHaveText("16 of 16 favorites");
+  const before = (await sets(request)).length;
+  await page.locator("#tiles .tile", { hasText: "Green Bay Packers" }).click();
+  await expect(page.locator("#toast")).toHaveText("That's the most favorites the panel holds");
+  await sleep(500);
+  expect((await sets(request)).length).toBe(before);
 });
 
 test("the favorites list stops offering Add a favorite at the panel's limit", async ({ page, request }) => {
