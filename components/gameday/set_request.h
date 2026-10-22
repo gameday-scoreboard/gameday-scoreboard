@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "leagues.h"
+#include "message.h"
+#include "night.h"
 #include "startup.h"
 #include "teams.h"
 #include "timezones.h"
@@ -21,7 +23,10 @@ namespace espn {
 constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "fav2",    "fav3",
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
-                                    "favs",   "today",    "live",   "autoupd", "count",   "match"};
+                                    "favs",   "today",    "live",   "autoupd", "count",   "match",
+                                    "beta",   "msg",      "msgurl", "msgevery", "best",
+                                    "jump",   "banner",   "leaders", "night",  "nightstart", "nightend",
+                                    "nightscreen", "nightlevel"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -104,9 +109,26 @@ inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, cons
   return out;
 }
 
+// No team picked: My team with no team, or Favorites with no favorite set.
+// Any Live mode counts as a choice. The panel then runs Live games over
+// no_team_leagues() and the state document's live list is that set.
+inline bool no_team_default(bool have_team, uint8_t mode, bool have_favorite) {
+  return !have_team && (mode == (uint8_t) Mode::MY_TEAM || (mode == (uint8_t) Mode::FAVORITES && !have_favorite));
+}
+
+// The leagues a panel with no team picked scans: every league, in kLeagues
+// order. Men's college basketball is read as ESPN's Top 25 slate there
+// (scan_url's top25), not all of Division I.
+inline std::vector<League> no_team_leagues() {
+  std::vector<League> out;
+  for (const auto &l : kLeagues)
+    out.push_back(l.league);
+  return out;
+}
+
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
-// (live_leagues above). Live anything is also the no-team default. A mode
+// (live_leagues above, or no_team_leagues for the no-team default). A mode
 // that follows a team scans none.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
@@ -121,6 +143,14 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
     default:
       return {};
   }
+}
+
+// Live games' leagues went from before to after (its list, or with the list
+// on auto the team or favorites it follows). True when the scan now reads
+// other leagues, so the board has to drop what the old ones put up and scan
+// again; a mode that doesn't read the list never does.
+inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, const std::vector<League> &after) {
+  return scan_leagues(mode, before) != scan_leagues(mode, after);
 }
 
 enum class SetKind : uint8_t {
@@ -145,6 +175,19 @@ enum class SetKind : uint8_t {
   AUTOUPD,   // on
   COUNT,     // on, baseball
   MATCH,     // on, soccer
+  BETA,      // on, release builds only
+  MSG,       // text, the message card's own entries (message.h); "" clears it
+  MSGURL,    // text, the list's address; "" clears it
+  MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
+  BEST,      // on, Live games picks the best game (best_game.h)
+  JUMP,      // on, Favorites jumps to the action (favorites.h)
+  BANNER,    // on, Favorites shows a banner when another favorite scores
+  LEADERS,   // on, football's season leaders in the pre-game ticker
+  NIGHT,        // on, the night schedule (night.h)
+  NIGHT_START,  // value, minutes after midnight
+  NIGHT_END,    // value, minutes after midnight
+  NIGHT_SCREEN, // on: lit at the night brightness, off: dark
+  NIGHT_LEVEL,  // value, 1 to 255
 };
 
 struct TeamRef {
@@ -162,6 +205,7 @@ struct SetOp {
   TeamRef team;
   std::vector<TeamRef> teams;
   std::vector<std::string> refused;  // favs entries left out, for the log
+  std::string text;
 };
 
 // Decodes one key=value from the request. False when the key is unknown or
@@ -246,6 +290,38 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.team = TeamRef{};
     return v == "none" || v.empty();
   }
+  if (k == "msg") {
+    op.kind = SetKind::MSG;
+    op.text = message_clean(v, kMsgTextMax, true);
+    return true;
+  }
+  if (k == "msgurl") {
+    op.kind = SetKind::MSGURL;
+    op.text = v;
+    return msg_url_ok(v);
+  }
+  if (k == "msgevery") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    op.kind = SetKind::MSGEVERY;
+    op.value = clamp_msg_every(atoi(v.c_str()));
+    return !v.empty() && v[0] >= '0' && v[0] <= '9';
+  }
+  if (k == "nightstart" || k == "nightend") {
+    // "23:00", the form a time field sends; anything else is refused.
+    op.kind = k == "nightstart" ? SetKind::NIGHT_START : SetKind::NIGHT_END;
+    op.value = night_parse_time(v);
+    return op.value >= 0;
+  }
+  if (k == "nightlevel") {
+    op.kind = SetKind::NIGHT_LEVEL;
+    int level = atoi(v.c_str());
+    op.value = level < 1 ? 1 : level > 255 ? 255 : level;
+    return true;
+  }
+  if (k == "night")
+    return on(SetKind::NIGHT);
+  if (k == "nightscreen")
+    return on(SetKind::NIGHT_SCREEN);
   if (k == "tzauto")
     return on(SetKind::TZ_AUTO);
   if (k == "down")
@@ -268,6 +344,16 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TODAY);
   if (k == "autoupd")
     return on(SetKind::AUTOUPD);
+  if (k == "beta")
+    return on(SetKind::BETA);
+  if (k == "best")
+    return on(SetKind::BEST);
+  if (k == "jump")
+    return on(SetKind::JUMP);
+  if (k == "banner")
+    return on(SetKind::BANNER);
+  if (k == "leaders")
+    return on(SetKind::LEADERS);
   return false;
 }
 

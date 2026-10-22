@@ -4,22 +4,37 @@
 # and whose md5 and sha256 match the manifest's.
 # Usage: scripts/check_site_firmware.sh <site dir> <tag, e.g. v1.5.4>
 #        scripts/check_site_firmware.sh --beta <site dir>
+#        scripts/check_site_firmware.sh --follow-beta <site dir> [version]
 # --beta checks the bar panels' beta channel (site/firmware/beta/<variant>/)
 # instead: its versions end in -beta.<build>, the same for both bar variants
-# (there is no two-panel bar build).
+# (there is no two-panel bar build). --follow-beta checks the beta for panels
+# with "Follow beta" on (site/firmware/<variant>-beta/) the same way, and
+# against the given version if there is one.
 set -euo pipefail
 
-if [ "$1" = --beta ]; then
-  site=$2
-  dir="$site/firmware/beta"
-  variants="moonhub75 scoreboard75"
-  want=""
-else
-  site=$1
-  dir="$site/firmware"
-  variants="moonhub75 moonhub75-2panel scoreboard75"
-  want=${2#v}
-fi
+case "$1" in
+  --beta)
+    site=$2
+    dir="$site/firmware"
+    variants="beta/moonhub75 beta/scoreboard75"
+    beta_mode=1
+    want=""
+    ;;
+  --follow-beta)
+    site=$2
+    dir="$site/firmware"
+    variants="moonhub75-beta scoreboard75-beta"
+    beta_mode=1
+    want=${3:-}
+    ;;
+  *)
+    site=$1
+    dir="$site/firmware"
+    variants="moonhub75 moonhub75-2panel scoreboard75"
+    beta_mode=0
+    want=${2#v}
+    ;;
+esac
 fail=0
 
 for v in $variants; do
@@ -31,15 +46,16 @@ for v in $variants; do
   fi
   bad=0
   got=$(jq -r .version "$m")
-  if [ -z "$want" ]; then
-    # Beta: the first variant sets the version the second must match.
+  if [ $beta_mode = 1 ]; then
+    # Beta: the given version, or else the first variant's, is the one
+    # every variant must have.
     if ! [[ "$got" =~ -beta\.[0-9]+$ ]]; then
       echo "::error::$m is version $got, not a beta (<release>-beta.<build>)"
       bad=1
     fi
-    beta=${beta:-$got}
+    beta=${beta:-${want:-$got}}
     if [ "$got" != "$beta" ]; then
-      echo "::error::$m is version $got, the other variant is $beta"
+      echo "::error::$m is version $got, not $beta"
       bad=1
     fi
   elif [ "$got" != "$want" ]; then

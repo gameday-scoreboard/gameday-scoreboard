@@ -6,6 +6,7 @@ namespace espn {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
 static std::string hits_line(const GameSnapshot &s) {
@@ -30,6 +31,8 @@ std::string baseball_status_text(const GameSnapshot &s, const TickerOptions &o, 
     case GameState::PRE:
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
+      if (o.records)
+        add_part(out, pregame_records(s));
       if (!b.team_probable.empty() && !b.opp_probable.empty())
         add_part(out, s.team_abbr + " " + b.team_probable + " vs " + s.opp_abbr + " " + b.opp_probable);
       add_odds(out, s, o);
@@ -73,7 +76,7 @@ std::string baseball_status_text(const GameSnapshot &s, const TickerOptions &o, 
 // "Top 5th", "Mid 5th", "Rain Delay": ESPN's own words, there is no clock.
 std::string baseball_clock_text(const GameSnapshot &s) { return s.short_detail; }
 
-static bool home_run(const GameSnapshot &s) {
+bool baseball_home_run(const GameSnapshot &s) {
   return s.mlb.play_type == "Home Run" || s.last_play.find(" homered") != std::string::npos;
 }
 
@@ -103,7 +106,7 @@ Splash baseball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool o
   }
   if (prev.state != GameState::IN || cur.state != GameState::IN)
     return none;
-  bool hr = home_run(cur);
+  bool hr = baseball_home_run(cur);
   int delta = cur.team_score - prev.team_score;
   if (delta > 0)
     return Splash{runs_word(delta, hr, !neutral, cur.team_abbr), parse_color(cur.team_color)};

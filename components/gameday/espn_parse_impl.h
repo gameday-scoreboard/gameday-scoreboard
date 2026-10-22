@@ -33,8 +33,12 @@ inline bool time_tbd(JsonObjectConst comp) {
 }
 
 // The fields read from one event, whether it sits in a scoreboard's events
-// array or is a single-event document's root.
-inline void fill_event_filter(JsonObject ev) {
+// array or is a single-event document's root. board_extras adds what the
+// halftime and final boards need (line score, headline, the last play's
+// details for the scoring log): every league polls its game on its own
+// (LeagueInfo::per_event), so a whole day's scoreboard, up to 750 KB for
+// college football, leaves them out.
+inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   ev["id"] = true;
   ev["date"] = true;
   ev["status"]["displayClock"] = true;
@@ -45,6 +49,10 @@ inline void fill_event_filter(JsonObject ev) {
   JsonObject comp = ev["competitions"].add<JsonObject>();
   comp["timeValid"] = true;
   comp["situation"]["lastPlay"]["text"] = true;
+  comp["situation"]["lastPlay"]["scoreValue"] = true;
+  comp["situation"]["lastPlay"]["drive"]["description"] = true;
+  comp["situation"]["lastPlay"]["probability"]["homeWinPercentage"] = true;
+  comp["situation"]["lastPlay"]["probability"]["awayWinPercentage"] = true;
   comp["situation"]["downDistanceText"] = true;
   comp["situation"]["shortDownDistanceText"] = true;
   comp["situation"]["isRedZone"] = true;
@@ -65,9 +73,17 @@ inline void fill_event_filter(JsonObject ev) {
   comp["broadcasts"].add<JsonObject>()["names"] = true;
   comp["venue"]["fullName"] = true;
   comp["notes"].add<JsonObject>()["headline"] = true;
+  if (!board_extras)
+    return;
+  comp["situation"]["lastPlay"]["type"]["text"] = true;
+  comp["situation"]["lastPlay"]["statYardage"] = true;
+  comp["situation"]["lastPlay"]["team"]["id"] = true;
+  comp["situation"]["lastPlay"]["athletesInvolved"][0]["shortName"] = true;
+  c["linescores"][0]["value"] = true;
+  comp["headlines"][0]["shortLinkText"] = true;
 }
 
-inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>()); }
+inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>(), false); }
 
 inline void fill_baseball_filter(JsonObject ev) {
   JsonObject comp = ev["competitions"][0];
@@ -119,10 +135,14 @@ inline void fill_scan_filter(JsonDocument &f, bool finals = false, bool pending 
   c["homeAway"] = true;
   c["team"]["abbreviation"] = true;
   c["team"]["conferenceId"] = true;
+  // Where each live game stands, for the best-game pick.
+  ev["status"]["period"] = true;
+  ev["status"]["clock"] = true;
+  c["score"] = true;
+  c["curatedRank"]["current"] = true;
   if (!finals && !pending)
     return;
   c["records"].add<JsonObject>()["summary"] = true;
-  c["curatedRank"]["current"] = true;
   c["team"]["color"] = true;
   if (pending)
     comp["broadcasts"].add<JsonObject>()["names"] = true;
@@ -130,7 +150,6 @@ inline void fill_scan_filter(JsonDocument &f, bool finals = false, bool pending 
     return;
   ev["status"]["type"]["completed"] = true;
   ev["status"]["type"]["shortDetail"] = true;
-  c["score"] = true;
   c["winner"] = true;
 }
 
@@ -165,7 +184,8 @@ inline std::string format_over_under(JsonVariantConst v) {
     return "";
   float f = v.as<float>();
   char buf[16];
-  if (f == (int) f)
+  // Range first: casting a float past int's range is undefined.
+  if (f > -1e6f && f < 1e6f && f == (int) f)
     snprintf(buf, sizeof(buf), "%d", (int) f);
   else
     snprintf(buf, sizeof(buf), "%.1f", f);
@@ -224,6 +244,18 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     (ours ? s.team_color : s.opp_color) = color;
     (ours ? s.team_logo : s.opp_logo) = logo;
     (ours ? s.team_timeouts : s.opp_timeouts) = timeouts;
+    uint8_t *lines = ours ? s.team_lines : s.opp_lines;
+    uint8_t &count = ours ? s.team_line_count : s.opp_line_count;
+    count = 0;
+    for (JsonVariantConst ls : c["linescores"].as<JsonArrayConst>()) {
+      // Capped before the cast: a value past int's range is undefined.
+      float v = ls["value"] | 0.0f;
+      int pts = v > 0 ? (int) (std::min(v, 255.0f) + 0.5f) : 0;
+      if (count < GameSnapshot::kLinesMax)
+        lines[count++] = 0;
+      pts += lines[count - 1];
+      lines[count - 1] = (uint8_t) std::min(pts, 255);
+    }
     if (ours) {
       s.team_winner = winner;
       s.team_home = home;
@@ -234,12 +266,31 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   if (!found_us)
     return false;
 
+  // A touchdown is worth 6 and a field goal 3; the extra point, two-point try
+  // and safety after them don't repeat the drive.
+  JsonObjectConst lp = sit["lastPlay"];
+  if ((lp["scoreValue"] | 0) >= 3)
+    s.drive = str_or_empty(lp["drive"]["description"]);
+  s.play_type = str_or_empty(lp["type"]["text"]);
+  s.play_athlete = str_or_empty(lp["athletesInvolved"][0]["shortName"]);
+  s.play_value = (int8_t) std::min(100, std::max(0, lp["scoreValue"] | 0));
+  s.play_yards = (int16_t) std::min(200, std::max(-200, lp["statYardage"] | 0));
+  s.play_team = (uint32_t) atol(str_or_empty(lp["team"]["id"]).c_str());
+  JsonVariantConst win = lp["probability"][s.team_home ? "homeWinPercentage" : "awayWinPercentage"];
+  if (win.is<float>()) {
+    // ESPN goes to 0.999 and 0.001 well before the end; 100% would claim
+    // a result the game hasn't reached.
+    int pct = (int) (win.as<float>() * 100.0f + 0.5f);
+    s.team_win_pct = (int8_t) std::min(99, std::max(1, pct));
+  }
+
   JsonObjectConst odds = comp["odds"][0];
   s.odds = str_or_empty(odds["details"]);
   s.over_under = format_over_under(odds["overUnder"]);
   s.tv = str_or_empty(comp["broadcasts"][0]["names"][0]);
   s.venue = str_or_empty(comp["venue"]["fullName"]);
   s.game_name = short_game_name(str_or_empty(comp["notes"][0]["headline"]));
+  s.headline = str_or_empty(comp["headlines"][0]["shortLinkText"]);
   s.valid = true;
   out = s;
   return true;
@@ -255,6 +306,38 @@ inline Half half_from_detail(const std::string &detail) {
   if (detail.rfind("End", 0) == 0)
     return Half::END;
   return Half::NONE;
+}
+
+// Football's extra filter fields: each side's season leaders (passing,
+// rushing, receiving), for the pre-game ticker.
+inline void fill_football_filter(JsonObject ev) {
+  JsonObject c = ev["competitions"][0]["competitors"][0];
+  JsonObject l = c["leaders"].add<JsonObject>();
+  l["name"] = true;
+  JsonObject top = l["leaders"].add<JsonObject>();
+  top["displayValue"] = true;
+  top["athlete"]["shortName"] = true;
+}
+
+// Fills s.team_leader and s.opp_leader from an event already read into s by
+// snapshot_from_event: the passing leader, or the rushing or receiving leader
+// when ESPN has no passing line yet.
+inline void football_from_event(JsonObjectConst ev, GameSnapshot &s) {
+  static const char *const kOrder[] = {"passingLeader", "rushingLeader", "receivingLeader"};
+  for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+    bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+    std::string &line = ours ? s.team_leader : s.opp_leader;
+    for (const char *want : kOrder) {
+      for (JsonObjectConst l : c["leaders"].as<JsonArrayConst>()) {
+        if (str_or_empty(l["name"]) != want)
+          continue;
+        JsonObjectConst top = l["leaders"][0];
+        line = leader_line(str_or_empty(top["athlete"]["shortName"]), str_or_empty(top["displayValue"]));
+      }
+      if (!line.empty())
+        break;
+    }
+  }
 }
 
 // Fills s.mlb from an event already read into s by snapshot_from_event.
@@ -485,16 +568,29 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       continue;
     LiveGame g;
     g.event_id = detail::str_or_empty(ev["id"]);
+    int period = ev["status"]["period"] | 0;
+    g.period = (uint8_t) (period < 0 ? 0 : period > 255 ? 255 : period);
+    float clock = ev["status"]["clock"] | -1.0f;
+    g.clock_s = clock >= 0 && clock <= 100000 ? (int32_t) clock : -1;  // NaN fails both
     for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
       bool home = detail::str_or_empty(c["homeAway"]) == "home";
       std::string abbr = detail::str_or_empty(c["team"]["abbreviation"]);
+      JsonVariantConst sc = c["score"];
+      int score = sc.is<const char *>() ? atoi(sc.as<const char *>()) : (sc | 0);
+      int16_t pts = (int16_t) (score < 0 ? 0 : score > 999 ? 999 : score);
+      int r = c["curatedRank"]["current"] | 99;
+      uint8_t rank = (uint8_t) (r >= 1 && r <= 25 ? r : 99);
       if (home) {
         g.home_abbr = abbr;
         g.home_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
         g.group = (uint32_t) atol(detail::str_or_empty(c["team"]["conferenceId"]).c_str());
+        g.home_score = pts;
+        g.home_rank = rank;
       } else {
         g.away_abbr = abbr;
         g.away_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
+        g.away_score = pts;
+        g.away_rank = rank;
       }
     }
     if (!g.event_id.empty() && g.away_id != 0)
@@ -547,6 +643,8 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
                  const std::string &event_id = "") {
   JsonDocument filter(detail::json_allocator());
   detail::fill_event_filter(filter.to<JsonObject>());
+  if (sport == Sport::FOOTBALL)
+    detail::fill_football_filter(filter.as<JsonObject>());
   if (sport == Sport::BASEBALL)
     detail::fill_baseball_filter(filter.as<JsonObject>());
   if (sport == Sport::SOCCER)
@@ -566,6 +664,8 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
   if (!detail::snapshot_from_event(doc.as<JsonObjectConst>(), our_team_id, s))
     return false;
   s.sport = sport;
+  if (sport == Sport::FOOTBALL)
+    detail::football_from_event(doc.as<JsonObjectConst>(), s);
   if (sport == Sport::BASEBALL)
     detail::baseball_from_event(doc.as<JsonObjectConst>(), s);
   if (sport == Sport::SOCCER)

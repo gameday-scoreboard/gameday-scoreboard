@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runs on your own panel - Game Day Scoreboard</title>
+  <meta name="description" content="Run the open-source Game Day Scoreboard firmware on your own ESP32-S3 HUB75 board: supported boards and panels, the MoonHub75 wiring and the web installer.">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/diy/">
+  <meta property="og:site_name" content="Game Day Scoreboard">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Runs on your own panel - Game Day Scoreboard">
+  <meta property="og:description" content="Run the open-source Game Day Scoreboard firmware on your own ESP32-S3 HUB75 board: supported boards and panels, the MoonHub75 wiring and the web installer.">
+  <meta property="og:url" content="https://install.gameday-scoreboard.com/diy/">
+  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@GameDayScore">
+  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
+    main { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+    h1 { font-size: 2rem; margin: 0 0 4px; }
+    .sub { color: #9da7b3; margin: 0 0 32px; }
+    .card { background: #151b23; border: 1px solid #262e38; border-radius: 12px; padding: 20px 24px; margin: 0 0 20px; }
+    .card h2 { margin: 0 0 6px; font-size: 1.2rem; }
+    .card h3 { margin: 18px 0 4px; font-size: 1rem; }
+    .card p { margin: 0 0 14px; color: #c3ccd6; }
+    .card ul { margin: 0 0 14px; padding-left: 20px; color: #c3ccd6; }
+    .card li { margin: 6px 0; }
+    code { background: #1f2731; padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+    .note { font-size: 0.9rem; color: #9da7b3; }
+    a { color: #7cc4ff; }
+    .button { display: inline-block; background: #f2b632; color: #0b0f14; font-weight: 600; text-decoration: none; padding: 10px 18px; border-radius: 8px; margin: 0 0 14px; }
+    .pins { overflow-x: auto; margin: 0 0 14px; }
+    .pins table { border-collapse: collapse; font-size: 0.85rem; }
+    .pins th, .pins td { border: 1px solid #262e38; padding: 4px 8px; text-align: center; }
+    .pins th { color: #9da7b3; font-weight: 600; }
+    /* Same pictures as the panel picker on the installer. */
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 16px; }
+    .panel { background: #0b0f14; border: 1px solid #262e38; border-radius: 12px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; color: #d6dde7; font-size: 0.95rem; text-align: center; }
+    .panel svg { width: 100%; max-width: 160px; height: auto; }
+    .panel svg rect { fill: #1d2532; stroke: #5a6678; stroke-width: 2; }
+    .panel small { color: #9da7b3; font-size: 0.8rem; margin-top: -4px; }
+    footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Runs on your own panel</h1>
+  <p class="sub">The Game Day Scoreboard firmware is open source under the MIT license. If you have an ESP32-S3 HUB75 controller and a panel, you can run it for free.</p>
+
+  <div class="card">
+    <h2>Boards</h2>
+
+    <h3>MoonHub75</h3>
+    <p>The <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> has a prebuilt firmware. Install it from your browser with the installer and it takes updates over Wi-Fi like any other panel.</p>
+
+    <h3>An ESP32-S3 board wired to the MoonHub75 pinout</h3>
+    <p>The same prebuilt firmware runs on a bare ESP32-S3 board if you wire it to the same pins. It needs:</p>
+    <ul>
+      <li>An ESP32-S3 with 16 MB of flash and 8 MB of octal PSRAM, like a dev board with an N16R8 module</li>
+      <li>A button from GPIO0 to ground. The BOOT button on most dev boards is already wired that way. It shows the panel's address, resets Wi-Fi and does a factory reset.</li>
+      <li>The panel wired to these pins (ESPHome's names; the MoonHub75 README calls the upper half R0, G0 and B0):</li>
+    </ul>
+    <div class="pins">
+      <table>
+        <tr><th>R1</th><th>G1</th><th>B1</th><th>R2</th><th>G2</th><th>B2</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>LAT</th><th>OE</th><th>CLK</th></tr>
+        <tr><td>1</td><td>5</td><td>6</td><td>7</td><td>13</td><td>9</td><td>16</td><td>48</td><td>47</td><td>21</td><td>38</td><td>8</td><td>4</td><td>18</td></tr>
+      </table>
+    </div>
+    <p class="note">Many panels read the ESP32's 3.3 V signals fine. If yours flickers or shows the wrong colors, put 5 V level shifters (74AHCT245 or similar) between the board and the panel.</p>
+
+    <h3>Other boards</h3>
+    <p>Any other ESP32-S3 HUB75 board with at least 16 MB of flash and octal PSRAM, the Waveshare ESP32-S3 RGB Matrix among them, needs its own build. There's no prebuilt firmware for these and we haven't tested them. Copy <code>firmware/controllers/moonhub75.yaml</code> with your board's pins, copy <code>firmware/gameday.yaml</code> to include it, and build that with ESPHome.</p>
+    <p class="note">Give your copy its own <code>variant</code> name. A build that keeps <code>moonhub75</code> installs the MoonHub75 release over itself when an update comes out, with the wrong pins. With its own name, the panel updates when you rebuild it.</p>
+  </div>
+
+  <div class="card">
+    <h2>Panels</h2>
+    <div class="panels">
+      <div class="panel">
+        <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
+        <span>One 64x64 panel</span>
+      </div>
+      <div class="panel">
+        <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
+        <span>One 128x64 panel</span>
+        <small>or two 64x64 side by side</small>
+      </div>
+    </div>
+    <p>One firmware drives both. You pick the layout in the installer and can change it on the panel's page later. It's made for the common indoor HUB75 panels with an E pin (1/32 scan). Other sizes, like 64x32, aren't supported.</p>
+    <p class="note">Power the panels from a 5 V supply rated for them; the panel's listing gives the current it draws at full brightness.</p>
+  </div>
+
+  <div class="card">
+    <h2>Install</h2>
+    <p>Plug the board into a computer over USB, open the installer in Chrome or Edge, pick one panel or two, and click Install.</p>
+    <a class="button" href="/">Open the installer</a>
+    <p>Joining Wi-Fi, picking a team and the Game Day app work the same as on a Game Day Scoreboard. <a href="https://app.gameday-scoreboard.com/setup/">Setup</a> covers the rest.</p>
+    <p class="note">Building from YAML instead? The <a href="https://github.com/gameday-scoreboard/gameday-scoreboard#build-it-yourself">README</a> has the steps.</p>
+  </div>
+
+  <div class="card">
+    <h2>What's different from a Game Day Scoreboard</h2>
+    <ul>
+      <li>You supply the case, stand and power supply.</li>
+      <li>Email support is for Game Day Scoreboards we sold. For a panel you built, <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/issues">open an issue on GitHub</a>. Bug reports from DIY builds are welcome.</li>
+      <li>The firmware is the same, with every league and setting. The prebuilt firmware for the MoonHub75 pinout gets every release.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Built one?</h2>
+    <p>Show us. Post a photo and the parts you used in Show and tell on GitHub. It helps the next person pick a board and panels.</p>
+    <a class="button" href="https://github.com/gameday-scoreboard/gameday-scoreboard/discussions/categories/show-and-tell">Post it in Show and tell</a>
+  </div>
+
+  <footer>
+    Source, issues and the YAML for building it yourself: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard">gameday-scoreboard/gameday-scoreboard</a>.
+    Built on <a href="https://github.com/pavlov-net/hub75-studio">hub75-studio</a> and ESPHome.
+    <br>
+    <a href="https://app.gameday-scoreboard.com/setup/">Setup</a> &middot; <a href="/changelog/">What's new</a> &middot; <a href="/privacy/">Privacy</a> &middot; <a href="/support/">Support</a>
+  </footer>
+</main>
+</body>
+</html>

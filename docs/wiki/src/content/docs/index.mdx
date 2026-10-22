@@ -1,0 +1,29 @@
+---
+title: Game Day Scoreboard
+description: How to set up, use and build the Game Day Scoreboard, a standalone LED scoreboard for your team.
+template: splash
+head:
+  - tag: title
+    content: Game Day Scoreboard
+hero:
+  tagline: Set it up, pick your team, and let it follow the game.
+  image:
+    file: ../../assets/final-hbr-irn.jpg
+    alt: "A final score on the scoreboard panel: HBR 24, IRN 10, HBR WINS!"
+  actions:
+    - text: Set up your panel
+      link: /get-started/setup/
+      icon: right-arrow
+    - text: Browse the help
+      link: /help/troubleshooting/
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<CardGrid>
+	<LinkCard title="Get started" description="Plug it in, join Wi-Fi and pick your team." href="/get-started/" />
+	<LinkCard title="Using your scoreboard" description="Settings, favorites, the app and Home Assistant." href="/using/" />
+	<LinkCard title="Help" description="Fixes for the things that go wrong." href="/help/" />
+	<LinkCard title="DIY, run it on your own board" description="Boards, panels and wiring for a build of your own." href="/diy/" />
+</CardGrid>

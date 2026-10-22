@@ -1,0 +1,38 @@
+name: Docs
+
+# Build the documentation site (docs/wiki, Astro + Starlight) on a pull
+# request that touches it or CHANGELOG.md, so a broken page or link fails
+# the PR. The changelog page is generated from CHANGELOG.md at build time.
+#
+# Publishing is not done here. The gameday-scoreboard/docs repo's Publish
+# workflow builds this repo's main every 15 minutes and deploys it to
+# GitHub Pages at docs.gameday-scoreboard.com, so what is live is always
+# what main has.
+
+on:
+  pull_request:
+    paths:
+      - "docs/wiki/**"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/wiki/package-lock.json
+      - name: Install
+        working-directory: docs/wiki
+        run: npm ci
+      - name: Build
+        working-directory: docs/wiki
+        run: npm run build

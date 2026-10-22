@@ -1,20 +1,20 @@
 # Game Day Scoreboard
 
-![Touchdown fireworks on the panel](docs/site/media/touchdown.gif)
+![A final score on the panel: HBR 24, IRN 10, HBR WINS!](docs/wiki/src/assets/final-hbr-irn.jpg)
 
 A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League.
 
-Watch the [full demo](https://gamedayscoreboard.app/) on the installer page.
+Watch the [full demo](https://install.gameday-scoreboard.com/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
 
 If you already use Home Assistant and want room lighting to celebrate too, [gameday-matrix](https://github.com/bharvey88/gameday-matrix) does the same thing through a blueprint.
 
 ## What it does
 
 - Next-game card while you wait: both logos, season records, kickoff day and time in your timezone, and a ticker with the betting line, over/under, TV network and venue
-- Live scoreboard at kickoff: scores, the game clock and quarter in large type under them, down and distance beneath that (red in the red zone), abbreviations in team colors with the team holding the ball in gold, records under the logos, timeout pips, and a scrolling ticker with the last play (clock and down and distance can be added to the ticker too)
+- Live scoreboard at kickoff: scores, the game clock and quarter in large type under them, down and distance beneath that (red in the red zone), abbreviations in team colors with a gold underline under the team holding the ball, records under the logos, timeout pips, and a scrolling ticker with the last play (down and distance can go in the ticker too; the clock always has its own row)
 - Full-screen splashes in your team's color for touchdowns, field goals, extra points and two-point conversions, the opponent's scores acknowledged in theirs, and a victory splash on a win
-- Each sport has its own board: the inning, count, outs and a small diamond of the runners in baseball; the minute, stoppage time, latest goal and red cards in soccer; the period and clock in hockey and basketball, with the playoff series when there is one. Home runs and goals get the fireworks too
-- Lingers on the final (half an hour, ten minutes for baseball), then looks up the next game
+- Each sport has its own board: the inning, count, outs and a small diamond of the runners in baseball; the minute, stoppage time, latest goal and red cards in soccer; the period and clock in hockey and basketball, with the playoff series on the board in basketball and in the ticker in hockey. Home runs and goals get the fireworks too
+- Lingers on your team's final (half an hour, ten minutes for baseball), then looks up the next game. In Favorite teams, After the final sets how long a final stays up (30 seconds unless you change it), and Live games moves to another game about a minute after its game ends
 - Live games: follows a random game in progress in the leagues you choose and moves on when it ends
 - A device page that mirrors the panel, celebrates with it, lists the next three games in football and soccer, and holds every setting
 - Up to 16 favorite teams from any league, cycling through the ones playing today, with the first four on a WizMote remote's numbered buttons
@@ -22,6 +22,8 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 - Adapts to one 64x64 panel (logos side by side, stacked scores) or one 128x64 panel or two 64x64 side by side (logos at the edges, big scores, records and pips in the middle); one firmware, the count is a setting
 
 ## Hardware
+
+Building your own? [Runs on your own panel](https://install.gameday-scoreboard.com/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
 
 - The Game Day Scoreboard controller (build `gameday-scoreboard75.yaml`), or an ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
@@ -34,8 +36,8 @@ The MoonHub75 pinout, under the names ESPHome uses (that board's README calls th
 
 ## Install
 
-1. Open the [installer page](https://gamedayscoreboard.app/), plug the controller in over USB, and click Install. That page is for the Game Day Scoreboard controller, which starts on a 128x64 display. Built your own on the MoonHub75 pinout? Use the [DIY installer](https://gamedayscoreboard.app/install/diy/) instead: it asks whether yours drives one 64x64 panel or a 128x64 display before you click Install, so the first boot uses the right layout.
-2. Enter your WiFi details in the dialog that follows the install. If you skip it, the panel shows a QR code for the Game Day app and starts a hotspot named Game Day plus six letters and numbers, like Game Day 2f6a70; join it and a setup page opens.
+1. Open the [installer page](https://install.gameday-scoreboard.com/), pick whether yours drives one 64x64 panel or a 128x64 display (or two 64x64 side by side), plug the controller in over USB, and click Install. It's for the Game Day Scoreboard controller and any board on the MoonHub75 pinout. An early test controller on the scoreboard75 pinout has its own [scoreboard75 installer](https://install.gameday-scoreboard.com/install/scoreboard75/).
+2. Click Next when the install finishes and enter your WiFi details when the dialog asks. If you skip it, the panel shows a QR code for the Game Day app and starts a hotspot named Game Day plus six letters and numbers, like Game Day 2f6a70; join it and a setup page opens.
 3. Once it's on WiFi the panel shows a QR code for the Game Day app, then the `gameday-xxxxxx.local` name of its own page. Pick your team in the app, or open that name on your phone and pick it there. Until you pick a team or a mode, from that page, the Game Day app or Home Assistant, the ticker asks you to and gives the panel's IP address for phones that can't resolve `.local` names. Holding the controller's boot button for 1.5 seconds shows the name and the IP address again any time.
 
 Team changes take effect immediately and survive reboots. Wrong panel size? Click the matching picture in the Setup card. Nothing needs reflashing to change teams or layouts.
@@ -46,10 +48,10 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 
 | Setting | What it does |
 | --- | --- |
-| Show | My team, Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every few minutes |
+| Show | My team, Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every minute unless you change Switch every (1 to 30 minutes) |
 | Team | All 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
-| Ticker: game situation, last play, odds and TV | Choose what scrolls along the bottom. Game situation is down and distance in football, the count and outs in baseball, and goals, cards and stats in soccer |
+| Ticker: Down and distance, Count and at-bat, Match stats, Last play, Pre-game odds and TV, Pre-game season leaders | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. Before kickoff in football, each team's passing leader. The page shows only the ones for sports your panel follows |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
 | Favorites | Up to 16 teams in priority order. "Only today's games" keeps the playlist to the favorites playing today. The first four are the numbered buttons on a WizMote remote |
 | Remote | Pair a WizMote: turn discovery on, press any button on the remote. ON/OFF, brightness and NIGHT buttons control the panel |
@@ -61,7 +63,27 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 
 ## Home Assistant is optional
 
-The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Team, Mode, Power, Brightness, Scroll Speed, Select Page, Game Status, Last Play, Firmware, Install Updates Automatically, Refresh Now, Reboot and the WizMote pairing switches. Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. Men's college basketball teams aren't in Home Assistant's Team list (it would be too long for an entity); pick them on the device page. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
+The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Team, Mode, Power, Brightness, Scroll Speed, Select Page with Page Next and Page Previous, Game Status, Last Play, Firmware, Install Updates Automatically, Check for Updates, Refresh Now, Reboot, Reset Wi-Fi, Factory Reset, IP, ESPN Data, Chip Temperature and the WizMote entities (Auto-Discovery, MAC Address, Status and Clear WizMote Pairing). Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. Men's college basketball teams aren't in Home Assistant's Team list (it would be too long for an entity); pick them on the device page. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
+
+Game Live, Team Score and Opponent Score follow the game in Game Status, and the panel fires an `esphome.gameday_score` event on every score in that game (`team`, `opponent`, `play`, `points`, `team_score`, `opponent_score`, `sport`, `my_team`) and `esphome.gameday_final` when it ends. Values arrive as text. To flash a light when your team scores a touchdown:
+
+```yaml
+- alias: "Flash the lights on our touchdown"
+  triggers:
+    - trigger: event
+      event_type: esphome.gameday_score
+      event_data:
+        play: touchdown
+        my_team: "true"
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.living_room
+      data:
+        flash: long
+```
+
+The [Home Assistant page](https://docs.gameday-scoreboard.com/using/home-assistant/) lists every field.
 
 ## Build it yourself
 
@@ -98,6 +120,10 @@ to the internet, so do not forward a port to it.
 ## Credits
 
 Built on hub75-studio's LVGL pages and controller packages, and on the attribute model of the ha-teamtracker integration. Thanks to both projects.
+
+## Contributing
+
+Contributions are welcome: bug reports from game days, test fixtures from odd games, builds for new boards and fixes to the device page. [CONTRIBUTING.md](CONTRIBUTING.md#where-help-is-wanted) says where help is wanted and how to build and test. Docs changes go in `docs/wiki` alongside the code they describe.
 
 ## License
 

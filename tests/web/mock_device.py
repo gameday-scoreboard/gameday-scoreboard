@@ -7,7 +7,9 @@ routes with the response shapes from components/gameday/gameday.cpp:
 
   GET  /gameday/state    the document rebuild_state_() writes
   POST /gameday/set      only the keys in SET_KEYS; 400 when none match
-  POST /gameday/action   400 without do=, 404 for a name the firmware does not know
+  POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
+                         power_ok sets health.power back to "ok"; say keeps its cleaned
+                         text in "say" for tests to read (the panel has no such key)
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
 
@@ -63,8 +65,10 @@ TZS = [name for name, _posix, _iana in TZ_ROWS]
 # /gameday/set's keys in the order the firmware applies them, and its limits.
 SET_H = (REPO / "components/gameday/set_request.h").read_text(encoding="utf-8")
 SET_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSetKeys\[\] = \{(.*?)\};", SET_H, re.S).group(1)))
-LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) int (k\w+) = (\d+);",
-                                             SET_H + (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
+MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
+LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
+                                             SET_H + MESSAGE_H +
+                                             (REPO / "components/gameday/startup.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -85,11 +89,24 @@ INITIAL = {
     "team": team("nfl", 6),
     "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "today": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "bootaddr": True,
-    "autoupd": False,
-    "misses": 0, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
+    "autoupd": False, "beta": False,
+    "msg": "", "msgurl": "", "msgevery": 2,
+    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
+    "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
+    "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
+    # GamedayComponent::health_json_(), added at the end of each read.
+    "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
+               "heap_kb": 143.2, "block_kb": 40.0, "psram_kb": 4100.5, "rssi": -58, "espn": 200,
+               "espn_ago": 9, "version": "1.5.4", "built": 1792285260, "channel": "stable",
+               # guard_json_keys() (components/gameday/guard.h)
+               "temp": 46.5, "heat": 0, "brownouts": 0, "power": "ok"},
+    # Spliced in live by the firmware (wifi_history.h): an hour up, one drop.
+    "wifi": {"rssi": -61, "step": 300, "hist": [-58, -59, -60, None, -64, -62, -61, -61, -60, -62, -61, -61],
+             "weak": False, "drops": 1, "day": 1, "causes": {"signal": 1}, "last": "signal", "last_ago": 2400,
+             "last_down": 42},
     "game": {"s": "PRE", "l": "nfl", "ta": "DAL", "ti": 6, "ts": 0, "oa": "PHI", "oi": 21, "os": 0,
              "tr": "1-0", "or": "0-1", "p": 0, "tt": 3, "ot": 3, "rz": False, "tv": "FOX",
              "venue": "AT&T Stadium", "odds": "DAL -3", "ou": "47.5", "detail": "Sun 3:25 PM",
@@ -136,6 +153,9 @@ WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
 # The saved team's league byte, which outlives a cleared team and counts in
 # Live auto. A fresh panel's is NFL.
 TEAM_LEAGUE = ["nfl"]
+# Live games' own list (the live mask), kept apart from the state's live list,
+# which shows every league instead while no team is picked.
+LIVE_LIST = [[]]
 
 
 def reset_state(overrides):
@@ -146,6 +166,7 @@ def reset_state(overrides):
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
     TEAM_LEAGUE[0] = (STATE.get("team") or {}).get("l", "nfl")
+    LIVE_LIST[0] = [] if STATE.get("live_auto", True) else list(STATE.get("live", []))
 
 
 def atoi(v):
@@ -155,6 +176,30 @@ def atoi(v):
 
 def clamp(v, lo, hi):
     return min(LIMITS[hi], max(LIMITS[lo], v))
+
+
+# message.h's emoji(): left out of a message rather than drawn as '?'.
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE00-\uFE0F\u200D\u20E3\U000E0000-\U000E007F]")
+
+
+def message_clean(v, cap, lines):
+    """message_clean() in components/gameday/message.h."""
+    v = EMOJI.sub("", v).replace("\t", " ")
+    v = "".join(c for c in v if c == "\n" or (ord(c) >= 0x20 and ord(c) != 0x7F))
+    out = ("\n" if lines else " ").join(ln.strip(" ") for ln in v.split("\n") if ln.strip(" "))
+    out = re.sub(r"(?<=[ \n]) +", "", out)
+    raw = out.encode("utf-8")
+    if len(raw) > cap:
+        out = raw[:cap].decode("utf-8", "ignore").rstrip(" \n")
+    return out
+
+
+def msg_url_ok(v):
+    """msg_url_ok() in components/gameday/message.h."""
+    if not v:
+        return True
+    rest = v[7:] if v.startswith("http://") else v[8:] if v.startswith("https://") else ""
+    return len(v) <= LIMITS["kMsgUrlMax"] and bool(rest) and all(0x20 < ord(c) < 0x7F for c in v)
 
 
 def parse_team_ref(v):
@@ -177,11 +222,31 @@ def live_auto_leagues():
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
+def no_team_default():
+    """set_request.h no_team_default(): My team with no team, or Favorites with none set."""
+    if STATE["team"]:
+        return False
+    return STATE["mode"] == 0 or (STATE["mode"] == 4 and not any(STATE["favs"]))
+
+
 def state_doc():
-    """rebuild_state_() works the auto leagues out each time from the team and favorites."""
-    if STATE.get("live_auto"):
+    """rebuild_state_() works the leagues out each time: every league with no team
+    picked (no_team_leagues()), else the auto leagues from the team and favorites."""
+    if no_team_default():
+        STATE["live"] = list(LEAGUES)
+    elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
+    else:
+        STATE["live"] = list(LIVE_LIST[0])
     return STATE
+
+
+def night_time(v):
+    """night_parse_time() in components/gameday/night.h, as the state document writes it."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        return None
+    return f"{int(m[1]):02d}:{m[2]}"
 
 
 def apply_set(kv):
@@ -220,23 +285,38 @@ def apply_set(kv):
             if ref is None and v not in ("none", ""):
                 continue
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
-        elif k == "today":
-            STATE["today"] = v == "1"
+        elif k in ("today", "jump", "banner"):
+            STATE[k] = v == "1"
         elif k == "live":
             keys = [lg for lg in LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
-            STATE["live"] = keys
+            LIVE_LIST[0] = keys
         elif k == "tz":
             i = timezone_index(v)
             if i >= 0:
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "count", "match", "play", "odds", "opp", "bootaddr", "autoupd"):
+        elif k in ("down", "count", "match", "play", "odds", "leaders", "opp", "best", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
                 STATE["panels"] = atoi(v)
+        elif k == "msg":
+            STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
+        elif k == "msgurl":
+            if msg_url_ok(v):
+                STATE["msgurl"] = v
+        elif k == "msgevery":
+            if v[:1].isdigit():
+                STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k in ("night", "nightscreen"):
+            STATE[k] = v == "1"
+        elif k in ("nightstart", "nightend"):
+            if night_time(v):
+                STATE[k] = night_time(v)
+        elif k == "nightlevel":
+            STATE["nightlevel"] = min(255, max(1, atoi(v)))
 
 
 def selftest():
@@ -438,8 +518,12 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc"):
+            if q["do"] not in ("refresh", "qc", "power_ok", "say"):
                 return self._json(404, {"error": "unknown action"})
+            if q["do"] == "power_ok" and STATE.get("health"):
+                STATE["health"]["power"] = "ok"
+            if q["do"] == "say":
+                STATE["say"] = message_clean(q.get("text", ""), LIMITS["kMsgTextMax"], True)
             return self._json(200, {"ok": True})
         if u.path == "/gameday/demo":
             q = {k: v[0] for k, v in pairs.items()}
