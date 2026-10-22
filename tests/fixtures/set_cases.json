@@ -13,7 +13,7 @@
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1, "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
   "cases": [
@@ -119,6 +119,22 @@
     {"name": "two panels", "set": [["panels", "2"]], "expect": {"panels": 2}},
     {"name": "zero panels is refused", "start": {"panels": 2}, "set": [["panels", "0"]], "expect": {"panels": 2}},
     {"name": "more panels than the build drives is refused", "set": [["panels", "3"]], "expect": {"panels": 1}},
+
+    {"name": "countdown off", "set": [["countdown", "0"]], "expect": {"countdown": false}},
+    {"name": "countdown back on", "start": {"countdown": false}, "set": [["countdown", "1"]], "expect": {"countdown": true}},
+    {"name": "custom countdown", "set": [["cddate", "2026-12-25"], ["cdname", "Christmas"]],
+     "expect": {"cdname": "Christmas", "cddate": "2026-12-25"}},
+    {"name": "countdown name is trimmed", "set": [["cdname", "  Opening Day  "]], "expect": {"cdname": "Opening Day"}},
+    {"name": "countdown name is cut to 20 bytes", "set": [["cdname", "The day the season finally starts"]],
+     "expect": {"cdname": "The day the season f"}},
+    {"name": "countdown name cut keeps a whole character", "set": [["cdname", "Graduation day Renaé"]],
+     "expect": {"cdname": "Graduation day Rena"}},
+    {"name": "countdown date none clears it", "start": {"cddate": "2026-12-25"}, "set": [["cddate", "none"]], "expect": {"cddate": ""}},
+    {"name": "countdown date empty clears it", "start": {"cddate": "2026-12-25"}, "set": [["cddate", ""]], "expect": {"cddate": ""}},
+    {"name": "countdown date in another format is refused", "start": {"cddate": "2026-12-25"}, "set": [["cddate", "12/25/2026"]],
+     "expect": {"cddate": "2026-12-25"}},
+    {"name": "countdown date that doesn't exist is refused", "set": [["cddate", "2026-02-30"]], "expect": {"cddate": ""}},
+    {"name": "countdown leap day", "set": [["cddate", "2028-02-29"]], "expect": {"cddate": "2028-02-29"}},
 
     {"name": "no known key answers 400", "start": {"rotate": 5}, "set": [["bogus", "1"]], "status": 400, "expect": {"rotate": 5}},
     {"name": "unknown keys next to known ones are skipped", "set": [["bogus", "1"], ["rotate", "5"]], "expect": {"rotate": 5}},
