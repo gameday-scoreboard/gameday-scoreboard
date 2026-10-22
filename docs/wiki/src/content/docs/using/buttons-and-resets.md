@@ -44,9 +44,7 @@ Reset Wi-Fi keeps the saved networks. The panel restarts into setup mode for 15 
 
 Factory reset erases everything: the saved Wi-Fi networks, your team, your favorites and every setting, including a paired WizMote and the panel layout. The panel restarts into setup the way it came out of the box, with the layout its firmware starts on. Do this before you sell or give the panel away.
 
-:::note[Coming in the next release]
 Before a factory reset you mean to set up again from, save a backup: **Export settings** on the device page, then **Import settings** once the panel is back on Wi-Fi. See [Back up and restore settings](/using/backup/).
-:::
 
 Start it from **Factory reset** in the Device card on the device page. The page asks you to confirm first.
 
