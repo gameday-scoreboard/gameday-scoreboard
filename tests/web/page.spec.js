@@ -26,8 +26,21 @@ const test = base.test.extend({
 // mock's default, null is firmware without the list.
 const reset = (request, state, fail, wifi) =>
   request.post("/_reset", { data: wifi === undefined ? { state, fail } : { state, fail, wifi } });
+// Playlists post to the settings import (app.js setRequest); a post of only
+// them reads back as the lists= text it stands for, so tests check it like a set.
+const playlistsPost = (p) => {
+  if (p.path !== "/gameday/settings") return null;
+  let d;
+  try { d = JSON.parse(p.body); } catch (_) { return null; }
+  if (!d || !Array.isArray(d.lists) || Object.keys(d).some((k) => !["schema", "lists", "list"].includes(k))) return null;
+  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",")).join(";") };
+  if (d.list !== undefined) q.list = String(d.list);
+  return q;
+};
 const sets = async (request) =>
-  (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/set").map((p) => p.q);
+  (await (await request.get("/_log")).json())
+    .map((p) => (p.path === "/gameday/set" ? p.q : playlistsPost(p)))
+    .filter(Boolean);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
 const deviceState = async (request) => (await request.get("/gameday/state")).json();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -521,6 +534,104 @@ test("favorites post the whole list in order on add, move and remove", async ({ 
   await expect(page.locator("#favCtls .ctl.fav label")).toHaveText([
     /^1\. Houston Texans/, /^2\. Dallas Cowboys/, /^3\. New York Yankees/,
   ]);
+});
+
+test("playlists post every playlist on new, teams, rename, move and remove", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Playlist 1=" });
+  const box = page.locator("#listCtls .plist");
+  await expect(box).toHaveCount(1);
+  await expect(box.nth(0).locator(".pbtn")).toHaveText("Button 1");
+  await expect(box.nth(0).locator(".chip")).toHaveText(["DAL", "HOU", "MISS"]);
+  await box.nth(0).locator(".chip", { hasText: "HOU" }).click();
+  await expectSet(request, { lists: "Playlist 1=nfl:34" });
+  await expect(box.nth(0).locator(".chip.on")).toHaveText(["HOU"]);
+  await box.nth(0).locator(".pname").fill("Texans; and=more");
+  await box.nth(0).locator(".pname").press("Enter");
+  await expectSet(request, { lists: "Texans andmore=nfl:34" });
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Texans andmore=nfl:34;Playlist 2=" });
+  await expect(box).toHaveCount(2);
+  await box.nth(0).getByRole("button", { name: "Move down Texans andmore" }).click();
+  await expectSet(request, { lists: "Playlist 2=;Texans andmore=nfl:34" });
+  await box.nth(1).getByRole("button", { name: "Remove Texans andmore" }).click();
+  await expectSet(request, { lists: "Playlist 2=" });
+  await expect(box).toHaveCount(1);
+  await expect(page.locator("#favHint")).toContainText("Your playlists have buttons 1 to 4");
+});
+
+test("One per sport makes a playlist for each sport in the favorites", async ({ page, request }) => {
+  await reset(request, {
+    favs: [
+      { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" },
+      { l: "nba", id: 6, abbr: "DAL", name: "Dallas Mavericks" },
+      { l: "ncaa", id: 251, abbr: "TEX", name: "Texas Longhorns" },
+      {},
+    ],
+  });
+  await page.goto("/");
+  await page.locator("#listSport").click();
+  await expectSet(request, { lists: "Football=nfl:6,ncaa:251;Basketball=nba:6" });
+  await expect(page.locator("#listCtls .pname").nth(0)).toHaveValue("Football");
+  await expect(page.locator("#listCtls .pname").nth(1)).toHaveValue("Basketball");
+  await page.locator("#listSport").click();
+  await expect(page.locator("#toast")).toHaveText("Every sport in your favorites has a playlist");
+});
+
+// All 16 playlists with every favorite are about 3 KB, far past the panel's
+// 512-byte URL and its 1 KB form body; the mock refuses both as the panel does.
+test("all 16 playlists with every favorite save", async ({ page, request }) => {
+  const favs = Array.from({ length: 16 }, (_, i) => ({ l: "nfl", id: i + 1, abbr: "T" + (i + 1), name: "Team " + (i + 1) }));
+  const all = Array.from({ length: 16 }, (_, i) => i);
+  const keys = favs.map((f) => "nfl:" + f.id).join(",");
+  await reset(request, { favs, lists: Array.from({ length: 15 }, (_, i) => ({ n: "Playlist " + (i + 1), f: all })) });
+  await page.goto("/");
+  await expect(page.locator("#listCtls .plist")).toHaveCount(15);
+  await page.locator("#listAdd").click();
+  const want = Array.from({ length: 15 }, (_, i) => "Playlist " + (i + 1) + "=" + keys).join(";") + ";Playlist 16=";
+  await expectSet(request, { lists: want });
+  await page.locator("#listCtls .plist").nth(15).locator(".chip").first().click();
+  await expectSet(request, { lists: want + "nfl:1" });
+  await expect(page.locator("#toast")).not.toContainText("did not respond");
+});
+
+test("playlists wait for favorites", async ({ page, request }) => {
+  await reset(request, { favs: [{}, {}, {}, {}] });
+  await page.goto("/");
+  await expect(page.locator("#listCtls")).toHaveText("Add favorites first, then group them here.");
+  await expect(page.locator("#listActions")).toBeHidden();
+});
+
+test("Favorite teams plays a playlist: the picker posts it, the bar names it, the others dim", async ({ page, request }) => {
+  const t = (abbr, name, id) => ({ l: "nfl", id, abbr, name });
+  await reset(request, {
+    mode: 4,
+    lists: [{ n: "Texans", f: [1] }],
+    list: 0,
+    next: [
+      { slot: 1, t: t("DAL", "Dallas Cowboys", 6), id: "1", s: "PRE", kick: 1792531500, oi: 21, oa: "PHI", ts: 0, os: 0, tv: "FOX", detail: "" },
+      { slot: 2, t: t("HOU", "Houston Texans", 34), id: "5", s: "PRE", kick: 1792620000, oi: 30, oa: "JAX", ts: 0, os: 0, tv: "CBS", detail: "" },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator("#favListRow")).toBeVisible();
+  await expect(page.locator("#favList option")).toHaveText(["All favorites", "Texans"]);
+  await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
+  await expect(page.locator("#upnextList .un.out")).toHaveCount(0);
+  await page.locator("#favList").selectOption("1");
+  await expectSet(request, { mode: "4", list: "1" });
+  await expect(page.locator("#favName")).toHaveText("Cycling through Texans");
+  await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI"]);
+});
+
+test("the playing picker is hidden without playlists", async ({ page, request }) => {
+  await reset(request, { mode: 4 });
+  await page.goto("/");
+  await expect(page.locator("#favbar")).toBeVisible();
+  await expect(page.locator("#favListRow")).toBeHidden();
 });
 
 test("the favorites picker stays open: checks, a tap adds or takes out, a count, Done", async ({ page, request }) => {
