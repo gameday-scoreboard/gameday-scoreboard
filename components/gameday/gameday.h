@@ -38,6 +38,7 @@
 #include "playlists.h"
 #include "offseason.h"
 #include "recap.h"
+#include "regulatory.h"
 #include "score_log.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
@@ -167,6 +168,8 @@ class GamedaySelect : public select::Select, public Component {
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
+//   POST /gameday/action?do=regulatory   the FCC information on the panel's screen
+//                                    (regulatory.h, firmware/pages/regulatory.yaml)
 //   POST /gameday/set?msg=...&msgurl=...&msgevery=0-30   the message card (message.h)
 //   GET  /gameday/settings           the settings backup, one JSON document (settings_doc.h)
 //   POST /gameday/settings           a backup as a JSON body, checked whole, then applied;

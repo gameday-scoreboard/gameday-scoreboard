@@ -1517,6 +1517,14 @@ test("the banner posts its text and seconds, and Take down posts no text", async
   await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "" });
 });
 
+test("Show on panel puts the FCC information on the panel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#fccShow").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "regulatory" });
+  await expect(page.locator("#toast")).toHaveText("FCC information on the panel");
+});
+
 test("the nickname names the page and the header, and saving it posts nick", async ({ page, request }) => {
   await reset(request, { nick: "Garage" });
   await page.goto("/");

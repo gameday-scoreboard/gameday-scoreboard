@@ -126,6 +126,10 @@ The Device card has the buttons and the details about the panel itself.
 
 Under them: the **Firmware** box, the Wi-Fi networks list, the panel's **Address** and **Name**, its Wi-Fi **Signal**, free memory, and **ESPN data**, how much the panel has downloaded from ESPN since it started, for anyone on a capped internet plan.
 
+:::note[Coming in the next release]
+Under **Name**, **FCC information** has a **Show on panel** button. The panel shows its model, FCC ID and FCC statement on its own screen for about a minute, then goes back to the board. A panel that was switched off turns on for it and stays on. One that is dimmed or dark for the night lights up for it, then goes back to the night setting.
+:::
+
 A **Diagnostics** section in the Device card says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal** it draws the last day of Wi-Fi signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one.
 
 The Device card can also show a **Follow beta** switch. Beta versions are test builds for test panels and can have bugs. Leave it off.

@@ -7,7 +7,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
 //   POST /gameday/settings        a settings document as JSON; the playlists go this way
 //   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
-//                                 say&text=...&secs=N (the banner)
+//                                 say&text=...&secs=N (the banner), regulatory
+//                                 (the FCC information on the panel)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -295,6 +296,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+        <div class="ctl"><label>FCC information<small>The FCC ID and Part 15 statement on the panel's own screen, for about a minute.</small></label><button class="btn" id="fccShow">Show on panel</button></div>
         <div class="sub">Diagnostics</div>
         <div id="health" hidden>
           <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
@@ -1111,6 +1113,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     toast("Banner up for " + secs + " s");
   };
   $("#sayStop").onclick = () => doAction("say", { text: "" });
+  $("#fccShow").onclick = () => {
+    doAction("regulatory");
+    toast("FCC information on the panel");
+  };
   $("#msgSave").onclick = () => {
     const url = $("#msgUrl").value.trim();
     if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The list's address starts with http:// or https://");

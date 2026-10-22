@@ -4429,7 +4429,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say";
+    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say" || name == "regulatory";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif

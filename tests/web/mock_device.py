@@ -891,7 +891,7 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "power_ok", "say"):
+            if q["do"] not in ("refresh", "qc", "power_ok", "say", "regulatory"):
                 return self._json(404, {"error": "unknown action"})
             if q["do"] == "power_ok" and STATE.get("health"):
                 STATE["health"]["power"] = "ok"

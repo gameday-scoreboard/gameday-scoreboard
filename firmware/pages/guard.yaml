@@ -29,7 +29,8 @@ script:
   - id: gd_guard
     mode: restart
     then:
-      # QC lights the panel with Power off and at night too (pages/qc.yaml).
+      # QC lights the panel with Power off and at night too (pages/qc.yaml),
+      # and the FCC screen at night (pages/regulatory.yaml).
       # The repaint is for the end of a screen-off night: the driver dropped
       # every frame while it was at 0 (gd_repaint).
       - if:
@@ -38,7 +39,7 @@ script:
           then:
             - hub75.set_brightness:
                 id: matrix
-                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, !id(qc_active));'
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, !id(qc_active) && !id(reg_active));'
             - script.execute: gd_repaint
       - lambda: |-
           const uint8_t mark = id(gameday_ctl).guard_mark();
