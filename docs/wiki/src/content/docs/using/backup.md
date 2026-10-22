@@ -5,10 +5,6 @@ sidebar:
   order: 18
 ---
 
-:::note[Coming in the next release]
-Everything on this page arrives with the next firmware release.
-:::
-
 Your teams, favorites, ticker switches and the rest take a while to set up. Save them to a file once, and after a factory reset, a replacement panel or a second panel for another room, load the file and the panel picks up where it was.
 
 ## Save a backup
