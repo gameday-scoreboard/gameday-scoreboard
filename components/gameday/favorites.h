@@ -293,10 +293,12 @@ inline int live_fav_rank(const LiveGame &g, const std::vector<FavRef> &favs) {
 // The live game to lock onto, as an index into live, or -1 to leave the pick
 // to the rotation. current is the game on the board; skip_current leaves it
 // out (it ended, though the scan may still list it as in progress). With
-// alternate, a scan with the board on one favorite's game moves to the next
-// favorite's, in list order, wrapping; a lone favorite's game stays.
+// alternate, a rotate scan (Switch every) with the board on one favorite's
+// game moves to the next favorite's, in list order, wrapping; a lone
+// favorite's game stays. Any other scan with alternate (a kickoff) keeps the
+// favorite's game on the board while it is still on.
 inline int take_over_pick(const std::vector<LiveGame> &live, const std::vector<FavRef> &favs,
-                          const std::string &current, bool skip_current, bool alternate) {
+                          const std::string &current, bool skip_current, bool alternate, bool rotate = true) {
   // Candidates by priority: (rank, index), insertion-sorted, a few at most.
   std::vector<std::pair<int, int>> cand;
   for (int i = 0; i < (int) live.size(); i++) {
@@ -316,7 +318,7 @@ inline int take_over_pick(const std::vector<LiveGame> &live, const std::vector<F
     return cand[0].second;
   for (size_t k = 0; k < cand.size(); k++)
     if (!current.empty() && live[cand[k].second].event_id == current)
-      return cand[(k + 1) % cand.size()].second;
+      return cand[rotate ? (k + 1) % cand.size() : k].second;
   return cand[0].second;
 }
 

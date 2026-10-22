@@ -2406,18 +2406,24 @@ void GamedayComponent::start_job_() {
         this->live_started_ms_ = now == 0 ? 1 : now;
       } else {
         // Picking the best game: only at a break in this one, never in the
-        // middle of a drive.
-        // A favorite's game that took the board holds it: no rotate, unless
-        // two favorites alternate. A favorite higher in the list starting
-        // later comes in on its kickoff scan (take_due). Alternate keeps
-        // Favorite teams' plain timer, so it doesn't wait for a break.
+        // middle of a drive, and one look per break.
+        // A favorite's game that took the board holds it with Stick: only a
+        // slow look, for a higher favorite with no kickoff time to scan at.
+        // A favorite higher in the list starting later comes in on its
+        // kickoff scan (take_due). Alternate keeps Favorite teams' plain
+        // timer, so it doesn't wait for a break (rotate_due, best_game.h).
         bool on_fav = this->take_over_() && this->live_fav_ >= 0;
         bool held = on_fav && this->prefs4_.collide == 0;
-        bool rotate = !held && this->live_started_ms_ != 0 &&
-                      (now - this->live_started_ms_) >= (uint32_t) this->prefs2_.rotate_minutes * MINUTE &&
-                      (!this->best_game() || on_fav || ::espn::at_break(this->game_));
+        bool brk = ::espn::pick_break(this->game_);
+        if (!brk)
+          this->break_looked_ = false;  // play is on again: the next break gets its look
+        bool rotate = this->live_started_ms_ != 0 &&
+                      ::espn::rotate_due(now - this->live_started_ms_,
+                                         (uint32_t) this->prefs2_.rotate_minutes * MINUTE, held, on_fav,
+                                         this->best_game(), brk, this->break_looked_);
         bool ended = this->game_.valid && this->game_.state != GameState::IN;
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_ || take_due;
+        j.rotate = rotate;
       }
       // With no team, nothing live means the finals rotation: the scan keeps
       // today's finals for it.
@@ -2788,9 +2794,11 @@ void GamedayComponent::apply_job_() {
     std::vector<::espn::FavRef> favs;
     if (this->take_over_())
       favs = this->fav_refs_();
+    // Alternate moves on only at a rotate scan, every Switch every; a kickoff
+    // scan keeps the favorite that is up.
     int taken = favs.empty() ? -1
                              : ::espn::take_over_pick(j.live, favs, this->schedule_.event_id, over,
-                                                      this->prefs4_.collide == 1);
+                                                      this->prefs4_.collide == 1, j.rotate);
     const ::espn::LiveGame &g =
         j.live[taken >= 0 ? (size_t) taken
                           : best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
@@ -2810,6 +2818,9 @@ void GamedayComponent::apply_job_() {
         ESP_LOGI(TAG, "Favorites take over: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
       else
         ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      // This break has had its look; the next one comes when play resumes.
+      if (taken < 0 && ::espn::pick_break(this->game_))
+        this->break_looked_ = true;
       this->live_fav_ = fav_rank;
       this->live_away_rank_ = side_rank;
       this->live_home_rank_ = other_rank;
