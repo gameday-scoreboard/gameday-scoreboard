@@ -36,6 +36,8 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - The board says **Can't reach ESPN** in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and in Live games after "No live NFL games, showing CHI" when your team's card can't be read. A panel cut off from ESPN for days keeps saying so instead of switching to "No upcoming game" every couple of days.
 - Between games the panel counts down to the next game in big digits, "2d 14h" and then hours and minutes, in your team's colors, taking turns with the next game's card every 10 seconds. It's on by default; turn it off with **Countdown to the next game** on the device page.
 - Count down to a day of your own, like Christmas or opening day: give it a name and a day on the device page and it takes the last 10 seconds of every minute between games, shows "Today" on the day, and goes away after. Settings backups keep both.
+- Favorite teams shows the off-season clock once every favorite (in the playlist, when one is playing) is between seasons, the same way My team does: with no game listed, or the next one more than 10 days away, like next season's opener. It's in the colors of the favorite who plays first, with that game under the time. Before, a listed opener months away left the board on "No upcoming game".
+- While the off-season clock is up, the panel checks the next game every 6 hours instead of every 15 minutes, which saves data on a capped plan.
 
 ## v2026.10.1
 

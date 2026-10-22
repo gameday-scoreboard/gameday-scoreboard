@@ -760,6 +760,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Turns f into the off-season clock card when the board has nothing to
   // show for months (offseason.h); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
+  void clock_next_line_(UpdateFields &f, const GameSnapshot &g);
   // The countdown card (countdown.h): which one has the board now, the
   // fields that draw it, and the once-a-second check that turns the card.
   ::espn::CountdownCard countdown_card_(int64_t now) const;

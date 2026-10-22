@@ -4507,6 +4507,11 @@ static void test_countdown() {
   CHECK_EQ(countdown_name("  Christmas  "), std::string("Christmas"));
   CHECK_EQ(countdown_name("Line\nbreak"), std::string("Linebreak"));
   CHECK_EQ(countdown_name("   "), std::string(""));
+  // Emoji are left out, not drawn as '?', and leave no double space.
+  CHECK_EQ(countdown_name("Xmas \xf0\x9f\x8e\x84 Eve"), std::string("Xmas Eve"));
+  CHECK_EQ(countdown_name("\xf0\x9f\x8e\x82 Birthday"), std::string("Birthday"));
+  CHECK_EQ(countdown_name("Go \xe2\x9a\xbd\xef\xb8\x8f"), std::string("Go"));
+  CHECK_EQ(countdown_name("Fianc\xc3\xa9 day"), std::string("Fianc\xc3\xa9 day"));
   CHECK_EQ(countdown_name("The day the season finally starts"), std::string("The day the season f"));
   CHECK_EQ(countdown_name("Graduation day Rena\xc3\xa9"), std::string("Graduation day Rena"));
   CHECK_EQ(countdown_name("Graduation day Ren\xc3\xa9"), std::string("Graduation day Ren\xc3\xa9"));
@@ -4665,6 +4670,20 @@ static void test_offseason() {
   CHECK(off_season(GameState::POST, now - 11 * day, now, hockey));
   CHECK(!off_season(GameState::POST, now - 2 * day, now, hockey));
   CHECK(!off_season(GameState::IN, now - 11 * day, now, hockey));
+
+  // Favorites, one favorite at a time: the clock needs every one at 1.
+  CHECK_EQ(fav_off_season(false, false, false, GameState::NOT_FOUND, 0, now, hockey), -1);  // not read yet
+  CHECK_EQ(fav_off_season(true, false, false, GameState::NOT_FOUND, 0, now, hockey), 1);    // no game named
+  // Next season's opener named, as ESPN lists it in November for an MLB
+  // team: past the horizon, the same as no game.
+  CHECK_EQ(fav_off_season(true, true, true, GameState::PRE, now + 120 * day, now, hockey), 1);
+  CHECK_EQ(fav_off_season(true, true, false, GameState::NOT_FOUND, now + 120 * day, now, hockey), 1);  // not polled yet
+  CHECK_EQ(fav_off_season(true, true, true, GameState::PRE, now + 2 * day, now, hockey), 0);  // a game this week
+  CHECK_EQ(fav_off_season(true, true, true, GameState::POST, now - 2 * day, now, hockey), 0);
+  CHECK_EQ(fav_off_season(true, true, true, GameState::POST, now - 40 * day, now, hockey), 1);  // the last final
+  CHECK_EQ(fav_off_season(true, true, true, GameState::IN, now - 11 * day, now, hockey), 0);
+  // Football keeps its card however far the game is.
+  CHECK_EQ(fav_off_season(true, true, true, GameState::PRE, now + 200 * day, now, football), 0);
 
   // The Next line. Wed Sep 9 2026, 10:00 AM.
   struct tm wed = mk(2026, 251, 3, 10, 0, 8, 9);
