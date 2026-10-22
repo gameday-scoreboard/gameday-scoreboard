@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 
+#include "espn_parse.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -444,7 +445,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
 
 // The reply to an import: {"ok":true,"restart":false,"skipped":[...]}.
 inline std::string settings_reply(const SettingsImport &in) {
-  JsonDocument doc;
+  JsonDocument doc(detail::json_allocator());
   if (!in.error.empty()) {
     doc["error"] = in.error;
   } else {

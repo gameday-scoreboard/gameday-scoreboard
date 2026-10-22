@@ -400,6 +400,29 @@ void test_fullest_fits() {
          kSettingsMaxBytes);
 }
 
+// Counts what the reply allocates through the hook the firmware points at PSRAM.
+struct CountingAllocator : ArduinoJson::Allocator {
+  int calls = 0;
+  int live = 0;
+  void *allocate(size_t size) override {
+    calls++;
+    live++;
+    return malloc(size);
+  }
+  void deallocate(void *ptr) override {
+    if (ptr != nullptr)
+      live--;
+    free(ptr);
+  }
+  void *reallocate(void *ptr, size_t size) override {
+    if (ptr == nullptr) {
+      calls++;
+      live++;
+    }
+    return realloc(ptr, size);
+  }
+};
+
 void test_reply() {
   SettingsImport in = import(R"({"schema":1,"name":"gameday-a1b2c3","panels":1,"sparkle":1})");
   SCHECK(settings_reply(in) == R"({"ok":true,"restart":true,"skipped":["sparkle"],"kept":[]})", "reply: %s",
@@ -407,6 +430,12 @@ void test_reply() {
   in = import(R"({"schema":1,"name":"gameday-ffffff","panels":1,"nick":"Kitchen"})");
   SCHECK(settings_reply(in) == R"({"ok":true,"restart":false,"skipped":[],"kept":["panels","nick"]})", "reply: %s",
          settings_reply(in).c_str());
+  CountingAllocator counting;
+  set_json_allocator(&counting);
+  std::string reply = settings_reply(in);
+  set_json_allocator(nullptr);
+  SCHECK(!reply.empty() && counting.calls > 0 && counting.live == 0,
+         "the reply didn't use the PSRAM hook (%d calls, %d live)", counting.calls, counting.live);
   in = import(R"({"schema":1,"mode":"x"})");
   SCHECK(settings_reply(in) == R"({"error":"mode should be a whole number."})", "reply: %s",
          settings_reply(in).c_str());

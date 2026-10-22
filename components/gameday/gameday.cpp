@@ -4488,7 +4488,7 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     request->send(405, "application/json", "{\"error\":\"GET or POST\"}");
     return;
   }
-  JsonDocument doc;
+  JsonDocument doc(::espn::detail::json_allocator());
   JsonArray list = doc["networks"].to<JsonArray>();
   for (const auto &e : nets->list()) {
     JsonObject o = list.add<JsonObject>();
