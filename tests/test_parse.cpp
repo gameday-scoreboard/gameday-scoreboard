@@ -4250,6 +4250,22 @@ static void test_night() {
   CHECK(night_window(60, 6 * 60, 3 * 60));
   CHECK(!night_window(60, 6 * 60, 23 * 60));
   CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+  {
+    // A change to the same start and end keeps the hours the schedule had.
+    NightPrefs now = night_defaults(), next = now;
+    next.start = 23 * 60;
+    next.end = 23 * 60;
+    next.on = 1;
+    CHECK(night_keep_hours(next, now));
+    CHECK_EQ(next.start, now.start);
+    CHECK_EQ(next.end, now.end);
+    CHECK_EQ(next.on, 1);  // the rest of the change stands
+    next.start = 22 * 60;
+    next.end = 6 * 60;
+    CHECK(!night_keep_hours(next, now));
+    CHECK_EQ(next.start, 22 * 60);
+    CHECK_EQ(next.end, 6 * 60);
+  }
 
   NightPrefs p = night_defaults();
   CHECK(!p.on);

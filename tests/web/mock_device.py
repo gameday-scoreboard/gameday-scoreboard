@@ -268,6 +268,7 @@ def night_time(v):
 
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
+    hours = (STATE["nightstart"], STATE["nightend"])
     for k, v in kv:
         if k == "team":
             ref = parse_team_ref(v)
@@ -337,6 +338,9 @@ def apply_set(kv):
                 STATE[k] = night_time(v)
         elif k == "nightlevel":
             STATE["nightlevel"] = min(255, max(1, atoi(v)))
+    # The same start and end keeps the hours it had (night_keep_hours).
+    if STATE["nightstart"] == STATE["nightend"]:
+        STATE["nightstart"], STATE["nightend"] = hours
 
 
 def entity(name):
@@ -466,6 +470,11 @@ def import_settings(doc):
                 favs.append(ref)
         else:
             skipped.append(k)
+    # The same start and end: the end is left out (settings_doc.h).
+    hours = dict(p for p in kv if p[0] in ("nightstart", "nightend"))
+    if len(hours) == 2 and night_time(hours["nightstart"]) == night_time(hours["nightend"]):
+        kv = [p for p in kv if p[0] != "nightend"]
+        skipped.append("nightend=" + night_time(hours["nightend"]))
     for name, ent, lo, hi in (("brightness", "Brightness", 1, 255), ("scroll", "Scroll Speed", 1, 10)):
         if name in doc and doc[name] is not None:
             if not is_int(doc[name]):

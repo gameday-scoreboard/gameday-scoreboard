@@ -20,6 +20,11 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- A panel that restarts during the night schedule's hours, as it does for the nightly update, comes back at its night brightness or with its screen off, instead of at full brightness for its first few seconds. After a power cut the schedule starts the moment the panel has the time.
+- A night schedule sent with the same start and end time, by an app, a script or a settings backup, keeps the hours it had instead of turning on and never running.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
