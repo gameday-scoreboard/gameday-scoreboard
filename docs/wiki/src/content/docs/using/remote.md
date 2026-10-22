@@ -1,6 +1,6 @@
 ---
 title: "WizMote remote"
-description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and your first four favorite teams."
+description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and your first four favorite teams or playlists."
 sidebar:
   order: 12
 ---
@@ -34,8 +34,12 @@ The brightness buttons move the same **Brightness** setting as the device page a
 
 Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.
 
-- In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the playlist carries on.
+- In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the panel carries on through your favorites.
 - In **My team** or **Live games**, a button switches the panel to My team, following that favorite.
 - A button for an empty slot does nothing.
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
+
+:::note[Coming in the next release]
+With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
+:::
