@@ -575,6 +575,9 @@ gameday:
   http_request_id: http_client
   time_id: ha_time
   panel_layout_id: gd_panels
+  # Kept in the settings backup with the component's own settings.
+  brightness_id: brightness
+  scroll_speed_id: shared_scroll_speed
   # "Follow beta" on the device page switches the update entity between these.
   beta_channel:
     update_id: gd_firmware_update
