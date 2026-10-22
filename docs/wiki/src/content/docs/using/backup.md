@@ -49,7 +49,7 @@ If the backup has a different panel layout (one 64x64 panel against a 128x64 one
 
 ## When it won't restore
 
-The panel checks the whole file before it changes anything. If a setting in it has the wrong kind of value, like text where a number goes, or a team or time the panel can't read, nothing changes and the page says which one, like **Not restored: mode should be a whole number. Nothing was changed.** That happens to a file that was edited by hand or damaged; restore an untouched copy instead.
+The panel checks the whole file before it changes anything. If a setting in it has the wrong kind of value, like text where a number goes, or a team, time or message list address the panel can't read, nothing changes and the page says which one, like **Not restored: mode should be a whole number. Nothing was changed.** That happens to a file that was edited by hand or damaged; restore an untouched copy instead.
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 

@@ -958,12 +958,13 @@
   // section stays hidden.
   const BACKUP_MAX = 4096;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
-  const probeBackup = async () => {
+  const probeBackup = async (retry) => {
     try {
       const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
       // Only a 404 is firmware without it; a 500 is a panel still starting.
       if (r.status === 404) $("#backup").hidden = true;
       else if (r.ok) $("#backup").hidden = false;
+      else if (retry) setTimeout(() => probeBackup(false), 5000);
       return r.ok ? await r.json() : null;
     } catch (_) {
       return null;
@@ -1911,7 +1912,7 @@
   connect();
   fetchState();
   loadNetworks();
-  probeBackup();
+  probeBackup(true);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();
