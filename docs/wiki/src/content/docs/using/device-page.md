@@ -38,7 +38,7 @@ Tap **Change team** to open the team chooser. It has a search box and a tab per 
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap the side you want to follow. The chooser opens on **On now** when a game is live, and on your team's league otherwise.
 
-The same chooser adds favorites: **Add a favorite** in the Favorites card opens it, and a tap adds the team to the end of your list. See [Favorite teams](/using/favorites/).
+The same chooser adds favorites: **Add a favorite** in the Favorites card opens it, and it stays open so you can add several. A tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it. See [Favorite teams](/using/favorites/).
 
 ## Settings
 
