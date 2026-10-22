@@ -22,10 +22,13 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- A panel that restarts during the night schedule's hours, as it does for the nightly update, comes back at its night brightness or with its screen off, instead of at full brightness for its first few seconds. After a power cut the schedule starts the moment the panel has the time.
+- A night schedule sent with the same start and end time, by an app, a script or a settings backup, keeps the hours it had instead of turning on and never running.
 - Pick the best game counts a soccer match as at a break from the 45th minute to halftime and from the 90th minute on, so a dull match no longer holds the panel for a whole half. It also looks once per break, so a hockey intermission or a quarter break costs one look instead of one every Switch every minutes, which is most of what a panel with no team picked reads.
 - Favorites take over with Stick with the higher team checks every Switch every minutes (at least every 5) for a higher favorite whose game started without a set time. With Alternate, the switch comes only every Switch every minutes, not also when another favorite's game is about to start.
 - Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
 - In a Live mode with your team on the board between games, a look for live games that fails (a slow or dropped connection) is tried again within a few minutes. Before, the panel waited for the next kickoff it knew of, up to 3 hours, and could miss the start of a game.
+- The board says **Can't reach ESPN** in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and in Live games after "No live NFL games, showing CHI" when your team's card can't be read. A panel cut off from ESPN for days keeps saying so instead of switching to "No upcoming game" every couple of days.
 
 ## v2026.10.1
 

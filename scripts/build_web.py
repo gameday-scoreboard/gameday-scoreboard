@@ -9,9 +9,13 @@ or demo.js or regenerating components/gameday/teams.h, and commit both bundles.
 
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "components" / "gameday"))
+from leagues_table import leagues as league_rows  # noqa: E402
+
 TEAMS_H = ROOT / "components" / "gameday" / "teams.h"
 APP_JS = ROOT / "firmware" / "web" / "app.js"
 BUNDLE = ROOT / "firmware" / "web" / "bundle.js"
@@ -19,13 +23,6 @@ DEMO_JS = ROOT / "firmware" / "web" / "demo.js"
 DEMO_BUNDLE = ROOT / "firmware" / "web" / "bundle-demo.js"
 
 TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
-LEAGUES_H = ROOT / "components" / "gameday" / "leagues.h"
-# One kLeagues row: enum, key, path, prefix, logo dir, then the sport and the
-# per_event, season_list and logo_by_id flags.
-LEAGUE_RE = re.compile(
-    r'\{League::(\w+),\s*"(\w+)",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)",\s*Sport::\w+,'
-    r"\s*(?:true|false),\s*(?:true|false),\s*(true|false),"
-)
 # One row of app.js's LEAGUES table, the fields it copies from leagues.h.
 JS_LEAGUE_RE = re.compile(r'^\s*(\w+): \{ prefix: "([^"]*)",.*?path: "([^"]*)", logo: "([^"]*)", byId: (true|false)', re.M)
 TZ_H = ROOT / "components" / "gameday" / "timezones.h"
@@ -36,7 +33,7 @@ def check_leagues(leagues, app_js):
     """app.js keeps its own copy of the leagues.h table. Stop the build when
     they differ, because a mismatch otherwise only shows as a broken logo or
     scoreboard URL on the device page."""
-    want = {key: (prefix, path, logo, by_id == "true") for _lg, key, path, prefix, logo, by_id in leagues}
+    want = {r["key"]: (r["prefix"], r["path"], r["logo_dir"], r["logo_by_id"]) for r in leagues}
     have = {key: (prefix, path, logo, by_id == "true") for key, prefix, path, logo, by_id in JS_LEAGUE_RE.findall(app_js)}
     for key in sorted(set(want) | set(have)):
         if want.get(key) != have.get(key):
@@ -44,10 +41,10 @@ def check_leagues(leagues, app_js):
 
 
 def main():
-    leagues = LEAGUE_RE.findall(LEAGUES_H.read_text(encoding="utf-8"))
+    leagues = league_rows()
     app_js = APP_JS.read_text(encoding="utf-8")
     check_leagues(leagues, app_js)
-    keys = {lg: key for lg, key, *_rest in leagues}
+    keys = {r["league"]: r["key"] for r in leagues}
     rows = []
     for league, tid, abbr, name, _group in TEAM_RE.findall(TEAMS_H.read_text(encoding="utf-8")):
         rows.append([keys[league], int(tid), abbr, name])

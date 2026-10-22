@@ -195,8 +195,6 @@ void GamedaySelect::control(const std::string &value) {
     this->parent_->select_team(value);
   else if (this->type_ == SelectType::MODE)
     this->parent_->select_mode(value);
-  else if (this->type_ == SelectType::FAVORITE)
-    this->parent_->select_favorite(this->slot_, value);
   else if (this->type_ == SelectType::PLAYLIST)
     this->parent_->select_playlist(value);
   else
@@ -355,6 +353,9 @@ void GamedayComponent::setup() {
   this->apply_timezone_();
   if (this->time_ != nullptr)
     this->time_->add_on_time_sync_callback([this]() {
+      // After a power cut the clock starts here: the night schedule
+      // applies now, not at the next tick.
+      this->night_tick_();
       if (!this->clock_approx_)
         return;
       ESP_LOGI(TAG, "Time server answered: clock no longer approximate");
@@ -369,6 +370,10 @@ void GamedayComponent::setup() {
   if (this->base_ != nullptr)
     this->base_->add_handler(this);
   this->schedule_next_(3000);
+  // A restart keeps the clock, and the nightly update restarts inside the
+  // default hours: the boot screen goes to the night's brightness on the
+  // first loop rather than at full brightness until the first tick, 10 s on.
+  this->defer([this]() { this->night_tick_(); });
 }
 
 std::string GamedayComponent::hostname() const { return std::string(App.get_name().c_str()); }
@@ -406,28 +411,6 @@ std::string GamedayComponent::favorite_option_(uint8_t slot) const {
   return "None";
 }
 
-void GamedayComponent::select_favorite(uint8_t slot, const std::string &option) {
-  if (slot < 1 || slot > FAV_MAX)
-    return;
-  uint8_t league = 0;
-  uint32_t id = 0;
-  if (option != "None") {
-    for (size_t i = 0; i < ::espn::kTeamCount; i++) {
-      const auto &t = ::espn::kTeams[i];
-      if (::espn::team_option(t) == option) {
-        league = (uint8_t) t.league;
-        id = t.espn_id;
-        break;
-      }
-    }
-    if (id == 0) {
-      ESP_LOGW(TAG, "Unknown favorite '%s'", option.c_str());
-      return;
-    }
-  }
-  this->set_favorite_(slot, league, id);
-}
-
 void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) {
   if (slot < 1 || slot > FAV_MAX)
     return;
@@ -441,8 +424,6 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   this->remap_lists_(before);
   bool first_pick = id != 0 && this->mark_setup_done_();
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
-  if (slot <= 4 && this->favorite_selects_[slot - 1] != nullptr)
-    this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
   this->favorites_changed_(first_pick, live_before);
 }
 
@@ -460,9 +441,6 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   this->remap_lists_(before);
   bool first_pick = any && this->mark_setup_done_();
   ESP_LOGI(TAG, "Favorites: %u team(s)", (unsigned) list.size());
-  for (uint8_t slot = 1; slot <= 4; slot++)
-    if (this->favorite_selects_[slot - 1] != nullptr)
-      this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
   this->favorites_changed_(first_pick, live_before);
 }
 
@@ -694,9 +672,6 @@ void GamedayComponent::publish_selects_() {
     this->timezone_select_->publish_state(::espn::kTimezones[this->prefs_.tz_index].name);
   if (this->mode_select_ != nullptr)
     this->mode_select_->publish_state(MODE_OPTIONS[this->prefs2_.mode]);
-  for (uint8_t slot = 1; slot <= 4; slot++)
-    if (this->favorite_selects_[slot - 1] != nullptr)
-      this->favorite_selects_[slot - 1]->publish_state(this->favorite_option_(slot));
   this->publish_playlist_select_();
 }
 
@@ -1092,7 +1067,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     this->fav_poll_ms_ = now == 0 ? 1 : now;
   if (j.need_schedule) {
     if (!j.schedule_ok) {
-      this->misses_++;
+      this->count_miss_();
       this->emit_({});  // the miss shows on the ticker and the page, as in My team
       this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
       this->schedule_next_(0);
@@ -1128,7 +1103,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     }
   }
   if (!j.game_ok) {
-    this->misses_++;
+    this->count_miss_();
     this->emit_({});
     this->back_off_();
     this->schedule_next_(0);
@@ -2693,7 +2668,7 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_scan) {
     if (!j.scan_ok && j.live.empty()) {
-      this->misses_++;
+      this->count_miss_();
       // Retry the scan, not the long wait.
       this->live_started_ms_ =
           ::espn::live_clock_after_failed_scan(this->live_started_ms_, this->live_fallback_, this->recap_on_);
@@ -2883,7 +2858,7 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_schedule) {
     if (!j.schedule_ok) {
-      this->misses_++;
+      this->count_miss_();
       this->drop_team_placeholder_();
       this->emit_({});
       this->schedule_next_(this->back_off_());
@@ -2917,7 +2892,7 @@ void GamedayComponent::apply_job_() {
     }
   }
   if (!j.game_ok) {
-    this->misses_++;
+    this->count_miss_();
     if (this->cache_unconfirmed_ && !j.throttled) {
       // ESPN has no such game any more, or the read failed: the cache may be
       // wrong, so read the team endpoint now, not in six hours.
@@ -3014,7 +2989,7 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
     this->emit_({});
     this->mark_board_ready_();
   } else if (j.polled && !j.game_ok) {
-    this->misses_++;
+    this->count_miss_();
     this->drop_team_placeholder_();
     this->emit_({});
   } else if (j.polled) {
@@ -3040,7 +3015,16 @@ void GamedayComponent::apply_cup_job_(uint32_t now) {
 std::string GamedayComponent::no_game_why_() const {
   if (this->game_.valid || this->demo_playing_())
     return "";
-  return ::espn::no_game_text(this->clock_set_(), this->live_mode_(), this->no_game_confirmed_, this->misses_,
+  size_t favs = 0, read = 0;
+  if (this->favorites_mode_()) {
+    favs = this->fav_.size();
+    for (const auto &e : this->fav_)
+      read += e.sched.valid ? 1 : 0;
+  }
+  // The Live fallback shows the saved team's card, which says why it is
+  // empty like My team does.
+  return ::espn::no_game_text(this->clock_set_(), this->live_mode_() && !this->live_fallback_,
+                              ::espn::no_game_said(favs, read, this->no_game_confirmed_), this->misses_,
                               this->captive_);
 }
 
@@ -3146,6 +3130,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // Before the Live mode prefixes, so a fallback team's Next line keeps "No
   // live X games, showing CHI |" in front of it.
   this->clock_fields_(f);
+  std::string showing;  // the Live fallback's "No live X games, showing DAL | "
   if (this->live_mode_() && !this->demo_playing_()) {
     std::string league_word = this->live_word_();
     const ::espn::Team *saved = this->current_team_();
@@ -3159,7 +3144,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_team_score = f.ha_opp_score = -1;
       f.message = this->recap_message_;
     } else if (this->live_fallback_ && saved != nullptr) {
-      std::string showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
+      showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
       f.status_text = showing + f.status_text;
       f.ha_status_text = showing + f.ha_status_text;
     } else if (!g.valid || g.state == GameState::NOT_FOUND) {
@@ -3174,8 +3159,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // once ESPN itself has said so; before that it would be a guess.
   std::string why = this->no_game_why_();
   if (!why.empty()) {
-    f.status_text = why;
-    f.ha_status_text = why;
+    f.status_text = showing + why;
+    f.ha_status_text = showing + why;
     f.message = why;
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
@@ -4525,6 +4510,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
     }
   }
+  if (::espn::night_keep_hours(night, this->night_))
+    ESP_LOGW(TAG, "Night schedule: start and end can't be the same time; keeping %s to %s",
+             ::espn::night_clock12(night.start).c_str(), ::espn::night_clock12(night.end).c_str());
   this->set_night_(night);
   if (msg_keys != 0 || msg_every >= 0)
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);

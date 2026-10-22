@@ -60,6 +60,10 @@ These show on the board or in the ticker.
 | **Postponed**, **Canceled** or **Suspended** | The game ended without being played out. | Nothing. |
 | **Sat TBD** | ESPN hasn't set the game's start time yet. | Nothing. The time shows once ESPN has it. |
 
+:::note[Coming in the next release]
+**Can't reach ESPN** also shows in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and after **No live NFL games, showing CHI** when your team's card can't be read. A panel that can't reach ESPN for days keeps saying so instead of switching to **No upcoming game** every couple of days.
+:::
+
 A panel with no team picked also brings the app's QR code back over the board for 13 seconds every 3 minutes, until you pick one.
 
 That QR code comes with **Pick your team in the app** beside it on a 128x64 panel. On a single 64x64 panel the words show for 5 seconds, then the QR code for 8.
