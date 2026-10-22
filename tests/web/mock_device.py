@@ -57,13 +57,15 @@ WEB = Path(os.environ.get("GAMEDAY_WEB", REPO / "firmware" / "web"))
 
 # Same tables the firmware and scripts/build_web.py read.
 TEAM_RE = re.compile(r'\{League::([A-Z]+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
-LEAGUE_RE = re.compile(r'\{League::[A-Z]+,\s*"([a-z]+)",')
 TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
 TEAMS = {}
 for lg, tid, abbr, name, _ in TEAM_RE.findall((REPO / "components/gameday/teams.h").read_text(encoding="utf-8")):
     TEAMS[(lg.lower(), int(tid))] = (abbr, name)
 # kLeagues order, which is the order the firmware lists live leagues in.
-LEAGUES = LEAGUE_RE.findall((REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"))
+sys.path.insert(0, str(REPO / "components" / "gameday"))
+from leagues_table import leagues  # noqa: E402
+
+LEAGUES = [row["key"] for row in leagues()]
 TZ_TEXT = "\n".join(ln for ln in (REPO / "components/gameday/timezones.h").read_text(encoding="utf-8").splitlines()
                     if not ln.lstrip().startswith("//"))
 TZ_ROWS = TZ_RE.findall(TZ_TEXT)
