@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "auto_update.h"
+#include "night.h"
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
@@ -260,6 +261,37 @@ static void test_event_live() {
   CHECK(sea.completed);
   CHECK(sea.team_winner);
   CHECK_EQ(sea.game_name, std::string("Super Bowl LX"));
+
+  // Records and season leaders for the pre-game ticker, from both sides of one game
+  GameSnapshot dal;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 6, dal, "401873007"));
+  CHECK(dal.state == GameState::PRE);
+  CHECK_EQ(dal.team_record, std::string("2-3"));
+  CHECK_EQ(dal.opp_record, std::string("3-2"));
+  CHECK_EQ(dal.team_leader, std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(dal.opp_leader, std::string("Love 1,408 yds 10 TD"));
+  // A 128-wide board shows the records under the logos; one 64-wide panel
+  // has no room, so its ticker carries them
+  TickerOptions wide;
+  CHECK_EQ(status_text(dal, wide, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | "
+                       "Lambeau Field"));
+  TickerOptions narrow;
+  narrow.records = true;
+  CHECK_EQ(status_text(dal, narrow, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | "
+                       "Love 1,408 yds 10 TD | Lambeau Field"));
+  TickerOptions no_leaders = narrow;
+  no_leaders.leaders = false;
+  CHECK_EQ(status_text(dal, no_leaders, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | Lambeau Field"));
+  GameSnapshot gb;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 9, gb, "401873007"));
+  CHECK_EQ(gb.team_leader, std::string("Love 1,408 yds 10 TD"));
+  CHECK_EQ(gb.opp_leader, std::string("Prescott 1,381 yds 9 TD"));
+  // A passing line with no touchdowns ("42/64, 409 YDS, 3 INT")
+  CHECK_EQ(chi.team_leader, std::string("Bagent 409 yds"));
+  CHECK_EQ(chi.opp_leader, std::string("Penix Jr. 719 yds 3 TD"));
 }
 
 static bool same_snapshot(const GameSnapshot &a, const GameSnapshot &b) {
@@ -759,6 +791,32 @@ static void test_status_text() {
   CHECK_EQ(status_text(p, no_odds, "Sun 5:30 PM"), std::string("Super Bowl LX | Sun 5:30 PM | Lumen Field"));
   p.game_name = p.venue = "Rose Bowl";
   CHECK_EQ(status_text(p, no_odds, "Thu 3:00 PM"), std::string("Rose Bowl | Thu 3:00 PM"));
+  // Leader lines: last name, yards with a comma, touchdowns when there are any
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1381 YDS, 9 TD, 3 INT"), std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(espn::detail::leader_line("M. Penix Jr.", "52/77, 719 YDS, 3 TD, 1 INT"), std::string("Penix Jr. 719 yds 3 TD"));
+  CHECK_EQ(espn::detail::leader_line("B. Robinson", "102 CAR, 580 YDS, 4 TD"), std::string("Robinson 580 yds 4 TD"));
+  CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
+  CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
+  CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
+  // Pre-game on a single panel: both records after the kickoff, the leaders
+  // after the odds, and the leaders switch takes only the leaders away
+  GameSnapshot pr = live(0, 0, GameState::PRE);
+  pr.team_record = "2-3";
+  pr.opp_record = "3-2";
+  pr.team_leader = "Prescott 1,381 yds 9 TD";
+  pr.opp_leader = "Love 1,408 yds 10 TD";
+  pr.venue = "Lambeau Field";
+  CHECK_EQ(status_text(pr, no_odds, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | Lambeau Field"));
+  TickerOptions narrow = no_odds;
+  narrow.records = true;
+  CHECK_EQ(status_text(pr, narrow, "Sun 7:20 PM"),
+           std::string("Sun 7:20 PM | DAL 2-3, PHI 3-2 | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | Lambeau Field"));
+  TickerOptions no_leaders = narrow;
+  no_leaders.leaders = false;
+  CHECK_EQ(status_text(pr, no_leaders, "Sun 7:20 PM"), std::string("Sun 7:20 PM | DAL 2-3, PHI 3-2 | Lambeau Field"));
+  pr.opp_record = "";
+  CHECK_EQ(status_text(pr, no_leaders, "Sun 7:20 PM"), std::string("Sun 7:20 PM | DAL 2-3 | Lambeau Field"));
   // Post
   GameSnapshot f = live(21, 20, GameState::POST);
   f.team_record = "3-0";
@@ -960,6 +1018,12 @@ static void test_live_games() {
            std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
                        "?groups=50&limit=300&dates=20260214"));
   CHECK(scan_url(League::NBA, 0).find("groups=") == std::string::npos);
+  // A panel with no team picked reads college basketball's Top 25 slate.
+  CHECK_EQ(scan_url(League::MCBB, parse_iso8601_z("2026-02-14T20:00Z"), true),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+                       "?dates=20260214"));
+  CHECK(scan_url(League::NCAA, 0, true).find("groups=80") != std::string::npos);
+  CHECK_EQ(scan_url(League::NHL, 0, true), scan_url(League::NHL, 0));
   // neutral splashes name both sides
   CHECK_EQ(decide_splash(live(0, 0), live(6, 0), true, true).text, std::string("DAL TOUCHDOWN"));
   CHECK_EQ(decide_splash(live(0, 0), live(0, 3), true, true).text, std::string("PHI FIELD GOAL"));
@@ -2114,10 +2178,15 @@ static void test_nba_pre_post() {
   CHECK_EQ(p.over_under, std::string("216.5"));
   CHECK_EQ(p.tv, std::string("NBA TV"));
   TickerOptions o;
-  CHECK_EQ(status_text(p, o, "Today 10:00 PM"), std::string("Today 10:00 PM | POR -14.5 | O/U 216.5 | NBA TV | Moda Center"));
+  CHECK_EQ(status_text(p, o, "Today 10:00 PM"),
+           std::string("Today 10:00 PM | POR -14.5 | O/U 216.5 | NBA TV | Moda Center"));
   TickerOptions no_odds;
   no_odds.odds = false;
   CHECK_EQ(status_text(p, no_odds, ""), std::string("10/7 - 10:00 PM EDT | Moda Center"));
+  // A single 64-wide panel has no room for the records, so the ticker carries them
+  TickerOptions narrow = no_odds;
+  narrow.records = true;
+  CHECK_EQ(status_text(p, narrow, ""), std::string("10/7 - 10:00 PM EDT | POR 0-0, GS 1-1 | Moda Center"));
   CHECK_EQ(basketball_series(p), std::string(""));
 
   GameSnapshot f = hoops_event("fixtures/event_nba_final.json", kPacers);
@@ -2384,10 +2453,14 @@ static void test_nhl_pre_post() {
   CHECK_EQ(p.over_under, std::string("6.5"));
   CHECK_EQ(p.tv, std::string("ESPN+"));
   TickerOptions o;
-  CHECK_EQ(status_text(p, o, "Today 10:00 PM"), std::string("Today 10:00 PM | EDM -135 | O/U 6.5 | ESPN+ | Honda Center"));
+  CHECK_EQ(status_text(p, o, "Today 10:00 PM"),
+           std::string("Today 10:00 PM | EDM -135 | O/U 6.5 | ESPN+ | Honda Center"));
   TickerOptions no_odds;
   no_odds.odds = false;
   CHECK_EQ(status_text(p, no_odds, ""), std::string("10/7 - 10:00 PM EDT | Honda Center"));
+  TickerOptions narrow = no_odds;
+  narrow.records = true;
+  CHECK_EQ(status_text(p, narrow, ""), std::string("10/7 - 10:00 PM EDT | EDM 2-0-1, ANA 2-0-0 | Honda Center"));
 
   // Tonight's final, and the win splash from the intermission document of the same game
   GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
@@ -2423,7 +2496,8 @@ static void test_nhl_pre_post() {
   GameSnapshot pre = po;
   pre.state = GameState::PRE;
   pre.odds = pre.over_under = pre.tv = "";
-  CHECK_EQ(status_text(pre, o, "Today 7:00 PM"), std::string("Today 7:00 PM | CAR leads series 2-0 | Lenovo Center"));
+  CHECK_EQ(status_text(pre, o, "Today 7:00 PM"),
+           std::string("Today 7:00 PM | CAR leads series 2-0 | Lenovo Center"));
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_nhl_live.json"), Sport::HOCKEY, kPenguins, x));  // not in it
@@ -4190,6 +4264,79 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
 }
 
+static void test_night() {
+  // Times as the page's fields send them
+  CHECK_EQ(night_parse_time("23:00"), 23 * 60);
+  CHECK_EQ(night_parse_time("7:05"), 7 * 60 + 5);
+  CHECK_EQ(night_parse_time("00:00"), 0);
+  CHECK_EQ(night_parse_time("23:59"), 23 * 60 + 59);
+  CHECK_EQ(night_parse_time("24:00"), -1);
+  CHECK_EQ(night_parse_time("12:60"), -1);
+  CHECK_EQ(night_parse_time("12:5"), -1);
+  CHECK_EQ(night_parse_time("123:00"), -1);
+  CHECK_EQ(night_parse_time(":30"), -1);
+  CHECK_EQ(night_parse_time("1a:00"), -1);
+  CHECK_EQ(night_parse_time("11 PM"), -1);
+  CHECK_EQ(night_parse_time(""), -1);
+  CHECK_EQ(night_time_text(7 * 60), std::string("07:00"));
+  CHECK_EQ(night_time_text(23 * 60 + 30), std::string("23:30"));
+  CHECK_EQ(night_clock12(7 * 60), std::string("7:00 AM"));
+  CHECK_EQ(night_clock12(0), std::string("12:00 AM"));
+  CHECK_EQ(night_clock12(12 * 60 + 5), std::string("12:05 PM"));
+  CHECK_EQ(night_clock12(23 * 60 + 30), std::string("11:30 PM"));
+
+  // Across midnight, and inside one day
+  CHECK(night_window(23 * 60, 7 * 60, 23 * 60));
+  CHECK(night_window(23 * 60, 7 * 60, 2 * 60));
+  CHECK(!night_window(23 * 60, 7 * 60, 7 * 60));  // over at the end minute
+  CHECK(!night_window(23 * 60, 7 * 60, 12 * 60));
+  CHECK(night_window(60, 6 * 60, 3 * 60));
+  CHECK(!night_window(60, 6 * 60, 23 * 60));
+  CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+
+  NightPrefs p = night_defaults();
+  CHECK(!p.on);
+  CHECK_EQ((int) p.start, 23 * 60);
+  CHECK_EQ((int) p.end, 7 * 60);
+  CHECK(!p.screen_off);
+  CHECK_EQ((int) p.level, (int) kNightLevelDefault);
+  const int late = 2 * 60;
+  CHECK(night_state(p, true, late, false) == Night::DAY);  // off out of the box
+  p.on = 1;
+  CHECK(night_state(p, true, late, false) == Night::DIM);
+  CHECK(night_state(p, true, 12 * 60, false) == Night::DAY);
+  CHECK(night_state(p, false, late, false) == Night::DAY);  // no clock yet: never dark
+  CHECK(night_state(p, true, late, true) == Night::GAME);
+  p.screen_off = 1;
+  CHECK(night_state(p, true, late, false) == Night::DARK);
+  CHECK(night_state(p, true, late, true) == Night::GAME);  // a live game lights it
+
+  p.level = 20;
+  CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
+  CHECK_EQ((int) night_brightness(128, Night::DARK, p), 0);
+  CHECK_EQ((int) night_brightness(128, Night::GAME, p), 128);
+  CHECK_EQ((int) night_brightness(128, Night::DAY, p), 128);
+  // Heat and power still hold the night level down
+  CHECK_EQ((int) guarded_brightness(night_brightness(128, Night::DIM, p), kHeatSteps, false), 5);
+  CHECK_EQ(std::string(night_word(Night::DAY)), std::string(""));
+  CHECK_EQ(std::string(night_word(Night::DARK)), std::string("off"));
+
+  // A damaged blob goes back to the defaults field by field
+  NightPrefs bad{};
+  bad.on = 7;
+  bad.start = 5000;
+  bad.end = 6 * 60;
+  bad.screen_off = 9;
+  bad.level = 0;
+  night_sanitize(bad);
+  CHECK_EQ((int) bad.on, 1);
+  CHECK_EQ((int) bad.start, (int) kNightStartDefault);
+  CHECK_EQ((int) bad.end, 6 * 60);
+  CHECK_EQ((int) bad.screen_off, 1);
+  CHECK_EQ((int) bad.level, (int) kNightLevelDefault);
+  static_assert(sizeof(NightPrefs) == 10, "NightPrefs is saved in flash: its size can't change");
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -4725,6 +4872,17 @@ static void test_line_score() {
   CHECK_EQ((int) f.team_line_count, 3);
   CHECK_EQ((int) f.team_lines[0], 2);
   CHECK_EQ((int) f.opp_lines[2], 0);
+  {
+    // A period value past int's range (found by the fuzzer) is capped, not cast
+    std::string json = slurp("fixtures/event_nhl_final.json");
+    const std::string first = "\"linescores\":[{\"value\":2.0,";
+    size_t at = json.find(first);
+    CHECK(at != std::string::npos);
+    json.replace(at, first.size(), "\"linescores\":[{\"value\":1.40187e+10,");
+    GameSnapshot big;
+    CHECK(parse_event_str(json, Sport::HOCKEY, kCapitals, big, root_id(json)));
+    CHECK(big.team_lines[0] == 255 || big.opp_lines[0] == 255);
+  }
   CHECK(line_score_due(f));
   LineScoreText t = line_score_text(f, 128);
   CHECK_EQ((int) t.font, 12);
@@ -5310,6 +5468,7 @@ int main() {
   test_heat_guard();
   test_power_log();
   test_guarded_brightness();
+  test_night();
   test_offseason();
   test_panel_text();
   test_message();

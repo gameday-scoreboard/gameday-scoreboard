@@ -43,12 +43,10 @@ The minutes for **Alternate** are the same setting as **Switch every** in Live g
 
 Panels set up before Favorite teams could alternate keep **Stick with the higher team** until you change it.
 
-:::note[Coming in the next release]
 **When two favorites are playing.** While one favorite's game is on the board, the panel also checks your other favorites' games in progress, each about every 30 seconds. Two switches in the **Favorites** card use those checks:
 
 - **Jump to the action** moves the panel to another favorite's game at its big moment, then back to the game it left once that moment has passed for a minute. A big moment is football in the red zone, the bases loaded, or a game within one score in its last two minutes or overtime (from the 88th minute in soccer). It's off on every panel until you turn it on. A game you picked with a remote button stays up.
 - **Score banner** shows another favorite's score along the bottom of the board for five seconds, like **KC TD, 21-17**, the favorite's score first. It covers touchdowns, field goals, runs, home runs and goals, not basketball, where teams score on most trips down the floor. A banner comes within about 30 seconds of the score. It's on until you turn it off.
-:::
 
 ## Using the remote
 
@@ -60,6 +58,4 @@ The **Up next** list under the board has one row per favorite: the live score, t
 
 If none of your favorites has any game scheduled, the board shows a clock in your first favorite's colors. See [Show: My team, Favorite teams, Live games](/using/modes/#when-your-team-has-no-game-coming).
 
-:::note[Coming in the next release]
 A favorite the panel hasn't read from ESPN yet says **Not checked yet** in the Up next list, keeping **No game scheduled** for a team that ESPN says has no game.
-:::

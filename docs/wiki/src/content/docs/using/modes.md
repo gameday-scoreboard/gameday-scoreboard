@@ -29,11 +29,14 @@ Football teams get the clock only when ESPN lists no game at all, so a bye week 
 
 A new panel has no team. Until you pick one, it shows live NFL and college football games as Live games would, and when nothing is on, the latest final scores and the games still to come (see [When nothing is live](#when-nothing-is-live)). The ticker asks you to pick one until you choose a team, a mode or a favorite, and the QR code for the Game Day app comes back over the board for 13 seconds every 3 minutes until you pick a team. See [Pick your team](/get-started/pick-your-team/).
 
+A panel with no team picked follows live games in every league it supports, not only football: NFL, college football, MLB, MLS, Premier League, NBA, WNBA, men's college basketball and NHL. On a weeknight in October that means the hockey, basketball and baseball games that are on. College basketball comes from the Top 25 games until you pick a team, and once you pick a college basketball team, or choose men's college basketball in Live games, the panel follows every Division I game. When nothing is live, the Later today games and the final scores cover every league too.
+
+The app's QR code still comes back every 3 minutes, now with **Pick your team in the app** beside it on a 128x64 panel. On a single 64x64 panel those words and the QR code take turns.
+
 ## Live games
 
 The panel follows a game in progress, picked at random from the leagues you choose, and moves to another one when that game ends or after **Switch every** minutes (1 to 30). When it moves on, it picks a different game from the one it showed last, if another one is on. Splashes name the team that scored, like "DAL TOUCHDOWN", since there is no "your team" here. With **Opponent scores too** off, only the team on the left gets them.
 
-:::note[Coming in the next release]
 Live games follows the best game on instead of a random one, with the **Pick the best game** switch on, as it is on a new or updated panel:
 
 - **The best game** is the closest one with the least time left. A game in overtime or extra innings comes first, and in college a ranked team, more so a top-ranked one, moves a game up.
@@ -41,7 +44,6 @@ Live games follows the best game on instead of a random one, with the **Pick the
 - **Upset alert.** When the better-ranked college team trails (a ranked team behind an unranked one, or behind a lower-ranked one) in the fourth quarter, the last ten minutes of a basketball game, or overtime, the panel flashes **UPSET ALERT** in red over that game, once a game. Those games also jump to the front of the line.
 
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
-:::
 
 :::note[Coming in the next release]
 ### Favorites take over
@@ -69,9 +71,7 @@ What the panel shows depends on whether you have a team:
 
 The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours. When there has been no game in the last week and none is coming, the board shows a gray clock and the ticker says "No live games right now".
 
-:::note[Coming in the next release]
 A change to the leagues, or to the favorites they follow, takes effect right away, instead of leaving the old leagues' final scores up until the next check.
-:::
 
 ## Favorite teams
 

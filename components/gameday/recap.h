@@ -8,12 +8,42 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <iterator>
 #include <string>
 #include <vector>
+
+#ifdef ESP_PLATFORM
+#include <esp_heap_caps.h>
+#endif
 
 #include "espn_parse.h"
 
 namespace espn {
+
+// The rotation's finals and games to come live in PSRAM on the panel. A
+// panel with no team keeps every league's, up to kRecapCap a day each, about
+// 200 bytes a game with its short strings stored inline: more than internal
+// RAM can spare. The host tests use the plain heap.
+template<class T> struct RecapAllocator {
+  using value_type = T;
+  RecapAllocator() = default;
+  template<class U> RecapAllocator(const RecapAllocator<U> &) {}
+  T *allocate(size_t n) {
+#ifdef ESP_PLATFORM
+    void *p = heap_caps_malloc_prefer(n * sizeof(T), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+#else
+    void *p = malloc(n * sizeof(T));
+#endif
+    if (p == nullptr)
+      abort();  // as operator new does with exceptions off
+    return static_cast<T *>(p);
+  }
+  void deallocate(T *p, size_t) { free(p); }  // ESP-IDF's free takes either heap
+  template<class U> bool operator==(const RecapAllocator<U> &) const { return true; }
+  template<class U> bool operator!=(const RecapAllocator<U> &) const { return false; }
+};
+template<class T> using RecapList = std::vector<T, RecapAllocator<T>>;
 
 // A day the way ESPN's scoreboard `dates=` parameter counts it for a league:
 // US Eastern, shifted like scan_url() (5 h for football, 9 h for the rest),
@@ -32,8 +62,8 @@ inline int64_t espn_day_epoch(int32_t day) { return (int64_t) day * 86400 + 17 *
 struct RecapDay {
   uint8_t league{0};
   int32_t day{0};
-  std::vector<Final> finals;
-  std::vector<Pending> later;  // today only, best first (pending_before)
+  RecapList<Final> finals;
+  RecapList<Pending> later;  // today only, best first (pending_before)
 };
 
 // Walking back for older finals stops once a league has this many.
@@ -95,7 +125,7 @@ inline std::string recap_matchup(const Pending &p) { return p.away_abbr + " at "
 // Ranked games first (best rank on either side), then by kickoff, the way
 // ESPN lists them. Games outside college football carry no rank and keep
 // kickoff order.
-inline void recap_sort(std::vector<Final> &finals) {
+inline void recap_sort(RecapList<Final> &finals) {
   std::stable_sort(finals.begin(), finals.end(), [](const Final &a, const Final &b) {
     if (a.rank != b.rank)
       return a.rank < b.rank;
@@ -142,7 +172,7 @@ inline void recap_trim(std::vector<RecapDay> &days, int64_t now) {
     if (today - d.day >= kRecapMaxDays || have[d.league] >= kRecapMinFinals)
       continue;
     if (d.day != today)
-      std::vector<Pending>().swap(d.later);
+      RecapList<Pending>().swap(d.later);
     if (d.finals.empty() && d.later.empty())
       continue;
     have[d.league] += d.finals.size();

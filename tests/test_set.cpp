@@ -52,11 +52,13 @@ struct Settings {
   int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
+  bool leaders{true};
   bool bootaddr{true}, autoupd{false}, beta{false};
   TeamRef favs[16];
   uint16_t live_mask{0};
   std::string msg, msgurl;
   int msgevery{kMsgEveryDefault};
+  NightPrefs night{night_defaults()};
 };
 constexpr int kFavMax = 16;
 constexpr int kMaxCols = 2;
@@ -129,9 +131,22 @@ void load(Settings &s, JsonObjectConst o) {
   flag("jump", s.jump);
   flag("banner", s.banner);
   flag("favtake", s.favtake);
+  flag("leaders", s.leaders);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
+  bool on = s.night.on != 0, screen = s.night.screen_off == 0;
+  flag("night", on);
+  flag("nightscreen", screen);
+  s.night.on = on ? 1 : 0;
+  s.night.screen_off = screen ? 0 : 1;
+  int level = s.night.level;
+  num("nightlevel", level);
+  s.night.level = (uint8_t) level;
+  if (o["nightstart"].is<const char *>())
+    s.night.start = (uint16_t) night_parse_time(o["nightstart"].as<const char *>());
+  if (o["nightend"].is<const char *>())
+    s.night.end = (uint16_t) night_parse_time(o["nightend"].as<const char *>());
 }
 
 void apply(Settings &s, const SetOp &op) {
@@ -165,12 +180,18 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::JUMP: s.jump = op.on; break;
     case SetKind::BANNER: s.banner = op.on; break;
     case SetKind::FAVTAKE: s.favtake = op.on; break;
+    case SetKind::LEADERS: s.leaders = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
     case SetKind::MSG: s.msg = op.text; break;
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
+    case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
+    case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
+    case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
+    case SetKind::NIGHT_SCREEN: s.night.screen_off = op.on ? 0 : 1; break;
+    case SetKind::NIGHT_LEVEL: s.night.level = (uint8_t) op.value; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -199,7 +220,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     if (f.id != 0)
       fav_leagues.push_back(f.league);
   JsonArray live = doc["live"].to<JsonArray>();
-  for (League l : live_leagues(s.live_mask, s.team_league, fav_leagues))
+  bool no_team = no_team_default(s.team.id != 0, (uint8_t) s.mode, !fav_leagues.empty());
+  for (League l : no_team ? no_team_leagues() : live_leagues(s.live_mask, s.team_league, fav_leagues))
     live.add(league_key(l));
   doc["live_auto"] = s.live_mask == 0;
   doc["tz"] = s.tz;
@@ -214,6 +236,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["jump"] = s.jump;
   doc["banner"] = s.banner;
   doc["favtake"] = s.favtake;
+  doc["leaders"] = s.leaders;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
@@ -221,6 +244,11 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["msg"] = s.msg;
   doc["msgurl"] = s.msgurl;
   doc["msgevery"] = s.msgevery;
+  doc["night"] = s.night.on != 0;
+  doc["nightstart"] = night_time_text(s.night.start);
+  doc["nightend"] = night_time_text(s.night.end);
+  doc["nightscreen"] = s.night.screen_off == 0;
+  doc["nightlevel"] = s.night.level;
 }
 
 void test_fixture_cases() {
@@ -301,7 +329,7 @@ void test_parse_set() {
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
-                 parse_set(key, "", op, kFavMax);
+                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }
@@ -331,12 +359,29 @@ void test_scan_leagues() {
   SCHECK(keys(scan_leagues((uint8_t) Mode::MY_TEAM, live)) == "", "My team scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NFL, live)) == "nfl", "Live NFL");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NCAA, live)) == "ncaa", "Live college");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything and the no-team default");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything");
   SCHECK(keys(scan_leagues((uint8_t) Mode::FAVORITES, live)) == "", "Favorites scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live)) == "mlb,nba,nhl", "Live games, its own leagues");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, (uint8_t) League::EPL, {}))) == "epl",
          "Live games, auto from the team's league");
   SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
+}
+
+// A panel nobody has picked a team on runs Live games over every league.
+void test_no_team() {
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
+         "the no-team default's scan reads every league");
+  const uint8_t my_team = (uint8_t) Mode::MY_TEAM, favs = (uint8_t) Mode::FAVORITES;
+  SCHECK(no_team_default(false, my_team, false), "My team, no team");
+  SCHECK(no_team_default(false, my_team, true), "My team, no team, favorites set for later");
+  SCHECK(!no_team_default(true, my_team, false), "My team with a team");
+  SCHECK(no_team_default(false, favs, false), "Favorites with none set");
+  SCHECK(!no_team_default(false, favs, true), "Favorites with one set");
+  SCHECK(!no_team_default(true, favs, false), "Favorites with none set and a team saved");
+  for (uint8_t m : {(uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA, (uint8_t) Mode::LIVE_ANY, (uint8_t) Mode::LIVE})
+    SCHECK(!no_team_default(false, m, false), "mode %u is a choice", (unsigned) m);
 }
 
 // A change to Live games' leagues restarts the scan only when it changes what
@@ -373,6 +418,7 @@ int run_set_tests(int &total_checks) {
   test_parse_set();
   test_live_leagues();
   test_scan_leagues();
+  test_no_team();
   test_live_scan_changed();
   test_fixture_cases();
   total_checks += checks;

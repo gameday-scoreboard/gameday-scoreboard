@@ -91,9 +91,11 @@ INITIAL = {
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
     "favmax": FAV_MAX, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "opp": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False,
     "msg": "", "msgurl": "", "msgevery": 2,
+    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
+    "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
@@ -151,6 +153,9 @@ WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
 # The saved team's league byte, which outlives a cleared team and counts in
 # Live auto. A fresh panel's is NFL.
 TEAM_LEAGUE = ["nfl"]
+# Live games' own list (the live mask), kept apart from the state's live list,
+# which shows every league instead while no team is picked.
+LIVE_LIST = [[]]
 
 
 def reset_state(overrides):
@@ -161,6 +166,7 @@ def reset_state(overrides):
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
     TEAM_LEAGUE[0] = (STATE.get("team") or {}).get("l", "nfl")
+    LIVE_LIST[0] = [] if STATE.get("live_auto", True) else list(STATE.get("live", []))
 
 
 def atoi(v):
@@ -216,11 +222,31 @@ def live_auto_leagues():
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
+def no_team_default():
+    """set_request.h no_team_default(): My team with no team, or Favorites with none set."""
+    if STATE["team"]:
+        return False
+    return STATE["mode"] == 0 or (STATE["mode"] == 4 and not any(STATE["favs"]))
+
+
 def state_doc():
-    """rebuild_state_() works the auto leagues out each time from the team and favorites."""
-    if STATE.get("live_auto"):
+    """rebuild_state_() works the leagues out each time: every league with no team
+    picked (no_team_leagues()), else the auto leagues from the team and favorites."""
+    if no_team_default():
+        STATE["live"] = list(LEAGUES)
+    elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
+    else:
+        STATE["live"] = list(LIVE_LIST[0])
     return STATE
+
+
+def night_time(v):
+    """night_parse_time() in components/gameday/night.h, as the state document writes it."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        return None
+    return f"{int(m[1]):02d}:{m[2]}"
 
 
 def apply_set(kv):
@@ -264,14 +290,14 @@ def apply_set(kv):
         elif k == "live":
             keys = [lg for lg in LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
-            STATE["live"] = keys
+            LIVE_LIST[0] = keys
         elif k == "tz":
             i = timezone_index(v)
             if i >= 0:
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "count", "match", "play", "odds", "opp", "best", "bootaddr", "autoupd", "beta"):
+        elif k in ("down", "count", "match", "play", "odds", "leaders", "opp", "best", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
@@ -284,6 +310,13 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k in ("night", "nightscreen"):
+            STATE[k] = v == "1"
+        elif k in ("nightstart", "nightend"):
+            if night_time(v):
+                STATE[k] = night_time(v)
+        elif k == "nightlevel":
+            STATE["nightlevel"] = min(255, max(1, atoi(v)))
 
 
 def selftest():

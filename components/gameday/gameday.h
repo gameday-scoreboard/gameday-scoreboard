@@ -32,6 +32,7 @@
 #include "health.h"
 #include "line_score.h"
 #include "message.h"
+#include "night.h"
 #include "offseason.h"
 #include "recap.h"
 #include "score_log.h"
@@ -148,7 +149,7 @@ class GamedaySelect : public select::Select, public Component {
 //   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
-//                                    down/count/match/play/odds/opp=0/1 panels=1/2
+//                                    down/count/match/play/odds/leaders/opp=0/1 panels=1/2
 //                                    (down: football, count: baseball, match: soccer)
 //                                    lockon=5-120 (min) release=30-3600 (s) collide=0 stick|1 alternate
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
@@ -250,6 +251,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_down_distance() const { return this->flag_(FLAG_DOWN); }
   bool ticker_baseball_count() const { return (this->prefs8_.ticker & TICK8_COUNT) != 0; }
   bool ticker_soccer_stats() const { return (this->prefs8_.ticker & TICK8_MATCH) != 0; }
+  // The season leaders in the pre-game ticker (football). Stored as an "off"
+  // bit so panels from before the setting keep showing them.
+  bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
   bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
@@ -285,6 +289,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_down_distance(bool on) { this->set_flag_(FLAG_DOWN, on); }
   void set_ticker_baseball_count(bool on) { this->set_ticker8_(TICK8_COUNT, on); }
   void set_ticker_soccer_stats(bool on) { this->set_ticker8_(TICK8_MATCH, on); }
+  void set_ticker_leaders(bool on) { this->set_ticker8_(TICK8_NOLEADERS, !on); }
   void set_best_game(bool on);
   void set_ticker_last_play(bool on) { this->set_flag_(FLAG_PLAY, on); }
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
@@ -300,9 +305,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 #endif
   void set_auto_update(bool on);
   // Heat and power protection (guard.h). guard_brightness() is what the
-  // display gets for the owner's Brightness; it runs from on_boot before
-  // setup(), so it loads the power log itself the first time.
-  uint8_t guard_brightness(uint8_t want);
+  // display gets for the owner's Brightness, after the night schedule
+  // (night.h) unless night is false (the QC screen); it runs from on_boot
+  // before setup(), so it loads the power log itself the first time.
+  uint8_t guard_brightness(uint8_t want, bool night = true);
   // The chip temperature sensor's readings (firmware/pages/guard.yaml).
   void set_chip_temp(float c);
   // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
@@ -516,6 +522,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   } __attribute__((packed));
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
+  // Football's season leaders before kickoff, on by default: set means off.
+  static constexpr uint8_t TICK8_NOLEADERS = 4;
   static constexpr uint8_t LIVE8_RANDOM = 1;  // "Pick the best game" off: a random game, as before
   void set_ticker8_(uint8_t f, bool on);
 
@@ -538,6 +546,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // live-game modes: scan the day's games first, then follow one
     bool need_scan{false};
     std::vector<League> scan_leagues;
+    bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
     std::vector<::espn::LiveGame> live;
     bool scan_ok{false};
     int64_t next_kickoff{0};  // earliest kickoff not started yet, 0 for none
@@ -617,12 +626,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // get that day's finished games and the ones not started yet.
   bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
                          std::vector<::espn::Final> *finals = nullptr,
-                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0,
+                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0, bool top25 = false,
                          const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr);
   // The mode the panel runs: the saved one, except that with no team picked
-  // My team (and Favorites with none set) runs as Live anything.
+  // My team (and Favorites with none set) runs as Live games over every
+  // league (live_leagues_).
   uint8_t effective_mode_() const {
-    return this->no_team_default() ? (uint8_t) Mode::LIVE_ANY : this->prefs2_.mode;
+    return this->no_team_default() ? (uint8_t) Mode::LIVE : this->prefs2_.mode;
   }
   static bool is_live_mode_(uint8_t m) {
     return (m >= (uint8_t) Mode::LIVE_NFL && m <= (uint8_t) Mode::LIVE_ANY) || m == (uint8_t) Mode::LIVE;
@@ -779,6 +789,27 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;
+  // The night schedule (night.h), its own blob. Loaded on first use, like
+  // the power log, since guard_brightness() runs before setup().
+  ESPPreferenceObject night_pref_;
+  ::espn::NightPrefs night_{};
+  bool night_loaded_{false};
+  ::espn::Night night_now_{::espn::Night::DAY};
+  // Live games: both sides of every game in progress at the last scan, so
+  // a team or favorite changed between scans counts at once. A game of the
+  // owner's that ends between scans keeps the panel lit until the next one,
+  // which errs toward lit. A full college football Saturday is a few
+  // hundred entries: PSRAM.
+  struct LiveSide {
+    uint32_t id;
+    uint8_t league;
+  };
+  std::vector<LiveSide, PsramAllocator<LiveSide>> scan_live_sides_;
+  void load_night_();
+  void set_night_(const ::espn::NightPrefs &p);
+  void night_tick_();  // from loop(), every AUTO_UPDATE_TICK
+  bool owner_team_(uint8_t league, uint32_t id) const;
+  bool owner_game_live_() const;
   ESPPreferenceObject pref7_;
   Prefs7 prefs7_{};
   ESPPreferenceObject pref8_;

@@ -51,9 +51,7 @@ Power the panels from a 5 V supply rated for them. The panel's listing gives the
 
 A new install starts at about half brightness (128 of 255). Change it with the Brightness setting on the device page.
 
-:::note[Coming in the next release]
 A panel that restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, holds its brightness low so it stays on. A small plug pulses in its top right corner, and every two minutes the bottom line says "Check power supply", until you press Clear on the device page. A panel that runs hot dims itself a step at a time and says "Too warm, dimming" until it cools.
-:::
 
 ## Ribbon cables and wiring checks
 

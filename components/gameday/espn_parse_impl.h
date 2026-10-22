@@ -248,8 +248,9 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     uint8_t &count = ours ? s.team_line_count : s.opp_line_count;
     count = 0;
     for (JsonVariantConst ls : c["linescores"].as<JsonArrayConst>()) {
+      // Capped before the cast: a value past int's range is undefined.
       float v = ls["value"] | 0.0f;
-      int pts = v > 0 ? (int) (v + 0.5f) : 0;
+      int pts = v > 0 ? (int) (std::min(v, 255.0f) + 0.5f) : 0;
       if (count < GameSnapshot::kLinesMax)
         lines[count++] = 0;
       pts += lines[count - 1];
@@ -305,6 +306,38 @@ inline Half half_from_detail(const std::string &detail) {
   if (detail.rfind("End", 0) == 0)
     return Half::END;
   return Half::NONE;
+}
+
+// Football's extra filter fields: each side's season leaders (passing,
+// rushing, receiving), for the pre-game ticker.
+inline void fill_football_filter(JsonObject ev) {
+  JsonObject c = ev["competitions"][0]["competitors"][0];
+  JsonObject l = c["leaders"].add<JsonObject>();
+  l["name"] = true;
+  JsonObject top = l["leaders"].add<JsonObject>();
+  top["displayValue"] = true;
+  top["athlete"]["shortName"] = true;
+}
+
+// Fills s.team_leader and s.opp_leader from an event already read into s by
+// snapshot_from_event: the passing leader, or the rushing or receiving leader
+// when ESPN has no passing line yet.
+inline void football_from_event(JsonObjectConst ev, GameSnapshot &s) {
+  static const char *const kOrder[] = {"passingLeader", "rushingLeader", "receivingLeader"};
+  for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+    bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+    std::string &line = ours ? s.team_leader : s.opp_leader;
+    for (const char *want : kOrder) {
+      for (JsonObjectConst l : c["leaders"].as<JsonArrayConst>()) {
+        if (str_or_empty(l["name"]) != want)
+          continue;
+        JsonObjectConst top = l["leaders"][0];
+        line = leader_line(str_or_empty(top["athlete"]["shortName"]), str_or_empty(top["displayValue"]));
+      }
+      if (!line.empty())
+        break;
+    }
+  }
 }
 
 // Fills s.mlb from an event already read into s by snapshot_from_event.
@@ -623,6 +656,8 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
                  const std::string &event_id = "") {
   JsonDocument filter(detail::json_allocator());
   detail::fill_event_filter(filter.to<JsonObject>());
+  if (sport == Sport::FOOTBALL)
+    detail::fill_football_filter(filter.as<JsonObject>());
   if (sport == Sport::BASEBALL)
     detail::fill_baseball_filter(filter.as<JsonObject>());
   if (sport == Sport::SOCCER)
@@ -642,6 +677,8 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
   if (!detail::snapshot_from_event(doc.as<JsonObjectConst>(), our_team_id, s))
     return false;
   s.sport = sport;
+  if (sport == Sport::FOOTBALL)
+    detail::football_from_event(doc.as<JsonObjectConst>(), s);
   if (sport == Sport::BASEBALL)
     detail::baseball_from_event(doc.as<JsonObjectConst>(), s);
   if (sport == Sport::SOCCER)

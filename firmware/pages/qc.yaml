@@ -63,11 +63,11 @@ script:
           lv_obj_move_foreground(id(qc_layer));
           lv_obj_clear_flag(id(qc_layer), LV_OBJ_FLAG_HIDDEN);
           id(qc_show).execute(0);
-      # Lit at the Brightness setting even if Power was off. The switch is
-      # left alone, so leaving QC knows what to go back to.
+      # Lit at the Brightness setting even if Power was off or it is night.
+      # The switch is left alone, so leaving QC knows what to go back to.
       - hub75.set_brightness:
           id: matrix
-          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
+          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, false);'
       - script.execute: gd_repaint
 
   - id: qc_stop
