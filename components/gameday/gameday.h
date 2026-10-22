@@ -162,7 +162,7 @@ class GamedaySelect : public select::Select, public Component {
 //   POST /gameday/set?msg=...&msgurl=...&msgevery=0-30   the message card (message.h)
 //   GET  /gameday/settings           the settings backup, one JSON document (settings_doc.h)
 //   POST /gameday/settings           a backup as a JSON body, checked whole, then applied;
-//                                    400 with "error" when refused, 413 past 4 KB
+//                                    400 with "error" when refused or past 4 KB
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
 //   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved

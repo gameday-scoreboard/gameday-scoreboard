@@ -4429,7 +4429,7 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
     JsonDocument in(::espn::detail::json_allocator());
     // Before the first build the document is "{}", and a backup of it would be empty.
     if (deserializeJson(in, state) != DeserializationError::Ok || in["mode"].isNull()) {
-      request->send(503, "application/json", "{\"error\":\"not ready\"}");
+      request->send(500, "application/json", "{\"error\":\"not ready\"}");
       return;
     }
     JsonDocument out(::espn::detail::json_allocator());
@@ -4445,14 +4445,15 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
     return;
   }
   if (request->method() != HTTP_POST) {
-    request->send(405, "application/json", "{\"error\":\"GET or POST\"}");
+    request->send(400, "application/json", "{\"error\":\"GET or POST\"}");
     return;
   }
   PsString body;
   body.swap(this->settings_body_);
   size_t length = request->contentLength();
+  // 400, not 413: ESPHome's web server sends any code it has no name for as 500.
   if (length > ::espn::kSettingsMaxBytes) {
-    request->send(413, "application/json", "{\"error\":\"That file is too big to be a settings backup.\"}");
+    request->send(400, "application/json", "{\"error\":\"That file is too big to be a settings backup.\"}");
     return;
   }
   ::espn::SettingsImport in;

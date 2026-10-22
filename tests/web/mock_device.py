@@ -706,7 +706,7 @@ class Handler(BaseHTTPRequestHandler):
             if "settings" in FAIL:
                 return self._json(404, {"error": "unknown route"})
             if n > SETTINGS_MAX:
-                return self._json(413, {"error": "That file is too big to be a settings backup."})
+                return self._json(400, {"error": "That file is too big to be a settings backup."})
             try:
                 doc = json.loads(raw)
             except ValueError:
