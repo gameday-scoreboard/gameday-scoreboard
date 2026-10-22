@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- Settings are saved on the panel the moment you change them, from the device page, the app, Home Assistant or the remote. Unplugging the panel within a minute of picking a team, a favorite, the night schedule or any other setting no longer loses the change, and a settings restore is saved at once too.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
