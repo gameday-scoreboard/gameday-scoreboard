@@ -25,6 +25,7 @@
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
+#include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
 #include "guard.h"
@@ -118,11 +119,17 @@ struct UpdateFields {
   // line; empty when none is known, and the page shows the date instead.
   bool clock{false};
   std::string next_line;
+  // The countdown card (countdown.h) on the same screen: big digits to
+  // countdown_at, which the page counts down itself, and next_line under
+  // them. countdown_end is when it stops: the kickoff, or the end of a
+  // custom countdown's day. 0 when the board shows something else.
+  int64_t countdown_at{0};
+  int64_t countdown_end{0};
 };
 
 enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, PLAYLIST };
 
-// PSRAM text (logo_cache.h's allocator): the message card's list.
+// PSRAM text (psram.h): the message card's list.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
 
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
@@ -302,6 +309,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_last_play(bool on) { this->set_flag_(FLAG_PLAY, on); }
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
+  // The next game's countdown card, on unless the owner turns it off.
+  bool countdown_on() const { return this->countdown_.off == 0; }
+  void set_countdown(bool on);
+  // The custom countdown: a name and a day (YYYYMMDD, 0 clears it).
+  void set_custom_countdown_name(const std::string &name);
+  void set_custom_countdown_day(uint32_t ymd);
   // "Install updates automatically", off unless the owner turns it on.
 #ifdef GAMEDAY_BAR
   // The bar build (firmware/pages/bar.yaml) always installs from the beta
@@ -561,6 +574,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static constexpr uint8_t TICK8_NOLEADERS = 4;
   static constexpr uint8_t LIVE8_RANDOM = 1;  // "Pick the best game" off: a random game, as before
   void set_ticker8_(uint8_t f, bool on);
+  // The countdown card's settings (countdown.h), in their own blob. A panel
+  // without it has the next game's countdown on and no custom one.
+  struct CountdownPrefs {
+    uint8_t off;  // 1 = no countdown to the next game
+    uint32_t ymd;  // the custom countdown's day, 0 = none
+    char name[::espn::kCountdownNameMax + 1];
+    uint8_t spare[3];
+  } __attribute__((packed));
+  ESPPreferenceObject countdown_pref_;
+  CountdownPrefs countdown_{};
+  void save_countdown_();
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
   // size is fixed for the same reason as Prefs7's.
   struct Prefs9 {
@@ -736,6 +760,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // show for months (offseason.h); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
   void clock_next_line_(UpdateFields &f, const GameSnapshot &g);
+  // The countdown card (countdown.h): which one has the board now, the
+  // fields that draw it, and the once-a-second check that turns the card.
+  ::espn::CountdownCard countdown_card_(int64_t now) const;
+  void countdown_fields_(UpdateFields &f);
+  void countdown_tick_();
+  // The custom countdown's day: when it starts, local time; 0 with none set.
+  int64_t custom_start_() const;
+  ::espn::CountdownCard countdown_shown_{::espn::CountdownCard::NONE};
+  uint32_t countdown_tick_ms_{0};
   void reset_game_();
   // Clears the board and scans again now, for a change in what the mode
   // follows. The caller starts the boot screen hold first.
@@ -905,7 +938,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint32_t side_ms{0};      // the last poll while another favorite had the board
   };
   // The favorite cards are ~1 KB each and internal heap is the panel's
-  // scarcest resource: PSRAM (logo_cache.h's allocator).
+  // scarcest resource: PSRAM (psram.h).
   using FavList = std::vector<FavEntry, PsramAllocator<FavEntry>>;
   FavList fav_;
   int fav_shown_{-1};
