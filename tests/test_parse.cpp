@@ -4446,6 +4446,11 @@ static void test_countdown() {
   CHECK_EQ(countdown_name("  Christmas  "), std::string("Christmas"));
   CHECK_EQ(countdown_name("Line\nbreak"), std::string("Linebreak"));
   CHECK_EQ(countdown_name("   "), std::string(""));
+  // Emoji are left out, not drawn as '?', and leave no double space.
+  CHECK_EQ(countdown_name("Xmas \xf0\x9f\x8e\x84 Eve"), std::string("Xmas Eve"));
+  CHECK_EQ(countdown_name("\xf0\x9f\x8e\x82 Birthday"), std::string("Birthday"));
+  CHECK_EQ(countdown_name("Go \xe2\x9a\xbd\xef\xb8\x8f"), std::string("Go"));
+  CHECK_EQ(countdown_name("Fianc\xc3\xa9 day"), std::string("Fianc\xc3\xa9 day"));
   CHECK_EQ(countdown_name("The day the season finally starts"), std::string("The day the season f"));
   CHECK_EQ(countdown_name("Graduation day Rena\xc3\xa9"), std::string("Graduation day Rena"));
   CHECK_EQ(countdown_name("Graduation day Ren\xc3\xa9"), std::string("Graduation day Ren\xc3\xa9"));

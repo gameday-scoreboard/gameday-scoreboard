@@ -125,6 +125,7 @@
     {"name": "custom countdown", "set": [["cddate", "2026-12-25"], ["cdname", "Christmas"]],
      "expect": {"cdname": "Christmas", "cddate": "2026-12-25"}},
     {"name": "countdown name is trimmed", "set": [["cdname", "  Opening Day  "]], "expect": {"cdname": "Opening Day"}},
+    {"name": "countdown name drops emoji", "set": [["cdname", "Xmas 🎄 Eve 🎅"]], "expect": {"cdname": "Xmas Eve"}},
     {"name": "countdown name is cut to 20 bytes", "set": [["cdname", "The day the season finally starts"]],
      "expect": {"cdname": "The day the season f"}},
     {"name": "countdown name cut keeps a whole character", "set": [["cdname", "Graduation day Renaé"]],
