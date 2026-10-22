@@ -36,7 +36,7 @@ inline bool time_tbd(JsonObjectConst comp) {
 // array or is a single-event document's root. board_extras adds what the
 // halftime and final boards need (line score, headline, the last play's
 // details for the scoring log): every league polls its game on its own
-// (LeagueInfo::per_event), so a whole day's scoreboard, up to 750 KB for
+// (fetch_game_), so a whole day's scoreboard, up to 750 KB for
 // college football, leaves them out.
 inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   ev["id"] = true;

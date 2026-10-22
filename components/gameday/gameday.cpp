@@ -2295,25 +2295,27 @@ bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::Live
 bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out) {
   bool live = is_live_mode_(this->job_.mode);
   League league = live || this->job_.fav_index >= 0 ? (League) schedule.league : team->league;
-  // A per_event league reads the one game, 8 to 20 KB a poll. The others read
-  // the day's scoreboard it sits in, up to 750 KB for college football.
+  // The one game, 8 to 20 KB a poll, where the day's scoreboard it sits in
+  // is up to 750 KB for college football.
   const ::espn::LeagueInfo *info = ::espn::league_info(league);
-  bool per_event = info != nullptr && info->per_event;
-  std::string url = per_event ? ::espn::event_url(league, schedule.event_id, schedule.comp_slug)
-                              : ::espn::scoreboard_url(league, schedule.group, schedule.kickoff_epoch,
-                                                       schedule.time_tbd);
+  if (info == nullptr)
+    return false;
+  std::string url = ::espn::event_url(league, schedule.event_id, schedule.comp_slug);
   ESP_LOGD(TAG, "Fetching game: %s", url.c_str());
   auto container = this->open_(url);
-  if (container == nullptr)
+  if (container == nullptr) {
+    // Worker task: the job is this task's until it reports done.
+    this->job_.game_gone = this->espn_status_ == 404;
     return false;
+  }
   ContainerReader reader(container, this->espn_bytes_);
   GameSnapshot g;
-  bool ok = per_event ? ::espn::parse_event(reader, info->sport, this->our_id_(), g, schedule.event_id)
-                      : ::espn::parse_scoreboard(reader, schedule.event_id, this->our_id_(), g);
+  bool ok = ::espn::parse_event(reader, info->sport, this->our_id_(), g, schedule.event_id);
   container->end();
   if (!ok) {
     ESP_LOGW(TAG, "Game %s not parsed (%u bytes)", schedule.event_id.c_str(),
              (unsigned) reader.total());
+    this->job_.game_gone = true;
     return false;
   }
   ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%u bytes)", ::espn::state_name(g.state), g.team_abbr.c_str(),
@@ -2921,10 +2923,18 @@ void GamedayComponent::apply_job_() {
   }
   if (!j.game_ok) {
     this->count_miss_();
-    if (this->cache_unconfirmed_ && !j.throttled) {
-      // ESPN has no such game any more, or the read failed: the cache may be
-      // wrong, so read the team endpoint now, not in six hours.
-      ESP_LOGI(TAG, "Cached game not found: reading the team again");
+    bool again = this->gone_event_ == this->schedule_.event_id;
+    if (::espn::reread_team_after_poll(this->cache_unconfirmed_, j.game_gone, j.throttled, again)) {
+      // The cache may be wrong, or ESPN no longer serves this game under its
+      // id (a rescheduled game it renumbered): read the team endpoint now,
+      // not after a back-off that would keep asking for the same game for
+      // hours.
+      if (this->cache_unconfirmed_)
+        ESP_LOGI(TAG, "Cached game not found: reading the team again");
+      else
+        ESP_LOGI(TAG, "ESPN didn't serve game %s: reading the team again", this->schedule_.event_id.c_str());
+      if (j.game_gone)
+        this->gone_event_ = this->schedule_.event_id;
       this->cache_unconfirmed_ = false;
       this->force_schedule_ = true;
       this->schedule_next_(0);
@@ -2936,6 +2946,7 @@ void GamedayComponent::apply_job_() {
     return;
   }
   this->cache_unconfirmed_ = false;
+  this->gone_event_.clear();
   this->prev_ = this->game_;
   this->game_ = j.game;
   this->mark_good_poll_();

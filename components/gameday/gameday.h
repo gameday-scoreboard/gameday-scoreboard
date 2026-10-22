@@ -615,6 +615,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool no_event{false};
     GameSnapshot game;
     bool game_ok{false};
+    // The poll reached ESPN, which didn't serve this game: a 404, or a
+    // document for another game or one the parser rejects (fetch_game_).
+    bool game_gone{false};
     // Favorite Teams mode: which cached entry this cycle refreshes or polls
     int fav_index{-1};
     uint32_t our_id{0};
@@ -865,6 +868,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject team_cache_pref_;
   bool team_cache_tried_{false};     // one look per boot
   bool cache_unconfirmed_{false};    // schedule_ came from the cache and no poll has confirmed it
+  std::string gone_event_;           // the last game ESPN didn't serve that the team was read again for
   bool upcoming_after_poll_{false};  // booted from the cache: season list after the first board
   bool load_team_cache_(const ::espn::Team *team);
   void save_team_cache_(const ::espn::Team *team);
