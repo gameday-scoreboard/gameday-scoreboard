@@ -2241,11 +2241,13 @@ void GamedayComponent::start_job_() {
         // middle of a drive.
         // A favorite's game that took the board holds it: no rotate, unless
         // two favorites alternate. A favorite higher in the list starting
-        // later comes in on its kickoff scan (take_due).
-        bool held = this->take_over_() && this->live_fav_ >= 0 && this->prefs4_.collide == 0;
+        // later comes in on its kickoff scan (take_due). Alternate keeps
+        // Favorite teams' plain timer, so it doesn't wait for a break.
+        bool on_fav = this->take_over_() && this->live_fav_ >= 0;
+        bool held = on_fav && this->prefs4_.collide == 0;
         bool rotate = !held && this->live_started_ms_ != 0 &&
                       (now - this->live_started_ms_) >= (uint32_t) this->prefs2_.rotate_minutes * MINUTE &&
-                      (!this->best_game() || ::espn::at_break(this->game_));
+                      (!this->best_game() || on_fav || ::espn::at_break(this->game_));
         bool ended = this->game_.valid && this->game_.state != GameState::IN;
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_ || take_due;
       }

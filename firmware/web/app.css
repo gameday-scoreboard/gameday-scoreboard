@@ -287,7 +287,7 @@ button { font: inherit; color: inherit; }
 .favbar .favctls, .livebar .livectls { display: flex; flex-direction: column; gap: 8px; flex: none; }
 .favbar .stepper, .livebar .stepper { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
 .favbar .stepper label { min-width: 118px; }
-.favbar .stepper select, .favbar .stepper input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; }
+.favbar .stepper select, .favbar .stepper input, .livebar .stepper select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; }
 .favbar .stepper input { width: 58px; text-align: center; }
 .favmove { display: inline-flex; gap: 4px; margin-left: 6px; flex: none; }
 .favmove button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text); width: 26px; height: 26px; cursor: pointer; font-size: 9px; padding: 0; }
