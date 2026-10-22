@@ -4148,6 +4148,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     this->handle_set_(request);
     return;
   }
+  if (url == StringRef("/gameday/settings")) {
+    this->handle_settings_(request);
+    return;
+  }
   if (url == StringRef("/gameday/action") && request->method() == HTTP_POST) {
     std::string name = request->arg("do");
     if (name.empty()) {
@@ -4272,8 +4276,20 @@ void GamedayComponent::handle_set_(AsyncWebServerRequest *request) {
 }
 
 void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::string>> &kv) {
+  std::vector<::espn::SetOp> ops;
+  for (const auto &p : kv) {
+    ::espn::SetOp op;
+    if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
+      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
+      continue;
+    }
+    ops.push_back(std::move(op));
+  }
+  this->apply_ops_(ops);
+}
+
+void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   bool dirty = false;
-  ::espn::SetOp op;
   // The message card's keys are saved together, once.
   std::string msg_text, msg_url;
   uint8_t msg_keys = 0;
@@ -4281,11 +4297,7 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
-  for (const auto &p : kv) {
-    if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
-      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
-      continue;
-    }
+  for (const auto &op : ops) {
     switch (op.kind) {
       case ::espn::SetKind::TEAM:
         if (op.team.id != 0)
@@ -4415,6 +4427,106 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
   if (dirty)
     this->rebuild_state_(&this->last_fields_);
+}
+
+// The import's body arrives here in pieces before handleRequest. The web
+// server hands over a JSON body only on its own path (the form posts of
+// /gameday/set never come here), one request at a time.
+void GamedayComponent::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
+                                  size_t total) {
+  char buf[AsyncWebServerRequest::URL_BUF_SIZE];
+  if (request->url_to(buf) != StringRef("/gameday/settings"))
+    return;
+  if (index == 0) {
+    PsString().swap(this->settings_body_);
+    if (total <= ::espn::kSettingsMaxBytes)
+      this->settings_body_.reserve(total);
+  }
+  if (total <= ::espn::kSettingsMaxBytes)
+    this->settings_body_.append((const char *) data, len);
+}
+
+void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_GET) {
+    // From the cached state document, built on the main loop, so nothing
+    // here reads a setting while the loop changes it.
+    std::string state = this->current_state_json_();
+    JsonDocument in(::espn::detail::json_allocator());
+    // Before the first build the document is "{}", and a backup of it would be empty.
+    if (deserializeJson(in, state) != DeserializationError::Ok || in["mode"].isNull()) {
+      request->send(500, "application/json", "{\"error\":\"not ready\"}");
+      return;
+    }
+    JsonDocument out(::espn::detail::json_allocator());
+    int brightness = this->brightness_number_ != nullptr && this->brightness_number_->has_state()
+                         ? (int) this->brightness_number_->state
+                         : -1;
+    int scroll =
+        this->scroll_number_ != nullptr && this->scroll_number_->has_state() ? (int) this->scroll_number_->state : -1;
+    // The live mask isn't in the state (its live list is what the panel scans
+    // now); one 16-bit read, so the web server can take it as it is.
+    ::espn::settings_from_state(in.as<JsonObjectConst>(), this->prefs7_.live_mask, brightness, scroll, out);
+    std::string body;
+    serializeJson(out, body);
+    request->send(200, "application/json", body.c_str());
+    return;
+  }
+  if (request->method() != HTTP_POST) {
+    request->send(400, "application/json", "{\"error\":\"GET or POST\"}");
+    return;
+  }
+  PsString body;
+  body.swap(this->settings_body_);
+  size_t length = request->contentLength();
+  // 400, not 413: ESPHome's web server sends any code it has no name for as 500.
+  if (length > ::espn::kSettingsMaxBytes) {
+    request->send(400, "application/json", "{\"error\":\"That file is too big to be a settings backup.\"}");
+    return;
+  }
+  ::espn::SettingsImport in;
+  {
+    JsonDocument doc(::espn::detail::json_allocator());
+    // A body left from a request that broke off doesn't match this one's length.
+    if (body.empty() || body.size() != length ||
+        deserializeJson(doc, body.data(), body.size()) != DeserializationError::Ok) {
+      in.error = "Not a settings backup.";
+    } else {
+      ::espn::SettingsTarget target;
+      target.fav_max = FAV_MAX;
+      if (this->panels_ != nullptr) {
+        target.panels = this->panels_->cols();
+        target.max_panels = this->panels_->max_cols();
+      }
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+      target.autoupd = true;
+#endif
+#ifdef GAMEDAY_BETA_CHANNEL
+      target.beta = true;
+#endif
+      target.brightness = this->brightness_number_ != nullptr;
+      target.scroll = this->scroll_number_ != nullptr;
+      ::espn::parse_settings(doc.as<JsonVariantConst>(), target, in);
+    }
+  }
+  std::string reply = ::espn::settings_reply(in);
+  if (!in.error.empty()) {
+    ESP_LOGW(TAG, "Settings import refused: %s", in.error.c_str());
+    request->send(400, "application/json", reply.c_str());
+    return;
+  }
+  this->defer([this, in]() { this->apply_settings_(in); });
+  request->send(200, "application/json", reply.c_str());
+}
+
+void GamedayComponent::apply_settings_(const ::espn::SettingsImport &in) {
+  ESP_LOGI(TAG, "Settings import: %u settings, %u left out", (unsigned) in.ops.size(), (unsigned) in.skipped.size());
+  for (const auto &s : in.skipped)
+    ESP_LOGW(TAG, "Left out of the import: %s", s.c_str());
+  this->apply_ops_(in.ops);
+  if (in.brightness >= 0 && this->brightness_number_ != nullptr)
+    this->brightness_number_->make_call().set_value((float) in.brightness).perform();
+  if (in.scroll >= 0 && this->scroll_number_ != nullptr)
+    this->scroll_number_->make_call().set_value((float) in.scroll).perform();
 }
 
 }  // namespace gameday

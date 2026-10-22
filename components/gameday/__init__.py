@@ -7,7 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from esphome import automation
 import esphome.codegen as cg
-from esphome.components import http_request, runtime_image, time, web_server_base
+from esphome.components import http_request, number, runtime_image, time, web_server_base
 from esphome.components.http_request.update import HttpRequestUpdate
 from esphome.components.panel_layout import PanelLayout
 from esphome.components.web_server_base import CONF_WEB_SERVER_BASE_ID
@@ -20,6 +20,9 @@ CODEOWNERS = ["@bharvey88"]
 
 CONF_HTTP_REQUEST_ID = "http_request_id"
 CONF_PANEL_LAYOUT_ID = "panel_layout_id"
+# The Brightness and Scroll Speed numbers, for the settings backup (settings_doc.h)
+CONF_BRIGHTNESS_ID = "brightness_id"
+CONF_SCROLL_SPEED_ID = "scroll_speed_id"
 CONF_ON_UPDATE = "on_update"
 CONF_ON_ACTION = "on_action"
 # Scores and finals of the game Home Assistant follows (ha_events.h), for
@@ -151,6 +154,8 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
             web_server_base.WebServerBase
         ),
         cv.Optional(CONF_PANEL_LAYOUT_ID): cv.use_id(PanelLayout),
+        cv.Optional(CONF_BRIGHTNESS_ID): cv.use_id(number.Number),
+        cv.Optional(CONF_SCROLL_SPEED_ID): cv.use_id(number.Number),
         cv.Optional(CONF_DEMO, default=False): cv.boolean,
         cv.Optional(CONF_BAR): cv.Schema(
             {cv.Required(CONF_REPORT_EMAIL): cv.string_strict}
@@ -235,6 +240,10 @@ async def to_code(config):
         cg.add(
             var.set_panel_layout(await cg.get_variable(config[CONF_PANEL_LAYOUT_ID]))
         )
+    if CONF_BRIGHTNESS_ID in config:
+        cg.add(var.set_brightness_number(await cg.get_variable(config[CONF_BRIGHTNESS_ID])))
+    if CONF_SCROLL_SPEED_ID in config:
+        cg.add(var.set_scroll_number(await cg.get_variable(config[CONF_SCROLL_SPEED_ID])))
     for conf in config.get(CONF_ON_UPDATE, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(

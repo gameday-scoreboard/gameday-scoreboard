@@ -99,6 +99,12 @@ The panel fills the screen with a splash when someone scores, in the scoring tea
 
 The Time line in the Setup card names the panel's timezone. While it follows your browser, opening the page from a browser in another zone moves the panel to that zone. Tap **choose manually** to pick one from the list instead; the page then leaves it alone until you tap **follow this browser**. The list covers the US zones (Eastern, Central, Mountain, Arizona, Pacific, Alaska and Hawaii), Canada Atlantic and Newfoundland, Mexico City, UK and Ireland, Central Europe, Australia Eastern and UTC. A new panel starts on US Central.
 
+:::note[Coming in the next release]
+### Backup
+
+The Setup card has a **Backup** section: **Export settings** saves this panel's settings to a file, and **Import settings** loads a saved file back, onto this panel or another one. Wi-Fi networks and the WizMote pairing aren't in the file. See [Back up and restore settings](/using/backup/).
+:::
+
 ## The Device card
 
 The Device card has the buttons and the details about the panel itself.

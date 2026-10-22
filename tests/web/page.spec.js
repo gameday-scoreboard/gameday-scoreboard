@@ -1,6 +1,7 @@
 // Device page (firmware/web/bundle.js) against mock_device.py. Each test
 // resets the mock, optionally with state overrides, and checks what the page
 // shows and what it posts back to /gameday/set.
+const fs = require("fs");
 const base = require("@playwright/test");
 const { expect } = base;
 
@@ -1521,4 +1522,69 @@ test("night mode says it is on, until when, and when a live game holds it off", 
   await page.reload();
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#nightbar")).toBeHidden();
+});
+
+test("Export downloads the settings, and Import restores a backup checked whole", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#backup")).toBeVisible();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.click("#bkExport")]);
+  expect(download.suggestedFilename()).toMatch(/^gameday-2f6a70-settings-\d{4}-\d\d-\d\d\.json$/);
+  const doc = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
+  expect(doc).toMatchObject({ schema: 1, name: "gameday-2f6a70", team: "nfl:6", mode: 0,
+                              favs: ["nfl:6", "nfl:34", "ncaa:145"], live: [], down: true, panels: 2, brightness: 128, scroll: 5 });
+  await expect(page.locator("#bkNote")).toHaveText(/^Saved gameday-2f6a70-settings-/);
+
+  const file = (name, body) => ({ name, mimeType: "application/json", buffer: Buffer.from(body) });
+  const posts = async () => (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/settings");
+
+  // Another panel's backup, with an empty remote slot and a key from newer firmware.
+  const backup = { ...doc, name: "gameday-aba970", team: "mlb:15", mode: 4, favs: ["mlb:15", "", "nfl:6"], down: false,
+                   brightness: 60, sparkle: true };
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.setInputFiles("#bkFile", file("den.json", JSON.stringify(backup)));
+  await expect(page.locator("#bkNote")).toHaveText("Restored. This panel's firmware doesn't have: sparkle.");
+  expect(asked).toBe("Replace this panel's settings with den.json (saved from gameday-aba970)? Wi-Fi networks and the WizMote pairing stay as they are.");
+  const st = await deviceState(request);
+  expect(st.team.abbr).toBe("ATL");
+  expect(st.mode).toBe(4);
+  expect(st.down).toBe(false);
+  expect(st.favs.map((t) => t.abbr || "")).toEqual(["ATL", "", "DAL", ""]);
+  expect((await (await request.get("/gameday/settings")).json()).brightness).toBe(60);
+
+  // One bad value refuses the whole file.
+  page.once("dialog", (d) => d.accept());
+  await page.setInputFiles("#bkFile", file("bad.json", JSON.stringify({ ...doc, team: "nfl:6", mode: "4" })));
+  await expect(page.locator("#bkNote")).toHaveText("Not restored: mode should be a whole number. Nothing was changed.");
+  expect((await deviceState(request)).team.abbr).toBe("ATL");
+
+  // Not a backup, or the owner says no: nothing is sent.
+  const sent = (await posts()).length;
+  await page.setInputFiles("#bkFile", file("notes.json", "[1, 2]"));
+  await expect(page.locator("#bkNote")).toHaveText("That file isn't a settings backup.");
+  page.once("dialog", (d) => d.dismiss());
+  await page.setInputFiles("#bkFile", file("again.json", JSON.stringify(doc)));
+  await sleep(300);
+  expect((await posts()).length).toBe(sent);
+  expect((await deviceState(request)).team.abbr).toBe("ATL");
+});
+
+test("Import of a backup with another panel layout waits out the restart", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#backup")).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.setInputFiles("#bkFile", { name: "one.json", mimeType: "application/json",
+                                        buffer: Buffer.from(JSON.stringify({ schema: 1, panels: 1 })) });
+  await expect(page.locator("#gone")).toHaveText("Restarting with the restored panel layout. This page reconnects when the panel is back.");
+  expect((await deviceState(request)).panels).toBe(1);
+});
+
+test("the backup section hides on firmware without it", async ({ page, request }) => {
+  await reset(request, {}, ["settings"]);
+  await page.goto("/");
+  await expect(page.locator("#tzline")).toBeVisible();
+  await sleep(300);
+  await expect(page.locator("#backup")).toBeHidden();
 });
