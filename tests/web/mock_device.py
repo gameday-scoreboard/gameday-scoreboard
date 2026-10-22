@@ -305,7 +305,8 @@ def apply_set(kv):
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
         elif k == "nick":
-            STATE["nick"] = message_clean(v, LIMITS["kNickMax"], False)
+            # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
+            STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)
         elif k == "msgurl":
             if msg_url_ok(v):
                 STATE["msgurl"] = v
