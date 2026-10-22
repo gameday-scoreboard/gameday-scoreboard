@@ -32,6 +32,7 @@
 #include "health.h"
 #include "line_score.h"
 #include "message.h"
+#include "night.h"
 #include "offseason.h"
 #include "recap.h"
 #include "score_log.h"
@@ -297,9 +298,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 #endif
   void set_auto_update(bool on);
   // Heat and power protection (guard.h). guard_brightness() is what the
-  // display gets for the owner's Brightness; it runs from on_boot before
-  // setup(), so it loads the power log itself the first time.
-  uint8_t guard_brightness(uint8_t want);
+  // display gets for the owner's Brightness, after the night schedule
+  // (night.h) unless night is false (the QC screen); it runs from on_boot
+  // before setup(), so it loads the power log itself the first time.
+  uint8_t guard_brightness(uint8_t want, bool night = true);
   // The chip temperature sensor's readings (firmware/pages/guard.yaml).
   void set_chip_temp(float c);
   // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
@@ -772,6 +774,27 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;
+  // The night schedule (night.h), its own blob. Loaded on first use, like
+  // the power log, since guard_brightness() runs before setup().
+  ESPPreferenceObject night_pref_;
+  ::espn::NightPrefs night_{};
+  bool night_loaded_{false};
+  ::espn::Night night_now_{::espn::Night::DAY};
+  // Live games: both sides of every game in progress at the last scan, so
+  // a team or favorite changed between scans counts at once. A game of the
+  // owner's that ends between scans keeps the panel lit until the next one,
+  // which errs toward lit. A full college football Saturday is a few
+  // hundred entries: PSRAM.
+  struct LiveSide {
+    uint32_t id;
+    uint8_t league;
+  };
+  std::vector<LiveSide, PsramAllocator<LiveSide>> scan_live_sides_;
+  void load_night_();
+  void set_night_(const ::espn::NightPrefs &p);
+  void night_tick_();  // from loop(), every AUTO_UPDATE_TICK
+  bool owner_team_(uint8_t league, uint32_t id) const;
+  bool owner_game_live_() const;
   ESPPreferenceObject pref7_;
   Prefs7 prefs7_{};
   ESPPreferenceObject pref8_;

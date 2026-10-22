@@ -1309,3 +1309,71 @@ test("the message card says how the list's last read went, and hides on firmware
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#msgCard")).toBeHidden();
 });
+
+test("night schedule: off by default, its times, screen and brightness post, hidden on firmware without it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="night"]');
+  await expect(page.locator("#nightCtls")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#nightSet")).toBeHidden();
+  await expect(page.locator("#nightbar")).toBeHidden();
+
+  await sw.click();
+  await expectSet(request, { night: "1" });
+  await expect(page.locator("#nightSet")).toBeVisible();
+  await expect(page.locator("#nightStart")).toHaveValue("23:00");
+  await expect(page.locator("#nightEnd")).toHaveValue("07:00");
+  await expect(page.locator("#nightLevelRow")).toBeVisible();
+  await expect(page.locator("#nightLevelHint")).toHaveText("How bright the panel is between 11 PM and 7 AM.");
+
+  await page.locator("#nightStart").fill("22:30");
+  await page.locator("#nightStart").dispatchEvent("change");
+  await expectSet(request, { nightstart: "22:30" });
+  await expect(page.locator("#nightLevelHint")).toHaveText("How bright the panel is between 10:30 PM and 7 AM.");
+
+  // The same start and end would be no night at all, so it isn't posted.
+  await page.locator("#nightEnd").fill("22:30");
+  await page.locator("#nightEnd").dispatchEvent("change");
+  await expect(page.locator("#toast")).toContainText("different time");
+  await expect(page.locator("#nightEnd")).toHaveValue("07:00");
+  expect((await sets(request)).some((q) => q.nightend)).toBe(false);
+
+  await page.locator("#nightLevel").fill("40");
+  await page.locator("#nightLevel").dispatchEvent("change");
+  await expectSet(request, { nightlevel: "40" });
+
+  // Screen off hides the slider and says the screen goes dark.
+  await page.locator('.sw[data-set="nightscreen"]').click();
+  await expectSet(request, { nightscreen: "0" });
+  await expect(page.locator("#nightLevelRow")).toBeHidden();
+  await expect(page.locator("#nightScreenHint")).toHaveText("Off: the screen goes dark between 10:30 PM and 7 AM.");
+
+  await reset(request, { night: null, night_now: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#nightCtls")).toBeHidden();
+});
+
+test("night mode says it is on, until when, and when a live game holds it off", async ({ page, request }) => {
+  await reset(request, { night: true, nightscreen: false, night_now: "off" });
+  await page.goto("/");
+  await expect(page.locator("#nightbar")).toBeVisible();
+  await expect(page.locator("#nightName")).toHaveText("Night mode until 7:00 AM");
+  await expect(page.locator("#nightText")).toContainText("The screen is off for the night");
+
+  await reset(request, { night: true, nightend: "06:30", night_now: "dim" });
+  await page.reload();
+  await expect(page.locator("#nightName")).toHaveText("Night mode until 6:30 AM");
+  await expect(page.locator("#nightText")).toContainText("dimmed for the night");
+
+  await reset(request, { night: true, night_now: "game" });
+  await page.reload();
+  await expect(page.locator("#nightName")).toHaveText("Night mode paused for a live game");
+  await expect(page.locator("#nightText")).toContainText("until 7:00 AM");
+
+  await reset(request, { night: true, night_now: "" });
+  await page.reload();
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#nightbar")).toBeHidden();
+});

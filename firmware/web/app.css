@@ -282,6 +282,9 @@ button { font: inherit; color: inherit; }
 .guardbar .name { color: #ffab40; white-space: normal; }
 .guardbar.power { border-color: #b02a2a; }
 .guardbar.power .name { color: #ff8a8a; }
+.nightbar { border-color: #3b4a7a; }
+.nightbar .name { color: #a9b8ff; white-space: normal; }
+.ctl input.num.time { width: auto; }
 .livebar .stepper { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--muted); }
 .favbar { align-items: flex-start; }
 .favbar .favctls, .livebar .livectls { display: flex; flex-direction: column; gap: 8px; flex: none; }

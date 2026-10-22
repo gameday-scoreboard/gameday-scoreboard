@@ -248,8 +248,9 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     uint8_t &count = ours ? s.team_line_count : s.opp_line_count;
     count = 0;
     for (JsonVariantConst ls : c["linescores"].as<JsonArrayConst>()) {
+      // Capped before the cast: a value past int's range is undefined.
       float v = ls["value"] | 0.0f;
-      int pts = v > 0 ? (int) (v + 0.5f) : 0;
+      int pts = v > 0 ? (int) (std::min(v, 255.0f) + 0.5f) : 0;
       if (count < GameSnapshot::kLinesMax)
         lines[count++] = 0;
       pts += lines[count - 1];
