@@ -5,8 +5,6 @@ sidebar:
   order: 12
 ---
 
-Everything on this page arrives with the next release.
-
 The panel can show your words as well as scores, in two ways:
 
 - A **banner** goes over whatever is on the panel for a few seconds, then the board comes back. "Happy birthday, Sam!" or "Pizza's here!"
