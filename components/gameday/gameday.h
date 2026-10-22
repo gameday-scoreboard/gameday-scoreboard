@@ -953,15 +953,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
   static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League. walk: next day back (or ahead) to read,
-  // 1 to kRecapMaxDays; 0 not started; kRecapMaxDays + 1 done. walk_day:
-  // the league's ESPN day a walk finished, so a fruitless one is tried again
-  // the next day rather than every scan. fwd_match: "BOS at NYR", the first
-  // game on the day the forward walk found.
-  uint8_t recap_back_[::espn::kLeagueCount]{};
-  int32_t recap_back_day_[::espn::kLeagueCount]{};
-  uint8_t recap_fwd_[::espn::kLeagueCount]{};
-  int32_t recap_fwd_day_[::espn::kLeagueCount]{};
+  // Per league, indexed by League: the walks back and forward (recap.h,
+  // RecapWalk), the kickoff the forward walk found (0 for none) and its
+  // fwd_match: "BOS at NYR", the first game on that day.
+  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
   int64_t recap_fwd_next_[::espn::kLeagueCount]{};
   std::string recap_fwd_match_[::espn::kLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
