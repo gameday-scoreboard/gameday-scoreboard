@@ -22,13 +22,14 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
-- Before a football game the ticker shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD". A new Pre-game season leaders switch on the device page turns them off. On a single 64x64 panel, which has no room for the records on the board, the pre-game ticker also shows both teams' records.
+- A panel with no team picked follows live games in every league, not only football, so a new panel on a weeknight in October shows the hockey, basketball and baseball games that are on. College basketball comes from the Top 25 games until you pick a team. Every 3 minutes the app's QR code comes back saying "Pick your team in the app"; on a single 64x64 panel the words and the QR code take turns.
 
 ## v2026.10.1
 
 Line scores at halftime and the final, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
 
 - At halftime and the final the board takes turns with the line score: each team's points by quarter, period or inning and the total, with runs, hits and errors in baseball. On a 64x64 panel it's a shorter form, by half in football and basketball. With Last play on, the halftime and final ticker also lists the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and the final adds ESPN's headline for the game.
+- Before a football game the ticker shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD". A new Pre-game season leaders switch on the device page turns them off. On a single 64x64 panel, which has no room for the records on the board, the pre-game ticker also shows both teams' records.
 - After a power cut the panel waits for your router instead of asking you to fix the Wi-Fi. A panel that hasn't found its network 30 seconds after starting says "Waiting for" the network and "Just had a power cut? Routers take a few min", and only shows "Wi-Fi lost" with the app QR code after 3 minutes.
 - A panel that runs hot, in a sunny window or a closed cabinet, dims itself a step at a time instead of cooking. A small thermometer pulses slowly in its top right corner, and every two minutes the bottom line says "Too warm, dimming". It goes back to your brightness as it cools. The device page says so too, and shows the chip temperature under Diagnostics. Home Assistant gets a Chip Temperature sensor.
 - A panel that restarts twice in a row because its power dipped, as on a phone charger or a power supply too weak for it, keeps its brightness low so it stays on. A small plug pulses slowly in its top right corner, and every two minutes the bottom line says "Check power supply", until you press Clear on the device page.

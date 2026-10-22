@@ -1017,6 +1017,12 @@ static void test_live_games() {
            std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
                        "?groups=50&limit=300&dates=20260214"));
   CHECK(scan_url(League::NBA, 0).find("groups=") == std::string::npos);
+  // A panel with no team picked reads college basketball's Top 25 slate.
+  CHECK_EQ(scan_url(League::MCBB, parse_iso8601_z("2026-02-14T20:00Z"), true),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
+                       "?dates=20260214"));
+  CHECK(scan_url(League::NCAA, 0, true).find("groups=80") != std::string::npos);
+  CHECK_EQ(scan_url(League::NHL, 0, true), scan_url(League::NHL, 0));
   // neutral splashes name both sides
   CHECK_EQ(decide_splash(live(0, 0), live(6, 0), true, true).text, std::string("DAL TOUCHDOWN"));
   CHECK_EQ(decide_splash(live(0, 0), live(0, 3), true, true).text, std::string("PHI FIELD GOAL"));

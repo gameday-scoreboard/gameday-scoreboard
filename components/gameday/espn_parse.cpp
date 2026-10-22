@@ -124,7 +124,7 @@ std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch,
   return url;
 }
 
-std::string scan_url(League league, int64_t now_epoch) {
+std::string scan_url(League league, int64_t now_epoch, bool top25) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
   civil_from_epoch(now_epoch - scan_day_shift(league), y, m, d);
@@ -133,7 +133,7 @@ std::string scan_url(League league, int64_t now_epoch) {
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
-  else if (league == League::MCBB)
+  else if (league == League::MCBB && !top25)
     snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);

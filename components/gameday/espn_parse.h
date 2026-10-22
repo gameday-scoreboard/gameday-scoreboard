@@ -248,7 +248,9 @@ std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
-std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
+// Every game of the day for one league. top25: men's college basketball
+// reads only ESPN's Top 25 slate (the no-team panel), not all of Division I.
+std::string scan_url(League league, int64_t now_epoch, bool top25 = false);
 // How far behind UTC the day scan_url() reads turns over. Football uses the
 // Eastern date. The other leagues play past midnight Eastern on the West
 // Coast (ESPN lists those games under the day they started, and rejects date
