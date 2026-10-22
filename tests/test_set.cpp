@@ -58,6 +58,7 @@ struct Settings {
   uint16_t live_mask{0};
   std::string msg, msgurl;
   int msgevery{kMsgEveryDefault};
+  NightPrefs night{night_defaults()};
 };
 constexpr int kFavMax = 16;
 constexpr int kMaxCols = 2;
@@ -133,6 +134,18 @@ void load(Settings &s, JsonObjectConst o) {
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
+  bool on = s.night.on != 0, screen = s.night.screen_off == 0;
+  flag("night", on);
+  flag("nightscreen", screen);
+  s.night.on = on ? 1 : 0;
+  s.night.screen_off = screen ? 0 : 1;
+  int level = s.night.level;
+  num("nightlevel", level);
+  s.night.level = (uint8_t) level;
+  if (o["nightstart"].is<const char *>())
+    s.night.start = (uint16_t) night_parse_time(o["nightstart"].as<const char *>());
+  if (o["nightend"].is<const char *>())
+    s.night.end = (uint16_t) night_parse_time(o["nightend"].as<const char *>());
 }
 
 void apply(Settings &s, const SetOp &op) {
@@ -172,6 +185,11 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::MSG: s.msg = op.text; break;
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
+    case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
+    case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
+    case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
+    case SetKind::NIGHT_SCREEN: s.night.screen_off = op.on ? 0 : 1; break;
+    case SetKind::NIGHT_LEVEL: s.night.level = (uint8_t) op.value; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -223,6 +241,11 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["msg"] = s.msg;
   doc["msgurl"] = s.msgurl;
   doc["msgevery"] = s.msgevery;
+  doc["night"] = s.night.on != 0;
+  doc["nightstart"] = night_time_text(s.night.start);
+  doc["nightend"] = night_time_text(s.night.end);
+  doc["nightscreen"] = s.night.screen_off == 0;
+  doc["nightlevel"] = s.night.level;
 }
 
 void test_fixture_cases() {
@@ -303,7 +326,7 @@ void test_parse_set() {
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
-                 parse_set(key, "", op, kFavMax);
+                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "auto_update.h"
+#include "night.h"
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
@@ -4263,6 +4264,79 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
 }
 
+static void test_night() {
+  // Times as the page's fields send them
+  CHECK_EQ(night_parse_time("23:00"), 23 * 60);
+  CHECK_EQ(night_parse_time("7:05"), 7 * 60 + 5);
+  CHECK_EQ(night_parse_time("00:00"), 0);
+  CHECK_EQ(night_parse_time("23:59"), 23 * 60 + 59);
+  CHECK_EQ(night_parse_time("24:00"), -1);
+  CHECK_EQ(night_parse_time("12:60"), -1);
+  CHECK_EQ(night_parse_time("12:5"), -1);
+  CHECK_EQ(night_parse_time("123:00"), -1);
+  CHECK_EQ(night_parse_time(":30"), -1);
+  CHECK_EQ(night_parse_time("1a:00"), -1);
+  CHECK_EQ(night_parse_time("11 PM"), -1);
+  CHECK_EQ(night_parse_time(""), -1);
+  CHECK_EQ(night_time_text(7 * 60), std::string("07:00"));
+  CHECK_EQ(night_time_text(23 * 60 + 30), std::string("23:30"));
+  CHECK_EQ(night_clock12(7 * 60), std::string("7:00 AM"));
+  CHECK_EQ(night_clock12(0), std::string("12:00 AM"));
+  CHECK_EQ(night_clock12(12 * 60 + 5), std::string("12:05 PM"));
+  CHECK_EQ(night_clock12(23 * 60 + 30), std::string("11:30 PM"));
+
+  // Across midnight, and inside one day
+  CHECK(night_window(23 * 60, 7 * 60, 23 * 60));
+  CHECK(night_window(23 * 60, 7 * 60, 2 * 60));
+  CHECK(!night_window(23 * 60, 7 * 60, 7 * 60));  // over at the end minute
+  CHECK(!night_window(23 * 60, 7 * 60, 12 * 60));
+  CHECK(night_window(60, 6 * 60, 3 * 60));
+  CHECK(!night_window(60, 6 * 60, 23 * 60));
+  CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+
+  NightPrefs p = night_defaults();
+  CHECK(!p.on);
+  CHECK_EQ((int) p.start, 23 * 60);
+  CHECK_EQ((int) p.end, 7 * 60);
+  CHECK(!p.screen_off);
+  CHECK_EQ((int) p.level, (int) kNightLevelDefault);
+  const int late = 2 * 60;
+  CHECK(night_state(p, true, late, false) == Night::DAY);  // off out of the box
+  p.on = 1;
+  CHECK(night_state(p, true, late, false) == Night::DIM);
+  CHECK(night_state(p, true, 12 * 60, false) == Night::DAY);
+  CHECK(night_state(p, false, late, false) == Night::DAY);  // no clock yet: never dark
+  CHECK(night_state(p, true, late, true) == Night::GAME);
+  p.screen_off = 1;
+  CHECK(night_state(p, true, late, false) == Night::DARK);
+  CHECK(night_state(p, true, late, true) == Night::GAME);  // a live game lights it
+
+  p.level = 20;
+  CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
+  CHECK_EQ((int) night_brightness(128, Night::DARK, p), 0);
+  CHECK_EQ((int) night_brightness(128, Night::GAME, p), 128);
+  CHECK_EQ((int) night_brightness(128, Night::DAY, p), 128);
+  // Heat and power still hold the night level down
+  CHECK_EQ((int) guarded_brightness(night_brightness(128, Night::DIM, p), kHeatSteps, false), 5);
+  CHECK_EQ(std::string(night_word(Night::DAY)), std::string(""));
+  CHECK_EQ(std::string(night_word(Night::DARK)), std::string("off"));
+
+  // A damaged blob goes back to the defaults field by field
+  NightPrefs bad{};
+  bad.on = 7;
+  bad.start = 5000;
+  bad.end = 6 * 60;
+  bad.screen_off = 9;
+  bad.level = 0;
+  night_sanitize(bad);
+  CHECK_EQ((int) bad.on, 1);
+  CHECK_EQ((int) bad.start, (int) kNightStartDefault);
+  CHECK_EQ((int) bad.end, 6 * 60);
+  CHECK_EQ((int) bad.screen_off, 1);
+  CHECK_EQ((int) bad.level, (int) kNightLevelDefault);
+  static_assert(sizeof(NightPrefs) == 10, "NightPrefs is saved in flash: its size can't change");
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -4798,6 +4872,17 @@ static void test_line_score() {
   CHECK_EQ((int) f.team_line_count, 3);
   CHECK_EQ((int) f.team_lines[0], 2);
   CHECK_EQ((int) f.opp_lines[2], 0);
+  {
+    // A period value past int's range (found by the fuzzer) is capped, not cast
+    std::string json = slurp("fixtures/event_nhl_final.json");
+    const std::string first = "\"linescores\":[{\"value\":2.0,";
+    size_t at = json.find(first);
+    CHECK(at != std::string::npos);
+    json.replace(at, first.size(), "\"linescores\":[{\"value\":1.40187e+10,");
+    GameSnapshot big;
+    CHECK(parse_event_str(json, Sport::HOCKEY, kCapitals, big, root_id(json)));
+    CHECK(big.team_lines[0] == 255 || big.opp_lines[0] == 255);
+  }
   CHECK(line_score_due(f));
   LineScoreText t = line_score_text(f, 128);
   CHECK_EQ((int) t.font, 12);
@@ -5307,6 +5392,7 @@ int main() {
   test_heat_guard();
   test_power_log();
   test_guarded_brightness();
+  test_night();
   test_offseason();
   test_panel_text();
   test_message();

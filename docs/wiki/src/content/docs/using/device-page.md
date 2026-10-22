@@ -63,6 +63,7 @@ Settings are grouped in cards. In the order the page shows them:
 | **Brightness** | Panel brightness, 1 to 255. |
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. |
 | **Showing** | The Scoreboard page or the Clock page. |
+| **Night schedule** | Coming in the next release. Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Only today's games** | The Favorite teams playlist skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
 | **Discovery**, **Unpair remote** | Pairs and unpairs a WizMote remote. See [WizMote remote](/using/remote/). |

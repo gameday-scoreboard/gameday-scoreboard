@@ -94,6 +94,8 @@ INITIAL = {
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False,
     "msg": "", "msgurl": "", "msgevery": 2,
+    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
+    "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
@@ -239,6 +241,14 @@ def state_doc():
     return STATE
 
 
+def night_time(v):
+    """night_parse_time() in components/gameday/night.h, as the state document writes it."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        return None
+    return f"{int(m[1]):02d}:{m[2]}"
+
+
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
     for k, v in kv:
@@ -300,6 +310,13 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k in ("night", "nightscreen"):
+            STATE[k] = v == "1"
+        elif k in ("nightstart", "nightend"):
+            if night_time(v):
+                STATE[k] = night_time(v)
+        elif k == "nightlevel":
+            STATE["nightlevel"] = min(255, max(1, atoi(v)))
 
 
 def selftest():

@@ -12,6 +12,7 @@
 
 #include "leagues.h"
 #include "message.h"
+#include "night.h"
 #include "startup.h"
 #include "teams.h"
 #include "timezones.h"
@@ -24,7 +25,8 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "msg",      "msgurl", "msgevery", "best",
-                                    "jump",   "banner",   "leaders"};
+                                    "jump",   "banner",   "leaders", "night",  "nightstart", "nightend",
+                                    "nightscreen", "nightlevel"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -181,6 +183,11 @@ enum class SetKind : uint8_t {
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
   LEADERS,   // on, football's season leaders in the pre-game ticker
+  NIGHT,        // on, the night schedule (night.h)
+  NIGHT_START,  // value, minutes after midnight
+  NIGHT_END,    // value, minutes after midnight
+  NIGHT_SCREEN, // on: lit at the night brightness, off: dark
+  NIGHT_LEVEL,  // value, 1 to 255
 };
 
 struct TeamRef {
@@ -299,6 +306,22 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.value = clamp_msg_every(atoi(v.c_str()));
     return !v.empty() && v[0] >= '0' && v[0] <= '9';
   }
+  if (k == "nightstart" || k == "nightend") {
+    // "23:00", the form a time field sends; anything else is refused.
+    op.kind = k == "nightstart" ? SetKind::NIGHT_START : SetKind::NIGHT_END;
+    op.value = night_parse_time(v);
+    return op.value >= 0;
+  }
+  if (k == "nightlevel") {
+    op.kind = SetKind::NIGHT_LEVEL;
+    int level = atoi(v.c_str());
+    op.value = level < 1 ? 1 : level > 255 ? 255 : level;
+    return true;
+  }
+  if (k == "night")
+    return on(SetKind::NIGHT);
+  if (k == "nightscreen")
+    return on(SetKind::NIGHT_SCREEN);
   if (k == "tzauto")
     return on(SetKind::TZ_AUTO);
   if (k == "down")

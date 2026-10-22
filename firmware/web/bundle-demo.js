@@ -103,6 +103,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <button class="btn" id="guardClear" hidden>Clear</button>
     </div>
 
+    <div class="teambar nightbar" id="nightbar" role="status" hidden>
+      <div class="cur"><div><div class="name" id="nightName"></div><div class="lg" id="nightText"></div></div></div>
+    </div>
+
     <section class="upnext" id="upnext" hidden>
       <div class="uh">Up next</div>
       <div class="ul" id="upnextList"></div>
@@ -180,6 +184,15 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="card">
         <h2>Panel</h2>
         <div id="panelCtls"></div>
+        <div id="nightCtls" hidden>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div id="nightSet" hidden>
+            <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
+            <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
+            <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
+            <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>Favorites</h2>
@@ -347,6 +360,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     msg: String, msgurl: String, msgevery: Number,
+    night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -790,6 +804,58 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+  };
+
+  // ---- night schedule (components/gameday/night.h) ---------------------------
+  // Times come as "23:00". 12-hour for people: "11 PM", "7:30 AM", and with
+  // full set the minutes always show, "7:00 AM".
+  const clock12 = (hhmm, full) => {
+    const [h, m] = String(hhmm || "0:0").split(":").map(Number);
+    const mm = String(m || 0).padStart(2, "0");
+    return ((h % 12) || 12) + (full || m ? ":" + mm : "") + (h < 12 ? " AM" : " PM");
+  };
+  const nightStart = $("#nightStart");
+  const nightEnd = $("#nightEnd");
+  const nightLevel = $("#nightLevel");
+  const nightTime = (input, key, other) => {
+    input.onchange = () => {
+      if (!input.value) { input.value = S[key]; return; }
+      if (input.value === S[key]) return;
+      if (input.value === other.value) {
+        toast("The night has to end at a different time than it starts");
+        input.value = S[key];
+        return;
+      }
+      setGD({ [key]: input.value });
+    };
+  };
+  nightTime(nightStart, "nightstart", nightEnd);
+  nightTime(nightEnd, "nightend", nightStart);
+  nightLevel.oninput = () => ($("#nightLevelVal").textContent = nightLevel.value);
+  nightLevel.onchange = () => setGD({ nightlevel: nightLevel.value });
+  const renderNight = () => {
+    if (!S) return;
+    // Older firmware has no night schedule.
+    $("#nightCtls").hidden = S.night === undefined;
+    $("#nightbar").hidden = !S.night_now;
+    if (S.night === undefined) return;
+    $("#nightSet").hidden = !S.night;
+    if (document.activeElement !== nightStart) nightStart.value = S.nightstart;
+    if (document.activeElement !== nightEnd) nightEnd.value = S.nightend;
+    if (document.activeElement !== nightLevel) {
+      nightLevel.value = S.nightlevel;
+      $("#nightLevelVal").textContent = S.nightlevel;
+    }
+    const hours = "between " + clock12(S.nightstart) + " and " + clock12(S.nightend);
+    $("#nightLevelRow").hidden = !S.nightscreen;
+    $("#nightLevelHint").textContent = "How bright the panel is " + hours + ".";
+    $("#nightScreenHint").textContent = S.nightscreen ? "On at the night brightness below." : "Off: the screen goes dark " + hours + ".";
+    // A dark or dim panel that doesn't look broken
+    const until = clock12(S.nightend, true);
+    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
+    $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
+      : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
+        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
   };
 
   // ---- message: the banner and the message card ---------------------------------
@@ -1292,6 +1358,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderCurrentTeam();
     renderMode();
     renderSettings();
+    renderNight();
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
