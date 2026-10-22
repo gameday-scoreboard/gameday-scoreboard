@@ -35,11 +35,30 @@
   "nightend": "07:00",
   "nightscreen": true,
   "nightlevel": 16,
+  "countdown": true,
+  "cdname": "Christmas",
+  "cddate": "2026-12-25",
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,
   "autoupd": false,
   "beta": false,
+  "lists": [
+    {
+      "n": "Sundays",
+      "t": [
+        "nfl:6"
+      ]
+    },
+    {
+      "n": "College",
+      "t": [
+        "ncaa:251",
+        "ncaa:2294"
+      ]
+    }
+  ],
+  "list": 2,
   "panels": 2,
   "brightness": 128,
   "scroll": 5

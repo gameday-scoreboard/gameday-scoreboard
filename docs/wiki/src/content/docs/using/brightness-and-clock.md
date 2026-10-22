@@ -37,7 +37,7 @@ You can also turn it off and on with:
 - **ON** and **OFF** on a WizMote
 - **Power** in Home Assistant
 
-A few things turn a dark panel back on by themselves, since they mean someone wants to look at it: picking a team or a mode in the app, on the device page or in Home Assistant, a numbered button or **NIGHT** on the remote, and the brighter button on the remote, which brings back the brightness the panel had.
+A few things turn a dark panel back on by themselves, since they mean someone wants to look at it: picking a team or a mode in the app, on the device page or in Home Assistant, a numbered button or **NIGHT** on the remote, and the brighter button on the remote, which brings back the brightness the panel had. During the night schedule's hours the panel comes back at its night setting instead: at the night brightness, or with **Screen at night** off, still dark until the hours end or a game of yours goes live.
 
 The panel always comes back on after a restart or a power cut.
 
@@ -52,6 +52,10 @@ Separate from the Clock page, the scoreboard shows a clock of its own when there
 - **In My team**, between seasons, the clock is in your team's colors. Under the time is your team's next game once it's on the schedule, like "Next: at PHI Mar 26 7:05 PM", or the date until then. Football teams get it only when ESPN lists no game at all, so a bye week never shows it; other leagues get it once the next game is more than 10 days away.
 - **In Favorite teams**, when none of your favorites has a game scheduled, the clock is in your first favorite's colors.
 - **In Live games** with no team picked, when there has been no game in the last week and none is coming, the clock is gray.
+
+:::note[Coming in the next release]
+Favorite teams follows the same rule as My team: the clock comes up once every favorite (in the playlist, when one is playing) is between seasons, with no game listed or the next one more than 10 days away (football only with no game listed). A favorite whose game is about to start still takes the panel. It's in the colors of the favorite whose game comes first, with that game under the time, like "Next: at PHI Mar 26 7:05 PM". While the clock is up, the panel checks for a new date every 6 hours instead of every 15 minutes, so it uses less data.
+:::
 
 On a single 64x64 panel the date goes under the time, and the next game goes in the ticker. See [Show: My team, Favorite teams, Live games](/using/modes/#when-your-team-has-no-game-coming).
 
