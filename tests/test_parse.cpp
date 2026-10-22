@@ -3056,6 +3056,7 @@ static void test_short_game_name() {
   // Notes that are a result or a schedule change are no name
   CHECK_EQ(short_game_name("Paris Saint-Germain win 4-3 on penalties"), std::string(""));
   CHECK_EQ(short_game_name("Rain - Makeup date April 5"), std::string(""));
+  CHECK_EQ(short_game_name("Sun Bowl presented by Win Inc"), std::string("Sun Bowl"));  // the sponsor goes first
   CHECK_EQ(short_game_name("NLCS - Game 2"), std::string("NLCS - Game 2"));
   CHECK_EQ(short_game_name("East 1st Round - Game 2"), std::string("East 1st Round - Game 2"));
   CHECK_EQ(short_game_name("Duke's Mayo Bowl"), std::string("Duke's Mayo Bowl"));
