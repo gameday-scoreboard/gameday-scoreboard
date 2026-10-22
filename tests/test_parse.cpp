@@ -811,6 +811,16 @@ static void test_status_text() {
   CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
   CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
   CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
+  // ESPN writes the yards with no thousands separator today (pinned from the
+  // recorded document below); one written "1,381" reads the same.
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1,381 YDS, 9 TD, 3 INT"),
+           std::string("Prescott 1,381 yds 9 TD"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "12,345 YDS"), std::string("Prescott 12,345 yds"));
+  CHECK_EQ(espn::detail::leader_line("D. Prescott", "-- YDS"), std::string(""));
+  {
+    std::string raw = slurp("fixtures/event_nfl_pre_dal.json");
+    CHECK(raw.find("\"112/185, 1408 YDS, 10 TD, 3 INT\"") != std::string::npos);
+  }
   // Pre-game on a single panel: both records after the kickoff, the leaders
   // after the odds, and the leaders switch takes only the leaders away
   GameSnapshot pr = live(0, 0, GameState::PRE);
@@ -855,6 +865,19 @@ static void test_status_text() {
 // The words for an empty board. "No upcoming game" (the empty answer) is only
 // right once ESPN said so; until then a failed read is ESPN out of reach.
 static void test_no_game_text() {
+  // Favorites: ESPN said "no game" only once every favorite's read answered.
+  // An off-season first favorite read before ESPN went away says nothing of
+  // the three unread ones, so the board still says Can't reach ESPN.
+  CHECK(!no_game_said(4, 1, true));
+  CHECK_EQ(no_game_text(true, false, no_game_said(4, 1, true), 2), std::string("Can't reach ESPN"));
+  CHECK(no_game_said(4, 4, false));
+  CHECK_EQ(no_game_text(true, false, no_game_said(4, 4, false), 2), std::string(""));
+  CHECK(no_game_said(0, 0, true));  // My team, and the Live fallback's card
+  CHECK(!no_game_said(0, 0, false));
+  // The miss count stops at 255 instead of wrapping to "ESPN answered".
+  CHECK_EQ(miss_count_after(0), (uint8_t) 1);
+  CHECK_EQ(miss_count_after(254), (uint8_t) 255);
+  CHECK_EQ(miss_count_after(255), (uint8_t) 255);
   // No clock yet: nothing can have been read, whatever else is true
   CHECK_EQ(no_game_text(false, false, false, 0), std::string("Getting ready"));
   CHECK_EQ(no_game_text(false, true, true, 5), std::string("Getting ready"));
@@ -4404,6 +4427,22 @@ static void test_night() {
   CHECK(night_window(60, 6 * 60, 3 * 60));
   CHECK(!night_window(60, 6 * 60, 23 * 60));
   CHECK(!night_window(8 * 60, 8 * 60, 8 * 60));  // same start and end: never
+  {
+    // A change to the same start and end keeps the hours the schedule had.
+    NightPrefs now = night_defaults(), next = now;
+    next.start = 23 * 60;
+    next.end = 23 * 60;
+    next.on = 1;
+    CHECK(night_keep_hours(next, now));
+    CHECK_EQ(next.start, now.start);
+    CHECK_EQ(next.end, now.end);
+    CHECK_EQ(next.on, 1);  // the rest of the change stands
+    next.start = 22 * 60;
+    next.end = 6 * 60;
+    CHECK(!night_keep_hours(next, now));
+    CHECK_EQ(next.start, 22 * 60);
+    CHECK_EQ(next.end, 6 * 60);
+  }
 
   NightPrefs p = night_defaults();
   CHECK(!p.on);

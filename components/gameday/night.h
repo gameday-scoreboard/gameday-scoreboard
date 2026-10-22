@@ -97,6 +97,17 @@ inline bool night_window(uint16_t start, uint16_t end, int minute) {
   return minute >= start || minute < end;
 }
 
+// A change that would leave the same start and end, a schedule that is on
+// and never runs, keeps the hours it had. The device page refuses it; an
+// app, a script or a restored backup can still send it. True when it kept them.
+inline bool night_keep_hours(NightPrefs &next, const NightPrefs &now) {
+  if (next.start != next.end)
+    return false;
+  next.start = now.start;
+  next.end = now.end;
+  return true;
+}
+
 // What the schedule is doing right now
 enum class Night : uint8_t {
   DAY = 0,   // off, outside its hours, or no clock yet
