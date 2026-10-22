@@ -51,7 +51,7 @@ struct Settings {
   uint8_t team_league{0};
   int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
-  bool jump{false}, banner{true};
+  bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
   bool bootaddr{true}, autoupd{false}, beta{false};
   TeamRef favs[16];
@@ -130,6 +130,7 @@ void load(Settings &s, JsonObjectConst o) {
   flag("best", s.best);
   flag("jump", s.jump);
   flag("banner", s.banner);
+  flag("favtake", s.favtake);
   flag("leaders", s.leaders);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
@@ -178,6 +179,7 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::BEST: s.best = op.on; break;
     case SetKind::JUMP: s.jump = op.on; break;
     case SetKind::BANNER: s.banner = op.on; break;
+    case SetKind::FAVTAKE: s.favtake = op.on; break;
     case SetKind::LEADERS: s.leaders = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
@@ -233,6 +235,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["best"] = s.best;
   doc["jump"] = s.jump;
   doc["banner"] = s.banner;
+  doc["favtake"] = s.favtake;
   doc["leaders"] = s.leaders;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;

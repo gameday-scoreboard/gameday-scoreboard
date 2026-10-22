@@ -11,7 +11,7 @@
   ],
   "base": {
     "team": "nfl:6", "team_league": "nfl", "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
-    "favs": ["", "", "", ""], "today": false, "jump": false, "banner": true, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
+    "favs": ["", "", "", ""], "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "msg": "", "msgurl": "", "msgevery": 2,
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
@@ -45,6 +45,8 @@
     {"name": "pre-game leaders off", "set": [["leaders", "0"]], "expect": {"leaders": false}},
     {"name": "pre-game leaders back on", "start": {"leaders": false}, "set": [["leaders", "1"]], "expect": {"leaders": true}},
     {"name": "jump and banner back", "start": {"jump": true, "banner": false}, "set": [["jump", "0"], ["banner", "1"]], "expect": {"jump": false, "banner": true}},
+    {"name": "favorites take over on", "set": [["favtake", "1"]], "expect": {"favtake": true}},
+    {"name": "favorites take over off", "start": {"favtake": true}, "set": [["favtake", "0"]], "expect": {"favtake": false}},
     {"name": "best game back on", "start": {"best": false}, "set": [["best", "1"]], "expect": {"best": true}},
     {"name": "each sport's situation switch is its own", "set": [["count", "0"]], "expect": {"down": true, "count": false, "match": true}},
     {"name": "soccer stats off, football and baseball stay on", "set": [["match", "0"]], "expect": {"down": true, "count": true, "match": false}},

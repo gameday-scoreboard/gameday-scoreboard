@@ -123,6 +123,10 @@
       <div class="livectls">
         <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
         <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button></div>
+        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button></div>
+        <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
+          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+        </select></div>
       </div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
@@ -352,7 +356,7 @@
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
@@ -622,6 +626,9 @@
     showFavRotate();
     setGD({ collide: collideSelect.value });
   };
+  // Live games' Favorites take over uses the same rule.
+  const liveCollide = $("#liveCollide");
+  liveCollide.onchange = () => setGD({ collide: liveCollide.value });
   favRotate.onchange = () => {
     const v = Math.min(30, Math.max(1, Number(favRotate.value) || 1));
     favRotate.value = v;
@@ -646,12 +653,16 @@
     const auto = liveAuto();
     // With nothing live the device shows the saved team's card, or with no
     // team a rotation of recent finals, and keeps scanning.
-    $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
-      : S.recap ? "No live game right now, showing recent finals"
-        : S.best ? "Following the best game on" : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? ""
-      : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
-        : "Moves on when it ends, or after Switch every. ")
+    // Favorites take over: a favorite's game in progress has the panel.
+    const lock = S.favlock && S.favlock.id ? S.favlock : null;
+    $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
+      : S.fallback ? "No live game right now, showing your team until one starts"
+        : S.recap ? "No live game right now, showing recent finals"
+          : S.best ? "Following the best game on" : "Following a random game in progress";
+    $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
+      : S.fallback || S.recap ? ""
+        : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
+          : "Moves on when it ends, or after Switch every. ")
       + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
@@ -696,6 +707,8 @@
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
     }
+    $("#liveCollideRow").hidden = !S.favtake;
+    if (document.activeElement !== liveCollide) liveCollide.value = String(S.collide || 0);
     if (favs) {
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);

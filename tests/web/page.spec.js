@@ -664,6 +664,31 @@ test("Pick the best game switch posts and changes what the Live games bar says",
   expect((await deviceState(request)).best).toBe(false);
 });
 
+test("Favorites take over switch posts, shows the two-favorites rule, and the bar names the favorite", async ({ page, request }) => {
+  const name = page.locator("#liveName");
+  const sw = page.locator('#livebar .sw[data-set="favtake"]');
+  const row = page.locator("#liveCollideRow");
+  await reset(request, { mode: 5, live: ["nfl"], live_auto: false });
+  await page.goto("/");
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await expect(row).toBeHidden();
+  await sw.click();
+  await expectSet(request, { favtake: "1" });
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await expect(row).toBeVisible();
+  // The same rule as Favorite teams mode's Two games at once.
+  await page.locator("#liveCollide").selectOption("1");
+  await expectSet(request, { collide: "1" });
+  expect((await deviceState(request)).collide).toBe(1);
+
+  // A favorite's game has the board.
+  await reset(request, { mode: 5, live: ["nfl"], live_auto: false, favtake: true,
+    favlock: { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" } });
+  await page.reload();
+  await expect(name).toHaveText("Locked on Dallas Cowboys");
+  await expect(page.locator("#liveLg")).toHaveText("A favorite is playing, so the panel stays on its game until it ends. Leagues:");
+});
+
 test("Live games bar says when nothing is live and the panel shows your team or finals", async ({ page, request }) => {
   const name = page.locator("#liveName");
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });

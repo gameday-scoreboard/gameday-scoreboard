@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "best_game.h"
@@ -264,6 +265,68 @@ inline int followed_favorite(const std::vector<FavGame> &games) {
       best = i;
   }
   return best;
+}
+
+// ---- Favorites take over (Live games) ----------------------------------------
+// Live games keeps its rotation, but a game a favorite plays in takes the
+// board while it is live. Two favorites live at once follow Favorites' own
+// rule: stick with the one higher in the list, or alternate on the rotate timer.
+
+// One favorite team. ESPN team ids are per league.
+struct FavRef {
+  uint8_t league{0};
+  uint32_t id{0};
+};
+
+// The list position (the priority) of the best favorite playing in g, -1
+// when no favorite is.
+inline int live_fav_rank(const LiveGame &g, const std::vector<FavRef> &favs) {
+  for (int i = 0; i < (int) favs.size(); i++)
+    if (favs[i].league == g.league && favs[i].id != 0 && (favs[i].id == g.away_id || favs[i].id == g.home_id))
+      return i;
+  return -1;
+}
+
+// The live game to lock onto, as an index into live, or -1 to leave the pick
+// to the rotation. current is the game on the board; skip_current leaves it
+// out (it ended, though the scan may still list it as in progress). With
+// alternate, a scan with the board on one favorite's game moves to the next
+// favorite's, in list order, wrapping; a lone favorite's game stays.
+inline int take_over_pick(const std::vector<LiveGame> &live, const std::vector<FavRef> &favs,
+                          const std::string &current, bool skip_current, bool alternate) {
+  // Candidates by priority: (rank, index), insertion-sorted, a few at most.
+  std::vector<std::pair<int, int>> cand;
+  for (int i = 0; i < (int) live.size(); i++) {
+    if (skip_current && !current.empty() && live[i].event_id == current)
+      continue;
+    int r = live_fav_rank(live[i], favs);
+    if (r < 0)
+      continue;
+    auto at = cand.begin();
+    while (at != cand.end() && at->first <= r)
+      ++at;
+    cand.insert(at, {r, i});
+  }
+  if (cand.empty())
+    return -1;
+  if (!alternate)
+    return cand[0].second;
+  for (size_t k = 0; k < cand.size(); k++)
+    if (!current.empty() && live[cand[k].second].event_id == current)
+      return cand[(k + 1) % cand.size()].second;
+  return cand[0].second;
+}
+
+// When to scan again for a favorite's kickoff: at the earliest kickoff the
+// last scan saw for one (0 for none). A kickoff already past means ESPN still
+// says "pre": look again in two minutes, and after twenty, every ten, so a
+// delayed start doesn't keep the panel reading scoreboards.
+inline int64_t take_over_rescan_at(int64_t now, int64_t fav_kickoff) {
+  if (fav_kickoff <= 0)
+    return 0;
+  if (fav_kickoff > now)
+    return fav_kickoff;
+  return now + (now - fav_kickoff < 20 * 60 ? 2 * 60 : 10 * 60);
 }
 
 }  // namespace espn
