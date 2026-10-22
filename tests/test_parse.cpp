@@ -792,6 +792,20 @@ static void test_status_text() {
   CHECK_EQ(status_text(p, no_odds, "Sun 5:30 PM"), std::string("Super Bowl LX | Sun 5:30 PM | Lumen Field"));
   p.game_name = p.venue = "Rose Bowl";
   CHECK_EQ(status_text(p, no_odds, "Thu 3:00 PM"), std::string("Rose Bowl | Thu 3:00 PM"));
+  // The playoff round leads the other sports' pre-game tickers too
+  for (Sport sport : {Sport::BASEBALL, Sport::BASKETBALL, Sport::HOCKEY}) {
+    GameSnapshot r;
+    r.valid = true;
+    r.sport = sport;
+    r.state = GameState::PRE;
+    r.team_abbr = "LAD";
+    r.opp_abbr = "NYM";
+    r.venue = "Dodger Stadium";
+    r.game_name = "NLCS - Game 2";
+    CHECK_EQ(status_text(r, no_odds, "Tue 7:08 PM"), std::string("NLCS - Game 2 | Tue 7:08 PM | Dodger Stadium"));
+    r.game_name.clear();
+    CHECK_EQ(status_text(r, no_odds, "Tue 7:08 PM"), std::string("Tue 7:08 PM | Dodger Stadium"));
+  }
   // Leader lines: last name, yards with a comma, touchdowns when there are any
   CHECK_EQ(espn::detail::leader_line("D. Prescott", "129/192, 1381 YDS, 9 TD, 3 INT"), std::string("Prescott 1,381 yds 9 TD"));
   CHECK_EQ(espn::detail::leader_line("M. Penix Jr.", "52/77, 719 YDS, 3 TD, 1 INT"), std::string("Penix Jr. 719 yds 3 TD"));
@@ -1549,7 +1563,10 @@ static void test_mlb_pre_post() {
   CHECK_EQ(p.tv, std::string("FS1"));
   TickerOptions o;
   std::string pre = status_text(p, o, "Today 10:00 PM");
-  CHECK(pre.rfind("Today 10:00 PM | MIL leads series 2-1 | MIL R. Gasser vs SD W. Buehler | SD -112 | ", 0) == 0);
+  // The round from the fixture's notes leads, as on the device page
+  CHECK_EQ(p.game_name, std::string("NLDS - Game 4"));
+  CHECK(pre.rfind("NLDS - Game 4 | Today 10:00 PM | MIL leads series 2-1 | MIL R. Gasser vs SD W. Buehler | SD -112 | ",
+                  0) == 0);
   CHECK(pre.find(" | FS1 | Petco Park") != std::string::npos);
 
   GameSnapshot f = mlb_event("fixtures/event_mlb_final.json", kWhiteSox);
@@ -2579,7 +2596,7 @@ static void test_nhl_pre_post() {
   pre.state = GameState::PRE;
   pre.odds = pre.over_under = pre.tv = "";
   CHECK_EQ(status_text(pre, o, "Today 7:00 PM"),
-           std::string("Today 7:00 PM | CAR leads series 2-0 | Lenovo Center"));
+           std::string("East 1st Round - Game 2 | Today 7:00 PM | CAR leads series 2-0 | Lenovo Center"));
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_nhl_live.json"), Sport::HOCKEY, kPenguins, x));  // not in it
@@ -3036,6 +3053,14 @@ static void test_short_game_name() {
   CHECK_EQ(short_game_name("Snoop Dogg Arizona Bowl presented by Gin & Juice by Dre and Snoop"),
            std::string("Arizona Bowl"));
   CHECK_EQ(short_game_name("LA Bowl Hosted by Gronk"), std::string("LA Bowl"));
+  // ESPN abbreviates the sponsor too (event_mcbb_ot.json)
+  CHECK_EQ(short_game_name("Ivy League Tournament pres. by TIAA - Final"), std::string("Ivy League Tournament"));
+  // Notes that are a result or a schedule change are no name
+  CHECK_EQ(short_game_name("Paris Saint-Germain win 4-3 on penalties"), std::string(""));
+  CHECK_EQ(short_game_name("Rain - Makeup date April 5"), std::string(""));
+  CHECK_EQ(short_game_name("Sun Bowl presented by Win Inc"), std::string("Sun Bowl"));  // the sponsor goes first
+  CHECK_EQ(short_game_name("NLCS - Game 2"), std::string("NLCS - Game 2"));
+  CHECK_EQ(short_game_name("East 1st Round - Game 2"), std::string("East 1st Round - Game 2"));
   CHECK_EQ(short_game_name("Duke's Mayo Bowl"), std::string("Duke's Mayo Bowl"));
   CHECK_EQ(short_game_name("College Football Playoff First Round Game"), std::string("CFP First Round Game"));
   CHECK_EQ(short_game_name("AFC Divisional Playoffs"), std::string("AFC Divisional"));
