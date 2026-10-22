@@ -3265,6 +3265,10 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
     if (!this->recap_on_ || !this->recap_cards_.empty())
       return;
   } else if (this->favorites_mode_()) {
+    // A favorite's game locked on has the board, playlist or not (a favorite
+    // outside the playlist still takes the panel near its kickoff).
+    if (this->fav_locked_)
+      return;
     // Every favorite in the playlist has been read, and each is between
     // seasons: no game, or the next one past the season horizon (often next
     // season's opener). The Next line is the soonest of those games.

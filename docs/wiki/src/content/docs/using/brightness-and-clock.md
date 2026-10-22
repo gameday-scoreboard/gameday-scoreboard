@@ -54,7 +54,7 @@ Separate from the Clock page, the scoreboard shows a clock of its own when there
 - **In Live games** with no team picked, when there has been no game in the last week and none is coming, the clock is gray.
 
 :::note[Coming in the next release]
-Favorite teams follows the same rule as My team: the clock comes up once every favorite is between seasons, with no game listed or the next one more than 10 days away (football only with no game listed). It's in the colors of the favorite whose game comes first, with that game under the time, like "Next: at PHI Mar 26 7:05 PM". While the clock is up, the panel checks for a new date every 6 hours instead of every 15 minutes, so it uses less data.
+Favorite teams follows the same rule as My team: the clock comes up once every favorite (in the playlist, when one is playing) is between seasons, with no game listed or the next one more than 10 days away (football only with no game listed). A favorite whose game is about to start still takes the panel. It's in the colors of the favorite whose game comes first, with that game under the time, like "Next: at PHI Mar 26 7:05 PM". While the clock is up, the panel checks for a new date every 6 hours instead of every 15 minutes, so it uses less data.
 :::
 
 On a single 64x64 panel the date goes under the time, and the next game goes in the ticker. See [Show: My team, Favorite teams, Live games](/using/modes/#when-your-team-has-no-game-coming).
