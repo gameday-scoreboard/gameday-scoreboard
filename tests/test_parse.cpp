@@ -4318,6 +4318,20 @@ static void test_offseason() {
   CHECK(!off_season(GameState::POST, now - 2 * day, now, hockey));
   CHECK(!off_season(GameState::IN, now - 11 * day, now, hockey));
 
+  // Favorites, one favorite at a time: the clock needs every one at 1.
+  CHECK_EQ(fav_off_season(false, false, false, GameState::NOT_FOUND, 0, now, hockey), -1);  // not read yet
+  CHECK_EQ(fav_off_season(true, false, false, GameState::NOT_FOUND, 0, now, hockey), 1);    // no game named
+  // Next season's opener named, as ESPN lists it in November for an MLB
+  // team: past the horizon, the same as no game.
+  CHECK_EQ(fav_off_season(true, true, true, GameState::PRE, now + 120 * day, now, hockey), 1);
+  CHECK_EQ(fav_off_season(true, true, false, GameState::NOT_FOUND, now + 120 * day, now, hockey), 1);  // not polled yet
+  CHECK_EQ(fav_off_season(true, true, true, GameState::PRE, now + 2 * day, now, hockey), 0);  // a game this week
+  CHECK_EQ(fav_off_season(true, true, true, GameState::POST, now - 2 * day, now, hockey), 0);
+  CHECK_EQ(fav_off_season(true, true, true, GameState::POST, now - 40 * day, now, hockey), 1);  // the last final
+  CHECK_EQ(fav_off_season(true, true, true, GameState::IN, now - 11 * day, now, hockey), 0);
+  // Football keeps its card however far the game is.
+  CHECK_EQ(fav_off_season(true, true, true, GameState::PRE, now + 200 * day, now, football), 0);
+
   // The Next line. Wed Sep 9 2026, 10:00 AM.
   struct tm wed = mk(2026, 251, 3, 10, 0, 8, 9);
   CHECK_EQ(next_line("DAL", "PHI", true, mk(2026, 255, 0, 15, 25, 8, 13), wed),

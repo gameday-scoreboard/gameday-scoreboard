@@ -697,6 +697,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Turns f into the off-season clock card when the board has nothing to
   // show for months (offseason.h); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
+  void clock_next_line_(UpdateFields &f, const GameSnapshot &g);
   void reset_game_();
   // Clears the board and scans again now, for a change in what the mode
   // follows. The caller starts the boot screen hold first.

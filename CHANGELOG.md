@@ -20,6 +20,11 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- Favorite teams shows the off-season clock once every favorite is between seasons, the same way My team does: with no game listed, or the next one more than 10 days away, like next season's opener. It's in the colors of the favorite who plays first, with that game under the time. Before, a listed opener months away left the board on "No upcoming game".
+- While the off-season clock is up, the panel checks the next game every 6 hours instead of every 15 minutes, which saves data on a capped plan.
+
 ## v2026.10.1
 
 Line scores at halftime and the final, a night schedule, a panel that protects itself when it runs hot or its power is weak, Wi-Fi that rides out power cuts and sign-in pages, and a Diagnostics section on the device page.
