@@ -28,7 +28,6 @@
 #include "poll_timing.h"
 #include "startup.h"
 #include "timezones.h"
-#include "update_mirror.h"
 #include "wifi_history.h"
 
 using namespace espn;
@@ -3901,48 +3900,6 @@ static void test_auto_update() {
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
-static void test_update_mirror() {
-  // On the primary: nothing until a read or install fails.
-  MirrorInputs in;
-  in.clock_valid = true;
-  CHECK(mirror_step(in) == MirrorStep::NONE);
-  in.answered = true;  // a good read on the primary is none of the mirror's business
-  CHECK(mirror_step(in) == MirrorStep::NONE);
-  in.error = true;
-  CHECK(mirror_step(in) == MirrorStep::TRY_MIRROR);
-  // The boot check, before the clock is set, fails TLS everywhere: no mirror read.
-  in.clock_valid = false;
-  CHECK(mirror_step(in) == MirrorStep::NO_CLOCK);
-  in.error = false;
-  CHECK(mirror_step(in) == MirrorStep::NONE);
-
-  // On the mirror, its read in flight (the error was cleared to start it).
-  MirrorInputs m;
-  m.on_mirror = true;
-  CHECK(mirror_step(m) == MirrorStep::NONE);
-  m.waited_ms = kMirrorWaitMs - 1;
-  CHECK(mirror_step(m) == MirrorStep::NONE);
-  m.waited_ms = kMirrorWaitMs;
-  CHECK(mirror_step(m) == MirrorStep::TIMED_OUT);
-  m.waited_ms = 5000;
-  m.answered = true;
-  CHECK(mirror_step(m) == MirrorStep::ANSWERED);
-  m.answered = false;
-  m.error = true;
-  CHECK(mirror_step(m) == MirrorStep::FAILED);
-  m.answered = true;  // an error wins: a failed read publishes nothing
-  CHECK(mirror_step(m) == MirrorStep::FAILED);
-  m.waited_ms = kMirrorWaitMs * 2;
-  CHECK(mirror_step(m) == MirrorStep::FAILED);
-  // millis() wraps every 49 days; the unsigned difference still counts up.
-  uint32_t since = 0xFFFFF000u;
-  uint32_t now = since + kMirrorWaitMs;
-  m = MirrorInputs{};
-  m.on_mirror = true;
-  m.waited_ms = now - since;
-  CHECK(mirror_step(m) == MirrorStep::TIMED_OUT);
-}
-
 static void test_update_mark() {
   UpdateMark m{};
   CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
@@ -5461,7 +5418,6 @@ int main() {
   test_backoff();
   test_cup_backoff();
   test_auto_update();
-  test_update_mirror();
   test_update_mark();
   test_boot_log();
   test_health_json();

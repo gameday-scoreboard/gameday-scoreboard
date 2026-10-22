@@ -41,12 +41,11 @@
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
-#include "update_mirror.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
 #endif
-#if defined(GAMEDAY_BETA_CHANNEL) || defined(GAMEDAY_UPDATE_MIRROR)
+#ifdef GAMEDAY_BETA_CHANNEL
 #include "esphome/components/http_request/update/http_request_update.h"
 #endif
 
@@ -353,17 +352,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
-  // The update feed's second host (update_mirror.h): `mirror` is `source`
-  // on the mirror, `beta_mirror` the beta manifest there (release builds).
-#ifdef GAMEDAY_UPDATE_MIRROR
-  void set_update_mirror(http_request::HttpRequestUpdate *update, const char *source, const char *mirror,
-                         const char *beta_mirror) {
-    this->mirror_update_ = update;
-    this->primary_source_ = source;
-    this->mirror_source_ = mirror;
-    this->beta_mirror_source_ = beta_mirror;
-  }
-#endif
 
   void setup() override;
   void loop() override;
@@ -794,17 +782,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject beta_pref_;
   uint8_t follow_beta_{0};  // 1 = read the beta manifest
   void apply_channel_();
-#endif
-#ifdef GAMEDAY_UPDATE_MIRROR
-  http_request::HttpRequestUpdate *mirror_update_{nullptr};
-  const char *primary_source_{nullptr};
-  const char *mirror_source_{nullptr};
-  const char *beta_mirror_source_{nullptr};
-  uint32_t mirror_since_ms_{0};
-  bool on_mirror_{false};
-  bool mirror_answered_{false};
-  void mirror_tick_();
-  void use_primary_();
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;
