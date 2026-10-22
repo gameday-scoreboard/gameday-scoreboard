@@ -1368,6 +1368,34 @@ test("the banner posts its text and seconds, and Take down posts no text", async
   await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "" });
 });
 
+test("the nickname names the page and the header, and saving it posts nick", async ({ page, request }) => {
+  await reset(request, { nick: "Garage" });
+  await page.goto("/");
+  await expect(page.locator("#nick")).toHaveValue("Garage");
+  await expect(page.locator("#devname")).toHaveText("Garage");
+  await expect(page).toHaveTitle("Garage · Game Day Scoreboard");
+
+  await page.locator("#nick").fill("  Living room ");
+  await page.locator("#nick").press("Enter");
+  await expectSet(request, { nick: "Living room" });
+  await expect(page.locator("#toast")).toHaveText("Nickname saved");
+  await expect.poll(async () => (await deviceState(request)).nick).toBe("Living room");
+  await expect(page).toHaveTitle("Living room · Game Day Scoreboard");
+
+  await page.locator("#nick").fill("");
+  await page.locator("#nick").press("Enter");
+  await expectSet(request, { nick: "" });
+  await expect(page.locator("#toast")).toHaveText("Nickname cleared");
+  await expect(page).not.toHaveTitle(/·/);
+});
+
+test("the nickname box hides on firmware without it", async ({ page, request }) => {
+  await reset(request, { nick: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#nickRow")).toBeHidden();
+});
+
 test("the message card posts its text, address and timing, and Clear turns it off", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

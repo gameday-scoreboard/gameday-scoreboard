@@ -432,6 +432,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  // The panel's nickname ("Living room"), shown by the device page and the
+  // apps. The hostname, Wi-Fi hotspot and Home Assistant name stay as they are.
+  struct PrefsNick {
+    char text[::espn::kNickMax + 1];
+  } __attribute__((packed));
+  ESPPreferenceObject nick_pref_;
+  std::string nick_;
+  void load_nick_();
+  void set_nick_(const std::string &nick);
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
   ESPPreferenceObject power_pref_;

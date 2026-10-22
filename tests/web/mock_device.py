@@ -93,7 +93,7 @@ INITIAL = {
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False,
-    "msg": "", "msgurl": "", "msgevery": 2,
+    "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
@@ -304,6 +304,8 @@ def apply_set(kv):
                 STATE["panels"] = atoi(v)
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
+        elif k == "nick":
+            STATE["nick"] = message_clean(v, LIMITS["kNickMax"], False)
         elif k == "msgurl":
             if msg_url_ok(v):
                 STATE["msgurl"] = v

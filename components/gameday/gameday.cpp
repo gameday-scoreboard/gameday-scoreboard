@@ -327,6 +327,7 @@ void GamedayComponent::setup() {
     this->pref8_.save(&this->prefs8_);
   }
   this->load_msg_();
+  this->load_nick_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -3535,6 +3536,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   JsonDocument doc(::espn::detail::json_allocator());
   const GameSnapshot &g = this->game_;
   doc["name"] = this->hostname();
+  doc["nick"] = this->nick_;  // "" until the owner names the panel
   doc["version"] = App.get_comment();
   doc["setup"] = this->flag_(FLAG_SETUP);
   doc["panels"] = this->panels_ != nullptr ? this->panels_->cols() : 0;
@@ -3893,6 +3895,26 @@ void GamedayComponent::load_msg_() {
   this->msg_url_ = ::espn::msg_url_ok(p.url) ? p.url : "";
   this->msg_every_ = (uint8_t) ::espn::clamp_msg_every(p.every);
   this->msg_reset_();
+}
+
+void GamedayComponent::load_nick_() {
+  this->nick_pref_ = global_preferences->make_preference<PrefsNick>(fnv1_hash("gameday_nick_v1"));
+  PrefsNick p{};
+  if (!this->nick_pref_.load(&p))
+    return;  // never named
+  p.text[sizeof(p.text) - 1] = '\0';
+  this->nick_ = ::espn::message_clean(p.text, ::espn::kNickMax, false);
+}
+
+void GamedayComponent::set_nick_(const std::string &nick) {
+  if (nick == this->nick_)
+    return;
+  this->nick_ = nick;
+  PrefsNick p{};
+  strncpy(p.text, nick.c_str(), sizeof(p.text) - 1);
+  this->nick_pref_.save(&p);
+  ESP_LOGI(TAG, "Nickname: %s", nick.empty() ? "(none)" : nick.c_str());
+  this->rebuild_state_(&this->last_fields_);
 }
 
 // Any of the three; a null pointer or a negative every leaves that one as it is.
@@ -4367,6 +4389,9 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
         break;
       case ::espn::SetKind::MSGEVERY:
         msg_every = op.value;
+        break;
+      case ::espn::SetKind::NICK:
+        this->set_nick_(op.text);
         break;
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;

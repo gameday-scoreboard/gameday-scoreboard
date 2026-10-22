@@ -17,6 +17,9 @@ namespace espn {
 
 constexpr size_t kMsgTextMax = 200;  // the saved text, and a banner, in bytes
 constexpr size_t kMsgUrlMax = 160;
+// The panel's nickname ("Living room"), in bytes: about 32 letters, fewer
+// with accents. One line, cleaned like a message.
+constexpr size_t kNickMax = 32;
 constexpr size_t kMsgLineMax = 64;  // one entry from a URL; a longer line is cut
 constexpr uint32_t kMsgChunkLines = 100;  // entries one read keeps
 constexpr uint32_t kMsgPageLines = 4;     // entries on the board at once

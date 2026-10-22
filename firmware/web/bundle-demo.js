@@ -187,6 +187,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       </div>
       <div class="card">
         <h2>Panel</h2>
+        <div id="nickRow" hidden>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the Game Day app, like Living room or Garage. Leave it empty to go by the panel's network name.</small></label>
+          <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
+        </div>
         <div id="panelCtls"></div>
         <div id="nightCtls" hidden>
           <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
@@ -364,7 +368,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     live: (v) => v.split(",").filter(Boolean),
     team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
-    msg: String, msgurl: String, msgevery: Number,
+    msg: String, msgurl: String, msgevery: Number, nick: String,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
@@ -929,6 +933,29 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     toast("Message card off");
   };
 
+  // ---- nickname: the header, the tab title and the box ---------------------------
+  const baseTitle = document.title || "Game Day Scoreboard";
+  let pingTitle = "";  // the device's own name, from the event stream
+  let nickSeen = null;
+  const renderNick = () => {
+    const nick = (S && S.nick) || "";
+    $("#devname").textContent = nick || pingTitle || "connecting";
+    document.title = nick ? nick + " · Game Day Scoreboard" : baseTitle;
+    // Older firmware has no nickname.
+    $("#nickRow").hidden = !S || S.nick === undefined;
+    const input = $("#nick");
+    if (nick === nickSeen || document.activeElement === input) return;
+    nickSeen = nick;
+    input.value = nick;
+  };
+  $("#nick").onchange = () => {
+    const nick = $("#nick").value.trim();
+    $("#nick").value = nick;
+    nickSeen = null;
+    setGD({ nick });
+    toast(nick ? "Nickname saved" : "Nickname cleared");
+  };
+
   // ---- panel picker ------------------------------------------------------------
   // Picking a layout restarts the device; the page waits it out.
   const renderPanels = () => {
@@ -1406,6 +1433,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderNick();
     renderData();
     renderHealth();
     renderWifi();
@@ -1825,7 +1853,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       if (!ev.data) return;
       try {
         const p = JSON.parse(ev.data);
-        if (p.title) $("#devname").textContent = p.title;
+        if (p.title) { pingTitle = p.title; renderNick(); }
         if (p.comment) $("#ver").textContent = p.comment;
       } catch (_) {}
     });
