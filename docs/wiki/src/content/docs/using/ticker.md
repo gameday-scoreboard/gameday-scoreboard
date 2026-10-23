@@ -26,7 +26,7 @@ At halftime and the final, with **Last play** on, the ticker also runs the scori
 
 Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 
-Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text. Before, they came out as a gap, like "Atl tico".
+Accented letters in names, like the é in Atlético or the ñ in Peña, show in the pre-game ticker and the panel's other small text. Two places still spell names without them, like "Martinez" for Martínez: soccer's ticker once the match starts, and the scoring plays and headline at halftime and the final.
 
 ## The switches
 

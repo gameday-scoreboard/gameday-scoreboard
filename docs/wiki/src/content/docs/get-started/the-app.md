@@ -14,9 +14,7 @@ The Game Day app is the companion app for your panel, for iPhone and Android. It
 - **Picks your team** and the mode, the same choices as the device page. See [Pick your team](/get-started/pick-your-team/).
 - **Changes the panel's settings**: the ticker, celebrations, favorites, brightness, the remote and the rest. The app's screens follow the device page's cards, so a setting is in the same place in both.
 
-:::note[Coming in the next release]
 On iPhone, give each panel a **Nickname** in its Panel settings, like "Living room". The panel list shows the nicknames, with each panel online or offline, and **Edit** lets you drag the list into your own order. The nickname is saved on the panel, so every phone and the device page see the same name. The order is kept on each phone.
-:::
 
 ## If the app doesn't list your panel
 
