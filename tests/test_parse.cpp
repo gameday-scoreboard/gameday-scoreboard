@@ -3969,7 +3969,17 @@ static void test_fav_side_polls() {
   // Another favorite's refresh read worked: ESPN answered, but the board's
   // game wasn't read, so its freshness stays.
   fx = fav_poll_effect(true, false, false, false);
-  CHECK(!fx.mark_good && fx.clear_backoff);
+  CHECK(!fx.mark_good && fx.clear_backoff && !fx.count_miss && !fx.back_off);
+  // One that failed (its team read or its game read) leaves the board's miss
+  // count and pace alone, as a side poll does; it retries on its own clock.
+  fx = fav_poll_effect(false, false, false, false);
+  CHECK(!fx.count_miss && !fx.back_off && !fx.mark_good && !fx.clear_backoff);
+  // Except a refusal.
+  fx = fav_poll_effect(false, false, true, false);
+  CHECK(!fx.count_miss && fx.back_off);
+  // The board's own read refused: a miss and a back-off.
+  fx = fav_poll_effect(false, false, true, true);
+  CHECK(fx.count_miss && fx.back_off);
 }
 
 // After a My team game poll failed: read the team again now, or back off.

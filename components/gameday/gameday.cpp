@@ -1089,14 +1089,21 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   FavEntry &e = this->fav_[j.fav_index];
   int64_t tnow = (int64_t) this->time_->timestamp_now();
   bool shown = j.fav_index == this->fav_shown_;
+  bool board = shown || this->fav_shown_ < 0;
   // A cup read that did not poll the game leaves the poll timer alone.
   if (shown && (j.comp < 0 || j.polled))
     this->fav_poll_ms_ = now == 0 ? 1 : now;
   if (j.need_schedule) {
     if (!j.schedule_ok) {
-      this->count_miss_();
-      this->emit_({});  // the miss shows on the ticker and the page, as in My team
-      this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
+      // Another favorite's failed team read retries on its own clock
+      // (RETRY_INTERVAL), not the board's.
+      ::espn::FavPollEffect fx = ::espn::fav_poll_effect(false, false, j.throttled, board);
+      if (fx.count_miss) {
+        this->count_miss_();
+        this->emit_({});  // the miss shows on the ticker and the page, as in My team
+      }
+      if (fx.back_off)
+        this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
       this->schedule_next_(0);
       return;
     }
@@ -1118,8 +1125,9 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.comps = j.comps;
     e.comp_next = j.comp + 1 < (int) j.comps.size() ? j.comp + 1 : -1;
     e.sched = j.schedule;
-    // A failed poll backs off below with the other failed polls
-    if (!j.polled && ::espn::cup_read_backs_off(j.cup_ok, false, false, j.throttled))
+    // A failed poll backs off below with the other failed polls; another
+    // favorite's failed cup read backs off only on a refusal.
+    if (!j.polled && ::espn::cup_read_backs_off(j.cup_ok, false, false, j.throttled) && (board || j.throttled))
       this->back_off_();  // start_fav_job_ waits it out
     if (j.no_event) {
       this->fav_no_event_(e, shown, tnow);
@@ -1130,8 +1138,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
       return;
     }
   }
-  ::espn::FavPollEffect fx =
-      ::espn::fav_poll_effect(j.game_ok, j.fav_side, j.throttled, shown || this->fav_shown_ < 0);
+  ::espn::FavPollEffect fx = ::espn::fav_poll_effect(j.game_ok, j.fav_side, j.throttled, board);
   if (j.fav_side)
     e.side_fails = j.game_ok ? 0 : e.side_fails < 255 ? e.side_fails + 1 : 255;
   if (!j.game_ok) {
@@ -1168,6 +1175,12 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     this->clear_backoff_();
   std::string banner = shown || !this->score_banner() ? "" : ::espn::fav_score_banner(old, e.game);
   bool switched = this->fav_choose_(tnow);
+  if (switched && j.fav_index == this->fav_shown_) {
+    // This read's game just took the board (Jump to the action): it was the
+    // board's poll, so the board is fresh and its next poll waits the interval.
+    this->mark_good_poll_();
+    this->fav_poll_ms_ = now == 0 ? 1 : now;
+  }
   // Not when that game just took the board, or is the one on it already.
   if (!banner.empty() && j.fav_index != this->fav_shown_ && e.game.event_id != this->game_.event_id) {
     this->fav_banner_text_ = banner;

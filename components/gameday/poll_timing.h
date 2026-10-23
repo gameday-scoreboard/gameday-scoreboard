@@ -99,11 +99,12 @@ inline uint32_t side_poll_wait_ms(uint8_t fails, uint32_t base) {
 
 // What a Favorites read that came back does to the board's shared state: the
 // miss count and freshness the ticker and page report, and the back-off every
-// read waits out. A side poll (side_poll_wait_ms) is about another game, so
-// its result touches none of it, except a refusal (403 or 429), which every
-// read has to respect. Any other read that worked clears the back-off; it
-// marks the board fresh only when it was the board's own game (`board`, or
-// nothing is on the board).
+// read waits out. Only a read of the board's own favorite (`board`, or
+// nothing is on the board) counts a miss, backs off or marks the board fresh.
+// A read about another favorite, its side poll (side_poll_wait_ms) or its
+// refresh, touches none of it, except a refusal (403 or 429), which every
+// read has to respect. Any read that worked other than a side poll clears
+// the back-off: ESPN answered.
 struct FavPollEffect {
   bool count_miss{false};
   bool back_off{false};
@@ -112,14 +113,11 @@ struct FavPollEffect {
 };
 inline FavPollEffect fav_poll_effect(bool ok, bool side, bool refused, bool board) {
   FavPollEffect fx;
-  if (side) {
-    fx.back_off = !ok && refused;
-    return fx;
-  }
-  fx.count_miss = !ok;
-  fx.back_off = !ok;
-  fx.mark_good = ok && board;
-  fx.clear_backoff = ok;
+  bool ours = board && !side;
+  fx.count_miss = !ok && ours;
+  fx.back_off = !ok && (ours || refused);
+  fx.mark_good = ok && ours;
+  fx.clear_backoff = ok && !side;
   return fx;
 }
 
