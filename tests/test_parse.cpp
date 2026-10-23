@@ -2784,6 +2784,21 @@ static void test_lookahead() {
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, none, "401856724"));
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 2294, none));
 
+  // The NFL keeps the game: NE @ CHI was final on 2026-10-22 and Chicago's
+  // team endpoint still named it, while Memphis's (college, in overtime two
+  // minutes later) named next week's. So the NFL skips the day read.
+  Schedule chi;
+  CHECK(parse_team_str(slurp("fixtures/team_nfl_chi_post.json"), chi));
+  CHECK_EQ(chi.event_id, std::string("401873010"));  // NE @ CHI, final
+  CHECK(chi.next_final);
+  Schedule mem;
+  CHECK(parse_team_str(slurp("fixtures/team_ncaa_mem_live.json"), mem));
+  CHECK_EQ(mem.event_id, std::string("401862814"));  // ARMY @ MEM, 10/31
+  CHECK(team_names_game_on_now(League::NFL));
+  for (League l : {League::NCAA, League::MLB, League::NBA, League::WNBA, League::NHL, League::MLS, League::EPL,
+                   League::MCBB})
+    CHECK(!team_names_game_on_now(l));
+
   CHECK_EQ(team_day_url(League::NHL, 0, parse_iso8601_z("2026-10-09T15:00Z")),
            std::string("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261009"));
   CHECK_EQ(team_day_url(League::MCBB, 8, parse_iso8601_z("2026-12-06T18:00Z")),
