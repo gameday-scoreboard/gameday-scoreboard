@@ -49,6 +49,10 @@ Live games follows the best game on instead of a random one, with the **Pick the
 
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
 
+:::note[Coming in the next release]
+A soccer match has no stops in play, so it counts as at a break from the 45th minute to halftime and from the 90th minute on. Before, only halftime counted, and a match could hold the panel for a whole half. The panel also looks once per break: a long break, like a hockey intermission, gets one look instead of one every **Switch every** minutes.
+:::
+
 ### Favorites take over
 
 Turn on **Favorites take over** under **Switch every** and a game one of your [favorites](/using/favorites/) is playing gets the panel while it's on, whatever else is live. Live games carries on as usual the rest of the time. Your favorites can be from any sport, like the Cowboys, Mavericks, Stars and Rangers on one list.
@@ -59,6 +63,10 @@ Turn on **Favorites take over** under **Switch every** and a game one of your [f
 - Only favorites in the leagues Live games follows count. On automatic leagues, that's all of them.
 
 The bar under the board says **Locked on** and the team's name while a favorite has the panel. It's off until you turn it on.
+
+:::note[Coming in the next release]
+With **Stick with the higher team**, the panel also checks every **Switch every** minutes (at least every 5) for a higher favorite whose game started without a set time, like the second game of a doubleheader, so it doesn't wait for the lower favorite's game to end. With **Alternate**, the switch between your favorites' games comes only every **Switch every** minutes, not also when another favorite's game is about to start.
+:::
 
 ### Choosing the leagues
 

@@ -526,6 +526,42 @@ static void test_best_game() {
   }
   CHECK(at_break(live(14, 10, GameState::POST)));
   CHECK(at_break(GameSnapshot{}));
+  // Pick the best game's breaks: every break, and in soccer from 45' to the
+  // half and from 90' on; the rest is play.
+  GameSnapshot fut = live(1, 0);
+  fut.sport = Sport::SOCCER;
+  for (const char *d : {"45'", "45'+2'", "HT", "90'", "90'+4'", "105'", "120'+1'"}) {
+    fut.short_detail = d;
+    CHECK(pick_break(fut));
+  }
+  for (const char *d : {"1'", "25'", "44'", "46'", "89'", ""}) {
+    fut.short_detail = d;
+    CHECK(!pick_break(fut));
+  }
+  // Play is still on at 90', so Jump to the action's at_break says no.
+  fut.short_detail = "90'+2'";
+  CHECK(!at_break(fut));
+  // The same minute in another sport is not a soccer clock.
+  s.short_detail = "45'";
+  CHECK(!pick_break(s));
+  s.short_detail = "End of 3rd";
+  CHECK(pick_break(s));
+
+  // When Live games looks for another game. Switch every 1 minute.
+  const uint32_t sw = 60 * 1000, m5 = 5 * 60 * 1000;
+  CHECK(!rotate_due(30 * 1000, sw, false, false, false, false, false));  // random: the timer
+  CHECK(rotate_due(sw, sw, false, false, false, false, false));
+  CHECK(!rotate_due(sw, sw, false, false, true, false, false));  // best: mid-play, no
+  CHECK(rotate_due(sw, sw, false, false, true, true, false));    // at a break
+  // A look at this break kept the game: no second scan until play resumes,
+  // however long the intermission.
+  CHECK(!rotate_due(18 * sw, sw, false, false, true, true, true));
+  CHECK(rotate_due(sw, sw, false, true, true, false, true));  // Alternate: the plain timer
+  // Stick with a favorite up: a slow look, at least every 5 minutes.
+  CHECK(!rotate_due(4 * sw, sw, true, true, true, true, false));
+  CHECK(rotate_due(m5, sw, true, true, true, false, false));
+  CHECK(!rotate_due(m5, 10 * sw, true, true, false, false, false));  // or Switch every when longer
+  CHECK(rotate_due(10 * sw, 10 * sw, true, true, false, false, false));
 
   // A poll of the followed game, the away side as team, checked for an upset.
   GameSnapshot p = live(24, 21);
@@ -5584,6 +5620,11 @@ static void test_take_over() {
   CHECK_EQ(take_over_pick(live, favs, "nyg-dal", false, true), 1);  // Cowboys, then Mavericks
   CHECK_EQ(take_over_pick(live, favs, "bos-dal", false, true), 2);  // then Stars
   CHECK_EQ(take_over_pick(live, favs, "dal-chi", false, true), 3);  // and back to the Cowboys
+  // A kickoff scan (not the Switch every look) keeps the favorite that's up.
+  CHECK_EQ(take_over_pick(live, favs, "nyg-dal", false, true, false), 3);
+  CHECK_EQ(take_over_pick(live, favs, "bos-dal", false, true, false), 1);
+  CHECK_EQ(take_over_pick(live, favs, "phi-lv", false, true, false), 3);  // on another game: the highest
+  CHECK_EQ(take_over_pick(live, favs, "bos-dal", true, true, false), 3);  // it ended: the highest
   // A lone favorite's game stays up.
   std::vector<LiveGame> one = {live[0], live[2]};
   CHECK_EQ(take_over_pick(one, favs, "dal-chi", false, true), 1);
