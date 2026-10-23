@@ -16,6 +16,10 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 | At a break | Halftime in football, the hits and errors between half innings in baseball, the series or records in basketball and hockey, and the goals, cards and stats at half time in soccer. |
 | After the final | "Final" with the records, or the sport's result line, like hits and errors in baseball or the goals in soccer. |
 
+:::note[Coming in the next release]
+Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", as football's does with a bowl or playoff name.
+:::
+
 Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds. On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
 
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
@@ -34,9 +38,13 @@ The Ticker card on the device page has a switch for each part. All of them start
 | **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | **Match stats** | Soccer: goals, cards, possession and shots. |
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. A very long play is cut short. |
-| **Pre-game odds and TV** | The line, over/under and TV channel before the start, in every league, when ESPN has them. |
+| **Odds, TV and win chance** | The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, the win chance during the game. |
 
-In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Pre-game odds and TV** also adds ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Odds, TV and win chance** shows ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+
+:::note[Coming in the next release]
+Until then the device page calls this switch **Pre-game odds and TV**. It's the same switch.
+:::
 
 A **Pre-game season leaders** switch, on to start, adds football's passing leaders before kickoff. Like the situation switches, it shows only on a panel that follows football.
 

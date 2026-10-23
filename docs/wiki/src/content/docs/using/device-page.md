@@ -9,6 +9,10 @@ Every panel serves its own web page. Open it in a browser on any phone or comput
 
 The page is plain HTML built into the firmware, so there is nothing to install and no account. It works with no internet connection except for two things your browser reads from ESPN itself: the team logos and the **On now** list. The Game Day app shows the same settings, so a change in one shows up in the other.
 
+:::note[Coming in the next release]
+A change is saved on the panel the moment you make it, from the page, the app, Home Assistant or the remote, so you can unplug the panel right after and it comes back with the change.
+:::
+
 ## The live board
 
 The top of the page mirrors the panel: both logos, the score, the game clock, down and distance or the count and outs, timeout pips, the ticker line and the last play. A label above it says **UPCOMING**, **LIVE**, **FINAL** or **NO GAME**, and bowl and playoff games show their name, like "Rose Bowl", under the score. When the panel splashes a score, the page shows the same words for a few seconds.
@@ -51,20 +55,20 @@ Settings are grouped in cards. In the order the page shows them:
 | Leagues (Live games) | The leagues Live games picks from. Until you pick, it follows the leagues of your team and favorites. **Back to automatic** goes back to that. |
 | **Switch every** (Live games) | Moves to another game in progress after this many minutes, 1 to 30. A new panel starts at 1. |
 | **Take over** (Favorite teams) | How many minutes before kickoff a favorite's game takes the panel, 5 to 120. Starts at 15. |
-| **After the final** (Favorite teams) | How long a favorite's final stays up before the playlist moves on, 30 seconds to 60 minutes. Starts at 30 seconds. |
+| **After the final** (Favorite teams) | How long a favorite's final stays up before the panel moves on, 30 seconds to 60 minutes. Starts at 30 seconds. |
 | **Two games at once** (Favorite teams) | **Stick with the higher team** in your list, or **Alternate** between them every set number of minutes. |
 | Ticker: **Down and distance** | Football: the down, yards to go and where the ball is. |
 | Ticker: **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | Ticker: **Match stats** | Soccer: goals, cards, possession and shots. |
 | Ticker: **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
-| Ticker: **Pre-game odds and TV** | The line, over/under and TV channel before the start, when ESPN has them. |
+| Ticker: **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
 | **Opponent scores too** | Splashes for the other side's scores. Your team's always show. See [Celebrations](#celebrations). |
 | **Panel on** | Turns the panel's lights on or off. |
 | **Brightness** | Panel brightness, 1 to 255. |
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. |
 | **Showing** | The Scoreboard page or the Clock page. |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
-| **Only today's games** | The Favorite teams playlist skips favorites that aren't playing today. |
+| **Only today's games** | Between games, Favorite teams skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
 | **Discovery**, **Unpair remote** | Pairs and unpairs a WizMote remote. See [WizMote remote](/using/remote/). |
 | Matrix | Click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/). |
@@ -79,6 +83,10 @@ The Favorites card has two more switches: **Jump to the action** (off to start) 
 
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).
 
+:::note[Coming in the next release]
+A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. See [Playlists](/using/favorites/#playlists).
+:::
+
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).
 
 The Panel card starts with a **Nickname** box. Give each panel a name, like "Living room" or "Garage", so you can tell them apart. The page's header and the browser tab show it, and so does the panel list in the iPhone app. Up to 32 characters (fewer with accents); emoji are left out. Clear the box to go back to the panel's own name. The nickname doesn't change the panel's network name, its address, its Wi-Fi hotspot or its name in Home Assistant.
@@ -86,6 +94,12 @@ The Panel card starts with a **Nickname** box. Give each panel a name, like "Liv
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
 
 Only the ticker switches for sports your panel follows are shown. Hockey and basketball have no game situation line, so they have no switch of their own.
+
+### Between games
+
+:::note[Coming in the next release]
+The **Between games** card has **Countdown to the next game**, on unless you turn it off, and **Your own countdown**: a **Name** and a **Day** to count down to, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/).
+:::
 
 ### Celebrations
 
@@ -109,6 +123,10 @@ The Device card has the buttons and the details about the panel itself.
 - **Reset Wi-Fi** and **Factory reset** restart the panel into setup, so the page can't follow it. See [The boot button and resets](/using/buttons-and-resets/).
 
 Under them: the **Firmware** box, the Wi-Fi networks list, the panel's **Address** and **Name**, its Wi-Fi **Signal**, free memory, and **ESPN data**, how much the panel has downloaded from ESPN since it started, for anyone on a capped internet plan.
+
+:::note[Coming in the next release]
+Under **Name**, **FCC information** has a **Show on panel** button. The panel shows its model, FCC ID and FCC statement on its own screen for about a minute, then goes back to the board. A panel that was switched off turns on for it and stays on. One that is dimmed or dark for the night lights up for it, then goes back to the night setting.
+:::
 
 A **Diagnostics** section in the Device card says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal** it draws the last day of Wi-Fi signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one.
 

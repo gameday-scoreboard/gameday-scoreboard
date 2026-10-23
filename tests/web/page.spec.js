@@ -26,8 +26,21 @@ const test = base.test.extend({
 // mock's default, null is firmware without the list.
 const reset = (request, state, fail, wifi) =>
   request.post("/_reset", { data: wifi === undefined ? { state, fail } : { state, fail, wifi } });
+// Playlists post to the settings import (app.js setRequest); a post of only
+// them reads back as the lists= text it stands for, so tests check it like a set.
+const playlistsPost = (p) => {
+  if (p.path !== "/gameday/settings") return null;
+  let d;
+  try { d = JSON.parse(p.body); } catch (_) { return null; }
+  if (!d || !Array.isArray(d.lists) || Object.keys(d).some((k) => !["schema", "lists", "list"].includes(k))) return null;
+  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",")).join(";") };
+  if (d.list !== undefined) q.list = String(d.list);
+  return q;
+};
 const sets = async (request) =>
-  (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/set").map((p) => p.q);
+  (await (await request.get("/_log")).json())
+    .map((p) => (p.path === "/gameday/set" ? p.q : playlistsPost(p)))
+    .filter(Boolean);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
 const deviceState = async (request) => (await request.get("/gameday/state")).json();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -302,6 +315,11 @@ test("mode pills post the mode and swap the settings bar", async ({ page, reques
   await page.locator("#rotate").press("Enter");
   await expectSet(request, { rotate: "30" }); // the page clamps to 1..30
   await expect(page.locator("#rotate")).toHaveValue("30");
+  // A decimal goes as a whole number: the panel refuses anything else.
+  await page.locator("#rotate").fill("7.6");
+  await page.locator("#rotate").press("Enter");
+  await expectSet(request, { rotate: "8" });
+  await expect(page.locator("#rotate")).toHaveValue("8");
 
   await page.locator('#modes button[data-mode="0"]').click();
   await expectSet(request, { mode: "0" });
@@ -406,6 +424,24 @@ test("the On now tab asks ESPN for every college game, not the Top 25", async ({
   expect(asked.mcbb.get("limit")).toBe("300");
   expect(asked.mcbb.get("dates")).toMatch(/^\d{8}$/);
   expect(asked.ncaa.get("groups")).toBe("80");
+});
+
+test("the On now tab keeps a late game on today's list after midnight Eastern, as the panel does", async ({ page, request }) => {
+  // 1:30 AM Eastern on Friday 10/23: a West Coast NBA game from Thursday is
+  // still on. Football's day has turned over; the other leagues' hasn't.
+  await page.clock.setFixedTime(new Date("2026-10-23T05:30:00Z"));
+  const asked = {};
+  for (const [lg, path] of [["nba", "basketball/nba"], ["nfl", "football/nfl"]]) {
+    await page.route(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard*`, (route) => {
+      asked[lg] = new URL(route.request().url()).searchParams.get("dates");
+      return route.fulfill({ json: { events: [] } });
+    });
+  }
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#pick").click();
+  await expect.poll(() => asked.nba).toBe("20261022");
+  await expect.poll(() => asked.nfl).toBe("20261023");
 });
 
 test("ticker, celebration and startup switches post 0 and 1", async ({ page, request }) => {
@@ -523,6 +559,104 @@ test("favorites post the whole list in order on add, move and remove", async ({ 
   ]);
 });
 
+test("playlists post every playlist on new, teams, rename, move and remove", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Playlist 1=" });
+  const box = page.locator("#listCtls .plist");
+  await expect(box).toHaveCount(1);
+  await expect(box.nth(0).locator(".pbtn")).toHaveText("Button 1");
+  await expect(box.nth(0).locator(".chip")).toHaveText(["DAL", "HOU", "MISS"]);
+  await box.nth(0).locator(".chip", { hasText: "HOU" }).click();
+  await expectSet(request, { lists: "Playlist 1=nfl:34" });
+  await expect(box.nth(0).locator(".chip.on")).toHaveText(["HOU"]);
+  await box.nth(0).locator(".pname").fill("Texans; and=more");
+  await box.nth(0).locator(".pname").press("Enter");
+  await expectSet(request, { lists: "Texans andmore=nfl:34" });
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Texans andmore=nfl:34;Playlist 2=" });
+  await expect(box).toHaveCount(2);
+  await box.nth(0).getByRole("button", { name: "Move down Texans andmore" }).click();
+  await expectSet(request, { lists: "Playlist 2=;Texans andmore=nfl:34" });
+  await box.nth(1).getByRole("button", { name: "Remove Texans andmore" }).click();
+  await expectSet(request, { lists: "Playlist 2=" });
+  await expect(box).toHaveCount(1);
+  await expect(page.locator("#favHint")).toContainText("Your playlists have buttons 1 to 4");
+});
+
+test("One per sport makes a playlist for each sport in the favorites", async ({ page, request }) => {
+  await reset(request, {
+    favs: [
+      { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" },
+      { l: "nba", id: 6, abbr: "DAL", name: "Dallas Mavericks" },
+      { l: "ncaa", id: 251, abbr: "TEX", name: "Texas Longhorns" },
+      {},
+    ],
+  });
+  await page.goto("/");
+  await page.locator("#listSport").click();
+  await expectSet(request, { lists: "Football=nfl:6,ncaa:251;Basketball=nba:6" });
+  await expect(page.locator("#listCtls .pname").nth(0)).toHaveValue("Football");
+  await expect(page.locator("#listCtls .pname").nth(1)).toHaveValue("Basketball");
+  await page.locator("#listSport").click();
+  await expect(page.locator("#toast")).toHaveText("Every sport in your favorites has a playlist");
+});
+
+// All 16 playlists with every favorite are about 3 KB, far past the panel's
+// 512-byte URL and its 1 KB form body; the mock refuses both as the panel does.
+test("all 16 playlists with every favorite save", async ({ page, request }) => {
+  const favs = Array.from({ length: 16 }, (_, i) => ({ l: "nfl", id: i + 1, abbr: "T" + (i + 1), name: "Team " + (i + 1) }));
+  const all = Array.from({ length: 16 }, (_, i) => i);
+  const keys = favs.map((f) => "nfl:" + f.id).join(",");
+  await reset(request, { favs, lists: Array.from({ length: 15 }, (_, i) => ({ n: "Playlist " + (i + 1), f: all })) });
+  await page.goto("/");
+  await expect(page.locator("#listCtls .plist")).toHaveCount(15);
+  await page.locator("#listAdd").click();
+  const want = Array.from({ length: 15 }, (_, i) => "Playlist " + (i + 1) + "=" + keys).join(";") + ";Playlist 16=";
+  await expectSet(request, { lists: want });
+  await page.locator("#listCtls .plist").nth(15).locator(".chip").first().click();
+  await expectSet(request, { lists: want + "nfl:1" });
+  await expect(page.locator("#toast")).not.toContainText("did not respond");
+});
+
+test("playlists wait for favorites", async ({ page, request }) => {
+  await reset(request, { favs: [{}, {}, {}, {}] });
+  await page.goto("/");
+  await expect(page.locator("#listCtls")).toHaveText("Add favorites first, then group them here.");
+  await expect(page.locator("#listActions")).toBeHidden();
+});
+
+test("Favorite teams plays a playlist: the picker posts it, the bar names it, the others dim", async ({ page, request }) => {
+  const t = (abbr, name, id) => ({ l: "nfl", id, abbr, name });
+  await reset(request, {
+    mode: 4,
+    lists: [{ n: "Texans", f: [1] }],
+    list: 0,
+    next: [
+      { slot: 1, t: t("DAL", "Dallas Cowboys", 6), id: "1", s: "PRE", kick: 1792531500, oi: 21, oa: "PHI", ts: 0, os: 0, tv: "FOX", detail: "" },
+      { slot: 2, t: t("HOU", "Houston Texans", 34), id: "5", s: "PRE", kick: 1792620000, oi: 30, oa: "JAX", ts: 0, os: 0, tv: "CBS", detail: "" },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator("#favListRow")).toBeVisible();
+  await expect(page.locator("#favList option")).toHaveText(["All favorites", "Texans"]);
+  await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
+  await expect(page.locator("#upnextList .un.out")).toHaveCount(0);
+  await page.locator("#favList").selectOption("1");
+  await expectSet(request, { mode: "4", list: "1" });
+  await expect(page.locator("#favName")).toHaveText("Cycling through Texans");
+  await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI"]);
+});
+
+test("the playing picker is hidden without playlists", async ({ page, request }) => {
+  await reset(request, { mode: 4 });
+  await page.goto("/");
+  await expect(page.locator("#favbar")).toBeVisible();
+  await expect(page.locator("#favListRow")).toBeHidden();
+});
+
 test("the favorites picker stays open: checks, a tap adds or takes out, a count, Done", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
@@ -607,6 +741,8 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
   await expectSet(request, { live: "mlb,nhl,nba" });
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NBA", "NHL"]);
+  // The re-read after the tap updates the chips in place, so focus stays put.
+  await expect(page.locator("#liveChips .chip", { hasText: /^NBA$/ })).toBeFocused();
 
   // The last league can't be switched off.
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
@@ -826,6 +962,38 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
+test("between games: the countdown switch is on by default, and the custom countdown posts its name and day", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="countdown"]');
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(sw).toHaveClass(/\bon\b/);
+  await expect(page.locator("#cdClear")).toBeHidden();
+  await sw.click();
+  await expectSet(request, { countdown: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+
+  await page.locator("#cdname").fill("Christmas");
+  await page.locator("#cdname").press("Tab");
+  await expectSet(request, { cdname: "Christmas" });
+  await page.locator("#cddate").fill("2026-12-25");
+  await page.locator("#cddate").dispatchEvent("change");
+  await expectSet(request, { cddate: "2026-12-25" });
+  await expect.poll(async () => (await deviceState(request)).cdname).toBe("Christmas");
+  await expect(page.locator("#cdClear")).toBeVisible();
+  await page.locator("#cdClear").click();
+  await expectSet(request, { cdname: "", cddate: "none" });
+  await expect.poll(async () => (await deviceState(request)).cddate).toBe("");
+  await expect(page.locator("#cdname")).toHaveValue("");
+  await expect(page.locator("#cdClear")).toBeHidden();
+
+  // Firmware from before the card has no such settings.
+  await reset(request, { countdown: null, cdname: null, cddate: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeHidden();
+});
+
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
@@ -1042,6 +1210,16 @@ test("other sports show their situation line and no timeout pips", async ({ page
   await expect(page.locator("#down")).toHaveText("Series tied 2-2");
 });
 
+test("a splash shows for a few seconds, then is gone for screen readers too", async ({ page, request }) => {
+  await reset(request, { splash: "TOUCHDOWN DAL" });
+  await page.goto("/");
+  await expect(page.locator("#splash")).toBeVisible();
+  await expect(page.locator("#splash")).toHaveText("TOUCHDOWN DAL");
+  // Hidden with visibility, not only faded out, so it leaves the accessibility tree.
+  await expect(page.locator("#splash")).toBeHidden({ timeout: 6000 });
+  await expect(page.getByText("TOUCHDOWN DAL")).toBeHidden();
+});
+
 test("timezone follows the browser, or a zone picked by hand", async ({ page, request }) => {
   await reset(request, { tz: 0, tz_name: "US Eastern", tz_auto: true });
   await page.goto("/");
@@ -1049,7 +1227,9 @@ test("timezone follows the browser, or a zone picked by hand", async ({ page, re
   await expect(page.locator("#toast")).toHaveText("Timezone set to US Central from this browser");
   await expect(page.locator("#tzline")).toContainText("US Central · set from this browser");
 
-  await page.locator("#tzline a", { hasText: "choose manually" }).click();
+  // A button, so the keyboard reaches it.
+  await page.locator("#tzline").getByRole("button", { name: "choose manually" }).focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator("#tzpick")).toBeVisible();
   await page.locator("#tzsel").selectOption({ label: "US Pacific" });
   await expectSet(request, { tzauto: "0", tz: "4" });
@@ -1088,7 +1268,7 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await page.goto("/");
   await expect(page.locator("#health")).toBeVisible();
   await expect(page.locator("#hStart")).toHaveText("Restart, 2 h 1 min ago");
-  await expect(page.locator("#hBoots")).toHaveText("Start 2 since the power came on");
+  await expect(page.locator("#hBoots")).toHaveText("2nd start since the power came on");
   await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
   await expect(page.locator("#hHeap")).toHaveText("143 KiB, largest piece 40 KiB");
   await expect(page.locator("#hEspn")).toHaveText("OK, 9 s ago");
@@ -1369,6 +1549,14 @@ test("the banner posts its text and seconds, and Take down posts no text", async
   await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "" });
 });
 
+test("Show on panel puts the FCC information on the panel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#fccShow").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "regulatory" });
+  await expect(page.locator("#toast")).toHaveText("FCC information on the panel");
+});
+
 test("the nickname names the page and the header, and saving it posts nick", async ({ page, request }) => {
   await reset(request, { nick: "Garage" });
   await page.goto("/");
@@ -1538,15 +1726,18 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   const file = (name, body) => ({ name, mimeType: "application/json", buffer: Buffer.from(body) });
   const posts = async () => (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/settings");
 
-  // Another panel's backup, with an empty remote slot and a key from newer firmware.
-  const backup = { ...doc, name: "gameday-aba970", team: "mlb:15", mode: 4, favs: ["mlb:15", "", "nfl:6"], down: false,
-                   brightness: 60, sparkle: true };
+  // Another panel's backup, with an empty remote slot, its own nickname and a
+  // key from newer firmware. This panel keeps its own nickname.
+  const backup = { ...doc, name: "gameday-aba970", nick: "Den", team: "mlb:15", mode: 4, favs: ["mlb:15", "", "nfl:6"],
+                   down: false, brightness: 60, sparkle: true };
   let asked = "";
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
   await page.setInputFiles("#bkFile", file("den.json", JSON.stringify(backup)));
-  await expect(page.locator("#bkNote")).toHaveText("Restored. This panel's firmware doesn't have: sparkle.");
-  expect(asked).toBe("Replace this panel's settings with den.json (saved from gameday-aba970)? Wi-Fi networks and the WizMote pairing stay as they are.");
+  await expect(page.locator("#bkNote")).toHaveText(
+    "Restored. This panel kept its own nickname. This panel's firmware doesn't have: sparkle.");
+  expect(asked).toBe("Replace this panel's settings with den.json (saved from gameday-aba970)? Wi-Fi networks and the WizMote pairing stay as they are, and so do this panel's nickname and layout.");
   const st = await deviceState(request);
+  expect(st.nick).toBe("");
   expect(st.team.abbr).toBe("ATL");
   expect(st.mode).toBe(4);
   expect(st.down).toBe(false);
@@ -1570,15 +1761,31 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   expect((await deviceState(request)).team.abbr).toBe("ATL");
 });
 
-test("Import of a backup with another panel layout waits out the restart", async ({ page, request }) => {
+test("Import of this panel's own backup with another layout waits out the restart", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#backup")).toBeVisible();
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.setInputFiles("#bkFile", { name: "one.json", mimeType: "application/json",
+                                        buffer: Buffer.from(JSON.stringify({ schema: 1, name: "gameday-2f6a70", panels: 1 })) });
+  await expect(page.locator("#gone")).toHaveText("Restarting with the restored panel layout. This page reconnects when the panel is back.");
+  expect(asked).toBe("Replace this panel's settings with one.json? Wi-Fi networks and the WizMote pairing stay as they are.");
+  expect((await deviceState(request)).panels).toBe(1);
+});
+
+test("Import of another panel's backup keeps this panel's layout", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   await expect(page.locator("#backup")).toBeVisible();
   page.once("dialog", (d) => d.accept());
-  await page.setInputFiles("#bkFile", { name: "one.json", mimeType: "application/json",
-                                        buffer: Buffer.from(JSON.stringify({ schema: 1, panels: 1 })) });
-  await expect(page.locator("#gone")).toHaveText("Restarting with the restored panel layout. This page reconnects when the panel is back.");
-  expect((await deviceState(request)).panels).toBe(1);
+  await page.setInputFiles("#bkFile", { name: "small.json", mimeType: "application/json",
+                                        buffer: Buffer.from(JSON.stringify({ schema: 1, name: "gameday-aba970", panels: 1, down: false })) });
+  await expect(page.locator("#bkNote")).toHaveText("Restored. This panel kept its own panel layout.");
+  await expect(page.locator("#gone")).toBeHidden();
+  const st = await deviceState(request);
+  expect(st.panels).toBe(2);
+  expect(st.down).toBe(false);
 });
 
 test("the backup section hides on firmware without it", async ({ page, request }) => {

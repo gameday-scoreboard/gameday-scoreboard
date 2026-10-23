@@ -1,7 +1,8 @@
 // The device API's shape against tests/fixtures/api/, which the companion
 // app's tests read. Fails when the firmware sends a key, takes a set
 // parameter or handles an action the fixtures lack, and when a fixture lists
-// one the firmware no longer has.
+// one the firmware no longer has, and when a value's JSON type isn't the
+// one tests/fixtures/api/types.json gives it.
 //
 // rebuild_state_ and handle_wifi_ need the whole ESPHome component, so their
 // keys come from gameday.cpp's source: every string-literal write
@@ -356,6 +357,172 @@ void test_actions() {
   compare("tests/fixtures/api/actions.json", "action", firmware, string_array("fixtures/api/actions.json"));
 }
 
+// A JSON value's type in types.json's words.
+const char *json_type(JsonVariantConst v) {
+  if (v.is<bool>())
+    return "bool";
+  if (v.is<long long>() || v.is<unsigned long long>())
+    return "int";
+  if (v.is<double>())
+    return "number";
+  if (v.is<const char *>())
+    return "string";
+  if (v.is<JsonObjectConst>())
+    return "object";
+  if (v.is<JsonArrayConst>())
+    return "array";
+  return "null";
+}
+
+using TypedKeys = std::map<std::string, std::set<std::string>>;
+
+void typed_keys(JsonVariantConst v, const std::string &prefix, TypedKeys &out);
+
+// Every key path with the types its values have, "favs[]" for an array's elements.
+void typed_value(JsonVariantConst v, const std::string &path, TypedKeys &out) {
+  if (v.is<JsonArrayConst>()) {
+    for (JsonVariantConst e : v.as<JsonArrayConst>()) {
+      out[path + "[]"].insert(json_type(e));
+      typed_value(e, path + "[]", out);
+    }
+  } else {
+    typed_keys(v, path, out);
+  }
+}
+
+void typed_keys(JsonVariantConst v, const std::string &prefix, TypedKeys &out) {
+  if (!v.is<JsonObjectConst>())
+    return;
+  for (JsonPairConst p : v.as<JsonObjectConst>()) {
+    std::string path = join(prefix, p.key().c_str());
+    out[path].insert(json_type(p.value()));
+    typed_value(p.value(), path, out);
+  }
+}
+
+// "number" takes a whole number too; a list takes any of its types.
+bool type_fits(JsonVariantConst want, const std::string &got) {
+  if (want.is<JsonArrayConst>()) {
+    for (JsonVariantConst w : want.as<JsonArrayConst>())
+      if (type_fits(w, got))
+        return true;
+    return false;
+  }
+  std::string w = want | "";
+  return w == got || (w == "number" && got == "int");
+}
+
+// Each value in doc has the type types.json gives its path. prefix is where
+// doc sits: "health" for the health object inside the state.
+void check_types(const std::string &what, JsonVariantConst doc, JsonObjectConst table, const std::string &prefix) {
+  TypedKeys found;
+  typed_value(doc, prefix, found);
+  for (const auto &f : found) {
+    JsonVariantConst want = table[f.first];
+    SCHECK(!want.isNull(), "%s has %s, which tests/fixtures/api/types.json has no type for %s", what.c_str(),
+           f.first.c_str(), kHint);
+    if (want.isNull())
+      continue;
+    for (const auto &t : f.second)
+      SCHECK(type_fits(want, t), "%s: %s is %s, not the type tests/fixtures/api/types.json gives it %s", what.c_str(),
+             f.first.c_str(), t.c_str(), kHint);
+  }
+}
+
+// types.json names the same keys as the fixtures, with the type each holds.
+// The health and wifi objects come from the real headers, so a firmware
+// change to one of their types fails here too.
+void test_types() {
+  JsonDocument types;
+  if (!load_fixture("fixtures/api/types.json", types))
+    return;
+  const char *const docs[][2] = {{"state", "fixtures/api/state.json"},
+                                 {"wifi", "fixtures/api/wifi.json"},
+                                 {"settings", "fixtures/api/settings.json"},
+                                 {"crash", "fixtures/api/crash.json"}};
+  for (const auto &d : docs) {
+    JsonObjectConst table = types[d[0]];
+    SCHECK(!table.isNull(), "tests/fixtures/api/types.json has no \"%s\" table", d[0]);
+    JsonDocument doc;
+    if (table.isNull() || !load_fixture(d[1], doc))
+      continue;
+    check_types(d[1], doc.as<JsonVariantConst>(), table, "");
+    // And nothing the fixture lacks, but the elements of an array it has empty.
+    TypedKeys found;
+    typed_value(doc.as<JsonVariantConst>(), "", found);
+    for (JsonPairConst p : table) {
+      std::string path = p.key().c_str();
+      bool element = path.size() > 2 && path.compare(path.size() - 2, 2, "[]") == 0 &&
+                     found.count(path.substr(0, path.size() - 2));
+      SCHECK(found.count(path) || element, "tests/fixtures/api/types.json types %s, which %s doesn't have %s",
+             path.c_str(), d[1], kHint);
+    }
+  }
+  JsonObjectConst state = types["state"];
+  const std::pair<const char *, std::string> parts[] = {{"health", full_health_json()}, {"wifi", full_wifi_json()}};
+  for (const auto &p : parts) {
+    JsonDocument doc;
+    if (deserializeJson(doc, p.second) == DeserializationError::Ok)
+      check_types(std::string("the firmware's ") + p.first + " object", doc.as<JsonVariantConst>(), state, p.first);
+  }
+  // The check itself: a whole number where a fraction goes passes, the other
+  // way round and a string for a number don't.
+  JsonDocument probe_types, probe;
+  deserializeJson(probe_types, R"({"a":"number","b":"int","c":["int","null"]})");
+  SCHECK(type_fits(probe_types["a"], "int") && !type_fits(probe_types["b"], "number") &&
+             !type_fits(probe_types["b"], "string") && type_fits(probe_types["c"], "null") &&
+             !type_fits(probe_types["c"], "string"),
+         "type_fits is wrong");
+}
+
+// GET /gameday/crash, which scripts/crash_report.py and the help desk read:
+// the keys CrashReport::json() writes.
+void test_crash_route() {
+  const char *const path = "../components/crash_report/crash_report.cpp";
+  const std::string src = strip_comments(slurp(path));
+  const std::string body = function_body(src, "std::string CrashReport::json(");
+  SCHECK(!body.empty(), "can't find CrashReport::json in %s; update test_api.cpp", path);
+  std::set<std::string> unknown;
+  std::set<std::string> firmware = written_keys(body, "root", {}, unknown);
+  for (const auto &v : unknown)
+    SCHECK(false, "CrashReport::json writes keys through %s, which test_api.cpp can't follow", v.c_str());
+  SCHECK(firmware.count("report") && firmware.count("count"), "the source scan found no crash report keys");
+  JsonDocument doc;
+  std::set<std::string> listed;
+  if (load_fixture("fixtures/api/crash.json", doc))
+    fixture_keys(doc.as<JsonVariantConst>(), "", listed);
+  compare("tests/fixtures/api/crash.json", "key", firmware, listed);
+}
+
+// set_forms.json says, for every set parameter, the form its value takes and
+// a few values the firmware takes or refuses; each is run through parse_set,
+// so the apps can read the forms knowing the panel agrees.
+void test_set_forms() {
+  JsonDocument forms;
+  if (!load_fixture("fixtures/api/set_forms.json", forms))
+    return;
+  std::set<std::string> firmware(std::begin(espn::kSetKeys), std::end(espn::kSetKeys)), listed;
+  for (JsonPairConst p : forms.as<JsonObjectConst>()) {
+    const std::string k = p.key().c_str();
+    listed.insert(k);
+    JsonObjectConst f = p.value();
+    SCHECK(f["form"].is<const char *>() && *(f["form"] | "") != '\0', "set_forms.json: %s has no form", k.c_str());
+    SCHECK(f["ok"].is<JsonArrayConst>() && f["ok"].size() > 0, "set_forms.json: %s has no value the panel takes",
+           k.c_str());
+    for (JsonVariantConst v : f["ok"].as<JsonArrayConst>()) {
+      espn::SetOp op;
+      SCHECK(espn::parse_set(k, v | "", op, 16), "set_forms.json: the firmware refuses %s=%s, listed as taken %s",
+             k.c_str(), v | "", kHint);
+    }
+    for (JsonVariantConst v : f["bad"].as<JsonArrayConst>()) {
+      espn::SetOp op;
+      SCHECK(!espn::parse_set(k, v | "", op, 16), "set_forms.json: the firmware takes %s=%s, listed as refused %s",
+             k.c_str(), v | "", kHint);
+    }
+  }
+  compare("tests/fixtures/api/set_forms.json", "set parameter", firmware, listed);
+}
+
 }  // namespace
 
 int main() {
@@ -363,6 +530,9 @@ int main() {
   test_wifi_route();
   test_set_params();
   test_actions();
+  test_types();
+  test_set_forms();
+  test_crash_route();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

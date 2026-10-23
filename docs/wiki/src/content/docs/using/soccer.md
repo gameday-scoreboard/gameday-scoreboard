@@ -18,7 +18,7 @@ The next-game card shows both logos, your club on the left, with each club's rec
 - the kickoff day and time in the panel's timezone
 - the cup stage, for a cup game
 - each club's recent form
-- the three-way odds, like "ARS -275, draw +425, LEE +700", when ESPN has them and **Pre-game odds and TV** is on
+- the three-way odds, like "ARS -275, draw +425, LEE +700", when ESPN has them and **Odds, TV and win chance** is on
 - the stadium
 
 ## During the match
