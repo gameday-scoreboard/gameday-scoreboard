@@ -18,7 +18,7 @@ The next-game card shows both logos, your club on the left, with each club's rec
 - the kickoff day and time in the panel's timezone
 - the cup stage, for a cup game
 - each club's recent form
-- the three-way odds, like "ARS -275, draw +425, LEE +700", when ESPN has them and **Pre-game odds and TV** is on
+- the three-way odds, like "ARS -275, draw +425, LEE +700", when ESPN has them and **Odds, TV and win chance** is on
 - the stadium
 
 ## During the match
@@ -49,7 +49,7 @@ At full time a win gets a victory splash with fireworks, your abbreviation and "
 
 ## Full time
 
-The clock row says "FT", "AET" after extra time, or "PENS" after a shootout. The ticker says "Full time", "After extra time" or who won on penalties, like "PSG win 4-3 on penalties", then the cup stage, the goals, any red cards and both records. The final stays up for half an hour in My team, then the panel looks up the next match.
+The clock row says "FT", "AET" after extra time, or "PENS" after a shootout. The ticker says "Full time", "After extra time" or who won on penalties, like "PSG win 4-3 on penalties", then the cup stage, the goals, any red cards and both records. With **Last play** on, it also adds ESPN's headline for the match when it has one. The final stays up for half an hour in My team, then the panel looks up the next match.
 
 A postponed or canceled match shows ESPN's word for it and gets no victory splash.
 

@@ -61,7 +61,7 @@ Settings are grouped in cards. In the order the page shows them:
 | Ticker: **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | Ticker: **Match stats** | Soccer: goals, cards, possession and shots. |
 | Ticker: **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
-| Ticker: **Pre-game odds and TV** | The line, over/under and TV channel before the start, when ESPN has them. |
+| Ticker: **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
 | **Opponent scores too** | Splashes for the other side's scores. Your team's always show. See [Celebrations](#celebrations). |
 | **Panel on** | Turns the panel's lights on or off. |
 | **Brightness** | Panel brightness, 1 to 255. |
@@ -89,9 +89,7 @@ A **Playlists** card, after Favorites, groups your favorites into named playlist
 
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).
 
-:::note[Coming in the next release]
 The Panel card starts with a **Nickname** box. Give each panel a name, like "Living room" or "Garage", so you can tell them apart. The page's header and the browser tab show it, and so does the panel list in the iPhone app. Up to 32 characters (fewer with accents); emoji are left out. Clear the box to go back to the panel's own name. The nickname doesn't change the panel's network name, its address, its Wi-Fi hotspot or its name in Home Assistant.
-:::
 
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
 
@@ -125,6 +123,10 @@ The Device card has the buttons and the details about the panel itself.
 - **Reset Wi-Fi** and **Factory reset** restart the panel into setup, so the page can't follow it. See [The boot button and resets](/using/buttons-and-resets/).
 
 Under them: the **Firmware** box, the Wi-Fi networks list, the panel's **Address** and **Name**, its Wi-Fi **Signal**, free memory, and **ESPN data**, how much the panel has downloaded from ESPN since it started, for anyone on a capped internet plan.
+
+:::note[Coming in the next release]
+Under **Name**, **FCC information** has a **Show on panel** button. The panel shows its model, FCC ID and FCC statement on its own screen for about a minute, then goes back to the board. A panel that was switched off turns on for it and stays on. One that is dimmed or dark for the night lights up for it, then goes back to the night setting.
+:::
 
 A **Diagnostics** section in the Device card says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal** it draws the last day of Wi-Fi signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one.
 

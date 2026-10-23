@@ -25,6 +25,7 @@
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
+#include "regulatory.h"
 #include "score_log.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
@@ -4734,6 +4735,59 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
   return r;
 }
 
+// The FCC screen (regulatory.h): every page fits its board, and the words
+// come out whole.
+static void test_regulatory() {
+  CHECK(reg_wrap("Contains FCC~ID:", 13) == (std::vector<std::string>{"Contains", "FCC ID:"}));
+  CHECK(reg_wrap("Contains FCC~ID:", 21) == (std::vector<std::string>{"Contains FCC ID:"}));
+  CHECK(reg_wrap("2AC7Z-ESPS3WROOM1", 13) == (std::vector<std::string>{"2AC7Z-", "ESPS3WROOM1"}));
+  CHECK(reg_wrap("2AC7Z-ESPS3WROOM1", 21) == (std::vector<std::string>{"2AC7Z-ESPS3WROOM1"}));
+  CHECK(reg_wrap("abcdefghij", 4) == (std::vector<std::string>{"abcd", "efgh", "ij"}));
+  CHECK(reg_wrap("  a  b ", 4) == (std::vector<std::string>{"a b"}));
+  CHECK(reg_wrap("text", 0).empty());
+  CHECK(reg_pages(0, 7).empty());
+  CHECK_EQ(reg_layout(64).cols, (size_t) 13);
+  CHECK_EQ(reg_layout(128).cols, (size_t) 21);
+  CHECK(reg_layout(128).big && !reg_layout(64).big);
+  for (int width : {64, 128}) {
+    const RegLayout lay = reg_layout(width);
+    // Room for the page number in the bottom 8 px
+    CHECK(lay.rows * (lay.big ? 12 : 8) <= 56);
+    CHECK(lay.cols * (lay.big ? 6 : 5) <= (size_t) width + 1);
+    const auto pages = reg_pages(lay.cols, lay.rows);
+    CHECK_EQ(pages.size(), (size_t) 5);
+    std::string statement;
+    for (size_t p = 0; p < pages.size(); p++) {
+      size_t rows = 0;
+      size_t start = 0;
+      while (start <= pages[p].size()) {
+        size_t nl = pages[p].find('\n', start);
+        const std::string line = pages[p].substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+        rows++;
+        CHECK(!line.empty() && line.size() <= lay.cols);
+        // A 13th letter on 64 px loses its fifth column, which only these use
+        if (line.size() * 5 > (size_t) width && !lay.big)
+          CHECK(std::string("T#&+^~").find(line.back()) == std::string::npos);
+        if (p > 0)
+          statement += (statement.empty() ? "" : " ") + line;
+        if (nl == std::string::npos)
+          break;
+        start = nl + 1;
+      }
+      CHECK(rows <= lay.rows);
+    }
+    // The statement word for word, and the label on the first page
+    CHECK_EQ(statement, std::string(kRegPart15));
+    CHECK(pages[0].find("Model GDS-1") != std::string::npos);
+    CHECK(pages[0].find("Game Day") != std::string::npos);
+    CHECK(pages[0].find("FCC ID:") != std::string::npos);
+  }
+  const auto small = reg_pages(13, 7);
+  CHECK_EQ(small[0], std::string("Game Day\nScoreboard\nModel GDS-1\nContains\nFCC ID:\n2AC7Z-\nESPS3WROOM1"));
+  const auto wide = reg_pages(21, 4);
+  CHECK_EQ(wide[0], std::string("Game Day Scoreboard\nModel GDS-1\nContains FCC ID:\n2AC7Z-ESPS3WROOM1"));
+}
+
 static void test_message() {
   // Cleaning: the saved text keeps its lines, a list entry is one line.
   CHECK_EQ(message_clean("  Wings $5 \r\n\n\tPints $3  \n", kMsgTextMax, true), std::string("Wings $5\nPints $3"));
@@ -5589,6 +5643,17 @@ static void test_take_over() {
   CHECK_EQ(take_over_rescan_at(k, k), k + 120);
   CHECK_EQ(take_over_rescan_at(k + 19 * 60, k), k + 19 * 60 + 120);
   CHECK_EQ(take_over_rescan_at(k + 20 * 60, k), k + 20 * 60 + 600);
+  // A scan with a league's read failed keeps the rescan already set when the
+  // new one is none or later, and moves one already due two minutes out.
+  const int64_t n = k - 3600;
+  CHECK_EQ(take_over_rescan_keep(n, 0, k), k);              // the failed league held the kickoff
+  CHECK_EQ(take_over_rescan_keep(n, k + 600, k), k);        // a later favorite doesn't push it back
+  CHECK_EQ(take_over_rescan_keep(n, k - 600, k), k - 600);  // an earlier one comes first
+  CHECK_EQ(take_over_rescan_keep(n, k, 0), k);              // nothing set before
+  CHECK_EQ(take_over_rescan_keep(n, 0, 0), (int64_t) 0);
+  CHECK_EQ(take_over_rescan_keep(k, 0, k), k + 120);  // this scan was the due one
+  CHECK_EQ(take_over_rescan_keep(k, 0, 1), k + 120);  // a "scan now" after a settings change
+  CHECK_EQ(take_over_rescan_keep(k, k + 60, k), k + 60);
 
   // The scan reports the earliest favorite kickoff it saw, per league's ids.
   std::string nfl = slurp("fixtures/scoreboard_nfl.json");
@@ -5865,6 +5930,7 @@ int main() {
   test_panel_text();
   test_prefs_sync();
   test_message();
+  test_regulatory();
   test_wifi_history();
   test_ha_events();
   test_line_score();
