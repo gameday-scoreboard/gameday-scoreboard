@@ -5548,6 +5548,17 @@ static void test_take_over() {
   CHECK_EQ(take_over_rescan_at(k, k), k + 120);
   CHECK_EQ(take_over_rescan_at(k + 19 * 60, k), k + 19 * 60 + 120);
   CHECK_EQ(take_over_rescan_at(k + 20 * 60, k), k + 20 * 60 + 600);
+  // A scan with a league's read failed keeps the rescan already set when the
+  // new one is none or later, and moves one already due two minutes out.
+  const int64_t n = k - 3600;
+  CHECK_EQ(take_over_rescan_keep(n, 0, k), k);              // the failed league held the kickoff
+  CHECK_EQ(take_over_rescan_keep(n, k + 600, k), k);        // a later favorite doesn't push it back
+  CHECK_EQ(take_over_rescan_keep(n, k - 600, k), k - 600);  // an earlier one comes first
+  CHECK_EQ(take_over_rescan_keep(n, k, 0), k);              // nothing set before
+  CHECK_EQ(take_over_rescan_keep(n, 0, 0), (int64_t) 0);
+  CHECK_EQ(take_over_rescan_keep(k, 0, k), k + 120);  // this scan was the due one
+  CHECK_EQ(take_over_rescan_keep(k, 0, 1), k + 120);  // a "scan now" after a settings change
+  CHECK_EQ(take_over_rescan_keep(k, k + 60, k), k + 60);
 
   // The scan reports the earliest favorite kickoff it saw, per league's ids.
   std::string nfl = slurp("fixtures/scoreboard_nfl.json");

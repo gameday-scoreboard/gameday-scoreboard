@@ -2771,9 +2771,13 @@ void GamedayComponent::apply_job_() {
     this->clear_backoff_();
     // Favorites take over: when to scan for the next favorite's kickoff. The
     // pick below says again whether a favorite has the board.
-    this->take_scan_at_ = this->take_over_() ? ::espn::take_over_rescan_at((int64_t) this->time_->timestamp_now(),
-                                                                           j.fav_kickoff)
-                                             : 0;
+    if (this->take_over_()) {
+      int64_t tnow = (int64_t) this->time_->timestamp_now();
+      int64_t at = ::espn::take_over_rescan_at(tnow, j.fav_kickoff);
+      this->take_scan_at_ = j.scan_ok ? at : ::espn::take_over_rescan_keep(tnow, at, this->take_scan_at_);
+    } else {
+      this->take_scan_at_ = 0;
+    }
     this->live_fav_ = -1;
     // For the night schedule: a game of the owner's on now, whichever game
     // the board picks.

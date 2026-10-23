@@ -338,4 +338,15 @@ inline int64_t take_over_rescan_at(int64_t now, int64_t fav_kickoff) {
   return now + (now - fav_kickoff < 20 * 60 ? 2 * 60 : 10 * 60);
 }
 
+// The same after a scan where a league's read failed: that league's favorite
+// kickoff can be missing from `next`, so the rescan already set stays when it
+// comes sooner. One already due moves two minutes out, so a league that keeps
+// failing is retried without a scan on every poll.
+inline int64_t take_over_rescan_keep(int64_t now, int64_t next, int64_t prev) {
+  if (prev == 0)
+    return next;
+  int64_t kept = prev > now ? prev : now + 2 * 60;
+  return next == 0 || kept < next ? kept : next;
+}
+
 }  // namespace espn

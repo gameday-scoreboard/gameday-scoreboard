@@ -36,6 +36,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - Count down to a day of your own, like Christmas or opening day: give it a name and a day on the device page and it takes the last 10 seconds of every minute between games, shows "Today" on the day, and goes away after. Settings backups keep both.
 - Favorite teams shows the off-season clock once every favorite (in the playlist, when one is playing) is between seasons, the same way My team does: with no game listed, or the next one more than 10 days away, like next season's opener. It's in the colors of the favorite who plays first, with that game under the time. Before, a listed opener months away left the board on "No upcoming game".
 - While the off-season clock is up, the panel checks the next game every 6 hours instead of every 15 minutes, which saves data on a capped plan.
+- Favorites take over on Stick with the higher team: a favorite higher in your list now takes the panel when its game starts even if ESPN didn't answer for its league the last time the panel looked, instead of waiting for the game on the panel to end.
 
 ## v2026.10.1
 
