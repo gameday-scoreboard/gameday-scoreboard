@@ -648,6 +648,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool game_gone{false};
     // Favorite Teams mode: which cached entry this cycle refreshes or polls
     int fav_index{-1};
+    bool fav_side{false};  // a poll of a live favorite another favorite's game has the board over
     uint32_t our_id{0};
     // Soccer: the team's reads per competition (comps[0] the league's, then
     // its kCups in order), and the one cup this cycle reads (1.., -1 none).
@@ -940,6 +941,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int comp_next{-1};            // the cup read due next, -1 when none
     int64_t action_epoch{0};  // the last poll that found the game at its action, 0 = none
     uint32_t side_ms{0};      // the last poll while another favorite had the board
+    uint8_t side_fails{0};    // those polls failed in a row (poll_timing.h, side_poll_wait_ms)
   };
   // The favorite cards are ~1 KB each and internal heap is the panel's
   // scarcest resource: PSRAM (psram.h).

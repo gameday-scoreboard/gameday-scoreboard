@@ -3924,6 +3924,39 @@ static void test_backoff() {
   CHECK(!is_throttle_status(503));
 }
 
+// Favorites' side polls (another favorite's game has the board) keep out of
+// the board's miss count, freshness and back-off.
+static void test_fav_side_polls() {
+  const uint32_t base = 30 * 1000, min = 60 * 1000;
+  CHECK_EQ(side_poll_wait_ms(0, base), base);
+  CHECK_EQ(side_poll_wait_ms(1, base), 5 * min);
+  CHECK_EQ(side_poll_wait_ms(2, base), 10 * min);
+  CHECK_EQ(side_poll_wait_ms(4, base), 40 * min);
+  CHECK_EQ(side_poll_wait_ms(5, base), 60 * min);
+  CHECK_EQ(side_poll_wait_ms(255, base), 60 * min);
+
+  // A side poll that worked clears nothing: the board's own poll may be the
+  // one failing, and its "Can't reach ESPN" must still come.
+  FavPollEffect fx = fav_poll_effect(true, true, false, false);
+  CHECK(!fx.mark_good && !fx.clear_backoff && !fx.count_miss && !fx.back_off);
+  // One that failed counts no miss and starts no back-off, so the board's
+  // 10 s poll keeps its pace.
+  fx = fav_poll_effect(false, true, false, false);
+  CHECK(!fx.count_miss && !fx.back_off);
+  // A refusal is everyone's: back off.
+  fx = fav_poll_effect(false, true, true, false);
+  CHECK(!fx.count_miss && fx.back_off);
+  // The board's own game, or a read with nothing on the board: as before.
+  fx = fav_poll_effect(true, false, false, true);
+  CHECK(fx.mark_good && fx.clear_backoff);
+  fx = fav_poll_effect(false, false, false, true);
+  CHECK(fx.count_miss && fx.back_off && !fx.mark_good);
+  // Another favorite's refresh read worked: ESPN answered, but the board's
+  // game wasn't read, so its freshness stays.
+  fx = fav_poll_effect(true, false, false, false);
+  CHECK(!fx.mark_good && fx.clear_backoff);
+}
+
 // After a My team game poll failed: read the team again now, or back off.
 static void test_reread_after_poll() {
   // A transport failure (timeout, 5xx): back off, as before.
@@ -5916,6 +5949,7 @@ int main() {
   test_later_today();
   test_backoff();
   test_cup_backoff();
+  test_fav_side_polls();
   test_reread_after_poll();
   test_auto_update();
   test_update_mark();

@@ -82,6 +82,47 @@ struct Backoff {
 // of wrapping to 0, which would read as "ESPN answered" after about 42 hours
 // of outage.
 inline uint8_t miss_count_after(uint8_t misses) { return misses < 255 ? (uint8_t) (misses + 1) : misses; }
+
+// Favorites: the wait between polls of a live favorite while another
+// favorite's game has the board (for Jump to the action and the score
+// banner). `base` while they work; after a failure 5 minutes, doubling up to
+// an hour, so one favorite whose game can't be read stops costing a read
+// every 30 seconds.
+inline uint32_t side_poll_wait_ms(uint8_t fails, uint32_t base) {
+  if (fails == 0)
+    return base;
+  uint32_t d = 5 * 60 * 1000;
+  for (uint8_t i = 1; i < fails && d < 60 * 60 * 1000; i++)
+    d *= 2;
+  return d > 60 * 60 * 1000 ? 60 * 60 * 1000 : d;
+}
+
+// What a Favorites read that came back does to the board's shared state: the
+// miss count and freshness the ticker and page report, and the back-off every
+// read waits out. A side poll (side_poll_wait_ms) is about another game, so
+// its result touches none of it, except a refusal (403 or 429), which every
+// read has to respect. Any other read that worked clears the back-off; it
+// marks the board fresh only when it was the board's own game (`board`, or
+// nothing is on the board).
+struct FavPollEffect {
+  bool count_miss{false};
+  bool back_off{false};
+  bool mark_good{false};
+  bool clear_backoff{false};
+};
+inline FavPollEffect fav_poll_effect(bool ok, bool side, bool refused, bool board) {
+  FavPollEffect fx;
+  if (side) {
+    fx.back_off = !ok && refused;
+    return fx;
+  }
+  fx.count_miss = !ok;
+  fx.back_off = !ok;
+  fx.mark_good = ok && board;
+  fx.clear_backoff = ok;
+  return fx;
+}
+
 // After a My team game poll failed: read the team endpoint again now instead
 // of backing off. Yes when the game came from the boot cache and no poll has
 // confirmed it, or when ESPN answered but didn't serve the game (gone: a 404,

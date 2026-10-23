@@ -1027,8 +1027,10 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
   }
   if (refresh >= 0)
     e.fetched_ms = now == 0 ? 1 : now;
-  if (side >= 0)
+  if (side >= 0) {
     e.side_ms = now == 0 ? 1 : now;
+    j.fav_side = index == side;
+  }
   this->start_worker_();
 }
 
@@ -1048,7 +1050,7 @@ int GamedayComponent::fav_side_due_(uint32_t now, int64_t now_epoch) const {
     if (!live || e.game.event_id == this->game_.event_id)
       continue;
     uint32_t age = e.side_ms == 0 ? UINT32_MAX : now - e.side_ms;
-    if (age < FAV_SIDE_INTERVAL || (due >= 0 && age <= oldest))
+    if (age < ::espn::side_poll_wait_ms(e.side_fails, FAV_SIDE_INTERVAL) || (due >= 0 && age <= oldest))
       continue;
     due = (int) i;
     oldest = age;
@@ -1102,6 +1104,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.sched = j.schedule;
     ::espn::adopt_league(e.sched, e.team->league);
     e.stale = false;
+    e.side_fails = 0;  // a fresh team read: the side polls start over
     if (!j.comps.empty()) {
       e.comps = j.comps;
       e.comp_next = 1;
@@ -1127,10 +1130,17 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
       return;
     }
   }
+  ::espn::FavPollEffect fx =
+      ::espn::fav_poll_effect(j.game_ok, j.fav_side, j.throttled, shown || this->fav_shown_ < 0);
+  if (j.fav_side)
+    e.side_fails = j.game_ok ? 0 : e.side_fails < 255 ? e.side_fails + 1 : 255;
   if (!j.game_ok) {
-    this->count_miss_();
-    this->emit_({});
-    this->back_off_();
+    if (fx.count_miss) {
+      this->count_miss_();
+      this->emit_({});
+    }
+    if (fx.back_off)
+      this->back_off_();
     this->schedule_next_(0);
     return;
   }
@@ -1152,7 +1162,10 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.final_epoch = tnow;
   if (::espn::in_action(e.game, e.team->league))
     e.action_epoch = tnow;
-  this->mark_good_poll_();
+  if (fx.mark_good)
+    this->mark_good_poll_();
+  else if (fx.clear_backoff)
+    this->clear_backoff_();
   std::string banner = shown || !this->score_banner() ? "" : ::espn::fav_score_banner(old, e.game);
   bool switched = this->fav_choose_(tnow);
   // Not when that game just took the board, or is the one on it already.

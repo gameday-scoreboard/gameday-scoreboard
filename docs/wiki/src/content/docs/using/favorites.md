@@ -52,6 +52,10 @@ Panels set up before Favorite teams could alternate keep **Stick with the higher
 - **Jump to the action** moves the panel to another favorite's game at its big moment, then back to the game it left once that moment has passed for a minute. A big moment is football in the red zone, the bases loaded, or a game within one score in its last two minutes or overtime (from the 88th minute in soccer). It's off on every panel until you turn it on. A game you picked with a remote button stays up.
 - **Score banner** shows another favorite's score along the bottom of the board for five seconds, like **KC TD, 21-17**, the favorite's score first. It covers touchdowns, field goals, runs, home runs and goals, not basketball, where teams score on most trips down the floor. A banner comes within about 30 seconds of the score. It's on until you turn it off.
 
+:::note[Coming in the next release]
+The checks behind Jump to the action and Score banner no longer affect the game on the board. If one of your other favorites' games can't be read, the panel checks it again after a few minutes, then less often, up to once an hour, instead of every 30 seconds. The board's game keeps updating on time, and a board whose own score stops updating says **Can't reach ESPN** as it should.
+:::
+
 ## Playlists
 
 :::note[Coming in the next release]
