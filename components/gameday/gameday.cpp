@@ -2282,9 +2282,12 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
 // read during a game (a boot, a team pick, the six-hour read, a cup read)
 // checks today's scoreboard for one on now. Its date is taken 9 hours back
 // (team_day_url's 5 plus 4 here), so a late West Coast game still finds its
-// own day after midnight Eastern.
+// own day after midnight Eastern. The NFL's endpoint keeps the game
+// (team_names_game_on_now), so it skips the read.
 void GamedayComponent::take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
                                          const char *comp_slug) {
+  if (::espn::team_names_game_on_now(team->league))
+    return;
   int64_t now = (int64_t) this->time_->timestamp_now();
   if (!s.event_id.empty() && s.kickoff_epoch <= now)
     return;
