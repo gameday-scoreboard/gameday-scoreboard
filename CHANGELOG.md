@@ -42,7 +42,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - Favorites take over on Stick with the higher team: a favorite higher in your list now takes the panel when its game starts even if ESPN didn't answer for its league the last time the panel looked, instead of waiting for the game on the panel to end.
 - The ticker switch "Pre-game odds and TV" is now called "Odds, TV and win chance" on the device page, since in football it also shows who is favored to win during the game. It's the same switch and keeps your setting.
 - After midnight Eastern, the device page's On now tab keeps listing a late West Coast game that's still on, as the panel does, instead of saying there are no games today.
-- The device page works better from the keyboard and with a screen reader: the Live games league buttons keep their focus while the page updates, the timezone links are buttons, and a splash that has faded is no longer read out. Diagnostics says "3rd start since the power came on".
+- The device page works better from the keyboard and with a screen reader: the Live games league buttons and the timezone button keep their focus while the page updates, the timezone links are buttons, and a splash that has faded is no longer read out. Diagnostics says "3rd start since the power came on".
 
 ## v2026.10.1
 

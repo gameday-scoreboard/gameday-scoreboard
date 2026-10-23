@@ -77,6 +77,10 @@ Settings are grouped in cards. In the order the page shows them:
 | **Install updates automatically** | Off unless you turn it on. Installs a new release between 3 and 5 AM, never during a game the panel follows. See [Firmware updates](/using/updates/). |
 | Wi-Fi networks | The networks the panel remembers, in the order it tries them, with **Forget** for each. See [Wi-Fi](/using/wifi/). |
 
+:::note[Coming in the next release]
+Until then the **Odds, TV and win chance** switch is called **Pre-game odds and TV** on the device page. It's the same switch.
+:::
+
 The Ticker card has a **Pre-game season leaders** switch, on to start: before kickoff in football, each team's passing leader with yards and touchdowns. It shows only on a panel that follows football. See [The ticker](/using/ticker/).
 
 The Favorites card has two more switches: **Jump to the action** (off to start) moves the panel to another favorite's game at its big moment, then back, and **Score banner** (on to start) shows another favorite's score along the bottom for five seconds. See [Favorite teams](/using/favorites/#when-a-game-is-on).

@@ -1598,6 +1598,19 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const tzsel = $("#tzsel");
   TZS.forEach((z, i) => { const o = el("option", null, z[0]); o.value = String(i); tzsel.appendChild(o); });
   tzsel.onchange = () => { setGD({ tzauto: 0, tz: tzsel.value }); $("#tzpick").hidden = true; };
+  // Built once and updated in place, like the Live games chips: every state
+  // read redraws the line, and a rebuilt button would take keyboard focus with it.
+  const tzName = el("b");
+  const tzNote = el("span", "muted");
+  const tzLink = el("button", "linkbtn lnk");
+  // Reads the state at tap time, not as it was when the line was drawn.
+  tzLink.onclick = () => {
+    const pick = $("#tzpick");
+    if (!S || S.tz_auto || !browserZoneName()) { pick.hidden = !pick.hidden; return; }
+    tzApplied = false;
+    setGD({ tzauto: 1 });
+    pick.hidden = true;
+  };
   const renderTime = () => {
     if (!S) return;
     const cur = S.tz_name || "";
@@ -1605,29 +1618,21 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const mine = browserZoneName();
     const mineIdx = mine ? TZS.findIndex((z) => z[0] === mine) : -1;
     const line = $("#tzline");
-    const pick = $("#tzpick");
     if (document.activeElement !== tzsel) tzsel.value = String(S.tz);
-    line.innerHTML = "";
-    line.appendChild(el("b", null, cur || "Not set"));
-    const link = el("button", "linkbtn lnk");
+    if (tzName.parentNode !== line) line.replaceChildren(tzName, tzNote, tzLink);
+    tzName.textContent = cur || "Not set";
     if (auto) {
-      line.appendChild(el("span", "muted", mine ? " · set from this browser" : " · this browser's zone is not in the list"));
-      link.textContent = "choose manually";
-      link.onclick = () => { pick.hidden = !pick.hidden; };
+      tzNote.textContent = mine ? " · set from this browser" : " · this browser's zone is not in the list";
+      tzLink.textContent = "choose manually";
       if (mine && mine !== cur && mineIdx >= 0 && !tzApplied) {
         tzApplied = true;
         setGD({ tz: mineIdx });
         toast("Timezone set to " + mine + " from this browser");
       }
     } else {
-      line.appendChild(el("span", "muted", " · chosen by hand"));
-      link.textContent = mine ? "follow this browser (" + mine + ")" : "change";
-      link.onclick = () => {
-        if (mine) { tzApplied = false; setGD({ tzauto: 1 }); pick.hidden = true; }
-        else pick.hidden = !pick.hidden;
-      };
+      tzNote.textContent = " · chosen by hand";
+      tzLink.textContent = mine ? "follow this browser (" + mine + ")" : "change";
     }
-    line.appendChild(link);
   };
 
   // ---- up next + splash (from the state document) -------------------------------
