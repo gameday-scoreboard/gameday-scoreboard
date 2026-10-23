@@ -1234,6 +1234,13 @@ test("timezone follows the browser, or a zone picked by hand", async ({ page, re
   await page.locator("#tzsel").selectOption({ label: "US Pacific" });
   await expectSet(request, { tzauto: "0", tz: "4" });
   await expect(page.locator("#tzline")).toContainText("US Pacific · chosen by hand");
+
+  // The re-read after the tap updates the line in place, so focus stays on the button.
+  await page.locator("#tzline").getByRole("button", { name: "follow this browser (US Central)" }).focus();
+  await page.keyboard.press("Enter");
+  await expectSet(request, { tzauto: "1" });
+  await expect(page.locator("#tzline")).toContainText("· set from this browser");
+  await expect(page.locator("#tzline").getByRole("button", { name: "choose manually" })).toBeFocused();
 });
 
 test("the panel picker posts the new layout", async ({ page, request }) => {
