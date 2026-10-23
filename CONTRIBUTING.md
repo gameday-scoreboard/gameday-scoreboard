@@ -143,8 +143,11 @@ visible changed. `docs/wiki/README.md` has the page conventions, and
 - Commit messages are one plain sentence about what changed for the
   person watching the panel, like "Name each panel's hotspot after its
   suffix".
-- Leave the version number and CHANGELOG.md alone; the maintainers write
-  both when a release goes out.
+- If owners will notice your change, add one bullet for it under
+  `## Unreleased` at the top of CHANGELOG.md, written for the person who
+  owns the panel. Leave the released sections and the version number
+  alone; the maintainers turn `## Unreleased` into the release when it
+  goes out.
 
 ### Things we won't merge
 
