@@ -43,6 +43,10 @@ Check that other devices on the same network can get online. The panel keeps try
 
 **Why:** the panel is on your Wi-Fi but can't get an answer from ESPN, where the scores come from. That's usually the internet connection, and sometimes ESPN itself.
 
+:::note[Coming in the next release]
+When ESPN answers but no longer has your team's next game under the number it had, as can happen when a game is rescheduled, the panel looks up your team again right away instead of waiting and trying the same game for hours.
+:::
+
 ## The panel says Getting ready for a long time
 
 Try another network, like your home Wi-Fi or a phone hotspot.

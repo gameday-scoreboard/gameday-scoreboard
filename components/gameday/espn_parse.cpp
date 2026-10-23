@@ -343,9 +343,13 @@ std::string pregame_records(const GameSnapshot &s) {
   return out;
 }
 
-// "1381" to "1,381"
-static std::string with_commas(const std::string &digits) {
-  std::string out;
+// "1381" to "1,381". Anything but digits is dropped first, so a count ESPN
+// already wrote as "1,381" comes out the same instead of "1,,381".
+static std::string with_commas(const std::string &number) {
+  std::string digits, out;
+  for (char c : number)
+    if (c >= '0' && c <= '9')
+      digits += c;
   size_t n = digits.size();
   for (size_t i = 0; i < n; i++) {
     if (i > 0 && (n - i) % 3 == 0)
@@ -377,9 +381,10 @@ std::string leader_line(const std::string &short_name, const std::string &displa
       break;
     start = comma + 2;
   }
-  if (name.empty() || yards.empty())
+  std::string yds = with_commas(yards);
+  if (name.empty() || yds.empty())
     return "";
-  std::string out = name + " " + with_commas(yards) + " yds";
+  std::string out = name + " " + yds + " yds";
   if (!tds.empty())
     out += " " + tds + " TD";
   return out;
@@ -550,14 +555,21 @@ std::string short_game_name(const std::string &headline) {
     c = (char) tolower((unsigned char) c);
   if (has_time_of_day(lower))
     return "";
-  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk"
-  for (const char *tail : {" presented by ", " powered by ", " hosted by "}) {
+  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk",
+  // "Ivy League Tournament pres. by TIAA"
+  for (const char *tail : {" presented by ", " pres. by ", " powered by ", " hosted by "}) {
     size_t at = lower.find(tail);
     if (at != std::string::npos) {
       s.resize(at);
       lower.resize(at);
     }
   }
+  // Notes that report a result or a schedule change, not a name: "Paris
+  // Saint-Germain win 4-3 on penalties", "Rain - Makeup date April 5". After
+  // the tail, so a sponsor's name can't wipe out the game's.
+  for (const char *note : {" win ", " wins ", "makeup", "postponed", "suspended"})
+    if (lower.find(note) != std::string::npos)
+      return "";
   // A playoff game at a bowl goes by the bowl
   size_t at = s.find(" at the ");
   if (at != std::string::npos && s.find(" Bowl", at) != std::string::npos)

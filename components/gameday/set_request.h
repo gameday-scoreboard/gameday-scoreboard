@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "countdown.h"
 #include "leagues.h"
 #include "message.h"
 #include "night.h"
@@ -24,9 +25,10 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta",   "msg",      "msgurl", "msgevery", "best",
-                                    "jump",   "banner",   "leaders", "night",  "nightstart", "nightend",
-                                    "nightscreen", "nightlevel", "favtake", "nick"};
+                                    "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
+                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
+                                    "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
+                                    "nick",   "lists",    "list"};
 
 // LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
 // the football-only live modes from before, kept for panels that saved them.
@@ -176,6 +178,9 @@ enum class SetKind : uint8_t {
   COUNT,     // on, baseball
   MATCH,     // on, soccer
   BETA,      // on, release builds only
+  COUNTDOWN,  // on, the next game's countdown card
+  CD_NAME,    // text, the custom countdown's name
+  CD_DATE,    // ymd, the custom countdown's day (0 clears it)
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
@@ -190,6 +195,8 @@ enum class SetKind : uint8_t {
   NIGHT_SCREEN, // on: lit at the night brightness, off: dark
   NIGHT_LEVEL,  // value, 1 to 255
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
+  LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
+  LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
 };
 
 struct TeamRef {
@@ -208,11 +215,29 @@ struct SetOp {
   std::vector<TeamRef> teams;
   std::vector<std::string> refused;  // favs entries left out, for the log
   std::string text;
+  uint32_t ymd{0};
 };
+
+// A whole number, the whole value: an optional minus and up to six digits.
+// "abc", "", "5x" and "1.5" are refused rather than read as 0 or 5.
+inline bool parse_whole_int(const std::string &v, int &out) {
+  size_t i = !v.empty() && v[0] == '-' ? 1 : 0;
+  if (v.size() == i || v.size() - i > 6)
+    return false;
+  int n = 0;
+  for (size_t k = i; k < v.size(); k++) {
+    if (v[k] < '0' || v[k] > '9')
+      return false;
+    n = n * 10 + (v[k] - '0');
+  }
+  out = i ? -n : n;
+  return true;
+}
 
 // Decodes one key=value from the request. False when the key is unknown or
 // the value is refused: the firmware logs it and changes nothing. Switches
-// are on for "1" only; numbers read like atoi, so "abc" is 0.
+// are on for "1" only. The mode and the minute and second settings take a
+// whole number only (parse_whole_int); the other numbers read like atoi.
 inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, size_t fav_max) {
   op = SetOp{};
   auto on = [&](SetKind kind) {
@@ -228,22 +253,27 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "mode") {
     op.kind = SetKind::MODE;
-    op.value = atoi(v.c_str());
-    return op.value >= 0 && op.value < kModeCount;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value < kModeCount;
   }
   if (k == "rotate") {
     op.kind = SetKind::ROTATE;
-    op.value = clamp_rotate_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_rotate_minutes(op.value);
     return true;
   }
   if (k == "lockon") {
     op.kind = SetKind::LOCKON;
-    op.value = clamp_lockon_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_lockon_minutes(op.value);
     return true;
   }
   if (k == "release") {
     op.kind = SetKind::RELEASE;
-    op.value = clamp_release_seconds(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_release_seconds(op.value);
     return true;
   }
   if (k == "panels") {
@@ -325,6 +355,22 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.value = level < 1 ? 1 : level > 255 ? 255 : level;
     return true;
   }
+  if (k == "lists") {
+    // Parsed by playlists.h once the request's favorites are in, since a
+    // playlist can only hold favorites.
+    op.kind = SetKind::LISTS;
+    op.text = v;
+    return true;
+  }
+  if (k == "list") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    // A number past the last playlist is refused where the playlists are known.
+    // strtol, not atoi: a number too long for an int saturates, and is refused.
+    op.kind = SetKind::LIST;
+    long n = strtol(v.c_str(), nullptr, 10);
+    op.value = n >= 0 && n <= 16 ? (int) n : -1;
+    return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
   if (k == "night")
     return on(SetKind::NIGHT);
   if (k == "nightscreen")
@@ -353,6 +399,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::AUTOUPD);
   if (k == "beta")
     return on(SetKind::BETA);
+  if (k == "countdown")
+    return on(SetKind::COUNTDOWN);
+  if (k == "cdname") {
+    op.kind = SetKind::CD_NAME;
+    op.text = countdown_name(v);
+    return true;
+  }
+  if (k == "cddate") {
+    // "2026-12-25"; "" or "none" clears it. Anything else is refused.
+    op.kind = SetKind::CD_DATE;
+    return parse_countdown_date(v, op.ymd);
+  }
   if (k == "best")
     return on(SetKind::BEST);
   if (k == "jump")

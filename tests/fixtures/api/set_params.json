@@ -24,6 +24,9 @@
   "count",
   "match",
   "beta",
+  "countdown",
+  "cdname",
+  "cddate",
   "msg",
   "msgurl",
   "msgevery",
@@ -37,5 +40,7 @@
   "nightscreen",
   "nightlevel",
   "favtake",
-  "nick"
+  "nick",
+  "lists",
+  "list"
 ]

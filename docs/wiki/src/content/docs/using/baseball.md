@@ -17,6 +17,10 @@ The next-game card shows both logos, your team on the left, with the records und
 - the betting line, over/under and TV channel, when ESPN has them and **Odds, TV and win chance** is on
 - the ballpark
 
+:::note[Coming in the next release]
+Before a playoff game the ticker starts with the round, like "NLCS - Game 2" or "World Series - Game 1".
+:::
+
 MLB has no Up next list on the device page: a team's season schedule is too large for the panel to read.
 
 ## During the game

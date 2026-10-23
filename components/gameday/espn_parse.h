@@ -260,8 +260,7 @@ inline int64_t scan_day_shift(League league) {
   return league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
 }
 // One game on its own, 8 to 20 KB, where the day's scoreboard it sits in is
-// up to 260 KB (NFL) or 750 KB (college). A LeagueInfo::per_event league
-// polls this.
+// up to 260 KB (NFL) or 750 KB (college). Every league polls this.
 std::string event_url(League league, const std::string &event_id);
 // One day's scoreboard for finding a team's next game (Eastern date of
 // day_epoch). College football and men's college basketball read the team's
@@ -296,6 +295,10 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 // "KC 72% to win" for the side ESPN's model favors, "" when it gives no
 // number (football's last play only).
 std::string win_chance(const GameSnapshot &s);
+// Whether ESPN has said the board has no game, for no_game_text. In Favorites
+// (favs > 0) only once every favorite's team read has answered (`read` of
+// them): one answered favorite says nothing of the others.
+inline bool no_game_said(size_t favs, size_t read, bool team_said) { return favs > 0 ? read == favs : team_said; }
 // The board and ticker with no game on the board, in place of the page's
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
 // be read from ESPN before it), "Can't reach ESPN" while reads fail and
