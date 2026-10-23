@@ -37,6 +37,9 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - Favorite teams shows the off-season clock once every favorite (in the playlist, when one is playing) is between seasons, the same way My team does: with no game listed, or the next one more than 10 days away, like next season's opener. It's in the colors of the favorite who plays first, with that game under the time. Before, a listed opener months away left the board on "No upcoming game".
 - While the off-season clock is up, the panel checks the next game every 6 hours instead of every 15 minutes, which saves data on a capped plan.
 - Favorites take over on Stick with the higher team: a favorite higher in your list now takes the panel when its game starts even if ESPN didn't answer for its league the last time the panel looked, instead of waiting for the game on the panel to end.
+- The ticker switch "Pre-game odds and TV" is now called "Odds, TV and win chance" on the device page, since in football it also shows who is favored to win during the game. It's the same switch and keeps your setting.
+- After midnight Eastern, the device page's On now tab keeps listing a late West Coast game that's still on, as the panel does, instead of saying there are no games today.
+- The device page works better from the keyboard and with a screen reader: the Live games league buttons keep their focus while the page updates, the timezone links are buttons, and a splash that has faded is no longer read out. Diagnostics says "3rd start since the power came on".
 
 ## v2026.10.1
 

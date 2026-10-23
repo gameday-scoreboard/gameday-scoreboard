@@ -127,8 +127,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
       <div class="livectls">
         <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
-        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button></div>
-        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button></div>
+        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
+        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
         <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
           <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
         </select></div>
@@ -158,7 +158,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Odds, TV and win chance<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Odds, TV and win chance"></button></div>
           <div class="ctl" data-sport="football"><label>Pre-game season leaders<small>Football: before kickoff, each team's passing leader with yards and touchdowns.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
@@ -729,13 +729,19 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
   };
+  // Built once and updated in place: every state read redraws the bar, and a
+  // rebuilt chip would take keyboard and screen reader focus with it.
   const renderLiveChips = () => {
     const host = $("#liveChips");
-    host.innerHTML = "";
     const on = liveKeys();
+    if (host.children.length) {
+      for (const b of host.children) setOn(b, on.includes(b.dataset.lg), "aria-pressed");
+      return;
+    }
     for (const lg of Object.keys(LEAGUES)) {
       if (!TEAMS.some((t) => t[0] === lg)) continue;
       const b = el("button", "chip", LEAGUES[lg].tab);
+      b.dataset.lg = lg;
       setOn(b, on.includes(lg), "aria-pressed");
       // From the list as it is now, not as it was when the chips were drawn:
       // a second tap can come before the redraw.
@@ -1342,16 +1348,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   let games = null;        // [{league, id, state, detail, away:{...}, home:{...}}]
   let gamesAt = 0;
   const teamById = (lg, id) => TEAMS.find((t) => t[0] === lg && t[1] === id);
-  const easternDate = () => {
-    // ESPN's dates parameter is US Eastern
-    const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-    const g = (t) => p.find((x) => x.type === t).value;
-    return g("year") + g("month") + g("day");
+  // The day the panel reads for a league (scan_day_shift in espn_parse.h):
+  // football's turns over at midnight Eastern, the other leagues' at 4 AM
+  // Eastern, so a late West Coast game stays on today's list.
+  const scanDate = (lg) => {
+    const shift = LEAGUES[lg].path.startsWith("football/") ? 5 : 9;
+    return new Date(Date.now() - shift * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
   };
   const loadGames = async (force) => {
     if (!force && games && Date.now() - gamesAt < 60000) return games;
-    const d = easternDate();
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${d}`]);
+    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate(lg)}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       try {
@@ -1603,7 +1609,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (document.activeElement !== tzsel) tzsel.value = String(S.tz);
     line.innerHTML = "";
     line.appendChild(el("b", null, cur || "Not set"));
-    const link = el("a", "lnk");
+    const link = el("button", "linkbtn lnk");
     if (auto) {
       line.appendChild(el("span", "muted", mine ? " · set from this browser" : " · this browser's zone is not in the list"));
       link.textContent = "choose manually";
@@ -1749,12 +1755,17 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
     return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
   };
+  // 2nd, 3rd, 11th, 22nd.
+  const ordinal = (n) => {
+    const t = n % 100;
+    return n + (t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+  };
   const renderHealth = () => {
     const h = S && S.health;
     $("#health").hidden = !h;
     if (!h) return;
     $("#hStart").textContent = restartName(h.start) + ", " + span(h.up) + " ago";
-    $("#hBoots").textContent = h.boots > 1 ? "Start " + h.boots + " since the power came on" : "";
+    $("#hBoots").textContent = h.boots > 1 ? ordinal(h.boots) + " start since the power came on" : "";
     $("#hFault").textContent = !h.fault ? "None"
       : restartName(h.fault) + (h.fault_ago != null ? ", " + span(h.fault_ago) + " ago" : "");
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
