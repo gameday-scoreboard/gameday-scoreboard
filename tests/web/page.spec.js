@@ -426,6 +426,24 @@ test("the On now tab asks ESPN for every college game, not the Top 25", async ({
   expect(asked.ncaa.get("groups")).toBe("80");
 });
 
+test("the On now tab keeps a late game on today's list after midnight Eastern, as the panel does", async ({ page, request }) => {
+  // 1:30 AM Eastern on Friday 10/23: a West Coast NBA game from Thursday is
+  // still on. Football's day has turned over; the other leagues' hasn't.
+  await page.clock.setFixedTime(new Date("2026-10-23T05:30:00Z"));
+  const asked = {};
+  for (const [lg, path] of [["nba", "basketball/nba"], ["nfl", "football/nfl"]]) {
+    await page.route(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard*`, (route) => {
+      asked[lg] = new URL(route.request().url()).searchParams.get("dates");
+      return route.fulfill({ json: { events: [] } });
+    });
+  }
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#pick").click();
+  await expect.poll(() => asked.nba).toBe("20261022");
+  await expect.poll(() => asked.nfl).toBe("20261023");
+});
+
 test("ticker, celebration and startup switches post 0 and 1", async ({ page, request }) => {
   await reset(request, { play: false });
   await page.goto("/");
@@ -723,6 +741,8 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
   await expectSet(request, { live: "mlb,nhl,nba" });
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NBA", "NHL"]);
+  // The re-read after the tap updates the chips in place, so focus stays put.
+  await expect(page.locator("#liveChips .chip", { hasText: /^NBA$/ })).toBeFocused();
 
   // The last league can't be switched off.
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
@@ -1190,6 +1210,16 @@ test("other sports show their situation line and no timeout pips", async ({ page
   await expect(page.locator("#down")).toHaveText("Series tied 2-2");
 });
 
+test("a splash shows for a few seconds, then is gone for screen readers too", async ({ page, request }) => {
+  await reset(request, { splash: "TOUCHDOWN DAL" });
+  await page.goto("/");
+  await expect(page.locator("#splash")).toBeVisible();
+  await expect(page.locator("#splash")).toHaveText("TOUCHDOWN DAL");
+  // Hidden with visibility, not only faded out, so it leaves the accessibility tree.
+  await expect(page.locator("#splash")).toBeHidden({ timeout: 6000 });
+  await expect(page.getByText("TOUCHDOWN DAL")).toBeHidden();
+});
+
 test("timezone follows the browser, or a zone picked by hand", async ({ page, request }) => {
   await reset(request, { tz: 0, tz_name: "US Eastern", tz_auto: true });
   await page.goto("/");
@@ -1197,7 +1227,9 @@ test("timezone follows the browser, or a zone picked by hand", async ({ page, re
   await expect(page.locator("#toast")).toHaveText("Timezone set to US Central from this browser");
   await expect(page.locator("#tzline")).toContainText("US Central · set from this browser");
 
-  await page.locator("#tzline a", { hasText: "choose manually" }).click();
+  // A button, so the keyboard reaches it.
+  await page.locator("#tzline").getByRole("button", { name: "choose manually" }).focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator("#tzpick")).toBeVisible();
   await page.locator("#tzsel").selectOption({ label: "US Pacific" });
   await expectSet(request, { tzauto: "0", tz: "4" });
@@ -1236,7 +1268,7 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await page.goto("/");
   await expect(page.locator("#health")).toBeVisible();
   await expect(page.locator("#hStart")).toHaveText("Restart, 2 h 1 min ago");
-  await expect(page.locator("#hBoots")).toHaveText("Start 2 since the power came on");
+  await expect(page.locator("#hBoots")).toHaveText("2nd start since the power came on");
   await expect(page.locator("#hFault")).toHaveText("Crash, 1 d 1 h ago");
   await expect(page.locator("#hHeap")).toHaveText("143 KiB, largest piece 40 KiB");
   await expect(page.locator("#hEspn")).toHaveText("OK, 9 s ago");
@@ -1515,6 +1547,14 @@ test("the banner posts its text and seconds, and Take down posts no text", async
   await expect(page.locator("#saySecs")).toHaveValue("600");
   await page.locator("#sayStop").click();
   await expect.poll(() => actions(request)).toContainEqual({ do: "say", text: "" });
+});
+
+test("Show on panel puts the FCC information on the panel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#fccShow").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "regulatory" });
+  await expect(page.locator("#toast")).toHaveText("FCC information on the panel");
 });
 
 test("the nickname names the page and the header, and saving it posts nick", async ({ page, request }) => {

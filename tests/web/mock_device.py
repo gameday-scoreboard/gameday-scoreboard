@@ -51,7 +51,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 REPO = Path(__file__).resolve().parents[2]
 WEB = Path(os.environ.get("GAMEDAY_WEB", REPO / "firmware" / "web"))
@@ -172,6 +172,18 @@ ENTITIES = [
 ]
 FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
 ENTITIES_INITIAL = copy.deepcopy(ENTITIES)
+# The control actions ESPHome's web server takes for each domain the page posts to.
+ENTITY_ACTIONS = {"switch": ("turn_on", "turn_off", "toggle"), "number": ("set",), "select": ("set",),
+                  "button": ("press",), "update": ("install",)}
+
+
+def entity_post_ok(path):
+    """POST /{domain}/{entity name}/{action}: only an entity in ENTITIES and an action
+    its domain takes, so a renamed entity or a misspelled URL fails the tests."""
+    parts = path.split("/")
+    if len(parts) != 4 or parts[1] not in ENTITY_ACTIONS or parts[3] not in ENTITY_ACTIONS[parts[1]]:
+        return False
+    return any(e["domain"] == parts[1] and e["name"] == unquote(parts[2]) for e in ENTITIES)
 
 STATE = copy.deepcopy(INITIAL)
 FAIL = set()
@@ -704,6 +716,21 @@ def selftest():
     for e in ENTITIES:
         e.update(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"]))
     print(f"settings backup: {bad} failures in all")
+
+    for path, want in (("/button/Reset%20Wi-Fi/press", True), ("/switch/Power/turn_off", True),
+                       ("/number/Scroll%20Speed/set", True), ("/update/Firmware/install", True),
+                       ("/button/Reset%20WiFi/press", False), ("/button/Reboot/turn_on", False),
+                       ("/switch/Brightness/turn_on", False), ("/text_sensor/IP/set", False)):
+        if entity_post_ok(path) != want:
+            bad += 1
+            print(f"FAIL POST {path} should {'pass' if want else 'get a 404'}")
+    # The names the mock takes are the firmware's, so renaming one there fails here.
+    yaml = (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8")
+    for e in ENTITIES:
+        if e["domain"] in ENTITY_ACTIONS and f'name: "{e["name"]}"' not in yaml:
+            bad += 1
+            print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml")
+    print(f"entity URLs: {bad} failures in all")
     return bad == 0
 
 
@@ -891,7 +918,7 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "power_ok", "say"):
+            if q["do"] not in ("refresh", "qc", "power_ok", "say", "regulatory"):
                 return self._json(404, {"error": "unknown action"})
             if q["do"] == "power_ok" and STATE.get("health"):
                 STATE["health"]["power"] = "ok"
@@ -907,7 +934,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         if u.path.startswith("/gameday/"):
             return self._json(404, {"error": "unknown route"})
-        if u.path.split("/")[1] in ("switch", "number", "select", "button", "update"):
+        if entity_post_ok(u.path):
             return self._send(200, "text/plain", "")
         self._send(404, "text/plain", "Not Found")
 

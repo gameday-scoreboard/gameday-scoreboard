@@ -55,8 +55,13 @@ contributors; read it too.
 - Decisions not to reopen without Brandon: OTA with no password, `api:` with
   no key, the device web page open ("panel trusts the home network"). Do not
   raise LAN hardening again. Prioritize customer-visible failures.
-- Bump `version` in firmware/gameday-common.yaml and add a CHANGELOG.md
-  section for every release; a tag without a matching section fails CI.
+- A PR an owner would notice adds its bullet under `## Unreleased` in
+  CHANGELOG.md; released sections stay as they shipped. A release renames
+  Unreleased to the version (after checking `git log` since the last tag
+  for merged changes with no bullet) and bumps `version` in
+  firmware/gameday-common.yaml; a tag without a matching section fails CI.
+- Name branches after the change (`espn-gzip`); CI's Branch rules job
+  refuses a PR from a `card-<number>` branch.
 - ESPHome venv at ~/development/tools/esphome-venv flashes over USB and
   streams logs; Brandon's panel is gameday-2f6a70.local. Use `esphome
   compile`, not `esphome config`, to catch C++ errors. Host tests: `make -C

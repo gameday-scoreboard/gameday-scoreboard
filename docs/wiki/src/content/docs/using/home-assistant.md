@@ -62,6 +62,8 @@ The panel sends Home Assistant an event every time either side scores in the gam
 
 `esphome.gameday_final` carries `team` and `opponent` (the left and right sides of the board), both scores, `result` (`win`, `loss` or `draw` for `team`), `winner` (empty on a draw), `sport` and `my_team` (`true` when `team` is your team).
 
+After the panel restarts, or starts following a game already under way, the first event is for the next score, not the ones before it.
+
 Every value arrives as text, so match `"true"` and `"7"` in quotes. To see them, open **Developer tools**, then **Events**, and listen to `esphome.gameday_score` during a game. This automation flashes a light when your team scores a touchdown:
 
 ```yaml
