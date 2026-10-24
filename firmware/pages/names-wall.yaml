@@ -1,0 +1,219 @@
+# Names wall (backlog #152 spike): the panel pages through a list of names
+# under a small title, for a bar that puts a plate on the wall for every
+# customer who earns one and is running out of wall. Throwaway: it proves the
+# display and how names get in, and the bench measures what it costs.
+#
+# Built only by the *-names.yaml top-level files; release firmware carries
+# none of it. The overlay sits on LVGL's top layer like QC does, so the
+# scoreboard keeps running underneath and comes back when the wall is off.
+#
+#   POST /names?on=1              show the wall      on=0 back to the scoreboard
+#   POST /names  (text/csv body)  a new list: one name a line, a CSV's first
+#                                 column, or a JSON array of strings
+#   POST /names?url=<csv url>     fetch the list from there, now and every
+#                                 poll minutes (a Google Sheet published as
+#                                 CSV, for instance)
+#   hold=<s> font=8|12 cols=0|1|2 title=<text> poll=<min> do=fetch|clear
+#   GET  /names                   state, page position and free heap
+#
+# Layout: a title row (spleen 5x8, gold) with the page counter at the right,
+# then rows of names in white. Font 8 fits 6 rows at 9 px, font 12 fits 4
+# rows at 13 px. At font 8 a 128 px panel takes two 64 px columns (12 names
+# a page, 12 characters each); at font 12 one column (4 names, 21
+# characters). cols=1 forces one 25 character column at font 8.
+
+esphome:
+  comment: "v${version} names wall"
+  build_path: build/gameday-${variant}-names
+
+# The spike's component lives next to the real ones (components/names_wall).
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [names_wall]
+
+names_wall:
+  id: names_wall_ctl
+  http_request_id: http_client
+
+globals:
+  - id: nw_visible
+    type: bool
+    initial_value: 'false'
+  - id: nw_gen
+    type: uint32_t
+    initial_value: '0'
+  - id: nw_page
+    type: int
+    initial_value: '0'
+  - id: nw_pages
+    type: int
+    initial_value: '0'
+  - id: nw_per_page
+    type: int
+    initial_value: '1'
+  - id: nw_page_ms
+    type: uint32_t
+    initial_value: '0'
+
+script:
+  # Places the title and the name slots for this panel width and font, and
+  # sets nw_per_page.
+  - id: nw_layout
+    parameters:
+      font: int
+      cols_setting: int
+    then:
+      - lambda: |-
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const bool big = font == 12;
+          lv_obj_t *slots[12] = {id(nw_n1), id(nw_n2), id(nw_n3), id(nw_n4), id(nw_n5), id(nw_n6),
+                                 id(nw_n7), id(nw_n8), id(nw_n9), id(nw_n10), id(nw_n11), id(nw_n12)};
+          const int rows = big ? 4 : 6;
+          const int row_h = big ? 13 : 9;
+          const int y0 = big ? 11 : 10;
+          int cols = cols_setting;
+          if (cols == 0) cols = big ? 1 : (W >= 128 ? 2 : 1);
+          if (cols > 2) cols = 2;
+          const int col_w = W / cols;
+          const int per_page = rows * cols;
+          id(nw_per_page) = per_page;
+          lv_obj_set_size(id(nw_layer), W, 64);
+          lv_obj_set_pos(id(nw_title), 2, 0);
+          lv_obj_set_width(id(nw_title), W - 36);
+          lv_obj_set_pos(id(nw_counter), W - 32, 0);
+          lv_obj_set_width(id(nw_counter), 30);
+          for (int i = 0; i < 12; i++) {
+            if (i >= per_page) {
+              lv_obj_add_flag(slots[i], LV_OBJ_FLAG_HIDDEN);
+              continue;
+            }
+            const int r = i % rows, c = i / rows;
+            lv_obj_set_style_text_font(slots[i], big ? id(spleen_12) : id(spleen_8), 0);
+            lv_obj_set_pos(slots[i], c * col_w + 2, y0 + r * row_h);
+            lv_obj_set_width(slots[i], col_w - 3);
+            lv_obj_clear_flag(slots[i], LV_OBJ_FLAG_HIDDEN);
+          }
+          ESP_LOGD("names_wall", "Layout: %d px wide, font %d, %d x %d = %d names a page", W, font, rows, cols, per_page);
+
+  # Puts page nw_page on the slots.
+  - id: nw_draw
+    then:
+      - lambda: |-
+          #include "esphome/components/gameday/panel_text.h"
+          lv_obj_t *slots[12] = {id(nw_n1), id(nw_n2), id(nw_n3), id(nw_n4), id(nw_n5), id(nw_n6),
+                                 id(nw_n7), id(nw_n8), id(nw_n9), id(nw_n10), id(nw_n11), id(nw_n12)};
+          const int per_page = id(nw_per_page);
+          std::vector<std::string> names;
+          id(names_wall_ctl).names_for_page((size_t) id(nw_page) * per_page, per_page, names);
+          for (int i = 0; i < per_page && i < 12; i++) {
+            if (i < (int) names.size())
+              lv_label_set_text(slots[i], gameday::panel_text(names[i]).c_str());
+            else
+              lv_label_set_text(slots[i], "");
+          }
+          char counter[16];
+          snprintf(counter, sizeof(counter), "%d/%d", id(nw_page) + 1, id(nw_pages));
+          lv_label_set_text(id(nw_counter), id(nw_pages) > 1 ? counter : "");
+          id(nw_page_ms) = millis();
+          id(names_wall_ctl).report_page((size_t) id(nw_page), (size_t) id(nw_pages));
+
+interval:
+  - interval: 250ms
+    id: nw_tick
+    then:
+      - lambda: |-
+          #include "esphome/components/gameday/panel_text.h"
+          auto v = id(names_wall_ctl).view();
+          if (!v.on) {
+            if (id(nw_visible)) {
+              id(nw_visible) = false;
+              id(nw_gen) = 0;
+              lv_obj_add_flag(id(nw_layer), LV_OBJ_FLAG_HIDDEN);
+              ESP_LOGI("names_wall", "Wall off, back to the scoreboard");
+            }
+            return;
+          }
+          const uint32_t now = millis();
+          if (!id(nw_visible)) {
+            id(nw_visible) = true;
+            lv_obj_move_foreground(id(nw_layer));
+            lv_obj_clear_flag(id(nw_layer), LV_OBJ_FLAG_HIDDEN);
+            id(gd_repaint).execute();
+            ESP_LOGI("names_wall", "Wall on: %u names", (unsigned) v.count);
+          }
+          if (v.generation != id(nw_gen)) {
+            // New list or settings: lay out again and start from the top.
+            id(nw_gen) = v.generation;
+            id(nw_layout).execute(v.font, v.cols);
+            lv_label_set_text(id(nw_title), gameday::panel_text(v.title).c_str());
+            const int per_page = id(nw_per_page);
+            id(nw_pages) = v.count == 0 ? 1 : (int) ((v.count + per_page - 1) / per_page);
+            id(nw_page) = 0;
+            if (v.count == 0) {
+              lv_obj_t *slots[12] = {id(nw_n1), id(nw_n2), id(nw_n3), id(nw_n4), id(nw_n5), id(nw_n6),
+                                     id(nw_n7), id(nw_n8), id(nw_n9), id(nw_n10), id(nw_n11), id(nw_n12)};
+              for (auto *s : slots) lv_label_set_text(s, "");
+              lv_label_set_text(id(nw_n1), "No names yet");
+              lv_label_set_text(id(nw_counter), "");
+              id(nw_page_ms) = now;
+              return;
+            }
+            id(nw_draw).execute();
+            return;
+          }
+          if (v.count > 0 && now - id(nw_page_ms) >= (uint32_t) v.hold_s * 1000) {
+            id(nw_page) = (id(nw_page) + 1) % id(nw_pages);
+            id(nw_draw).execute();
+          }
+
+lvgl:
+  top_layer:
+    widgets:
+      - obj:
+          id: nw_layer
+          scrollbar_mode: "OFF"
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_opa: COVER
+          bg_color: 0x000000
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          hidden: true
+          widgets:
+            - label:
+                id: nw_title
+                x: 2
+                y: 0
+                width: 60
+                long_mode: CLIP
+                text_align: LEFT
+                text: ""
+                styles: [st_spleen8]
+                text_color: 0xFFD000
+            - label:
+                id: nw_counter
+                x: 32
+                y: 0
+                width: 30
+                long_mode: CLIP
+                text_align: RIGHT
+                text: ""
+                styles: [st_spleen8]
+                text_opa: 60%
+            - label: {id: nw_n1, x: 2, y: 10, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8]}
+            - label: {id: nw_n2, x: 2, y: 19, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8]}
+            - label: {id: nw_n3, x: 2, y: 28, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8]}
+            - label: {id: nw_n4, x: 2, y: 37, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8]}
+            - label: {id: nw_n5, x: 2, y: 46, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8]}
+            - label: {id: nw_n6, x: 2, y: 55, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8]}
+            - label: {id: nw_n7, x: 2, y: 10, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8], hidden: true}
+            - label: {id: nw_n8, x: 2, y: 19, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8], hidden: true}
+            - label: {id: nw_n9, x: 2, y: 28, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8], hidden: true}
+            - label: {id: nw_n10, x: 2, y: 37, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8], hidden: true}
+            - label: {id: nw_n11, x: 2, y: 46, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8], hidden: true}
+            - label: {id: nw_n12, x: 2, y: 55, width: 60, long_mode: CLIP, text_align: LEFT, text: "", styles: [st_spleen8], hidden: true}
