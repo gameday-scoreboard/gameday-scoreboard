@@ -133,8 +133,9 @@ the panel shows, a setting, a button hold or anything else an owner or
 DIY builder would notice, update or add the page for it under
 `docs/wiki/src/content/docs/` in the same pull request. CI fails a PR
 into `dev` that changes `firmware/` or `components/` without a docs
-change; a maintainer adds the label `docs: not needed` when nothing
-visible changed. `docs/wiki/README.md` has the page conventions, and
+change. When nothing visible changed, add a line to the PR
+description saying why: `No owner-visible change, no docs: <why>`.
+A maintainer checks that claim in review. `docs/wiki/README.md` has the page conventions, and
 `npm install` then `npm run dev` in `docs/wiki` previews the site.
 
 ### Style

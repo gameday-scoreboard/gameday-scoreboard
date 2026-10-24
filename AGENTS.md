@@ -117,7 +117,8 @@ is the short version.
 - A change an owner or DIY builder can see or do comes with its docs
   page, updated or added under `docs/wiki/src/content/docs/` in the same
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
-  `firmware/` or `components/` without one, unless the PR carries the
-  label `docs: not needed`. Describe behavior `main` doesn't have yet in a
+  `firmware/` or `components/` without one, unless the PR description
+  has a line `No owner-visible change, no docs: <why>` (the reviewer checks
+  that claim). Describe behavior `main` doesn't have yet in a
   `:::note[Coming in the next release]` aside. `npm run build` in
   `docs/wiki` must pass.
