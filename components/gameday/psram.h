@@ -1,8 +1,8 @@
 // PSRAM for the component's own containers: logos, the favorites list, the
-// finals rotation, a scan's games. Plain new and malloc only use internal RAM in this build.
-// Pure, with no ESPHome includes, so the host tests compile it; there it is
-// the plain heap. JSON documents use ESPHome's json::SpiRamAllocator instead
-// (espn_parse_impl.h's json_allocator()).
+// finals rotation, a scan's games. Plain new and malloc only use internal
+// RAM in this build. Pure, with no ESPHome includes, so the host tests
+// compile it; there it is the plain heap. JSON documents use ESPHome's
+// json::SpiRamAllocator instead (espn_parse_impl.h's json_allocator()).
 #pragma once
 
 #include <cstddef>
