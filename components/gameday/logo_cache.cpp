@@ -142,20 +142,21 @@ void LogoCache::make_room_() {
     this->entries_.erase(this->entries_.begin() + i);
 }
 
-// Caller holds the lock. When the task can't start (no internal block big
-// enough for its stack), retry_() tries again a second later.
+// Caller holds the lock. Wakes the logo task, starting it the first time.
+// When it can't start (no PSRAM left for its stack), retry_() tries again a
+// second later.
 void LogoCache::start_task_() {
-  if (this->task_running_)
+  if (this->task_.is_created()) {
+    xTaskNotifyGive(this->task_.get_handle());
     return;
-  this->task_running_ = true;
+  }
   // Same stack as the ESPN worker: the TLS handshake needs it.
-  if (xTaskCreate(&LogoCache::task_, "gameday_logo", 16384, this, 1, nullptr) != pdPASS) {
+  if (!this->task_.create(&LogoCache::task_fn_, "gameday_logo", 16384, this, 1, true)) {
     if (this->start_fails_ == 0)
-      ESP_LOGW(TAG, "Could not start the logo task (largest free internal block %u bytes)",
-               (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+      ESP_LOGW(TAG, "Could not start the logo task (largest free PSRAM block %u bytes)",
+               (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
     if (this->start_fails_ < UINT16_MAX)
       this->start_fails_++;
-    this->task_running_ = false;
     return;
   }
   if (this->start_fails_ > 0)
@@ -163,13 +164,17 @@ void LogoCache::start_task_() {
   this->start_fails_ = 0;
 }
 
-void LogoCache::task_(void *arg) {
-  static_cast<LogoCache *>(arg)->run_();
-  vTaskDelete(nullptr);
+void LogoCache::task_fn_(void *arg) {
+  auto *self = static_cast<LogoCache *>(arg);
+  while (true) {
+    self->run_();
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  }
 }
 
-// Logo task: works through queued logos one at a time, then exits. The task
-// only touches an entry while it is LOADING, and nothing drops a busy entry.
+// Logo task: works through queued logos one at a time, then goes back to
+// waiting. It only touches an entry while it is LOADING, and nothing drops a
+// busy entry. A logo queued while it works wakes it again, so none waits.
 void LogoCache::run_() {
   while (true) {
     Entry *job = nullptr;
@@ -182,10 +187,8 @@ void LogoCache::run_() {
           break;
         }
       }
-      if (job == nullptr) {
-        this->task_running_ = false;  // under the lock, so get() starts a new task for anything queued after this
+      if (job == nullptr)
         return;
-      }
       job->state = State::LOADING;
       url.assign(job->url.data(), job->url.size());
     }

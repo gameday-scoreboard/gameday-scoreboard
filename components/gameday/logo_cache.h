@@ -13,6 +13,7 @@
 
 #include "esphome/components/http_request/http_request.h"
 #include "esphome/components/runtime_image/runtime_image.h"
+#include "esphome/core/static_task.h"
 #include "psram.h"
 
 namespace esphome::gameday {
@@ -25,6 +26,13 @@ using ::espn::PsramAllocator;
 // panel restarts. Downloads run on their own task so a slow logo server can
 // only delay a logo, never the main loop. Decoding stays on the main loop
 // because ESPHome's PNG decoder feeds the main loop's watchdog.
+//
+// The logo task starts with the first logo and then waits for the next one,
+// its stack in PSRAM. A list of 16 favorites queues 30 or more logos while
+// the ESPN worker reads one favorite after another, so with its stack in
+// internal RAM the two 16 KB stacks were up at once for the whole rescan and
+// left too small a block for the next worker. The task only downloads into
+// PSRAM, and a task that never writes flash may keep its stack there.
 //
 // Everything a logo allocates goes to PSRAM, not just its pixels. Plain new
 // and malloc only use internal RAM in this build, so the PNG download and
@@ -82,7 +90,7 @@ class LogoCache {
     uint32_t wait_ms{0};  // how long after failed_ms to ask again
   };
 
-  static void task_(void *arg);
+  static void task_fn_(void *arg);
   void run_();
   bool download_(const std::string &url, Bytes &body, bool &throttled, uint32_t &retry_after_ms);
   bool decode_(std::optional<Logo> &image, const Bytes &body);
@@ -97,7 +105,7 @@ class LogoCache {
   std::vector<std::unique_ptr<Entry>> entries_;
   std::string pinned_[4];  // current pair, then the pair before
   uint32_t retry_check_ms_{0};
-  bool task_running_{false};
+  StaticTask task_;
   uint16_t start_fails_{0};  // failed task starts in a row
   std::atomic<bool> downloaded_{false};
   std::atomic<uint32_t> bytes_downloaded_{0};
