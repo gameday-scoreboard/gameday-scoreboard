@@ -124,7 +124,7 @@ void dump_scoreboard(std::ostream &o, const char *path) {
         dump_splashes(o, s);
     }
   }
-  std::vector<LiveGame> live;
+  LiveList live;
   bool ok = parse_live_games(json, live);
   o << " live ok=" << ok << " n=" << live.size() << "\n";
   for (const auto &g : live)

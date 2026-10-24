@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "psram.h"
 #include "teams.h"
 
 namespace espn {
@@ -219,6 +220,13 @@ struct Pending {
 // One scan keeps at most this many of a league's games later today: the
 // most a loop of the rotation shows.
 static const size_t kPendingKeep = 8;
+
+// A scan's lists live in PSRAM on the panel. With no team picked it reads
+// every league, and a college Saturday ends with 80 or more finals at about
+// 200 bytes each: one 25 KB block, more than internal RAM has in one piece.
+using LiveList = PsVector<LiveGame>;
+using FinalList = PsVector<Final>;
+using PendingList = PsVector<Pending>;
 
 // Ranked games first (best rank on either side), then by kickoff.
 inline bool pending_before(const Pending &a, const Pending &b) {

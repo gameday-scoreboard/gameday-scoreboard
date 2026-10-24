@@ -46,27 +46,27 @@
       "json": 14444
     },
     "scan_mlb_day": {
-      "heap": 1704,
+      "heap": 1075,
       "json": 7003
     },
     "scan_nba_day": {
-      "heap": 2424,
+      "heap": 1075,
       "json": 6794
     },
     "scan_ncaa_day": {
-      "heap": 7104,
+      "heap": 1075,
       "json": 20942
     },
     "scan_ncaa_live": {
-      "heap": 36186,
+      "heap": 1074,
       "json": 185850
     },
     "scan_nhl_day": {
-      "heap": 3824,
+      "heap": 1074,
       "json": 11460
     },
     "scan_soccer_day": {
-      "heap": 1792,
+      "heap": 1055,
       "json": 7023
     },
     "schedule_nfl": {
