@@ -22,7 +22,7 @@ namespace espn {
 // panel with no team keeps every league's, up to kRecapCap a day each, about
 // 200 bytes a game with its short strings stored inline: more than internal
 // RAM can spare.
-template<class T> using RecapList = std::vector<T, PsramAllocator<T>>;
+template<class T> using RecapList = PsVector<T>;
 
 // A day the way ESPN's scoreboard `dates=` parameter counts it for a league:
 // US Eastern, shifted like scan_url() (5 h for football, 9 h for the rest),
@@ -247,9 +247,9 @@ inline void recap_share(const size_t (&have)[kLeagueCount], size_t cap, size_t (
 // had for today, so the rotation fills up as games end and drops the ones
 // that started. A league with neither keeps its days, so a scan that failed
 // for one league never empties it. Each league keeps only the games to come
-// its share of a loop could show, since every one is internal RAM.
-inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &finals,
-                         const std::vector<Pending> &pending, int64_t now) {
+// its share of a loop could show.
+inline void recap_absorb(std::vector<RecapDay> &days, const FinalList &finals, const PendingList &pending,
+                         int64_t now) {
   size_t have[kLeagueCount] = {}, keep[kLeagueCount];
   auto today = [now](const Pending &p) {
     return p.kickoff_epoch > now && espn_day(p.kickoff_epoch, p.league) == espn_day(now, p.league);
@@ -280,7 +280,7 @@ inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &
 // past its kickoff, and the scan's first kickoff is then behind us with
 // other games still to come today, so fall back on the first kept game
 // ahead.
-inline int64_t recap_scan_next(int64_t next_kickoff, const std::vector<Pending> &pending, int64_t now) {
+inline int64_t recap_scan_next(int64_t next_kickoff, const PendingList &pending, int64_t now) {
   if (next_kickoff > now)
     return next_kickoff;
   int64_t best = 0;

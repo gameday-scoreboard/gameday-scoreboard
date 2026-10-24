@@ -496,7 +496,7 @@ inline uint8_t best_rank(JsonObjectConst comp) {
 // one of those teams plays, 0 when there is none (Favorites take over).
 template<typename TInput, typename TOut>
 bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
-                      std::vector<Final> *finals = nullptr, std::vector<Pending> *pending = nullptr,
+                      FinalList *finals = nullptr, PendingList *pending = nullptr,
                       const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr) {
   JsonDocument filter(detail::json_allocator());
   detail::fill_scan_filter(filter, finals != nullptr, pending != nullptr);
@@ -510,7 +510,7 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
   if (watch_kickoff != nullptr)
     *watch_kickoff = 0;
   // Kept apart from *pending until the end, so the cap counts this document only.
-  std::vector<Pending> later;
+  PendingList later;
   for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
     std::string state = detail::str_or_empty(ev["status"]["type"]["state"]);
     bool tbd = detail::time_tbd(ev["competitions"][0]);

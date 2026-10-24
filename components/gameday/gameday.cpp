@@ -2336,8 +2336,8 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
   return ok;
 }
 
-bool GamedayComponent::fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
-                                         std::vector<::espn::Final> *finals, std::vector<::espn::Pending> *pending,
+bool GamedayComponent::fetch_live_games_(League league, ::espn::LiveList &out, int64_t &next_kickoff,
+                                         ::espn::FinalList *finals, ::espn::PendingList *pending,
                                          int64_t epoch, bool top25, const std::vector<uint32_t> *watch,
                                          int64_t *watch_kickoff) {
   std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now(), top25);
@@ -2675,7 +2675,7 @@ void GamedayComponent::run_job_() {
     // One day's scoreboard: its finals going back, its first kickoff and that
     // game's matchup going forward. The live list is always empty for a day
     // that is not today.
-    std::vector<::espn::LiveGame> live;
+    ::espn::LiveList live;
     j.recap_ok = this->fetch_live_games_((League) j.recap_league, live, j.next_kickoff,
                                          j.recap_forward ? nullptr : &j.finals,
                                          j.recap_forward ? &j.pending : nullptr, ::espn::espn_day_epoch(j.recap_day),
@@ -2683,8 +2683,8 @@ void GamedayComponent::run_job_() {
     return;
   }
   if (j.need_scan) {
-    std::vector<::espn::Final> *finals = j.want_finals ? &j.finals : nullptr;
-    std::vector<::espn::Pending> *pending = j.want_finals ? &j.pending : nullptr;
+    ::espn::FinalList *finals = j.want_finals ? &j.finals : nullptr;
+    ::espn::PendingList *pending = j.want_finals ? &j.pending : nullptr;
     j.scan_ok = true;
     for (League l : j.scan_leagues) {
       // Favorites take over: this league's favorites, for their next kickoff.

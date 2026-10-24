@@ -3,8 +3,9 @@
 // and prints, per case, as JSON:
 //   json   the most bytes the JSON documents (filter and parse) held at once,
 //          through the allocator the firmware points at PSRAM
-//   heap   the most bytes everything else held at once (the result vectors
-//          and strings), which on the panel come out of internal RAM
+//   heap   the most bytes everything else held at once through operator new
+//          (the result vectors and strings), which on the panel come out of
+//          internal RAM. Lists on PsramAllocator (a scan's) count in neither.
 // These are host figures (64-bit pointers, glibc), larger than the panel's,
 // and the same on every run of the same code, so CI can compare them with a
 // budget and with the base branch. scripts/size_budget.py reads the output.
@@ -126,9 +127,9 @@ template<typename F> static void measure(const char *name, F read) {
 static void scan(const char *name, const std::string &file) {
   std::string json = slurp("fixtures/" + file);
   measure(name, [&] {
-    std::vector<LiveGame> live;
-    std::vector<Final> finals;
-    std::vector<Pending> pending;
+    LiveList live;
+    FinalList finals;
+    PendingList pending;
     int64_t next = 0;
     return parse_live_games(json, live, &next, &finals, &pending);
   });

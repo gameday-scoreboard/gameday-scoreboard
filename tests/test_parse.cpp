@@ -414,7 +414,7 @@ static LiveGame lg(League l, int away, int home, int period, int clock, uint8_t 
 static void test_best_game() {
   // The scan reads where each game stands.
   std::string json = slurp("fixtures/scoreboard_ncaa_live.json");
-  std::vector<LiveGame> games;
+  LiveList games;
   CHECK(parse_live_games(json, games));
   const LiveGame *ore = nullptr;
   for (auto &g : games) {
@@ -435,9 +435,9 @@ static void test_best_game() {
   // closer games still in the 3rd.
   CHECK_EQ(games[best_live_game(games, "")].event_id, std::string(kLiveEvent));
   // The same holds with finals and pending asked for (the no-team scan).
-  std::vector<LiveGame> again;
-  std::vector<Final> finals;
-  std::vector<Pending> pending;
+  LiveList again;
+  FinalList finals;
+  PendingList pending;
   int64_t next = 0;
   CHECK(parse_live_games(json, again, &next, &finals, &pending));
   CHECK_EQ(again.size(), games.size());
@@ -501,7 +501,7 @@ static void test_best_game() {
   CHECK(live_interest(lg(League::MLB, 3, 3, 9, 0)) > live_interest(lg(League::MLB, 3, 3, 3, 0)));
 
   // The game on the board keeps it against a near tie, not a clearly better one.
-  std::vector<LiveGame> two = {lg(League::NFL, 17, 21, 4, 120, 99, 99, "a"), lg(League::NFL, 21, 21, 4, 120, 99, 99, "b")};
+  LiveList two = {lg(League::NFL, 17, 21, 4, 120, 99, 99, "a"), lg(League::NFL, 21, 21, 4, 120, 99, 99, "b")};
   CHECK_EQ(two[best_live_game(two, "")].event_id, std::string("b"));
   CHECK_EQ(two[best_live_game(two, "a")].event_id, std::string("b"));  // 75 x 3 is well short of a tie's 300
   two[0] = lg(League::NFL, 21, 21, 4, 150, 99, 99, "a");
@@ -509,9 +509,9 @@ static void test_best_game() {
   // A game the board saw end goes last, even when the scan still lists it.
   two[0] = lg(League::NFL, 21, 21, 4, 0, 99, 99, "a");
   CHECK_EQ(two[best_live_game(two, "a", true)].event_id, std::string("b"));
-  std::vector<LiveGame> one = {two[0]};
+  LiveList one = {two[0]};
   CHECK_EQ(best_live_game(one, "a", true), (size_t) 0);
-  std::vector<LiveGame> empty;
+  LiveList empty;
   CHECK_EQ(best_live_game(empty, ""), (size_t) 0);
 
   // Breaks in play: the only time the pick moves off the game on the board.
@@ -1048,7 +1048,7 @@ static void test_upcoming() {
 
 static void test_live_games() {
   std::string json = slurp("fixtures/scoreboard_ncaa_live.json");
-  std::vector<LiveGame> games;
+  LiveList games;
   CHECK(parse_live_games(json, games));
   CHECK(games.size() >= 1);
   bool found = false;
@@ -1063,7 +1063,7 @@ static void test_live_games() {
     }
   }
   CHECK(found);
-  std::vector<LiveGame> none;
+  LiveList none;
   std::string nfl = slurp("fixtures/scoreboard_nfl.json");
   CHECK(parse_live_games(nfl, none));
   CHECK_EQ(none.size(), (size_t) 0);
@@ -3331,8 +3331,8 @@ static void test_recap() {
   const uint8_t NFL = (uint8_t) League::NFL, NCAA = (uint8_t) League::NCAA;
   // Finals ride along with the scan only when asked for
   std::string titles = slurp("fixtures/scoreboard_ncaa_conf_titles.json");
-  std::vector<LiveGame> live;
-  std::vector<Final> finals;
+  LiveList live;
+  FinalList finals;
   int64_t next = -1;
   CHECK(parse_live_games(titles, live, &next, &finals));
   CHECK_EQ(live.size(), (size_t) 0);
@@ -3528,7 +3528,7 @@ static Pending mkpending(uint8_t league, int rank, int64_t kick, const char *abb
   return p;
 }
 
-static bool sorted_by_kickoff(const std::vector<Pending> &v) {
+static bool sorted_by_kickoff(const PendingList &v) {
   for (size_t i = 1; i < v.size(); i++)
     if (v[i - 1].kickoff_epoch > v[i].kickoff_epoch)
       return false;
@@ -3543,9 +3543,9 @@ static void test_later_today() {
 
   // NHL, 10/9: four games to come, in kickoff order, with what a card needs
   std::string nhl_day = slurp("fixtures/day_nhl_20261009.json");
-  std::vector<LiveGame> live;
-  std::vector<Final> finals;
-  std::vector<Pending> nhl;
+  LiveList live;
+  FinalList finals;
+  PendingList nhl;
   int64_t next = -1;
   CHECK(parse_live_games(nhl_day, live, &next, &finals, &nhl));
   CHECK_EQ(live.size(), (size_t) 0);
@@ -3595,7 +3595,7 @@ static void test_later_today() {
 
   // MLB, 10/12: the live game is not one to come; the one after it is
   std::string mlb_day = slurp("fixtures/day_mlb_20261012.json");
-  std::vector<Pending> mlb;
+  PendingList mlb;
   live.clear();
   CHECK(parse_live_games(mlb_day, live, &next, &finals, &mlb));
   CHECK_EQ(live.size(), (size_t) 1);
@@ -3613,7 +3613,7 @@ static void test_later_today() {
 
   // NBA, 10/15: two to come, one with no TV listed
   std::string nba_day = slurp("fixtures/day_nba_20261015.json");
-  std::vector<Pending> nba;
+  PendingList nba;
   live.clear();
   CHECK(parse_live_games(nba_day, live, &next, nullptr, &nba));
   CHECK_EQ(nba.size(), (size_t) 2);
@@ -3642,7 +3642,7 @@ static void test_later_today() {
   // NFL week 1, sixteen to come: only the first eight are kept, ties in
   // ESPN's order
   std::string nfl_week = slurp("fixtures/scoreboard_nfl.json");
-  std::vector<Pending> nfl;
+  PendingList nfl;
   CHECK(parse_live_games(nfl_week, live, &next, nullptr, &nfl));
   CHECK_EQ(nfl.size(), kPendingKeep);
   CHECK(sorted_by_kickoff(nfl));
@@ -3659,7 +3659,7 @@ static void test_later_today() {
   // and none of them is a game on now or a final. The rescan still waits
   // for the earliest kickoff, ranked or not.
   std::string ncaa = slurp("fixtures/scoreboard_ncaa_live.json");
-  std::vector<Pending> college;
+  PendingList college;
   live.clear();
   finals.clear();
   CHECK(parse_live_games(ncaa, live, &next, &finals, &college));
@@ -3688,7 +3688,7 @@ static void test_later_today() {
                       R"({"id":"4","date":"2026-10-24T19:30Z","status":{"type":{"state":"pre"}},"competitions":[{"timeValid":true,"competitors":[{"id":"7","homeAway":"home","team":{"abbreviation":"GGG"}},{"id":"8","homeAway":"away","team":{"abbreviation":"HHH"}}],"broadcasts":[{"names":["ESPN","ABC"]}]}]},)"
                       R"({"id":"5","date":"2026-10-24T18:00Z","status":{"type":{"state":"in"}},"competitions":[{"timeValid":true,"competitors":[{"id":"9","homeAway":"home","team":{"abbreviation":"III"}},{"id":"10","homeAway":"away","team":{"abbreviation":"JJJ"}}]}]},)"
                       R"({"id":"6","date":"2026-10-24T15:00Z","status":{"type":{"state":"post","completed":true,"shortDetail":"Final"}},"competitions":[{"timeValid":true,"competitors":[{"id":"11","homeAway":"home","score":"3","team":{"abbreviation":"KKK"}},{"id":"12","homeAway":"away","score":"1","team":{"abbreviation":"LLL"}}]}]}]})";
-  std::vector<Pending> one;
+  PendingList one;
   live.clear();
   finals.clear();
   CHECK(parse_live_games(mixed, live, &next, &finals, &one));
@@ -3777,7 +3777,7 @@ static void test_later_today() {
   recap_merge(days, finals_day(NBA, thu - 1, 3));
   recap_merge(days, finals_day(NHL, thu - 1, 13));
   recap_merge(days, finals_day(MLB, thu - 1, 5));
-  std::vector<Pending> later = {
+  PendingList later = {
       mkpending(NBA, 99, noon + 7 * h + 1800, "N1"), mkpending(NBA, 99, noon + 8 * h + 1800, "N2"),
       mkpending(NHL, 99, noon + 7 * h, "H1"),        mkpending(NHL, 99, noon + 7 * h, "H2"),
       mkpending(NHL, 99, noon + 7 * h, "H3"),        mkpending(NHL, 99, noon + 8 * h, "H4"),
@@ -3849,8 +3849,8 @@ static void test_later_today() {
   // A later scan at 7:01 PM: B1 is final and H1 and H2 are under way. ESPN
   // still lists H3 as not started, but its time has passed, so it is not
   // kept; N1, N2 and H4 are. Today's MLB day now holds the final.
-  std::vector<Final> today_finals = {mkfinal(MLB, 99, noon + 4 * h, "B1")};
-  std::vector<Pending> still = {later[0], later[1], later[4], later[5]};
+  FinalList today_finals = {mkfinal(MLB, 99, noon + 4 * h, "B1")};
+  PendingList still = {later[0], later[1], later[4], later[5]};
   recap_absorb(days, today_finals, still, noon + 7 * h + 60);
   CHECK_EQ(recap_count(days, MLB), (size_t) 6);
   size_t stored = 0;
@@ -3870,7 +3870,7 @@ static void test_later_today() {
   // games to come, one from each of the first eight leagues, and the
   // finals come down to the 14 left of the 22
   std::vector<RecapDay> all;
-  std::vector<Pending> two_each;
+  PendingList two_each;
   uint16_t every = 0;
   for (const auto &info : kLeagues) {
     uint8_t l = (uint8_t) info.league;
@@ -5126,7 +5126,7 @@ static void test_tbd_kickoff() {
   Schedule mday;
   CHECK(parse_team_game_str(sb, kMichigan, mday));
   CHECK(!mday.time_tbd);
-  std::vector<LiveGame> live;
+  LiveList live;
   int64_t next = -1;
   CHECK(parse_live_games(sb, live, &next));
   CHECK_EQ(next, parse_iso8601_z("2026-10-24T16:00Z"));
@@ -5651,7 +5651,7 @@ static LiveGame take_lg(League l, uint32_t away, uint32_t home, const char *id) 
 static void test_take_over() {
   // Cowboys, Mavericks, Stars: ids are per league, so NBA team 6 isn't the Cowboys.
   std::vector<FavRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 9}};
-  std::vector<LiveGame> live = {take_lg(League::NFL, 21, 13, "phi-lv"), take_lg(League::NBA, 2, 6, "bos-dal"),
+  LiveList live = {take_lg(League::NFL, 21, 13, "phi-lv"), take_lg(League::NBA, 2, 6, "bos-dal"),
                                 take_lg(League::NHL, 9, 4, "dal-chi"), take_lg(League::NFL, 19, 6, "nyg-dal")};
   CHECK_EQ(live_fav_rank(live[0], favs), -1);
   CHECK_EQ(live_fav_rank(live[1], favs), 1);  // the Mavericks at home
@@ -5667,7 +5667,7 @@ static void test_take_over() {
   // Its game ended (the scan may still list it): the next favorite's.
   CHECK_EQ(take_over_pick(live, favs, "nyg-dal", true, false), 1);
   // No favorite on: the rotation picks.
-  std::vector<LiveGame> others = {live[0], take_lg(League::NBA, 19, 7, "x")};
+  LiveList others = {live[0], take_lg(League::NBA, 19, 7, "x")};
   CHECK_EQ(take_over_pick(others, favs, "", false, false), -1);
   CHECK_EQ(take_over_pick(others, {}, "", false, true), -1);
   CHECK_EQ(take_over_pick({}, favs, "", false, false), -1);
@@ -5684,12 +5684,12 @@ static void test_take_over() {
   CHECK_EQ(take_over_pick(live, favs, "phi-lv", false, true, false), 3);  // on another game: the highest
   CHECK_EQ(take_over_pick(live, favs, "bos-dal", true, true, false), 3);  // it ended: the highest
   // A lone favorite's game stays up.
-  std::vector<LiveGame> one = {live[0], live[2]};
+  LiveList one = {live[0], live[2]};
   CHECK_EQ(take_over_pick(one, favs, "dal-chi", false, true), 1);
   CHECK_EQ(take_over_pick(one, favs, "dal-chi", true, true), -1);  // and when it ends, nothing
   // Two favorites in one game count once.
   std::vector<FavRef> rivals = {{(uint8_t) League::NFL, 19}, {(uint8_t) League::NFL, 6}};
-  std::vector<LiveGame> derby = {live[0], live[3]};
+  LiveList derby = {live[0], live[3]};
   CHECK_EQ(take_over_pick(derby, rivals, "nyg-dal", false, true), 1);
   CHECK_EQ(live_fav_rank(live[3], rivals), 0);
 
@@ -5715,7 +5715,7 @@ static void test_take_over() {
 
   // The scan reports the earliest favorite kickoff it saw, per league's ids.
   std::string nfl = slurp("fixtures/scoreboard_nfl.json");
-  std::vector<LiveGame> games;
+  LiveList games;
   int64_t next = 0, fav_next = -1;
   std::vector<uint32_t> cowboys = {6};
   CHECK(parse_live_games(nfl, games, &next, nullptr, nullptr, &cowboys, &fav_next));

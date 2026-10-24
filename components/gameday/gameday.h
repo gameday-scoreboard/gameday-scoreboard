@@ -629,7 +629,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool rotate{false};  // the scan is the Switch every look, not a kickoff or a game that ended
     std::vector<League> scan_leagues;
     bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
-    std::vector<::espn::LiveGame> live;
+    ::espn::LiveList live;
     bool scan_ok{false};
     int64_t next_kickoff{0};  // earliest kickoff not started yet, 0 for none
     // Favorites take over: the favorites to look for, and the earliest
@@ -667,8 +667,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // to come too when asked, and a recap job reads one other day's
     // scoreboard for one league.
     bool want_finals{false};
-    std::vector<::espn::Final> finals;
-    std::vector<::espn::Pending> pending;
+    ::espn::FinalList finals;
+    ::espn::PendingList pending;
     bool need_recap{false};
     bool recap_forward{false};  // looking for the next kickoff, not for finals
     uint8_t recap_league{0};
@@ -710,9 +710,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out);
   // epoch picks the day (now when 0); finals and pending, when given, also
   // get that day's finished games and the ones not started yet.
-  bool fetch_live_games_(League league, std::vector<::espn::LiveGame> &out, int64_t &next_kickoff,
-                         std::vector<::espn::Final> *finals = nullptr,
-                         std::vector<::espn::Pending> *pending = nullptr, int64_t epoch = 0, bool top25 = false,
+  bool fetch_live_games_(League league, ::espn::LiveList &out, int64_t &next_kickoff,
+                         ::espn::FinalList *finals = nullptr, ::espn::PendingList *pending = nullptr,
+                         int64_t epoch = 0, bool top25 = false,
                          const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr);
   // The mode the panel runs: the saved one, except that with no team picked
   // My team (and Favorites with none set) runs as Live games over every
