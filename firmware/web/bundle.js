@@ -1348,16 +1348,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   let games = null;        // [{league, id, state, detail, away:{...}, home:{...}}]
   let gamesAt = 0;
   const teamById = (lg, id) => TEAMS.find((t) => t[0] === lg && t[1] === id);
-  // The day the panel reads for a league (scan_day_shift in espn_parse.h):
-  // football's turns over at midnight Eastern, the other leagues' at 4 AM
-  // Eastern, so a late West Coast game stays on today's list.
-  const scanDate = (lg) => {
-    const shift = LEAGUES[lg].path.startsWith("football/") ? 5 : 9;
-    return new Date(Date.now() - shift * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
-  };
+  // The day the panel reads (scan_day_shift in espn_parse.h) turns over at
+  // 4 AM Eastern, so a late West Coast game stays on today's list.
+  const scanDate = () => new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
   const loadGames = async (force) => {
     if (!force && games && Date.now() - gamesAt < 60000) return games;
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate(lg)}`]);
+    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       try {

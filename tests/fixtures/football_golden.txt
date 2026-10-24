@@ -4,7 +4,7 @@ league 0 path=nfl
   2026-09-05T16:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905
   2026-09-06T03:30Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905
   2026-09-06T04:59Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905
-  2026-09-06T05:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260906 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260906
+  2026-09-06T05:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260906 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260905
   2026-11-02T01:15Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261101 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261101
   2027-01-01T00:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261231 scan=https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261231
 league 1 path=college-football
@@ -13,7 +13,7 @@ league 1 path=college-football
   2026-09-05T16:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20260905
   2026-09-06T03:30Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20260905
   2026-09-06T04:59Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20260905 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20260905
-  2026-09-06T05:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20260906 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20260906
+  2026-09-06T05:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20260906 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20260905
   2026-11-02T01:15Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20261101 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20261101
   2027-01-01T00:00Z sb=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=8&dates=20261231 scan=https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300&dates=20261231
 dark=https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/scoreboard/dal.png&w=64&h=64

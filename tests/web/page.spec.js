@@ -427,8 +427,8 @@ test("the On now tab asks ESPN for every college game, not the Top 25", async ({
 });
 
 test("the On now tab keeps a late game on today's list after midnight Eastern, as the panel does", async ({ page, request }) => {
-  // 1:30 AM Eastern on Friday 10/23: a West Coast NBA game from Thursday is
-  // still on. Football's day has turned over; the other leagues' hasn't.
+  // 1:30 AM Eastern on Friday 10/23: West Coast games from Thursday are
+  // still on. No league's day turns over until 4 AM Eastern.
   await page.clock.setFixedTime(new Date("2026-10-23T05:30:00Z"));
   const asked = {};
   for (const [lg, path] of [["nba", "basketball/nba"], ["nfl", "football/nfl"]]) {
@@ -441,7 +441,7 @@ test("the On now tab keeps a late game on today's list after midnight Eastern, a
   await page.goto("/");
   await page.locator("#pick").click();
   await expect.poll(() => asked.nba).toBe("20261022");
-  await expect.poll(() => asked.nfl).toBe("20261023");
+  await expect.poll(() => asked.nfl).toBe("20261022");
 });
 
 test("ticker, celebration and startup switches post 0 and 1", async ({ page, request }) => {

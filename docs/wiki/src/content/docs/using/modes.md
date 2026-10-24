@@ -50,6 +50,8 @@ Live games follows the best game on instead of a random one, with the **Pick the
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
 
 :::note[Coming in the next release]
+A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends, as late games in the other sports already did. Before, a football game still on at midnight Eastern dropped out of Live games.
+
 A soccer match has no stops in play, so it counts as at a break from the 45th minute to halftime and from the 90th minute on. Before, only halftime counted, and a match could hold the panel for a whole half. The panel also looks once per break: a long break, like a hockey intermission, gets one look instead of one every **Switch every** minutes.
 :::
 
