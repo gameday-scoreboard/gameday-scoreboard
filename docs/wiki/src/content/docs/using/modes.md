@@ -13,7 +13,7 @@ The panel follows one team: its next game before kickoff, the game while it's on
 
 - **Before the game** the board shows both logos and the matchup, and the ticker gives the kickoff day and time in the panel's timezone, plus the line, over/under, TV channel and venue when ESPN has them. Each sport has its own details; see [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 - **During the game** the panel reads ESPN every 10 seconds, about as often as ESPN updates.
-- **After the final** the score stays up for half an hour, or ten minutes for baseball, since game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game.
+- **After the final** the score stays up for half an hour, or ten minutes for baseball, since game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game. In baseball, basketball and hockey, when that game is three or more days off, the final can stay up longer, until ESPN lists the team's next game.
 
 Far from kickoff the panel checks the game every 15 minutes, and every minute in the last hour before it starts. If a read from ESPN fails, it waits longer before each new try.
 
@@ -51,6 +51,8 @@ Turn **Pick the best game** off for the random game and the move every **Switch 
 
 :::note[Coming in the next release]
 A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends, as late games in the other sports already did. Before, a football game still on at midnight Eastern dropped out of Live games.
+
+A soccer match has no stops in play, so it counts as at a break from the 45th minute to halftime and from the 90th minute on. Before, only halftime counted, and a match could hold the panel for a whole half. The panel also looks once per break: a long break, like a hockey intermission, gets one look instead of one every **Switch every** minutes.
 :::
 
 ### Favorites take over
@@ -63,6 +65,10 @@ Turn on **Favorites take over** under **Switch every** and a game one of your [f
 - Only favorites in the leagues Live games follows count. On automatic leagues, that's all of them.
 
 The bar under the board says **Locked on** and the team's name while a favorite has the panel. It's off until you turn it on.
+
+:::note[Coming in the next release]
+With **Stick with the higher team**, the panel also checks every **Switch every** minutes (at least every 5) for a higher favorite whose game started without a set time, like the second game of a doubleheader, so it doesn't wait for the lower favorite's game to end. With **Alternate**, the switch between your favorites' games comes only every **Switch every** minutes, not also when another favorite's game is about to start.
+:::
 
 ### Choosing the leagues
 

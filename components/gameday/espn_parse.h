@@ -429,6 +429,12 @@ inline bool today_game_first(const Schedule &team, const Schedule &today) {
   return team.event_id.empty() || today.kickoff_epoch < team.kickoff_epoch;
 }
 
+// The NFL's team endpoint keeps naming a game through its final (NE @ CHI on
+// 2026-10-22, while a college team's had moved on from a game still in
+// overtime), so an NFL read never needs the day's scoreboard to find the game
+// on now. That read is the whole NFL day, ~256 KB on a Sunday.
+inline bool team_names_game_on_now(League league) { return league == League::NFL; }
+
 // How long a live mode waits after a scan that found nothing in progress:
 // until the day's next kickoff, but at least min_ms (the game is due and
 // not under way yet) and at most max_ms (kickoffs move, and the day the scan

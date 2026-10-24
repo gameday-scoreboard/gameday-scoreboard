@@ -193,6 +193,8 @@ packages:
   guard: !include pages/guard.yaml
   # The owner's banner over everything, and its Home Assistant text entity
   message: !include pages/message.yaml
+  # The FCC information on the panel's own screen (POST /gameday/action?do=regulatory)
+  regulatory: !include pages/regulatory.yaml
 
 # The theme's Spleen fonts, with Latin-1 added to ESPHome's default ASCII so
 # accented names (São Paulo, Atlético) draw. Text from outside the panel goes
@@ -633,6 +635,12 @@ gameday:
           lambda: 'return x == "fav_banner";'
         then:
           - script.execute: gd_fav_banner
+    # The FCC information (pages/regulatory.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "regulatory";'
+        then:
+          - script.execute: reg_show
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:

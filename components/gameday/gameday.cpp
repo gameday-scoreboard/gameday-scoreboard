@@ -1027,8 +1027,10 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
   }
   if (refresh >= 0)
     e.fetched_ms = now == 0 ? 1 : now;
-  if (side >= 0)
+  if (side >= 0) {
     e.side_ms = now == 0 ? 1 : now;
+    j.fav_side = index == side;
+  }
   this->start_worker_();
 }
 
@@ -1048,7 +1050,7 @@ int GamedayComponent::fav_side_due_(uint32_t now, int64_t now_epoch) const {
     if (!live || e.game.event_id == this->game_.event_id)
       continue;
     uint32_t age = e.side_ms == 0 ? UINT32_MAX : now - e.side_ms;
-    if (age < FAV_SIDE_INTERVAL || (due >= 0 && age <= oldest))
+    if (age < ::espn::side_poll_wait_ms(e.side_fails, FAV_SIDE_INTERVAL) || (due >= 0 && age <= oldest))
       continue;
     due = (int) i;
     oldest = age;
@@ -1087,14 +1089,21 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   FavEntry &e = this->fav_[j.fav_index];
   int64_t tnow = (int64_t) this->time_->timestamp_now();
   bool shown = j.fav_index == this->fav_shown_;
+  bool board = shown || this->fav_shown_ < 0;
   // A cup read that did not poll the game leaves the poll timer alone.
   if (shown && (j.comp < 0 || j.polled))
     this->fav_poll_ms_ = now == 0 ? 1 : now;
   if (j.need_schedule) {
     if (!j.schedule_ok) {
-      this->count_miss_();
-      this->emit_({});  // the miss shows on the ticker and the page, as in My team
-      this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
+      // Another favorite's failed team read retries on its own clock
+      // (RETRY_INTERVAL), not the board's.
+      ::espn::FavPollEffect fx = ::espn::fav_poll_effect(false, false, j.throttled, board);
+      if (fx.count_miss) {
+        this->count_miss_();
+        this->emit_({});  // the miss shows on the ticker and the page, as in My team
+      }
+      if (fx.back_off)
+        this->back_off_();  // start_fav_job_ waits it out and keeps the playlist ticking
       this->schedule_next_(0);
       return;
     }
@@ -1102,6 +1111,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.sched = j.schedule;
     ::espn::adopt_league(e.sched, e.team->league);
     e.stale = false;
+    e.side_fails = 0;  // a fresh team read: the side polls start over
     if (!j.comps.empty()) {
       e.comps = j.comps;
       e.comp_next = 1;
@@ -1115,8 +1125,9 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.comps = j.comps;
     e.comp_next = j.comp + 1 < (int) j.comps.size() ? j.comp + 1 : -1;
     e.sched = j.schedule;
-    // A failed poll backs off below with the other failed polls
-    if (!j.polled && ::espn::cup_read_backs_off(j.cup_ok, false, false, j.throttled))
+    // A failed poll backs off below with the other failed polls; another
+    // favorite's failed cup read backs off only on a refusal.
+    if (!j.polled && ::espn::cup_read_backs_off(j.cup_ok, false, false, j.throttled) && (board || j.throttled))
       this->back_off_();  // start_fav_job_ waits it out
     if (j.no_event) {
       this->fav_no_event_(e, shown, tnow);
@@ -1127,10 +1138,16 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
       return;
     }
   }
+  ::espn::FavPollEffect fx = ::espn::fav_poll_effect(j.game_ok, j.fav_side, j.throttled, board);
+  if (j.fav_side)
+    e.side_fails = j.game_ok ? 0 : e.side_fails < 255 ? e.side_fails + 1 : 255;
   if (!j.game_ok) {
-    this->count_miss_();
-    this->emit_({});
-    this->back_off_();
+    if (fx.count_miss) {
+      this->count_miss_();
+      this->emit_({});
+    }
+    if (fx.back_off)
+      this->back_off_();
     this->schedule_next_(0);
     return;
   }
@@ -1152,9 +1169,18 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
     e.final_epoch = tnow;
   if (::espn::in_action(e.game, e.team->league))
     e.action_epoch = tnow;
-  this->mark_good_poll_();
+  if (fx.mark_good)
+    this->mark_good_poll_();
+  else if (fx.clear_backoff)
+    this->clear_backoff_();
   std::string banner = shown || !this->score_banner() ? "" : ::espn::fav_score_banner(old, e.game);
   bool switched = this->fav_choose_(tnow);
+  if (switched && j.fav_index == this->fav_shown_) {
+    // This read's game just took the board (Jump to the action): it was the
+    // board's poll, so the board is fresh and its next poll waits the interval.
+    this->mark_good_poll_();
+    this->fav_poll_ms_ = now == 0 ? 1 : now;
+  }
   // Not when that game just took the board, or is the one on it already.
   if (!banner.empty() && j.fav_index != this->fav_shown_ && e.game.event_id != this->game_.event_id) {
     this->fav_banner_text_ = banner;
@@ -2269,9 +2295,12 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
 // read during a game (a boot, a team pick, the six-hour read, a cup read)
 // checks today's scoreboard for one on now. Its date is taken 9 hours back
 // (team_day_url's 5 plus 4 here), so a late West Coast game still finds its
-// own day after midnight Eastern.
+// own day after midnight Eastern. The NFL's endpoint keeps the game
+// (team_names_game_on_now), so it skips the read.
 void GamedayComponent::take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
                                          const char *comp_slug) {
+  if (::espn::team_names_game_on_now(team->league))
+    return;
   int64_t now = (int64_t) this->time_->timestamp_now();
   if (!s.event_id.empty() && s.kickoff_epoch <= now)
     return;
@@ -2480,18 +2509,24 @@ void GamedayComponent::start_job_() {
         this->live_started_ms_ = now == 0 ? 1 : now;
       } else {
         // Picking the best game: only at a break in this one, never in the
-        // middle of a drive.
-        // A favorite's game that took the board holds it: no rotate, unless
-        // two favorites alternate. A favorite higher in the list starting
-        // later comes in on its kickoff scan (take_due). Alternate keeps
-        // Favorite teams' plain timer, so it doesn't wait for a break.
+        // middle of a drive, and one look per break.
+        // A favorite's game that took the board holds it with Stick: only a
+        // slow look, for a higher favorite with no kickoff time to scan at.
+        // A favorite higher in the list starting later comes in on its
+        // kickoff scan (take_due). Alternate keeps Favorite teams' plain
+        // timer, so it doesn't wait for a break (rotate_due, best_game.h).
         bool on_fav = this->take_over_() && this->live_fav_ >= 0;
         bool held = on_fav && this->prefs4_.collide == 0;
-        bool rotate = !held && this->live_started_ms_ != 0 &&
-                      (now - this->live_started_ms_) >= (uint32_t) this->prefs2_.rotate_minutes * MINUTE &&
-                      (!this->best_game() || on_fav || ::espn::at_break(this->game_));
+        bool brk = ::espn::pick_break(this->game_);
+        if (!brk)
+          this->break_looked_ = false;  // play is on again: the next break gets its look
+        bool rotate = this->live_started_ms_ != 0 &&
+                      ::espn::rotate_due(now - this->live_started_ms_,
+                                         (uint32_t) this->prefs2_.rotate_minutes * MINUTE, held, on_fav,
+                                         this->best_game(), brk, this->break_looked_);
         bool ended = this->game_.valid && this->game_.state != GameState::IN;
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_ || take_due;
+        j.rotate = rotate;
       }
       // With no team, nothing live means the finals rotation: the scan keeps
       // today's finals for it.
@@ -2771,9 +2806,13 @@ void GamedayComponent::apply_job_() {
     this->clear_backoff_();
     // Favorites take over: when to scan for the next favorite's kickoff. The
     // pick below says again whether a favorite has the board.
-    this->take_scan_at_ = this->take_over_() ? ::espn::take_over_rescan_at((int64_t) this->time_->timestamp_now(),
-                                                                           j.fav_kickoff)
-                                             : 0;
+    if (this->take_over_()) {
+      int64_t tnow = (int64_t) this->time_->timestamp_now();
+      int64_t at = ::espn::take_over_rescan_at(tnow, j.fav_kickoff);
+      this->take_scan_at_ = j.scan_ok ? at : ::espn::take_over_rescan_keep(tnow, at, this->take_scan_at_);
+    } else {
+      this->take_scan_at_ = 0;
+    }
     this->live_fav_ = -1;
     // For the night schedule: a game of the owner's on now, whichever game
     // the board picks.
@@ -2863,9 +2902,11 @@ void GamedayComponent::apply_job_() {
     std::vector<::espn::FavRef> favs;
     if (this->take_over_())
       favs = this->fav_refs_();
+    // Alternate moves on only at a rotate scan, every Switch every; a kickoff
+    // scan keeps the favorite that is up.
     int taken = favs.empty() ? -1
                              : ::espn::take_over_pick(j.live, favs, this->schedule_.event_id, over,
-                                                      this->prefs4_.collide == 1);
+                                                      this->prefs4_.collide == 1, j.rotate);
     const ::espn::LiveGame &g =
         j.live[taken >= 0 ? (size_t) taken
                           : best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
@@ -2885,6 +2926,9 @@ void GamedayComponent::apply_job_() {
         ESP_LOGI(TAG, "Favorites take over: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
       else
         ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      // This break has had its look; the next one comes when play resumes.
+      if (taken < 0 && ::espn::pick_break(this->game_))
+        this->break_looked_ = true;
       this->live_fav_ = fav_rank;
       this->live_away_rank_ = side_rank;
       this->live_home_rank_ = other_rank;
@@ -4429,7 +4473,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say";
+    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say" || name == "regulatory";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif

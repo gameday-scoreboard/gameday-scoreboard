@@ -34,7 +34,7 @@ Holding the button on a panel that is off turns it on, so you can see the countd
 
 Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it with the 10 second hold, or with **Reset Wi-Fi** in the Device card on the device page.
 
-The panel forgets every Wi-Fi network it has saved and restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Set it up again from the app or the hotspot; see [Set up your panel](/get-started/setup/).
+The panel restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Give it the new network from the app or the hotspot; see [Set up your panel](/get-started/setup/).
 
 Your team, favorites and every other setting stay as they were.
 
@@ -54,7 +54,7 @@ With no app and no device page, hold the boot button until the screen says **Rel
 
 | | Reset Wi-Fi | Factory reset |
 | --- | --- | --- |
-| Saved Wi-Fi networks | Cleared | Cleared |
+| Saved Wi-Fi networks | Kept (setup for 15 minutes) | Cleared |
 | Team, mode and favorites | Kept | Cleared |
 | Settings (ticker, brightness, timezone and the rest) | Kept | Cleared |
 | WizMote pairing | Kept | Cleared |

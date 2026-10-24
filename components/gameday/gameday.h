@@ -38,6 +38,7 @@
 #include "playlists.h"
 #include "offseason.h"
 #include "recap.h"
+#include "regulatory.h"
 #include "score_log.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
@@ -167,6 +168,8 @@ class GamedaySelect : public select::Select, public Component {
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
+//   POST /gameday/action?do=regulatory   the FCC information on the panel's screen
+//                                    (regulatory.h, firmware/pages/regulatory.yaml)
 //   POST /gameday/set?msg=...&msgurl=...&msgevery=0-30   the message card (message.h)
 //   GET  /gameday/settings           the settings backup, one JSON document (settings_doc.h)
 //   POST /gameday/settings           a backup as a JSON body, checked whole, then applied;
@@ -620,6 +623,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t mode{0};  // effective_mode_() when the job was made; the worker reads this, not the prefs
     // live-game modes: scan the day's games first, then follow one
     bool need_scan{false};
+    bool rotate{false};  // the scan is the Switch every look, not a kickoff or a game that ended
     std::vector<League> scan_leagues;
     bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
     std::vector<::espn::LiveGame> live;
@@ -644,6 +648,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool game_gone{false};
     // Favorite Teams mode: which cached entry this cycle refreshes or polls
     int fav_index{-1};
+    bool fav_side{false};  // a poll of a live favorite another favorite's game has the board over
     uint32_t our_id{0};
     // Soccer: the team's reads per competition (comps[0] the league's, then
     // its kCups in order), and the one cup this cycle reads (1.., -1 none).
@@ -936,6 +941,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int comp_next{-1};            // the cup read due next, -1 when none
     int64_t action_epoch{0};  // the last poll that found the game at its action, 0 = none
     uint32_t side_ms{0};      // the last poll while another favorite had the board
+    uint8_t side_fails{0};    // those polls failed in a row (poll_timing.h, side_poll_wait_ms)
   };
   // The favorite cards are ~1 KB each and internal heap is the panel's
   // scarcest resource: PSRAM (psram.h).
@@ -983,6 +989,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool take_over_() const { return this->favorites_take_over() && this->live_mode_() && !this->fav_.empty(); }
   std::vector<::espn::FavRef> fav_refs_() const;
   int live_fav_{-1};          // the fav_ entry whose game took the board, -1 for none
+  bool break_looked_{false};  // Pick the best game looked at this break and kept the game (rotate_due)
   int64_t take_scan_at_{0};   // epoch: scan then for a favorite's kickoff, 0 for none
 
   // The finals rotation (recap.h): a live mode with nothing live on a panel
