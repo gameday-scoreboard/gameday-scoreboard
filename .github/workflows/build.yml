@@ -218,6 +218,10 @@ jobs:
             yaml: firmware/gameday-2panel.yaml
           - variant: scoreboard75
             yaml: firmware/gameday-scoreboard75.yaml
+          # Its feed folder goes on the site with the others, but no
+          # installer page offers it until it has run on hardware.
+          - variant: waveshare
+            yaml: firmware/gameday-waveshare.yaml
     steps:
       - uses: actions/checkout@v7
       # On the beta branch this is also the beta channel for panels with

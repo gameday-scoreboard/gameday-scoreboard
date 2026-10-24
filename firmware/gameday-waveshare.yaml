@@ -1,0 +1,12 @@
+# Game Day Scoreboard for a HUB75 matrix on the Waveshare ESP32-S3-RGB-Matrix
+# (waveshare pinout). Same firmware as gameday.yaml, which targets the
+# MoonHub75 pinout; only the controller package differs. Built in CI but not
+# published to the installer until it has run on hardware.
+substitutions:
+  variant: "waveshare"
+  # Bench target is one 128x64 panel, so boot (and Factory Reset) as 128 wide.
+  default_panel_cols: "2"
+
+packages:
+  controller: !include controllers/waveshare.yaml
+  common: !include gameday-common.yaml
