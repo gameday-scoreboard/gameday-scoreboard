@@ -276,17 +276,18 @@ static void test_event_live() {
   // has no room, so its ticker carries them
   TickerOptions wide;
   CHECK_EQ(status_text(dal, wide, "Sun 7:20 PM"),
-           std::string("Sun 7:20 PM | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | "
-                       "Lambeau Field"));
+           std::string("Week 6 | Sun 7:20 PM | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | "
+                       "Love 1,408 yds 10 TD | 56F Clear at Lambeau Field"));
   TickerOptions narrow;
   narrow.records = true;
   CHECK_EQ(status_text(dal, narrow, "Sun 7:20 PM"),
-           std::string("Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | Prescott 1,381 yds 9 TD | "
-                       "Love 1,408 yds 10 TD | Lambeau Field"));
+           std::string("Week 6 | Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | "
+                       "Prescott 1,381 yds 9 TD | Love 1,408 yds 10 TD | 56F Clear at Lambeau Field"));
   TickerOptions no_leaders = narrow;
   no_leaders.leaders = false;
   CHECK_EQ(status_text(dal, no_leaders, "Sun 7:20 PM"),
-           std::string("Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | Lambeau Field"));
+           std::string("Week 6 | Sun 7:20 PM | DAL 2-3, GB 3-2 | GB -1.5 | O/U 53.5 | NBC | "
+                       "56F Clear at Lambeau Field"));
   GameSnapshot gb;
   CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 9, gb, "401873007"));
   CHECK_EQ(gb.team_leader, std::string("Love 1,408 yds 10 TD"));
@@ -1604,7 +1605,16 @@ static void test_mlb_pre_post() {
   CHECK_EQ(p.game_name, std::string("NLDS - Game 4"));
   CHECK(pre.rfind("NLDS - Game 4 | Today 10:00 PM | MIL leads series 2-1 | MIL R. Gasser vs SD W. Buehler | SD -112 | ",
                   0) == 0);
-  CHECK(pre.find(" | FS1 | Petco Park") != std::string::npos);
+  // Each side's home run leader, with the RBIs when he leads those too, then
+  // the forecast at an open-air park
+  CHECK_EQ(p.team_leader, std::string("Bauers 26 HR"));
+  CHECK_EQ(p.opp_leader, std::string("Machado 30 HR 91 RBI"));
+  CHECK(pre.find(" | FS1 | Bauers 26 HR | Machado 30 HR 91 RBI | 82F Mostly clear at Petco Park") !=
+        std::string::npos);
+  TickerOptions no_leaders;
+  no_leaders.leaders = false;
+  CHECK(status_text(p, no_leaders, "Today 10:00 PM").find(" | FS1 | 82F Mostly clear at Petco Park") !=
+        std::string::npos);
 
   GameSnapshot f = mlb_event("fixtures/event_mlb_final.json", kWhiteSox);
   CHECK(f.state == GameState::POST);
@@ -2324,6 +2334,16 @@ static void test_nba_pre_post() {
   narrow.records = true;
   CHECK_EQ(status_text(p, narrow, ""), std::string("10/7 - 10:00 PM EDT | POR 0-0, GS 1-1 | Moda Center"));
   CHECK_EQ(basketball_series(p), std::string(""));
+  // A preseason game lists no leaders; a regular-season one lists points per
+  // game, and an arena has no forecast
+  CHECK_EQ(p.team_leader, std::string(""));
+  GameSnapshot m = hoops_event("fixtures/event_nba_pre_leaders.json", 14);  // MIA at CHA
+  CHECK_EQ(m.team_leader, std::string("Antetokounmpo 35.0 PPG"));
+  CHECK_EQ(m.opp_leader, std::string("Allen 21.0 PPG"));
+  CHECK_EQ(m.weather, std::string(""));
+  CHECK_EQ((int) m.week, 0);
+  CHECK_EQ(status_text(m, no_odds, ""),
+           std::string("10/24 - 6:00 PM EDT | Antetokounmpo 35.0 PPG | Allen 21.0 PPG | Spectrum Center"));
 
   GameSnapshot f = hoops_event("fixtures/event_nba_final.json", kPacers);
   CHECK(f.state == GameState::POST);
@@ -2581,6 +2601,70 @@ static void test_nhl_live() {
   CHECK_EQ(clock_text(ot2), std::string("12:00 3OT"));
 }
 
+// The pre-game ticker's week, forecast and leaders, and what keeps them out.
+static void test_pregame_extras() {
+  // RUTG at NU on 2026-10-24: ESPN sent "33" as the forecast's words and
+  // "Clear" as its condition id
+  GameSnapshot nu;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_pre_weather.json"), Sport::FOOTBALL, 77, nu, "401858498"));
+  CHECK(nu.state == GameState::PRE);
+  CHECK_EQ((int) nu.week, 8);
+  CHECK_EQ(nu.weather, std::string("54F Clear"));
+  CHECK_EQ(nu.team_leader, std::string("Chiles 1,398 yds 9 TD"));
+  CHECK_EQ(nu.opp_leader, std::string("Lonergan 1,066 yds 10 TD"));
+  TickerOptions o;
+  o.odds = false;
+  CHECK_EQ(status_text(nu, o, "Sat 2:30 PM"),
+           std::string("Week 8 | Sat 2:30 PM | Chiles 1,398 yds 9 TD | Lonergan 1,066 yds 10 TD | 54F Clear at Ryan Field"));
+  // A named game leads instead of the week, and a venue that repeats the
+  // name leaves the forecast on its own
+  GameSnapshot bowl = nu;
+  bowl.game_name = bowl.venue = "Rose Bowl";
+  CHECK_EQ(espn::detail::pregame_name(bowl), std::string("Rose Bowl"));
+  CHECK_EQ(espn::detail::venue_line(bowl), std::string("54F Clear"));
+  bowl.weather.clear();
+  CHECK_EQ(espn::detail::venue_line(bowl), std::string(""));
+  // A dome's forecast is left out (ATL's indoor stadium, "Sunny" in the feed)
+  GameSnapshot atl;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre.json"), Sport::FOOTBALL, 1, atl));
+  CHECK_EQ(atl.weather, std::string(""));
+  CHECK_EQ((int) atl.week, 6);
+  // Once the game is on: no week, forecast or leaders
+  GameSnapshot live;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, live, "401871053"));
+  CHECK_EQ((int) live.week, 0);
+  CHECK_EQ(live.weather, std::string(""));
+  GameSnapshot top = mlb_event("fixtures/event_mlb_top.json", kBraves);
+  CHECK_EQ(top.team_leader, std::string(""));
+  CHECK_EQ(top.opp_leader, std::string(""));
+  // A postseason game has no week
+  CHECK_EQ((int) mlb_event("fixtures/event_mlb_pre.json", kBrewers).week, 0);
+
+  CHECK_EQ(espn::detail::stat_leader("G. Antetokounmpo", "35.0", "PPG"), std::string("Antetokounmpo 35.0 PPG"));
+  CHECK_EQ(espn::detail::stat_leader("M. Penix Jr.", "3", "pts"), std::string("Penix Jr. 3 pts"));
+  CHECK_EQ(espn::detail::stat_leader("C. McDavid", "0", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::stat_leader("C. McDavid", "0.0", "PPG"), std::string(""));
+  CHECK_EQ(espn::detail::stat_leader("C. McDavid", "--", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::stat_leader("C. McDavid", "1.2.3", "PPG"), std::string(""));
+  CHECK_EQ(espn::detail::stat_leader("C. McDavid", "", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::stat_leader("", "9", "pts"), std::string(""));
+
+  // The forecast's words and temperature, and what makes them unusable
+  auto wx = [](const char *json) {
+    JsonDocument d;
+    deserializeJson(d, json);
+    return espn::detail::weather_text(d.as<JsonObjectConst>());
+  };
+  CHECK_EQ(wx(R"({"temperature":76,"displayValue":"Cloudy","conditionId":"7"})"), std::string("76F Cloudy"));
+  CHECK_EQ(wx(R"({"temperature":-4,"displayValue":"Snow","conditionId":"22"})"), std::string("-4F Snow"));
+  CHECK_EQ(wx(R"({"temperature":71.6,"displayValue":"7","conditionId":"7"})"), std::string("72F"));
+  CHECK_EQ(wx(R"({"temperature":"hot","displayValue":"Sunny"})"), std::string(""));
+  CHECK_EQ(wx(R"({"displayValue":"Sunny"})"), std::string(""));
+  CHECK_EQ(wx(R"({"temperature":400,"displayValue":"Sunny"})"), std::string(""));
+  CHECK_EQ(wx(R"({"temperature":80,"displayValue":"Mostly sunny with a chance of afternoon thunderstorms"})"),
+           std::string("80F Mostly sunny with a chance of"));
+}
+
 static void test_nhl_pre_post() {
   GameSnapshot p = nhl_event("fixtures/event_nhl_pre.json", kOilers);
   CHECK(p.state == GameState::PRE);
@@ -2590,12 +2674,13 @@ static void test_nhl_pre_post() {
   CHECK_EQ(p.tv, std::string("ESPN+"));
   TickerOptions o;
   CHECK_EQ(status_text(p, o, "Today 10:00 PM"),
-           std::string("Today 10:00 PM | EDM -135 | O/U 6.5 | ESPN+ | Honda Center"));
+           std::string("Today 10:00 PM | EDM -135 | O/U 6.5 | ESPN+ | McDavid 9 pts | Carlsson 5 pts | Honda Center"));
   TickerOptions no_odds;
   no_odds.odds = false;
-  CHECK_EQ(status_text(p, no_odds, ""), std::string("10/7 - 10:00 PM EDT | Honda Center"));
+  CHECK_EQ(status_text(p, no_odds, ""), std::string("10/7 - 10:00 PM EDT | McDavid 9 pts | Carlsson 5 pts | Honda Center"));
   TickerOptions narrow = no_odds;
   narrow.records = true;
+  narrow.leaders = false;
   CHECK_EQ(status_text(p, narrow, ""), std::string("10/7 - 10:00 PM EDT | EDM 2-0-1, ANA 2-0-0 | Honda Center"));
 
   // Tonight's final, and the win splash from the intermission document of the same game
@@ -5950,6 +6035,7 @@ int main() {
   test_nhl_team();
   test_nhl_live();
   test_nhl_pre_post();
+  test_pregame_extras();
   test_nhl_splash();
   test_nba_urls();
   test_nba_team();

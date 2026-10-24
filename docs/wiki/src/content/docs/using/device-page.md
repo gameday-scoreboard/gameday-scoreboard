@@ -83,6 +83,10 @@ Until then the **Odds, TV and win chance** switch is called **Pre-game odds and 
 
 The Ticker card has a **Pre-game season leaders** switch, on to start: before kickoff in football, each team's passing leader with yards and touchdowns. It shows only on a panel that follows football. See [The ticker](/using/ticker/).
 
+:::note[Coming in the next release]
+The switch also covers each team's season leader in baseball (home runs), basketball (points per game) and hockey (points), and shows on a panel that follows any of those sports or football.
+:::
+
 The Favorites card has two more switches: **Jump to the action** (off to start) moves the panel to another favorite's game at its big moment, then back, and **Score banner** (on to start) shows another favorite's score along the bottom for five seconds. See [Favorite teams](/using/favorites/#when-a-game-is-on).
 
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).

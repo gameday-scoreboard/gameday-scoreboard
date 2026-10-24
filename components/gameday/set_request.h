@@ -188,7 +188,7 @@ enum class SetKind : uint8_t {
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
   FAVTAKE,   // on, Live games locks onto a favorite's game while it is live (favorites.h)
-  LEADERS,   // on, football's season leaders in the pre-game ticker
+  LEADERS,   // on, the season leaders in the pre-game ticker
   NIGHT,        // on, the night schedule (night.h)
   NIGHT_START,  // value, minutes after midnight
   NIGHT_END,    // value, minutes after midnight

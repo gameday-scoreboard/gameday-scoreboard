@@ -20,7 +20,17 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", as football's does with a bowl or playoff name.
 :::
 
-Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds. On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
+:::note[Coming in the next release]
+Before a regular-season football game the ticker starts with the week, like "Week 8". Before any game at an open-air venue it ends with ESPN's forecast for it, like "76F Cloudy at Hard Rock Stadium". Indoor venues and games with no forecast keep just the venue.
+:::
+
+Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds.
+
+:::note[Coming in the next release]
+Baseball, basketball and hockey get season leaders too, after the odds: the home run leader in baseball, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI"; points per game in basketball, like "Allen 21.0 PPG"; and points in hockey, like "McDavid 9 pts".
+:::
+
+On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
 
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
 
@@ -47,6 +57,10 @@ Until then the device page calls this switch **Pre-game odds and TV**. It's the 
 :::
 
 A **Pre-game season leaders** switch, on to start, adds football's passing leaders before kickoff. Like the situation switches, it shows only on a panel that follows football.
+
+:::note[Coming in the next release]
+The **Pre-game season leaders** switch covers the baseball, basketball and hockey leaders too, and shows on a panel that follows any of those sports or football.
+:::
 
 These three, Down and distance, Count and at-bat and Match stats, are the game situation for their sport. Hockey and basketball have no situation line, so they have no switch of their own. The card only shows the switches for sports your panel follows, from your team, your favorites and the leagues you picked for Live games, so turning off football's line leaves baseball's count alone.
 

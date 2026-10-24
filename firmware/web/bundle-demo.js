@@ -159,7 +159,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
           <div class="ctl"><label>Odds, TV and win chance<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Odds, TV and win chance"></button></div>
-          <div class="ctl" data-sport="football"><label>Pre-game season leaders<small>Football: before kickoff, each team's passing leader with yards and touchdowns.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
+          <div class="ctl" data-sport="football baseball basketball hockey"><label>Pre-game season leaders<small>Before the start, each team's season leader: passing in football, home runs in baseball, points in basketball and hockey.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -1001,11 +1001,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // Live games leagues picked by hand), all of them before anything is
     // picked. The automatic Live list is no help here: it never comes back
     // empty (NFL on a new panel). Hockey and basketball have no situation
-    // line, so no switch.
+    // line, so no switch of their own; a switch for several sports lists them.
     const sports = new Set([S.team].concat(S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
     document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
-      row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
+      row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = S.countdown === undefined;

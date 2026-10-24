@@ -20,6 +20,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
+| `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 
@@ -69,6 +70,7 @@ NBA (preseason) and WNBA (semifinals), recorded 2026-10-07 from
 | `event_nba_clock.json` | 401908620 MIL @ OKC, 12.3 1st (tenths, no minutes) |
 | `event_nba_end.json` | 401908620, End of 1st |
 | `event_nba_pre.json` | 401914129 GS @ POR, pre-game with odds |
+| `event_nba_pre_leaders.json` | 401909853 MIA @ CHA, regular-season pre-game with each side's points, rebounds and assists per game leaders (recorded 2026-10-24) |
 | `event_wnba_live.json` | 401918297 NY @ ATL, 4.5 2nd, ATL leads series 1-0 |
 | `event_wnba_half.json` | 401918297, Halftime |
 | `event_wnba_ot.json` | 401918297, 20.8 OT |
