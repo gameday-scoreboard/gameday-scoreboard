@@ -22,6 +22,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- A panel with a long list of favorite teams no longer restarts while it looks up the list after a change, and no longer runs so short of memory after a restart that it stops reading scores for a minute at a time.
 - A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.
 - Settings are saved on the panel the moment you change them, from the device page, the app, Home Assistant or the remote. Unplugging the panel within a minute of picking a team, a favorite, the night schedule or any other setting no longer loses the change, and a settings restore is saved at once too.
 - A panel that restarts during the night schedule's hours, as it does for the nightly update, comes back at its night brightness or with its screen off, instead of at full brightness for its first few seconds. After a power cut the schedule starts the moment the panel has the time.

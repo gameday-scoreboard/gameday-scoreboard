@@ -4064,13 +4064,13 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     o["neutral"] = u.neutral;
     o["tv"] = u.tv;
   }
-  std::string out;
+  PsString out;
   serializeJson(doc, out);
   std::lock_guard<std::mutex> lock(this->state_mutex_);
   this->state_json_ = std::move(out);
 }
 
-std::string GamedayComponent::current_state_json_() {
+PsString GamedayComponent::current_state_json_() {
   std::lock_guard<std::mutex> lock(this->state_mutex_);
   return this->state_json_;
 }
@@ -4434,15 +4434,16 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   StringRef url = request->url_to(buf);
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
-    std::string body = this->current_state_json_();
+    PsString body = this->current_state_json_();
     // The cached document is rebuilt on changes; the health and Wi-Fi
     // numbers move all the time, so they go in fresh at its end.
     if (body.size() >= 2 && body.back() == '}') {
+      std::string health = this->health_json_(), wifi = this->wifi_json_();
       body.pop_back();
       body += ",\"health\":";
-      body += this->health_json_();
+      body.append(health.data(), health.size());
       body += ",\"wifi\":";
-      body += this->wifi_json_();
+      body.append(wifi.data(), wifi.size());
       body += '}';
     }
     request->send(200, "application/json", body.c_str());
@@ -4799,10 +4800,10 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_GET) {
     // From the cached state document, built on the main loop, so nothing
     // here reads a setting while the loop changes it.
-    std::string state = this->current_state_json_();
+    PsString state = this->current_state_json_();
     JsonDocument in(::espn::detail::json_allocator());
     // Before the first build the document is "{}", and a backup of it would be empty.
-    if (deserializeJson(in, state) != DeserializationError::Ok || in["mode"].isNull()) {
+    if (deserializeJson(in, state.data(), state.size()) != DeserializationError::Ok || in["mode"].isNull()) {
       request->send(500, "application/json", "{\"error\":\"not ready\"}");
       return;
     }
@@ -4815,7 +4816,7 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
     // The live mask isn't in the state (its live list is what the panel scans
     // now); one 16-bit read, so the web server can take it as it is.
     ::espn::settings_from_state(in.as<JsonObjectConst>(), this->prefs7_.live_mask, brightness, scroll, out);
-    std::string body;
+    PsString body;  // a few KB with 16 favorites and their playlists
     serializeJson(out, body);
     request->send(200, "application/json", body.c_str());
     return;
@@ -4847,8 +4848,8 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
         // server's task, and the main loop owns nick_.
         JsonDocument filter(::espn::detail::json_allocator()), state(::espn::detail::json_allocator());
         filter["nick"] = true;
-        std::string json = this->current_state_json_();
-        if (deserializeJson(state, json, DeserializationOption::Filter(filter)) == DeserializationError::Ok)
+        PsString json = this->current_state_json_();
+        if (deserializeJson(state, json.data(), json.size(), DeserializationOption::Filter(filter)) == DeserializationError::Ok)
           target.nick = state["nick"] | "";
       }
       target.fav_max = FAV_MAX;

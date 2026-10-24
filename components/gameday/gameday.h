@@ -130,7 +130,7 @@ struct UpdateFields {
 
 enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, PLAYLIST };
 
-// PSRAM text (psram.h): the message card's list.
+// PSRAM text (psram.h): the message card's list, the state document.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
 
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
@@ -425,7 +425,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Main loop: an import checked by handle_settings_.
   void apply_settings_(const ::espn::SettingsImport &in);
   void rebuild_state_(const UpdateFields *f);  // main loop only
-  std::string current_state_json_();
+  PsString current_state_json_();
   // The "health" object, read live on each GET /gameday/state (HTTP task).
   std::string health_json_();
   ::espn::Restart start_reason_{::espn::Restart::NONE};
@@ -495,7 +495,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int8_t wifi_rssi_{0};  // the last sample
   uint32_t wifi_reason_seen_{0};  // wifi_reason_seq when the link last came up
   std::mutex state_mutex_;
-  std::string state_json_{"{}"};
+  // GET /gameday/state, in PSRAM like each request's copy of it: with 16
+  // favorites it is 6 KB or more, and a copy in internal RAM grown for the
+  // health numbers needed a block twice that while the favorites were read.
+  PsString state_json_{"{}"};
   UpdateFields last_fields_;
   web_server_base::WebServerBase *base_{nullptr};
   panel_layout::PanelLayout *panels_{nullptr};
