@@ -1120,7 +1120,7 @@ test("favorites and switches keep each tap through a slow re-read", async ({ pag
   expect([st.opp, st.down]).toEqual([false, false]);
 });
 
-test("pre-game leaders switch: football panels only, posts leaders", async ({ page, request }) => {
+test("pre-game leaders switch: every sport but soccer, posts leaders", async ({ page, request }) => {
   const sw = page.getByRole("switch", { name: "Pre-game season leaders", exact: true });
   await reset(request, {});
   await page.goto("/");
@@ -1130,8 +1130,13 @@ test("pre-game leaders switch: football panels only, posts leaders", async ({ pa
   await expect(sw).not.toBeChecked();
   expect((await deviceState(request)).leaders).toBe(false);
 
-  // No football team or favorite: no football leaders to turn off.
+  // Hockey has leaders too.
   await reset(request, { team: { l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, favs: [{}, {}, {}, {}] });
+  await page.reload();
+  await expect(sw).toBeVisible();
+
+  // Soccer has none to turn off.
+  await reset(request, { team: { l: "epl", id: 359, abbr: "ARS", name: "Arsenal" }, favs: [{}, {}, {}, {}] });
   await page.reload();
   await expect(sw).toBeHidden();
 });
@@ -1163,10 +1168,11 @@ test("situation switches: one per sport the panel follows, each posting its own 
   const st = await deviceState(request);
   expect([st.down, st.count, st.match]).toEqual([true, false, false]);
 
-  // Hockey only: no situation line, so no switch.
+  // Hockey only: no situation line, so no situation switch; the leaders switch stays.
   await reset(request, { team: { l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, favs: [{}, {}, {}, {}] });
   await page.reload();
-  await expect(page.locator("#tickerCtls .ctl[data-sport]:visible")).toHaveCount(0);
+  await expect(page.locator("#tickerCtls .ctl[data-sport]:visible")).toHaveCount(1);
+  await expect(sw("Pre-game season leaders")).toBeVisible();
   await expect(sw("Last play")).toBeVisible();
 
   // Live games leagues picked by hand count too.

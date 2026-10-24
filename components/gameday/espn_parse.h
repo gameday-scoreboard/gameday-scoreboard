@@ -132,9 +132,15 @@ struct GameSnapshot {
   uint8_t team_lines[kLinesMax]{}, opp_lines[kLinesMax]{};
   uint8_t team_line_count{0}, opp_line_count{0};
   std::string headline;  // ESPN's story line on a final, "" when it has none
-  // Football's season leader for each side, ready for the pre-game ticker
-  // ("Prescott 1,381 yds 9 TD"); "" when ESPN lists none.
+  // Each side's season leader before the start, ready for the pre-game
+  // ticker: "Prescott 1,381 yds 9 TD", "Machado 30 HR 91 RBI", "Allen 21.0
+  // PPG", "McDavid 9 pts". "" when ESPN lists none, and once the game starts.
   std::string team_leader, opp_leader;
+  // Before the start: the regular-season week (football, 0 when ESPN gives
+  // none) and the forecast at an outdoor venue ("76F Cloudy", "" indoors or
+  // when the event has none).
+  uint8_t week{0};
+  std::string weather;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};
@@ -231,7 +237,7 @@ struct TickerOptions {
   bool soccer_stats{true};    // goals, cards, possession and shots
   bool last_play{true};
   bool odds{true};
-  bool leaders{true};  // the season leaders before kickoff (football)
+  bool leaders{true};  // each side's season leader before the start
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -401,10 +407,22 @@ std::string pregame_records(const GameSnapshot &s);
 // "D. Prescott" + "129/192, 1381 YDS, 9 TD, 3 INT" gives "Prescott 1,381 yds
 // 9 TD". "" when the line has no yards.
 std::string leader_line(const std::string &short_name, const std::string &display_value);
+// Another sport's leader from ESPN's short name, the stat ("35.0", "42") and
+// its unit: "Antetokounmpo 35.0 PPG". "" when the stat isn't a number above 0.
+std::string stat_leader(const std::string &short_name, const std::string &value, const char *unit);
+// The pre-game ticker's first part: the game's name ("Rose Bowl", "NLCS -
+// Game 2"), else the week ("Week 8"), else "".
+std::string pregame_name(const GameSnapshot &s);
+// The pre-game ticker's last part: the forecast and the venue, "76F Cloudy at
+// Hard Rock Stadium". A venue that repeats the game's name ("Rose Bowl") is
+// left out.
+std::string venue_line(const GameSnapshot &s);
 // The pre-game betting parts when the ticker shows odds: the line, the
 // over/under and the TV listing. Soccer builds its own line.
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds);
+// Both sides' season leaders before the start, when the ticker shows them.
+void add_leaders(std::string &out, const GameSnapshot &s, const TickerOptions &o);
 // The last play, cut to 160 characters so one long description doesn't fill
 // the ticker.
 void add_last_play(std::string &out, std::string play);

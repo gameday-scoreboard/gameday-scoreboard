@@ -22,6 +22,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- The pre-game ticker shows each team's season leader in baseball, basketball and hockey too, like "Machado 30 HR 91 RBI", "Allen 21.0 PPG" or "McDavid 9 pts", under the same **Pre-game season leaders** switch as football's. A regular-season football game's ticker starts with the week, like "Week 8", and a game at an open-air venue ends with ESPN's forecast, like "76F Cloudy at Hard Rock Stadium".
 - A panel with a long list of favorite teams no longer restarts while it looks up the list after a change, and no longer runs so short of memory after a restart that it stops reading scores for a minute at a time.
 - A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.
 - Settings are saved on the panel the moment you change them, from the device page, the app, Home Assistant or the remote. Unplugging the panel within a minute of picking a team, a favorite, the night schedule or any other setting no longer loses the change, and a settings restore is saved at once too.

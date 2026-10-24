@@ -269,7 +269,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_down_distance() const { return this->flag_(FLAG_DOWN); }
   bool ticker_baseball_count() const { return (this->prefs8_.ticker & TICK8_COUNT) != 0; }
   bool ticker_soccer_stats() const { return (this->prefs8_.ticker & TICK8_MATCH) != 0; }
-  // The season leaders in the pre-game ticker (football). Stored as an "off"
+  // The season leaders in the pre-game ticker (every sport but soccer). Stored as an "off"
   // bit so panels from before the setting keep showing them.
   bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
@@ -576,7 +576,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   } __attribute__((packed));
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
-  // Football's season leaders before kickoff, on by default: set means off.
+  // Season leaders before the start, on by default: set means off.
   static constexpr uint8_t TICK8_NOLEADERS = 4;
   static constexpr uint8_t LIVE8_RANDOM = 1;  // "Pick the best game" off: a random game, as before
   void set_ticker8_(uint8_t f, bool on);

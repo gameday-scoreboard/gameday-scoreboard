@@ -19,6 +19,8 @@ The next-game card shows both logos, your team on the left, with the records und
 
 :::note[Coming in the next release]
 Before a playoff game the ticker starts with the round, like "NLCS - Game 2" or "World Series - Game 1".
+
+After the odds the ticker shows each team's home run leader for the season, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI". **Pre-game season leaders** on the device page turns them off. At an open-air ballpark the ballpark comes with ESPN's forecast for the game, like "82F Mostly clear at Petco Park"; a ballpark with a roof shows just its name.
 :::
 
 MLB has no Up next list on the device page: a team's season schedule is too large for the panel to read.

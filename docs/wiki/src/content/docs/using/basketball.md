@@ -13,6 +13,8 @@ The next-game card shows both logos, your team on the left, with the records und
 
 :::note[Coming in the next release]
 Before a playoff game the ticker starts with the round, like "East 1st Round - Game 2".
+
+After the odds the ticker shows each team's scoring leader for the season in points per game, like "Allen 21.0 PPG", once ESPN has one (it lists none in the preseason). **Pre-game season leaders** on the device page turns them off.
 :::
 
 Basketball teams have no Up next list on the device page: their season schedules are too large for the panel to read.
