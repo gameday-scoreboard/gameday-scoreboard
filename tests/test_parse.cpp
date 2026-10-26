@@ -1017,6 +1017,55 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
 }
 
+// The label counts days in local time and the panel redraws it when
+// local_day changes (gameday.cpp, day_tick_). A London panel still said
+// "Tomorrow 1:30 PM" at midnight on 10/25, the night the clocks went back.
+// Each zone: a kickoff, the first instant of its local day, and the label
+// either side of that instant.
+static void test_kickoff_midnight() {
+  const char *was = getenv("TZ");
+  std::string saved = was != nullptr ? was : "";
+  struct Case {
+    const char *tz, *kick, *midnight, *before, *after;
+  } cases[] = {
+      // London: the clocks go back at 2 AM BST, after that midnight.
+      {"GMT0BST,M3.5.0/1,M10.5.0", "2026-10-25T13:30Z", "2026-10-24T23:00Z", "Tomorrow 1:30 PM", "Today 1:30 PM"},
+      {"GMT0BST,M3.5.0/1,M10.5.0", "2026-10-26T19:00Z", "2026-10-26T00:00Z", "Tomorrow 7:00 PM", "Today 7:00 PM"},
+      // US Central, falling back and springing forward.
+      {"CST6CDT,M3.2.0,M11.1.0", "2026-11-01T18:00Z", "2026-11-01T05:00Z", "Tomorrow 12:00 PM", "Today 12:00 PM"},
+      {"CST6CDT,M3.2.0,M11.1.0", "2027-03-14T17:00Z", "2027-03-14T06:00Z", "Tomorrow 12:00 PM", "Today 12:00 PM"},
+      // Chile springs forward at midnight itself: Sunday starts at 1 AM.
+      {"<-04>4<-03>,M9.1.6/24,M4.1.6/24", "2026-09-06T18:00Z", "2026-09-06T04:00Z", "Tomorrow 3:00 PM",
+       "Today 3:00 PM"},
+  };
+  auto local = [](int64_t epoch) {
+    time_t t = (time_t) epoch;
+    struct tm out{};
+    localtime_r(&t, &out);
+    return out;
+  };
+  for (const auto &c : cases) {
+    setenv("TZ", c.tz, 1);
+    tzset();
+    int64_t mid = parse_iso8601_z(c.midnight);
+    struct tm kick = local(parse_iso8601_z(c.kick));
+    struct tm before = local(mid - 1), after = local(mid);
+    CHECK_EQ(kickoff_label(kick, before), std::string(c.before));
+    CHECK_EQ(kickoff_label(kick, after), std::string(c.after));
+    CHECK(after.tm_hour <= 1 && after.tm_min == 0);
+    // The redraw comes at that instant, once: not in the evening before, and
+    // not again when the clocks change later in the night.
+    CHECK(local_day(before) != local_day(after));
+    CHECK(local_day(local(mid - 6 * 3600)) == local_day(before));
+    CHECK(local_day(local(mid + 6 * 3600)) == local_day(after));
+  }
+  if (saved.empty())
+    unsetenv("TZ");
+  else
+    setenv("TZ", saved.c_str(), 1);
+  tzset();
+}
+
 static void test_upcoming() {
   std::vector<Upcoming> up;
   CHECK(parse_upcoming_str(slurp("fixtures/schedule_nfl_dal.json"), 6, 3, up));
@@ -6034,6 +6083,7 @@ int main() {
   test_soccer_cups();
   test_lookahead();
   test_tbd_kickoff();
+  test_kickoff_midnight();
   test_nhl_urls();
   test_nhl_team();
   test_nhl_live();

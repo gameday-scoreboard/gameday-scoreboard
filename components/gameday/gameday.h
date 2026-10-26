@@ -777,6 +777,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int64_t custom_start_() const;
   ::espn::CountdownCard countdown_shown_{::espn::CountdownCard::NONE};
   uint32_t countdown_tick_ms_{0};
+  // A new local day redraws the board, whose kickoff labels ("Tomorrow 1:30
+  // PM") count from the day it was drawn on (espn_parse.h, local_day).
+  void day_tick_();
+  int64_t drawn_day_{0};
   void reset_game_();
   // Clears the board and scans again now, for a change in what the mode
   // follows. The caller starts the boot screen hold first.

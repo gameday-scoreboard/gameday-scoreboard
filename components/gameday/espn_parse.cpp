@@ -649,9 +649,7 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
   // -1: no kickoff time to show.
   if (kick_local.tm_mon < 0 || kick_local.tm_mon > 11 || kick_local.tm_wday < 0 || kick_local.tm_wday > 6)
     return "";
-  int64_t now_day = (int64_t) now_local.tm_year * 366 + now_local.tm_yday;
-  int64_t kick_day = (int64_t) kick_local.tm_year * 366 + kick_local.tm_yday;
-  int64_t diff = kick_day - now_day;
+  int64_t diff = local_day(kick_local) - local_day(now_local);
   std::string when;
   if (diff == 0)
     when = "Today";
