@@ -3348,6 +3348,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     if (this->msg_shown_)
       this->msg_show_("");
   }
+  if (this->clock_set_())
+    this->drawn_day_ = ::espn::local_day(this->time_->now().to_c_tm());
   this->last_fields_ = f;
   this->rebuild_state_(&f);
   if (this->hold_for_logos_(f))
@@ -3545,6 +3547,23 @@ void GamedayComponent::countdown_tick_() {
   if (!this->clock_set_())
     return;
   if (this->countdown_card_((int64_t) this->time_->timestamp_now()) != this->countdown_shown_)
+    this->emit_({});
+  this->day_tick_();
+}
+
+// Nothing else redraws at midnight: My team can go 15 minutes between reads
+// before a far kickoff, and a favorite hours. A game under way has no kickoff
+// label, and is redrawn every read anyway.
+void GamedayComponent::day_tick_() {
+  if (this->drawn_day_ == 0 || ::espn::local_day(this->time_->now().to_c_tm()) == this->drawn_day_)
+    return;
+  if (this->demo_playing_() || (this->game_.valid && this->game_.state == GameState::IN))
+    return;
+  ESP_LOGI(TAG, "New local day, redrawing the kickoff labels");
+  // The finals rotation keeps its card's ticker, so the card is put up again.
+  if (this->recap_on_ && this->live_mode_())
+    this->recap_show_();
+  else
     this->emit_({});
 }
 
