@@ -494,6 +494,17 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
 #endif
   ESP_LOGW(TAG, "Timed out while connecting to Wi-Fi network");
   // GAMEDAY: begin
+  this->handover_failed_ = true;
+  // After "Reset Wi-Fi" the panel had a blank network, which is what keeps it
+  // in setup (components/saved_networks). Put that back rather than clearing
+  // the list: Bluetooth and the hotspot stay up, the app can send the name
+  // and password again, and gd_setup_window takes the panel back to its
+  // saved networks once the owner has gone.
+  if (this->setup_mode_) {
+    ESP_LOGI(TAG, "Staying in setup for another try");
+    wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+    return;
+  }
   // Go back to the network the panel had, which is still the one saved in
   // flash. Upstream clears the list here, which left a panel with a wrong
   // password offline until a power cycle and kept the offline

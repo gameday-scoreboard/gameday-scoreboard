@@ -83,6 +83,12 @@ class ImprovBLEComponent final : public Component,
   // Advertised so the app can tell a panel that lost its network from a new one.
   // Set from on_boot and on every Wi-Fi connect.
   void set_has_saved_network(bool saved);
+  // The boot after "Reset Wi-Fi": a failed handover puts the blank network
+  // back, so the panel stays in setup with Bluetooth up for another try
+  // instead of joining a saved network (which turns Bluetooth off).
+  void set_setup_mode(bool setup) { this->setup_mode_ = setup; }
+  // A handover from the app timed out this boot (gd_setup_window).
+  bool handover_failed() const { return this->handover_failed_; }
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }
@@ -114,6 +120,8 @@ class ImprovBLEComponent final : public Component,
   wifi::WiFiAP restore_sta_;
   wifi::WiFiAP last_connected_sta_;  // see remember_sta()
   bool has_saved_network_{false};    // see set_has_saved_network()
+  bool setup_mode_{false};           // see set_setup_mode()
+  bool handover_failed_{false};      // see handover_failed()
   // GAMEDAY: end
 
   BLEService *service_{nullptr};

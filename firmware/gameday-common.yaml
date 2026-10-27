@@ -452,26 +452,34 @@ script:
   # back on the saved networks, the same as unplugging it, which the setup
   # screen offers. on_connect stops this, so finishing setup on a network ends
   # it. Someone still at it over Bluetooth or on the hotspot at 15 minutes
-  # gets up to 10 more.
+  # gets up to 10 more. A wrong name or password from the app keeps the panel
+  # in setup for another try (components/improv_ble); a minute after the
+  # owner leaves the app and the hotspot, it goes back to the saved networks
+  # (components/saved_networks/setup_window.h).
   - id: gd_setup_window
     then:
-      - delay: 15min
       - while:
           condition:
-            lambda: |-
-              const bool app =
-                  (esp32_ble_server::global_ble_server != nullptr &&
-                   esp32_ble_server::global_ble_server->get_connected_client_count() > 0) ||
-                  (improv_ble::global_improv_component != nullptr &&
-                   improv_ble::global_improv_component->get_improv_state() == improv::STATE_PROVISIONING);
-              wifi_sta_list_t hotspot{};
-              const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
-              return (app || on_hotspot) && millis() < 25 * 60 * 1000;
+            lambda: return true;
           then:
             - delay: 10s
-      - lambda: |-
-          ESP_LOGW("wifi", "Setup not finished in 15 minutes, restarting onto the saved networks");
-          App.safe_reboot();
+            - lambda: |-
+                static saved_networks::SetupWindow window;
+                auto *imp = improv_ble::global_improv_component;
+                const bool app =
+                    (esp32_ble_server::global_ble_server != nullptr &&
+                     esp32_ble_server::global_ble_server->get_connected_client_count() > 0) ||
+                    (imp != nullptr && imp->get_improv_state() == improv::STATE_PROVISIONING);
+                wifi_sta_list_t hotspot{};
+                const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
+                const bool failed = imp != nullptr && imp->handover_failed();
+                if (!window.restart_due(millis() / 1000, app || on_hotspot, failed))
+                  return;
+                if (failed && millis() < saved_networks::SetupWindow::WINDOW_S * 1000)
+                  ESP_LOGW("wifi", "Setup from the app failed and nobody is trying again, restarting onto the saved networks");
+                else
+                  ESP_LOGW("wifi", "Setup not finished in 15 minutes, restarting onto the saved networks");
+                App.safe_reboot();
 
 captive_portal:
 
