@@ -1,4 +1,4 @@
-// Startup helpers: the saved team info a boot can start from, and how long
+// Startup helpers: the fallback team info a boot can start from, and how long
 // the boot screen waits for the first scoreboard. Pure, with no ESPHome
 // includes, so the host tests compile it directly.
 #pragma once
@@ -29,9 +29,9 @@ inline int clamp_rotate_minutes(int minutes) {
   return minutes;
 }
 
-// The team endpoint's answer for the saved team, kept in flash so a boot can
-// go straight to the scoreboard instead of reading the team endpoint (about
-// 23 KB) first. Only what the scoreboard request needs.
+// The team endpoint's answer for the fallback team (favorite #1), kept in
+// flash so a boot can go straight to the scoreboard instead of reading the
+// team endpoint (about 23 KB) first. Only what the scoreboard request needs.
 struct TeamCache {
   uint8_t league;
   uint32_t team_id;

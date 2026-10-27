@@ -128,7 +128,7 @@ struct UpdateFields {
   int64_t countdown_end{0};
 };
 
-enum class SelectType : uint8_t { TEAM, TIMEZONE, MODE, PLAYLIST };
+enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
 
 // PSRAM text (psram.h): the message card's list, the state document.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
@@ -148,7 +148,7 @@ class GamedaySelect : public select::Select, public Component {
 
  protected:
   void control(const std::string &value) override;
-  SelectType type_{SelectType::TEAM};
+  SelectType type_{SelectType::MODE};
   GamedayComponent *parent_{nullptr};
 };
 
@@ -200,7 +200,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void add_on_action_callback(std::function<void(std::string)> &&cb) {
     this->action_callbacks_.push_back(std::move(cb));
   }
-  void set_team_select(select::Select *s) { this->team_select_ = s; }
   void set_timezone_select(select::Select *s) { this->timezone_select_ = s; }
   void set_mode_select(select::Select *s) { this->mode_select_ = s; }
   void set_playlist_select(select::Select *s) { this->playlist_select_ = s; }
@@ -213,8 +212,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   }
 
   // Called by the selects and by template entities in YAML.
-  void select_team(const std::string &option);
-  void select_team_id(League league, uint32_t id);
   void select_timezone(const std::string &option);
   void select_mode(const std::string &option);
   std::string hostname() const;  // the device name, with its MAC suffix
@@ -252,8 +249,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
   // them to the demo (demo.cpp).
   void remote_number(uint8_t n);
-  // No team picked and nothing else chosen: the panel follows live games and
-  // the finals rotation, and the boot screen gives the app's QR code a turn
+  // Favorites with no favorite set: the panel follows live games and the
+  // finals rotation, and the boot screen gives the app's QR code a turn
   // every few minutes (boot.yaml, boot_app_qr_turn) until a team is picked.
   bool no_team_default() const;
   bool app_qr_turns() const { return this->no_team_default() && !this->demo_playing_(); }
@@ -389,9 +386,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) override;
 
  protected:
-  void apply_team_(const ::espn::Team &t);
-  void clear_team_();
   bool mark_setup_done_();
+  // Every mode change lands here: the page, the apps, Home Assistant, a
+  // playlist and the remote. m is a Mode.
+  void set_mode_(uint8_t m);
   void fire_action_(const std::string &name);
   void set_favorite_(uint8_t slot, uint8_t league, uint32_t id);
   // The whole list at once, in priority order (the page's favs= key).
@@ -518,9 +516,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static constexpr uint8_t FLAG_NOBOOTADDR = 128;  // skip the address flash on a configured panel's boot
   static constexpr uint8_t FLAGS_DEFAULT = FLAG_DOWN | FLAG_PLAY | FLAG_ODDS | FLAG_OPP;
 
+  // old_league and old_team_id were My team's team. Nothing reads them; they
+  // stay so the blob keeps its size and the timezone and flags still load.
   struct Prefs {
-    uint8_t league;
-    uint32_t team_id;
+    uint8_t old_league;
+    uint32_t old_team_id;
     uint8_t tz_index;
     uint8_t flags;
   } __attribute__((packed));
@@ -537,12 +537,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t lockon_minutes;
     uint16_t release_seconds;
     uint8_t collide;  // 0 = stick with the higher slot, 1 = alternate on the rotate timer
-  } __attribute__((packed));
-  // Its presence says team_id 0 means "no team" on this panel. Firmware
-  // before it saved Dallas as the team on first boot (recap.h,
-  // legacy_team_unpicked).
-  struct Prefs5 {
-    uint8_t no_team_ok;
   } __attribute__((packed));
   struct Prefs6 {
     uint8_t auto_update;  // 1 = install new releases on its own
@@ -612,10 +606,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void end_sync_batch_();
   ::espn::PrefsSyncGate sync_gate_;
   void publish_selects_();
-  void publish_team_select_(const std::string &option);
   void apply_timezone_();
-  const ::espn::Team *current_team_() const;
-  std::string team_option_() const;
+  // The team Live games shows when nothing is live: favorite #1, the first
+  // team in the list. nullptr with no favorites.
+  const ::espn::Team *fallback_team_() const { return this->fav_.empty() ? nullptr : this->fav_[0].team; }
 
   // One fetch cycle runs on its own FreeRTOS task so the display loop never
   // waits on the network. The main loop fills a Job, the worker performs the
@@ -661,7 +655,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool cup_ok{false};      // the cup's team read answered
     bool polled{false};      // a cup read polled the game it picked
     std::string done_event;  // a game seen to finish, passed over by the pick
-    bool no_lookahead{false};  // My team: a final is still lingering on the board
+    bool no_lookahead{false};  // the fallback team: a final is still lingering on the board
     int8_t lookahead{0};       // 0 not run, 1 found the next game, 2 nothing ahead, -1 a read failed
     // The finals rotation. A scan keeps the day's finals and the games still
     // to come too when asked, and a recap job reads one other day's
@@ -714,9 +708,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
                          ::espn::FinalList *finals = nullptr, ::espn::PendingList *pending = nullptr,
                          int64_t epoch = 0, bool top25 = false,
                          const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr);
-  // The mode the panel runs: the saved one, except that with no team picked
-  // My team (and Favorites with none set) runs as Live games over every
-  // league (live_leagues_).
+  // The mode the panel runs: the saved one, except that Favorites with none
+  // set runs as Live games over every league (live_leagues_).
   uint8_t effective_mode_() const {
     return this->no_team_default() ? (uint8_t) Mode::LIVE : this->prefs2_.mode;
   }
@@ -736,14 +729,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
       mask |= ::espn::recap_bit((uint8_t) l);
     return mask;
   }
-  // Mode 4 with at least one favorite set; with none it behaves like My Team.
+  // Mode 4 with at least one favorite set; with none it runs as Live games
+  // (no_team_default).
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
   uint32_t our_id_() const;  // team id the snapshot is oriented around
   std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
   uint32_t linger_ms_() const;  // how long a final stays up before the next game
-  std::string lingered_event_;  // the final the last linger ended on (My team)
+  std::string lingered_event_;  // the final the last linger ended on (Live games' fallback team)
   uint32_t linger_backoff_ms_{0};  // a longer linger on that final when no next game turned up
   // Non-football leagues without a season list find the next game in the
   // coming days' scoreboards when the team endpoint names a finished one.
@@ -787,7 +781,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void restart_board_();
   // Restarts the board when Live games now scans other leagues than before.
   bool live_leagues_changed_(const std::vector<League> &before);
-  void drop_team_placeholder_();
   // A game poll came back clean: clear the miss count and start the clock over.
   void mark_good_poll_() {
     this->misses_ = 0;
@@ -826,7 +819,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   http_request::HttpRequestComponent *http_{nullptr};
   LogoCache logos_;
   time::RealTimeClock *time_{nullptr};
-  select::Select *team_select_{nullptr};
   select::Select *timezone_select_{nullptr};
   std::vector<std::function<void(const UpdateFields &)>> callbacks_;
   std::vector<std::function<void(const ::espn::HaEvent &)>> ha_event_callbacks_;
@@ -845,7 +837,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs3 prefs3_{};
   ESPPreferenceObject pref4_;
   Prefs4 prefs4_{};
-  ESPPreferenceObject pref5_;
   ESPPreferenceObject pref6_;
   Prefs6 prefs6_{};
   // Install updates automatically (auto_update.h), run from loop().
@@ -909,7 +900,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs9 prefs9_{};
   // The select's options point into these, so they live as long as it does.
   std::vector<std::string> playlist_options_;
-  // The team endpoint's answer for the saved team (startup.h), so a boot can
+  // The team endpoint's answer for the fallback team (startup.h), so a boot can
   // skip that read and go straight to the scoreboard.
   ESPPreferenceObject team_cache_pref_;
   bool team_cache_tried_{false};     // one look per boot
@@ -989,7 +980,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool live_none_{false};         // last scan found nothing in progress
   // With nothing live, the wait until the next scan: up to the next kickoff.
   uint32_t live_rescan_ms_{2 * 60 * 1000};
-  // A live mode with nothing live: the board shows the saved team's card and
+  // A live mode with nothing live: the board shows favorite #1's card and
   // keeps scanning. The mode the owner picked does not change.
   bool live_fallback_{false};
   // Favorites take over: on, with favorites to look for, in a live mode.
@@ -1031,7 +1022,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 
   Schedule schedule_;
   uint32_t schedule_fetched_ms_{0};
-  // Soccer: the saved team's reads per competition (as Job::comps), the cup
+  // Soccer: the fallback team's reads per competition (as Job::comps), the cup
   // read due next (-1 when none) and the last game seen to finish.
   std::vector<Schedule> comps_;
   int comp_next_{-1};

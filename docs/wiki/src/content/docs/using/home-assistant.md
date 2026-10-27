@@ -11,14 +11,13 @@ Nothing about the panel needs Home Assistant. It reads ESPN, runs its own device
 
 With Home Assistant on the same network, it discovers the panel as a new ESPHome device and offers to add it. The prebuilt firmware has no API encryption key, so there is no key to enter.
 
-Picking a team or a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
+Picking a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
 
 ## What appears
 
 | Entity | What it is |
 | --- | --- |
-| **Team** | The team the panel follows in My team. Every league except men's college basketball, whose list would be too long for one entity; pick those teams on the device page. |
-| **Mode** | My team, Favorite teams or Live games, plus the older Live NFL, Live college and Live anything. |
+| **Mode** | Favorite teams or Live games. A panel on one of the older football-only live modes shows Live games. |
 | **Power** | The panel's lights on or off. |
 | **Brightness** | 1 to 255. |
 | **Scroll Speed** | The ticker speed, 1 to 10. |
@@ -29,6 +28,10 @@ Picking a team or a mode from Home Assistant counts as setting the panel up, the
 | **Install Updates Automatically** | The same switch as on the device page. See [Firmware updates](/using/updates/). |
 | **Check for Updates**, **Refresh Now**, **Reboot** | The device page's buttons. |
 | **Reset Wi-Fi**, **Factory Reset** | The resets. See [The boot button and resets](/using/buttons-and-resets/). |
+
+:::note[Coming in the next release]
+The **Team** entity is gone, along with My team. Until then, **Team** picks the team My team follows, and **Mode** also lists My team and the older Live NFL, Live college and Live anything.
+:::
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
@@ -42,7 +45,7 @@ A **Playlist** select picks the playlist Favorite teams plays: **All favorites**
 
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
 
-**Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in My team and Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
+**Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
 ## Score events
 

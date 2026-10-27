@@ -196,11 +196,6 @@ struct Final {
 
 // The scoreboard card for a final, the away side as "team" like a broadcast.
 GameSnapshot final_snapshot(const Final &f);
-// What a team change puts on the board until the first read lands: the new
-// team's logo and name, no game. It is valid only so the page draws the
-// logo; a failed read drops it (is_team_placeholder) so the board says why.
-GameSnapshot team_placeholder(const Team &t);
-bool is_team_placeholder(const GameSnapshot &g);
 
 // A game later today from a day's scoreboard, for the rotation's "Later
 // today" cards (recap.h). As small as a Final: short strings and ids, the
