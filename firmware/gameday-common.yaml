@@ -388,23 +388,28 @@ script:
   # so a setup, or Wi-Fi coming back with the app connected, could do it. Hang up
   # first, after a second for the Wi-Fi result to reach the app, and turn
   # Bluetooth off once Bluedroid has no link left: then it is done in about
-  # 0.2 s. A link that stays up leaves Bluetooth on rather than risk the
-  # stall; the next connect tries again.
+  # 0.2 s. A link that stays up through three hangups leaves Bluetooth on
+  # rather than risk the stall; the next connect tries again.
   - id: gd_ble_off
     mode: restart
     then:
-      - if:
-          condition:
-            lambda: 'return improv_ble::ImprovBLEComponent::open_links() > 0;'
+      # Three tries: Improv keeps advertising for a few seconds after a setup,
+      # so the app can connect again right after the first hangup.
+      - repeat:
+          count: 3
           then:
-            - delay: 1s
-            - lambda: |-
-                ESP_LOGI("ble", "On Wi-Fi, hanging up on the Bluetooth client");
-                improv_ble::ImprovBLEComponent::hang_up();
-            - wait_until:
+            - if:
                 condition:
-                  lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
-                timeout: 10s
+                  lambda: 'return improv_ble::ImprovBLEComponent::open_links() > 0;'
+                then:
+                  - delay: 1s
+                  - lambda: |-
+                      ESP_LOGI("ble", "On Wi-Fi, hanging up on the Bluetooth client");
+                      improv_ble::ImprovBLEComponent::hang_up();
+                  - wait_until:
+                      condition:
+                        lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
+                      timeout: 10s
       - if:
           condition:
             lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
