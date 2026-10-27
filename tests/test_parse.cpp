@@ -1537,25 +1537,6 @@ static GameSnapshot mlb_event(const char *file, uint32_t team) {
   return s;
 }
 
-// A team change's placeholder is dropped on a failed read so the board says
-// "Can't reach ESPN"; a game read from ESPN or a final card never is.
-static void test_team_placeholder() {
-  Team dal{League::NFL, 6, "DAL", "Dallas Cowboys", 0};
-  GameSnapshot p = team_placeholder(dal);
-  CHECK(p.valid);
-  CHECK_EQ(p.team_abbr, std::string("DAL"));
-  CHECK_EQ(p.team_logo, team_logo_url(League::NFL, 6, "DAL"));
-  CHECK(is_team_placeholder(p));
-  CHECK(!is_team_placeholder(GameSnapshot{}));
-  GameSnapshot pre = mlb_event("fixtures/event_mlb_top.json", kBraves);
-  CHECK(!pre.event_id.empty());
-  CHECK(!is_team_placeholder(pre));
-  Final f;
-  f.away_abbr = "DAL";
-  f.home_abbr = "PHI";
-  CHECK(!is_team_placeholder(final_snapshot(f)));
-}
-
 static void test_mlb_urls() {
   CHECK_EQ(team_url(League::MLB, 15), std::string("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/15"));
   CHECK_EQ(event_url(League::MLB, "401908016"),
@@ -3310,20 +3291,21 @@ static void test_badge() {
 // The demo build's matchups, made-up teams and script (demo.h).
 static void test_demo() {
   auto abbrs = [](DemoMatchup m) { return std::string(m.home->abbr) + "-" + m.away->abbr; };
-  // No picks: the panel's own team at home when it is in the league, else the stock game.
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NFL, 12)) == "KC-PHI");
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NCAA, 333)) == "DAL-PHI");
-  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NCAA, 333)) == "ALA-MICH");
-  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NFL, 6)) == "OSU-MICH");
+  // No picks: favorite #1 at home when it is in the league, else the stock game.
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, nullptr)) == "DAL-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, find_team(League::NFL, 12))) == "KC-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, find_team(League::NCAA, 333))) == "DAL-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, find_team(League::NCAA, 333))) == "ALA-MICH");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, find_team(League::NFL, 6))) == "OSU-MICH");
   // A panel that follows the stock opponent plays the stock home team instead.
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, League::NFL, 21)) == "PHI-DAL");
-  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, League::NCAA, 130)) == "MICH-OSU");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 0, find_team(League::NFL, 21))) == "PHI-DAL");
+  CHECK(abbrs(demo_matchup(DemoKind::COLLEGE, 0, 0, find_team(League::NCAA, 130))) == "MICH-OSU");
   // Picks win, and a pick from the other league is no pick.
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 25, League::NFL, 6)) == "SEA-SF");
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 333, 0, League::NFL, 6)) == "DAL-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 25, find_team(League::NFL, 6))) == "SEA-SF");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 333, 0, find_team(League::NFL, 6))) == "DAL-PHI");
   // The same team on both sides never happens.
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 26, League::NFL, 6)) == "SEA-PHI");
-  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 6, League::NFL, 6)) == "DAL-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 26, 26, find_team(League::NFL, 6))) == "SEA-PHI");
+  CHECK(abbrs(demo_matchup(DemoKind::PRO, 0, 6, find_team(League::NFL, 6))) == "DAL-PHI");
 
   // Made-up teams: unique, and never a real team's abbreviation.
   for (size_t i = 0; i < kMadeUpTeamCount; i++) {
@@ -3664,13 +3646,6 @@ static void test_recap() {
   CHECK_EQ(recap_cards({}, both, true).size(), (size_t) 1);
   CHECK_EQ(recap_cards({}, both, false).size(), (size_t) 0);
   CHECK_EQ(recap_card_ms(RecapKind::FINAL), (uint32_t) 7000);
-
-  // Panels from before "no team" saved Dallas on first boot
-  CHECK(legacy_team_unpicked(NFL, 6, false, false));
-  CHECK(legacy_team_unpicked(NFL, 6, true, true));
-  CHECK(!legacy_team_unpicked(NFL, 6, true, false));
-  CHECK(!legacy_team_unpicked(NFL, 17, false, true));
-  CHECK(!legacy_team_unpicked(NCAA, 6, false, false));
 }
 
 static Pending mkpending(uint8_t league, int rank, int64_t kick, const char *abbr) {
@@ -6103,7 +6078,6 @@ int main() {
   test_boot_hold();
   test_rotate_minutes();
   test_mlb_urls();
-  test_team_placeholder();
   test_mlb_team();
   test_mlb_live();
   test_mlb_pre_post();

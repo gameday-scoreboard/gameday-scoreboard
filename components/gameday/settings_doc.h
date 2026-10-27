@@ -3,9 +3,9 @@
 // page's Export and Import and the apps' back up and restore. The document's
 // keys are POST /gameday/set's, with JSON types instead of text:
 //   {"schema": 1, "version": "v2026.10.1", "name": "gameday-2f6a70",
-//    "team": "nfl:6", "mode": 4, "favs": ["nfl:6", "", "mlb:15"],
+//    "mode": 4, "favs": ["nfl:6", "", "mlb:15"],
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
-// "none" is no team, "" in favs an empty slot (the remote's buttons keep their
+// "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
 // playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}]. Brightness and
 // scroll are the Home Assistant numbers of the same names.
@@ -56,8 +56,8 @@ inline SettingType setting_type(const char *k) {
                                       "leaders", "night", "nightscreen", "favtake", "countdown"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list"};
-  static const char *const kText[] = {"team", "fav1", "fav2", "fav3", "fav4", "tz",
-                                      "msg",  "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
+  static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -89,7 +89,7 @@ inline std::string team_ref_text(JsonObjectConst t) {
 // the panel keeps built on its main loop, so the web server never reads a
 // setting while the loop changes it. live_mask is Live games' own list (0 for
 // automatic): the state's live list is what the panel scans now, every league
-// while no team is picked. brightness and scroll are -1 in a build without
+// while no favorite is picked. brightness and scroll are -1 in a build without
 // those numbers. Keys the state leaves out (autoupd and beta in some builds)
 // are left out here too.
 inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brightness, int scroll, JsonDocument &out) {
@@ -101,7 +101,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     out["name"] = s["name"];
   // In the device page's order. Ints, switches and text have the state's
   // key and type; the rest are converted.
-  static const char *const kKeys[] = {"nick",     "team",     "mode",     "favs",     "rotate",      "lockon",     "release",
+  static const char *const kKeys[] = {"nick",     "mode",     "favs",     "rotate",      "lockon",     "release",
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
@@ -109,12 +109,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
                                       "lists",    "list"};
   for (const char *k : kKeys) {
-    if (strcmp(k, "team") == 0) {
-      if (s["team"].is<JsonObjectConst>()) {
-        std::string ref = team_ref_text(s["team"]);
-        out["team"] = ref.empty() ? std::string("none") : ref;
-      }
-    } else if (strcmp(k, "favs") == 0) {
+    if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
       // the empty slots at the end are left off.
       if (!s["favs"].is<JsonArrayConst>())
@@ -283,7 +278,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         if (!v.is<const char *>())
           return detail::settings_fail(out, k + " should be text.");
         std::string text = v.as<const char *>();
-        if (k == "team" || (k.size() == 4 && k.compare(0, 3, "fav") == 0)) {
+        if (k.size() == 4 && k.compare(0, 3, "fav") == 0) {
           TeamRef t;
           int r = detail::settings_team(text, t);
           if (r == -2)
