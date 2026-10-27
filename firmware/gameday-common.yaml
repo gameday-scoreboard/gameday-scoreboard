@@ -286,7 +286,7 @@ wifi:
     - script.stop: gd_offline_count
     - script.stop: gd_setup_window
     - script.stop: boot_wifi_lost_later
-    - ble.disable:
+    - script.execute: gd_ble_off
     - lambda: |-
         // Arms the offline restart below. Until the panel has been on its
         // network once this boot there is nothing to recover, so that
@@ -309,6 +309,7 @@ wifi:
   # repaints the normal lines by itself once Wi-Fi returns, so a router
   # reboot resolves with no reboot of our own.
   on_disconnect:
+    - script.stop: gd_ble_off
     - script.execute: gd_ble_grace
     - script.execute: boot_wifi_lost_later
     - script.execute: gd_offline_count
@@ -378,6 +379,51 @@ script:
     then:
       - delay: 30s
       - ble.enable:
+
+  # Bluetooth off once the panel is on Wi-Fi (see wifi: above). Bluedroid's
+  # shutdown runs on the main loop and waits for every Bluetooth link to
+  # close: about 0.2 s with none, but 5 s and more while one is open. The Game
+  # Day app stays connected after a Bluetooth setup until the panel hangs up,
+  # so turning Bluetooth off straight away stalled the main loop past the 5 s
+  # task watchdog and restarted the panel in the middle of its first moments
+  # on the network. Hang up on the app first, then turn Bluetooth off once the
+  # link is gone. A second is plenty for the Wi-Fi result to reach the app
+  # before the hangup. A link that somehow stays up leaves Bluetooth on rather
+  # than stall the loop; the next connect tries again.
+  - id: gd_ble_off
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return esp32_ble_server::global_ble_server != nullptr &&
+                     esp32_ble_server::global_ble_server->get_connected_client_count() > 0;
+          then:
+            - delay: 1s
+            - lambda: |-
+                auto *server = esp32_ble_server::global_ble_server;
+                if (server == nullptr)
+                  return;
+                const uint32_t n = server->get_connected_client_count();
+                const uint16_t *clients = server->get_clients();
+                for (uint32_t i = 0; i < n; i++)
+                  esp_ble_gatts_close(server->get_gatts_if(), clients[i]);
+                ESP_LOGI("ble", "On Wi-Fi, hanging up on %u Bluetooth client(s)", (unsigned) n);
+            - wait_until:
+                condition:
+                  lambda: |-
+                    auto *server = esp32_ble_server::global_ble_server;
+                    return server == nullptr || server->get_connected_client_count() == 0;
+                timeout: 10s
+      - if:
+          condition:
+            lambda: |-
+              return esp32_ble_server::global_ble_server == nullptr ||
+                     esp32_ble_server::global_ble_server->get_connected_client_count() == 0;
+          then:
+            - ble.disable:
+          else:
+            - lambda: 'ESP_LOGW("ble", "A Bluetooth link is still open, leaving Bluetooth on");'
 
   # A panel that has a saved network but cannot get back on it is stuck in a
   # way nothing else recovers from. ESPHome's own reboot_timeout is disabled
