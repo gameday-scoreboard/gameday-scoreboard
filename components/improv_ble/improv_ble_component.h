@@ -3,8 +3,9 @@
 // Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
-// the password out of the log, goes back to the saved network after a failed handover,
-// and says in the advert whether the panel has a saved network.
+// the password out of the log, goes back to the saved network (or to setup mode
+// after "Reset Wi-Fi") after a failed handover, and says in the advert whether
+// the panel has a saved network.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "esphome/core/component.h"
@@ -83,6 +84,9 @@ class ImprovBLEComponent final : public Component,
   // Advertised so the app can tell a panel that lost its network from a new one.
   // Set from on_boot and on every Wi-Fi connect.
   void set_has_saved_network(bool saved);
+  // A handover failed this boot and the panel went back to the blank setup
+  // network it had after "Reset Wi-Fi", waiting for another try.
+  bool setup_retry_pending() const { return this->setup_retry_pending_; }
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }
@@ -114,6 +118,10 @@ class ImprovBLEComponent final : public Component,
   wifi::WiFiAP restore_sta_;
   wifi::WiFiAP last_connected_sta_;  // see remember_sta()
   bool has_saved_network_{false};    // see set_has_saved_network()
+  // The panel was in setup mode (a blank network) when the handover started,
+  // so a failure puts the blank network back instead of none.
+  bool restore_setup_{false};
+  bool setup_retry_pending_{false};  // see setup_retry_pending()
   // GAMEDAY: end
 
   BLEService *service_{nullptr};

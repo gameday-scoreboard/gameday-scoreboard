@@ -25,8 +25,9 @@
 // "Reset Wi-Fi" keeps the list and the slot. It saves a flag instead, and the
 // next boot reads and clears it and starts in setup mode with a blank network
 // in memory, the state the rest of the firmware already reads as "reset". So
-// that one boot is in setup and any later one, after an unplug or after the
-// 15 minutes in gameday-common.yaml run out, is back on the saved networks.
+// that one boot is in setup and any later one, after an unplug, after the
+// 15 minutes in gameday-common.yaml run out, or a minute after a failed setup
+// from the app that nobody tries again, is back on the saved networks.
 //
 // Within a boot the list is only saved, never re-applied: a setup from the
 // app narrows the live list to the new network the way ESPHome always did,

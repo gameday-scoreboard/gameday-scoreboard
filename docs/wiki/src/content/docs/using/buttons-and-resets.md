@@ -40,6 +40,10 @@ Your team, favorites and every other setting stay as they were.
 
 Reset Wi-Fi keeps the saved networks. The panel restarts into setup mode for 15 minutes, so you can put it on a new network from the Game Day app or its hotspot. The setup screen also says **Unplug it to rejoin saved Wi-Fi**: unplug the panel and plug it back in, and it goes back to the networks it already knows. It does that by itself after the 15 minutes too, or a little later if you're still setting it up from the app or the hotspot.
 
+:::note[Coming in the next release]
+A wrong network name or password typed in the app during that setup no longer leaves the panel off Wi-Fi. It stays in setup, so the app can ask for them again. Close the app instead and, about a minute later, the panel goes back to the networks it already knows. While it's in setup, the app lists it as a panel that can't reach its Wi-Fi, not as a new one.
+:::
+
 ## Factory reset
 
 Factory reset erases everything: the saved Wi-Fi networks, your team, your favorites and every setting, including a paired WizMote and the panel layout. The panel restarts into setup the way it came out of the box, with the layout its firmware starts on. Do this before you sell or give the panel away.

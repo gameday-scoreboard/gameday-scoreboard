@@ -131,11 +131,18 @@ esphome:
                 improv_ble::global_improv_component->set_wifi_timeout(1000);
               }
             }
+        # In setup after "Reset Wi-Fi" the panel still has networks of its own,
+        # so the advert says so and the app shows it as a panel that can't
+        # reach its Wi-Fi, not a new one.
         - if:
             condition:
               lambda: 'return id(gd_networks).in_setup();'
             then:
+              - lambda: |-
+                  if (improv_ble::global_improv_component != nullptr)
+                    improv_ble::global_improv_component->set_has_saved_network(true);
               - script.execute: gd_setup_window
+              - script.execute: gd_setup_retry
         # Keep Bluetooth off at boot because it shares the radio with the Wi-Fi
         # scan. With it on, Wi-Fi was ready 12 s after boot instead of 5.
         # A panel with no saved network, or in setup after a reset, turns it on
@@ -256,7 +263,8 @@ ota:
 # house) and tries the last one that worked first. Setup from the app or the
 # hotspot page adds to the list; Factory Reset empties it. "Reset Wi-Fi"
 # keeps it: the panel restarts into setup for 15 minutes (gd_setup_window),
-# and an unplug or the end of the 15 minutes brings it back.
+# and an unplug, the end of the 15 minutes, or a minute after a failed setup
+# nobody tries again (gd_setup_retry) brings it back.
 # GET /gameday/wifi lists them (names only) and POST /gameday/wifi?forget=
 # drops one.
 saved_networks:
@@ -285,6 +293,7 @@ wifi:
     - script.stop: gd_ble_grace
     - script.stop: gd_offline_count
     - script.stop: gd_setup_window
+    - script.stop: gd_setup_retry
     - script.stop: boot_wifi_lost_later
     - ble.disable:
     - lambda: |-
@@ -473,6 +482,38 @@ script:
           ESP_LOGW("wifi", "Setup not finished in 15 minutes, restarting onto the saved networks");
           App.safe_reboot();
 
+  # A wrong name or password from the app during that setup puts the panel
+  # back in setup mode (components/improv_ble), with Bluetooth and the
+  # hotspot still up, so the app can ask again. Once nobody has been on
+  # Bluetooth or the hotspot for a minute after that, the owner has given up
+  # on the new network: restart onto the saved ones rather than wait out the
+  # 15 minutes offline. Started with gd_setup_window; on_connect stops it.
+  - id: gd_setup_retry
+    then:
+      - while:
+          condition:
+            lambda: return true;
+          then:
+            - delay: 10s
+            - lambda: |-
+                auto *improv = improv_ble::global_improv_component;
+                const bool app =
+                    (esp32_ble_server::global_ble_server != nullptr &&
+                     esp32_ble_server::global_ble_server->get_connected_client_count() > 0) ||
+                    (improv != nullptr && improv->get_improv_state() == improv::STATE_PROVISIONING);
+                wifi_sta_list_t hotspot{};
+                const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
+                if (improv == nullptr || !improv->setup_retry_pending() || app || on_hotspot) {
+                  id(gd_setup_idle_seconds) = 0;
+                  return;
+                }
+                id(gd_setup_idle_seconds) += 10;
+                ESP_LOGI("wifi", "Setup failed, nobody setting up for %d s", id(gd_setup_idle_seconds));
+                if (id(gd_setup_idle_seconds) >= 60) {
+                  ESP_LOGW("wifi", "Setup failed and abandoned, restarting onto the saved networks");
+                  App.safe_reboot();
+                }
+
 captive_portal:
 
 improv_serial:
@@ -584,6 +625,12 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+  # Seconds nobody has been setting the panel up since a failed handover on
+  # the setup boot after "Reset Wi-Fi" (gd_setup_retry).
+  - id: gd_setup_idle_seconds
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 # The device page talks to /gameday/state, /gameday/set and /gameday/action
 # (components/gameday). Only the entities worth having in Home Assistant stay.

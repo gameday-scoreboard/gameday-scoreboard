@@ -22,6 +22,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- After Reset Wi-Fi, a wrong network name or password typed in the app no longer leaves the panel off Wi-Fi for up to 15 minutes. The panel stays in setup so the app can ask again, and about a minute after nobody is setting it up it goes back to its saved networks. The app now lists a panel in that setup as one that can't reach its Wi-Fi rather than a new panel.
 - The pre-game ticker shows each team's season leader in baseball, basketball and hockey too, like "Machado 30 HR 91 RBI", "Allen 21.0 PPG" or "McDavid 9 pts", under the same **Pre-game season leaders** switch as football's. A regular-season football game's ticker starts with the week, like "Week 8", and a game at an open-air venue ends with ESPN's forecast, like "76F Cloudy at Hard Rock Stadium".
 - A panel with a long list of favorite teams no longer restarts while it looks up the list after a change, and no longer runs so short of memory after a restart that it stops reading scores for a minute at a time.
 - A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.

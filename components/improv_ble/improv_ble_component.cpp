@@ -1,8 +1,9 @@
 // Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
-// the password out of the log, goes back to the saved network after a failed handover,
-// and says in the advert whether the panel has a saved network.
+// the password out of the log, goes back to the saved network (or to setup mode
+// after "Reset Wi-Fi") after a failed handover, and says in the advert whether
+// the panel has a saved network.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "improv_ble_component.h"
@@ -448,6 +449,9 @@ void ImprovBLEComponent::process_incoming_data_() {
           if (current.get_ssid().empty())
             current = this->last_connected_sta_;
           this->restore_sta_ = current.get_ssid().empty() ? wifi::WiFiAP{} : current;
+          // Nothing real to go back to, but a blank network that still counts
+          // as has_sta() is setup mode after "Reset Wi-Fi".
+          this->restore_setup_ = this->restore_sta_.get_ssid().empty() && wifi::global_wifi_component->has_sta();
         }
         // GAMEDAY: end
 
@@ -504,6 +508,17 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
     wifi::global_wifi_component->start_connecting(this->restore_sta_);
     return;
   }
+  // Back to setup mode instead of no network at all, so the hotspot and
+  // Bluetooth stay up and the app can ask for the name and password again.
+  // Not the saved networks: joining one would turn Bluetooth off under the
+  // app. gameday-common.yaml (gd_setup_retry) restarts onto them once nobody
+  // is setting the panel up.
+  if (this->restore_setup_) {
+    ESP_LOGI(TAG, "Back in setup mode for another try");
+    this->setup_retry_pending_ = true;
+    wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+    return;
+  }
   // GAMEDAY: end
   wifi::global_wifi_component->clear_sta();
 }
@@ -516,7 +531,11 @@ void ImprovBLEComponent::check_wifi_connection_() {
   if (this->state_ == improv::STATE_PROVISIONING) {
     wifi::global_wifi_component->save_wifi_sta(this->connecting_sta_.get_ssid(), this->connecting_sta_.get_password());
     this->connecting_sta_ = {};
-    this->restore_sta_ = {};  // GAMEDAY
+    // GAMEDAY: begin
+    this->restore_sta_ = {};
+    this->restore_setup_ = false;
+    this->setup_retry_pending_ = false;
+    // GAMEDAY: end
     this->cancel_timeout("wifi-connect-timeout");
 
     // Build the URL list directly into a stack buffer with no heap allocation
