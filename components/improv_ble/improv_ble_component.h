@@ -89,6 +89,10 @@ class ImprovBLEComponent final : public Component,
   void set_setup_mode(bool setup) { this->setup_mode_ = setup; }
   // A handover from the app timed out this boot (gd_setup_window).
   bool handover_failed() const { return this->handover_failed_; }
+  // The network the last failed handover tried, and millis() when it failed
+  // (0 for none). The setup screen says so for a while (pages/boot.yaml).
+  const std::string &failed_ssid() const { return this->failed_ssid_; }
+  uint32_t failed_ms() const { return this->failed_ms_; }
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }
@@ -122,6 +126,8 @@ class ImprovBLEComponent final : public Component,
   bool has_saved_network_{false};    // see set_has_saved_network()
   bool setup_mode_{false};           // see set_setup_mode()
   bool handover_failed_{false};      // see handover_failed()
+  uint32_t failed_ms_{0};            // see failed_ms()
+  std::string failed_ssid_;          // see failed_ssid()
   // GAMEDAY: end
 
   BLEService *service_{nullptr};

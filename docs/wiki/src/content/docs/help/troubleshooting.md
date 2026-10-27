@@ -23,6 +23,10 @@ A panel that isn't set up yet shows **SETUP**. The app finds that one over Bluet
 
 While it joins, the panel shows **JOINING** and the name of the network it was given, so a wrong pick shows up there.
 
+:::note[Coming in the next release]
+If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
+:::
+
 **Why:** the panel's Wi-Fi only works on 2.4 GHz. A guest network can let the panel join but keep your phone from reaching it afterwards.
 
 If the panel says **Wi-Fi needs sign-in, use home or a hotspot**, the network wants a sign-in on a web page, like many bar, hotel and dorm networks. The panel can't sign in to those pages. Set it up on a home network or a phone hotspot instead.
