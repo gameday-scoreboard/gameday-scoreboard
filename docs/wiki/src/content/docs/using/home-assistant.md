@@ -1,6 +1,6 @@
 ---
 title: "Home Assistant (optional)"
-description: "The panel is an ESPHome device: add it to Home Assistant to see the game status and automate power, brightness, the team and updates."
+description: "The panel is an ESPHome device: add it to Home Assistant to see the game status and automate power, brightness, the mode and updates."
 sidebar:
   order: 16
 ---
@@ -28,12 +28,12 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **Install Updates Automatically** | The same switch as on the device page. See [Firmware updates](/using/updates/). |
 | **Check for Updates**, **Refresh Now**, **Reboot** | The device page's buttons. |
 | **Reset Wi-Fi**, **Factory Reset** | The resets. See [The boot button and resets](/using/buttons-and-resets/). |
+| **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
+| **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
 :::note[Coming in the next release]
 The **Team** entity is gone, along with My team. Until then, **Team** picks the team My team follows, and **Mode** also lists My team and the older Live NFL, Live college and Live anything.
 :::
-| **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
-| **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
 A few diagnostic sensors, the Wi-Fi signal and the free memory readings, are there but turned off until you turn them on in Home Assistant.
 
