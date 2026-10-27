@@ -1039,6 +1039,11 @@ int GamedayComponent::fav_side_due_(uint32_t now, int64_t now_epoch) const {
 void GamedayComponent::fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch) {
   ESP_LOGI(TAG, "No upcoming game for %s", e.team->abbr);
   this->no_game_confirmed_ = true;
+  // The board's read answered, so its run of failures is over. Nothing is
+  // polled with no game, so nothing else would clear the count, and the
+  // ticker's "no update" and the hidden message card would stay.
+  if (shown || this->fav_shown_ < 0)
+    this->misses_ = 0;
   e.game = GameSnapshot{};
   e.final_epoch = 0;
   if (shown)

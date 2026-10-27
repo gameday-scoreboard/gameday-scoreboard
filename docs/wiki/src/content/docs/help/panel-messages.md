@@ -63,7 +63,7 @@ These show on the board or in the ticker.
 :::note[Coming in the next release]
 **No internet** on the board: the panel joined Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered. Check that other devices on the network can get online. See [Troubleshooting](/help/troubleshooting/#the-panel-says-no-internet). **Getting ready** now lasts only those first 30 seconds.
 
-These trouble lines, and **no update** in the ticker, also show in place of your own [message card](/using/messages/) while they last.
+Your own [message card](/using/messages/) also steps aside while three reads from ESPN in a row have failed (**no update** in the ticker), while the Wi-Fi wants a sign-in, and while the panel says **No internet**.
 :::
 
 :::note[Coming in the next release]
