@@ -813,11 +813,6 @@ lvgl_page_manager:
 select:
   - platform: gameday
     gameday_id: gameday_ctl
-    type: team
-    name: "Team"
-    icon: "mdi:football"
-  - platform: gameday
-    gameday_id: gameday_ctl
     type: mode
     name: "Mode"
     icon: "mdi:shuffle-variant"

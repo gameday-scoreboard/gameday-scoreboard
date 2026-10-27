@@ -36,7 +36,7 @@ Basketball only celebrates the win. A game has around a hundred scoring plays, s
 
 ## The final
 
-The ticker says "Final", or "Final/OT" after overtime, with the series or the records. The final stays up for half an hour in My team, then the panel looks up your team's next game.
+The ticker says "Final", or "Final/OT" after overtime, with the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for half an hour, then the panel looks up the team's next game.
 
 At halftime and the final the board takes turns, 10 seconds each, with the line score: each team's points by quarter (by half in men's college basketball) and the total, with one OT column after overtime. On a 64x64 panel it's by half, the teams side by side under their abbreviations. With **Last play** on, the final's ticker adds ESPN's headline for the game when it has one. Basketball has no list of scoring plays: nearly every trip down the floor scores.
 

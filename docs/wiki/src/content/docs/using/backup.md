@@ -31,7 +31,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 ## What's in the file
 
 - The panel's **Nickname**. A backup loaded onto a second panel gives it the same nickname, so rename that one afterwards.
-- Your team and what the panel shows: **My team**, **Favorite teams** or **Live games**
+- What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out.
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
 - The Live games leagues, **Switch every** and **Pick the best game**

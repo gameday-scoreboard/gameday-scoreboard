@@ -52,7 +52,7 @@ These show on the board or in the ticker.
 | **Looking for a live game** | In Live games, the panel is checking what's on. With one league picked, it names it, like **Looking for a live NHL game**. | Wait. |
 | **No live games right now** | In Live games, nothing is being played in the leagues you picked. | Nothing. The panel shows today's later games and recent final scores, and picks up the next game when it starts. |
 | **No live NFL games, showing CHI** | In Live games with nothing on, the panel shows your own team until a game starts. | Nothing. |
-| **Favorites: add teams in the app or on the page** | The panel is in Favorite teams with no favorites. | Add favorites, or switch to My team. See [Favorite teams](/using/favorites/). |
+| **Favorites: add teams in the app or on the page** | The panel is in Favorite teams with no favorites. | Add a favorite, or switch to Live games. See [Favorite teams](/using/favorites/). |
 | **Later today** | A card before the games still to come today, each with both logos, the start time and the TV channel. | Nothing. |
 | **Yesterday's NHL scores**, or another day and league | A card before that day's final scores. | Nothing. |
 | **Next: BOS at NYR Thu 6:00 PM** | No game is left today. This is the next one. | Nothing. |

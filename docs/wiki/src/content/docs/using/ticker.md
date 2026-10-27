@@ -75,7 +75,7 @@ The ticker also says when something needs your attention:
 - **Pick a team in the Game Day app or at** and the panel's IP address: the panel has never had a team, mode or favorite picked. It goes away once you pick one, from the app, the device page or Home Assistant. The IP address is there for phones that can't open `.local` names. See [Pick your team](/get-started/pick-your-team/).
 - **no update for** and a number of minutes, or **no update yet**: the panel has missed three reads from ESPN in a row. The score may be old. It clears by itself when a read comes through.
 - **Favorites: add teams in the app or on the page**: the panel is in Favorite teams with no favorites.
-- **No live games, showing** and your team, like "No live NFL games, showing DAL": Live games found nothing on, so it shows your team until a game starts. See [Show: My team, Favorite teams, Live games](/using/modes/#when-nothing-is-live).
+- **No live games, showing** and a team, like "No live NFL games, showing DAL": Live games found nothing on, so it shows your first favorite until a game starts. See [Show: Favorite teams, Live games](/using/modes/#when-nothing-is-live).
 
 For the messages that take over the whole board, see [Panel messages](/help/panel-messages/).
 

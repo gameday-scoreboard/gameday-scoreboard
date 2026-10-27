@@ -1,6 +1,5 @@
 {
-  "team": {"form": "league:id of a team the panel knows, or none", "ok": ["nfl:6", "ncaa:251", "none"], "bad": ["dallas", "nfl:999999", ""]},
-  "mode": {"form": "0 My team, 4 Favorite teams, 5 Live games (1 to 3 are older live modes)", "ok": ["0", "4", "5"], "bad": ["6", "-1"]},
+  "mode": {"form": "4 Favorite teams, 5 Live games (1 to 3 are older live modes; 0, My team before, is taken as 4)", "ok": ["4", "5", "0"], "bad": ["6", "-1"]},
   "rotate": {"form": "minutes, clamped to 1 to 30", "ok": ["1", "5", "30"]},
   "fav1": {"form": "league:id, or none or empty to clear the remote's slot 1", "ok": ["nfl:6", "none", ""], "bad": ["dallas"]},
   "fav2": {"form": "league:id, or none or empty to clear the remote's slot 2", "ok": ["mlb:15", "none", ""], "bad": ["dallas"]},

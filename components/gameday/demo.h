@@ -98,22 +98,21 @@ constexpr uint32_t kDemoProHome = 6, kDemoProAway = 21;
 constexpr uint32_t kDemoCollegeHome = 194, kDemoCollegeAway = 130;
 
 // The two real teams a demo plays. A picked team wins. With no pick, the home
-// side is the panel's own team when it plays in this league, else the stock
-// home team, and the away side is the stock opponent. The two sides are
-// never the same team.
+// side is favorite #1 when it plays in this league, else the stock home team,
+// and the away side is the stock opponent. The two sides are never the same
+// team.
 struct DemoMatchup {
   const Team *home;
   const Team *away;
 };
-inline DemoMatchup demo_matchup(DemoKind kind, uint32_t picked_home, uint32_t picked_away, League panel_league,
-                                uint32_t panel_team) {
+inline DemoMatchup demo_matchup(DemoKind kind, uint32_t picked_home, uint32_t picked_away, const Team *first_fav) {
   League lg = demo_league(kind);
   bool college = kind == DemoKind::COLLEGE;
   uint32_t stock_home = college ? kDemoCollegeHome : kDemoProHome;
   uint32_t stock_away = college ? kDemoCollegeAway : kDemoProAway;
   const Team *home = find_team(lg, picked_home);
-  if (home == nullptr && panel_league == lg)
-    home = find_team(lg, panel_team);
+  if (home == nullptr && first_fav != nullptr && first_fav->league == lg)
+    home = first_fav;
   if (home == nullptr)
     home = find_team(lg, stock_home);
   const Team *away = find_team(lg, picked_away);

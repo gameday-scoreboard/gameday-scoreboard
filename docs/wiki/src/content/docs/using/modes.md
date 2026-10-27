@@ -1,19 +1,27 @@
 ---
-title: "Show: My team, Favorite teams, Live games"
-description: "The three things the panel can follow, how it picks a game, when it moves on, and what it shows when nothing is on."
+title: "Show: Favorite teams, Live games"
+description: "The two things the panel can follow, how it picks a game, when it moves on, and what it shows when nothing is on."
 sidebar:
   order: 3
 ---
 
-The three buttons under the board on the device page, **My team**, **Live games** and **Favorite teams**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
+The two buttons under the board on the device page, **Favorite teams** and **Live games**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
 
-## My team
+:::note[Coming in the next release]
+Favorite teams replaces My team. To follow one team, make it your only favorite. A panel that was in My team starts in Favorite teams after the update. The team it followed isn't copied over, so add it as a favorite. Live games with nothing on shows your first favorite instead of the My team pick, and the **Team** entity is gone from Home Assistant.
 
-The panel follows one team: its next game before kickoff, the game while it's on, and the final after.
+Until then, the device page has a third button, **My team**, which follows the one team picked with **Change team**.
+:::
+
+## Favorite teams
+
+The panel cycles through up to 16 favorite teams, and a favorite's game takes the panel shortly before kickoff. With one favorite, the panel follows that one team. See [Favorite teams](/using/favorites/) for how it works, its settings and playlists.
+
+### How a team's game is shown
 
 - **Before the game** the board shows both logos and the matchup, and the ticker gives the kickoff day and time in the panel's timezone, plus the line, over/under, TV channel and venue when ESPN has them. Each sport has its own details; see [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 - **During the game** the panel reads ESPN every 10 seconds, about as often as ESPN updates.
-- **After the final** the score stays up for half an hour, or ten minutes for baseball, since game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game. In baseball, basketball and hockey, when that game is three or more days off, the final can stay up longer, until ESPN lists the team's next game.
+- **After the final** the score stays up for a while, then the panel moves on to the team's next game.
 
 Far from kickoff the panel checks the game every 15 minutes, and every minute in the last hour before it starts. If a read from ESPN fails, it waits longer before each new try.
 
@@ -23,17 +31,15 @@ Your team is always on the left of the board.
 Before the game, the board takes turns with a big countdown to kickoff in your team's colors, like "2d 14h". See [Countdowns](/using/countdowns/).
 :::
 
-### When your team has no game coming
+### When your teams have no game coming
 
-Between seasons the board shows a clock in your team's colors instead of an empty scoreboard. Under the time is the next game once it's on the schedule, like "Next: at PHI Mar 26 7:05 PM", or the date until then. On a single 64x64 panel the next game goes in the ticker, since there is no room for it under the time.
+Between seasons the board shows a clock instead of an empty scoreboard. See [Favorite teams](/using/favorites/) and [Brightness and the clock](/using/brightness-and-clock/).
 
-Football teams get the clock only when ESPN lists no game at all, so a bye week never shows it. In the other leagues the clock comes up once the next game is more than 10 days away.
+### A panel with no favorites
 
-### A panel with no team picked
+A new panel has no favorites. Until you add one, it shows live games as Live games would, and when nothing is on, the latest final scores and the games still to come (see [When nothing is live](#when-nothing-is-live)). The ticker asks you to pick a team until you choose a mode or a favorite, and the QR code for the Game Day app comes back over the board for 13 seconds every 3 minutes until you add a team. In Favorite teams with no favorites, the ticker starts with "Favorites: add teams in the app or on the page". See [Pick your team](/get-started/pick-your-team/).
 
-A new panel has no team. Until you pick one, it shows live NFL and college football games as Live games would, and when nothing is on, the latest final scores and the games still to come (see [When nothing is live](#when-nothing-is-live)). The ticker asks you to pick one until you choose a team, a mode or a favorite, and the QR code for the Game Day app comes back over the board for 13 seconds every 3 minutes until you pick a team. See [Pick your team](/get-started/pick-your-team/).
-
-A panel with no team picked follows live games in every league it supports, not only football: NFL, college football, MLB, MLS, Premier League, NBA, WNBA, men's college basketball and NHL. On a weeknight in October that means the hockey, basketball and baseball games that are on. College basketball comes from the Top 25 games until you pick a team, and once you pick a college basketball team, or choose men's college basketball in Live games, the panel follows every Division I game. When nothing is live, the Later today games and the final scores cover every league too.
+A panel with no favorites follows live games in every league it supports, not only football: NFL, college football, MLB, MLS, Premier League, NBA, WNBA, men's college basketball and NHL. On a weeknight in October that means the hockey, basketball and baseball games that are on. College basketball comes from the Top 25 games until you add a favorite, and once you add a college basketball team, or choose men's college basketball in Live games, the panel follows every Division I game. When nothing is live, the Later today games and the final scores cover every league too.
 
 The app's QR code still comes back every 3 minutes, now with **Pick your team in the app** beside it on a 128x64 panel. On a single 64x64 panel those words and the QR code take turns.
 
@@ -72,14 +78,14 @@ With **Stick with the higher team**, the panel also checks every **Switch every*
 
 ### Choosing the leagues
 
-The league buttons under the mode buttons pick the leagues. Until you pick any, Live games follows the leagues of your team and your favorites, and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your team and favorites. At least one league stays on.
+The league buttons under the mode buttons pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
 
 ### When nothing is live
 
-What the panel shows depends on whether you have a team:
+What the panel shows depends on whether you have favorites:
 
-- **With a team picked**, it shows your team's card, the same as My team, with a line like "No live NFL games, showing DAL" at the front of the ticker. It keeps looking, and switches to a live game when one starts.
-- **With no team picked**, it rotates through the games still to come today under **Later today**, each with both logos, the start time and the TV channel, then the latest final scores for every league it follows, under headers like "Yesterday's NHL scores". When no game is left today, a "Next" card names the next matchup and its time, like "Next: BOS at NYR Thu 6:00 PM". A game drops off the Later today list once it starts.
+- **With favorites**, it shows your first favorite's card, as in [How a team's game is shown](#how-a-teams-game-is-shown), with a line like "No live NFL games, showing DAL" at the front of the ticker. It keeps looking, and switches to a live game when one starts.
+- **With no favorites**, it rotates through the games still to come today under **Later today**, each with both logos, the start time and the TV channel, then the latest final scores for every league it follows, under headers like "Yesterday's NHL scores". When no game is left today, a "Next" card names the next matchup and its time, like "Next: BOS at NYR Thu 6:00 PM". A game drops off the Later today list once it starts.
 
 The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours.
 
@@ -91,12 +97,6 @@ When there has been no game in the last week and none is coming, the board shows
 
 A change to the leagues, or to the favorites they follow, takes effect right away, instead of leaving the old leagues' final scores up until the next check.
 
-## Favorite teams
-
-The panel cycles through up to 16 favorite teams, and a favorite's game takes the panel shortly before kickoff. See [Favorite teams](/using/favorites/) for how it works, its settings and playlists.
-
-Favorite teams with no favorites set works like My team, and the ticker asks you to add teams.
-
 ## Remote buttons and modes
 
-Buttons 1 to 4 on a WizMote remote pick your first four favorites. In Favorite teams, a button jumps to that favorite. In My team or Live games, a button switches the panel to My team following that favorite. See [WizMote remote](/using/remote/).
+Buttons 1 to 4 on a WizMote remote pick your first four favorites. In Favorite teams, a button jumps to that favorite. In Live games, a button switches the panel to Favorite teams on that favorite. See [WizMote remote](/using/remote/).

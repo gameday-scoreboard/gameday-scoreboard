@@ -37,8 +37,8 @@ inline bool off_season(GameState state, int64_t kickoff_epoch, int64_t now, int6
 }
 
 // One favorite, for the Favorites clock: -1 while its team read hasn't
-// answered, 1 between seasons (the same rule as My team, off_season), 0 when
-// it has a card to show. named: the team endpoint named a game. polled: its
+// answered, 1 between seasons (the same rule as the fallback card,
+// off_season), 0 when it has a card to show. named: the team endpoint named a game. polled: its
 // game was read, with that state and kickoff; before that the kickoff the
 // team endpoint gave counts as a game ahead.
 inline int fav_off_season(bool read, bool named, bool polled, GameState state, int64_t kickoff_epoch, int64_t now,

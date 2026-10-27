@@ -13,7 +13,6 @@ from esphome.components.web_server_base import CONF_WEB_SERVER_BASE_ID
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_TIME_ID, CONF_TRIGGER_ID, __version__ as ESPHOME_VERSION
 
-from .leagues_table import leagues
 
 DEPENDENCIES = ["network", "http_request", "time"]
 AUTO_LOAD = ["json", "runtime_image", "select", "web_server_base"]
@@ -67,26 +66,7 @@ FinalTrigger = gameday_ns.class_(
 
 COMPONENT_DIR = Path(__file__).resolve().parent
 
-_TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
 _TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
-# Leagues left out of Home Assistant's team select. Men's college
-# basketball's ~365 teams would push the options past Home Assistant's 16 KB
-# attribute limit; the device page lists them.
-_HA_SKIP_LEAGUES = {"MCBB"}
-
-
-def team_options():
-    """Select options in kTeams order, without _HA_SKIP_LEAGUES."""
-    prefixes = {row["league"]: row["prefix"] for row in leagues()}
-    text = (COMPONENT_DIR / "teams.h").read_text(encoding="utf-8")
-    opts = []
-    for league, _tid, _abbr, name, _group in _TEAM_RE.findall(text):
-        if league in _HA_SKIP_LEAGUES:
-            continue
-        opts.append(f"{prefixes[league]}: {name}")
-    if len(opts) < 100:
-        raise cv.Invalid("teams.h looks truncated; run scripts/build_teams.py")
-    return opts
 
 
 def timezone_options():
