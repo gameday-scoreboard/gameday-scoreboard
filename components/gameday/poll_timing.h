@@ -121,8 +121,8 @@ inline FavPollEffect fav_poll_effect(bool ok, bool side, bool refused, bool boar
   return fx;
 }
 
-// After a My team game poll failed: read the team endpoint again now instead
-// of backing off. Yes when the game came from the boot cache and no poll has
+// After a fallback team game poll failed: read the team endpoint again now
+// instead of backing off. Yes when the game came from the boot cache and no poll has
 // confirmed it, or when ESPN answered but didn't serve the game (gone: a 404,
 // another game's document, one the parser rejects), once per game (again:
 // the team was already read again for this one and named it anyway). Never
@@ -142,7 +142,7 @@ inline bool cup_read_backs_off(bool cup_ok, bool polled, bool game_ok, bool thro
 
 // ---- Live modes' scan clock ---------------------------------------------------
 
-// While nothing is live (the saved team's card, or the finals rotation with no
+// While nothing is live (favorite #1's card, or the finals rotation with no
 // team) the board waits `rescan_ms` from `started_ms` before it scans for a
 // live game again. 0 means no wait is running: scan now. A favorite's game
 // due to start (take_due) cuts the wait short. Times are millis(), so the

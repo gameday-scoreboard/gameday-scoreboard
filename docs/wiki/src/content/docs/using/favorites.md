@@ -5,13 +5,13 @@ sidebar:
   order: 4
 ---
 
-Favorite teams lets the panel follow up to 16 teams from any league, in the order you choose. Between games it cycles through them. When a favorite's game is about to start, that game takes the panel until it's over.
+Favorite teams lets the panel follow up to 16 teams from any league, in the order you choose. Between games it cycles through them. When a favorite's game is about to start, that game takes the panel until it's over. To follow just one team, make it your only favorite.
 
 ## Setting up your list
 
 On the device page, open the **Favorites** card and tap **Add a favorite**. The team chooser opens and stays open, so you can add several teams in one go: tap a team to add it to the end of the list. Teams already in your list show a check mark, and tapping a checked team takes it out again. A line at the top counts them, like **5 of 16 favorites**; once the list is full, the chooser says so. Tap **Done** when you're finished.
 
-Back in the **Favorites** card, each row has buttons to move the team up or down and to remove it. The Game Day app edits the same list. **Change team** for My team still closes as soon as you pick.
+Back in the **Favorites** card, each row has buttons to move the team up or down and to remove it. The Game Day app edits the same list.
 
 The order is the priority. Higher teams win when two games clash (unless you choose **Alternate**, below), and the first four are buttons 1 to 4 on a WizMote remote. The page marks those four with their button number.
 
@@ -85,6 +85,6 @@ Once you have a playlist, buttons 1 to 4 play your first four playlists instead.
 
 The **Up next** list under the board has one row per favorite: the live score, the final, or the next kickoff and TV channel. The row the panel is showing is highlighted. **No game scheduled** means ESPN lists no game for that team.
 
-If none of your favorites has any game scheduled, the board shows a clock in your first favorite's colors. See [Show: My team, Favorite teams, Live games](/using/modes/#when-your-team-has-no-game-coming).
+If none of your favorites has any game scheduled, the board shows a clock in your first favorite's colors. See [The off-season clock](/using/brightness-and-clock/#the-off-season-clock).
 
 A favorite the panel hasn't read from ESPN yet says **Not checked yet** in the Up next list, keeping **No game scheduled** for a team that ESPN says has no game.

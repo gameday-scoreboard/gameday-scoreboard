@@ -386,16 +386,4 @@ inline std::vector<RecapCard> recap_cards(const std::vector<RecapDay> &days, uin
   return out;
 }
 
-// Panels flashed before "no team" existed saved Dallas (ESPN id 6) as the
-// team on first boot. Whether that Dallas was ever really picked: not when
-// setup was never finished, and not on a panel that is in a Live mode,
-// which is how an owner who chose only a mode ends up with it. Dallas in My
-// team or Favorites mode is kept, since there is no telling it apart from a
-// pick. Any other team was picked.
-inline bool legacy_team_unpicked(uint8_t league, uint32_t team_id, bool setup_done, bool live_mode) {
-  if (league != (uint8_t) League::NFL || team_id != 6)
-    return false;
-  return !setup_done || live_mode;
-}
-
 }  // namespace espn

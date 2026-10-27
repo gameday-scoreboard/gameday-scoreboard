@@ -4,12 +4,6 @@
   "version": "v2026.10.1",
   "setup": true,
   "panels": 2,
-  "team": {
-    "l": "nfl",
-    "id": 6,
-    "abbr": "DAL",
-    "name": "Dallas Cowboys"
-  },
   "mode": 4,
   "rotate": 1,
   "lockon": 15,
