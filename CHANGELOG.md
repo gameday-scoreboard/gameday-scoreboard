@@ -22,6 +22,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+- A panel set up from the Game Day app over Bluetooth no longer restarts a few seconds after it joins your Wi-Fi, which made the app say it couldn't reach the panel. The same restart could happen when the panel's Wi-Fi came back while the app was connected to it over Bluetooth.
 - The pre-game ticker shows each team's season leader in baseball, basketball and hockey too, like "Machado 30 HR 91 RBI", "Allen 21.0 PPG" or "McDavid 9 pts", under the same **Pre-game season leaders** switch as football's. A regular-season football game's ticker starts with the week, like "Week 8", and a game at an open-air venue ends with ESPN's forecast, like "76F Cloudy at Hard Rock Stadium".
 - A panel with a long list of favorite teams no longer restarts while it looks up the list after a change, and no longer runs so short of memory after a restart that it stops reading scores for a minute at a time.
 - A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.
