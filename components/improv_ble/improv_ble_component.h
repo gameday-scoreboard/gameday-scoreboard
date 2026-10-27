@@ -83,6 +83,13 @@ class ImprovBLEComponent final : public Component,
   // Advertised so the app can tell a panel that lost its network from a new one.
   // Set from on_boot and on every Wi-Fi connect.
   void set_has_saved_network(bool saved);
+  // Bluetooth links open right now, as Bluedroid counts them; 0 while
+  // Bluedroid is down. A phone's link can outlast its BLE server client by a
+  // moment after a hangup, so this, not the client count, says when turning
+  // Bluetooth off won't stall (gd_ble_off in gameday-common.yaml).
+  static uint16_t open_links();
+  // Hang up on every phone connected to the BLE server.
+  static void hang_up();
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }

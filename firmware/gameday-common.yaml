@@ -380,46 +380,34 @@ script:
       - delay: 30s
       - ble.enable:
 
-  # Bluetooth off once the panel is on Wi-Fi (see wifi: above). Bluedroid's
-  # shutdown runs on the main loop and waits for every Bluetooth link to
-  # close: about 0.2 s with none, but 5 s and more while one is open. The Game
+  # Bluetooth off once the panel is on Wi-Fi (see wifi: above). ESPHome turns
+  # Bluedroid off on the main loop, and Bluedroid waits a fixed 5 s there
+  # whenever a phone's link is still open, even once the link closes; that
+  # races the 5 s task watchdog, which often restarted the panel. The Game
   # Day app stays connected after a Bluetooth setup until the panel hangs up,
-  # so turning Bluetooth off straight away stalled the main loop past the 5 s
-  # task watchdog and restarted the panel in the middle of its first moments
-  # on the network. Hang up on the app first, then turn Bluetooth off once the
-  # link is gone. A second is plenty for the Wi-Fi result to reach the app
-  # before the hangup. A link that somehow stays up leaves Bluetooth on rather
-  # than stall the loop; the next connect tries again.
+  # so a setup, or Wi-Fi coming back with the app connected, could do it. Hang up
+  # first, after a second for the Wi-Fi result to reach the app, and turn
+  # Bluetooth off once Bluedroid has no link left: then it is done in about
+  # 0.2 s. A link that stays up leaves Bluetooth on rather than risk the
+  # stall; the next connect tries again.
   - id: gd_ble_off
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return esp32_ble_server::global_ble_server != nullptr &&
-                     esp32_ble_server::global_ble_server->get_connected_client_count() > 0;
+            lambda: 'return improv_ble::ImprovBLEComponent::open_links() > 0;'
           then:
             - delay: 1s
             - lambda: |-
-                auto *server = esp32_ble_server::global_ble_server;
-                if (server == nullptr)
-                  return;
-                const uint32_t n = server->get_connected_client_count();
-                const uint16_t *clients = server->get_clients();
-                for (uint32_t i = 0; i < n; i++)
-                  esp_ble_gatts_close(server->get_gatts_if(), clients[i]);
-                ESP_LOGI("ble", "On Wi-Fi, hanging up on %u Bluetooth client(s)", (unsigned) n);
+                ESP_LOGI("ble", "On Wi-Fi, hanging up on the Bluetooth client");
+                improv_ble::ImprovBLEComponent::hang_up();
             - wait_until:
                 condition:
-                  lambda: |-
-                    auto *server = esp32_ble_server::global_ble_server;
-                    return server == nullptr || server->get_connected_client_count() == 0;
+                  lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
                 timeout: 10s
       - if:
           condition:
-            lambda: |-
-              return esp32_ble_server::global_ble_server == nullptr ||
-                     esp32_ble_server::global_ble_server->get_connected_client_count() == 0;
+            lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
           then:
             - ble.disable:
           else:
