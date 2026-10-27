@@ -926,6 +926,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t http_clock_ms_{0};   // millis() of the last Date header read, 0 = none since Wi-Fi came up
   bool clock_approx_{false};    // the clock came from ESPN's Date header and no time server has answered since
   bool clock_wait_shown_{false};
+  bool clock_late_shown_{false};  // the board has said "No internet" since Wi-Fi came up
+  // millis() since the loop saw Wi-Fi come up with no clock, 0 off Wi-Fi.
+  uint32_t since_join_ms_() const;
   bool board_ready_{false};
   uint32_t board_pending_ms_{0};  // millis() of the last team change, 0 = waiting since boot
   void mark_board_ready_();

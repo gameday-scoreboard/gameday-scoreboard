@@ -937,6 +937,24 @@ static void test_no_game_text() {
   CHECK_EQ(no_game_text(true, false, false, 2, true), std::string("Wi-Fi needs a sign-in"));
   CHECK_EQ(no_game_text(true, true, false, 1, true), std::string("Wi-Fi needs a sign-in"));
   CHECK_EQ(no_game_text(true, false, false, 2, false), std::string("Can't reach ESPN"));
+  // No clock: "Getting ready" for the first 30 s on Wi-Fi, then "No internet"
+  // (no time server and no ESPN Date header answered), live modes too
+  CHECK_EQ(kClockGraceMs, (uint32_t) 30000);
+  CHECK_EQ(no_game_text(false, false, false, 0, false, 0), std::string("Getting ready"));  // off Wi-Fi
+  CHECK_EQ(no_game_text(false, false, false, 0, false, 29999), std::string("Getting ready"));
+  CHECK_EQ(no_game_text(false, false, false, 0, false, 30000), std::string("No internet"));
+  CHECK_EQ(no_game_text(false, true, false, 0, false, 30000), std::string("No internet"));
+  CHECK_EQ(no_game_text(false, false, true, 5, false, 600000), std::string("No internet"));
+  // A sign-in page answered: that, before or after the 30 s
+  CHECK_EQ(no_game_text(false, false, false, 0, true, 1000), std::string("Wi-Fi needs a sign-in"));
+  CHECK_EQ(no_game_text(false, false, false, 0, true, 30000), std::string("Wi-Fi needs a sign-in"));
+  // The clock is set: the time on Wi-Fi no longer matters
+  CHECK_EQ(no_game_text(true, false, false, 0, false, 600000), std::string(""));
+  CHECK_EQ(no_game_text(true, false, false, 1, false, 600000), std::string("Can't reach ESPN"));
+  CHECK_EQ(no_game_text(true, true, false, 3, false, 600000), std::string(""));
+  CHECK(!clock_late(true, 600000));
+  CHECK(!clock_late(false, 29999));
+  CHECK(clock_late(false, 30000));
 }
 
 // The plain HTTP read of ESPN after joining Wi-Fi (captive.h). Only a clear
@@ -5102,6 +5120,25 @@ static void test_message() {
   CHECK(msg_turn(true, true, true, kMsgPageMs, 2, kMsgPageMs) == MsgTurn::HIDE);
   CHECK(msg_turn(true, true, false, 0, 0, kMsgPageMs) == MsgTurn::SHOW);
   CHECK(msg_turn(true, true, true, kMsgPageMs, 0, kMsgPageMs) == MsgTurn::NEXT);
+  // The panel's trouble line wins over the card: three missed ESPN reads in a
+  // row, a sign-in Wi-Fi, or no internet. Not two misses, which the ticker
+  // doesn't call stale either.
+  CHECK(!msg_trouble(0, false, false));
+  CHECK(!msg_trouble(2, false, false));
+  CHECK(msg_trouble(3, false, false));
+  CHECK(msg_trouble(255, false, false));
+  CHECK(msg_trouble(0, true, false));
+  CHECK(msg_trouble(0, false, true));
+  // Trouble starts with the card up (every 0, holding the board): it comes
+  // down; while trouble lasts it stays down; once it clears it comes straight
+  // back on every 0, and after its wait on every N
+  CHECK(msg_turn(true, !msg_trouble(3, false, false), true, 0, 0, kMsgPageMs) == MsgTurn::HIDE);
+  CHECK(msg_turn(true, !msg_trouble(3, false, false), false, 999999, 0, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, !msg_trouble(0, true, false), false, 999999, 0, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, !msg_trouble(0, false, true), false, 999999, 0, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, !msg_trouble(0, false, false), false, 0, 0, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, !msg_trouble(0, false, false), false, 60000, 2, kMsgPageMs) == MsgTurn::NONE);
+  CHECK(msg_turn(true, !msg_trouble(0, false, false), false, 120000, 2, kMsgPageMs) == MsgTurn::SHOW);
 }
 
 // A settings change writes flash at once, except while a /gameday/set request
