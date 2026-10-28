@@ -52,6 +52,7 @@ struct Settings {
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
+  bool field{true}, winbar{true}, spark{true};
   bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true};
   std::string cdname;
   uint32_t cdymd{0};
@@ -140,6 +141,9 @@ void load(Settings &s, JsonObjectConst o) {
   flag("banner", s.banner);
   flag("favtake", s.favtake);
   flag("leaders", s.leaders);
+  flag("field", s.field);
+  flag("winbar", s.winbar);
+  flag("spark", s.spark);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
@@ -225,6 +229,9 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::BANNER: s.banner = op.on; break;
     case SetKind::FAVTAKE: s.favtake = op.on; break;
     case SetKind::LEADERS: s.leaders = op.on; break;
+    case SetKind::FIELD: s.field = op.on; break;
+    case SetKind::WINBAR: s.winbar = op.on; break;
+    case SetKind::SPARK: s.spark = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
@@ -294,6 +301,9 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["banner"] = s.banner;
   doc["favtake"] = s.favtake;
   doc["leaders"] = s.leaders;
+  doc["field"] = s.field;
+  doc["winbar"] = s.winbar;
+  doc["spark"] = s.spark;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;

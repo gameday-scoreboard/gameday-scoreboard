@@ -828,6 +828,8 @@ gameday:
         message: !lambda 'return gameday::panel_text(x.message);'
         clock_card: !lambda 'return x.clock;'
         countdown_card: !lambda 'return x.countdown_at != 0;'
+        viz: !lambda 'return (int) x.viz;'
+        win_pct: !lambda 'return x.win_pct;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'

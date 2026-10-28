@@ -58,6 +58,9 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   comp["situation"]["shortDownDistanceText"] = true;
   comp["situation"]["isRedZone"] = true;
   comp["situation"]["possession"] = true;
+  comp["situation"]["yardLine"] = true;
+  comp["situation"]["down"] = true;
+  comp["situation"]["distance"] = true;
   comp["situation"]["homeTimeouts"] = true;
   comp["situation"]["awayTimeouts"] = true;
   JsonObject c = comp["competitors"].add<JsonObject>();
@@ -258,6 +261,14 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   s.down_distance = str_or_empty(sit["downDistanceText"]);
   s.short_down_distance = str_or_empty(sit["shortDownDistanceText"]);
   s.is_red_zone = sit["isRedZone"] | false;
+  // Range-checked before the casts: ESPN's numbers are ints, but a document
+  // with something else in them must not wrap.
+  int yard = sit["yardLine"] | -1;
+  s.yard_line = (uint8_t) (yard >= 0 && yard <= 100 ? yard : 255);
+  int down = sit["down"] | 0;
+  s.down = (uint8_t) (down >= 1 && down <= 4 ? down : 0);
+  int dist = sit["distance"] | 0;
+  s.distance = (uint8_t) (dist >= 0 && dist <= 100 ? dist : 0);
   std::string possession = str_or_empty(sit["possession"]);
   int home_to = sit["homeTimeouts"] | 0;
   int away_to = sit["awayTimeouts"] | 0;

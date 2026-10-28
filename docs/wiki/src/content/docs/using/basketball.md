@@ -26,6 +26,11 @@ Basketball teams have no Up next list on the device page: their season schedules
 - **The playoff series** on the row under the clock, like "NY lead 2-1" or "Series 2-2", when the game is a playoff game.
 - **The ticker** with the last play. During a break it shows the series, or the records outside the playoffs.
 
+
+:::note[Coming in the next release]
+On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started following the game. Your team's lead fills up from the middle in your color, the other team's lead fills down in theirs, and a white pixel marks the latest read. Early in the game the chart is a short, stretched line; by the fourth quarter it is the whole game. A one-pixel **win chance bar** just above it shows ESPN's chance for each side, your color from the left. The panel samples both from the game document it already reads, so nothing extra is downloaded. **Score margin** and **Win chance bar** in the Pictures card on the device page turn them off.
+:::
+
 Basketball has no game situation line, so there is no ticker switch for one. **Last play** in the Ticker card turns the last play on or off. See [The ticker](/using/ticker/).
 
 On a single 64x64 panel the clock takes the abbreviations' place during play. There is no room for the series row or the records.

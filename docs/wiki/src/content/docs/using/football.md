@@ -44,6 +44,14 @@ At kickoff the board switches to the live scoreboard:
 - **Timeout pips** under each logo: three bars per team, lit gold for each timeout left and dim for each one used.
 - **The ticker** with the down, distance and where the ball is, like "3rd & 4 at FIU 31", and the last play. Turn either off in the Ticker card on the device page. See [The ticker](/using/ticker/).
 
+:::note[Coming in the next release]
+On a 128-wide board the down and distance row becomes a **field strip**: a picture of the field across the board with your end zone on the left under your logo and the other team's on the right, each in its team's color. A white marker shows where the ball is, with a tip pointing the way the offense is going, and a gold line marks the line to gain. In the red zone the field between the ball and the goal line glows red and the marker turns red. Each team's timeouts left show as dots in its end zone (three, two, one or none), in place of the timeout pips. The down and distance text, like "3rd & 4", sits on the half of the strip away from the ball.
+
+Just above the strip, a one-pixel **win chance bar** runs the width of the board: your color from the left for ESPN's chance of your team winning, the other team's color for the rest, with a white pixel at the split. It moves with every play.
+
+Both are on to start. **Field strip** and **Win chance bar** in the Pictures card on the device page turn them off; with the strip off, the row shows the down and distance and the timeout pips as before. A single 64x64 panel has no room for either.
+:::
+
 After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Odds, TV and win chance**.
 
 On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker.

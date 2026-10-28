@@ -16,6 +16,7 @@
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "game_viz.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -5481,6 +5482,191 @@ static void test_wifi_history() {
 
 // The line score at halftime and the final (line_score.h), from the recorded
 // single-event documents.
+// The pictures on the situation row (game_viz.h): the field strip's
+// geometry, the win bar's split and the margin sparkline's samples.
+static void test_game_viz() {
+  // The recorded FIU @ JXST read: FIU (away) has the ball at its own 31,
+  // 3rd & 4. ESPN's yardLine 69 counts from the home goal line.
+  GameSnapshot g;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, g));
+  CHECK_EQ((int) g.yard_line, 69);
+  CHECK_EQ((int) g.down, 3);
+  CHECK_EQ((int) g.distance, 4);
+  CHECK(!g.team_home);
+  CHECK_EQ(g.possession, 1);
+  // 128 wide, 6 px end zones: the field is columns 6..121 (115 px across).
+  FieldStrip f = field_strip(g, 128);
+  CHECK(f.valid);
+  CHECK_EQ((int) f.ez, 6);
+  // FIU's own 31 is 31 yards from the left (its) end zone.
+  CHECK_EQ((int) f.ball_x, field_col(31, 128, 6));
+  CHECK_EQ(field_col(31, 128, 6), 6 + (31 * 115 + 50) / 100);
+  CHECK(f.has_offense);
+  CHECK(f.to_right);  // we have it, so we attack the right end zone
+  CHECK_EQ((int) f.gain_x, field_col(35, 128, 6));
+  CHECK(!f.red_zone);
+  CHECK_EQ((int) f.left_timeouts, 0);   // FIU, away, 0 left
+  CHECK_EQ((int) f.right_timeouts, 1);  // JXST, home, 1 left
+  CHECK(!f.text_left);  // the ball is on the left half, so the text goes right
+  // The same read from the home side: the ball sits 69 from our end zone,
+  // and the offense (them) attacks our end zone on the left.
+  GameSnapshot h;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 55, h));
+  CHECK(h.team_home);
+  CHECK_EQ(h.possession, 2);
+  FieldStrip fh = field_strip(h, 128);
+  CHECK(fh.valid);
+  CHECK_EQ((int) fh.ball_x, field_col(69, 128, 6));
+  CHECK(!fh.to_right);
+  CHECK_EQ((int) fh.gain_x, field_col(65, 128, 6));
+  CHECK(fh.text_left);
+  CHECK_EQ((int) fh.left_timeouts, 1);
+  CHECK_EQ((int) fh.right_timeouts, 0);
+  // Goal to go: the line to gain is the goal line, so no column of its own.
+  GameSnapshot gl = g;
+  gl.yard_line = 100 - 96;  // FIU at the JXST 4
+  gl.distance = 4;
+  gl.is_red_zone = true;
+  FieldStrip fg = field_strip(gl, 128);
+  CHECK(fg.valid);
+  CHECK_EQ((int) fg.gain_x, -1);
+  CHECK(fg.red_zone);
+  CHECK_EQ((int) fg.red_from, fg.ball_x + 2);
+  CHECK_EQ((int) fg.red_to, 121);
+  CHECK_EQ((int) fg.ball_x, field_col(96, 128, 6));
+  CHECK(fg.text_left);
+  // At the goal line the marker still fits inside the field.
+  gl.yard_line = 0;
+  fg = field_strip(gl, 128);
+  CHECK(fg.valid);
+  CHECK_EQ((int) fg.ball_x, 120);
+  CHECK(fg.red_from <= fg.red_to);
+  // Nobody has the ball (between plays after a score): no tip, no line, no red zone.
+  GameSnapshot np = g;
+  np.possession = 0;
+  np.is_red_zone = true;
+  FieldStrip fn = field_strip(np, 128);
+  CHECK(fn.valid);
+  CHECK(!fn.has_offense);
+  CHECK_EQ((int) fn.gain_x, -1);
+  CHECK(!fn.red_zone);
+  // Nothing without a yard line, before the start, in another sport, or on a
+  // board too narrow for it.
+  GameSnapshot none = g;
+  none.yard_line = 255;
+  CHECK(!field_strip(none, 128).valid);
+  none = g;
+  none.state = GameState::PRE;
+  CHECK(!field_strip(none, 128).valid);
+  none = g;
+  none.sport = Sport::BASKETBALL;
+  CHECK(!field_strip(none, 128).valid);
+  // A document with no situation, or out-of-range numbers, leaves the defaults.
+  GameSnapshot pre;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre.json"), Sport::FOOTBALL, 6, pre) || true);
+  CHECK_EQ((int) pre.yard_line, 255);
+  CHECK_EQ((int) pre.down, 0);
+  CHECK_EQ((int) pre.distance, 0);
+
+  // The win bar: our columns of 128 for our chance, never the whole bar.
+  CHECK_EQ(win_bar_split(50, 128), 64);
+  CHECK_EQ(win_bar_split(1, 128), 1);
+  CHECK_EQ(win_bar_split(99, 128), 127);
+  CHECK_EQ(win_bar_split(72, 128), 92);
+  CHECK_EQ(win_bar_split(0, 128), -1);
+  CHECK_EQ(win_bar_split(100, 128), -1);
+  CHECK_EQ(win_bar_split(-1, 128), -1);
+
+  // The margin track: one sample per read, a redraw adds nothing, and a new
+  // game starts over.
+  MarginTrack t;
+  CHECK(t.read("1", 0, 50, "12:00", 1));
+  CHECK(!t.read("1", 0, 50, "12:00", 1));  // the same read drawn again
+  CHECK(t.read("1", 0, 51, "11:40", 1));   // the clock moved
+  CHECK(t.read("1", 3, 60, "11:40", 1));   // a basket
+  CHECK_EQ((int) t.n, 3);
+  CHECK_EQ((int) t.margin[2], 3);
+  CHECK_EQ((int) t.win[2], 60);
+  CHECK(t.read("2", -2, 0, "20:00", 1));
+  CHECK_EQ((int) t.n, 1);
+  CHECK_EQ(t.event_id, std::string("2"));
+  CHECK_EQ((int) t.margin[0], -2);
+  CHECK_EQ((int) t.win[0], 0);
+  // Full: pairs merge and every second read makes a sample from then on.
+  MarginTrack m;
+  for (int i = 0; i < MarginTrack::kMax; i++)
+    m.add("g", i - 64, 50);
+  CHECK_EQ((int) m.n, (int) MarginTrack::kMax);
+  CHECK_EQ((int) m.stride, 1);
+  m.add("g", 100, 50);  // the 129th read: the pairs merge and it is sample 65
+  CHECK_EQ((int) m.n, 65);
+  CHECK_EQ((int) m.stride, 2);
+  CHECK_EQ((int) m.pending, 0);
+  CHECK_EQ((int) m.margin[0], -63);  // the second of each pair stays
+  CHECK_EQ((int) m.margin[63], 63);
+  CHECK_EQ((int) m.margin[64], 100);
+  CHECK_EQ(m.last_margin, 100);
+  m.add("g", 90, 50);  // every second read is a sample now
+  CHECK_EQ((int) m.n, 65);
+  CHECK_EQ((int) m.pending, 1);
+  CHECK_EQ(m.last_margin, 90);
+  // Clamped to what fits the slot.
+  m.add("g", 300, 150);
+  CHECK_EQ((int) m.n, 66);
+  CHECK_EQ((int) m.margin[65], 127);
+  CHECK_EQ((int) m.win[65], 99);
+  // 4096 reads (a long game polled often) still fit.
+  for (int i = 0; i < 4096; i++)
+    m.add("g", 5, 50);
+  CHECK(m.n <= MarginTrack::kMax);
+  CHECK(m.stride >= 32);
+
+  // The sparkline's columns: stretched across the width, scaled to the peak.
+  int8_t cols[128];
+  MarginTrack e;
+  CHECK_EQ(margin_columns(e, 128, 4, 3, cols), 0);
+  MarginTrack one;
+  one.add("g", 2, 50);
+  CHECK_EQ(margin_columns(one, 128, 4, 3, cols), 1);
+  CHECK_EQ((int) cols[0], 4);  // the only point is the peak
+  CHECK_EQ((int) cols[127], 4);
+  MarginTrack two;
+  two.add("g", 0, 50);
+  two.add("g", 8, 60);
+  CHECK_EQ(margin_columns(two, 128, 4, 3, cols), 2);
+  CHECK_EQ((int) cols[0], 0);
+  CHECK_EQ((int) cols[127], 4);
+  CHECK_EQ((int) cols[64], 2);  // halfway is 4 of 8, so 2 of 4 px
+  MarginTrack swing;
+  swing.add("g", 10, 50);
+  swing.add("g", -10, 50);
+  swing.add("g", 10, 50);
+  CHECK_EQ(margin_columns(swing, 128, 4, 3, cols), 3);
+  CHECK_EQ((int) cols[0], 4);
+  CHECK_EQ((int) cols[127], 4);
+  // A deficit fills down to 3 at most.
+  int low = 0;
+  for (int x = 0; x < 128; x++)
+    low = std::min(low, (int) cols[x]);
+  CHECK_EQ(low, -3);
+  // A 1-point lead against a 20-point peak still shows a pixel.
+  MarginTrack tiny;
+  tiny.add("g", 20, 50);
+  tiny.add("g", 1, 50);
+  CHECK_EQ(margin_columns(tiny, 128, 4, 3, cols), 2);
+  CHECK_EQ((int) cols[127], 1);
+  // A pending read (after a merge) is the last point.
+  MarginTrack pend;
+  pend.add("g", 0, 50);  // the sample
+  pend.stride = 2;       // as after a merge
+  pend.add("g", 6, 50);  // pending, not a sample yet
+  CHECK_EQ((int) pend.n, 1);
+  CHECK_EQ((int) pend.pending, 1);
+  CHECK_EQ(margin_columns(pend, 128, 4, 3, cols), 2);
+  CHECK_EQ((int) cols[0], 0);
+  CHECK_EQ((int) cols[127], 4);
+}
+
 static void test_line_score() {
   // NHL final, WSH 5-3 over PIT, read as Washington's panel
   GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
@@ -6073,6 +6259,7 @@ int main() {
   test_schedule_league();
   test_schedule_due();
   test_no_live_rescan();
+  test_game_viz();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();

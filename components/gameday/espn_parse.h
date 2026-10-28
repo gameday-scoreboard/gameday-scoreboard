@@ -114,6 +114,13 @@ struct GameSnapshot {
   std::string last_play, down_distance;
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
+  // Football, for the field strip (game_viz.h): where the ball is as ESPN
+  // gives it, yards from the HOME team's goal line (home at its own 35 is 35,
+  // away at its own 31 is 69), 255 when the document has none; the down and
+  // the yards to go, 0 when none.
+  uint8_t yard_line{255};
+  uint8_t down{0};
+  uint8_t distance{0};
   // Football: how the drive went ("4 plays, 58 yards, 1:36"), only while the
   // last play is a touchdown or field goal, and our side's chance to win
   // after the last play (1 to 99), -1 when ESPN gives none.

@@ -28,7 +28,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list"};
+                                    "nick",   "lists",    "list",   "field",   "winbar",  "spark"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -202,6 +202,9 @@ enum class SetKind : uint8_t {
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  FIELD,        // on, football's field strip on the board (game_viz.h)
+  WINBAR,       // on, the win chance bar on the board
+  SPARK,        // on, the score margin sparkline on the board
 };
 
 struct TeamRef {
@@ -381,6 +384,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TZ_AUTO);
   if (k == "down")
     return on(SetKind::DOWN);
+  if (k == "field")
+    return on(SetKind::FIELD);
+  if (k == "winbar")
+    return on(SetKind::WINBAR);
+  if (k == "spark")
+    return on(SetKind::SPARK);
   if (k == "count")
     return on(SetKind::COUNT);
   if (k == "match")

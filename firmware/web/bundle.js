@@ -158,6 +158,15 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
       </div>
       <div class="card">
+        <h2>Pictures</h2>
+        <p class="hint">Drawn on the row under the clock during a game, on a 128-wide board. A single 64x64 panel has no room for them.</p>
+        <div id="vizCtls">
+          <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is, the line to gain, which way the offense is going and the timeouts left, in the teams' colors. The red zone glows red.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: a thin bar split at ESPN's chance for each side to win, updated every play.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
+          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game as a small chart, your side's lead up in your color, theirs down in theirs.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+        </div>
+      </div>
+      <div class="card">
         <h2>Celebrations</h2>
         <p class="hint">Full-screen splashes for scores. Yours always show.</p>
         <div id="celebCtls">
@@ -993,7 +1002,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // line, so no switch of their own; a switch for several sports lists them.
     const sports = new Set((S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
-    document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
+    document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
     // Firmware from before the countdown card leaves these out.

@@ -162,6 +162,11 @@ script:
             lv_obj_set_pos(id(tt_game_status_lbl), 0, 56);
             lv_obj_set_style_text_font(id(tt_splash_lbl), id(spleen_16), 0);
             lv_obj_set_pos(id(tt_splash_lbl), 0, 16);
+            // The pictures (game_viz.h): the win bar on the row above the
+            // situation row, the strip or sparkline canvas on the row itself.
+            lv_obj_set_pos(id(tt_viz_canvas), 0, 48);
+            for (lv_obj_t *o : {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)})
+              lv_obj_set_pos(o, 0, 47);
           } else {
             // Single panel: logos side by side, everything stacked beneath
             lv_obj_set_pos(id(gd_team_logo_img), 0, 0);
@@ -195,6 +200,9 @@ script:
             lv_obj_set_pos(id(tt_game_status_lbl), 0, 56);
             lv_obj_set_style_text_font(id(tt_splash_lbl), id(spleen_12), 0);
             lv_obj_set_pos(id(tt_splash_lbl), 0, 18);
+            // No room for the pictures on a single panel
+            for (lv_obj_t *o : {id(tt_viz_canvas), id(tt_win_team), id(tt_win_opp), id(tt_win_mark)})
+              lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
           }
           // Baseball's bases, drawn as a small diamond (first base on the
           // right), and the outs. gd_update shows them during a half inning.
@@ -264,6 +272,8 @@ script:
       clock_card: bool
       countdown_card: bool
       next_line: string
+      viz: int
+      win_pct: int
     then:
       - lambda: |-
           id(gd_sport) = sport;
@@ -532,6 +542,153 @@ script:
           } else {
             lv_obj_clear_flag(id(tt_away_team_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(id(tt_home_team_lbl), LV_OBJ_FLAG_HIDDEN);
+          }
+      - lambda: |-
+          // The pictures on a wide board's situation row
+          // (components/gameday/game_viz.h): football's field strip, the win
+          // chance bar on the row above it, and the score margin sparkline for
+          // basketball and hockey. The component's viz bits say which to draw
+          // (the owner's switches already applied); the geometry comes from it
+          // too, so the host tests cover it.
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const bool wide = W >= 128;
+          lv_obj_t *cv = id(tt_viz_canvas);
+          auto bright = [](uint32_t c) -> lv_color_t {
+            uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+            uint32_t m = std::max(r, std::max(g, b));
+            if (m == 0)
+              return lv_color_hex(0xFFFFFF);
+            if (m < 0xC0) {
+              r = r * 0xC0 / m;
+              g = g * 0xC0 / m;
+              b = b * 0xC0 / m;
+            }
+            return lv_color_make(r, g, b);
+          };
+          // White dots on a dark end zone, black on a light one.
+          auto light = [](uint32_t c) {
+            uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+            return r * 299 + g * 587 + b * 114 > 160000;
+          };
+          auto px = [&](int x, int y, lv_color_t c) {
+            if (x >= 0 && x < W && x < 128 && y >= 0 && y < 8)
+              lv_canvas_set_px(cv, x, y, c, LV_OPA_COVER);
+          };
+          auto fill = [&](int x0, int y0, int w, int h, lv_color_t c) {
+            for (int y = y0; y < y0 + h; y++)
+              for (int x = x0; x < x0 + w; x++)
+                px(x, y, c);
+          };
+          const bool live = game_state == "IN";
+          const bool field = wide && live && (viz & ::espn::VIZ_FIELD) != 0;
+          const bool winbar = wide && live && (viz & ::espn::VIZ_WINBAR) != 0 && win_pct >= 1 && win_pct <= 99;
+          const bool spark = wide && !field && (viz & ::espn::VIZ_SPARK) != 0;
+          lv_obj_t *bars[3] = {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)};
+          if (winbar) {
+            // Our color from the left for our chance, theirs for the rest, a
+            // white pixel at the split.
+            int split = ::espn::win_bar_split(win_pct, W);
+            lv_obj_set_style_bg_color(bars[0], bright((uint32_t) team_color), 0);
+            lv_obj_set_style_bg_color(bars[1], bright((uint32_t) opponent_color), 0);
+            lv_obj_set_pos(bars[0], 0, 47);
+            lv_obj_set_size(bars[0], split, 1);
+            lv_obj_set_pos(bars[1], split, 47);
+            lv_obj_set_size(bars[1], W - split, 1);
+            lv_obj_set_pos(bars[2], split == W - 1 ? split - 1 : split, 47);
+            lv_obj_set_size(bars[2], 1, 1);
+            for (lv_obj_t *o : bars)
+              lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+          } else {
+            for (lv_obj_t *o : bars)
+              lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+          }
+          lv_obj_t *pips[6] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3),
+                               id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
+          bool drawn = false;
+          if (field) {
+            ::espn::FieldStrip fs = id(gameday_ctl).field_strip(W);
+            if (fs.valid) {
+              const int ez = fs.ez, right = W - ez;  // the field is ez..right-1
+              fill(0, 0, W, 8, lv_color_hex(0x0C3A14));
+              if (fs.red_zone)
+                fill(fs.red_from, 0, fs.red_to - fs.red_from + 1, 8, lv_color_hex(0x5A0A0A));
+              // Ten-yard dashes along the edges, midfield a little brighter.
+              for (int yd = 10; yd <= 90; yd += 10) {
+                int x = ::espn::field_col(yd, W, ez);
+                lv_color_t c = lv_color_hex(yd == 50 ? 0x3C8A48 : 0x2A6A34);
+                px(x, 0, c);
+                px(x, 7, c);
+                if (yd == 50) {
+                  px(x, 1, c);
+                  px(x, 6, c);
+                }
+              }
+              // End zones in team colors, with the timeouts left as dots.
+              uint32_t tc = (uint32_t) team_color, oc = (uint32_t) opponent_color;
+              fill(0, 0, ez, 8, bright(tc));
+              fill(right, 0, ez, 8, bright(oc));
+              lv_color_t tdot = lv_color_hex(light(tc) ? 0x000000 : 0xFFFFFF);
+              lv_color_t odot = lv_color_hex(light(oc) ? 0x000000 : 0xFFFFFF);
+              for (int i = 0; i < 3; i++) {
+                if (i < fs.left_timeouts)
+                  fill(ez / 2 - 1, i * 3, 2, 2, tdot);
+                if (i < fs.right_timeouts)
+                  fill(right + ez / 2 - 1, i * 3, 2, 2, odot);
+              }
+              if (fs.gain_x >= 0)
+                fill(fs.gain_x, 0, 1, 8, lv_color_hex(0xFFD000));
+              // The ball, with a tip the way the offense is going.
+              lv_color_t ball = lv_color_hex(fs.red_zone ? 0xFF3030 : 0xFFFFFF);
+              fill(fs.ball_x, 2, 2, 4, ball);
+              if (fs.has_offense) {
+                int tip = fs.to_right ? fs.ball_x + 2 : fs.ball_x - 1;
+                if (tip >= ez && tip < right) {
+                  px(tip, 3, ball);
+                  px(tip, 4, ball);
+                }
+              }
+              lv_obj_invalidate(cv);
+              lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
+              drawn = true;
+              // The pips' row is the strip's; the end zones carry the timeouts.
+              for (lv_obj_t *o : pips)
+                lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+              // "3rd & 4" on the half of the strip away from the ball.
+              lv_obj_set_style_text_align(id(tt_down_lbl), fs.text_left ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
+              lv_obj_set_pos(id(tt_down_lbl), fs.text_left ? ez + 2 : W / 2, 48);
+              lv_obj_set_width(id(tt_down_lbl), W / 2 - ez - 2);
+            }
+          } else if (spark) {
+            // The margin over the game: our lead up in our color, theirs down
+            // in theirs, from a dim baseline, the latest read in white.
+            int8_t cols[128];
+            const int cw = std::min(W, 128);
+            int pts = ::espn::margin_columns(id(gameday_ctl).margin_track(), cw, 4, 3, cols);
+            if (pts > 0) {
+              fill(0, 0, W, 8, lv_color_hex(0x000000));
+              lv_color_t up = bright((uint32_t) team_color), down = bright((uint32_t) opponent_color);
+              for (int x = 0; x < cw; x++) {
+                int v = cols[x];
+                px(x, 4, lv_color_hex(0x303030));
+                if (v > 0)
+                  fill(x, 4 - v, 1, v, up);
+                else if (v < 0)
+                  fill(x, 5, 1, -v, down);
+              }
+              int last = cols[cw - 1];
+              px(cw - 1, last > 0 ? 4 - last : last < 0 ? 4 - last : 4, lv_color_hex(0xFFFFFF));
+              lv_obj_invalidate(cv);
+              lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
+              drawn = true;
+            }
+          }
+          if (!drawn)
+            lv_obj_add_flag(cv, LV_OBJ_FLAG_HIDDEN);
+          if (!field && wide) {
+            // The situation row as the layout had it.
+            lv_obj_set_style_text_align(id(tt_down_lbl), LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_pos(id(tt_down_lbl), 32, 48);
+            lv_obj_set_width(id(tt_down_lbl), W - 64);
           }
       - lambda: |-
           // Halftime and the final: the line score takes turns with the board
@@ -810,6 +967,57 @@ lvgl:
                         text_font: spleen_12
                         text_color: 0xFFFFFF
                         text: ""
+
+              # The pictures row (components/gameday/game_viz.h): the field
+              # strip or the margin sparkline on this canvas, and the win
+              # chance bar as three slivers on the row above. Placed by
+              # tt_apply_layout, drawn and shown by gd_update on a wide board.
+              - canvas:
+                  id: tt_viz_canvas
+                  x: 0
+                  y: 48
+                  width: 128
+                  height: 8
+                  hidden: true
+              - obj:
+                  id: tt_win_team
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 47
+                  width: 64
+                  height: 1
+                  radius: 0
+                  border_width: 0
+                  pad_all: 0
+                  bg_opa: COVER
+                  bg_color: 0x808080
+                  hidden: true
+              - obj:
+                  id: tt_win_opp
+                  scrollbar_mode: "OFF"
+                  x: 64
+                  y: 47
+                  width: 64
+                  height: 1
+                  radius: 0
+                  border_width: 0
+                  pad_all: 0
+                  bg_opa: COVER
+                  bg_color: 0x808080
+                  hidden: true
+              - obj:
+                  id: tt_win_mark
+                  scrollbar_mode: "OFF"
+                  x: 64
+                  y: 47
+                  width: 1
+                  height: 1
+                  radius: 0
+                  border_width: 0
+                  pad_all: 0
+                  bg_opa: COVER
+                  bg_color: 0xFFFFFF
+                  hidden: true
 
               - label:
                   id: tt_away_team_lbl

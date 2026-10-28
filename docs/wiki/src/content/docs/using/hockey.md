@@ -27,6 +27,11 @@ NHL teams have no Up next list on the device page: their season schedules are to
 - **Intermissions** show ESPN's words, like "End of 1st", and the ticker shows the series, or the records outside the playoffs.
 - **The ticker** with the last play. Turn it off with **Last play** in the Ticker card. See [The ticker](/using/ticker/).
 
+
+:::note[Coming in the next release]
+On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started following the game. Your team's lead fills up from the middle in your color, the other team's fills down in theirs, and a white pixel marks the latest read. **Score margin** in the Pictures card on the device page turns it off. ESPN publishes no win chance for hockey, so there is no win chance bar.
+:::
+
 The board doesn't show power plays. ESPN's NHL data has no power play field, and working one out from the penalties would be wrong when penalties offset.
 
 On a single 64x64 panel the clock takes the abbreviations' place during play, and there is no room for the records.
