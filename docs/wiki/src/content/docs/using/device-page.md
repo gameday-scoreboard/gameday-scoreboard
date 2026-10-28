@@ -38,7 +38,7 @@ Tap **Add a favorite** in the Favorites card to open the team chooser. It has a 
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
-The chooser is for favorites only. Until then, **Change team** opens it for My team, and a tap there follows that team and closes it.
+The chooser is for favorites only.
 
 ## Settings
 
@@ -72,11 +72,7 @@ Settings are grouped in cards. In the order the page shows them:
 | **Install updates automatically** | Off unless you turn it on. Installs a new release between 3 and 5 AM, never during a game the panel follows. See [Firmware updates](/using/updates/). |
 | Wi-Fi networks | The networks the panel remembers, in the order it tries them, with **Forget** for each. See [Wi-Fi](/using/wifi/). |
 
-Until then the **Odds, TV and win chance** switch is called **Pre-game odds and TV** on the device page. It's the same switch.
-
-The Ticker card has a **Pre-game season leaders** switch, on to start: before kickoff in football, each team's passing leader with yards and touchdowns. It shows only on a panel that follows football. See [The ticker](/using/ticker/).
-
-The switch also covers each team's season leader in baseball (home runs), basketball (points per game) and hockey (points), and shows on a panel that follows any of those sports or football.
+The Ticker card has a **Pre-game season leaders** switch, on to start: before the game, each team's season leader, the passing leader with yards and touchdowns in football, home runs in baseball, points per game in basketball and points in hockey. It shows on a panel that follows any of those sports. See [The ticker](/using/ticker/).
 
 The Favorites card has two more switches: **Jump to the action** (off to start) moves the panel to another favorite's game at its big moment, then back, and **Score banner** (on to start) shows another favorite's score along the bottom for five seconds. See [Favorite teams](/using/favorites/#when-a-game-is-on).
 

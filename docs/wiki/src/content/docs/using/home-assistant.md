@@ -31,7 +31,7 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
-The **Team** entity is gone, along with My team. Until then, **Team** picks the team My team follows, and **Mode** also lists My team and the older Live NFL, Live college and Live anything.
+The **Team** entity is gone, along with My team.
 
 A few diagnostic sensors, the Wi-Fi signal and the free memory readings, are there but turned off until you turn them on in Home Assistant.
 

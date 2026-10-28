@@ -46,11 +46,7 @@ The Ticker card on the device page has a switch for each part. All of them start
 
 In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Odds, TV and win chance** shows ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
 
-Until then the device page calls this switch **Pre-game odds and TV**. It's the same switch.
-
-A **Pre-game season leaders** switch, on to start, adds football's passing leaders before kickoff. Like the situation switches, it shows only on a panel that follows football.
-
-The **Pre-game season leaders** switch covers the baseball, basketball and hockey leaders too, and shows on a panel that follows any of those sports or football.
+A **Pre-game season leaders** switch, on to start, adds the season leaders before the game. Like the situation switches, it shows only on a panel that follows a sport it covers: football, baseball, basketball or hockey.
 
 These three, Down and distance, Count and at-bat and Match stats, are the game situation for their sport. Hockey and basketball have no situation line, so they have no switch of their own. The card only shows the switches for sports your panel follows, from your team, your favorites and the leagues you picked for Live games, so turning off football's line leaves baseball's count alone.
 

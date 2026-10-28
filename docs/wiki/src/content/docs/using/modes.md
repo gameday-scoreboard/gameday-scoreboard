@@ -9,8 +9,6 @@ The two buttons under the board on the device page, **Favorite teams** and **Liv
 
 Favorite teams replaces My team. To follow one team, make it your only favorite. A panel that was in My team starts in Favorite teams after the update. The team it followed isn't copied over, so add it as a favorite. Live games with nothing on shows your first favorite instead of the My team pick, and the **Team** entity is gone from Home Assistant.
 
-Until then, the device page has a third button, **My team**, which follows the one team picked with **Change team**.
-
 ## Favorite teams
 
 The panel cycles through up to 16 favorite teams, and a favorite's game takes the panel shortly before kickoff. With one favorite, the panel follows that one team. See [Favorite teams](/using/favorites/) for how it works, its settings and playlists.
