@@ -14,9 +14,11 @@ The Game Day app is the companion app for your panel, for iPhone and Android. It
 - **Picks your teams** and the mode, the same choices as the device page. See [Pick your team](/get-started/pick-your-team/).
 - **Changes the panel's settings**: the ticker, celebrations, favorites, brightness, the remote and the rest. They are the same settings as on the device page, and a change in one shows in the other.
 
-## On iPhone: Board, Teams and Settings
+## Board, Teams and Settings
 
-The iPhone app has three tabs along the bottom. They show the panel you picked last. The app runs on iPad too, with the same tabs.
+Both apps have three tabs: **Board**, **Teams** and **Settings**. They show the panel you picked last. The iPhone app runs on iPad too, with the same tabs.
+
+A few things are on iPhone only for now: messages, playlists, the night schedule, the countdowns, and backing up and restoring settings. They're marked below. On Android, use the [device page](/using/device-page/) for them.
 
 ### Board
 
@@ -24,7 +26,7 @@ What you reach for during a game:
 
 - The game on the panel, and what's up next.
 - The mode, **Favorites** or **Live games**, with the one switch that goes with it: **Only today's games** for Favorites, the leagues for Live games. The device page calls the first one **Favorite teams**.
-- **Message**, for a banner or a message card on the panel. See [Your own messages](/using/messages/).
+- **Message**, for a banner or a message card on the panel (iPhone only). See [Your own messages](/using/messages/).
 - **Brightness**, **Screen** to turn the panel's screen off and on, and **Refresh now** to read the scores again right away.
 
 The panel's name is at the top. Tap it to switch to another panel, to add one, or, with two or more, to manage them.
@@ -33,30 +35,24 @@ If the app loses its connection to the panel for a moment while the panel still 
 
 ### Teams
 
-- **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each row has arrows to move the team up or down, **Edit** lets you drag them, and a swipe takes one out. See [Favorite teams](/using/favorites/).
-- **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
+- **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
+- **Playing** and **Playlists**, for groups of your favorites (iPhone only). See [Playlists](/using/favorites/#playlists).
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
 - **Live games**: the leagues it follows, **Switch every**, and the other Live games switches. Choosing leagues here doesn't change the panel's mode. See [Modes](/using/modes/).
 
 ### Settings
 
-- **Display**: ticker speed, **Showing** (the scoreboard or the clock) and the night schedule, then the ticker, celebrations and **Between games**, which has the countdown to the next game and your own countdown. See [Brightness and the clock](/using/brightness-and-clock/), [The ticker](/using/ticker/) and [Countdowns](/using/countdowns/).
-- **Device**: the panel's **Nickname**, **Setup** (the walkthrough again, the timezone, and showing how to connect when the panel starts), **Backup**, firmware updates, **Reboot**, **Reset Wi-Fi**, **Wi-Fi networks**, **Diagnostics**, and **Advanced** for the panel layout, the remote and the panel's memory. See [Back up and restore settings](/using/backup/) and [Wi-Fi](/using/wifi/).
+- **Display**: ticker speed, **Showing** (the scoreboard or the clock), the ticker and celebrations. On iPhone it also has the night schedule and **Between games**, with the countdown to the next game and your own countdown. See [Brightness and the clock](/using/brightness-and-clock/), [The ticker](/using/ticker/) and [Countdowns](/using/countdowns/).
+- **Device**: the panel's **Nickname**, **Setup**, firmware updates, **Reboot**, **Reset Wi-Fi**, the panel's saved Wi-Fi networks and the remote. On iPhone, **Setup** has the walkthrough again and the timezone, **Backup** saves and restores the panel's settings, and **Advanced** has the panel layout, the remote and the panel's memory. On Android the panel layout is under **Setup** and the remote under **Remote**. See [Back up and restore settings](/using/backup/), [Wi-Fi](/using/wifi/) and [WizMote remote](/using/remote/).
 - **Panels**: every panel saved in the app, and new ones nearby.
-- **Team logos**, the app's version, links to help and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
-
-## On Android
-
-The Android app has the same favorites, Live games, ticker, celebrations, remote, Wi-Fi networks and device settings, laid out its own way.
-
-These are on iPhone only for now: playlists, the countdowns, the night schedule, messages, and backing up and restoring settings. On Android, use the [device page](/using/device-page/) for them.
+- **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
 
 ## Your panels
 
-The panel list shows each panel's nickname, with a dot for online and **Offline** next to a panel the app can't reach. On iPhone the list is **Settings > Panels**, and it's what the Board shows until you have a panel.
+The panel list is **Settings > Panels**, and it's what the Board shows until you have a panel. It shows each panel's nickname, with a dot for online and **Offline** next to a panel the app can't reach.
 
-- **Nickname**: give each panel a name like "Living room". On iPhone it's in **Settings > Device**; on Android it's at the top of the panel's **Panel** settings. The nickname is saved on the panel, so every phone and the device page see the same name.
-- **Order**: with two or more panels, drag the list into your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
+- **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
+- **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
 
 ## If the app doesn't list your panel
 
