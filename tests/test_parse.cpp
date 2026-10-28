@@ -5522,6 +5522,32 @@ static void test_game_viz() {
   CHECK(fh.text_left);
   CHECK_EQ((int) fh.left_timeouts, 1);
   CHECK_EQ((int) fh.right_timeouts, 0);
+  // DEL @ WKU on 2026-10-27 (trimmed from a live read): WKU, home, has the
+  // ball, 4th & 11 at the DEL 45 (ESPN yardLine 55, 55 from WKU's goal line);
+  // Delaware is 94.8% to win with 3 timeouts to WKU's 2.
+  GameSnapshot del;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 48, del));
+  CHECK_EQ((int) del.yard_line, 55);
+  CHECK_EQ((int) del.down, 4);
+  CHECK_EQ((int) del.distance, 11);
+  CHECK_EQ((int) del.team_win_pct, 95);
+  CHECK_EQ(del.possession, 2);
+  FieldStrip fd = field_strip(del, 128);
+  CHECK(fd.valid);
+  CHECK_EQ((int) fd.ball_x, field_col(45, 128, 6));  // 45 from Delaware's end zone on the left
+  CHECK(!fd.to_right);                                // WKU drives at it
+  CHECK_EQ((int) fd.gain_x, field_col(34, 128, 6));
+  CHECK_EQ((int) fd.left_timeouts, 3);
+  CHECK_EQ((int) fd.right_timeouts, 2);
+  CHECK_EQ(win_bar_split(del.team_win_pct, 128), 122);
+  GameSnapshot wku;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 98, wku));
+  CHECK_EQ((int) wku.team_win_pct, 5);
+  CHECK_EQ(wku.possession, 1);
+  FieldStrip fw = field_strip(wku, 128);
+  CHECK_EQ((int) fw.ball_x, field_col(55, 128, 6));
+  CHECK(fw.to_right);
+  CHECK_EQ((int) fw.gain_x, field_col(66, 128, 6));
   // Goal to go: the line to gain is the goal line, so no column of its own.
   GameSnapshot gl = g;
   gl.yard_line = 100 - 96;  // FIU at the JXST 4
