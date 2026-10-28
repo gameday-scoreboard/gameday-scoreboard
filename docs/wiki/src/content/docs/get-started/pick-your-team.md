@@ -13,7 +13,7 @@ Favorites are the only way to pick a team. Until then, the device page also has 
 
 ## From the Game Day app
 
-Once the app has put the panel on your Wi-Fi, it lets you pick your team. Later, open the panel in the app and change your teams the same way. See [The Game Day app](/get-started/the-app/).
+Once the app has put the panel on your Wi-Fi, it opens the panel so you can add your teams. Later, tap **Add a favorite** to add more: on iPhone it's on the **Teams** tab, on Android under **Favorites** on the panel's screen. The app's team chooser has the same league tabs, search and **On now** tab as the device page's. See [The Game Day app](/get-started/the-app/).
 
 ## From the device page
 
