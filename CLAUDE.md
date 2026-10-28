@@ -25,8 +25,9 @@ contributors; read it too.
   that changes what an owner or DIY builder sees or does updates or adds
   the page for it under docs/wiki/src/content/docs/ in the same PR; CI
   ("Docs updated") fails a PR into `dev` that touches firmware/ or
-  components/ without a docs change unless it carries the label
-  `docs: not needed`. Behavior that `main` doesn't have yet goes in a
+  components/ without a docs change unless the PR description has a line
+  `No owner-visible change, no docs: <why>`, which the reviewer checks.
+  Behavior that `main` doesn't have yet goes in a
   `:::note[Coming in the next release]` aside, removed at release time.
   Docs describe the firmware on the branch they sit on, written for the
   owner, no internal names, cards or notes. `cd docs/wiki && npm run
