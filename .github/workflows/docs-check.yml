@@ -50,13 +50,15 @@ jobs:
             echo "This PR also changes the docs."
             exit 0
           fi
-          # The line needs a reason after the colon (four characters or more).
-          # grep reads a string, not a pipe: with pipefail, a grep -q that
-          # stops early can fail the pipe on a long description.
+          # The line may be a bullet and needs a reason after the colon, four
+          # characters or more, not the template's <why>. grep reads a string,
+          # not a pipe: with pipefail, a grep -q that stops early can fail the
+          # pipe on a long description.
           body=$(tr -d '\r' <<<"$BODY")
-          if grep -qiE '^[[:space:]]*no owner-visible change, no docs:[[:space:]]*[^[:space:]].{3,}' <<<"$body"; then
+          line='^[[:space:]]*([-*][[:space:]]+)?no owner-visible change, no docs:'
+          if grep -qiE "$line"'[[:space:]]*[^[:space:]<].{3,}' <<<"$body"; then
             echo "The description says no owner-visible change:"
-            grep -iE '^[[:space:]]*no owner-visible change, no docs:' <<<"$body"
+            grep -iE "$line" <<<"$body"
             exit 0
           fi
           if tr '|' '\n' <<<"$LABELS" | grep -qxF 'docs: not needed'; then
