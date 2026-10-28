@@ -641,10 +641,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release
-          # Only the variant zips: each holds that board's factory image, which
-          # scripts/factory_flash.py takes from it. Releases up to v2026.10.2
-          # also carried the factory images on their own.
-          ASSETS=""
+          # MoonHub75's factory image on its own, for flashing by hand (the board
+          # we build and the one DIY builders use), plus the variant zips below.
+          # scoreboard75 is the early test boards: its image stays in its zip.
+          # scripts/factory_flash.py reads the image out of a zip.
+          f=$(ls artifacts/moonhub75/*.factory.bin | head -1)
+          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin"
+          ASSETS="release/gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin"
           # Also zip each variant's manifest folder (manifest.json plus the
           # OTA and factory bins it references, with relative paths that
           # resolve the same wherever the folder lands) so site.yml can
@@ -660,7 +663,7 @@ jobs:
             echo
             echo "Panels update themselves from their device page or the Game Day app. To install from scratch, use the [installer](https://install.gameday-scoreboard.com/) in your browser."
             echo
-            echo "**Which file?** You don't need any of them for that. The installer site is built from these zips, one per build. Each holds that board's \`.factory.bin\` too, for flashing over USB by hand."
+            echo "**Which file?** You don't need any of them for that. To flash a MoonHub75 over USB by hand, use \`gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin\`. The \`firmware-*.zip\` files are what the installer site is built from; you don't need them."
             if [ -n "$PREV" ]; then
               echo
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"

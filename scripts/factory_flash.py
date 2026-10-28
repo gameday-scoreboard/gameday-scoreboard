@@ -350,6 +350,7 @@ def fetch_release(tag, variant, folder):
         tmp.replace(path)
     return path
 
+
 def flash_one(args, image, image_sha, version, out, qc_flag):
     port = "COM?" if args.dry_run and not args.port else (args.port or pick_port())
     print(f"Port {port}")
