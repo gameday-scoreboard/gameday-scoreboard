@@ -26,6 +26,8 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app lets you pick your team.
 
 :::note[Coming in the next release]
+If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
+
 About a second after the panel joins your Wi-Fi, it ends the Bluetooth connection with the app and turns Bluetooth off, and the app carries on over Wi-Fi. Before, a panel could restart a few seconds after joining while the app was still connected, and the app then said it couldn't reach the panel.
 :::
 

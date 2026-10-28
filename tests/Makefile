@@ -23,7 +23,7 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) $(SRCS) -o $@ $(LDFLAGS)
 
-build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
+build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h ../components/saved_networks/setup_window.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
 
