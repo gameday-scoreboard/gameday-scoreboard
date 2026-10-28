@@ -20,6 +20,10 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+- A new panel given a wrong Wi-Fi name or password in the Game Day app goes back to **SETUP** after **Can't join**, instead of saying it is waiting for that network after a power cut and later that Wi-Fi is lost.
+
 ## v2026.10.2
 
 Favorite teams replaces My team, with playlists, countdowns to the next game and to your own day, a second try after a wrong Wi-Fi password, and fixes for Bluetooth setup restarts, memory and missed scores.
