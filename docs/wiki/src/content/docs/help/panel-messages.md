@@ -26,6 +26,12 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | --- | --- | --- |
 | **Unplug it to rejoin saved Wi-Fi** | The panel is in setup after a Wi-Fi reset and still knows its old networks. | Set it up on a new network, or unplug it and plug it back in to go back to the old one. It goes back by itself after 15 minutes. |
 
+:::note[Coming in the next release]
+| The panel says | What it means | What to do |
+| --- | --- | --- |
+| **Can't join**, a network name, **Check name / and password** | The network the app just sent didn't work: the name or the password is wrong, or the panel can't see that network. It shows for 30 seconds. | Check both in the app, which asks for them again. After a Wi-Fi reset, close the app instead and the panel goes back to its saved networks a minute later. |
+:::
+
 ## When the Wi-Fi is the problem
 
 | The panel says | What it means | What to do |

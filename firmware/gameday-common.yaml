@@ -294,6 +294,9 @@ wifi:
         id(gd_ever_connected) = true;
         id(gd_offline_seconds) = 0;
         if (improv_ble::global_improv_component != nullptr) {
+          // Setup is over once the panel is on a network: a failed handover
+          // later this boot goes back to that one.
+          improv_ble::global_improv_component->set_setup_mode(false);
           improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
           improv_ble::global_improv_component->set_has_saved_network(true);
         }

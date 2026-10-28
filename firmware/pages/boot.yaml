@@ -329,9 +329,11 @@ script:
           // here after "Reset Wi-Fi": that panel boots with an empty network in
           // memory, which still counts as has_sta(), and is in setup, not in
           // trouble. boot_had_creds carries a real network through a failed
-          // handover from the app, which clears the one in memory.
+          // handover from the app, which clears the one in memory. A network
+          // the app is still trying doesn't count: a panel in setup that is
+          // sent a wrong password is still in setup, not lost.
           const bool have_creds = w->has_sta() && !w->get_sta().get_ssid().empty();
-          if (have_creds) id(boot_had_creds) = true;
+          if (have_creds && !provisioning) id(boot_had_creds) = true;
           static const uint32_t GRACE_MS = 30000, ROUTER_MS = 3 * 60 * 1000;
           const bool never = id(boot_last_connected_ms) == 0;
           const bool waiting = id(boot_had_creds) && never && id(boot_power_cut_grace) &&
@@ -878,10 +880,18 @@ improv_ble:
         id(boot_set_lines).execute("JOINING", joining.empty() ? std::string("Wi-Fi") : joining, "", "", true);
   on_state:
     # A handover that failed: boot_refresh says so now, not on the next poll.
+    # Read failed_ms(): the error this trigger is handed is always ERROR_NONE
+    # (improv_ble never sets error_state_).
     - if:
         condition:
-          lambda: return error == improv::ERROR_UNABLE_TO_CONNECT;
+          lambda: |-
+            auto *imp = improv_ble::global_improv_component;
+            return imp != nullptr && imp->failed_ms() != 0 && millis() - imp->failed_ms() < 1000;
         then:
+          # On the next loop: this runs inside the timeout, before the network
+          # in memory is put back, and boot_refresh must not take the one that
+          # failed for the panel's own.
+          - delay: 1ms
           - script.execute:
               id: boot_refresh
               via_button: false

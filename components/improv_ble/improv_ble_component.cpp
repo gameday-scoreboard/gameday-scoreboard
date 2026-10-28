@@ -492,7 +492,7 @@ void ImprovBLEComponent::process_incoming_data_() {
 }
 
 void ImprovBLEComponent::on_wifi_connect_timeout_() {
-  // GAMEDAY: before the error and state callbacks, which redraw the setup screen
+  // GAMEDAY: before the state callback, which redraws the setup screen (pages/boot.yaml)
   this->failed_ssid_ = this->connecting_sta_.get_ssid().str();
   this->failed_ms_ = std::max<uint32_t>(millis(), 1);
   this->set_error_(improv::ERROR_UNABLE_TO_CONNECT);
