@@ -641,12 +641,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release
-          # MoonHub75 keeps the unsuffixed factory bin name it has always had.
+          # MoonHub75's factory image on its own, for flashing by hand (the board
+          # we build and the one DIY builders use), plus the variant zips below.
+          # scoreboard75 is the early test boards: its image stays in its zip.
+          # scripts/factory_flash.py reads the image out of a zip.
           f=$(ls artifacts/moonhub75/*.factory.bin | head -1)
-          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}.factory.bin"
-          f=$(ls artifacts/scoreboard75/*.factory.bin | head -1)
-          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-scoreboard75.factory.bin"
-          ASSETS="release/gameday-scoreboard-${GITHUB_REF_NAME}.factory.bin release/gameday-scoreboard-${GITHUB_REF_NAME}-scoreboard75.factory.bin"
+          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin"
+          ASSETS="release/gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin"
           # Also zip each variant's manifest folder (manifest.json plus the
           # OTA and factory bins it references, with relative paths that
           # resolve the same wherever the folder lands) so site.yml can
@@ -660,7 +661,9 @@ jobs:
           {
             cat notes/notes.md
             echo
-            echo "Install or update from the [flasher page](https://install.gameday-scoreboard.com/), or let a panel already running v0.2.2 or later update itself from its device page."
+            echo "Panels update themselves from their device page or the Game Day app. To install from scratch, use the [installer](https://install.gameday-scoreboard.com/) in your browser."
+            echo
+            echo "**Which file?** You don't need any of them for that. To flash a MoonHub75 over USB by hand, use \`gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin\`. The \`firmware-*.zip\` files are what the installer site is built from; you don't need them."
             if [ -n "$PREV" ]; then
               echo
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"

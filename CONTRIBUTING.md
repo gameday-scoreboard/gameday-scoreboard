@@ -146,8 +146,11 @@ previews the site.
   person watching the panel, like "Name each panel's hotspot after its
   suffix".
 - If owners will notice your change, add one bullet for it under
-  `## Unreleased` at the top of CHANGELOG.md, written for the person who
-  owns the panel. Leave the released sections and the version number
+  `## Unreleased` at the top of CHANGELOG.md, in the group it belongs to
+  (`### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`): one short line
+  for the person who owns the panel, starting with an emoji, like
+  "- 🎵 Playlists: group your favorites and play just that group". The
+  detail belongs on the docs page. Leave the released sections and the version number
   alone; the maintainers turn `## Unreleased` into the release when it
   goes out.
 

@@ -5,8 +5,12 @@ the tagged version into the GitHub release and into the firmware manifest, so
 the device page shows it when an update is available. A tag without a
 matching section fails the build.
 
-Format: `## vX.Y.Z` heading, then short bullets written for the person who
-owns the panel, not for the code.
+Format: `## vX.Y.Z` heading, one plain summary line, then the changes
+grouped under `### ⚠️ Heads up` (anything an owner has to do or notice),
+`### ✨ New` and `### 🐛 Fixes`, leaving out a group with nothing in it. One
+short line per change, written for the person who owns the panel, not for
+the code, starting with an emoji that fits it. The detail goes on the docs
+page that describes it, not here.
 
 Changes merged since the last release go under `## Unreleased` at the top.
 The release renames that heading to the new version. A released section
@@ -14,46 +18,38 @@ stays as it shipped: a change to something it describes is a new bullet
 under `## Unreleased`.
 
 The site renders this file to install.gameday-scoreboard.com/changelog, newest first,
-with a one-line summary for each release: the first sentence of the first
-bullet, or a plain line between the heading and the bullets when a release
-needs a better one; that plain line is also the update summary on the device
-page. Panels link to their release's section there. Neither
+with a one-line summary for each release: the plain line under the heading
+(older releases without one use the first sentence of the first bullet);
+that line is also the update summary on the device page, so keep it under
+240 characters. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
 ## v2026.10.2
 
 Favorite teams replaces My team, with playlists, countdowns to the next game and to your own day, a second try after a wrong Wi-Fi password, and fixes for Bluetooth setup restarts, memory and missed scores.
 
-- Your message card steps aside when the panel has trouble to report: after three missed score updates in a row, on a Wi-Fi that wants you to sign in, or with no internet, the board says so instead of showing your message, and your message comes back once it clears. A panel on Wi-Fi with no internet now says **No internet** 30 seconds after joining instead of **Getting ready** for as long as it lasts.
-- A panel set up from the Game Day app over Bluetooth no longer restarts a few seconds after it joins your Wi-Fi, which made the app say it couldn't reach the panel. The same restart could happen when the panel's Wi-Fi came back while the app was connected to it over Bluetooth.
-- Favorite teams replaces My team: the device page, the app and Home Assistant have two modes, Favorite teams and Live games. To follow one team, make it your only favorite. A panel that was in My team starts in Favorite teams; the team it followed isn't copied over, so add it as a favorite. Live games with nothing on shows your first favorite, and on automatic it follows your favorites' leagues. The **Team** entity is gone from Home Assistant, and a WizMote button in Live games switches to Favorite teams on that favorite.
-- After Reset Wi-Fi, a wrong network name or password typed in the Game Day app no longer leaves the panel off Wi-Fi for up to 15 minutes. It says **Can't join**, the network's name and **Check name and password** on its screen, stays in setup so the app can ask again, and a minute after you close the app it goes back to the networks it already knows. The app lists it as a panel that can't reach its Wi-Fi, not as a new one.
-- The pre-game ticker shows each team's season leader in baseball, basketball and hockey too, like "Machado 30 HR 91 RBI", "Allen 21.0 PPG" or "McDavid 9 pts", under the same **Pre-game season leaders** switch as football's. A regular-season football game's ticker starts with the week, like "Week 8", and a game at an open-air venue ends with ESPN's forecast, like "76F Cloudy at Hard Rock Stadium".
-- A panel with a long list of favorite teams no longer restarts while it looks up the list after a change, and no longer runs so short of memory after a restart that it stops reading scores for a minute at a time.
-- A settings backup from another panel no longer gives this panel the other one's nickname or panel layout: it keeps its own, and the device page says so. A backup this panel saved itself, restored after a factory reset, still brings both back. A message list address this panel's firmware can't read is left out and listed, like a team it doesn't have, instead of stopping the whole restore.
-- Settings are saved on the panel the moment you change them, from the device page, the app, Home Assistant or the remote. Unplugging the panel within a minute of picking a team, a favorite, the night schedule or any other setting no longer loses the change, and a settings restore is saved at once too.
-- A panel that restarts during the night schedule's hours, as it does for the nightly update, comes back at its night brightness or with its screen off, instead of at full brightness for its first few seconds. After a power cut the schedule starts the moment the panel has the time.
-- A night schedule sent with the same start and end time, by an app, a script or a settings backup, keeps the hours it had instead of turning on and never running.
-- When ESPN no longer has your team's next game under the number it had, as can happen with a rescheduled game, the panel looks up your team again right away instead of retrying that game for hours.
-- Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", the way football's names a bowl. The device page no longer shows a rainout's makeup date or a shootout result as the game's name.
-- In Favorite teams with Score banner or Jump to the action on, the checks on your other favorites' live games no longer affect the game on the board. A frozen score on the board now says "Can't reach ESPN" even while another favorite's game reads fine, and one favorite's game that can't be read is checked after a few minutes, then less often, instead of slowing the board's own updates. A failed look at another favorite's next game no longer delays the board's next update either, with these settings on or off.
-- Pick the best game counts a soccer match as at a break from the 45th minute to halftime and from the 90th minute on, so a dull match no longer holds the panel for a whole half. It also looks once per break, so a hockey intermission or a quarter break costs one look instead of one every Switch every minutes, which is most of what a panel with no team picked reads.
-- Favorites take over with Stick with the higher team checks every Switch every minutes (at least every 5) for a higher favorite whose game started without a set time. With Alternate, the switch comes only every Switch every minutes, not also when another favorite's game is about to start.
-- Playlists: group your favorites, like your football teams or your basketball teams, and Favorite teams plays the group you pick instead of every favorite. Make them in the new Playlists card on the device page, or tap One per sport. Pick one under Favorite teams, with the new Playlist entity in Home Assistant, or with buttons 1 to 4 on a WizMote, which play your first four playlists once you have any and show the name on the board. A favorite outside the playlist still takes the panel near its kickoff.
-- A team logo no longer stays blank for the whole game when the panel was too busy to start downloading it; it tries again a second later. The logos the panel keeps also take far less memory, about 3 KB each instead of nearly 50 KB.
-- In a Live mode with your team on the board between games, a look for live games that fails (a slow or dropped connection) is tried again within a few minutes. Before, the panel waited for the next kickoff it knew of, up to 3 hours, and could miss the start of a game.
-- The board says **Can't reach ESPN** in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and in Live games after "No live NFL games, showing CHI" when your team's card can't be read. A panel cut off from ESPN for days keeps saying so instead of switching to "No upcoming game" every couple of days.
-- Between games the panel counts down to the next game in big digits, "2d 14h" and then hours and minutes, in your team's colors, taking turns with the next game's card every 10 seconds. It's on by default; turn it off with **Countdown to the next game** on the device page.
-- Count down to a day of your own, like Christmas or opening day: give it a name and a day on the device page and it takes the last 10 seconds of every minute between games, shows "Today" on the day, and goes away after. Settings backups keep both.
-- Favorite teams shows the off-season clock once every favorite (in the playlist, when one is playing) is between seasons, the same way My team does: with no game listed, or the next one more than 10 days away, like next season's opener. It's in the colors of the favorite who plays first, with that game under the time. Before, a listed opener months away left the board on "No upcoming game".
-- While the off-season clock is up, the panel checks the next game every 6 hours instead of every 15 minutes, which saves data on a capped plan.
-- A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends. Before, a football game still on at midnight Eastern dropped out of Live games, and with your team saved the panel went back to your team's card.
-- Favorites take over on Stick with the higher team: a favorite higher in your list now takes the panel when its game starts even if ESPN didn't answer for its league the last time the panel looked, instead of waiting for the game on the panel to end.
-- The ticker switch "Pre-game odds and TV" is now called "Odds, TV and win chance" on the device page, since in football it also shows who is favored to win during the game. It's the same switch and keeps your setting.
-- After midnight Eastern, the device page's On now tab keeps listing a late West Coast game that's still on, as the panel does, instead of saying there are no games today.
-- The device page works better from the keyboard and with a screen reader: the Live games league buttons and the timezone button keep their focus while the page updates, the timezone links are buttons, and a splash that has faded is no longer read out. Diagnostics says "3rd start since the power came on".
-- The panel can show its FCC information on its own screen: **Show on panel** next to **FCC information** in the Device card of the device page, or in the app. It goes through its pages twice, then the board comes back.
-- A kickoff label like "Tomorrow 1:30 PM" turns into "Today 1:30 PM" at your local midnight. Before, it kept yesterday's word until the panel next read ESPN.
+### ⚠️ Heads up
+
+- ⚠️ My team is gone: to follow one team, make it your only favorite. A panel that was in My team switches to Favorite teams, so add your team back as a favorite.
+
+### ✨ New
+
+- 🎵 Playlists: group your favorites, like your football teams, and play just that group
+- ⏳ Countdowns to your next game, and to a day you pick, like Christmas
+- 🏀 Season leaders and the playoff round in the pre-game ticker for baseball, basketball and hockey
+- 🏈 Football's ticker starts with the week and shows the forecast at open-air stadiums
+- 📶 Wrong Wi-Fi password in the app? The panel says **Can't join** and the app asks again
+- 📜 The panel can show its FCC information on its own screen
+
+### 🐛 Fixes
+
+- 📱 Setup from the app no longer restarts the panel right after it joins Wi-Fi
+- 💾 Settings are saved the moment you change them
+- 🧠 Long favorites lists no longer run the panel out of memory
+- 🌐 **No internet** instead of **Getting ready** when the internet is down
+- 🌙 The night schedule keeps its brightness after a restart
+- 🕛 "Tomorrow" turns into "Today" at midnight, and late West Coast games stay in Live games
+- 🖼️ A logo that missed its download tries again
 
 ## v2026.10.1
 
