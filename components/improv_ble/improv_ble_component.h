@@ -93,6 +93,13 @@ class ImprovBLEComponent final : public Component,
   // (0 for none). The setup screen says so for a while (pages/boot.yaml).
   const std::string &failed_ssid() const { return this->failed_ssid_; }
   uint32_t failed_ms() const { return this->failed_ms_; }
+  // Bluetooth links open right now, as Bluedroid counts them; 0 while
+  // Bluedroid is down. A phone's link can outlast its BLE server client by a
+  // moment after a hangup, so this, not the client count, says when turning
+  // Bluetooth off won't stall (gd_ble_off in gameday-common.yaml).
+  static uint16_t open_links();
+  // Hang up on every phone connected to the BLE server.
+  static void hang_up();
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }

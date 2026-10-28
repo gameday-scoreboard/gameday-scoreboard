@@ -48,9 +48,7 @@ std::string keys(const std::vector<League> &leagues) {
 // apply_set_'s setters store. PanelLayout's 1 to max_cols check (2 in
 // gameday-common.yaml) is the one refusal outside set_request.h.
 struct Settings {
-  TeamRef team;
-  uint8_t team_league{0};
-  int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
+  int mode{4}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
@@ -80,15 +78,6 @@ std::string team_str(const TeamRef &t) {
 }
 
 void load(Settings &s, JsonObjectConst o) {
-  if (o["team_league"].is<const char *>()) {
-    const LeagueInfo *info = league_by_key(o["team_league"]);
-    s.team_league = info != nullptr ? (uint8_t) info->league : 0;
-  }
-  if (o["team"].is<const char *>()) {
-    s.team = team_ref(o["team"]);
-    if (s.team.id != 0)
-      s.team_league = s.team.league;
-  }
   if (o["favs"].is<JsonArrayConst>()) {
     int i = 0;
     for (auto f : o["favs"].as<JsonArrayConst>())
@@ -184,11 +173,6 @@ void remap(Settings &s, const std::vector<TeamRef> &before) {
 void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
   std::vector<TeamRef> before = fav_refs(s);
   switch (op.kind) {
-    case SetKind::TEAM:
-      s.team = op.team;
-      if (op.team.id != 0)
-        s.team_league = op.team.league;
-      break;
     case SetKind::MODE: s.mode = op.value; break;
     case SetKind::ROTATE: s.rotate = op.value; break;
     case SetKind::LOCKON: s.lockon = op.value; break;
@@ -265,7 +249,6 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
 
 // The settings keys of rebuild_state_'s document, teams as league:id.
 void state_doc(const Settings &s, JsonDocument &doc) {
-  doc["team"] = team_str(s.team);
   doc["mode"] = s.mode;
   doc["rotate"] = s.rotate;
   doc["lockon"] = s.lockon;
@@ -294,8 +277,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     if (f.id != 0)
       fav_leagues.push_back(f.league);
   JsonArray live = doc["live"].to<JsonArray>();
-  bool no_team = no_team_default(s.team.id != 0, (uint8_t) s.mode, !fav_leagues.empty());
-  for (League l : no_team ? no_team_leagues() : live_leagues(s.live_mask, s.team_league, fav_leagues))
+  bool no_team = no_team_default((uint8_t) s.mode, !fav_leagues.empty());
+  for (League l : no_team ? no_team_leagues() : live_leagues(s.live_mask, fav_leagues))
     live.add(league_key(l));
   doc["live_auto"] = s.live_mask == 0;
   doc["tz"] = s.tz;
@@ -385,8 +368,7 @@ void test_parse_set() {
          "fav4");
   SCHECK(parse_set("fav1", "none", op, kFavMax) && op.slot == 1 && op.team.id == 0, "fav1 none");
   SCHECK(!parse_set("fav1", "nfl:99999", op, kFavMax), "fav1 unknown team");
-  SCHECK(parse_set("team", "none", op, kFavMax) && op.kind == SetKind::TEAM && op.team.id == 0, "team none");
-  SCHECK(parse_set("team", "nfl:6x", op, kFavMax) && op.team.id == 6, "team id reads like strtoul");
+  SCHECK(!parse_set("team", "nfl:6", op, kFavMax), "team is not a setting");
 
   SCHECK(parse_set("favs", "nfl:6,bogus,nfl:6,mlb:15", op, kFavMax), "favs");
   SCHECK(op.teams.size() == 2 && op.refused.size() == 1 && op.refused[0] == "bogus", "favs drops repeats, logs bad");
@@ -396,11 +378,14 @@ void test_parse_set() {
   SCHECK(parse_set("rotate", "999", op, kFavMax) && op.value == kRotateMaxMinutes, "rotate 999");
   SCHECK(!parse_set("lockon", "", op, kFavMax), "lockon empty is refused");
   SCHECK(!parse_set("release", "60s", op, kFavMax), "release with trailing text is refused");
-  SCHECK(!parse_set("mode", "abc", op, kFavMax), "mode text is refused, not My team");
+  SCHECK(!parse_set("mode", "abc", op, kFavMax), "mode text is refused, not Favorites");
   SCHECK(!parse_set("mode", "1.5", op, kFavMax), "mode 1.5 is refused");
   SCHECK(!parse_set("rotate", "9999999", op, kFavMax), "rotate past six digits is refused");
   SCHECK(parse_set("release", "100000", op, kFavMax) && op.value == kReleaseMaxSeconds, "release 100000");
-  SCHECK(parse_set("mode", "0", op, kFavMax) && op.value == 0, "mode 0");
+  SCHECK(parse_set("mode", "0", op, kFavMax) && op.value == (int) Mode::FAVORITES, "mode 0, My team before, is Favorites");
+  SCHECK(parse_set("mode", "2", op, kFavMax) && op.value == 2, "an old live mode stays");
+  SCHECK(read_mode(0) == 4 && read_mode(4) == 4 && read_mode(5) == 5 && read_mode(6) == -1 && read_mode(-1) == -1,
+         "read_mode");
   SCHECK(parse_set("mode", "5", op, kFavMax) && op.value == 5, "mode 5");
   SCHECK(!parse_set("mode", "6", op, kFavMax), "mode 6");
   SCHECK(parse_set("panels", "7", op, kFavMax) && op.value == 7, "panels passes the count through");
@@ -447,16 +432,14 @@ void test_parse_set() {
 
 void test_live_leagues() {
   std::vector<uint8_t> none;
-  SCHECK(keys(live_leagues(0, (uint8_t) League::NFL, none)) == "nfl", "auto, nothing saved");
-  SCHECK(keys(live_leagues(0, (uint8_t) League::MLB, none)) == "mlb", "auto, team only");
-  SCHECK(keys(live_leagues(0, (uint8_t) League::NHL, {(uint8_t) League::NCAA, (uint8_t) League::NHL})) == "ncaa,nhl",
-         "auto, team plus favorites, league order");
-  SCHECK(keys(live_leagues(0, 200, none)) == "nfl", "auto, unknown league byte falls back to NFL");
-  SCHECK(keys(live_leagues(0, 200, {(uint8_t) League::EPL})) == "epl", "auto, unknown team league skipped");
+  SCHECK(keys(live_leagues(0, none)) == "nfl", "auto, no favorites is NFL");
+  SCHECK(keys(live_leagues(0, {(uint8_t) League::NHL, (uint8_t) League::NCAA})) == "ncaa,nhl",
+         "auto, the favorites' leagues in league order");
+  SCHECK(keys(live_leagues(0, {200})) == "nfl", "auto, an unknown league falls back to NFL");
+  SCHECK(keys(live_leagues(0, {200, (uint8_t) League::EPL})) == "epl", "auto, an unknown league skipped");
   uint16_t mlb_nba = (uint16_t) ((1u << (uint8_t) League::MLB) | (1u << (uint8_t) League::NBA));
-  SCHECK(keys(live_leagues(mlb_nba, (uint8_t) League::NFL, {(uint8_t) League::NHL})) == "mlb,nba",
-         "an explicit mask ignores team and favorites");
-  SCHECK(keys(live_leagues(1u << 15, (uint8_t) League::MLB, none)) == "nfl", "a mask of unknown leagues is NFL");
+  SCHECK(keys(live_leagues(mlb_nba, {(uint8_t) League::NHL})) == "mlb,nba", "an explicit mask ignores the favorites");
+  SCHECK(keys(live_leagues(1u << 15, none)) == "nfl", "a mask of unknown leagues is NFL");
 
   SCHECK(live_mask_from_keys("") == 0, "empty keys");
   SCHECK(live_mask_from_keys("xfl,MLB") == 0, "unknown and upper-case keys");
@@ -467,32 +450,27 @@ void test_live_leagues() {
 // What each mode's scan reads is what its finals rotation walks.
 void test_scan_leagues() {
   std::vector<League> live = {League::MLB, League::NBA, League::NHL};
-  SCHECK(keys(scan_leagues((uint8_t) Mode::MY_TEAM, live)) == "", "My team scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NFL, live)) == "nfl", "Live NFL");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NCAA, live)) == "ncaa", "Live college");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything");
   SCHECK(keys(scan_leagues((uint8_t) Mode::FAVORITES, live)) == "", "Favorites scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live)) == "mlb,nba,nhl", "Live games, its own leagues");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, (uint8_t) League::EPL, {}))) == "epl",
-         "Live games, auto from the team's league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, {(uint8_t) League::EPL}))) == "epl",
+         "Live games, auto from a favorite's league");
   SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
 }
 
-// A panel nobody has picked a team on runs Live games over every league.
+// A panel in Favorites with none set runs Live games over every league.
 void test_no_team() {
   SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
   SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
          "the no-team default's scan reads every league");
-  const uint8_t my_team = (uint8_t) Mode::MY_TEAM, favs = (uint8_t) Mode::FAVORITES;
-  SCHECK(no_team_default(false, my_team, false), "My team, no team");
-  SCHECK(no_team_default(false, my_team, true), "My team, no team, favorites set for later");
-  SCHECK(!no_team_default(true, my_team, false), "My team with a team");
-  SCHECK(no_team_default(false, favs, false), "Favorites with none set");
-  SCHECK(!no_team_default(false, favs, true), "Favorites with one set");
-  SCHECK(!no_team_default(true, favs, false), "Favorites with none set and a team saved");
+  const uint8_t favs = (uint8_t) Mode::FAVORITES;
+  SCHECK(no_team_default(favs, false), "Favorites with none set");
+  SCHECK(!no_team_default(favs, true), "Favorites with one set");
   for (uint8_t m : {(uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA, (uint8_t) Mode::LIVE_ANY, (uint8_t) Mode::LIVE})
-    SCHECK(!no_team_default(false, m, false), "mode %u is a choice", (unsigned) m);
+    SCHECK(!no_team_default(m, false), "mode %u is a choice", (unsigned) m);
 }
 
 // A change to Live games' leagues restarts the scan only when it changes what
@@ -503,23 +481,23 @@ void test_live_scan_changed() {
   std::vector<uint8_t> none;
   uint16_t ncaa = (uint16_t) (1u << (uint8_t) League::NCAA);
   uint16_t nfl_only = (uint16_t) (1u << nfl);
-  // No team saved, list on auto (NFL), then set to college only: the
+  // No favorites, list on auto (NFL), then set to college only: the
   // living room panel that kept cycling NFL finals.
-  SCHECK(live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(ncaa, nfl, none)), "auto NFL to college");
-  SCHECK(!live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(nfl_only, nfl, none)),
+  SCHECK(live_scan_changed(live, live_leagues(0, none), live_leagues(ncaa, none)), "auto NFL to college");
+  SCHECK(!live_scan_changed(live, live_leagues(0, none), live_leagues(nfl_only, none)),
          "auto NFL to an explicit NFL reads the same league");
-  SCHECK(!live_scan_changed(live, live_leagues(ncaa, nfl, none), live_leagues(ncaa, nfl, none)), "same list");
+  SCHECK(!live_scan_changed(live, live_leagues(ncaa, none), live_leagues(ncaa, none)), "same list");
   // On auto a new favorite in another league adds that league.
-  SCHECK(live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(0, nfl, {(uint8_t) League::NHL})),
+  SCHECK(live_scan_changed(live, live_leagues(0, {nfl}), live_leagues(0, {nfl, (uint8_t) League::NHL})),
          "auto, a favorite added in a new league");
-  SCHECK(!live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(0, nfl, {nfl})),
-         "auto, a favorite added in the team's league");
-  SCHECK(!live_scan_changed(live, live_leagues(ncaa, nfl, none), live_leagues(ncaa, nfl, {(uint8_t) League::NHL})),
+  SCHECK(!live_scan_changed(live, live_leagues(0, {nfl}), live_leagues(0, {nfl, nfl})),
+         "auto, a favorite added in a league already followed");
+  SCHECK(!live_scan_changed(live, live_leagues(ncaa, none), live_leagues(ncaa, {(uint8_t) League::NHL})),
          "an explicit list ignores a new favorite");
   // Modes that don't read the list never restart for it.
-  for (uint8_t m : {(uint8_t) Mode::MY_TEAM, (uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA,
-                    (uint8_t) Mode::LIVE_ANY, (uint8_t) Mode::FAVORITES})
-    SCHECK(!live_scan_changed(m, live_leagues(0, nfl, none), live_leagues(ncaa, nfl, none)),
+  for (uint8_t m : {(uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA, (uint8_t) Mode::LIVE_ANY,
+                    (uint8_t) Mode::FAVORITES})
+    SCHECK(!live_scan_changed(m, live_leagues(0, none), live_leagues(ncaa, none)),
            "mode %u ignores Live games' list", (unsigned) m);
 }
 

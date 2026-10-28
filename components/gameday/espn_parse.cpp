@@ -173,21 +173,6 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
                    (scoreboard ? "/500/scoreboard/" : "/500/") + file + ".png");
 }
 
-GameSnapshot team_placeholder(const Team &t) {
-  GameSnapshot g;
-  g.valid = true;
-  g.state = GameState::PRE;
-  g.team_abbr = t.abbr;
-  g.team_id = t.espn_id;
-  g.team_logo = team_logo_url(t.league, t.espn_id, t.abbr);
-  return g;
-}
-
-// Every game read from ESPN has an event id; a final card is POST.
-bool is_team_placeholder(const GameSnapshot &g) {
-  return g.valid && g.state == GameState::PRE && g.event_id.empty();
-}
-
 GameSnapshot final_snapshot(const Final &f) {
   GameSnapshot g;
   g.valid = true;
@@ -459,9 +444,12 @@ using detail::pregame_records;
 using detail::records_line;
 using detail::venue_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive,
+                         uint32_t since_join_ms) {
   if (captive)
     return "Wi-Fi needs a sign-in";
+  if (clock_late(clock_set, since_join_ms))
+    return "No internet";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)

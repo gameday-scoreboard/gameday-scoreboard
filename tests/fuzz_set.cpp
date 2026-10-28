@@ -31,7 +31,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   std::string body((const char *) data, size);
   std::vector<uint8_t> fav_leagues;
   uint16_t mask = 0;
-  uint8_t team_league = 0;
   size_t start = 0;
   while (start <= body.size()) {
     size_t amp = body.find('&', start);
@@ -47,7 +46,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       continue;
     switch (op.kind) {
       case SetKind::MODE:
-        require(op.value >= 0 && op.value < kModeCount, "the mode is past MODE_OPTIONS", k, v);
+        require(op.value > 0 && op.value < kModeCount, "the mode is out of range or My team's 0", k, v);
         break;
       case SetKind::TZ:
         require(op.value >= 0 && (size_t) op.value < kTimezoneCount, "the zone is past kTimezones", k, v);
@@ -66,11 +65,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         require(op.team.id == 0 || known_team(op.team.league, op.team.id), "the team is unknown", k, v);
         if (op.team.id != 0)
           fav_leagues.push_back(op.team.league);
-        break;
-      case SetKind::TEAM:
-        require(op.team.id == 0 || known_team(op.team.league, op.team.id), "the team is unknown", k, v);
-        if (op.team.id != 0)
-          team_league = op.team.league;
         break;
       case SetKind::FAVS:
         require(op.teams.size() <= kFavMax, "the list is longer than FAV_MAX", k, v);
@@ -118,9 +112,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         break;
     }
   }
-  std::vector<League> live = live_leagues(mask, team_league, fav_leagues);
+  std::vector<League> live = live_leagues(mask, fav_leagues);
   for (uint8_t mode = 0; mode < kModeCount; mode++) {
-    live_scan_changed(mode, live, live_leagues(0, team_league, fav_leagues));
+    live_scan_changed(mode, live, live_leagues(0, fav_leagues));
     for (League l : scan_leagues(mode, live))
       if (league_info(l) == nullptr)
         abort();

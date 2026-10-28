@@ -59,6 +59,18 @@ Try another network, like your home Wi-Fi or a phone hotspot.
 
 On a network that blocks time servers, the panel sets its clock from ESPN a few seconds after joining and shows today's games instead of **Getting ready**.
 
+:::note[Coming in the next release]
+**Getting ready** shows only for the first 30 seconds after the panel joins Wi-Fi. If it still has no clock by then, it says why: **Wi-Fi needs a sign-in** on a network that wants you to sign in on a web page, otherwise **No internet**. See the next section.
+:::
+
+## The panel says No internet
+
+:::note[Coming in the next release]
+Check that other devices on the same network can get online, then restart the router if they can't. The panel keeps trying by itself and shows today's games as soon as the internet is back. If other devices are fine, try another network, like a phone hotspot.
+
+**Why:** the panel joined your Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered, so the network isn't reaching the internet. The panel needs the time from the internet before it can read any scores.
+:::
+
 ## Half the board is blank, or the picture shows twice
 
 Open the device page and find **Matrix** in the Setup card. Click the picture that matches your panel:

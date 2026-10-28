@@ -286,7 +286,7 @@ wifi:
     - script.stop: gd_offline_count
     - script.stop: gd_setup_window
     - script.stop: boot_wifi_lost_later
-    - ble.disable:
+    - script.execute: gd_ble_off
     - lambda: |-
         // Arms the offline restart below. Until the panel has been on its
         // network once this boot there is nothing to recover, so that
@@ -309,6 +309,7 @@ wifi:
   # repaints the normal lines by itself once Wi-Fi returns, so a router
   # reboot resolves with no reboot of our own.
   on_disconnect:
+    - script.stop: gd_ble_off
     - script.execute: gd_ble_grace
     - script.execute: boot_wifi_lost_later
     - script.execute: gd_offline_count
@@ -378,6 +379,44 @@ script:
     then:
       - delay: 30s
       - ble.enable:
+
+  # Bluetooth off once the panel is on Wi-Fi (see wifi: above). ESPHome turns
+  # Bluedroid off on the main loop, and Bluedroid waits a fixed 5 s there
+  # whenever a phone's link is still open, even once the link closes; that
+  # races the 5 s task watchdog, which often restarted the panel. The Game
+  # Day app stays connected after a Bluetooth setup until the panel hangs up,
+  # so a setup, or Wi-Fi coming back with the app connected, could do it. Hang up
+  # first, after a second for the Wi-Fi result to reach the app, and turn
+  # Bluetooth off once Bluedroid has no link left: then it is done in about
+  # 0.2 s. A link that stays up through three hangups leaves Bluetooth on
+  # rather than risk the stall; the next connect tries again.
+  - id: gd_ble_off
+    mode: restart
+    then:
+      # Three tries: Improv keeps advertising for a few seconds after a setup,
+      # so the app can connect again right after the first hangup.
+      - repeat:
+          count: 3
+          then:
+            - if:
+                condition:
+                  lambda: 'return improv_ble::ImprovBLEComponent::open_links() > 0;'
+                then:
+                  - delay: 1s
+                  - lambda: |-
+                      ESP_LOGI("ble", "On Wi-Fi, hanging up on the Bluetooth client");
+                      improv_ble::ImprovBLEComponent::hang_up();
+                  - wait_until:
+                      condition:
+                        lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
+                      timeout: 10s
+      - if:
+          condition:
+            lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
+          then:
+            - ble.disable:
+          else:
+            - lambda: 'ESP_LOGW("ble", "A Bluetooth link is still open, leaving Bluetooth on");'
 
   # A panel that has a saved network but cannot get back on it is stuck in a
   # way nothing else recovers from. ESPHome's own reboot_timeout is disabled
@@ -819,11 +858,6 @@ lvgl_page_manager:
     icon: "mdi:page-previous"
 
 select:
-  - platform: gameday
-    gameday_id: gameday_ctl
-    type: team
-    name: "Team"
-    icon: "mdi:football"
   - platform: gameday
     gameday_id: gameday_ctl
     type: mode

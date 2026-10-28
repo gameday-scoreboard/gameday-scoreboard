@@ -49,7 +49,7 @@ At full time a win gets a victory splash with fireworks, your abbreviation and "
 
 ## Full time
 
-The clock row says "FT", "AET" after extra time, or "PENS" after a shootout. The ticker says "Full time", "After extra time" or who won on penalties, like "PSG win 4-3 on penalties", then the cup stage, the goals, any red cards and both records. With **Last play** on, it also adds ESPN's headline for the match when it has one. The final stays up for half an hour in My team, then the panel looks up the next match.
+The clock row says "FT", "AET" after extra time, or "PENS" after a shootout. The ticker says "Full time", "After extra time" or who won on penalties, like "PSG win 4-3 on penalties", then the cup stage, the goals, any red cards and both records. With **Last play** on, it also adds ESPN's headline for the match when it has one. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for half an hour, then the panel looks up the next match.
 
 A postponed or canceled match shows ESPN's word for it and gets no victory splash.
 
