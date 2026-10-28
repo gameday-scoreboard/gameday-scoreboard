@@ -237,6 +237,11 @@ logger:
 # No Home Assistant required: never reboot for lack of an API client.
 api:
   reboot_timeout: 0s
+  # The game events (esphome.gameday_*, components/gameday/ha_events.h) are
+  # sent by the gameday component itself, with one field list shared with
+  # the webhook. Home Assistant takes events from any ESPHome device; only
+  # actions need "Allow the device to perform Home Assistant actions".
+  homeassistant_services: true
   # The banner (pages/message.yaml) with its seconds, 10 when 0. Home
   # Assistant lists it as esphome.<device name>_show_message.
   actions:
@@ -738,35 +743,6 @@ gameday:
             - switch.is_off: power
         then:
           - switch.turn_on: power
-  # Home Assistant events for automations: every score and the final of the
-  # game Game Status follows (components/gameday/ha_events.h), for both sides
-  # whatever the splash settings. Home Assistant takes events from any
-  # ESPHome device; only actions need "Allow the device to perform Home
-  # Assistant actions".
-  on_score:
-    - homeassistant.event:
-        event: esphome.gameday_score
-        data:
-          team: !lambda 'return x.team;'
-          opponent: !lambda 'return x.opponent;'
-          play: !lambda 'return x.play;'
-          points: !lambda 'return to_string(x.points);'
-          team_score: !lambda 'return to_string(x.team_score);'
-          opponent_score: !lambda 'return to_string(x.opponent_score);'
-          sport: !lambda 'return x.sport;'
-          my_team: !lambda 'return x.my_team ? "true" : "false";'
-  on_final:
-    - homeassistant.event:
-        event: esphome.gameday_final
-        data:
-          team: !lambda 'return x.team;'
-          opponent: !lambda 'return x.opponent;'
-          team_score: !lambda 'return to_string(x.team_score);'
-          opponent_score: !lambda 'return to_string(x.opponent_score);'
-          result: !lambda 'return x.result;'
-          winner: !lambda 'return x.winner;'
-          sport: !lambda 'return x.sport;'
-          my_team: !lambda 'return x.my_team ? "true" : "false";'
   on_update:
     # Published on every update, though the value often repeats: Home
     # Assistant only logs a change, and the device page takes each Game
@@ -789,6 +765,17 @@ gameday:
         };
         put(id(gd_team_score), x.ha_team_score);
         put(id(gd_opp_score), x.ha_opp_score);
+        // The sides, colors, period and clock, also only on a change.
+        auto say = [](text_sensor::TextSensor *t, const std::string &v) {
+          if (!t->has_state() || t->state != v)
+            t->publish_state(v);
+        };
+        say(id(gd_ha_team), x.ha_team);
+        say(id(gd_ha_opponent), x.ha_opponent);
+        say(id(gd_ha_team_rgb), x.ha_team_rgb);
+        say(id(gd_ha_opp_rgb), x.ha_opp_rgb);
+        say(id(gd_ha_period), x.ha_period);
+        say(id(gd_ha_clock), x.ha_clock);
     - lambda: |-
         id(gd_countdown_at) = x.countdown_at;
         id(gd_countdown_end) = x.countdown_end;
@@ -975,6 +962,33 @@ text_sensor:
     name: "Last Play"
     id: gd_last_play_sensor
     icon: "mdi:message-text-outline"
+  # The game Game Status follows: the two sides, ESPN's colors for each as
+  # "r,g,b" for a light's rgb_color, where the game is ("3rd quarter",
+  # "Halftime") and its clock. Empty with no game.
+  - platform: template
+    name: "Team"
+    id: gd_ha_team
+    icon: "mdi:shield-outline"
+  - platform: template
+    name: "Opponent"
+    id: gd_ha_opponent
+    icon: "mdi:shield-outline"
+  - platform: template
+    name: "Team Color"
+    id: gd_ha_team_rgb
+    icon: "mdi:palette"
+  - platform: template
+    name: "Opponent Color"
+    id: gd_ha_opp_rgb
+    icon: "mdi:palette-outline"
+  - platform: template
+    name: "Period"
+    id: gd_ha_period
+    icon: "mdi:timeline-clock-outline"
+  - platform: template
+    name: "Game Clock"
+    id: gd_ha_clock
+    icon: "mdi:timer-outline"
   - platform: wifi_info
     ip_address:
       name: "IP"

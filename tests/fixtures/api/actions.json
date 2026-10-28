@@ -4,6 +4,7 @@
   "power_ok",
   "say",
   "regulatory",
+  "event_test",
   "demo",
   "demo_stop"
 ]
