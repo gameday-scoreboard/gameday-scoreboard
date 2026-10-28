@@ -9,7 +9,7 @@ Find what you're seeing, then try the fix. Each entry ends with why it happens, 
 
 ## The app can't find my panel
 
-Check that your phone is on the same Wi-Fi network as the panel. Then add the panel by address: tap the add button in the app and enter the panel's name, like `gameday-2f6a70.local`, or its IP address. If you don't have either, hold the button on the controller for about 1.5 seconds and the panel shows both for 20 seconds.
+Check that your phone is on the same Wi-Fi network as the panel. Then add the panel by address: tap **+** on the app's panel list (on iPhone, **Settings > Panels**) and enter the panel's name, like `gameday-2f6a70.local`, or its IP address. If you don't have either, hold the button on the controller for about 1.5 seconds and the panel shows both for 20 seconds.
 
 A panel that isn't set up yet shows **SETUP**. The app finds that one over Bluetooth, so keep Bluetooth on and the phone near the panel.
 
