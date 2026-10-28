@@ -45,9 +45,7 @@ Each turn shows up to four entries. With more than that, the next turn picks up 
 
 The card never covers a live game or a score celebration. It does cover the panel's own trouble line between games, like "Can't reach ESPN" or "Wi-Fi needs sign-in", so on **Whenever no game is on** a panel with trouble keeps showing your message; the device page still says what's wrong. In Favorite teams and Live games it takes turns with whatever the board shows between games, the finals and next games included.
 
-:::note[Coming in the next release]
 The card makes way for the panel's own trouble line. When three reads from ESPN in a row fail, when the Wi-Fi wants a sign-in, or when the panel has no internet, the board says so in place of your message, on **Whenever no game is on** too. Your message comes back by itself once the trouble clears: right away on **Whenever no game is on**, at its next turn otherwise. See [Panel messages](/help/panel-messages/) for what each line means.
-:::
 
 **Clear** empties the text and the address, and the card stops.
 

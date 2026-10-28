@@ -24,9 +24,7 @@ The page says **Restored** when the panel has the settings. A file from another 
 
 If the backup has a different panel layout (one 64x64 panel against a 128x64 one), the panel restarts with the new layout and the page reconnects when it's back.
 
-:::note[Coming in the next release]
 A backup from another panel leaves this panel's nickname and panel layout as they are, so a second panel doesn't take the first one's name and a 64x64 panel's backup doesn't turn a 128x64 panel into half a board. The page says which it kept, like **This panel kept its own nickname**, and asks first. A backup this panel saved itself, restored after a factory reset, still brings both back, and a different layout still restarts it.
-:::
 
 ## What's in the file
 
@@ -43,9 +41,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
-:::note[Coming in the next release]
 The file also has your playlists, with their teams and their order, and the one Favorite teams is playing. See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day.
-:::
 
 ## What isn't
 
@@ -64,9 +60,7 @@ The panel checks the whole file before it changes anything. If a setting in it h
 
 A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
 
-:::note[Coming in the next release]
 A message list address this panel's firmware can't read, like one from a later release that takes another kind of address, is left out and listed the same way instead of stopping the whole restore.
-:::
 
 ## For scripts and Home Assistant
 
@@ -79,6 +73,4 @@ curl -X POST -H "Content-Type: application/json" --data-binary @backup.json http
 
 The restore answers `{"ok":true,"restart":false,"skipped":[]}`, or an `error` with the reason and nothing changed. Send it as `application/json`, as above.
 
-:::note[Coming in the next release]
 The answer also has `kept`, like `"kept":["nick"]`: the settings this panel kept as its own because the file came from another panel, `nick` and `panels`.
-:::

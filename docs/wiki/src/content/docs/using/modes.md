@@ -7,11 +7,9 @@ sidebar:
 
 The two buttons under the board on the device page, **Favorite teams** and **Live games**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
 
-:::note[Coming in the next release]
 Favorite teams replaces My team. To follow one team, make it your only favorite. A panel that was in My team starts in Favorite teams after the update. The team it followed isn't copied over, so add it as a favorite. Live games with nothing on shows your first favorite instead of the My team pick, and the **Team** entity is gone from Home Assistant.
 
 Until then, the device page has a third button, **My team**, which follows the one team picked with **Change team**.
-:::
 
 ## Favorite teams
 
@@ -27,9 +25,7 @@ Far from kickoff the panel checks the game every 15 minutes, and every minute in
 
 Your team is always on the left of the board.
 
-:::note[Coming in the next release]
 Before the game, the board takes turns with a big countdown to kickoff in your team's colors, like "2d 14h". See [Countdowns](/using/countdowns/).
-:::
 
 ### When your teams have no game coming
 
@@ -55,11 +51,9 @@ Live games follows the best game on instead of a random one, with the **Pick the
 
 Turn **Pick the best game** off for the random game and the move every **Switch every** minutes, as before.
 
-:::note[Coming in the next release]
 A late football game, like a 10:30 PM Eastern college kickoff on the West Coast, stays in Live games until it ends, as late games in the other sports already did. Before, a football game still on at midnight Eastern dropped out of Live games.
 
 A soccer match has no stops in play, so it counts as at a break from the 45th minute to halftime and from the 90th minute on. Before, only halftime counted, and a match could hold the panel for a whole half. The panel also looks once per break: a long break, like a hockey intermission, gets one look instead of one every **Switch every** minutes.
-:::
 
 ### Favorites take over
 
@@ -72,9 +66,7 @@ Turn on **Favorites take over** under **Switch every** and a game one of your [f
 
 The bar under the board says **Locked on** and the team's name while a favorite has the panel. It's off until you turn it on.
 
-:::note[Coming in the next release]
 With **Stick with the higher team**, the panel also checks every **Switch every** minutes (at least every 5) for a higher favorite whose game started without a set time, like the second game of a doubleheader, so it doesn't wait for the lower favorite's game to end. With **Alternate**, the switch between your favorites' games comes only every **Switch every** minutes, not also when another favorite's game is about to start.
-:::
 
 ### Choosing the leagues
 
@@ -89,9 +81,7 @@ What the panel shows depends on whether you have favorites:
 
 The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours.
 
-:::note[Coming in the next release]
 A check that fails, on a slow or dropped connection, is tried again within a few minutes instead of waiting for that kickoff.
-:::
 
 When there has been no game in the last week and none is coming, the board shows a gray clock and the ticker says "No live games right now".
 
