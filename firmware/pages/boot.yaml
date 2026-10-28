@@ -867,7 +867,8 @@ improv_ble:
         hidden: false
     # Draw the current state now rather than on the next poll. Improv also
     # starts 90 s into an outage, and this way that panel keeps saying
-    # Wi-Fi lost instead of flashing SETUP.
+    # Wi-Fi lost instead of flashing SETUP. It fires again on the way back to
+    # AUTHORIZED after a failed handover, which draws Can't join at once.
     - script.execute:
         id: boot_refresh
         via_button: false
@@ -878,23 +879,6 @@ improv_ble:
         // Name the network the app just handed over, so a wrong pick shows here.
         const std::string joining = wifi::global_wifi_component->get_sta().get_ssid().str();
         id(boot_set_lines).execute("JOINING", joining.empty() ? std::string("Wi-Fi") : joining, "", "", true);
-  on_state:
-    # A handover that failed: boot_refresh says so now, not on the next poll.
-    # Read failed_ms(): the error this trigger is handed is always ERROR_NONE
-    # (improv_ble never sets error_state_).
-    - if:
-        condition:
-          lambda: |-
-            auto *imp = improv_ble::global_improv_component;
-            return imp != nullptr && imp->failed_ms() != 0 && millis() - imp->failed_ms() < 1000;
-        then:
-          # On the next loop: this runs inside the timeout, before the network
-          # in memory is put back, and boot_refresh must not take the one that
-          # failed for the panel's own.
-          - delay: 1ms
-          - script.execute:
-              id: boot_refresh
-              via_button: false
   on_provisioned:
     # Credentials worked; nudge boot_check's 500ms poll now instead of
     # waiting up to half a second for it to notice and repaint the

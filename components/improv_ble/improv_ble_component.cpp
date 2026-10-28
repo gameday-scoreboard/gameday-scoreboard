@@ -492,9 +492,19 @@ void ImprovBLEComponent::process_incoming_data_() {
 }
 
 void ImprovBLEComponent::on_wifi_connect_timeout_() {
-  // GAMEDAY: before the state callback, which redraws the setup screen (pages/boot.yaml)
+  // GAMEDAY: begin
   this->failed_ssid_ = this->connecting_sta_.get_ssid().str();
   this->failed_ms_ = std::max<uint32_t>(millis(), 1);
+  this->handover_failed_ = true;
+  // After "Reset Wi-Fi" the panel had a blank network, which is what keeps it
+  // in setup (components/saved_networks). Put that back rather than clearing
+  // the list: Bluetooth and the hotspot stay up, the app can send the name
+  // and password again, and gd_setup_window takes the panel back to its
+  // saved networks once the owner has gone. Before the state change below:
+  // on_start in pages/boot.yaml redraws the setup screen from it at once.
+  if (this->setup_mode_)
+    wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+  // GAMEDAY: end
   this->set_error_(improv::ERROR_UNABLE_TO_CONNECT);
   this->set_state_(improv::STATE_AUTHORIZED);
 #ifdef USE_BINARY_SENSOR
@@ -503,15 +513,8 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
 #endif
   ESP_LOGW(TAG, "Timed out while connecting to Wi-Fi network");
   // GAMEDAY: begin
-  this->handover_failed_ = true;
-  // After "Reset Wi-Fi" the panel had a blank network, which is what keeps it
-  // in setup (components/saved_networks). Put that back rather than clearing
-  // the list: Bluetooth and the hotspot stay up, the app can send the name
-  // and password again, and gd_setup_window takes the panel back to its
-  // saved networks once the owner has gone.
   if (this->setup_mode_) {
     ESP_LOGI(TAG, "Staying in setup for another try");
-    wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
     return;
   }
   // Go back to the network the panel had, which is still the one saved in
