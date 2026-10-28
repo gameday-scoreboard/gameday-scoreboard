@@ -51,9 +51,12 @@ jobs:
             exit 0
           fi
           # The line needs a reason after the colon (four characters or more).
-          if tr -d '\r' <<<"$BODY" | grep -qiE '^[[:space:]]*no owner-visible change, no docs:[[:space:]]*[^[:space:]].{3,}'; then
+          # grep reads a string, not a pipe: with pipefail, a grep -q that
+          # stops early can fail the pipe on a long description.
+          body=$(tr -d '\r' <<<"$BODY")
+          if grep -qiE '^[[:space:]]*no owner-visible change, no docs:[[:space:]]*[^[:space:]].{3,}' <<<"$body"; then
             echo "The description says no owner-visible change:"
-            tr -d '\r' <<<"$BODY" | grep -iE '^[[:space:]]*no owner-visible change, no docs:'
+            grep -iE '^[[:space:]]*no owner-visible change, no docs:' <<<"$body"
             exit 0
           fi
           if tr '|' '\n' <<<"$LABELS" | grep -qxF 'docs: not needed'; then

@@ -135,8 +135,9 @@ DIY builder would notice, update or add the page for it under
 into `dev` that changes `firmware/` or `components/` without a docs
 change. When nothing visible changed, add a line to the PR
 description saying why: `No owner-visible change, no docs: <why>`.
-A maintainer checks that claim in review. `docs/wiki/README.md` has the page conventions, and
-`npm install` then `npm run dev` in `docs/wiki` previews the site.
+A maintainer checks that claim in review. `docs/wiki/README.md` has the
+page conventions, and `npm install` then `npm run dev` in `docs/wiki`
+previews the site.
 
 ### Style
 
