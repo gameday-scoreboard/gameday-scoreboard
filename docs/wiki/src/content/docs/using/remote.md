@@ -9,7 +9,7 @@ The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart 
 
 ## Pairing
 
-1. Open the device page, or the Remote section in the Game Day app, and find the **Remote** card.
+1. Open the **Remote** card on the device page, or **Remote** in the Game Day app (**Settings > Device**, then **Advanced** on iPhone or **Remote** on Android).
 2. Turn on **Discovery**. The status line says **Discovery on: press any button on the remote**.
 3. Press any button on the WizMote.
 
