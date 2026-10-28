@@ -89,12 +89,14 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
     case GameState::NOT_FOUND:
       return "No upcoming game";
     case GameState::PRE:
+      add_part(out, s.game_name);  // a playoff round, like "East 1st Round - Game 2"
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
       if (o.records)
         add_part(out, pregame_records(s));
       add_odds(out, s, o);
-      add_part(out, s.venue);
+      detail::add_leaders(out, s, o);
+      add_part(out, detail::venue_line(s));
       return out;
     case GameState::POST:
       // Postponed, Canceled or Suspended: ESPN's post state without a result.

@@ -16,13 +16,27 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 | At a break | Halftime in football, the hits and errors between half innings in baseball, the series or records in basketball and hockey, and the goals, cards and stats at half time in soccer. |
 | After the final | "Final" with the records, or the sport's result line, like hits and errors in baseball or the goals in soccer. |
 
-Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds. On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
+:::note[Coming in the next release]
+Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", as football's does with a bowl or playoff name.
+:::
+
+:::note[Coming in the next release]
+Before a regular-season football game the ticker starts with the week, like "Week 8". Before any game at an open-air venue it ends with ESPN's forecast for it, like "76F Cloudy at Hard Rock Stadium". Indoor venues and games with no forecast keep just the venue.
+:::
+
+Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds.
+
+:::note[Coming in the next release]
+Baseball, basketball and hockey get season leaders too, after the odds: the home run leader in baseball, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI"; points per game in basketball, like "Allen 21.0 PPG"; and points in hockey, like "McDavid 9 pts".
+:::
+
+On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
 
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
 
 Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 
-Accented letters in names, like the é in Atlético or the ñ in Peña, show in the ticker and the panel's other small text. Before, they came out as a gap, like "Atl tico".
+Accented letters in names, like the é in Atlético or the ñ in Peña, show in the pre-game ticker and the panel's other small text. Two places still spell names without them, like "Martinez" for Martínez: soccer's ticker once the match starts, and the scoring plays and headline at halftime and the final.
 
 ## The switches
 
@@ -34,11 +48,19 @@ The Ticker card on the device page has a switch for each part. All of them start
 | **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | **Match stats** | Soccer: goals, cards, possession and shots. |
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. A very long play is cut short. |
-| **Pre-game odds and TV** | The line, over/under and TV channel before the start, in every league, when ESPN has them. |
+| **Odds, TV and win chance** | The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, the win chance during the game. |
 
-In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Pre-game odds and TV** also adds ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Odds, TV and win chance** shows ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
+
+:::note[Coming in the next release]
+Until then the device page calls this switch **Pre-game odds and TV**. It's the same switch.
+:::
 
 A **Pre-game season leaders** switch, on to start, adds football's passing leaders before kickoff. Like the situation switches, it shows only on a panel that follows football.
+
+:::note[Coming in the next release]
+The **Pre-game season leaders** switch covers the baseball, basketball and hockey leaders too, and shows on a panel that follows any of those sports or football.
+:::
 
 These three, Down and distance, Count and at-bat and Match stats, are the game situation for their sport. Hockey and basketball have no situation line, so they have no switch of their own. The card only shows the switches for sports your panel follows, from your team, your favorites and the leagues you picked for Live games, so turning off football's line leaves baseball's count alone.
 
@@ -53,7 +75,7 @@ The ticker also says when something needs your attention:
 - **Pick a team in the Game Day app or at** and the panel's IP address: the panel has never had a team, mode or favorite picked. It goes away once you pick one, from the app, the device page or Home Assistant. The IP address is there for phones that can't open `.local` names. See [Pick your team](/get-started/pick-your-team/).
 - **no update for** and a number of minutes, or **no update yet**: the panel has missed three reads from ESPN in a row. The score may be old. It clears by itself when a read comes through.
 - **Favorites: add teams in the app or on the page**: the panel is in Favorite teams with no favorites.
-- **No live games, showing** and your team, like "No live NFL games, showing DAL": Live games found nothing on, so it shows your team until a game starts. See [Show: My team, Favorite teams, Live games](/using/modes/#when-nothing-is-live).
+- **No live games, showing** and a team, like "No live NFL games, showing DAL": Live games found nothing on, so it shows your first favorite until a game starts. See [Show: Favorite teams, Live games](/using/modes/#when-nothing-is-live).
 
 For the messages that take over the whole board, see [Panel messages](/help/panel-messages/).
 

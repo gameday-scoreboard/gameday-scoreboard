@@ -15,10 +15,18 @@ The ticker along the bottom carries:
 
 - the game's name for bowl and playoff games, like "Rose Bowl" or "NFC Wild Card"
 - the kickoff day and time in the panel's timezone, like "Sat 3:30 PM" or "Tomorrow 7:15 PM"
-- the betting line, the over/under ("O/U") and the TV network, when ESPN has them and **Pre-game odds and TV** is on
+- the betting line, the over/under ("O/U") and the TV network, when ESPN has them and **Odds, TV and win chance** is on
 - the venue
 
+:::note[Coming in the next release]
+In the regular season the ticker starts with the week, like "Week 8", where a bowl or playoff game has its name. At an open-air stadium the venue comes with ESPN's forecast for the game, like "76F Cloudy at Hard Rock Stadium". A dome, or a game with no forecast yet, shows just the venue.
+:::
+
 A game whose kickoff time isn't set yet, like a college game a couple of weeks out, shows the day and "TBD", like "Sat TBD".
+
+:::note[Coming in the next release]
+The day changes at midnight in the panel's timezone, so a game that read "Tomorrow 1:30 PM" in the evening reads "Today 1:30 PM" from 12:00 AM.
+:::
 
 After the odds, the ticker also shows each team's passing leader for the season with yards and touchdowns, like "Prescott 1,381 yds 9 TD", when ESPN has one. Early in the season, before a team has a passing line, it shows the rushing or receiving leader instead. **Pre-game season leaders** on the device page turns them off.
 
@@ -36,7 +44,7 @@ At kickoff the board switches to the live scoreboard:
 - **Timeout pips** under each logo: three bars per team, lit gold for each timeout left and dim for each one used.
 - **The ticker** with the down, distance and where the ball is, like "3rd & 4 at FIU 31", and the last play. Turn either off in the Ticker card on the device page. See [The ticker](/using/ticker/).
 
-After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Pre-game odds and TV**.
+After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Odds, TV and win chance**.
 
 On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker.
 

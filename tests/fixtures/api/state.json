@@ -4,12 +4,6 @@
   "version": "v2026.10.1",
   "setup": true,
   "panels": 2,
-  "team": {
-    "l": "nfl",
-    "id": 6,
-    "abbr": "DAL",
-    "name": "Dallas Cowboys"
-  },
   "mode": 4,
   "rotate": 1,
   "lockon": 15,
@@ -73,6 +67,9 @@
   "opp": true,
   "best": true,
   "bootaddr": true,
+  "countdown": true,
+  "cdname": "Christmas",
+  "cddate": "2026-12-25",
   "night": true,
   "nightstart": "23:00",
   "nightend": "07:00",

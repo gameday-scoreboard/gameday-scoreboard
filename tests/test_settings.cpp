@@ -37,8 +37,10 @@ std::string slurp(const char *path) {
 }
 
 // A release build on two panels wide, as gameday-common.yaml builds it.
+// It is the panel the settings fixture was saved from.
 SettingsTarget full_target() {
   SettingsTarget t;
+  t.name = "gameday-a1b2c3";
   t.fav_max = 16;
   t.panels = 2;
   t.max_panels = 2;
@@ -109,11 +111,11 @@ void test_export() {
     SCHECK(slot || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
   }
 
-  // No team, an empty slot between two favorites, a live list of its own,
-  // and a build without the numbers or a panel layout. With no team picked
-  // the state's live list is every league; the backup keeps the panel's own.
+  // An empty slot between two favorites, a live list of its own, and a build
+  // without the numbers or a panel layout. With no favorite picked the
+  // state's live list is every league; the backup keeps the panel's own.
   JsonDocument s2, out2;
-  deserializeJson(s2, R"({"team":{},"favs":[{"l":"nfl","id":6},{},{"l":"mlb","id":15},{},{}],
+  deserializeJson(s2, R"({"favs":[{"l":"nfl","id":6},{},{"l":"mlb","id":15},{},{}],
     "live":["nfl","ncaa","mlb","mls","epl","nba","wnba","mcbb","nhl"],"live_auto":false,"panels":0,
     "tz_name":"US Eastern","tz_auto":false})");
   uint16_t mask = (uint16_t) ((1u << (uint8_t) League::MLB) | (1u << (uint8_t) League::NHL));
@@ -121,8 +123,8 @@ void test_export() {
   std::string got2;
   serializeJson(out2, got2);
   SCHECK(got2 ==
-             R"({"schema":1,"team":"none","favs":["nfl:6","","mlb:15"],"live":["mlb","nhl"],"tz":"US Eastern","tzauto":false})",
-         "export of a panel with no team: %s", got2.c_str());
+             R"({"schema":1,"favs":["nfl:6","","mlb:15"],"live":["mlb","nhl"],"tz":"US Eastern","tzauto":false})",
+         "export with an empty slot: %s", got2.c_str());
 }
 
 void test_types() {
@@ -143,8 +145,7 @@ void test_round_trip() {
   SCHECK(in.ops.size() == want, "the fixture gives %zu ops, not %zu", in.ops.size(), want);
   SCHECK(in.brightness == 128 && in.scroll == 5, "brightness %d scroll %d", in.brightness, in.scroll);
   SCHECK(!in.restart, "the same panel count restarts the panel");
-  SCHECK(!in.ops.empty() && in.ops[0].kind == SetKind::TEAM && in.ops[0].team.id == 6, "the first op isn't the team");
-  SCHECK(in.ops.size() > 1 && in.ops[1].kind == SetKind::MODE && in.ops[1].value == 4, "the second op isn't the mode");
+  SCHECK(!in.ops.empty() && in.ops[0].kind == SetKind::MODE && in.ops[0].value == 4, "the first op isn't the mode");
   const SetOp *favs = find(in, SetKind::FAVS);
   SCHECK(favs != nullptr && favs->teams.size() == 3 && favs->teams[1].id == 251, "favs came back wrong");
   const SetOp *tz = find(in, SetKind::TZ);
@@ -157,9 +158,9 @@ void test_round_trip() {
   SCHECK(url != nullptr && url->text == "http://homeassistant.local:8123/local/gameday.txt", "msgurl came back wrong");
 
   // The document's order doesn't matter.
-  SettingsImport b = import(R"({"schema":1,"panels":1,"mode":0,"team":"none"})");
-  SCHECK(b.error.empty() && b.ops.size() == 3 && b.ops[0].kind == SetKind::TEAM && b.ops[0].team.id == 0 &&
-             b.ops[1].kind == SetKind::MODE && b.ops[2].kind == SetKind::PANELS,
+  SettingsImport b = import(R"({"schema":1,"name":"gameday-a1b2c3","panels":1,"rotate":5,"mode":4})");
+  SCHECK(b.error.empty() && b.ops.size() == 3 && b.ops[0].kind == SetKind::MODE && b.ops[1].kind == SetKind::ROTATE &&
+             b.ops[2].kind == SetKind::PANELS,
          "ops aren't in kSetKeys order");
   SCHECK(b.restart, "two panels to one doesn't restart the panel");
 
@@ -202,18 +203,16 @@ void test_favs() {
 void test_refused() {
   refused("[]", "a list");
   refused(R"("hello")", "text");
-  refused(R"({"team":"nfl:6"})", "no schema");
-  refused(R"({"schema":"1","team":"nfl:6"})", "schema as text");
+  refused(R"({"mode":4})", "no schema");
+  refused(R"({"schema":"1","mode":4})", "schema as text");
   refused(R"({"schema":0})", "schema 0");
-  SettingsImport newer = import(R"({"schema":2,"team":"nfl:6"})");
+  SettingsImport newer = import(R"({"schema":2,"mode":4})");
   SCHECK(newer.error.find("newer firmware") != std::string::npos, "schema 2 says: %s", newer.error.c_str());
 
   // Wrong types
   refused(R"({"schema":1,"mode":"4"})", "mode as text");
   refused(R"({"schema":1,"down":1})", "a switch as a number");
   refused(R"({"schema":1,"down":"true"})", "a switch as text");
-  refused(R"({"schema":1,"team":6})", "team as a number");
-  refused(R"({"schema":1,"team":{"l":"nfl","id":6}})", "team as the state's object");
   refused(R"({"schema":1,"tz":1})", "tz as an index");
   refused(R"({"schema":1,"live":"nfl"})", "live as text");
   refused(R"({"schema":1,"rotate":2.5})", "a fraction");
@@ -242,14 +241,12 @@ void test_refused() {
   refused(R"({"schema":1,"brightness":40,"scroll":"5"})", "a good brightness with a bad scroll");
 
   // Values the panel doesn't take
-  refused(R"({"schema":1,"team":"dallas"})", "a team that isn't one");
   refused(R"({"schema":1,"fav2":"dallas"})", "a slot that isn't a team");
   refused(R"({"schema":1,"nightstart":"25:00"})", "nightstart 25:00");
   refused(R"({"schema":1,"nightend":"7am"})", "nightend 7am");
-  refused(R"({"schema":1,"msgurl":"ftp://example.com/list.txt"})", "an ftp message list");
 
   // One bad key refuses the good ones with it.
-  refused(R"({"schema":1,"team":"nfl:6","mode":4,"favs":["nfl:6"],"down":"yes"})", "a document with one bad key");
+  refused(R"({"schema":1,"mode":4,"favs":["nfl:6"],"down":"yes"})", "a document with one bad key");
 }
 
 // What newer firmware or another build has is left out and listed; the rest
@@ -258,7 +255,7 @@ void test_left_out() {
   SettingsImport in = import(R"({"schema":1,"team":"nfl:999999","mode":1,"sparkle":true,"tz":"Mars/Olympus",
     "live":["nfl","xfl"],"fav1":"nba:999999","created":"2027-01-01"})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
-  SCHECK(skipped(in, "team=nfl:999999") && find(in, SetKind::TEAM) == nullptr, "an unknown team was applied");
+  SCHECK(skipped(in, "team"), "My team's team isn't listed as left out");
   SCHECK(skipped(in, "fav1=nba:999999") && find(in, SetKind::FAV_SLOT) == nullptr, "an unknown slot was applied");
   SCHECK(skipped(in, "sparkle") && skipped(in, "created"), "unknown keys aren't listed");
   SCHECK(skipped(in, "tz=Mars/Olympus") && find(in, SetKind::TZ) == nullptr, "an unknown time zone was applied");
@@ -266,6 +263,19 @@ void test_left_out() {
   SCHECK(skipped(in, "live=xfl") && live != nullptr && live->mask == (1u << (uint8_t) League::NFL),
          "live wasn't kept to the leagues this firmware has");
   SCHECK(find(in, SetKind::MODE) != nullptr && find(in, SetKind::MODE)->value == 1, "mode wasn't applied");
+  // A backup from when My team was a mode comes back as Favorites.
+  SettingsImport old = import(R"({"schema":1,"mode":0,"team":"nfl:6"})");
+  const SetOp *old_mode = find(old, SetKind::MODE);
+  SCHECK(old_mode != nullptr && old_mode->value == 4 && skipped(old, "team"),
+         "My team's mode 0 didn't restore as Favorites");
+
+  // A message list address this firmware can't read (newer firmware may take
+  // another scheme or a longer one) is left out like a time zone it lacks.
+  in = import(R"({"schema":1,"msgurl":"ftp://example.com/list.txt","down":false})");
+  SCHECK(in.error.empty() && skipped(in, "msgurl=ftp://example.com/list.txt") && find(in, SetKind::MSGURL) == nullptr &&
+             find(in, SetKind::DOWN) != nullptr,
+         "an address this firmware can't read wasn't left out alone: '%s'", in.error.c_str());
+  refused(R"({"schema":1,"msgurl":7})", "msgurl as a number");
 
   // A bar or demo build: no update switches, no panel layout, no numbers.
   SettingsTarget bare;
@@ -278,6 +288,51 @@ void test_left_out() {
   SCHECK(in.brightness < 0 && in.scroll < 0 && !in.restart, "a bare build kept numbers it can't set");
   // Still checked when the build can't take them.
   refused(R"({"schema":1,"brightness":"900"})", "brightness as text on any build");
+}
+
+// The nickname and the panel layout are the panel's own: a file saved from
+// another panel leaves them as they are and says so, one from this panel
+// (after a factory reset) brings them back.
+void test_other_panel() {
+  std::string other = slurp("fixtures/api/settings.json");
+  size_t at = other.find("gameday-a1b2c3");
+  SCHECK(at != std::string::npos, "the settings fixture has no name");
+  if (at != std::string::npos)
+    other.replace(at, 14, "gameday-ffffff");
+  SettingsTarget t = full_target();
+  SettingsImport in = import(other, t);
+  SCHECK(in.error.empty() && in.skipped.empty(), "another panel's file: '%s', %zu left out", in.error.c_str(),
+         in.skipped.size());
+  SCHECK(find(in, SetKind::NICK) == nullptr && find(in, SetKind::PANELS) == nullptr && !in.restart,
+         "another panel's nickname or layout was applied");
+  // The same count of panels has nothing to keep, so only the nickname is listed.
+  SCHECK(in.kept.size() == 1 && in.kept[0] == "nick", "kept %zu, the first %s", in.kept.size(),
+         in.kept.empty() ? "" : in.kept[0].c_str());
+  SCHECK(find(in, SetKind::MODE) != nullptr && find(in, SetKind::FAVS) != nullptr, "the owner's settings didn't come");
+  // A nickname the same as this panel's isn't listed.
+  t.nick = "Living room";
+  in = import(other, t);
+  SCHECK(in.error.empty() && in.kept.empty(), "the same nickname was listed as kept");
+  // A 64x64 panel's file onto a 128x64 one keeps its two panels.
+  in = import(R"({"schema":1,"name":"gameday-ffffff","panels":1,"down":false})");
+  SCHECK(in.error.empty() && in.kept.size() == 1 && in.kept[0] == "panels" && !in.restart &&
+             find(in, SetKind::PANELS) == nullptr && in.ops.size() == 1,
+         "another panel's layout: %zu kept, %zu ops", in.kept.size(), in.ops.size());
+  // No name says nothing about where the file came from: kept too.
+  in = import(R"({"schema":1,"panels":1,"nick":"Kitchen"})");
+  SCHECK(in.error.empty() && in.kept.size() == 2 && in.ops.empty() && !in.restart, "a file with no name: %zu kept",
+         in.kept.size());
+  // This panel's own file, after a reset: both come back.
+  in = import(R"({"schema":1,"name":"gameday-a1b2c3","panels":1,"nick":"Kitchen"})");
+  SCHECK(in.error.empty() && in.kept.empty() && in.restart && find(in, SetKind::NICK) != nullptr &&
+             find(in, SetKind::NICK)->text == "Kitchen" && find(in, SetKind::PANELS) != nullptr,
+         "this panel's own file didn't restore its nickname and layout");
+  // Kept or not, a value of the wrong type still refuses the file, and a
+  // layout out of range is still left out.
+  refused(R"({"schema":1,"name":"gameday-ffffff","panels":"2"})", "another panel's layout as text");
+  refused(R"({"schema":1,"name":"gameday-ffffff","nick":5})", "another panel's nickname as a number");
+  in = import(R"({"schema":1,"name":"gameday-ffffff","panels":3})");
+  SCHECK(in.error.empty() && skipped(in, "panels=3") && in.kept.empty(), "a third panel wasn't left out");
 }
 
 // The same start and end would leave the schedule on and never running: the
@@ -346,10 +401,42 @@ void test_fullest_fits() {
          kSettingsMaxBytes);
 }
 
+// Counts what the reply allocates through the hook the firmware points at PSRAM.
+struct CountingAllocator : ArduinoJson::Allocator {
+  int calls = 0;
+  int live = 0;
+  void *allocate(size_t size) override {
+    calls++;
+    live++;
+    return malloc(size);
+  }
+  void deallocate(void *ptr) override {
+    if (ptr != nullptr)
+      live--;
+    free(ptr);
+  }
+  void *reallocate(void *ptr, size_t size) override {
+    if (ptr == nullptr) {
+      calls++;
+      live++;
+    }
+    return realloc(ptr, size);
+  }
+};
+
 void test_reply() {
-  SettingsImport in = import(R"({"schema":1,"panels":1,"sparkle":1})");
-  SCHECK(settings_reply(in) == R"({"ok":true,"restart":true,"skipped":["sparkle"]})", "reply: %s",
+  SettingsImport in = import(R"({"schema":1,"name":"gameday-a1b2c3","panels":1,"sparkle":1})");
+  SCHECK(settings_reply(in) == R"({"ok":true,"restart":true,"skipped":["sparkle"],"kept":[]})", "reply: %s",
          settings_reply(in).c_str());
+  in = import(R"({"schema":1,"name":"gameday-ffffff","panels":1,"nick":"Kitchen"})");
+  SCHECK(settings_reply(in) == R"({"ok":true,"restart":false,"skipped":[],"kept":["panels","nick"]})", "reply: %s",
+         settings_reply(in).c_str());
+  CountingAllocator counting;
+  set_json_allocator(&counting);
+  std::string reply = settings_reply(in);
+  set_json_allocator(nullptr);
+  SCHECK(!reply.empty() && counting.calls > 0 && counting.live == 0,
+         "the reply didn't use the PSRAM hook (%d calls, %d live)", counting.calls, counting.live);
   in = import(R"({"schema":1,"mode":"x"})");
   SCHECK(settings_reply(in) == R"({"error":"mode should be a whole number."})", "reply: %s",
          settings_reply(in).c_str());
@@ -364,6 +451,7 @@ int main() {
   test_favs();
   test_refused();
   test_left_out();
+  test_other_panel();
   test_night_hours();
   test_playlists();
   test_fullest_fits();

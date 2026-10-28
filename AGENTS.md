@@ -110,8 +110,10 @@ is the short version.
   passwords or keys to the default build. The README section "On your
   network" explains why.
 - Team logos come from ESPN at runtime. Don't commit league or team logos.
-- Version bumps and CHANGELOG sections are written by maintainers at
-  release time. Leave both alone in a feature PR.
+- A PR that changes what an owner sees or does adds one bullet under
+  `## Unreleased` at the top of CHANGELOG.md, written for the owner.
+  Never edit a released section or the version number; the maintainers
+  rename `## Unreleased` and bump the version when a release goes out.
 - A change an owner or DIY builder can see or do comes with its docs
   page, updated or added under `docs/wiki/src/content/docs/` in the same
   PR. CI's "Docs updated" job fails a PR into `dev` that touches

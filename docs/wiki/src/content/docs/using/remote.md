@@ -37,7 +37,7 @@ During the [night schedule](/using/brightness-and-clock/)'s hours the panel stay
 Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.
 
 - In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the panel carries on through your favorites.
-- In **My team** or **Live games**, a button switches the panel to My team, following that favorite.
+- In **Live games**, a button switches the panel to Favorite teams and jumps to that favorite.
 - A button for an empty slot does nothing.
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).

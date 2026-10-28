@@ -1,6 +1,5 @@
 {
-  "team": {"form": "league:id of a team the panel knows, or none", "ok": ["nfl:6", "ncaa:251", "none"], "bad": ["dallas", "nfl:999999", ""]},
-  "mode": {"form": "0 My team, 4 Favorite teams, 5 Live games (1 to 3 are older live modes)", "ok": ["0", "4", "5"], "bad": ["6", "-1"]},
+  "mode": {"form": "4 Favorite teams, 5 Live games (1 to 3 are older live modes; 0, My team before, is taken as 4)", "ok": ["4", "5", "0"], "bad": ["6", "-1"]},
   "rotate": {"form": "minutes, clamped to 1 to 30", "ok": ["1", "5", "30"]},
   "fav1": {"form": "league:id, or none or empty to clear the remote's slot 1", "ok": ["nfl:6", "none", ""], "bad": ["dallas"]},
   "fav2": {"form": "league:id, or none or empty to clear the remote's slot 2", "ok": ["mlb:15", "none", ""], "bad": ["dallas"]},
@@ -24,6 +23,9 @@
   "count": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "match": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "beta": {"form": "1 on, anything else off", "ok": ["1", "0"]},
+  "countdown": {"form": "1 shows the countdown to the next game between games, anything else off", "ok": ["1", "0"]},
+  "cdname": {"form": "the custom countdown's name, trimmed, up to 20 bytes cut on a whole character; control characters and bytes that aren't UTF-8 are dropped; empty clears it", "ok": ["Christmas", ""]},
+  "cddate": {"form": "the custom countdown's day, YYYY-MM-DD, 2020 to 2099; none or empty clears it", "ok": ["2026-12-25", "none", ""], "bad": ["2026-02-30", "12/25/2026", "2026-1-5"]},
   "msg": {"form": "the message card's own text; cleaned to what the panel can draw", "ok": ["Go team", ""]},
   "msgurl": {"form": "an http or https address of a text file, at most 160 bytes, or empty for none", "ok": ["http://homeassistant.local:8123/local/gameday.txt", ""], "bad": ["ftp://example.com/list.txt", "homeassistant.local/list.txt"]},
   "msgevery": {"form": "minutes between message cards, a whole number, clamped to 0 to 30", "ok": ["0", "2"], "bad": ["", "x"]},

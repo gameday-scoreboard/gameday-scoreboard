@@ -193,6 +193,8 @@ packages:
   guard: !include pages/guard.yaml
   # The owner's banner over everything, and its Home Assistant text entity
   message: !include pages/message.yaml
+  # The FCC information on the panel's own screen (POST /gameday/action?do=regulatory)
+  regulatory: !include pages/regulatory.yaml
 
 # The theme's Spleen fonts, with Latin-1 added to ESPHome's default ASCII so
 # accented names (São Paulo, Atlético) draw. Text from outside the panel goes
@@ -215,6 +217,12 @@ font:
     glyphs: *panel_glyphs
   - id: !extend spleen_16
     glyphs: *panel_glyphs
+  # The countdown card's big digits on a wide board (gameday-live.yaml), cut
+  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today".
+  - file: "https://github.com/fcambus/spleen/raw/refs/tags/2.1.0/spleen-16x32.bdf"
+    id: spleen_32
+    size: 32
+    glyphs: ["0123456789 Tadhmoy"]
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -278,7 +286,7 @@ wifi:
     - script.stop: gd_offline_count
     - script.stop: gd_setup_window
     - script.stop: boot_wifi_lost_later
-    - ble.disable:
+    - script.execute: gd_ble_off
     - lambda: |-
         // Arms the offline restart below. Until the panel has been on its
         // network once this boot there is nothing to recover, so that
@@ -301,6 +309,7 @@ wifi:
   # repaints the normal lines by itself once Wi-Fi returns, so a router
   # reboot resolves with no reboot of our own.
   on_disconnect:
+    - script.stop: gd_ble_off
     - script.execute: gd_ble_grace
     - script.execute: boot_wifi_lost_later
     - script.execute: gd_offline_count
@@ -370,6 +379,44 @@ script:
     then:
       - delay: 30s
       - ble.enable:
+
+  # Bluetooth off once the panel is on Wi-Fi (see wifi: above). ESPHome turns
+  # Bluedroid off on the main loop, and Bluedroid waits a fixed 5 s there
+  # whenever a phone's link is still open, even once the link closes; that
+  # races the 5 s task watchdog, which often restarted the panel. The Game
+  # Day app stays connected after a Bluetooth setup until the panel hangs up,
+  # so a setup, or Wi-Fi coming back with the app connected, could do it. Hang up
+  # first, after a second for the Wi-Fi result to reach the app, and turn
+  # Bluetooth off once Bluedroid has no link left: then it is done in about
+  # 0.2 s. A link that stays up through three hangups leaves Bluetooth on
+  # rather than risk the stall; the next connect tries again.
+  - id: gd_ble_off
+    mode: restart
+    then:
+      # Three tries: Improv keeps advertising for a few seconds after a setup,
+      # so the app can connect again right after the first hangup.
+      - repeat:
+          count: 3
+          then:
+            - if:
+                condition:
+                  lambda: 'return improv_ble::ImprovBLEComponent::open_links() > 0;'
+                then:
+                  - delay: 1s
+                  - lambda: |-
+                      ESP_LOGI("ble", "On Wi-Fi, hanging up on the Bluetooth client");
+                      improv_ble::ImprovBLEComponent::hang_up();
+                  - wait_until:
+                      condition:
+                        lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
+                      timeout: 10s
+      - if:
+          condition:
+            lambda: 'return improv_ble::ImprovBLEComponent::open_links() == 0;'
+          then:
+            - ble.disable:
+          else:
+            - lambda: 'ESP_LOGW("ble", "A Bluetooth link is still open, leaving Bluetooth on");'
 
   # A panel that has a saved network but cannot get back on it is stuck in a
   # way nothing else recovers from. ESPHome's own reboot_timeout is disabled
@@ -538,6 +585,16 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'true'
+  # The countdown card's target and end (epoch seconds, countdown.h), from the
+  # latest board update, so the page counts down once a second by itself.
+  - id: gd_countdown_at
+    type: int64_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_countdown_end
+    type: int64_t
+    restore_value: no
+    initial_value: '0'
   # The logos the board wants right now, from the latest board update.
   - id: gd_team_logo_url
     type: std::string
@@ -617,6 +674,12 @@ gameday:
           lambda: 'return x == "fav_banner";'
         then:
           - script.execute: gd_fav_banner
+    # The FCC information (pages/regulatory.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "regulatory";'
+        then:
+          - script.execute: reg_show
     # The QC screen (pages/qc.yaml), for a panel already on Wi-Fi
     - if:
         condition:
@@ -726,6 +789,9 @@ gameday:
         };
         put(id(gd_team_score), x.ha_team_score);
         put(id(gd_opp_score), x.ha_opp_score);
+    - lambda: |-
+        id(gd_countdown_at) = x.countdown_at;
+        id(gd_countdown_end) = x.countdown_end;
     # The board gets the text through panel_text() so a character the fonts
     # lack never draws as a box; Home Assistant keeps the original above.
     - script.execute:
@@ -761,6 +827,7 @@ gameday:
         opp_marks: !lambda 'return x.opp_marks;'
         message: !lambda 'return gameday::panel_text(x.message);'
         clock_card: !lambda 'return x.clock;'
+        countdown_card: !lambda 'return x.countdown_at != 0;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'
@@ -783,11 +850,6 @@ lvgl_page_manager:
     icon: "mdi:page-previous"
 
 select:
-  - platform: gameday
-    gameday_id: gameday_ctl
-    type: team
-    name: "Team"
-    icon: "mdi:football"
   - platform: gameday
     gameday_id: gameday_ctl
     type: mode
@@ -841,6 +903,10 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 128
+    # Into flash at once, like every other setting (the number saves its
+    # own value after this runs, so the write waits for the next loop).
+    set_action:
+      - lambda: 'id(gameday_ctl).sync_soon();'
     on_value:
       then:
         - if:
@@ -861,6 +927,8 @@ number:
     restore_value: true
     initial_value: 5
     entity_category: config
+    set_action:
+      - lambda: 'id(gameday_ctl).sync_soon();'
 
 button:
   - platform: template

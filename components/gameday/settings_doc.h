@@ -3,9 +3,9 @@
 // page's Export and Import and the apps' back up and restore. The document's
 // keys are POST /gameday/set's, with JSON types instead of text:
 //   {"schema": 1, "version": "v2026.10.1", "name": "gameday-2f6a70",
-//    "team": "nfl:6", "mode": 4, "favs": ["nfl:6", "", "mlb:15"],
+//    "mode": 4, "favs": ["nfl:6", "", "mlb:15"],
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
-// "none" is no team, "" in favs an empty slot (the remote's buttons keep their
+// "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
 // playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}]. Brightness and
 // scroll are the Home Assistant numbers of the same names.
@@ -14,9 +14,12 @@
 // type, or text the panel can't read (a team, a time, an address), refuses
 // the document. What this firmware doesn't know or can't take (a key, a team,
 // a league or a time zone from newer firmware, a number out of its range, a
-// favorite past its 16) is left out and listed, so a backup still restores
-// across versions. Wi-Fi networks and
-// the WizMote pairing are not in it.
+// favorite past its 16, a message list address it can't read) is left out
+// and listed, so a backup still restores across versions. The nickname and
+// the panel layout describe the panel, not the owner's choices: they come
+// back only onto the panel the file was saved from (its "name", the hostname,
+// which a factory reset keeps), and a file from another panel lists them as
+// kept. Wi-Fi networks and the WizMote pairing are not in it.
 // Pure, no ESPHome includes, so the host tests cover it.
 #pragma once
 
@@ -27,6 +30,7 @@
 #include <string>
 #include <vector>
 
+#include "espn_parse.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -49,11 +53,11 @@ enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
 inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
-                                      "leaders", "night", "nightscreen", "favtake"};
+                                      "leaders", "night", "nightscreen", "favtake", "countdown"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list"};
-  static const char *const kText[] = {"team", "fav1", "fav2", "fav3", "fav4", "tz",
-                                      "msg",  "msgurl", "nightstart", "nightend", "nick"};
+  static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -85,7 +89,7 @@ inline std::string team_ref_text(JsonObjectConst t) {
 // the panel keeps built on its main loop, so the web server never reads a
 // setting while the loop changes it. live_mask is Live games' own list (0 for
 // automatic): the state's live list is what the panel scans now, every league
-// while no team is picked. brightness and scroll are -1 in a build without
+// while no favorite is picked. brightness and scroll are -1 in a build without
 // those numbers. Keys the state leaves out (autoupd and beta in some builds)
 // are left out here too.
 inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brightness, int scroll, JsonDocument &out) {
@@ -97,19 +101,15 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     out["name"] = s["name"];
   // In the device page's order. Ints, switches and text have the state's
   // key and type; the rest are converted.
-  static const char *const kKeys[] = {"nick",     "team",     "mode",     "favs",     "rotate",      "lockon",     "release",
+  static const char *const kKeys[] = {"nick",     "mode",     "favs",     "rotate",      "lockon",     "release",
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
-                                      "nightstart", "nightend", "nightscreen", "nightlevel", "msg",      "msgurl",
-                                      "msgevery", "autoupd",  "beta",     "lists",       "list"};
+                                      "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
+                                      "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
+                                      "lists",    "list"};
   for (const char *k : kKeys) {
-    if (strcmp(k, "team") == 0) {
-      if (s["team"].is<JsonObjectConst>()) {
-        std::string ref = team_ref_text(s["team"]);
-        out["team"] = ref.empty() ? std::string("none") : ref;
-      }
-    } else if (strcmp(k, "favs") == 0) {
+    if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
       // the empty slots at the end are left off.
       if (!s["favs"].is<JsonArrayConst>())
@@ -164,6 +164,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
 
 // What the panel can take, from the build and the running firmware.
 struct SettingsTarget {
+  std::string name;  // this panel's hostname, as the export writes it
+  std::string nick;  // its nickname now
   size_t fav_max{16};
   int panels{0};      // panels wide now; 0 when the build has no panel layout
   int max_panels{0};  // the most it drives
@@ -179,6 +181,7 @@ struct SettingsImport {
   int scroll{-1};
   bool restart{false};  // the panel count changes, so the panel restarts
   std::vector<std::string> skipped;  // "key" or "key=value" this firmware left out
+  std::vector<std::string> kept;     // "nick", "panels": another panel's, this one keeps its own
   std::string error;  // why the document was refused; nothing was applied
 };
 
@@ -221,6 +224,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     return detail::settings_fail(out, "Not a settings backup.");
   if (schema > kSettingsSchema)
     return detail::settings_fail(out, "This backup is from newer firmware. Update the panel, then restore it.");
+  // Saved from this panel (after a factory reset, say), not from another one.
+  bool same_panel = !target.name.empty() && doc["name"].is<const char *>() && target.name == doc["name"].as<const char *>();
 
   for (const char *key : kSetKeys) {
     JsonVariantConst v = doc[key];
@@ -260,6 +265,11 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;
         }
+        if (k == "panels" && !same_panel) {
+          if (n != target.panels)
+            out.kept.push_back(k);
+          continue;
+        }
         if (k == "panels")
           out.restart = n != target.panels;
         break;
@@ -268,7 +278,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         if (!v.is<const char *>())
           return detail::settings_fail(out, k + " should be text.");
         std::string text = v.as<const char *>();
-        if (k == "team" || (k.size() == 4 && k.compare(0, 3, "fav") == 0)) {
+        if (k.size() == 4 && k.compare(0, 3, "fav") == 0) {
           TeamRef t;
           int r = detail::settings_team(text, t);
           if (r == -2)
@@ -280,8 +290,14 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, r == 0 ? "none" : text, op, target.fav_max);
           break;
         }
-        if (k == "tz" && timezone_index(text.c_str()) < 0) {
+        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text))) {
           out.skipped.push_back(k + "=" + text);
+          continue;
+        }
+        if (k == "nick" && !same_panel) {
+          parse_set(k, text, op, target.fav_max);
+          if (op.text != target.nick)
+            out.kept.push_back(k);
           continue;
         }
         if (!parse_set(k, text, op, target.fav_max))
@@ -424,7 +440,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
 
 // The reply to an import: {"ok":true,"restart":false,"skipped":[...]}.
 inline std::string settings_reply(const SettingsImport &in) {
-  JsonDocument doc;
+  JsonDocument doc(detail::json_allocator());
   if (!in.error.empty()) {
     doc["error"] = in.error;
   } else {
@@ -433,6 +449,9 @@ inline std::string settings_reply(const SettingsImport &in) {
     JsonArray skipped = doc["skipped"].to<JsonArray>();
     for (const auto &s : in.skipped)
       skipped.add(s);
+    JsonArray kept = doc["kept"].to<JsonArray>();
+    for (const auto &k : in.kept)
+      kept.add(k);
   }
   std::string body;
   serializeJson(doc, body);
