@@ -119,7 +119,7 @@ INITIAL = {
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "celebrate": 2, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
@@ -417,6 +417,9 @@ def apply_set(kv):
                 STATE[k] = night_time(v)
         elif k == "nightlevel":
             STATE["nightlevel"] = min(255, max(1, atoi(v)))
+        elif k == "celebrate":
+            if v in ("0", "1", "2"):
+                STATE["celebrate"] = int(v)
     # The same start and end keeps the hours it had (night_keep_hours).
     if STATE["nightstart"] == STATE["nightend"]:
         STATE["nightstart"], STATE["nightend"] = hours
@@ -530,7 +533,7 @@ def import_settings(doc):
             if not is_int(v):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
-                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
+                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255), "celebrate": (0, 2),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]

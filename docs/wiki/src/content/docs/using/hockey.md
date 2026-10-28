@@ -37,6 +37,10 @@ A goal fills the screen for 4 seconds with fireworks on black, in the scoring te
 
 When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
 
+:::note[Coming in the next release]
+With **Celebrations** on **Full**, your goal lights the goal lamp: a red beam spins from the middle of the board, the red glow pulses and the frame flashes, with "GOAL!" in white, for 4.5 seconds. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's goals are a dim 2-second flash. **Subtle** keeps every goal to the quick flash; **Off** shows no splash at all.
+:::
+
 ## The playoff series
 
 In the playoffs the series, like "CAR leads series 2-0", is in the ticker before the game, and takes the records' place during intermissions and at the final. It isn't on the board itself.

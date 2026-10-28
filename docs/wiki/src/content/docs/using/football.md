@@ -64,6 +64,10 @@ A touchdown gets fireworks on black with the words in your team's color. The sma
 
 The other side's scores show the same way in their color with their abbreviation in front, like "PHI TOUCHDOWN", unless you turn off **Opponent scores too** in the Celebrations card.
 
+:::note[Coming in the next release]
+With **Celebrations** on **Full**, your touchdown gets 5 seconds of fireworks in your team's colors over a gold goalpost, with the ball sailing through the uprights. A field goal, an extra point or a two-point score sweeps a bar of light across the board twice. The win holds for 10 seconds: your abbreviation and "WINS", the final score under it, and confetti falling in your colors. The other side's scores are a dim 2-second flash. **Subtle** keeps every score to the quick flash; **Off** shows no splash at all.
+:::
+
 The panel compares each score with the one before, about every 10 seconds, so a touchdown and the extra point that land in the same update show as one TOUCHDOWN.
 
 When your team wins, a victory splash with fireworks says your abbreviation and "WINS".

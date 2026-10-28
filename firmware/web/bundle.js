@@ -159,9 +159,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       </div>
       <div class="card">
         <h2>Celebrations</h2>
-        <p class="hint">Full-screen splashes for scores. Yours always show.</p>
+        <p class="hint">Full-screen celebrations for scores and the win. Yours always show; the other side's stay quiet.</p>
         <div id="celebCtls">
-          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+          <div class="ctl"><label for="celebrate">Celebrations<small>Full: fireworks for a touchdown, the ball out of the park, the net or the goal lamp for a goal, a three through the hoop, and confetti with the final score when your team wins. Subtle: a quick flash in the team's color. Off: the board just updates.</small></label><select id="celebrate">
+            <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
+          </select></div>
+          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer, as a dim flash. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
       <div class="card" id="cdCard" hidden>
@@ -385,6 +388,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    celebrate: Number,
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
@@ -666,6 +670,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
   const releaseSelect = $("#release");
   releaseSelect.onchange = () => setGD({ release: releaseSelect.value });
+  const celebrateSelect = $("#celebrate");
+  celebrateSelect.onchange = () => setGD({ celebrate: celebrateSelect.value });
   const collideSelect = $("#collide");
   const favRotate = $("#favrotate");
   const showFavRotate = () => {
@@ -759,6 +765,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (document.activeElement !== favRotate) favRotate.value = S.rotate;
     if (document.activeElement !== lockonInput) lockonInput.value = S.lockon || 15;
     if (document.activeElement !== releaseSelect) releaseSelect.value = String(S.release || 30);
+    // Firmware without the setting sends no celebrate key: it celebrates in full.
+    if (document.activeElement !== celebrateSelect) celebrateSelect.value = String(S.celebrate === undefined ? 2 : S.celebrate);
     if (document.activeElement !== collideSelect) {
       collideSelect.value = String(S.collide || 0);
       showFavRotate();

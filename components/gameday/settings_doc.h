@@ -55,7 +55,7 @@ inline SettingType setting_type(const char *k) {
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
                                       "leaders", "night", "nightscreen", "favtake", "countdown"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel", "list"};
+                                     "release", "collide", "msgevery", "nightlevel", "list", "celebrate"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
   static const char *const kList[] = {"favs", "live"};
@@ -104,7 +104,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
   static const char *const kKeys[] = {"nick",     "mode",     "favs",     "rotate",      "lockon",     "release",
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
-                                      "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
+                                      "odds",     "leaders",  "opp",      "celebrate",   "best",       "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
                                       "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
                                       "lists",    "list"};

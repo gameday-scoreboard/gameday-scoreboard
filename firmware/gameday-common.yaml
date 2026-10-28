@@ -169,9 +169,6 @@ external_components:
     components: [gameday, panel_layout, improv_ble, saved_networks, crash_report]
   - source: github://pavlov-net/lvgl-page-manager@v0.3.0
     components: [lvgl_page_manager]
-  # Fireworks behind the touchdown and win splashes
-  - source: github://pavlov-net/lvgl-canvas-fx@v0.4.1
-    components: [lvgl_canvas_fx]
 
 packages:
   hub75_studio:
@@ -818,6 +815,10 @@ gameday:
         opponent_record: !lambda 'return gameday::panel_text(x.opponent_record);'
         splash_text: !lambda 'return gameday::panel_text(x.splash_text);'
         splash_color: !lambda 'return (int) x.splash_color;'
+        celeb_kind: !lambda 'return (int) x.celeb_kind;'
+        celeb_alt: !lambda 'return (int) x.celeb_alt;'
+        celeb_line2: !lambda 'return x.celeb_line2;'
+        celeb_ms: !lambda 'return (int) x.celeb_ms;'
         sport: !lambda 'return (int) x.sport;'
         situation: !lambda 'return x.situation;'
         outs: !lambda 'return x.outs;'

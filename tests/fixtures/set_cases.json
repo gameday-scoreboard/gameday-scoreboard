@@ -10,7 +10,7 @@
   "base": {
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
-    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
+    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "celebrate": 2, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
@@ -153,6 +153,10 @@
      "expect": {"night": false, "nightstart": "21:00"}},
     {"name": "screen off at night", "set": [["nightscreen", "0"]], "expect": {"nightscreen": false}},
     {"name": "screen back on at night", "start": {"nightscreen": false}, "set": [["nightscreen", "1"]], "expect": {"nightscreen": true}},
+    {"name": "celebrations off", "set": [["celebrate", "0"]], "expect": {"celebrate": 0}},
+    {"name": "celebrations subtle", "set": [["celebrate", "1"]], "expect": {"celebrate": 1}},
+    {"name": "celebrations past full are refused", "set": [["celebrate", "3"]], "expect": {"celebrate": 2}},
+    {"name": "celebrations need a number", "set": [["celebrate", "full"]], "expect": {"celebrate": 2}},
     {"name": "night brightness", "set": [["nightlevel", "40"]], "expect": {"nightlevel": 40}},
     {"name": "night brightness 0 is 1", "set": [["nightlevel", "0"]], "expect": {"nightlevel": 1}},
     {"name": "night brightness past 255 is 255", "set": [["nightlevel", "900"]], "expect": {"nightlevel": 255}},

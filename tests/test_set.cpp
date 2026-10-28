@@ -52,6 +52,7 @@ struct Settings {
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
+  int celebrate{2};  // celebrate.h CelebLevel
   bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true};
   std::string cdname;
   uint32_t cdymd{0};
@@ -155,6 +156,7 @@ void load(Settings &s, JsonObjectConst o) {
   s.night.screen_off = screen ? 0 : 1;
   int level = s.night.level;
   num("nightlevel", level);
+  num("celebrate", s.celebrate);
   s.night.level = (uint8_t) level;
   if (o["nightstart"].is<const char *>())
     s.night.start = (uint16_t) night_parse_time(o["nightstart"].as<const char *>());
@@ -220,6 +222,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::PLAY: s.play = op.on; break;
     case SetKind::ODDS: s.odds = op.on; break;
     case SetKind::OPP: s.opp = op.on; break;
+    case SetKind::CELEBRATE: s.celebrate = op.value; break;
     case SetKind::BEST: s.best = op.on; break;
     case SetKind::JUMP: s.jump = op.on; break;
     case SetKind::BANNER: s.banner = op.on; break;
@@ -289,6 +292,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["play"] = s.play;
   doc["odds"] = s.odds;
   doc["opp"] = s.opp;
+  doc["celebrate"] = s.celebrate;
   doc["best"] = s.best;
   doc["jump"] = s.jump;
   doc["banner"] = s.banner;

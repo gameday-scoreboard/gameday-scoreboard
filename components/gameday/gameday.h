@@ -25,6 +25,8 @@
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
+#include "celebrate.h"
+#include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -81,6 +83,12 @@ struct UpdateFields {
   std::string opponent_record;
   std::string splash_text;
   uint32_t splash_color{0};
+  // The celebration for this splash (celebrate.h decide_celebration): the
+  // kind, its second color, the win's second line and how long it holds.
+  uint8_t celeb_kind{0};
+  uint32_t celeb_alt{0xFFFFFF};
+  std::string celeb_line2;
+  uint32_t celeb_ms{0};
   std::string last_play;
   std::string clock_text;  // "5:36 - 3rd" while the game is live, else empty
   std::string down_distance;  // "3rd & 10" while live, else empty
@@ -274,6 +282,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
+  // Celebrations (celebrate.h): off, subtle or full. Full is the default.
+  ::espn::CelebLevel celebrations() const { return ::espn::celeb_level_from_stored(this->prefs8_.celeb); }
+  void set_celebrations(::espn::CelebLevel level);
   bool setup_done() const { return this->flag_(FLAG_SETUP); }
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
@@ -566,7 +577,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
     uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
-    uint8_t spare[2];
+    uint8_t celeb;   // celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
+    uint8_t spare[1];
   } __attribute__((packed));
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots

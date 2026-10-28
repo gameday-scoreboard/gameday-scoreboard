@@ -50,6 +50,10 @@ A home run gets fireworks on black with the words in the team's color. Other run
 
 When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
 
+:::note[Coming in the next release]
+With **Celebrations** on **Full**, a home run shows the ball arcing up and out over the outfield wall under the stadium lights and bursting in your team's colors as it leaves the park. Other runs sweep a bar of light across the board. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's runs are a dim 2-second flash. **Subtle** keeps every score to the quick flash; **Off** shows no splash at all.
+:::
+
 ## The final
 
 The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for ten minutes, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game.

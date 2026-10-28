@@ -28,7 +28,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list"};
+                                    "nick",   "lists",    "list",   "celebrate"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -202,6 +202,7 @@ enum class SetKind : uint8_t {
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
 };
 
 struct TeamRef {
@@ -350,6 +351,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.kind = k == "nightstart" ? SetKind::NIGHT_START : SetKind::NIGHT_END;
     op.value = night_parse_time(v);
     return op.value >= 0;
+  }
+  if (k == "celebrate") {
+    // 0 off, 1 subtle, 2 full; anything else is refused.
+    op.kind = SetKind::CELEBRATE;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
   }
   if (k == "nightlevel") {
     op.kind = SetKind::NIGHT_LEVEL;
