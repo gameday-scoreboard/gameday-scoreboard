@@ -3,7 +3,8 @@
 ESPHome firmware for a standalone sports scoreboard (NFL, college football,
 MLB, NBA, WNBA, men's college basketball, NHL, MLS and the Premier League) on
 an ESP32-S3 HUB75 controller. One top-level YAML per pinout: gameday.yaml
-(MoonHub75) and gameday-scoreboard75.yaml (our controller board); each picks
+(MoonHub75, also the pinout of our own controller board) and
+gameday-scoreboard75.yaml (four early test boards, not a product); each picks
 its pin map from firmware/controllers/ and shares everything else via
 gameday-common.yaml.
 Sibling repo: the iOS companion app at ~/development/gameday-scoreboard-ios (github.com/gameday-scoreboard/gameday-scoreboard-ios).

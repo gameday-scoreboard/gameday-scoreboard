@@ -10,7 +10,7 @@ is the short version.
 ## Layout
 
 - `firmware/gameday.yaml` (MoonHub75 pinout) and
-  `firmware/gameday-scoreboard75.yaml` (our controller board) are the two
+  `firmware/gameday-scoreboard75.yaml` (the early scoreboard75 test boards) are the two
   release builds. Each only names itself and picks a pin map from
   `firmware/controllers/`; everything else is in
   `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
