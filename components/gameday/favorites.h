@@ -25,8 +25,12 @@ struct FavGame {
   // idle; 0 = no limit. Football has none, so a bye week never hides a team;
   // other leagues use it to drop a team that is out of season.
   int64_t horizon_s{0};
+  bool countdown{false};  // its countdown card takes a turn after it (countdown.h)
   // A recent poll found the game at its action (in_action), for Jump to the action.
   bool action{false};
+  // The team is in the playlist being played (playlists.h). One that isn't
+  // still locks on near its kickoff, but stays out of the idle playlist.
+  bool in_list{true};
 };
 
 struct FavRules {
@@ -35,6 +39,7 @@ struct FavRules {
   bool alternate{false};      // two locked games: flip between them (else the higher slot wins)
   int64_t rotate_s{5 * 60};   // flip interval when alternating
   int64_t dwell_s{10};        // seconds per card in the idle playlist
+  int64_t countdown_s{0};     // and after a card with a countdown, the countdown's
   bool today_only{false};     // idle playlist: only games today (local time) or live
   int64_t day_start{0};       // today's local midnight, epoch seconds
   int64_t day_end{0};         // the next one
@@ -43,6 +48,7 @@ struct FavRules {
 struct FavChoice {
   int index{-1};  // slot to show, -1 when no favorite has a card
   bool locked{false};
+  bool again{false};  // the playlist moved on and came back to the card already up (a playlist of one)
 };
 
 inline bool fav_locked(const FavGame &g, int64_t now, const FavRules &r) {
@@ -130,7 +136,7 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
   // goes blank while it has cards.
   int level = 0;
   auto ok_at = [&](int i, int lv) {
-    if (!valid(i))
+    if (!valid(i) || !games[i].in_list)
       return false;
     if (lv >= 2)
       return true;
@@ -144,11 +150,14 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
       break;
   }
   auto ok = [&](int i) { return ok_at(i, level); };
+  int64_t dwell = r.dwell_s + (valid(current) && games[current].countdown ? r.countdown_s : 0);
   // A remote press shows its card for the dwell even when a filter would skip it.
-  if ((ok(current) || (current == pinned && valid(current))) && now - shown_since < r.dwell_s)
+  if ((ok(current) || (current == pinned && valid(current))) && now - shown_since < dwell)
     c.index = current;
-  else
+  else {
     c.index = fav_next_(games, current, ok);
+    c.again = c.index >= 0 && c.index == current;
+  }
   return c;
 }
 
@@ -249,12 +258,12 @@ inline std::string fav_score_banner(const GameSnapshot &prev, const GameSnapshot
 
 // The favorite Home Assistant reports while the idle playlist rotates, so its
 // sensors don't change with every card: the next kickoff, else the first slot
-// with a card. -1 when no favorite has one.
+// with a card, among the playlist being played. -1 when none has one.
 inline int followed_favorite(const std::vector<FavGame> &games) {
   int best = -1;
   for (int i = 0; i < (int) games.size(); i++) {
     const FavGame &g = games[i];
-    if (!g.valid)
+    if (!g.valid || !g.in_list)
       continue;
     if (best < 0) {
       best = i;
@@ -290,10 +299,12 @@ inline int live_fav_rank(const LiveGame &g, const std::vector<FavRef> &favs) {
 // The live game to lock onto, as an index into live, or -1 to leave the pick
 // to the rotation. current is the game on the board; skip_current leaves it
 // out (it ended, though the scan may still list it as in progress). With
-// alternate, a scan with the board on one favorite's game moves to the next
-// favorite's, in list order, wrapping; a lone favorite's game stays.
-inline int take_over_pick(const std::vector<LiveGame> &live, const std::vector<FavRef> &favs,
-                          const std::string &current, bool skip_current, bool alternate) {
+// alternate, a rotate scan (Switch every) with the board on one favorite's
+// game moves to the next favorite's, in list order, wrapping; a lone
+// favorite's game stays. Any other scan with alternate (a kickoff) keeps the
+// favorite's game on the board while it is still on.
+inline int take_over_pick(const LiveList &live, const std::vector<FavRef> &favs,
+                          const std::string &current, bool skip_current, bool alternate, bool rotate = true) {
   // Candidates by priority: (rank, index), insertion-sorted, a few at most.
   std::vector<std::pair<int, int>> cand;
   for (int i = 0; i < (int) live.size(); i++) {
@@ -313,7 +324,7 @@ inline int take_over_pick(const std::vector<LiveGame> &live, const std::vector<F
     return cand[0].second;
   for (size_t k = 0; k < cand.size(); k++)
     if (!current.empty() && live[cand[k].second].event_id == current)
-      return cand[(k + 1) % cand.size()].second;
+      return cand[rotate ? (k + 1) % cand.size() : k].second;
   return cand[0].second;
 }
 
@@ -327,6 +338,17 @@ inline int64_t take_over_rescan_at(int64_t now, int64_t fav_kickoff) {
   if (fav_kickoff > now)
     return fav_kickoff;
   return now + (now - fav_kickoff < 20 * 60 ? 2 * 60 : 10 * 60);
+}
+
+// The same after a scan where a league's read failed: that league's favorite
+// kickoff can be missing from `next`, so the rescan already set stays when it
+// comes sooner. One already due moves two minutes out, so a league that keeps
+// failing is retried without a scan on every poll.
+inline int64_t take_over_rescan_keep(int64_t now, int64_t next, int64_t prev) {
+  if (prev == 0)
+    return next;
+  int64_t kept = prev > now ? prev : now + 2 * 60;
+  return next == 0 || kept < next ? kept : next;
 }
 
 }  // namespace espn

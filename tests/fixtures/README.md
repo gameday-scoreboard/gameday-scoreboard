@@ -20,6 +20,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
+| `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 
@@ -69,6 +70,7 @@ NBA (preseason) and WNBA (semifinals), recorded 2026-10-07 from
 | `event_nba_clock.json` | 401908620 MIL @ OKC, 12.3 1st (tenths, no minutes) |
 | `event_nba_end.json` | 401908620, End of 1st |
 | `event_nba_pre.json` | 401914129 GS @ POR, pre-game with odds |
+| `event_nba_pre_leaders.json` | 401909853 MIA @ CHA, regular-season pre-game with each side's points, rebounds and assists per game leaders (recorded 2026-10-24) |
 | `event_wnba_live.json` | 401918297 NY @ ATL, 4.5 2nd, ATL leads series 1-0 |
 | `event_wnba_half.json` | 401918297, Halftime |
 | `event_wnba_ot.json` | 401918297, 20.8 OT |
@@ -135,6 +137,14 @@ during FLA @ TEX (halftime):
 | `team_ncaa_tex_live.json` | `.../football/college-football/teams/251`, nextEvent is 401856732 MISS @ TEX on 10/24, group 8 (SEC) |
 | `day_ncaa_20261017.json` | `.../college-football/scoreboard?groups=8&dates=20261017`, 401856724 FLA @ TEX and MSST @ LSU in progress, five SEC games to come |
 
+The NFL does not. Recorded 2026-10-22 at 10:32 PM Central, NE @ CHI final,
+and two minutes later ECU @ MEM (college) in overtime:
+
+| File | Source |
+| --- | --- |
+| `team_nfl_chi_post.json` | `.../football/nfl/teams/3`, nextEvent is still 401873010 NE @ CHI, Final 30-24 |
+| `team_ncaa_mem_live.json` | `.../football/college-football/teams/235`, nextEvent is 401862814 ARMY @ MEM on 10/31 while 401862807 ECU @ MEM is in overtime |
+
 College football games with no kickoff time yet, recorded 2026-10-14. ESPN
 lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
 "TBD" (Iowa, team 2294, is off on 10/17, so its next game is one of them):
@@ -166,6 +176,24 @@ at once (the bar build's `bar` next to `beta`, favorites rows next to the
 team's upcoming games, a reason for an empty board next to a live game).
 `wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
 /gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
-(`demo` and `demo_stop` only in demo builds). `test_api.cpp` fails when the
-firmware and these files disagree, and the companion app's tests read them,
-so a firmware change to the API updates them in the same PR.
+(`demo` and `demo_stop` only in demo builds). `settings.json` is `GET
+/gameday/settings`, the backup, and `crash.json` is `GET /gameday/crash`, the
+crash report `scripts/crash_report.py` and the help desk read.
+
+The key lists say which keys exist; two more files say what they hold.
+`types.json` gives the JSON type of every key in `state.json`, `wifi.json`,
+`settings.json` and `crash.json` (`bool`, `int`, `number`, `string`, `object`,
+`array`, or a list like `["int", "null"]`), with `favs[]` for an array's
+elements. `set_forms.json` gives every `POST /gameday/set` parameter's form,
+like `HH:MM` or `league:id`, with values the firmware takes (`ok`) and
+refuses (`bad`). `test_api.cpp` fails when a fixture's value doesn't have
+its type, when the firmware's health and wifi objects don't, and when
+`parse_set` disagrees with an `ok` or `bad` value. `python3
+scripts/api_types.py check <panel>` compares a live panel with `types.json`,
+and `python3 scripts/api_types.py seed` rebuilds it from the fixtures.
+
+`test_api.cpp` fails when the firmware and these files disagree, and the
+companion app's tests read them, so a firmware change to the API updates
+them in the same PR. `GET /gameday/heap` (a bench reading) and
+`/gameday/demo` (demo builds only) are not part of the API the apps use and
+have no fixture.

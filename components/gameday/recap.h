@@ -13,48 +13,26 @@
 #include <string>
 #include <vector>
 
-#ifdef ESP_PLATFORM
-#include <esp_heap_caps.h>
-#endif
-
 #include "espn_parse.h"
+#include "psram.h"
 
 namespace espn {
 
 // The rotation's finals and games to come live in PSRAM on the panel. A
 // panel with no team keeps every league's, up to kRecapCap a day each, about
 // 200 bytes a game with its short strings stored inline: more than internal
-// RAM can spare. The host tests use the plain heap.
-template<class T> struct RecapAllocator {
-  using value_type = T;
-  RecapAllocator() = default;
-  template<class U> RecapAllocator(const RecapAllocator<U> &) {}
-  T *allocate(size_t n) {
-#ifdef ESP_PLATFORM
-    void *p = heap_caps_malloc_prefer(n * sizeof(T), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-#else
-    void *p = malloc(n * sizeof(T));
-#endif
-    if (p == nullptr)
-      abort();  // as operator new does with exceptions off
-    return static_cast<T *>(p);
-  }
-  void deallocate(T *p, size_t) { free(p); }  // ESP-IDF's free takes either heap
-  template<class U> bool operator==(const RecapAllocator<U> &) const { return true; }
-  template<class U> bool operator!=(const RecapAllocator<U> &) const { return false; }
-};
-template<class T> using RecapList = std::vector<T, RecapAllocator<T>>;
+// RAM can spare.
+template<class T> using RecapList = PsVector<T>;
 
 // A day the way ESPN's scoreboard `dates=` parameter counts it for a league:
-// US Eastern, shifted like scan_url() (5 h for football, 9 h for the rest),
-// so a West Coast game that ends at 1 AM Eastern lands on the day it started.
+// US Eastern, shifted like scan_url() (to 4 AM Eastern), so a West Coast
+// game that ends at 1 AM Eastern lands on the day it started.
 inline int32_t espn_day(int64_t epoch, uint8_t league) {
   int64_t s = epoch - scan_day_shift((League) league);
   return (int32_t) (s >= 0 ? s / 86400 : (s - 86399) / 86400);
 }
 
-// Back to an epoch inside that day (noon Eastern), for scan_url(). Noon is
-// inside the day for either shift.
+// Back to an epoch inside that day (noon Eastern), for scan_url().
 inline int64_t espn_day_epoch(int32_t day) { return (int64_t) day * 86400 + 17 * 3600; }
 
 // One game day of one league, newest day first in a list: its finals, and
@@ -70,6 +48,69 @@ struct RecapDay {
 static const size_t kRecapMinFinals = 4;
 // How far back the walk, and the forward search for the next kickoff, look.
 static const int kRecapMaxDays = 7;
+
+// One league's walk through ESPN days for the finals rotation, one day read
+// per step. Back: from yesterday until the league has kRecapMinFinals finals
+// or the walk has looked kRecapMaxDays back. Forward, when no game is left
+// today: from tomorrow until a day has a kickoff. A walk that ends is tried
+// again on a later day, never on every scan.
+struct RecapWalk {
+  static constexpr uint8_t kDone = kRecapMaxDays + 1;
+  uint8_t step{0};  // the next day back (or ahead) to read, 1 to kRecapMaxDays; 0 not started; kDone ended
+  int32_t day{0};   // the league's ESPN day the walk ended on
+
+  void finish(int32_t today) {
+    this->step = kDone;
+    this->day = today;
+  }
+
+  // Back: the day to read now, into read_day, or false when there is none.
+  // have: the league's finals already held. A walk that ended with nothing
+  // starts again on a new day.
+  bool back_due(int32_t today, size_t have, int32_t &read_day) {
+    if (this->step == kDone && this->day != today && have == 0)
+      this->step = 0;
+    if (this->step == 0) {
+      if (have >= kRecapMinFinals) {
+        this->finish(today);  // today's scan already had enough
+        return false;
+      }
+      this->step = 1;
+    }
+    if (this->step > kRecapMaxDays)
+      return false;
+    read_day = today - this->step;
+    return true;
+  }
+  // Back: a day was read and the league now holds `have` finals.
+  void back_read(int32_t today, size_t have) {
+    if (have >= kRecapMinFinals || ++this->step > kRecapMaxDays)
+      this->finish(today);
+  }
+
+  // Forward: the day to read now, or false. next: the kickoff the walk found
+  // last (0 for none). It starts again once that kickoff has passed, or, when
+  // it found none, on a new day.
+  bool fwd_due(int32_t today, int64_t next, int64_t now, int32_t &read_day) {
+    if (this->step == kDone && next <= now && (next != 0 || this->day != today))
+      this->step = 0;
+    if (this->step == 0)
+      this->step = 1;
+    if (this->step > kRecapMaxDays)
+      return false;
+    read_day = today + this->step;
+    return true;
+  }
+  // Forward: a day was read. found: it has a kickoff still ahead. False when
+  // the walk gave up, a week out with no kickoff.
+  bool fwd_read(int32_t today, bool found) {
+    if (found || ++this->step > kRecapMaxDays) {
+      this->finish(today);
+      return found;
+    }
+    return true;
+  }
+};
 // Game cards in one loop, later today and finals together, shared between
 // the leagues shown. Two logos each, so 22 stays inside the 48-logo cache
 // (four are kept pinned) and a loop does not download the same logos again
@@ -205,9 +246,9 @@ inline void recap_share(const size_t (&have)[kLeagueCount], size_t cap, size_t (
 // had for today, so the rotation fills up as games end and drops the ones
 // that started. A league with neither keeps its days, so a scan that failed
 // for one league never empties it. Each league keeps only the games to come
-// its share of a loop could show, since every one is internal RAM.
-inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &finals,
-                         const std::vector<Pending> &pending, int64_t now) {
+// its share of a loop could show.
+inline void recap_absorb(std::vector<RecapDay> &days, const FinalList &finals, const PendingList &pending,
+                         int64_t now) {
   size_t have[kLeagueCount] = {}, keep[kLeagueCount];
   auto today = [now](const Pending &p) {
     return p.kickoff_epoch > now && espn_day(p.kickoff_epoch, p.league) == espn_day(now, p.league);
@@ -238,7 +279,7 @@ inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &
 // past its kickoff, and the scan's first kickoff is then behind us with
 // other games still to come today, so fall back on the first kept game
 // ahead.
-inline int64_t recap_scan_next(int64_t next_kickoff, const std::vector<Pending> &pending, int64_t now) {
+inline int64_t recap_scan_next(int64_t next_kickoff, const PendingList &pending, int64_t now) {
   if (next_kickoff > now)
     return next_kickoff;
   int64_t best = 0;
@@ -343,18 +384,6 @@ inline std::vector<RecapCard> recap_cards(const std::vector<RecapDay> &days, uin
   if (have_next && later.empty())
     out.push_back({RecapKind::NEXT, 0, 0});
   return out;
-}
-
-// Panels flashed before "no team" existed saved Dallas (ESPN id 6) as the
-// team on first boot. Whether that Dallas was ever really picked: not when
-// setup was never finished, and not on a panel that is in a Live mode,
-// which is how an owner who chose only a mode ends up with it. Dallas in My
-// team or Favorites mode is kept, since there is no telling it apart from a
-// pick. Any other team was picked.
-inline bool legacy_team_unpicked(uint8_t league, uint32_t team_id, bool setup_done, bool live_mode) {
-  if (league != (uint8_t) League::NFL || team_id != 6)
-    return false;
-  return !setup_done || live_mode;
 }
 
 }  // namespace espn

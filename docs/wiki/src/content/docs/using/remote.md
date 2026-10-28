@@ -1,6 +1,6 @@
 ---
 title: "WizMote remote"
-description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and your first four favorite teams."
+description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and your first four favorite teams or playlists."
 sidebar:
   order: 12
 ---
@@ -9,7 +9,7 @@ The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart 
 
 ## Pairing
 
-1. Open the device page, or the Remote section in the Game Day app, and find the **Remote** card.
+1. Open the **Remote** card on the device page, or **Remote** in the Game Day app (**Settings > Device**, then **Advanced** on iPhone or **Remote** on Android).
 2. Turn on **Discovery**. The status line says **Discovery on: press any button on the remote**.
 3. Press any button on the WizMote.
 
@@ -30,12 +30,16 @@ The panel pairs with one remote at a time. Pairing another one replaces the firs
 
 The brightness buttons move the same **Brightness** setting as the device page and the app.
 
+During the [night schedule](/using/brightness-and-clock/)'s hours the panel stays at its night setting: the brightness buttons change the daytime brightness for the morning, and a screen that's off for the night stays off, whatever you press, until the hours end or a game of yours goes live. To light it up at night, turn **Night schedule** off in the Panel card on the device page.
+
 ## The numbered buttons
 
 Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.
 
-- In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the playlist carries on.
-- In **My team** or **Live games**, a button switches the panel to My team, following that favorite.
+- In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the panel carries on through your favorites.
+- In **Live games**, a button switches the panel to Favorite teams and jumps to that favorite.
 - A button for an empty slot does nothing.
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
+
+With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).

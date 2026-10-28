@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "panel_text.h"
+#include "playlists.h"
 #include "set_request.h"
 
 using namespace espn;
@@ -30,7 +31,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   std::string body((const char *) data, size);
   std::vector<uint8_t> fav_leagues;
   uint16_t mask = 0;
-  uint8_t team_league = 0;
   size_t start = 0;
   while (start <= body.size()) {
     size_t amp = body.find('&', start);
@@ -46,7 +46,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       continue;
     switch (op.kind) {
       case SetKind::MODE:
-        require(op.value >= 0 && op.value < kModeCount, "the mode is past MODE_OPTIONS", k, v);
+        require(op.value > 0 && op.value < kModeCount, "the mode is out of range or My team's 0", k, v);
         break;
       case SetKind::TZ:
         require(op.value >= 0 && (size_t) op.value < kTimezoneCount, "the zone is past kTimezones", k, v);
@@ -65,11 +65,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         require(op.team.id == 0 || known_team(op.team.league, op.team.id), "the team is unknown", k, v);
         if (op.team.id != 0)
           fav_leagues.push_back(op.team.league);
-        break;
-      case SetKind::TEAM:
-        require(op.team.id == 0 || known_team(op.team.league, op.team.id), "the team is unknown", k, v);
-        if (op.team.id != 0)
-          team_league = op.team.league;
         break;
       case SetKind::FAVS:
         require(op.teams.size() <= kFavMax, "the list is longer than FAV_MAX", k, v);
@@ -91,6 +86,25 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       case SetKind::MSGURL:
         require(msg_url_ok(op.text) && op.text.size() <= kMsgUrlMax, "the address is not one the panel reads", k, v);
         break;
+      case SetKind::LISTS: {
+        // set_lists_ copies each name into a kListNameMax byte field and keeps
+        // a mask over the favorites.
+        std::vector<ListDef> lists = parse_lists(op.text, kFavMax);
+        require(lists.size() <= (size_t) kListMax, "more playlists than kListMax", k, v);
+        for (const auto &l : lists) {
+          require(!l.name.empty() && l.name.size() <= kListNameMax, "a playlist name is empty or too long", k, v);
+          require(l.name.find(';') == std::string::npos && l.name.find('=') == std::string::npos,
+                  "a playlist name has a separator", k, v);
+          require(l.teams.size() <= kFavMax, "a playlist has more teams than FAV_MAX", k, v);
+          for (const auto &t : l.teams)
+            require(known_team(t.league, t.id), "a playlist team is unknown", k, v);
+          esphome::gameday::panel_text(l.name);  // the name the remote puts on the board
+        }
+        break;
+      }
+      case SetKind::LIST:
+        require(op.value >= 0 && op.value <= kListMax, "list is past kListMax", k, v);
+        break;
       case SetKind::MSGEVERY:
         require(op.value >= 0 && op.value <= kMsgEveryMax, "msgevery is out of range", k, v);
         break;
@@ -98,9 +112,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         break;
     }
   }
-  std::vector<League> live = live_leagues(mask, team_league, fav_leagues);
+  std::vector<League> live = live_leagues(mask, fav_leagues);
   for (uint8_t mode = 0; mode < kModeCount; mode++) {
-    live_scan_changed(mode, live, live_leagues(0, team_league, fav_leagues));
+    live_scan_changed(mode, live, live_leagues(0, fav_leagues));
     for (League l : scan_leagues(mode, live))
       if (league_info(l) == nullptr)
         abort();

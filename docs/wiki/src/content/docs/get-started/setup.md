@@ -23,7 +23,11 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 2. Pick your Wi-Fi network from the list. The list comes from the panel itself, strongest network first, so it shows what the panel can actually reach.
 3. Enter the password.
 
-While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app lets you pick your team.
+While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app opens it so you can add your teams. On iPhone a short walkthrough takes you through your teams, what the panel shows, the ticker and the timezone.
+
+If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
+
+About a second after the panel joins your Wi-Fi, it ends the Bluetooth connection with the app and turns Bluetooth off, and the app carries on over Wi-Fi. Before, a panel could restart a few seconds after joining while the app was still connected, and the app then said it couldn't reach the panel.
 
 ## Without the app: use the panel's hotspot
 

@@ -1,6 +1,6 @@
 ---
 title: "Home Assistant (optional)"
-description: "The panel is an ESPHome device: add it to Home Assistant to see the game status and automate power, brightness, the team and updates."
+description: "The panel is an ESPHome device: add it to Home Assistant to see the game status and automate power, brightness, the mode and updates."
 sidebar:
   order: 16
 ---
@@ -11,14 +11,13 @@ Nothing about the panel needs Home Assistant. It reads ESPN, runs its own device
 
 With Home Assistant on the same network, it discovers the panel as a new ESPHome device and offers to add it. The prebuilt firmware has no API encryption key, so there is no key to enter.
 
-Picking a team or a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
+Picking a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
 
 ## What appears
 
 | Entity | What it is |
 | --- | --- |
-| **Team** | The team the panel follows in My team. Every league except men's college basketball, whose list would be too long for one entity; pick those teams on the device page. |
-| **Mode** | My team, Favorite teams or Live games, plus the older Live NFL, Live college and Live anything. |
+| **Mode** | Favorite teams or Live games. A panel on one of the older football-only live modes shows Live games. |
 | **Power** | The panel's lights on or off. |
 | **Brightness** | 1 to 255. |
 | **Scroll Speed** | The ticker speed, 1 to 10. |
@@ -32,13 +31,17 @@ Picking a team or a mode from Home Assistant counts as setting the panel up, the
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
+The **Team** entity is gone, along with My team.
+
 A few diagnostic sensors, the Wi-Fi signal and the free memory readings, are there but turned off until you turn them on in Home Assistant.
 
 Favorites, the timezone, the ticker switches, the celebrations, the Live games leagues and the panel layout have no entities. Set them on the device page or in the app.
 
+A **Playlist** select picks the playlist Favorite teams plays: **All favorites** or one of your playlists by name. Choosing one switches the panel to Favorite teams. Home Assistant reads the names when it connects to the panel, so a playlist you add or rename shows in the list after the panel restarts or Home Assistant reconnects. See [Playlists](/using/favorites/#playlists).
+
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
 
-**Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in My team and Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
+**Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
 ## Score events
 
@@ -57,6 +60,8 @@ The panel sends Home Assistant an event every time either side scores in the gam
 | `my_team` | `true` when your team scored. Always `false` in Live games, where neither side is yours. |
 
 `esphome.gameday_final` carries `team` and `opponent` (the left and right sides of the board), both scores, `result` (`win`, `loss` or `draw` for `team`), `winner` (empty on a draw), `sport` and `my_team` (`true` when `team` is your team).
+
+After the panel restarts, or starts following a game already under way, the first event is for the next score, not the ones before it.
 
 Every value arrives as text, so match `"true"` and `"7"` in quotes. To see them, open **Developer tools**, then **Events**, and listen to `esphome.gameday_score` during a game. This automation flashes a light when your team scores a touchdown:
 

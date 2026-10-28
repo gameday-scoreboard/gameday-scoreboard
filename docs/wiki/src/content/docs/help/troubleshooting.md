@@ -9,7 +9,7 @@ Find what you're seeing, then try the fix. Each entry ends with why it happens, 
 
 ## The app can't find my panel
 
-Check that your phone is on the same Wi-Fi network as the panel. Then add the panel by address: tap the add button in the app and enter the panel's name, like `gameday-2f6a70.local`, or its IP address. If you don't have either, hold the button on the controller for about 1.5 seconds and the panel shows both for 20 seconds.
+Check that your phone is on the same Wi-Fi network as the panel. Then add the panel by address: tap **+** on the app's panel list (on iPhone, **Settings > Panels**) and enter the panel's name, like `gameday-2f6a70.local`, or its IP address. If you don't have either, hold the button on the controller for about 1.5 seconds and the panel shows both for 20 seconds.
 
 A panel that isn't set up yet shows **SETUP**. The app finds that one over Bluetooth, so keep Bluetooth on and the phone near the panel.
 
@@ -22,6 +22,8 @@ A panel that isn't set up yet shows **SETUP**. The app finds that one over Bluet
 - Use your main network, not a guest network.
 
 While it joins, the panel shows **JOINING** and the name of the network it was given, so a wrong pick shows up there.
+
+If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
 
 **Why:** the panel's Wi-Fi only works on 2.4 GHz. A guest network can let the panel join but keep your phone from reaching it afterwards.
 
@@ -43,6 +45,8 @@ Check that other devices on the same network can get online. The panel keeps try
 
 **Why:** the panel is on your Wi-Fi but can't get an answer from ESPN, where the scores come from. That's usually the internet connection, and sometimes ESPN itself.
 
+When ESPN answers but no longer has your team's next game under the number it had, as can happen when a game is rescheduled, the panel looks up your team again right away instead of waiting and trying the same game for hours.
+
 ## The panel says Getting ready for a long time
 
 Try another network, like your home Wi-Fi or a phone hotspot.
@@ -50,6 +54,14 @@ Try another network, like your home Wi-Fi or a phone hotspot.
 **Why:** the panel needs the time before it can read any scores, and it gets the time from the internet. Some guest, office and school networks block that.
 
 On a network that blocks time servers, the panel sets its clock from ESPN a few seconds after joining and shows today's games instead of **Getting ready**.
+
+**Getting ready** shows only for the first 30 seconds after the panel joins Wi-Fi. If it still has no clock by then, it says why: **Wi-Fi needs a sign-in** on a network that wants you to sign in on a web page, otherwise **No internet**. See the next section.
+
+## The panel says No internet
+
+Check that other devices on the same network can get online, then restart the router if they can't. The panel keeps trying by itself and shows today's games as soon as the internet is back. If other devices are fine, try another network, like a phone hotspot.
+
+**Why:** the panel joined your Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered, so the network isn't reaching the internet. The panel needs the time from the internet before it can read any scores.
 
 ## Half the board is blank, or the picture shows twice
 

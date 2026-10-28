@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "countdown.h"
 #include "leagues.h"
 #include "message.h"
 #include "night.h"
@@ -20,21 +21,32 @@
 namespace espn {
 
 // In the order the firmware applies them, whatever order the request uses.
-constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "fav2",    "fav3",
+constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "fav3",
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta",   "msg",      "msgurl", "msgevery", "best",
-                                    "jump",   "banner",   "leaders", "night",  "nightstart", "nightend",
-                                    "nightscreen", "nightlevel", "favtake", "nick"};
+                                    "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
+                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
+                                    "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
+                                    "nick",   "lists",    "list"};
 
-// LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
-// the football-only live modes from before, kept for panels that saved them.
-enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
+// FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
+// the leagues of the live mask. Modes 1-3 are the football-only live modes
+// from before, kept for panels that saved them. 0 was My team, which
+// Favorites replaced: a saved or sent 0 reads as Favorites (read_mode).
+enum class Mode : uint8_t { LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
 
-// Mode 0 (My team) to 5 (Live games).
+// The modes parse_set and a saved setting take, 0 to kModeCount - 1.
 constexpr int kModeCount = 6;
 static_assert((int) Mode::LIVE + 1 == kModeCount, "parse_set takes modes 0 to kModeCount - 1");
+
+// A mode number from the page, an app, a backup or flash, as the panel runs
+// it: My team's 0 is Favorites. -1 when it is out of range.
+inline int read_mode(int m) {
+  if (m < 0 || m >= kModeCount)
+    return -1;
+  return m == 0 ? (int) Mode::FAVORITES : m;
+}
 
 constexpr int kLockonMinMinutes = 5;
 constexpr int kLockonMaxMinutes = 120;
@@ -88,14 +100,10 @@ inline uint16_t live_mask_from_keys(const std::string &keys) {
   return mask;
 }
 
-// The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: the
-// saved team's league and each favorite's. team_league is the league byte
-// the panel keeps, which stays after the team is cleared. NFL when nothing
-// is left.
-inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, const std::vector<uint8_t> &fav_leagues) {
+// The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: each
+// favorite's league, NFL when there are none.
+inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t> &fav_leagues) {
   if (mask == 0) {
-    if (team_league < 16)
-      mask |= (uint16_t) (1u << team_league);
     for (uint8_t l : fav_leagues)
       if (l < 16)
         mask |= (uint16_t) (1u << l);
@@ -109,11 +117,11 @@ inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, cons
   return out;
 }
 
-// No team picked: My team with no team, or Favorites with no favorite set.
-// Any Live mode counts as a choice. The panel then runs Live games over
-// no_team_leagues() and the state document's live list is that set.
-inline bool no_team_default(bool have_team, uint8_t mode, bool have_favorite) {
-  return !have_team && (mode == (uint8_t) Mode::MY_TEAM || (mode == (uint8_t) Mode::FAVORITES && !have_favorite));
+// No team picked: Favorites with no favorite set. Any Live mode counts as a
+// choice. The panel then runs Live games over no_team_leagues() and the
+// state document's live list is that set.
+inline bool no_team_default(uint8_t mode, bool have_favorite) {
+  return mode == (uint8_t) Mode::FAVORITES && !have_favorite;
 }
 
 // The leagues a panel with no team picked scans: every league, in kLeagues
@@ -129,7 +137,7 @@ inline std::vector<League> no_team_leagues() {
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
 // (live_leagues above, or no_team_leagues for the no-team default). A mode
-// that follows a team scans none.
+// that follows teams (Favorites) scans none.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
     case Mode::LIVE_NFL:
@@ -146,7 +154,7 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
 }
 
 // Live games' leagues went from before to after (its list, or with the list
-// on auto the team or favorites it follows). True when the scan now reads
+// on auto the favorites it follows). True when the scan now reads
 // other leagues, so the board has to drop what the old ones put up and scan
 // again; a mode that doesn't read the list never does.
 inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, const std::vector<League> &after) {
@@ -154,8 +162,7 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 }
 
 enum class SetKind : uint8_t {
-  TEAM,      // team, id 0 clears it
-  MODE,      // value
+  MODE,      // value, read_mode's
   ROTATE,    // value, minutes
   FAV_SLOT,  // slot (1-4), team (id 0 clears the slot)
   TZ,        // value, index into kTimezones
@@ -176,6 +183,9 @@ enum class SetKind : uint8_t {
   COUNT,     // on, baseball
   MATCH,     // on, soccer
   BETA,      // on, release builds only
+  COUNTDOWN,  // on, the next game's countdown card
+  CD_NAME,    // text, the custom countdown's name
+  CD_DATE,    // ymd, the custom countdown's day (0 clears it)
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
@@ -183,13 +193,15 @@ enum class SetKind : uint8_t {
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
   FAVTAKE,   // on, Live games locks onto a favorite's game while it is live (favorites.h)
-  LEADERS,   // on, football's season leaders in the pre-game ticker
+  LEADERS,   // on, the season leaders in the pre-game ticker
   NIGHT,        // on, the night schedule (night.h)
   NIGHT_START,  // value, minutes after midnight
   NIGHT_END,    // value, minutes after midnight
   NIGHT_SCREEN, // on: lit at the night brightness, off: dark
   NIGHT_LEVEL,  // value, 1 to 255
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
+  LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
+  LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
 };
 
 struct TeamRef {
@@ -199,7 +211,7 @@ struct TeamRef {
 };
 
 struct SetOp {
-  SetKind kind{SetKind::TEAM};
+  SetKind kind{SetKind::MODE};
   int value{0};
   bool on{false};
   uint8_t slot{0};
@@ -208,11 +220,29 @@ struct SetOp {
   std::vector<TeamRef> teams;
   std::vector<std::string> refused;  // favs entries left out, for the log
   std::string text;
+  uint32_t ymd{0};
 };
+
+// A whole number, the whole value: an optional minus and up to six digits.
+// "abc", "", "5x" and "1.5" are refused rather than read as 0 or 5.
+inline bool parse_whole_int(const std::string &v, int &out) {
+  size_t i = !v.empty() && v[0] == '-' ? 1 : 0;
+  if (v.size() == i || v.size() - i > 6)
+    return false;
+  int n = 0;
+  for (size_t k = i; k < v.size(); k++) {
+    if (v[k] < '0' || v[k] > '9')
+      return false;
+    n = n * 10 + (v[k] - '0');
+  }
+  out = i ? -n : n;
+  return true;
+}
 
 // Decodes one key=value from the request. False when the key is unknown or
 // the value is refused: the firmware logs it and changes nothing. Switches
-// are on for "1" only; numbers read like atoi, so "abc" is 0.
+// are on for "1" only. The mode and the minute and second settings take a
+// whole number only (parse_whole_int); the other numbers read like atoi.
 inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, size_t fav_max) {
   op = SetOp{};
   auto on = [&](SetKind kind) {
@@ -220,30 +250,32 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.on = v == "1";
     return true;
   };
-  if (k == "team") {
-    op.kind = SetKind::TEAM;
-    if (v == "none")
-      return true;
-    return parse_team_ref(v, op.team.league, op.team.id) && known_team(op.team.league, op.team.id);
-  }
   if (k == "mode") {
     op.kind = SetKind::MODE;
-    op.value = atoi(v.c_str());
-    return op.value >= 0 && op.value < kModeCount;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = read_mode(op.value);
+    return op.value >= 0;
   }
   if (k == "rotate") {
     op.kind = SetKind::ROTATE;
-    op.value = clamp_rotate_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_rotate_minutes(op.value);
     return true;
   }
   if (k == "lockon") {
     op.kind = SetKind::LOCKON;
-    op.value = clamp_lockon_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_lockon_minutes(op.value);
     return true;
   }
   if (k == "release") {
     op.kind = SetKind::RELEASE;
-    op.value = clamp_release_seconds(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_release_seconds(op.value);
     return true;
   }
   if (k == "panels") {
@@ -325,6 +357,22 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.value = level < 1 ? 1 : level > 255 ? 255 : level;
     return true;
   }
+  if (k == "lists") {
+    // Parsed by playlists.h once the request's favorites are in, since a
+    // playlist can only hold favorites.
+    op.kind = SetKind::LISTS;
+    op.text = v;
+    return true;
+  }
+  if (k == "list") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    // A number past the last playlist is refused where the playlists are known.
+    // strtol, not atoi: a number too long for an int saturates, and is refused.
+    op.kind = SetKind::LIST;
+    long n = strtol(v.c_str(), nullptr, 10);
+    op.value = n >= 0 && n <= 16 ? (int) n : -1;
+    return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
   if (k == "night")
     return on(SetKind::NIGHT);
   if (k == "nightscreen")
@@ -353,6 +401,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::AUTOUPD);
   if (k == "beta")
     return on(SetKind::BETA);
+  if (k == "countdown")
+    return on(SetKind::COUNTDOWN);
+  if (k == "cdname") {
+    op.kind = SetKind::CD_NAME;
+    op.text = countdown_name(v);
+    return true;
+  }
+  if (k == "cddate") {
+    // "2026-12-25"; "" or "none" clears it. Anything else is refused.
+    op.kind = SetKind::CD_DATE;
+    return parse_countdown_date(v, op.ymd);
+  }
   if (k == "best")
     return on(SetKind::BEST);
   if (k == "jump")
