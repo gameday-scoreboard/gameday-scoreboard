@@ -42,6 +42,4 @@ Buttons 1 to 4 are the first four teams in your favorites list, in order. The de
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
 
-:::note[Coming in the next release]
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
-:::

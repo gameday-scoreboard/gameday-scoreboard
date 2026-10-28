@@ -20,7 +20,9 @@ needs a better one; that plain line is also the update summary on the device
 page. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
-## Unreleased
+## v2026.10.2
+
+Favorite teams replaces My team, with playlists, countdowns to the next game and to your own day, a second try after a wrong Wi-Fi password, and fixes for Bluetooth setup restarts, memory and missed scores.
 
 - Your message card steps aside when the panel has trouble to report: after three missed score updates in a row, on a Wi-Fi that wants you to sign in, or with no internet, the board says so instead of showing your message, and your message comes back once it clears. A panel on Wi-Fi with no internet now says **No internet** 30 seconds after joining instead of **Getting ready** for as long as it lasts.
 - A panel set up from the Game Day app over Bluetooth no longer restarts a few seconds after it joins your Wi-Fi, which made the app say it couldn't reach the panel. The same restart could happen when the panel's Wi-Fi came back while the app was connected to it over Bluetooth.
@@ -50,6 +52,8 @@ the site nor the docs' What's new page shows `## Unreleased`.
 - The ticker switch "Pre-game odds and TV" is now called "Odds, TV and win chance" on the device page, since in football it also shows who is favored to win during the game. It's the same switch and keeps your setting.
 - After midnight Eastern, the device page's On now tab keeps listing a late West Coast game that's still on, as the panel does, instead of saying there are no games today.
 - The device page works better from the keyboard and with a screen reader: the Live games league buttons and the timezone button keep their focus while the page updates, the timezone links are buttons, and a splash that has faded is no longer read out. Diagnostics says "3rd start since the power came on".
+- The panel can show its FCC information on its own screen: **Show on panel** next to **FCC information** in the Device card of the device page, or in the app. It goes through its pages twice, then the board comes back.
+- A kickoff label like "Tomorrow 1:30 PM" turns into "Today 1:30 PM" at your local midnight. Before, it kept yesterday's word until the panel next read ESPN.
 
 ## v2026.10.1
 

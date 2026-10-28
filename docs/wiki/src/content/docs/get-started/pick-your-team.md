@@ -7,9 +7,7 @@ sidebar:
 
 Your teams are your favorites: one team, or up to 16 from any league. Pick them in the Game Day app or on the panel's device page. Both change the same list, so use whichever is closer to hand.
 
-:::note[Coming in the next release]
-Favorites are the only way to pick a team. Until then, the device page also has **My team**, with **Change team**, for following a single team.
-:::
+Favorites are the only way to pick a team.
 
 ## From the Game Day app
 

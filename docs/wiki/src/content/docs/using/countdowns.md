@@ -5,7 +5,6 @@ sidebar:
   order: 4
 ---
 
-:::note[Coming in the next release]
 Between games the panel counts down to the next one in big digits, and it can count down to a day you pick.
 
 ## The countdown to the next game
@@ -38,4 +37,3 @@ The name can be up to 20 characters long, fewer with accented letters. Emoji are
 ## On a 64x64 panel
 
 A single 64x64 panel shows the countdown in the same size as the off-season clock's time, with the matchup or the name under it.
-:::
