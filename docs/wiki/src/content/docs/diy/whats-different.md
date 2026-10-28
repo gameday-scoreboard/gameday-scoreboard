@@ -35,6 +35,10 @@ curl -X POST "http://gameday-xxxxxx.local/gameday/action?do=qc"
 
 Put your panel's name in place of `gameday-xxxxxx`. The panel lights red, green, blue and white for 2 seconds each, walks a white line down all 64 rows, then shows the firmware version, the PSRAM size, the Wi-Fi signal and the panel size. It runs round and round. Press the button once to pass the button test and finish, or it stops by itself after 2 minutes.
 
+## The FCC information isn't yours
+
+**Show on panel** next to **FCC information** on the device page puts the Game Day Scoreboard's model (GDS-1), FCC ID and FCC statement on the screen. Your board runs the same firmware, so it shows them too, but they describe the Game Day Scoreboard that was sold, not a board you built. Getting your own build through the FCC rules is up to you.
+
 ## Support is on GitHub
 
 Email support is for Game Day Scoreboards that were sold. For a panel you built, [open an issue on GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/issues). Bug reports from DIY builds are welcome. The firmware version (the Firmware row on the device page), your board and your panel layout save a round of questions, and a photo of the panel helps more than anything. Issues are public, so leave out Wi-Fi passwords.

@@ -2,7 +2,8 @@
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
 // the password out of the log, goes back to the saved network after a failed handover,
-// and says in the advert whether the panel has a saved network.
+// says in the advert whether the panel has a saved network, and hangs up on
+// phones and counts open links so Bluetooth can be turned off without a stall.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "improv_ble_component.h"
@@ -24,9 +25,14 @@
 #include "esphome/components/esp32_ble_server/ble_2902.h"
 
 // GAMEDAY: begin
+#include <esp_bt_main.h>
+#include <esp_gatts_api.h>
 #include <esp_wifi.h>
 
 #include <algorithm>
+
+// Bluedroid's count of open links (stack/btm_api.h, outside its public API).
+extern "C" uint16_t BTM_GetNumAclLinks(void);
 // GAMEDAY: end
 
 namespace esphome::improv_ble {
@@ -486,6 +492,19 @@ void ImprovBLEComponent::process_incoming_data_() {
 }
 
 void ImprovBLEComponent::on_wifi_connect_timeout_() {
+  // GAMEDAY: begin
+  this->failed_ssid_ = this->connecting_sta_.get_ssid().str();
+  this->failed_ms_ = std::max<uint32_t>(millis(), 1);
+  this->handover_failed_ = true;
+  // After "Reset Wi-Fi" the panel had a blank network, which is what keeps it
+  // in setup (components/saved_networks). Put that back rather than clearing
+  // the list: Bluetooth and the hotspot stay up, the app can send the name
+  // and password again, and gd_setup_window takes the panel back to its
+  // saved networks once the owner has gone. Before the state change below:
+  // on_start in pages/boot.yaml redraws the setup screen from it at once.
+  if (this->setup_mode_)
+    wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+  // GAMEDAY: end
   this->set_error_(improv::ERROR_UNABLE_TO_CONNECT);
   this->set_state_(improv::STATE_AUTHORIZED);
 #ifdef USE_BINARY_SENSOR
@@ -494,6 +513,10 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
 #endif
   ESP_LOGW(TAG, "Timed out while connecting to Wi-Fi network");
   // GAMEDAY: begin
+  if (this->setup_mode_) {
+    ESP_LOGI(TAG, "Staying in setup for another try");
+    return;
+  }
   // Go back to the network the panel had, which is still the one saved in
   // flash. Upstream clears the list here, which left a panel with a wrong
   // password offline until a power cycle and kept the offline
@@ -579,6 +602,25 @@ void ImprovBLEComponent::advertise_service_data_() {
 }
 
 // GAMEDAY: begin
+uint16_t ImprovBLEComponent::open_links() {
+  // Bluedroid's state only exists while it is up (CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY).
+  if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED)
+    return 0;
+  return BTM_GetNumAclLinks();
+}
+
+void ImprovBLEComponent::hang_up() {
+  auto *server = esp32_ble_server::global_ble_server;
+  if (server == nullptr)
+    return;
+  // Copied first: the server's list changes as the disconnects come back.
+  const uint32_t n = server->get_connected_client_count();
+  std::array<uint16_t, USE_ESP32_BLE_MAX_CONNECTIONS> ids{};
+  std::copy_n(server->get_clients(), std::min<uint32_t>(n, ids.size()), ids.begin());
+  for (uint32_t i = 0; i < n && i < ids.size(); i++)
+    esp_ble_gatts_close(server->get_gatts_if(), ids[i]);
+}
+
 void ImprovBLEComponent::set_has_saved_network(bool saved) {
   if (this->has_saved_network_ == saved)
     return;

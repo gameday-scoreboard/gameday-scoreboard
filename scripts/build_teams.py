@@ -49,7 +49,8 @@ FBS_GROUPS = {
 
 COMPONENT = Path(__file__).resolve().parent.parent / "components" / "gameday"
 OUT = COMPONENT / "teams.h"
-LEAGUES_H = COMPONENT / "leagues.h"
+sys.path.insert(0, str(COMPONENT))
+from leagues_table import leagues  # noqa: E402
 
 # Fewest teams a fresh list may have before the run is treated as a bad read.
 MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350}
@@ -130,8 +131,7 @@ def unescape(s):
 
 def league_table():
     """(enum name, ESPN path) in kLeagues order."""
-    text = LEAGUES_H.read_text(encoding="utf-8")
-    return re.findall(r'\{League::(\w+), "\w+", "([^"]+)",', text)
+    return [(row["league"], row["path"]) for row in leagues()]
 
 
 def current_rows():

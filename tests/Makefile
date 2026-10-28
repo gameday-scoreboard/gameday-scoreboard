@@ -10,11 +10,12 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
 	./build/test_settings
+	./build/test_logo_cache
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
@@ -22,7 +23,7 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) $(SRCS) -o $@ $(LDFLAGS)
 
-build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
+build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h ../components/saved_networks/setup_window.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
 
@@ -38,6 +39,12 @@ build/test_api: test_api.cpp ../components/gameday/set_request.h ../components/g
 build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_settings.cpp -o $@ $(LDFLAGS)
+
+# The logo cache's state machine, with FreeRTOS, http_request and RuntimeImage
+# replaced by the stand-ins in logo_stubs/.
+build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the

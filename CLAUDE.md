@@ -25,8 +25,9 @@ contributors; read it too.
   that changes what an owner or DIY builder sees or does updates or adds
   the page for it under docs/wiki/src/content/docs/ in the same PR; CI
   ("Docs updated") fails a PR into `dev` that touches firmware/ or
-  components/ without a docs change unless it carries the label
-  `docs: not needed`. Behavior that `main` doesn't have yet goes in a
+  components/ without a docs change unless the PR description has a line
+  `No owner-visible change, no docs: <why>`, which the reviewer checks.
+  Behavior that `main` doesn't have yet goes in a
   `:::note[Coming in the next release]` aside, removed at release time.
   Docs describe the firmware on the branch they sit on, written for the
   owner, no internal names, cards or notes. `cd docs/wiki && npm run
@@ -55,8 +56,13 @@ contributors; read it too.
 - Decisions not to reopen without Brandon: OTA with no password, `api:` with
   no key, the device web page open ("panel trusts the home network"). Do not
   raise LAN hardening again. Prioritize customer-visible failures.
-- Bump `version` in firmware/gameday-common.yaml and add a CHANGELOG.md
-  section for every release; a tag without a matching section fails CI.
+- A PR an owner would notice adds its bullet under `## Unreleased` in
+  CHANGELOG.md; released sections stay as they shipped. A release renames
+  Unreleased to the version (after checking `git log` since the last tag
+  for merged changes with no bullet) and bumps `version` in
+  firmware/gameday-common.yaml; a tag without a matching section fails CI.
+- Name branches after the change (`espn-gzip`); CI's Branch rules job
+  refuses a PR from a `card-<number>` branch.
 - ESPHome venv at ~/development/tools/esphome-venv flashes over USB and
   streams logs; Brandon's panel is gameday-2f6a70.local. Use `esphome
   compile`, not `esphome config`, to catch C++ errors. Host tests: `make -C

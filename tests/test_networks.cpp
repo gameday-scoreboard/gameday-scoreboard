@@ -1,10 +1,13 @@
-// Host tests for the saved Wi-Fi network list (components/saved_networks/network_list.h).
+// Host tests for the saved Wi-Fi network list (components/saved_networks/network_list.h)
+// and the setup window after "Reset Wi-Fi" (setup_window.h).
 // Build with `make` in tests/.
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
 
 #include "network_list.h"
+#include "setup_window.h"
 
 using namespace wifi_list;
 
@@ -319,6 +322,39 @@ static void test_forget_the_last_network() {
   CHECK(names(l) == "Home");
 }
 
+// Ticks every 10 s like gd_setup_window; the first second it restarts at, or 0.
+static uint32_t restart_at(bool (*busy)(uint32_t), uint32_t failed_at) {
+  SetupWindow w;
+  for (uint32_t t = 10; t <= 30 * 60; t += 10)
+    if (w.restart_due(t, busy(t), t >= failed_at))
+      return t;
+  return 0;
+}
+
+static void test_setup_window() {
+  const uint32_t never = UINT32_MAX;
+  // Nobody comes: the 15 minutes run out.
+  CHECK(restart_at([](uint32_t) { return false; }, never) == 15 * 60);
+  // Someone on Bluetooth or the hotspot the whole time: 10 more minutes at most.
+  CHECK(restart_at([](uint32_t) { return true; }, never) == 25 * 60);
+  // Still there at 15 minutes, gone at 18: restart at once.
+  CHECK(restart_at([](uint32_t t) { return t >= 14 * 60 && t < 18 * 60; }, never) == 18 * 60);
+  // Comes and goes without a failed handover: the window stays 15 minutes.
+  CHECK(restart_at([](uint32_t t) { return t >= 60 && t < 120; }, never) == 15 * 60);
+
+  // The app connects at 1 min, the handover fails at 2, the owner retries
+  // over Bluetooth until 5 and closes the app: a minute later, back on the
+  // saved networks.
+  CHECK(restart_at([](uint32_t t) { return t >= 60 && t < 300; }, 120) == 360);
+  // Back in the app 30 s after leaving: the minute starts over when it leaves again.
+  CHECK(restart_at([](uint32_t t) { return (t >= 60 && t < 300) || (t >= 330 && t < 400); }, 120) == 460);
+  // The app drops during the handover; the failure 30 s later starts the minute.
+  // (A handover under way counts as busy, so idle starts at the failure.)
+  CHECK(restart_at([](uint32_t t) { return t >= 60 && t < 200; }, 200) == 260);
+  // Never more than 25 minutes, failure or not.
+  CHECK(restart_at([](uint32_t) { return true; }, 120) == 25 * 60);
+}
+
 int main() {
   test_put_front_and_order();
   test_cap_at_max();
@@ -331,6 +367,7 @@ int main() {
   test_reset_empties_the_list();
   test_forget_survives_a_restart();
   test_forget_the_last_network();
+  test_setup_window();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

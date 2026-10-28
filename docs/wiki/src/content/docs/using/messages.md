@@ -43,7 +43,9 @@ In the **Message card** part of the same card, type your message and press **Sav
 
 Each turn shows up to four entries. With more than that, the next turn picks up where the last one stopped, and after the last entry it starts again at the top.
 
-The card never covers a live game or a score celebration. In Favorite teams and Live games it takes turns with whatever the board shows between games, the finals and next games included.
+The card never covers a live game or a score celebration.
+
+The card makes way for the panel's own trouble line. When three reads from ESPN in a row fail, when the Wi-Fi wants a sign-in, or when the panel has no internet, the board says so in place of your message, on **Whenever no game is on** too. Your message comes back by itself once the trouble clears: right away on **Whenever no game is on**, at its next turn otherwise. See [Panel messages](/help/panel-messages/) for what each line means.
 
 **Clear** empties the text and the address, and the card stops.
 
@@ -51,7 +53,7 @@ The card never covers a live game or a score celebration. In Favorite teams and 
 
 For a long list, like every member of a club, put a plain text file somewhere the panel can read it and give the card its address under **Or a list from a web address**. The file has one entry per line: names, specials, anything. Blank lines are skipped, and a line longer than 64 characters is cut.
 
-The address starts with `http://` or `https://`. A file on a computer at home works, and so does a file on the web, like a "raw" link to a GitHub Gist or a shared text file.
+The address starts with `http://` or `https://`. A file on a computer at home works over `http://`, and so does a file on the web, like a "raw" link to a GitHub Gist or a shared text file. An `https://` address needs a certificate from a public authority, as web hosts have; a home server with its own certificate can't be read, and the device page says "The panel couldn't reach that address".
 
 The panel never holds the whole list. It reads 100 entries at a time and fetches the next 100 when it gets to them, so the list can be as long as you like, up to about 128 KB of text (several thousand names). It reads the file again from the top every so often, so a name you add shows up the same day.
 
