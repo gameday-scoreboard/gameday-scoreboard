@@ -23,7 +23,7 @@ The iPhone app has three tabs along the bottom. They show the panel you picked l
 What you reach for during a game:
 
 - The game on the panel, and what's up next.
-- The mode, **Favorite teams** or **Live games**, with the one switch that goes with it: **Only today's games** for Favorite teams, the leagues for Live games.
+- The mode, **Favorites** or **Live games**, with the one switch that goes with it: **Only today's games** for Favorites, the leagues for Live games. The device page calls the first one **Favorite teams**.
 - **Message**, for a banner or a message card on the panel. See [Your own messages](/using/messages/).
 - **Brightness**, **Screen** to turn the panel's screen off and on, and **Refresh now** to read the scores again right away.
 
