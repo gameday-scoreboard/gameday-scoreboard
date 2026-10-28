@@ -164,7 +164,8 @@ class Celebration {
         next_rocket_ = 0.35f;
         break;
       case CelebKind::WIN:
-        for (int i = 0; i < kCelebParticles * 5 / 6; i++)
+        // Confetti for the board's area: a single panel gets half as much.
+        for (int i = 0, n = kCelebParticles * 5 / 6 * (w < 128 ? w : 128) / 128; i < n; i++)
           confetti_(rng_.range(0, (float) h));
         break;
       default:

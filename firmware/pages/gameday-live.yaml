@@ -639,7 +639,9 @@ script:
                 if (!celeb_line2.empty())
                   words += "\n" + celeb_line2;
                 lv_label_set_text(lbl, words.c_str());
-                lv_obj_set_style_text_font(lbl, place.font == 16 ? id(spleen_16) : place.font == 12 ? id(spleen_12) : id(spleen_8), 0);
+                const lv_font_t *font = place.font == 16 ? id(spleen_16)->get_lv_font()
+                                        : place.font == 12 ? id(spleen_12)->get_lv_font() : id(spleen_8)->get_lv_font();
+                lv_obj_set_style_text_font(lbl, font, 0);
                 lv_obj_set_style_text_line_space(lbl, 2, 0);
                 lv_obj_set_pos(lbl, 0, place.y);
                 if (::espn::celeb_animated(kind)) {
