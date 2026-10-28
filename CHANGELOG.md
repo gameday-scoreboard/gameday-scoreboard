@@ -24,6 +24,12 @@ that line is also the update summary on the device page, so keep it under
 240 characters. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+### 🐛 Fixes
+
+- 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
+
 ## v2026.10.2
 
 Favorite teams replaces My team, with playlists, countdowns to the next game and to your own day, a second try after a wrong Wi-Fi password, and fixes for Bluetooth setup restarts, memory and missed scores.

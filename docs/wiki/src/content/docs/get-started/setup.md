@@ -27,6 +27,10 @@ While the panel joins, it shows **JOINING** and the name of the network the app 
 
 If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
 
+:::note[Coming in the next release]
+After those 30 seconds a new panel goes back to **SETUP**. Before, it said it was waiting for that network after a power cut, and later that Wi-Fi was lost.
+:::
+
 About a second after the panel joins your Wi-Fi, it ends the Bluetooth connection with the app and turns Bluetooth off, and the app carries on over Wi-Fi. Before, a panel could restart a few seconds after joining while the app was still connected, and the app then said it couldn't reach the panel.
 
 ## Without the app: use the panel's hotspot

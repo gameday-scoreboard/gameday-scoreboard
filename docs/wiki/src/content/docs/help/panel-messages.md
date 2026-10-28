@@ -30,6 +30,10 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | --- | --- | --- |
 | **Can't join**, a network name, **Check name / and password** | The network the app just sent didn't work: the name or the password is wrong, or the panel can't see that network. It shows for 30 seconds. | Check both in the app, which asks for them again. After a Wi-Fi reset, close the app instead and the panel goes back to its saved networks a minute later. |
 
+:::note[Coming in the next release]
+After **Can't join**, a new panel goes back to **SETUP / Game Day / app**. Before, it went on to **Waiting for** and later **Wi-Fi lost / open app**.
+:::
+
 ## When the Wi-Fi is the problem
 
 | The panel says | What it means | What to do |
