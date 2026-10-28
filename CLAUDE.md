@@ -3,7 +3,8 @@
 ESPHome firmware for a standalone sports scoreboard (NFL, college football,
 MLB, NBA, WNBA, men's college basketball, NHL, MLS and the Premier League) on
 an ESP32-S3 HUB75 controller. One top-level YAML per pinout: gameday.yaml
-(MoonHub75) and gameday-scoreboard75.yaml (our controller board); each picks
+(MoonHub75, also the pinout of our own controller board) and
+gameday-scoreboard75.yaml (four early test boards, not a product); each picks
 its pin map from firmware/controllers/ and shares everything else via
 gameday-common.yaml.
 Sibling repo: the iOS companion app at ~/development/gameday-scoreboard-ios (github.com/gameday-scoreboard/gameday-scoreboard-ios).
@@ -57,7 +58,10 @@ contributors; read it too.
   no key, the device web page open ("panel trusts the home network"). Do not
   raise LAN hardening again. Prioritize customer-visible failures.
 - A PR an owner would notice adds its bullet under `## Unreleased` in
-  CHANGELOG.md; released sections stay as they shipped. A release renames
+  CHANGELOG.md, under `### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`:
+  one short line, starting with an emoji that fits it, the detail on the
+  docs page (CHANGELOG.md's own top note has the format). Released
+  sections stay as they shipped. A release renames
   Unreleased to the version (after checking `git log` since the last tag
   for merged changes with no bullet) and bumps `version` in
   firmware/gameday-common.yaml; a tag without a matching section fails CI.
