@@ -26,7 +26,9 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
-- A new panel given a wrong Wi-Fi name or password in the Game Day app goes back to **SETUP** after **Can't join**, instead of saying it is waiting for that network after a power cut and later that Wi-Fi is lost.
+### 🐛 Fixes
+
+- 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
 
 ## v2026.10.2
 
