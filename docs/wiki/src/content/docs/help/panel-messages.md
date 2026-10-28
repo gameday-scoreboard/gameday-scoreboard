@@ -61,6 +61,12 @@ These show on the board or in the ticker.
 | **Sat TBD** | ESPN hasn't set the game's start time yet. | Nothing. The time shows once ESPN has it. |
 
 :::note[Coming in the next release]
+**No internet** on the board: the panel joined Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered. Check that other devices on the network can get online. See [Troubleshooting](/help/troubleshooting/#the-panel-says-no-internet). **Getting ready** now lasts only those first 30 seconds.
+
+Your own [message card](/using/messages/) also steps aside while three reads from ESPN in a row have failed (**no update** in the ticker), while the Wi-Fi wants a sign-in, and while the panel says **No internet**.
+:::
+
+:::note[Coming in the next release]
 **Can't reach ESPN** also shows in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and after **No live NFL games, showing CHI** when your team's card can't be read. A panel that can't reach ESPN for days keeps saying so instead of switching to **No upcoming game** every couple of days.
 :::
 

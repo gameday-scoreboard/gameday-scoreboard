@@ -306,15 +306,25 @@ std::string win_chance(const GameSnapshot &s);
 // (favs > 0) only once every favorite's team read has answered (`read` of
 // them): one answered favorite says nothing of the others.
 inline bool no_game_said(size_t favs, size_t read, bool team_said) { return favs > 0 ? read == favs : team_said; }
+// How long after joining Wi-Fi a panel with no clock says "Getting ready".
+// A time server answers in a second or two, and ESPN's Date header is read
+// 5 s after joining; past this, neither has answered.
+constexpr uint32_t kClockGraceMs = 30 * 1000;
+// No clock kClockGraceMs after joining Wi-Fi: neither the time server nor
+// ESPN answered, so the panel has no internet. since_join_ms is 0 off Wi-Fi.
+inline bool clock_late(bool clock_set, uint32_t since_join_ms) {
+  return !clock_set && since_join_ms >= kClockGraceMs;
+}
 // The board and ticker with no game on the board, in place of the page's
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
-// be read from ESPN before it), "Can't reach ESPN" while reads fail and
+// be read from ESPN before it), "No internet" once that has taken
+// kClockGraceMs since joining Wi-Fi, "Can't reach ESPN" while reads fail and
 // ESPN has never said this team has no game. Empty for the default, and in
 // a live mode, which has its own words. captive (captive.h: the Wi-Fi answered
 // with a sign-in page and ESPN has not answered since) wins over all of it,
 // live modes included, since nothing can be read until it ends.
 std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses,
-                         bool captive = false);
+                         bool captive = false, uint32_t since_join_ms = 0);
 // Bench only. Every ESPN URL starts with this root; a bench build points
 // it at a host that does not exist to make ESPN unreachable without
 // touching the network. Pass a string literal: only the pointer is kept,

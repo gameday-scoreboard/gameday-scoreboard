@@ -1039,6 +1039,11 @@ int GamedayComponent::fav_side_due_(uint32_t now, int64_t now_epoch) const {
 void GamedayComponent::fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch) {
   ESP_LOGI(TAG, "No upcoming game for %s", e.team->abbr);
   this->no_game_confirmed_ = true;
+  // The board's read answered, so its run of failures is over. Nothing is
+  // polled with no game, so nothing else would clear the count, and the
+  // ticker's "no update" and the hidden message card would stay.
+  if (shown || this->fav_shown_ < 0)
+    this->misses_ = 0;
   e.game = GameSnapshot{};
   e.final_epoch = 0;
   if (shown)
@@ -1335,6 +1340,9 @@ void GamedayComponent::wait_for_clock_() {
     this->wifi_up_ms_ = 0;
     this->sntp_asked_ms_ = 0;
     this->http_clock_ms_ = 0;
+    // Back on Wi-Fi, the board says "Getting ready" again before "No internet".
+    this->clock_wait_shown_ = false;
+    this->clock_late_shown_ = false;
     return;
   }
   const uint32_t now = millis();
@@ -1345,11 +1353,23 @@ void GamedayComponent::wait_for_clock_() {
     this->clock_wait_shown_ = true;
     this->emit_({});
   }
+  if (!this->clock_late_shown_ && ::espn::clock_late(false, now - this->wifi_up_ms_)) {
+    // Neither the time server nor ESPN's Date header has answered: say so
+    // rather than "Getting ready" for as long as it lasts.
+    this->clock_late_shown_ = true;
+    ESP_LOGW(TAG, "No clock %us after Wi-Fi: no time server or ESPN answer, the board says No internet",
+             (unsigned) ((now - this->wifi_up_ms_) / 1000));
+    this->emit_({});
+  }
   if (this->sntp_asked_ms_ != 0 && now - this->sntp_asked_ms_ < SNTP_ASK_INTERVAL)
     return;
   this->sntp_asked_ms_ = now == 0 ? 1 : now;
   if (esp_sntp_restart())
     ESP_LOGI(TAG, "Clock not set yet: asking the time server now");
+}
+
+uint32_t GamedayComponent::since_join_ms_() const {
+  return this->wifi_up_ms_ != 0 && network::is_connected() ? millis() - this->wifi_up_ms_ : 0;
 }
 
 // UDP 123 is blocked on some networks (guest Wi-Fi, some offices and
@@ -3038,7 +3058,7 @@ std::string GamedayComponent::no_game_why_() const {
   // empty as a favorite's card does.
   return ::espn::no_game_text(this->clock_set_(), this->live_mode_() && !this->live_fallback_,
                               ::espn::no_game_said(favs, read, this->no_game_confirmed_), this->misses_,
-                              this->captive_);
+                              this->captive_, this->since_join_ms_());
 }
 
 void GamedayComponent::emit_(const ::espn::Splash &splash) {
@@ -4204,8 +4224,10 @@ void GamedayComponent::msg_tick_() {
     return;
   this->msg_tick_ms_ = now;
   const bool on = !this->msg_url_.empty() || !this->msg_text_.empty();
-  // Not over a live game, the demo or a splash.
-  const bool between = !this->demo_playing_() && this->last_fields_.game_state != "IN" &&
+  // Not over a live game, the demo, a splash or the panel's trouble line.
+  const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
+                                           ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
+  const bool between = !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
                        (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
   ::espn::MsgTurn turn =

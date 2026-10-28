@@ -444,9 +444,12 @@ using detail::pregame_records;
 using detail::records_line;
 using detail::venue_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive,
+                         uint32_t since_join_ms) {
   if (captive)
     return "Wi-Fi needs a sign-in";
+  if (clock_late(clock_set, since_join_ms))
+    return "No internet";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)
