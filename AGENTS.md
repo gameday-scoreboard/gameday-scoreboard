@@ -111,7 +111,9 @@ is the short version.
   network" explains why.
 - Team logos come from ESPN at runtime. Don't commit league or team logos.
 - A PR that changes what an owner sees or does adds one bullet under
-  `## Unreleased` at the top of CHANGELOG.md, written for the owner.
+  `## Unreleased` at the top of CHANGELOG.md, in its group (`### ⚠️ Heads
+  up`, `### ✨ New` or `### 🐛 Fixes`): one short line for the owner,
+  starting with an emoji. The detail goes on the docs page.
   Never edit a released section or the version number; the maintainers
   rename `## Unreleased` and bump the version when a release goes out.
 - A change an owner or DIY builder can see or do comes with its docs

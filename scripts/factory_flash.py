@@ -42,6 +42,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zlib
 from pathlib import Path
@@ -66,9 +67,12 @@ NVS_PAGE_SIZE = 0x1000
 
 def release_asset(tag, variant):
     """File name of the factory image on the GitHub release (see build.yml)."""
-    if variant == "moonhub75":
-        return f"gameday-scoreboard-{tag}.factory.bin"
     return f"gameday-scoreboard-{tag}-{variant}.factory.bin"
+
+
+def old_release_asset(tag, variant):
+    """The name MoonHub75's image had on releases up to v2026.10.2, with no board in it."""
+    return f"gameday-scoreboard-{tag}.factory.bin" if variant == "moonhub75" else None
 
 
 def version_from(text):
@@ -302,8 +306,17 @@ def fetch_release(tag, variant, folder):
     if not path.exists():
         url = f"https://github.com/{REPO}/releases/download/{tag}/{name}"
         print(f"Downloading {url}")
-        with urllib.request.urlopen(url, timeout=60) as r:
-            data = r.read()
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                data = r.read()
+        except urllib.error.HTTPError as e:
+            old = old_release_asset(tag, variant)
+            if e.code != 404 or old is None:
+                raise
+            url = f"https://github.com/{REPO}/releases/download/{tag}/{old}"
+            print(f"Not on that release; older releases name it {old}. Downloading {url}")
+            with urllib.request.urlopen(url, timeout=60) as r:
+                data = r.read()
         tmp = path.with_suffix(".part")
         tmp.write_bytes(data)
         tmp.replace(path)
@@ -403,7 +416,9 @@ def selftest():
     assert panel_name("34:85:18:2f:6a:70") == "gameday-2f6a70"
 
     assert release_asset("v1.5.5", "scoreboard75") == "gameday-scoreboard-v1.5.5-scoreboard75.factory.bin"
-    assert release_asset("v1.5.5", "moonhub75") == "gameday-scoreboard-v1.5.5.factory.bin"
+    assert release_asset("v2026.10.3", "moonhub75") == "gameday-scoreboard-v2026.10.3-moonhub75.factory.bin"
+    assert old_release_asset("v1.5.5", "moonhub75") == "gameday-scoreboard-v1.5.5.factory.bin"
+    assert old_release_asset("v1.5.5", "scoreboard75") is None
     assert version_from("gameday-scoreboard-v1.5.5-scoreboard75.factory.bin") == "1.5.5"
     assert version_from("firmware.factory.bin") == ""
 

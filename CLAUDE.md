@@ -57,7 +57,10 @@ contributors; read it too.
   no key, the device web page open ("panel trusts the home network"). Do not
   raise LAN hardening again. Prioritize customer-visible failures.
 - A PR an owner would notice adds its bullet under `## Unreleased` in
-  CHANGELOG.md; released sections stay as they shipped. A release renames
+  CHANGELOG.md, under `### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`:
+  one short line, starting with an emoji that fits it, the detail on the
+  docs page (CHANGELOG.md's own top note has the format). Released
+  sections stay as they shipped. A release renames
   Unreleased to the version (after checking `git log` since the last tag
   for merged changes with no bullet) and bumps `version` in
   firmware/gameday-common.yaml; a tag without a matching section fails CI.
