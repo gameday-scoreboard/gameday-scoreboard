@@ -29,7 +29,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list",   "hook",    "pregame"};
+                                    "nick",   "lists",    "list",   "remote1", "remote2", "remote3",
+                                    "remote4", "hook",    "pregame"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -203,6 +204,7 @@ enum class SetKind : uint8_t {
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  REMOTE,       // slot (button 1 to 4), value (RemoteKind), team or text: what the button plays (remote.h)
   HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
   PREGAME,      // value, minutes before the start for the reminder event, 0 = none
 };
@@ -212,6 +214,10 @@ struct TeamRef {
   uint32_t id{0};
   bool operator==(const TeamRef &o) const { return league == o.league && id == o.id; }
 };
+
+// What one of the remote's buttons 1 to 4 plays (remote.h). FAV, a saved 0,
+// is the button's own favorite, 1 to 4 by place in the list.
+enum class RemoteKind : uint8_t { FAV = 0, TEAM = 1, LIST = 2, ALL = 3, NONE = 4 };
 
 struct SetOp {
   SetKind kind{SetKind::MODE};
@@ -319,7 +325,7 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return true;
   }
   if (k.size() == 4 && k.compare(0, 3, "fav") == 0 && k[3] >= '1' && k[3] <= '4') {
-    // One of the remote's four slots; "none" or "" clears it.
+    // One of the first four favorite slots; "none" or "" clears it.
     op.kind = SetKind::FAV_SLOT;
     op.slot = (uint8_t) (k[3] - '0');
     if (parse_team_ref(v, op.team.league, op.team.id) && known_team(op.team.league, op.team.id))
@@ -375,6 +381,27 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     long n = strtol(v.c_str(), nullptr, 10);
     op.value = n >= 0 && n <= 16 ? (int) n : -1;
     return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
+  if (k.size() == 7 && k.compare(0, 6, "remote") == 0 && k[6] >= '1' && k[6] <= '4') {
+    // fav, team:nfl:6, list:<name>, all or none. A team that isn't a
+    // favorite, or a playlist that doesn't exist, is refused where those
+    // are known.
+    op.kind = SetKind::REMOTE;
+    op.slot = (uint8_t) (k[6] - '0');
+    if (v == "fav" || v == "all" || v == "none") {
+      op.value = (int) (v == "fav" ? RemoteKind::FAV : v == "all" ? RemoteKind::ALL : RemoteKind::NONE);
+      return true;
+    }
+    if (v.compare(0, 5, "team:") == 0) {
+      op.value = (int) RemoteKind::TEAM;
+      return parse_team_ref(v.substr(5), op.team.league, op.team.id) && known_team(op.team.league, op.team.id);
+    }
+    if (v.compare(0, 5, "list:") == 0) {
+      op.value = (int) RemoteKind::LIST;
+      op.text = v.substr(5);
+      return !op.text.empty();
+    }
+    return false;
   }
   if (k == "hook") {
     op.kind = SetKind::HOOK;

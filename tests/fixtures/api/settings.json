@@ -58,6 +58,10 @@
     }
   ],
   "list": 2,
+  "remote1": "fav",
+  "remote2": "list:College",
+  "remote3": "fav",
+  "remote4": "none",
   "hook": "http://192.168.1.20:1880/gameday",
   "pregame": 15,
   "panels": 2,

@@ -73,6 +73,10 @@ Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorit
 
 Once you have a playlist, buttons 1 to 4 play your first four playlists instead. The panel switches to Favorite teams, plays that playlist, and shows its name for a moment. A button with no playlist does nothing. With no playlists, the buttons stay your first four favorites.
 
+:::note[Coming in the next release]
+Making a playlist no longer changes the remote. Buttons 1 to 4 stay on your first four favorites until you pick something else for them in the **Remote** card on the device page: any favorite, any playlist, all favorites or nothing. The order of your playlists no longer matters for the remote. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+:::
+
 ## On the device page
 
 The **Up next** list under the board has one row per favorite: the live score, the final, or the next kickoff and TV channel. The row the panel is showing is highlighted. **No game scheduled** means ESPN lists no game for that team.

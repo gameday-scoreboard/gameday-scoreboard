@@ -1,6 +1,6 @@
 // Playlists: named groups of the owner's favorites. Favorite teams mode plays
-// one of them, or every favorite when none is chosen, and WizMote buttons 1
-// to 4 pick the first four. A playlist is kept as a mask over the favorites
+// one of them, or every favorite when none is chosen, and a WizMote button
+// can be set to one (remote.h). A playlist is kept as a mask over the favorites
 // list, so it costs no team storage of its own and only the favorites are
 // ever read from ESPN.
 // Pure, no ESPHome includes, so the host tests cover it.

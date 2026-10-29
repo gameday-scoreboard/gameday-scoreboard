@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "playlists.h"
+#include "remote.h"
 #include "set_request.h"
 
 using namespace espn;
@@ -59,6 +60,7 @@ struct Settings {
   // Playlists as the firmware keeps them: a name and a mask over favs.
   std::vector<std::pair<std::string, uint16_t>> lists;
   int list{0};
+  RemoteButton remote[kRemoteButtons]{};
   uint16_t live_mask{0};
   std::string msg, msgurl, nick, hook;
   int msgevery{kMsgEveryDefault};
@@ -98,6 +100,22 @@ void load(Settings &s, JsonObjectConst o) {
   }
   if (o["list"].is<int>())
     s.list = o["list"].as<int>();
+  // The state's remote list, {"v": ...} per button; a value as the set takes it.
+  if (o["remote"].is<JsonArrayConst>()) {
+    int i = 0;
+    for (JsonObjectConst b : o["remote"].as<JsonArrayConst>()) {
+      SetOp op;
+      std::string key = "remote" + std::to_string(i + 1);
+      if (i < kRemoteButtons && parse_set(key, b["v"] | "", op, kFavMax)) {
+        s.remote[i] = RemoteButton{};
+        s.remote[i].kind = (uint8_t) op.value;
+        s.remote[i].league = op.team.league;
+        s.remote[i].id = op.team.id;
+        remote_put_name(s.remote[i], op.text);
+      }
+      i++;
+    }
+  }
   if (o["live_auto"].is<bool>() || o["live"].is<JsonArrayConst>()) {
     std::string list;
     for (auto l : o["live"].as<JsonArrayConst>())
@@ -168,10 +186,21 @@ void load(Settings &s, JsonObjectConst o) {
 
 std::vector<TeamRef> fav_refs(const Settings &s) { return std::vector<TeamRef>(s.favs, s.favs + kFavMax); }
 
-// remap_lists_: each playlist follows its teams through a favorites change.
+std::vector<std::string> list_names(const Settings &s) {
+  std::vector<std::string> out;
+  for (const auto &l : s.lists)
+    out.push_back(l.first);
+  return out;
+}
+
+// remap_lists_ and remote_after_favs_: each playlist follows its teams
+// through a favorites change, and a button on a team that left goes back to
+// its own favorite.
 void remap(Settings &s, const std::vector<TeamRef> &before) {
   for (auto &l : s.lists)
     l.second = remap_mask(l.second, before, fav_refs(s));
+  for (auto &b : s.remote)
+    remote_after_favs(b, fav_refs(s));
 }
 
 void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
@@ -197,6 +226,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
       // set_lists_: the one being played stays chosen by its name, or by
       // list= in the same request.
       std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
+      std::vector<std::string> names_before = list_names(s);
       s.lists.clear();
       s.list = 0;
       for (const auto &d : parse_lists(op.text, kFavMax)) {
@@ -206,8 +236,13 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
       }
       if (keep_list >= 0 && keep_list <= (int) s.lists.size())
         s.list = keep_list;
+      for (auto &b : s.remote)
+        remote_after_lists(b, names_before, list_names(s));
       break;
     }
+    case SetKind::REMOTE:
+      remote_set(s.remote[op.slot - 1], op, fav_refs(s), list_names(s));
+      break;
     case SetKind::LIST:
       // set_active_list_ switches to Favorite teams; a number past the last
       // playlist is refused. With lists= set_lists_ took it.
@@ -277,6 +312,13 @@ void state_doc(const Settings &s, JsonDocument &doc) {
         f.add(i);
   }
   doc["list"] = s.list;
+  JsonArray remote = doc["remote"].to<JsonArray>();
+  for (const auto &b : s.remote) {
+    JsonObject o = remote.add<JsonObject>();
+    o["v"] = remote_text((RemoteKind) b.kind, b);
+    if (b.gone != (uint8_t) RemoteKind::FAV)
+      o["gone"] = remote_text((RemoteKind) b.gone, b);
+  }
   doc["today"] = s.today;
   std::vector<uint8_t> fav_leagues;
   for (const auto &f : s.favs)
@@ -430,10 +472,23 @@ void test_parse_set() {
   SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");
   SCHECK(!parse_set("msgevery", "-1", op, kFavMax), "msgevery -1");
 
+  SCHECK(parse_set("remote2", "team:nfl:6", op, kFavMax) && op.kind == SetKind::REMOTE && op.slot == 2 &&
+             op.value == (int) RemoteKind::TEAM && op.team.id == 6,
+         "remote2 team");
+  SCHECK(parse_set("remote4", "list:Game day", op, kFavMax) && op.value == (int) RemoteKind::LIST &&
+             op.text == "Game day",
+         "remote4 playlist, spaces and all");
+  SCHECK(parse_set("remote1", "fav", op, kFavMax) && op.value == (int) RemoteKind::FAV, "remote1 fav");
+  SCHECK(parse_set("remote1", "none", op, kFavMax) && op.value == (int) RemoteKind::NONE, "remote1 none");
+  SCHECK(!parse_set("remote1", "team:nfl:99999", op, kFavMax), "remote team the panel doesn't know");
+  SCHECK(!parse_set("remote1", "list:", op, kFavMax), "remote playlist with no name");
+  SCHECK(!parse_set("remote5", "fav", op, kFavMax), "no button 5");
+
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
-                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax);
+                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
+                 parse_set(key, "fav", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }

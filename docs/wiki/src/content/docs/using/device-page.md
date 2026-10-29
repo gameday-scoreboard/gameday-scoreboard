@@ -66,6 +66,7 @@ Settings are grouped in cards. In the order the page shows them:
 | **Only today's games** | Between games, Favorite teams skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
 | **Discovery**, **Unpair remote** | Pairs and unpairs a WizMote remote. See [WizMote remote](/using/remote/). |
+| **Buttons 1 to 4** | Coming in the next release: what each numbered button on the remote plays, a favorite, a playlist, all favorites or nothing. See [The numbered buttons](/using/remote/#the-numbered-buttons). |
 | Matrix | Click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/). |
 | Timezone | Used for kickoff times and the clock. The page sets it from your browser unless you choose one by hand. |
 | **Show how to connect when the panel starts** | After it joins Wi-Fi, the panel shows a QR code for the Game Day app, then its address, for about 20 seconds. Turn it off to go straight to the scoreboard. |

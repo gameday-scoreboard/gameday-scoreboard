@@ -337,6 +337,14 @@ void GamedayComponent::setup() {
   if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
       this->prefs9_.active > this->prefs9_.count)
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
+  this->remote_pref_ = global_preferences->make_preference<PrefsRemote>(fnv1_hash("gameday_remote_v1"));
+  bool remote_ok = this->remote_pref_.load(&this->remote_);
+  for (const auto &b : this->remote_.btn)
+    remote_ok = remote_ok && b.kind <= (uint8_t) ::espn::RemoteKind::NONE &&
+                (b.gone == (uint8_t) ::espn::RemoteKind::FAV || b.gone == (uint8_t) ::espn::RemoteKind::TEAM ||
+                 b.gone == (uint8_t) ::espn::RemoteKind::LIST);
+  if (!remote_ok)
+    this->remote_ = PrefsRemote{};  // every button on its own favorite
   this->load_msg_();
   this->load_nick_();
   this->load_hook_();
@@ -433,6 +441,7 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
   else
     this->pref7_.save(&this->prefs7_);
   this->remap_lists_(before);
+  this->remote_after_favs_();
   bool first_pick = id != 0 && this->mark_setup_done_();
   this->sync_prefs_();
   ESP_LOGI(TAG, "Favorite %u: %s", (unsigned) slot, this->favorite_option_(slot).c_str());
@@ -451,6 +460,7 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
   this->pref3_.save(&this->prefs3_);
   this->pref7_.save(&this->prefs7_);
   this->remap_lists_(before);
+  this->remote_after_favs_();
   bool first_pick = any && this->mark_setup_done_();
   this->sync_prefs_();
   ESP_LOGI(TAG, "Favorites: %u team(s)", (unsigned) list.size());
@@ -523,8 +533,16 @@ bool GamedayComponent::fav_in_list_(size_t i) const {
   return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
 }
 
+std::vector<std::string> GamedayComponent::list_names_() const {
+  std::vector<std::string> out;
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++)
+    out.push_back(this->list_name_(n));
+  return out;
+}
+
 void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
   std::string active_name = this->list_name_(this->prefs9_.active);
+  std::vector<std::string> names_before = this->list_names_();
   bool was_active = this->prefs9_.active != 0;
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
@@ -548,6 +566,23 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   }
   this->prefs9_.active = active;
   this->pref9_.save(&this->prefs9_);
+  // The remote's buttons follow their playlists by name, through a rename too.
+  std::vector<std::string> names_after = this->list_names_();
+  bool buttons = false;
+  for (uint8_t i = 0; i < ::espn::kRemoteButtons; i++) {
+    std::string was = ::espn::remote_name(this->remote_.btn[i]);
+    if (!::espn::remote_after_lists(this->remote_.btn[i], names_before, names_after))
+      continue;
+    buttons = true;
+    if (this->remote_.btn[i].kind == (uint8_t) ::espn::RemoteKind::LIST)
+      ESP_LOGI(TAG, "Remote button %u: playlist %s is %s now", (unsigned) i + 1, was.c_str(),
+               ::espn::remote_name(this->remote_.btn[i]).c_str());
+    else
+      ESP_LOGI(TAG, "Remote button %u: playlist %s is gone, back to favorite %u", (unsigned) i + 1, was.c_str(),
+               (unsigned) i + 1);
+  }
+  if (buttons)
+    this->remote_pref_.save(&this->remote_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
@@ -620,20 +655,81 @@ void GamedayComponent::publish_playlist_select_() {
   this->playlist_select_->publish_state(this->playlist_options_[this->prefs9_.active]);
 }
 
+// ---- The remote's buttons 1 to 4 (remote.h) ---------------------------------
+
+void GamedayComponent::set_remote_(const ::espn::SetOp &op) {
+  if (op.slot < 1 || op.slot > ::espn::kRemoteButtons)
+    return;
+  ::espn::RemoteButton &b = this->remote_.btn[op.slot - 1];
+  if (!::espn::remote_set(b, op, this->fav_refs_all_(), this->list_names_())) {
+    ESP_LOGW(TAG, "Remote button %u: %s isn't a favorite or a playlist", (unsigned) op.slot,
+             op.value == (int) ::espn::RemoteKind::TEAM ? "that team" : op.text.c_str());
+    return;
+  }
+  this->remote_pref_.save(&this->remote_);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) op.slot,
+           ::espn::remote_text((::espn::RemoteKind) b.kind, b).c_str());
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::remote_after_favs_() {
+  std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
+  bool changed = false;
+  for (uint8_t i = 0; i < ::espn::kRemoteButtons; i++)
+    if (::espn::remote_after_favs(this->remote_.btn[i], favs)) {
+      changed = true;
+      ESP_LOGI(TAG, "Remote button %u: its team left the favorites, back to favorite %u", (unsigned) i + 1,
+               (unsigned) i + 1);
+    }
+  if (changed) {
+    this->remote_pref_.save(&this->remote_);
+    this->sync_prefs_();
+  }
+}
+
 #ifndef GAMEDAY_DEMO
-// With playlists, buttons 1-4 play the first four; without, they jump to the
-// first four favorites.
+bool GamedayComponent::remote_assigned(uint8_t n) const {
+  return n >= 1 && n <= ::espn::kRemoteButtons &&
+         this->remote_.btn[n - 1].kind != (uint8_t) ::espn::RemoteKind::NONE;
+}
+
+// Each button plays what the owner set it to, its own favorite until then.
 void GamedayComponent::remote_number(uint8_t n) {
-  if (this->prefs9_.count == 0) {
-    this->press_favorite(n);
+  if (n < 1 || n > ::espn::kRemoteButtons)
     return;
+  const ::espn::RemoteButton &b = this->remote_.btn[n - 1];
+  switch ((::espn::RemoteKind) b.kind) {
+    case ::espn::RemoteKind::FAV:
+      this->press_favorite(n);
+      return;
+    case ::espn::RemoteKind::TEAM:
+      for (uint8_t i = 0; i < FAV_MAX; i++)
+        if (this->fav_league_(i) == b.league && this->fav_id_(i) == b.id) {
+          this->press_favorite(i + 1);
+          return;
+        }
+      ESP_LOGI(TAG, "Remote button %u: that team isn't a favorite", (unsigned) n);
+      return;
+    case ::espn::RemoteKind::LIST: {
+      std::string name = ::espn::remote_name(b);
+      for (uint8_t i = 1; i <= this->prefs9_.count; i++)
+        if (this->list_name_(i) == name) {
+          ESP_LOGI(TAG, "Remote button %u: playlist %s", (unsigned) n, name.c_str());
+          this->set_active_list_(i, true);
+          return;
+        }
+      ESP_LOGI(TAG, "Remote button %u: no playlist %s", (unsigned) n, name.c_str());
+      return;
+    }
+    case ::espn::RemoteKind::ALL:
+      ESP_LOGI(TAG, "Remote button %u: every favorite", (unsigned) n);
+      this->set_active_list_(0, true);
+      return;
+    case ::espn::RemoteKind::NONE:
+      ESP_LOGI(TAG, "Remote button %u: set to nothing", (unsigned) n);
+      return;
   }
-  if (n > this->prefs9_.count) {
-    ESP_LOGI(TAG, "Remote button %u: no playlist %u", (unsigned) n, (unsigned) n);
-    return;
-  }
-  ESP_LOGI(TAG, "Remote button %u: playlist %s", (unsigned) n, this->list_name_(n).c_str());
-  this->set_active_list_(n, true);
 }
 #endif
 
@@ -3860,6 +3956,16 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   }
   doc["list"] = this->prefs9_.active;
   doc["listmax"] = ::espn::kListMax;
+  // What each of the remote's buttons 1 to 4 plays (remote.h).
+  JsonArray remote = doc["remote"].to<JsonArray>();
+  // {"v": "list:Sundays"}, or {"v": "fav", "gone": "team:nfl:6"} for a
+  // button that went back to its own favorite.
+  for (const auto &b : this->remote_.btn) {
+    JsonObject o = remote.add<JsonObject>();
+    o["v"] = ::espn::remote_text((::espn::RemoteKind) b.kind, b);
+    if (b.gone != (uint8_t) ::espn::RemoteKind::FAV)
+      o["gone"] = ::espn::remote_text((::espn::RemoteKind) b.gone, b);
+  }
   doc["today"] = this->today_only();
   doc["jump"] = this->jump_to_action();
   doc["banner"] = this->score_banner();
@@ -4971,6 +5077,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
           ESP_LOGW(TAG, "No playlist %d", op.value);
         else
           this->set_active_list_((uint8_t) op.value, false);
+        break;
+      case ::espn::SetKind::REMOTE:
+        this->set_remote_(op);
         break;
       case ::espn::SetKind::TZ:
         this->select_timezone(::espn::kTimezones[op.value].name);

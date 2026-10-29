@@ -39,6 +39,7 @@
 #include "playlists.h"
 #include "offseason.h"
 #include "recap.h"
+#include "remote.h"
 #include "regulatory.h"
 #include "score_log.h"
 #include "poll_timing.h"
@@ -141,7 +142,7 @@ enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
 
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
-// jump to the first four.
+// start on the first four (remote.h).
 static constexpr uint8_t FAV_MAX = 16;
 
 class GamedayComponent;
@@ -222,7 +223,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void select_timezone(const std::string &option);
   void select_mode(const std::string &option);
   std::string hostname() const;  // the device name, with its MAC suffix
-  // Favorites: the first four slots are the remote's numbered buttons.
+  // Jumps to favorite slot (1 to FAV_MAX), as a remote button does.
   void press_favorite(uint8_t slot);
   // Playlists (playlists.h): the Home Assistant select's option, a name or
   // "All favorites".
@@ -253,9 +254,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &fav_banner_text() const { return this->fav_banner_text_; }
   uint32_t fav_banner_color() const { return this->fav_banner_color_; }
   void refresh_now();
-  // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
-  // them to the demo (demo.cpp).
+  // WizMote buttons 1-4: what the owner set each to (remote.h) in release
+  // firmware; the demo build gives them to the demo (demo.cpp).
   void remote_number(uint8_t n);
+  // False for a button set to nothing, so its press doesn't wake the panel either.
+  bool remote_assigned(uint8_t n) const;
   // Favorites with no favorite set: the panel follows live games and the
   // finals rotation, and the boot screen gives the app's QR code a turn
   // every few minutes (boot.yaml, boot_app_qr_turn) until a team is picked.
@@ -423,6 +426,19 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string list_name_(uint8_t n) const;  // n = 1..count
   bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist
   void publish_playlist_select_();
+  std::vector<std::string> list_names_() const;
+  // The remote's buttons (remote.h), in their own blob, all on their own
+  // favorite on a panel without it. Its size is fixed for the same reason as
+  // Prefs7's.
+  struct PrefsRemote {
+    ::espn::RemoteButton btn[::espn::kRemoteButtons];
+    uint8_t spare[4];
+  } __attribute__((packed));
+  ESPPreferenceObject remote_pref_;
+  PrefsRemote remote_{};
+  void set_remote_(const ::espn::SetOp &op);
+  // A button on a team that left the favorites goes back to its own. Saves.
+  void remote_after_favs_();
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
   void put_fav_(uint8_t i, uint8_t league, uint32_t id);  // no save
@@ -980,7 +996,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // which one the panel shows (favorites.h) and polls only that game.
   struct FavEntry {
     const ::espn::Team *team{nullptr};
-    uint8_t slot{0};  // 1-4, the remote button
+    uint8_t slot{0};  // 1 to FAV_MAX, its place in the favorites list
     Schedule sched;
     GameSnapshot game;
     uint32_t fetched_ms{0};  // last schedule attempt

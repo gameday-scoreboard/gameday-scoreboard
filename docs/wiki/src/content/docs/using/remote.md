@@ -47,3 +47,17 @@ Buttons 1 to 4 are the first four teams in your favorites list, in order. The de
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
 
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
+
+:::note[Coming in the next release]
+You pick what each numbered button plays, and making a playlist no longer changes them. Under **Buttons 1 to 4** in the **Remote** card on the device page, each button has a list:
+
+- **Favorite 1** (2, 3 or 4 for the other buttons): the team in that place in your favorites list. Every button starts here.
+- One of your favorites by name. The button stays on that team when you reorder your favorites.
+- One of your playlists. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. The button stays on the playlist when you rename it or move it.
+- **All favorites**: switches the panel to Favorite teams with every favorite.
+- **Nothing**: the button does nothing, and doesn't turn on a panel that is off.
+
+A button stays on what you pick: adding, moving or renaming a favorite or a playlist never changes it. If you take out the team a button plays, or remove its playlist, that button goes back to its own favorite, and the Remote card says so under it until you pick for that button again.
+
+The Favorites card marks the teams a button plays, and the Playlists card marks the playlists. Your picks are in a settings backup.
+:::

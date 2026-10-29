@@ -236,6 +236,11 @@ void test_refused() {
            in.ops.size(), in.skipped.size());
   }
   SCHECK(skipped(import(R"({"schema":1,"mode":6})"), "mode=6"), "mode=6 isn't listed");
+  SettingsImport rb = import(R"({"schema":1,"remote1":"sport:football","remote2":"list:Sundays"})");
+  SCHECK(rb.error.empty() && skipped(rb, "remote1=sport:football") && rb.ops.size() == 1 &&
+             rb.ops[0].kind == SetKind::REMOTE && rb.ops[0].slot == 2,
+         "a button value from newer firmware is left out, the rest restore");
+  SCHECK(!import(R"({"schema":1,"remote1":4})").error.empty(), "a button value that isn't text is refused");
   SCHECK(skipped(import(R"({"schema":1,"scroll":11})"), "scroll=11"), "scroll=11 isn't listed");
 
   refused(R"({"schema":1,"brightness":40,"scroll":"5"})", "a good brightness with a bad scroll");

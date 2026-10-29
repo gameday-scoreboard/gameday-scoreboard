@@ -33,6 +33,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ### ✨ New
 
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- 🎛️ Pick what each of the remote's buttons 1 to 4 plays: a favorite, a playlist, all favorites or nothing. Making a playlist no longer changes them
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
 
 ### 🐛 Fixes

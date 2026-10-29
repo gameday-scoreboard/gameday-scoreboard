@@ -120,7 +120,8 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"],
+    "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
@@ -207,7 +208,7 @@ LIVE_LIST = [[]]
 def reset_state(overrides):
     STATE.clear()
     STATE.update(copy.deepcopy(INITIAL))
-    STATE.update(overrides)
+    STATE.update(copy.deepcopy(overrides))
     # A null override drops the key, like firmware that doesn't send it.
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
@@ -310,6 +311,46 @@ def remap_lists(before):
         pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
 
 
+def remote_value(v):
+    """parse_set()'s remoteN values (set_request.h): fav, team:league:id, list:name, all or none."""
+    if v in ("fav", "all", "none"):
+        return v
+    if v.startswith("team:"):
+        ref = parse_team_ref(v[5:])
+        return f"team:{ref[0]}:{ref[1]}" if ref else None
+    if v.startswith("list:") and len(v) > 5:
+        return v
+    return None
+
+
+def remote_after_favs():
+    """remote_after_favs() in remote.h: a button on a team that left the favorites goes back to its own."""
+    favs = [f"team:{r[0]}:{r[1]}" for r in fav_refs() if r]
+    for b in STATE["remote"]:
+        if b["v"].startswith("team:") and b["v"] not in favs:
+            remote_back(b)
+
+
+def remote_back(b):
+    """The button back on its own favorite, keeping what it lost."""
+    lost = b["v"]
+    b.clear()
+    b.update({"v": "fav", "gone": lost})
+
+
+def remote_after_lists(before, after):
+    """remote_after_lists() in remote.h: a playlist keeps its buttons by name, through a rename too."""
+    for b in STATE["remote"]:
+        if not b["v"].startswith("list:") or b["v"][5:] in after:
+            continue
+        name = b["v"][5:]
+        i = before.index(name) if name in before else -1
+        if len(before) == len(after) and i >= 0 and after[i] not in before:
+            b["v"] = "list:" + after[i]
+        else:
+            remote_back(b)
+
+
 def parse_lists(v):
     """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
     out = []
@@ -371,19 +412,33 @@ def apply_set(kv):
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
             STATE["favs"] = [team(*r) for r in refs] + [{}] * (4 - len(refs))
             remap_lists(before)
+            remote_after_favs()
         elif k in ("fav1", "fav2", "fav3", "fav4"):
             ref = parse_team_ref(v)
             if ref is None and v not in ("none", ""):
                 continue
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
             remap_lists(before)
+            remote_after_favs()
         elif k == "lists":
             # set_lists_(): the playlist being played stays chosen by its name.
             active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] else ""
+            names_before = [pl["n"] for pl in STATE["lists"]]
             STATE["lists"] = parse_lists(v)
+            remote_after_lists(names_before, [pl["n"] for pl in STATE["lists"]])
             STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
             if 0 <= keep_list <= len(STATE["lists"]):
                 STATE["list"] = keep_list
+        elif k in ("remote1", "remote2", "remote3", "remote4"):
+            # set_remote_(): a team has to be a favorite, a playlist one of the playlists.
+            val = remote_value(v)
+            if val is None:
+                continue
+            if val.startswith("team:") and val not in [f"team:{r[0]}:{r[1]}" for r in fav_refs() if r]:
+                continue
+            if val.startswith("list:") and val[5:] not in [pl["n"] for pl in STATE["lists"]]:
+                continue
+            STATE["remote"][int(k[6]) - 1] = {"v": val}
         elif k == "list":
             # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it.
             if not with_lists and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
@@ -465,6 +520,9 @@ def settings_doc():
             # The state's teams are places in favs; the backup names them.
             out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
                             for pl in s.get("lists", [])]
+        elif k.startswith("remote"):
+            # What a button lost isn't a setting.
+            out[k] = s["remote"][int(k[6]) - 1]["v"]
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
             out["live"] = list(LIVE_LIST[0])
@@ -577,7 +635,7 @@ def import_settings(doc):
                     continue
                 kv.append((k, v if r == 1 else "none"))
             elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
-                    k == "hook" and not hook_url_ok(v)):
+                    k == "hook" and not hook_url_ok(v)) or (k.startswith("remote") and remote_value(v) is None):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):

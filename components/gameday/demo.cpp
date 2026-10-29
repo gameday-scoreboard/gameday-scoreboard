@@ -98,6 +98,8 @@ void GamedayComponent::stop_demo() {
   this->rebuild_demo_json_();
 }
 
+bool GamedayComponent::remote_assigned(uint8_t n) const { return n >= 1 && n <= 4; }
+
 void GamedayComponent::remote_number(uint8_t n) {
   switch (n) {
     case 1:

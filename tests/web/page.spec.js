@@ -553,7 +553,9 @@ test("playlists post every playlist on new, teams, rename, move and remove", asy
   await expectSet(request, { lists: "Playlist 1=" });
   const box = page.locator("#listCtls .plist");
   await expect(box).toHaveCount(1);
-  await expect(box.nth(0).locator(".pbtn")).toHaveText("Button 1");
+  // A new playlist takes no remote button: they stay on their favorites.
+  await expect(box.nth(0).locator(".pbtn")).toHaveCount(0);
+  await expect(page.locator("#favCtls .ctl.fav").nth(0).locator("small")).toHaveText("NFL · remote button 1");
   await expect(box.nth(0).locator(".chip")).toHaveText(["DAL", "HOU", "MISS"]);
   await box.nth(0).locator(".chip", { hasText: "HOU" }).click();
   await expectSet(request, { lists: "Playlist 1=nfl:34" });
@@ -569,7 +571,73 @@ test("playlists post every playlist on new, teams, rename, move and remove", asy
   await box.nth(1).getByRole("button", { name: "Remove Texans andmore" }).click();
   await expectSet(request, { lists: "Playlist 2=" });
   await expect(box).toHaveCount(1);
-  await expect(page.locator("#favHint")).toContainText("Your playlists have buttons 1 to 4");
+  expect((await deviceState(request)).remote.map((b) => b.v)).toEqual(["fav", "fav", "fav", "fav"]);
+});
+
+test("each remote button picks a favorite, a playlist, all favorites or nothing", async ({ page, request }) => {
+  await reset(request, { lists: [{ n: "Sundays", f: [0, 1] }] });
+  await page.goto("/");
+  await expect(page.locator("#remoteSet")).toBeVisible();
+  for (const n of [1, 2, 3, 4]) await expect(page.locator("#remote" + n)).toHaveValue("fav");
+  await expect(page.locator("#remote1 option").first()).toHaveText("Favorite 1 (Dallas Cowboys)");
+  await expect(page.locator("#remote4 option").first()).toHaveText("Favorite 4 (none yet)");
+  await expect(page.locator("#remote1 optgroup[label=Favorites] option")).toHaveText(["Dallas Cowboys", "Houston Texans", "Ole Miss Rebels"]);
+  await expect(page.locator("#remote1 optgroup[label=Playlists] option")).toHaveText(["Sundays"]);
+
+  await page.locator("#remote2").selectOption("list:Sundays");
+  await expectSet(request, { remote2: "list:Sundays" });
+  await expect(page.locator("#listCtls .plist .pbtn")).toHaveText("Button 2");
+  await page.locator("#remote3").selectOption("team:nfl:6");
+  await expectSet(request, { remote3: "team:nfl:6" });
+  await page.locator("#remote4").selectOption("none");
+  await expectSet(request, { remote4: "none" });
+  await page.locator("#remote1").selectOption("all");
+  await expectSet(request, { remote1: "all" });
+  const rows = page.locator("#favCtls .ctl.fav small");
+  await expect(rows).toHaveText(["NFL · remote button 3", "NFL", "College football"]);
+  expect((await deviceState(request)).remote).toEqual([{ v: "all" }, { v: "list:Sundays" }, { v: "team:nfl:6" }, { v: "none" }]);
+
+  // Moving favorites and playlists around leaves every button where it is.
+  await page.locator("#favCtls .ctl.fav").nth(0).getByRole("button", { name: "Move down" }).click();
+  await expectSet(request, { favs: "nfl:34,nfl:6,ncaa:145" });
+  await expect(rows).toHaveText(["NFL", "NFL · remote button 3", "College football"]);
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Sundays=nfl:34,nfl:6;Playlist 2=" });
+  await page.locator("#listCtls .plist").nth(0).getByRole("button", { name: "Move down Sundays" }).click();
+  await expectSet(request, { lists: "Playlist 2=;Sundays=nfl:34,nfl:6" });
+  await expect(page.locator("#remote2")).toHaveValue("list:Sundays");
+  expect((await deviceState(request)).remote).toEqual([{ v: "all" }, { v: "list:Sundays" }, { v: "team:nfl:6" }, { v: "none" }]);
+});
+
+test("a removed playlist or favorite puts its button back on its own favorite and says so", async ({ page, request }) => {
+  await reset(request, {
+    lists: [{ n: "Sundays", f: [0] }, { n: "Texans", f: [1] }],
+    remote: [{ v: "team:nfl:34" }, { v: "list:Sundays" }, { v: "fav" }, { v: "fav" }],
+  });
+  await page.goto("/");
+  await expect(page.locator("#remote2")).toHaveValue("list:Sundays");
+  // A rename takes the button along.
+  const names = page.locator("#listCtls .pname");
+  await names.nth(0).fill("Game day");
+  await names.nth(0).press("Enter");
+  await names.nth(0).blur();
+  await expectSet(request, { lists: "Game day=nfl:6;Texans=nfl:34" });
+  await expect(page.locator("#remote2")).toHaveValue("list:Game day");
+
+  await page.locator("#listCtls .plist").nth(0).getByRole("button", { name: "Remove Game day" }).click();
+  await expectSet(request, { lists: "Texans=nfl:34" });
+  await expect(page.locator("#remote2")).toHaveValue("fav");
+  await expect(page.locator("#remoteGone2")).toHaveText("The Game day playlist was removed, so button 2 is back on favorite 2.");
+
+  await page.locator("#favCtls .ctl.fav").nth(1).getByRole("button", { name: "Remove" }).click();
+  await expectSet(request, { favs: "nfl:6,ncaa:145" });
+  await expect(page.locator("#remote1")).toHaveValue("fav");
+  await expect(page.locator("#remoteGone1")).toHaveText("The Houston Texans left your favorites, so button 1 is back on favorite 1.");
+
+  // Picking for the button again clears the note.
+  await page.locator("#remote2").selectOption("all");
+  await expectSet(request, { remote2: "all" });
+  await expect(page.locator("#remoteGone2")).toHaveCount(0);
 });
 
 test("One per sport makes a playlist for each sport in the favorites", async ({ page, request }) => {

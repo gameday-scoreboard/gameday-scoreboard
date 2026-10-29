@@ -48,6 +48,12 @@
   ],
   "list": 2,
   "listmax": 16,
+  "remote": [
+    {"v": "fav"},
+    {"v": "list:College"},
+    {"v": "fav", "gone": "list:Weekend"},
+    {"v": "none"}
+  ],
   "today": false,
   "jump": false,
   "banner": true,

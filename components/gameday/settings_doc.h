@@ -7,8 +7,10 @@
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
 // "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
-// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}]. Brightness and
-// scroll are the Home Assistant numbers of the same names.
+// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}].
+// remote1 to remote4 are what the remote's buttons play, as the set takes
+// them (remote.h). Brightness and scroll are the Home Assistant numbers of
+// the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
 // type, or text the panel can't read (a team, a time, an address), refuses
@@ -56,8 +58,9 @@ inline SettingType setting_type(const char *k) {
                                       "leaders", "night", "nightscreen", "favtake", "countdown"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
-  static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook"};
+  static const char *const kText[] = {"fav1",    "fav2",    "fav3",       "fav4",     "tz",      "msg",
+                                      "msgurl",  "nightstart", "nightend", "nick",   "cdname",  "cddate",
+                                      "hook",    "remote1", "remote2",    "remote3", "remote4"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -107,7 +110,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
                                       "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
-                                      "lists",    "list",     "hook",     "pregame"};
+                                      "lists",    "list",     "remote1",  "remote2",     "remote3",    "remote4",
+                                      "hook",     "pregame"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -138,6 +142,11 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
             t.add(ref);
         }
       }
+    } else if (strncmp(k, "remote", 6) == 0) {
+      // The state's remote list, one button each; what a button lost isn't a setting.
+      JsonVariantConst v = s["remote"][k[6] - '1']["v"];
+      if (v.is<const char *>())
+        out[k] = v;
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
@@ -291,8 +300,11 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, r == 0 ? "none" : text, op, target.fav_max);
           break;
         }
+        // A button value from newer firmware is left out, and that button
+        // stays as it is.
         if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
-            (k == "hook" && !hook_url_ok(text))) {
+            (k == "hook" && !hook_url_ok(text)) ||
+            (k.compare(0, 6, "remote") == 0 && !parse_set(k, text, op, target.fav_max))) {
           out.skipped.push_back(k + "=" + text);
           continue;
         }
