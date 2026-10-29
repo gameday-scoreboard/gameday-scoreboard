@@ -47,14 +47,24 @@
       "n": "Sundays",
       "t": [
         "nfl:6"
-      ]
+      ],
+      "days": 1,
+      "from": "11:00",
+      "to": "23:00",
+      "only": true,
+      "today": -1
     },
     {
       "n": "College",
       "t": [
         "ncaa:251",
         "ncaa:2294"
-      ]
+      ],
+      "days": 0,
+      "from": "00:00",
+      "to": "00:00",
+      "only": false,
+      "today": 1
     }
   ],
   "list": 2,

@@ -369,6 +369,20 @@ void test_playlists() {
   refused(R"({"schema":1,"lists":[{"n":"Pros"}]})", "a playlist with no teams list");
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":["cowboys"]}]})", "a playlist team that isn't a team");
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":[6]}]})", "a playlist team as a number");
+
+  // A playlist's options become its @ part; any left out are at their defaults
+  in = import(R"({"schema":1,"lists":[{"n":"Sun","t":["nfl:6"],"days":1,"from":"11:00","to":"23:00","only":true,
+    "today":-1},{"n":"Sat","t":[],"days":64},{"n":"Old","t":["nfl:6"]},{"n":"Bad","t":[],"days":200}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "Sun=nfl:6@1,11:00,23:00,1,-1;Sat=@64,00:00,00:00,0,-1;Old=nfl:6;Bad=",
+         "lists with options came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  SCHECK(skipped(in, "lists=Bad@options"), "options out of range aren't listed");
+  in = import(R"({"schema":1,"lists":[{"n":"Bad","t":[],"from":"25:00"}]})");
+  SCHECK(in.error.empty() && skipped(in, "lists=Bad@options"), "a time that doesn't read isn't listed");
+  refused(R"({"schema":1,"lists":[{"n":"Pros","t":[],"days":"Sunday"}]})", "days as text");
+  refused(R"({"schema":1,"lists":[{"n":"Pros","t":[],"only":1}]})", "only as a number");
+  refused(R"({"schema":1,"lists":[{"n":"Pros","t":[],"from":1100}]})", "from as a number");
 }
 
 // The fullest export the panel can write comes back through its own import:
@@ -390,6 +404,11 @@ void test_fullest_fits() {
     JsonArray f = l["f"].to<JsonArray>();
     for (int j = 0; j < 16; j++)
       f.add(j);
+    l["days"] = 127;
+    l["from"] = "23:59";
+    l["to"] = "23:58";
+    l["only"] = false;
+    l["today"] = -1;
   }
   state["list"] = kListMax;
   state["msg"] = std::string(kMsgTextMax, '"');

@@ -337,6 +337,17 @@ void GamedayComponent::setup() {
   if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
       this->prefs9_.active > this->prefs9_.count)
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
+  this->pref10_ = global_preferences->make_preference<Prefs10>(fnv1_hash("gameday_prefs10_v1"));
+  if (!this->pref10_.load(&this->prefs10_))
+    this->prefs10_ = Prefs10{};  // no schedules, every option at its default
+  for (uint8_t i = 0; i < ::espn::kListMax; i++) {
+    // A time from damage or a later firmware: that schedule is off.
+    if (this->prefs10_.from[i] >= ::espn::kMinutesPerDay || this->prefs10_.to[i] >= ::espn::kMinutesPerDay)
+      this->prefs10_.days[i] = this->prefs10_.from[i] = this->prefs10_.to[i] = 0;
+    this->prefs10_.days[i] &= 0x7f;
+  }
+  if (this->prefs10_.sched_on > this->prefs9_.count || this->prefs10_.sched_before > this->prefs9_.count)
+    this->prefs10_.sched_on = this->prefs10_.sched_before = 0;
   this->load_msg_();
   this->load_nick_();
   this->load_hook_();
@@ -365,6 +376,7 @@ void GamedayComponent::setup() {
       // After a power cut the clock starts here: the night schedule
       // applies now, not at the next tick.
       this->night_tick_();
+      this->list_sched_tick_();
       if (!this->clock_approx_)
         return;
       ESP_LOGI(TAG, "Time server answered: clock no longer approximate");
@@ -523,55 +535,97 @@ bool GamedayComponent::fav_in_list_(size_t i) const {
   return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
 }
 
+::espn::ListOpts GamedayComponent::list_opts_(uint8_t n) const {
+  ::espn::ListOpts o;
+  if (n < 1 || n > this->prefs9_.count)
+    return o;
+  const Prefs10 &p = this->prefs10_;
+  o.days = p.days[n - 1];
+  o.from = p.from[n - 1];
+  o.to = p.to[n - 1];
+  o.only = (p.flags[n - 1] & LIST10_ONLY) != 0;
+  if (p.flags[n - 1] & LIST10_TODAY_SET)
+    o.today = (p.flags[n - 1] & LIST10_TODAY_ON) ? 1 : 0;
+  return o;
+}
+
+void GamedayComponent::put_list_opts_(Prefs10 &p, uint8_t i, const ::espn::ListOpts &o) {
+  p.days[i] = o.days;
+  p.from[i] = o.from;
+  p.to[i] = o.to;
+  p.flags[i] = (o.only ? LIST10_ONLY : 0) | (o.today >= 0 ? LIST10_TODAY_SET : 0) | (o.today == 1 ? LIST10_TODAY_ON : 0);
+}
+
 void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
   std::string active_name = this->list_name_(this->prefs9_.active);
   bool was_active = this->prefs9_.active != 0;
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
+  std::string sched_on = this->list_name_(this->prefs10_.sched_on);
+  std::string sched_before = this->list_name_(this->prefs10_.sched_before);
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
   Prefs9 p{};
+  Prefs10 q{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   for (uint8_t n = 0; n < p.count; n++) {
     strncpy(p.name[n], lists[n].name.c_str(), ::espn::kListNameMax);
     p.mask[n] = ::espn::list_mask(lists[n].teams, favs);
+    // Sent without options (an app from before them), a playlist keeps its own by name.
+    ::espn::ListOpts o = lists[n].opts;
+    for (uint8_t k = 1; k <= this->prefs9_.count && !lists[n].has_opts; k++)
+      if (this->list_name_(k) == lists[n].name)
+        o = this->list_opts_(k);
+    put_list_opts_(q, n, o);
   }
   // The playlist being played stays chosen by its name; with that name gone
   // it is every favorite. keep (list= in the same request, as a rename sends
-  // it) names it instead.
+  // it) names it instead. The schedules' memory follows its playlists by
+  // name the same way.
   this->prefs9_ = p;
-  uint8_t active = 0;
-  if (keep >= 0 && keep <= p.count) {
-    active = (uint8_t) keep;
-  } else {
-    for (uint8_t n = 1; n <= p.count && !active_name.empty(); n++)
-      if (this->list_name_(n) == active_name)
-        active = n;
-  }
+  auto by_name = [this](const std::string &name) -> uint8_t {
+    for (uint8_t n = 1; n <= this->prefs9_.count && !name.empty(); n++)
+      if (this->list_name_(n) == name)
+        return n;
+    return 0;
+  };
+  uint8_t active = keep >= 0 && keep <= p.count ? (uint8_t) keep : by_name(active_name);
   this->prefs9_.active = active;
+  q.sched_on = by_name(sched_on);
+  q.sched_before = by_name(sched_before);
   this->pref9_.save(&this->prefs9_);
+  this->prefs10_ = q;
+  this->pref10_.save(&this->prefs10_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
   uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
-  // A rename alone plays the same teams, so the board stays as it is.
+  // A rename alone plays the same teams, so the board stays as it is. New
+  // options apply from the next pick, as the panel's own switches do.
   if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask))
     this->set_active_list_(active, false);  // other teams play now: pick again
   else
     this->rebuild_state_(&this->last_fields_);
+  this->list_sched_tick_();  // a schedule set for now starts now
 }
 
 // From the page, Home Assistant or the remote (announce: the name goes up on
 // the board, so a press in the dark says what it picked). Favorite teams
-// starts playing it, from its first card.
-void GamedayComponent::set_active_list_(uint8_t n, bool announce) {
+// starts playing it, from its first card. A schedule (by_hand false) leaves
+// the mode alone: on Live games the playlist waits for Favorite teams.
+void GamedayComponent::set_active_list_(uint8_t n, bool announce, bool by_hand) {
   if (n > this->prefs9_.count)
     n = 0;
   if (n != this->prefs9_.active) {
     this->prefs9_.active = n;
     this->pref9_.save(&this->prefs9_);
     this->sync_prefs_();
-    ESP_LOGI(TAG, "Playlist: %s", n == 0 ? "every favorite" : this->list_name_(n).c_str());
+    ESP_LOGI(TAG, "Playlist: %s%s", n == 0 ? "every favorite" : this->list_name_(n).c_str(),
+             by_hand ? "" : " (schedule)");
   }
   this->publish_playlist_select_();
+  if (!by_hand && this->prefs2_.mode != (uint8_t) Mode::FAVORITES) {
+    this->rebuild_state_(&this->last_fields_);
+    return;
+  }
   if (announce)
     this->say(n == 0 ? "All favorites" : this->list_name_(n), 3);
   if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES) {
@@ -587,6 +641,32 @@ void GamedayComponent::set_active_list_(uint8_t n, bool announce) {
   this->emit_({});
   this->end_backoff_wait_();
   this->schedule_next_(0);
+}
+
+void GamedayComponent::list_sched_tick_() {
+  ESPTime now = this->time_ != nullptr ? this->time_->now() : ESPTime{};
+  if (!now.is_valid())
+    return;
+  ::espn::ListOpts opts[::espn::kListMax];
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++)
+    opts[n - 1] = this->list_opts_(n);
+  // ESPTime counts weekdays from 1, Sunday.
+  uint8_t want = ::espn::list_sched_want(opts, this->prefs9_.count, now.day_of_week - 1, now.hour * 60 + now.minute);
+  ::espn::ListSched sched{this->prefs10_.sched_on, this->prefs10_.sched_before};
+  bool held = this->favorites_mode_() && this->fav_locked_;
+  int next = ::espn::list_sched_step(sched, this->prefs9_.active, want, held);
+  if (sched.on != this->prefs10_.sched_on || sched.before != this->prefs10_.sched_before) {
+    if (want != 0)
+      ESP_LOGI(TAG, "Playlist schedule: %s starts", this->list_name_(want).c_str());
+    else
+      ESP_LOGI(TAG, "Playlist schedule: %s is over", this->list_name_(this->prefs10_.sched_on).c_str());
+    this->prefs10_.sched_on = sched.on;
+    this->prefs10_.sched_before = sched.before;
+    this->pref10_.save(&this->prefs10_);
+    this->sync_prefs_();
+  }
+  if (next >= 0)
+    this->set_active_list_((uint8_t) next, true, false);
 }
 
 void GamedayComponent::select_playlist(const std::string &option) {
@@ -854,7 +934,11 @@ void GamedayComponent::rebuild_favorites_(bool keep_cards) {
   r.rotate_s = (int64_t) this->prefs2_.rotate_minutes * 60;
   r.dwell_s = ::espn::kCountdownTurnS;
   r.countdown_s = ::espn::kCountdownTurnS;
-  r.today_only = this->today_only();
+  // The playlist playing can have its own Only today's games, and can keep
+  // the panel to its own games.
+  ::espn::ListOpts list = this->list_opts_(this->prefs9_.active);
+  r.today_only = list.today >= 0 ? list.today == 1 : this->today_only();
+  r.only_list = list.only;
   if (this->time_ != nullptr) {
     ESPTime t = this->time_->now();
     if (t.is_valid()) {
@@ -1249,6 +1333,7 @@ void GamedayComponent::loop() {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
     this->night_tick_();
+    this->list_sched_tick_();
     if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
       // A settled run: the plug from this start's brownout comes down
       this->power_settled_ = true;
@@ -3857,8 +3942,15 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     for (uint8_t i = 0; i < FAV_MAX; i++)
       if (this->fav_id_(i) != 0 && ((this->prefs9_.mask[n - 1] >> i) & 1u))
         f.add(i);
+    ::espn::ListOpts opts = this->list_opts_(n);
+    o["days"] = opts.days;
+    o["from"] = ::espn::night_time_text(opts.from);
+    o["to"] = ::espn::night_time_text(opts.to);
+    o["only"] = opts.only;
+    o["today"] = opts.today;
   }
   doc["list"] = this->prefs9_.active;
+  doc["listsched"] = this->prefs10_.sched_on;  // the playlist a schedule put on, 0 for none
   doc["listmax"] = ::espn::kListMax;
   doc["today"] = this->today_only();
   doc["jump"] = this->jump_to_action();

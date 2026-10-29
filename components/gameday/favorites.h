@@ -29,7 +29,8 @@ struct FavGame {
   // A recent poll found the game at its action (in_action), for Jump to the action.
   bool action{false};
   // The team is in the playlist being played (playlists.h). One that isn't
-  // still locks on near its kickoff, but stays out of the idle playlist.
+  // stays out of the idle playlist, and still locks on near its kickoff
+  // unless the playlist plays only its own games (FavRules::only_list).
   bool in_list{true};
 };
 
@@ -41,6 +42,7 @@ struct FavRules {
   int64_t dwell_s{10};        // seconds per card in the idle playlist
   int64_t countdown_s{0};     // and after a card with a countdown, the countdown's
   bool today_only{false};     // idle playlist: only games today (local time) or live
+  bool only_list{false};      // only the playlist's own favorites lock on near kickoff
   int64_t day_start{0};       // today's local midnight, epoch seconds
   int64_t day_end{0};         // the next one
 };
@@ -106,7 +108,9 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
   FavChoice c;
   if (games.empty())
     return c;
-  auto locked = [&](int i) { return i >= 0 && i < (int) games.size() && fav_locked(games[i], now, r); };
+  auto locked = [&](int i) {
+    return i >= 0 && i < (int) games.size() && (games[i].in_list || !r.only_list) && fav_locked(games[i], now, r);
+  };
   auto valid = [&](int i) { return i >= 0 && i < (int) games.size() && games[i].valid; };
   bool any_locked = false;
   for (int i = 0; i < (int) games.size(); i++)

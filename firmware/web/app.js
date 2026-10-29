@@ -230,7 +230,7 @@
       </div>
       <div class="card">
         <h2>Playlists</h2>
-        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff, unless the playlist plays only its own games. Under Options a playlist can also play on a schedule.</p>
         <div id="listCtls"></div>
         <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button><button class="btn" id="listSport">One per sport</button></div>
       </div>
@@ -390,6 +390,18 @@
   // its main loop to apply it) comes back. Then the device's value wins.
   const APPLY_MS = 300;
   const held = {};       // key -> {v: the value as the state document has it, ack: when the post was answered}
+  // One playlist of lists= text, "Name=nfl:6,nba:6@days,from,to,only,today"
+  // (playlists.h), as its name, team keys and options in the state's order.
+  const splitList = (p) => {
+    const eq = p.indexOf("=");
+    const [refs, opts] = (eq < 0 ? "" : p.slice(eq + 1)).split("@");
+    const o = (opts || "").split(",");
+    return {
+      n: eq < 0 ? p : p.slice(0, eq),
+      keys: refs.split(",").filter(Boolean),
+      opts: opts === undefined ? {} : { days: Number(o[0]), from: o[1], to: o[2], only: o[3] === "1", today: Number(o[4]) },
+    };
+  };
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
@@ -401,9 +413,8 @@
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
-      const [n, refs] = p.split("=");
-      const keys = (refs || "").split(",");
-      return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
+      const l = splitList(p);
+      return Object.assign({ n: l.n, f: favKeys.map((k, i) => (l.keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, l.opts);
     }),
     list: Number,
     msg: String, msgurl: String, msgevery: Number, nick: String,
@@ -473,8 +484,8 @@
     const doc = {
       schema: 1,
       lists: String(params.lists).split(";").filter(Boolean).map((p) => {
-        const [n, refs] = p.split("=");
-        return { n, t: (refs || "").split(",").filter(Boolean) };
+        const l = splitList(p);
+        return Object.assign({ n: l.n, t: l.keys }, l.opts);
       }),
     };
     if (params.list !== undefined) doc.list = Number(params.list);
@@ -783,7 +794,8 @@
         ? "No favorites set yet"
         : S.locked && shown
           ? "Locked on " + (shown.t.name || shown.t.abbr)
-          : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
+          : playing ? "Cycling through " + playing.n + (S.listsched && S.listsched === S.list ? " (on its schedule)" : "")
+            : "Cycling through your favorites";
     }
     renderListPick();
   };
@@ -860,7 +872,10 @@
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
   const playingList = () => (S && S.list ? lists()[S.list - 1] : null);
-  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
+  // Each with its options (a playlist from before them has none: the defaults).
+  const listOpts = (l) => "@" + [l.days || 0, l.from || "00:00", l.to || "00:00", l.only ? 1 : 0,
+    l.today === undefined ? -1 : l.today].join(",");
+  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",") + listOpts(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
   // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
@@ -877,6 +892,89 @@
     ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
   const listMax = () => (S && S.listmax) || 16;
   let listSig = "";
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // "Sun 11 AM to 11 PM", "Sat all day", "" with no schedule.
+  const schedText = (l) => {
+    if (!l.days) return "";
+    const d = l.days === 127 ? "Every day" : l.days === 65 ? "Weekends" : l.days === 62 ? "Weekdays"
+      : DAYS.filter((_, i) => l.days & (1 << i)).join(", ");
+    if (l.from !== l.to) return d + " " + clock12(l.from) + " to " + clock12(l.to);
+    return d + (l.from === "00:00" ? " all day" : " from " + clock12(l.from) + " for 24 hours");
+  };
+  const openOpts = new Set();  // playlists whose options are open, by name, kept over a redraw
+  // A playlist's options (components/gameday/playlists.h ListOpts): a
+  // schedule, only its own games, its own Only today's games.
+  const listOptions = (l, i) => {
+    // From the playlists as they are now: a time typed in keeps the page from
+    // redrawing, so this box's l can be a post behind.
+    const set = (patch) => postLists(lists().map((o, k) => (k === i ? Object.assign({}, o, patch(o)) : o)));
+    const box = el("details", "popts");
+    box.open = openOpts.has(l.n);
+    box.ontoggle = () => (box.open ? openOpts.add(l.n) : openOpts.delete(l.n));
+    const said = [schedText(l), l.only && "only its games", l.today === 1 && "today only", l.today === 0 && "every day's games"]
+      .filter(Boolean);
+    box.appendChild(el("summary", null, "Options" + (said.length ? ": " + said.join(", ") : "")));
+
+    const only = el("div", "ctl");
+    only.innerHTML = "<label>Only this playlist's games<small>Other favorites don't take the panel near their kickoff while it plays.</small></label>";
+    const sw = el("button", "sw");
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-label", "Only " + l.n + "'s games");
+    setOn(sw, !!l.only, "aria-checked");
+    sw.onclick = () => set((o) => ({ only: !o.only }));
+    only.appendChild(sw);
+    box.appendChild(only);
+
+    const today = el("div", "ctl");
+    today.innerHTML = "<label>Only today's games<small>Between games, skip favorites that aren't playing today.</small></label>";
+    const pick = el("select");
+    pick.setAttribute("aria-label", "Only today's games in " + l.n);
+    [["-1", "Like Favorites"], ["1", "On"], ["0", "Off"]].forEach(([v, t]) => {
+      const o = el("option", null, t);
+      o.value = v;
+      pick.appendChild(o);
+    });
+    pick.value = String(l.today === undefined ? -1 : l.today);
+    pick.onchange = () => set(() => ({ today: Number(pick.value) }));
+    today.appendChild(pick);
+    box.appendChild(today);
+
+    const sched = el("div", "ctl");
+    sched.innerHTML = "<label>Schedule<small>On these days the panel plays this playlist, then goes back to what it played before. A game the panel is on finishes first.</small></label>";
+    box.appendChild(sched);
+    const days = el("div", "chips");
+    days.setAttribute("role", "group");
+    days.setAttribute("aria-label", "Days " + l.n + " plays");
+    DAYS.forEach((d, k) => {
+      const on = !!((l.days || 0) & (1 << k));
+      const c = el("button", "chip", d);
+      setOn(c, on, "aria-pressed");
+      c.onclick = () => set((o) => ({ days: (o.days || 0) ^ (1 << k) }));
+      days.appendChild(c);
+    });
+    box.appendChild(days);
+    if (l.days) {
+      const times = el("div", "ctl ptimes");
+      const time = (label, key) => {
+        const t = el("input", "num time");
+        t.type = "time";
+        t.required = true;
+        t.value = l[key] || "00:00";
+        t.setAttribute("aria-label", label + " (" + l.n + ")");
+        t.onchange = () => {
+          if (!t.value) { t.value = l[key] || "00:00"; return; }
+          if (lists()[i] && t.value !== lists()[i][key]) set(() => ({ [key]: t.value }));
+        };
+        times.appendChild(el("span", null, label));
+        times.appendChild(t);
+      };
+      time("From", "from");
+      time("to", "to");
+      box.appendChild(times);
+      if (l.from === l.to) box.appendChild(el("p", "hint", "The same time twice is the whole day."));
+    }
+    return box;
+  };
   const renderLists = () => {
     const host = $("#listCtls");
     host.innerHTML = "";
@@ -892,7 +990,7 @@
         const n = cleanName(name.value);
         if (!n || n === l.n) { name.value = l.n; return; }
         if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another playlist has that name"); }
-        const next = ls.map((o, k) => (k === i ? { n, f: o.f } : o));
+        const next = ls.map((o, k) => (k === i ? Object.assign({}, o, { n }) : o));
         postLists(next, S.list === i + 1 ? i + 1 : undefined);
       };
       row.appendChild(name);
@@ -917,7 +1015,7 @@
       mk("\u2715", "Remove", () => postLists(ls.filter((_, k) => k !== i)));
       row.appendChild(ctl);
       box.appendChild(row);
-      const chips = el("div", "chips");
+      const chips = el("div", "chips pteams");
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favKeys.forEach((key, fi) => {
@@ -928,11 +1026,12 @@
         setOn(c, on, "aria-pressed");
         c.onclick = () => {
           const f = on ? l.f.filter((x) => x !== fi) : l.f.concat([fi]).sort((a, b) => a - b);
-          postLists(ls.map((o, k) => (k === i ? { n: o.n, f } : o)));
+          postLists(ls.map((o, k) => (k === i ? Object.assign({}, o, { f }) : o)));
         };
         chips.appendChild(c);
       });
       box.appendChild(chips);
+      box.appendChild(listOptions(l, i));
       host.appendChild(box);
     });
     const none = !favKeys.length;
@@ -992,7 +1091,10 @@
     }
     // Redrawn only when something changed, so a name being typed keeps its place.
     const sig = favKeys.join(",") + "|" + JSON.stringify(lists());
-    if (sig !== listSig && !(document.activeElement && document.activeElement.classList.contains("pname"))) {
+    // A playlist name or time being typed keeps its place too.
+    const typing = document.activeElement && (document.activeElement.classList.contains("pname")
+      || (document.activeElement.tagName === "INPUT" && !!document.activeElement.closest(".popts")));
+    if (sig !== listSig && !typing) {
       listSig = sig;
       renderLists();
     }

@@ -310,6 +310,11 @@ button { font: inherit; color: inherit; }
 .plist .ctl { border-top: 0; padding-bottom: 0; }
 .plist .pname { flex: 1; min-width: 0; margin: 0; }
 .plist .pbtn { color: var(--muted); font-size: 12px; flex: none; }
+.popts { margin-top: 8px; }
+.popts summary { color: var(--muted); font-size: 12px; cursor: pointer; }
+.popts .ctl { padding: 8px 0 0; }
+.popts .ptimes { justify-content: flex-start; gap: 8px; }
+.popts .hint { margin: 6px 0 0; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }
 

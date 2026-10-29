@@ -1748,6 +1748,18 @@ static void test_favorites() {
   c = pick_favorite(takes, T, r, 0, T, -1);
   CHECK_EQ(c.index, 1);
   CHECK(c.locked);
+  // unless the playlist plays only its own games: the live game outside it
+  // doesn't lock, and the playlist keeps cycling
+  r.only_list = true;
+  c = pick_favorite(takes, T, r, 0, T, -1);
+  CHECK_EQ(c.index, 0);
+  CHECK(!c.locked);
+  // its own game still locks on
+  takes[0] = fav(GameState::PRE, T + 300);
+  c = pick_favorite(takes, T, r, 0, T, -1);
+  CHECK_EQ(c.index, 0);
+  CHECK(c.locked);
+  r.only_list = false;
 }
 
 // A schedule parsed from the team endpoint does not know its own league, so

@@ -120,7 +120,7 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listsched": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
@@ -310,8 +310,24 @@ def remap_lists(before):
         pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
 
 
+LIST_OPTS_DEFAULT = {"days": 0, "from": "00:00", "to": "00:00", "only": False, "today": -1}
+
+
+def parse_list_opts(v):
+    """parse_list_opts() in components/gameday/playlists.h: the part after '@', None when it doesn't read."""
+    part = v.split(",")
+    if len(part) != 5 or not all(re.fullmatch(r"-?\d{1,6}", p) for p in (part[0], part[3], part[4])):
+        return None
+    days, only, today = int(part[0]), int(part[3]), int(part[4])
+    start, end = night_time(part[1]), night_time(part[2])
+    if not 0 <= days <= 127 or only not in (0, 1) or today not in (-1, 0, 1) or not start or not end:
+        return None
+    return {"days": days, "from": start, "to": end, "only": only == 1, "today": today}
+
+
 def parse_lists(v):
-    """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
+    """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites.
+    A playlist sent without options keeps its own by name (set_lists_)."""
     out = []
     for part in v.split(";") if v else []:
         if len(out) >= LIMITS["kListMax"]:
@@ -320,12 +336,17 @@ def parse_lists(v):
         name = message_clean(name.replace("=", ""), LIMITS["kListNameMax"], False)
         if not name:
             continue
+        refs, at, opts = refs.partition("@")
+        opts = parse_list_opts(opts) if at else None
+        if opts is None:
+            old = next((pl for pl in STATE["lists"] if pl["n"] == name), None)
+            opts = {k: old[k] for k in LIST_OPTS_DEFAULT} if old else dict(LIST_OPTS_DEFAULT)
         teams = []
         for r in refs.split(",") if refs else []:
             ref = parse_team_ref(r)
             if ref and ref not in teams and len(teams) < FAV_MAX:
                 teams.append(ref)
-        out.append({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams]})
+        out.append({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams], **opts})
     return out
 
 
@@ -463,7 +484,8 @@ def settings_doc():
             out["favs"] = favs
         elif k == "lists":
             # The state's teams are places in favs; the backup names them.
-            out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
+            out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])],
+                             **{k: pl[k] for k in LIST_OPTS_DEFAULT if k in pl}}
                             for pl in s.get("lists", [])]
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
@@ -537,7 +559,20 @@ def import_settings(doc):
                 if not name or len(parts) == LIMITS["kListMax"]:
                     skipped.append("lists=" + name)
                     continue
-                parts.append(name + "=" + ",".join(refs))
+                # Its options, any left out at their defaults; none keeps its own.
+                opt = ""
+                if any(e.get(o) is not None for o in LIST_OPTS_DEFAULT):
+                    days, start, end, only, today = (e.get("days", 0), e.get("from", "00:00"), e.get("to", "00:00"),
+                                                     e.get("only", False), e.get("today", -1))
+                    if not is_int(days) or not is_int(today) or not isinstance(start, str) or not isinstance(end, str) \
+                            or not isinstance(only, bool):
+                        return fail('a playlist\'s days and today should be whole numbers, from and to times like '
+                                    '"11:00", only true or false.')
+                    if 0 <= days <= 127 and -1 <= today <= 1 and night_time(start) and night_time(end):
+                        opt = f"@{days},{night_time(start)},{night_time(end)},{int(only)},{today}"
+                    else:
+                        skipped.append("lists=" + name + "@options")
+                parts.append(name + "=" + ",".join(refs) + opt)
             kv.append(("lists", ";".join(parts)))
             continue
         if kind == "Bool":

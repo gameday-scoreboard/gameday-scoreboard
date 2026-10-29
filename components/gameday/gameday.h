@@ -419,9 +419,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // -1 to keep the one playing by its name.
   void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = -1);
   // n: 1 to the playlist count, 0 = every favorite.
-  void set_active_list_(uint8_t n, bool announce);
+  void set_active_list_(uint8_t n, bool announce, bool by_hand = true);
   std::string list_name_(uint8_t n) const;  // n = 1..count
   bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist
+  ::espn::ListOpts list_opts_(uint8_t n) const;  // n = 1..count; defaults for 0
+  // The playlist schedules, from loop() every AUTO_UPDATE_TICK and on a clock
+  // or playlist change.
+  void list_sched_tick_();
   void publish_playlist_select_();
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
@@ -610,6 +614,21 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     char name[::espn::kListMax][::espn::kListNameMax];  // no terminator when full
     uint8_t spare[2];
   } __attribute__((packed));
+  // Each playlist's options (playlists.h ListOpts), in Prefs9's order, and
+  // what the schedules did last. Its own blob, so Prefs9 keeps its size.
+  struct Prefs10 {
+    uint8_t days[::espn::kListMax];
+    uint16_t from[::espn::kListMax];
+    uint16_t to[::espn::kListMax];
+    uint8_t flags[::espn::kListMax];  // LIST10_*
+    uint8_t sched_on;                 // ListSched
+    uint8_t sched_before;
+    uint8_t spare[4];
+  } __attribute__((packed));
+  static constexpr uint8_t LIST10_ONLY = 1;      // only this playlist's games
+  static constexpr uint8_t LIST10_TODAY_SET = 2;  // its own Only today's games, else the panel's
+  static constexpr uint8_t LIST10_TODAY_ON = 4;
+  static void put_list_opts_(Prefs10 &p, uint8_t i, const ::espn::ListOpts &o);  // i = 0..kListMax-1
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
@@ -949,6 +968,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   Prefs8 prefs8_{};
   ESPPreferenceObject pref9_;
   Prefs9 prefs9_{};
+  ESPPreferenceObject pref10_;
+  Prefs10 prefs10_{};
   // The select's options point into these, so they live as long as it does.
   std::vector<std::string> playlist_options_;
   // The team endpoint's answer for the fallback team (startup.h), so a boot can

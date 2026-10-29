@@ -67,6 +67,20 @@ The order of the playlists matters for the remote: the first four are buttons 1 
 
 A favorite you take out of your list leaves every playlist it was in. Adding it back doesn't put it back in them.
 
+:::note[Coming in the next release]
+Each playlist gets an **Options** row on the device page, under its teams. It's closed until you tap it, and once something is set it says what, like **Options: Sun 11 AM to 11 PM, only its games**.
+
+- **Schedule** plays the playlist on its own. Tap the days, then set **From** and **to**, like Sundays 11 AM to 11 PM. The same time twice is the whole day, so a playlist for Saturdays only needs Sat. A **to** earlier than **From** runs past midnight, so Saturday 8 PM to 1 AM keeps going until 1 AM Sunday. When the time comes, the panel switches **Playing** to the playlist, shows its name for a moment, and the bar says **(on its schedule)**. When it ends, the panel goes back to what it played before, **All favorites** if you hadn't picked a playlist.
+  - A game the panel is locked on finishes first: the switch waits until it's over, both at the start and at the end.
+  - When two schedules overlap, the playlist higher in the list wins.
+  - If you pick a playlist yourself while a schedule runs, your pick stays, even after the schedule ends.
+  - The schedule only changes the playlist. A panel on Live games stays on Live games, and plays the scheduled playlist when you switch it to Favorite teams.
+- **Only this playlist's games**, off to start. On, a favorite outside the playlist no longer takes the panel near its kickoff while the playlist plays, and the panel stays on the playlist's own teams.
+- **Only today's games** follows the switch in the **Favorites** card (**Like Favorites**) until you set it **On** or **Off** for this playlist.
+
+A settings backup keeps each playlist's options.
+:::
+
 ## Using the remote
 
 Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorite teams, the panel shows that favorite's card at once. If its game is locked on, the panel stays on it; otherwise the card stays up for its 10 seconds and the cards carry on from there. A button for an empty slot does nothing. See [WizMote remote](/using/remote/).

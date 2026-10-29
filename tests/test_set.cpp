@@ -538,6 +538,70 @@ void test_playlists() {
   SCHECK(remap_mask(0b001, favs, favs) == 0b001, "unchanged list, same mask");
   SCHECK(list_has(0, false, 7) && list_has(0, true, 7), "no playlist, or an empty one: every favorite");
   SCHECK(list_has(0b10, true, 1) && !list_has(0b10, true, 0), "a playlist: its own favorites");
+
+  // Options after '@'
+  l = parse_lists("Sundays=nfl:6@1,11:00,23:00,1,-1;Hoops=nba:6;Bad=nba:6@1,25:00,23:00,0,0", kFavMax);
+  SCHECK(l.size() == 3 && l[0].teams.size() == 1 && l[0].has_opts && l[0].opts.days == 1 && l[0].opts.from == 660 &&
+             l[0].opts.to == 1380 && l[0].opts.only && l[0].opts.today == -1,
+         "options after the teams");
+  SCHECK(!l[1].has_opts && l[1].opts == ListOpts{}, "no options: keeps its own");
+  SCHECK(l[2].teams.size() == 1 && !l[2].has_opts, "options that don't read: keeps its own, teams still read");
+  ListOpts o;
+  SCHECK(parse_list_opts("127,00:00,00:00,0,1", o) && o.days == 127 && o.today == 1, "every day, today on");
+  for (const char *bad : {"", "1", "128,00:00,00:00,0,0", "1,00:00,00:00,2,0", "1,00:00,00:00,0,2",
+                          "1,00:00,00:00,0,-2", "1,0000,00:00,0,0", "1,00:00,00:00,0,0,0", "x,00:00,00:00,0,0"})
+    SCHECK(!parse_list_opts(bad, o), "%s should be refused", bad);
+  SCHECK(list_opts_text(l[0].opts) == "1,11:00,23:00,1,-1", "options back to text: %s",
+         list_opts_text(l[0].opts).c_str());
+
+  // Schedules. Weekdays count from 0, Sunday.
+  ListOpts sun;
+  sun.days = 1;
+  sun.from = 11 * 60;
+  sun.to = 23 * 60;
+  SCHECK(list_sched_on(sun, 0, 11 * 60) && list_sched_on(sun, 0, 23 * 60 - 1), "inside Sunday's window");
+  SCHECK(!list_sched_on(sun, 0, 11 * 60 - 1) && !list_sched_on(sun, 0, 23 * 60) && !list_sched_on(sun, 1, 12 * 60),
+         "outside it, and on Monday");
+  ListOpts sat;  // all of Saturday
+  sat.days = 64;
+  SCHECK(list_sched_on(sat, 6, 0) && list_sched_on(sat, 6, 1439) && !list_sched_on(sat, 0, 0) &&
+             !list_sched_on(sat, 5, 1439),
+         "the same time twice is the whole day");
+  ListOpts late;  // Saturday 8 PM to 1 AM
+  late.days = 64;
+  late.from = 20 * 60;
+  late.to = 60;
+  SCHECK(list_sched_on(late, 6, 20 * 60) && list_sched_on(late, 0, 30) && !list_sched_on(late, 0, 60) &&
+             !list_sched_on(late, 6, 30),
+         "past midnight belongs to the day it started");
+  SCHECK(!list_sched_on(ListOpts{}, 0, 600), "no days, no schedule");
+  ListOpts both[2] = {sat, sun};
+  both[0].days = 1;  // all of Sunday, overlapping sun
+  SCHECK(list_sched_want(both, 2, 0, 12 * 60) == 1, "the higher in the order wins");
+  SCHECK(list_sched_want(both + 1, 1, 0, 12 * 60) == 1 && list_sched_want(both, 2, 1, 12 * 60) == 0, "want");
+
+  // Stepping: on to the scheduled list, back at the end
+  ListSched st;
+  SCHECK(list_sched_step(st, 0, 0, false) == -1, "no schedule, no change");
+  SCHECK(list_sched_step(st, 2, 1, true) == -1 && st.on == 0, "a held game finishes first");
+  SCHECK(list_sched_step(st, 2, 1, false) == 1 && st.on == 1 && st.before == 2, "the window starts");
+  SCHECK(list_sched_step(st, 1, 1, false) == -1, "inside it, no change");
+  SCHECK(list_sched_step(st, 1, 0, true) == -1 && st.on == 1, "the end waits for a held game too");
+  SCHECK(list_sched_step(st, 1, 0, false) == 2 && st.on == 0, "back to what played before");
+  // A pick by hand inside the window stays when it ends
+  st = ListSched{};
+  list_sched_step(st, 0, 1, false);
+  SCHECK(list_sched_step(st, 3, 1, false) == -1, "a hand pick inside the window stands");
+  SCHECK(list_sched_step(st, 3, 0, false) == -1 && st.on == 0, "and stays after it");
+  // From one window straight into another, back to what played before both
+  st = ListSched{};
+  list_sched_step(st, 0, 2, false);
+  SCHECK(list_sched_step(st, 2, 1, false) == 1 && st.before == 0, "the next window takes over");
+  SCHECK(list_sched_step(st, 1, 0, false) == 0, "and the end goes back to All favorites");
+  // Already playing the scheduled list: nothing to switch, nothing to undo
+  st = ListSched{};
+  SCHECK(list_sched_step(st, 1, 1, false) == -1 && st.on == 1, "already on it");
+  SCHECK(list_sched_step(st, 1, 0, false) == -1, "stays on it after");
 }
 
 }  // namespace

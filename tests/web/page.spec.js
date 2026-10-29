@@ -554,10 +554,10 @@ test("playlists post every playlist on new, teams, rename, move and remove", asy
   const box = page.locator("#listCtls .plist");
   await expect(box).toHaveCount(1);
   await expect(box.nth(0).locator(".pbtn")).toHaveText("Button 1");
-  await expect(box.nth(0).locator(".chip")).toHaveText(["DAL", "HOU", "MISS"]);
-  await box.nth(0).locator(".chip", { hasText: "HOU" }).click();
+  await expect(box.nth(0).locator(".pteams .chip")).toHaveText(["DAL", "HOU", "MISS"]);
+  await box.nth(0).locator(".pteams .chip", { hasText: "HOU" }).click();
   await expectSet(request, { lists: "Playlist 1=nfl:34" });
-  await expect(box.nth(0).locator(".chip.on")).toHaveText(["HOU"]);
+  await expect(box.nth(0).locator(".pteams .chip.on")).toHaveText(["HOU"]);
   await box.nth(0).locator(".pname").fill("Texans; and=more");
   await box.nth(0).locator(".pname").press("Enter");
   await expectSet(request, { lists: "Texans andmore=nfl:34" });
@@ -634,6 +634,53 @@ test("Favorite teams plays a playlist: the picker posts it, the bar names it, th
   await expectSet(request, { mode: "4", list: "1" });
   await expect(page.locator("#favName")).toHaveText("Cycling through Texans");
   await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI"]);
+});
+
+// The playlists as the last settings import posted them, options and all.
+const lastLists = async (request) => {
+  const posts = (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/settings");
+  return posts.length ? JSON.parse(posts[posts.length - 1].body).lists : null;
+};
+
+test("a playlist's options: a schedule, only its games, its own today, kept on a rename", async ({ page, request }) => {
+  await reset(request, { mode: 4, lists: [{ n: "Sundays", f: [0] }] });
+  await page.goto("/");
+  const box = page.locator("#listCtls .plist").nth(0);
+  await expect(box.locator(".popts summary")).toHaveText("Options");
+  await box.locator(".popts summary").click();
+  await expect(box.locator(".ptimes")).toHaveCount(0);
+  await box.locator(".popts .chip", { hasText: "Sun" }).click();
+  await expect.poll(() => lastLists(request)).toEqual([
+    { n: "Sundays", t: ["nfl:6"], days: 1, from: "00:00", to: "00:00", only: false, today: -1 },
+  ]);
+  await expect(box.locator(".popts summary")).toHaveText("Options: Sun all day");
+  await box.locator(".ptimes input").nth(0).fill("11:00");
+  await box.locator(".ptimes input").nth(1).fill("23:00");
+  await expect.poll(() => lastLists(request)).toEqual([
+    { n: "Sundays", t: ["nfl:6"], days: 1, from: "11:00", to: "23:00", only: false, today: -1 },
+  ]);
+  await box.getByRole("switch", { name: "Only Sundays's games" }).click();
+  await box.getByLabel("Only today's games in Sundays").selectOption("1");
+  await expect.poll(() => lastLists(request)).toEqual([
+    { n: "Sundays", t: ["nfl:6"], days: 1, from: "11:00", to: "23:00", only: true, today: 1 },
+  ]);
+  await expect(page.locator("#listCtls .plist .popts summary"))
+    .toHaveText("Options: Sun 11 AM to 11 PM, only its games, today only");
+  await expect(page.locator("#listCtls .plist .popts")).toHaveAttribute("open", "");
+  const st = await deviceState(request);
+  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: 1, from: "11:00", to: "23:00", only: true, today: 1 });
+  await page.locator("#listCtls .pname").fill("Football");
+  await page.locator("#listCtls .pname").press("Enter");
+  await expect.poll(() => lastLists(request)).toEqual([
+    { n: "Football", t: ["nfl:6"], days: 1, from: "11:00", to: "23:00", only: true, today: 1 },
+  ]);
+});
+
+test("a playlist its schedule put on says so", async ({ page, request }) => {
+  await reset(request, { mode: 4, lists: [{ n: "Sundays", f: [0], days: 1, from: "11:00", to: "23:00", only: false, today: -1 }],
+    list: 1, listsched: 1 });
+  await page.goto("/");
+  await expect(page.locator("#favName")).toHaveText("Cycling through Sundays (on its schedule)");
 });
 
 test("the playing picker is hidden without playlists", async ({ page, request }) => {

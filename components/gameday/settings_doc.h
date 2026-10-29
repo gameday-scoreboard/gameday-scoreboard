@@ -7,8 +7,11 @@
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
 // "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
-// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}]. Brightness and
-// scroll are the Home Assistant numbers of the same names.
+// playlists by name and team, with their options as the state document has
+// them, [{"n": "Football", "t": ["nfl:6", "ncaa:251"], "days": 1, "from": "11:00",
+// "to": "23:00", "only": false, "today": -1}]; a playlist without the options
+// keeps the ones it has. Brightness and scroll are the Home Assistant numbers
+// of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
 // type, or text the panel can't read (a team, a time, an address), refuses
@@ -137,6 +140,9 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
           if (!ref.empty())
             t.add(ref);
         }
+        for (const char *opt : {"days", "from", "to", "only", "today"})
+          if (!l[opt].isNull())
+            o[opt] = l[opt];
       }
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
@@ -384,6 +390,36 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           if (name.empty() || kept == (size_t) kListMax) {
             out.skipped.push_back("lists=" + name);
             continue;
+          }
+          // Its options, any left out at their defaults. With none of them
+          // it keeps the ones it has; with one this firmware can't take, it
+          // keeps them too and the playlist's options are listed.
+          bool any = false;
+          for (const char *opt : {"days", "from", "to", "only", "today"})
+            any = any || !e[opt].isNull();
+          if (any) {
+            ListOpts o;
+            bool ok = true;
+            JsonVariantConst days = e["days"], from = e["from"], to = e["to"], only = e["only"], today = e["today"];
+            if ((!days.isNull() && !days.is<int>()) || (!from.isNull() && !from.is<const char *>()) ||
+                (!to.isNull() && !to.is<const char *>()) || (!only.isNull() && !only.is<bool>()) ||
+                (!today.isNull() && !today.is<int>()))
+              return detail::settings_fail(out, "a playlist's days and today should be whole numbers, from and to "
+                                                "times like \"11:00\", only true or false.");
+            int d = days | 0, t = today | -1;
+            int f = from.isNull() ? 0 : night_parse_time(from.as<const char *>());
+            int u = to.isNull() ? 0 : night_parse_time(to.as<const char *>());
+            ok = d >= 0 && d <= 127 && t >= -1 && t <= 1 && f >= 0 && u >= 0;
+            if (ok) {
+              o.days = (uint8_t) d;
+              o.from = (uint16_t) f;
+              o.to = (uint16_t) u;
+              o.only = only | false;
+              o.today = (int8_t) t;
+              refs += "@" + list_opts_text(o);
+            } else {
+              out.skipped.push_back("lists=" + name + "@options");
+            }
           }
           kept++;
           text += (text.empty() ? "" : ";") + name + "=" + refs;
