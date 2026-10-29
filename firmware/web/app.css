@@ -266,6 +266,8 @@ button { font: inherit; color: inherit; }
 
 /* Firmware update */
 .fw { margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+.fw.important { border-color: var(--gold); }
+.fw.important .fwline { color: var(--gold); }
 .fwline { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
 .fwsub { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .fwsub .notes { margin: 6px 0 4px; padding-left: 18px; color: #c3ccd6; }
