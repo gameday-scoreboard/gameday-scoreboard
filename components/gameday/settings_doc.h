@@ -53,11 +53,12 @@ enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
 inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
-                                      "leaders", "night", "nightscreen", "favtake", "countdown"};
+                                      "leaders", "night", "nightscreen", "favtake", "countdown", "wxon"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook"};
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "town"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -106,8 +107,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
-                                      "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
-                                      "lists",    "list",     "hook",     "pregame"};
+                                      "cddate",   "town",     "wxon",     "msg",         "msgurl",     "msgevery",
+                                      "autoupd",  "beta",     "lists",    "list",        "hook",       "pregame"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
