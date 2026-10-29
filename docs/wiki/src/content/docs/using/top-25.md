@@ -20,7 +20,7 @@ The Top 25 shows when the panel follows a college football or men's college bask
 
 A panel with no team picked yet doesn't show it.
 
-It takes a turn every 10 minutes while no game is on, over whatever the board shows: the next game, a countdown, the off-season clock or the final scores. A turn goes through all 25 teams, five seconds a page, then the board comes back. It never covers a game in progress, a score splash or the line the panel shows when it can't reach ESPN, and it waits for your [message card](/using/messages/) to finish when both are due.
+It takes a turn every 10 minutes while no game is on, over whatever the board shows: the next game, a countdown, the off-season clock or the final scores. A turn goes through all 25 teams, five seconds a page, then the board comes back. It never covers a game in progress, a score splash or the line the panel shows when it can't reach ESPN, and it waits for your [message card](/using/messages/) to finish when both are due. A message card on **Whenever no game is on** keeps it off.
 
 If you follow both sports, football and basketball take turns. A poll more than 50 days old is left off, so football's stays up through the bowl games until the final poll after the title game, and basketball's shows from the preseason poll in October to the final one in April.
 
