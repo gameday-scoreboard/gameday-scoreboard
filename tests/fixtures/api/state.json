@@ -48,6 +48,8 @@
   ],
   "list": 2,
   "listmax": 16,
+  "sports": [],
+  "sport": "",
   "today": false,
   "jump": false,
   "banner": true,
@@ -68,8 +70,11 @@
   "best": true,
   "bootaddr": true,
   "countdown": true,
+  "top25": true,
+  "news": false,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
+  "gameleaders": true,
   "night": true,
   "nightstart": "23:00",
   "nightend": "07:00",
@@ -79,6 +84,7 @@
   "autoupd": false,
   "beta": false,
   "update_failed": "2026.10.2",
+  "update_important": true,
   "bar": {
     "report": "support@gameday-scoreboard.com"
   },
@@ -88,6 +94,13 @@
   "msgread": {
     "status": 200,
     "entries": 3
+  },
+  "hook": "http://192.168.1.20:1880/gameday",
+  "pregame": 15,
+  "hookpost": {
+    "status": 200,
+    "sent": 4,
+    "dropped": 0
   },
   "misses": 0,
   "captive": false,
@@ -136,6 +149,7 @@
     "tc": "003594",
     "oc": "004C54",
     "id": "401772845",
+    "leaders": false,
     "sport": 0,
     "sit": "",
     "outs": -1,

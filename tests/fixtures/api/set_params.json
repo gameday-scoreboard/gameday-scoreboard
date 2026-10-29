@@ -24,8 +24,11 @@
   "match",
   "beta",
   "countdown",
+  "top25",
+  "news",
   "cdname",
   "cddate",
+  "gameleaders",
   "msg",
   "msgurl",
   "msgevery",
@@ -41,5 +44,8 @@
   "favtake",
   "nick",
   "lists",
-  "list"
+  "list",
+  "sport",
+  "hook",
+  "pregame"
 ]

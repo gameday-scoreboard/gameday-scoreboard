@@ -241,7 +241,9 @@ jobs:
       - uses: actions/checkout@v7
       # On the beta branch this is also the beta channel for panels with
       # "Follow beta" on: the same "-beta.<run>" version as the bar build of
-      # this run, and publish-beta puts it on the site.
+      # this run, and publish-beta puts it on the site. beta_version.py
+      # numbers it after the newest release tag, so dev's YAML keeps the
+      # last release's version until the release prep PR sets the next one.
       - name: Beta version and summary
         id: beta
         env:
@@ -252,8 +254,7 @@ jobs:
           # The release's section of the site's changelog, which this tag's deploy renders.
           url="https://install.gameday-scoreboard.com/changelog/#$GITHUB_REF_NAME"
           if [ "$GITHUB_REF" = refs/heads/beta ]; then
-            v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
-            v="$v-beta.$GITHUB_RUN_NUMBER"
+            v=$(python3 scripts/beta_version.py "$GITHUB_RUN_NUMBER")
             sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
             summary="Beta $v from ${GITHUB_SHA::7}."
             url="https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
@@ -374,8 +375,9 @@ jobs:
     # from the beta channel on its own, for the free panels in bars. Every run
     # keeps it as a downloadable file (bar-<variant>, outside publish's
     # firmware-* pattern) for flashing a new bar panel by hand. On the beta
-    # branch it is also the beta channel: its version gets "-beta.<run>" so
-    # each one is newer than the last, and publish-beta puts it on the site.
+    # branch it is also the beta channel: its version is the next release's
+    # number plus "-beta.<run>" (scripts/beta_version.py) so each one is newer
+    # than the last, and publish-beta puts it on the site.
     name: Build ${{ matrix.variant }} bar
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     needs: branch-rules
@@ -400,7 +402,7 @@ jobs:
           v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
           summary="Development build"
           if [ "$GITHUB_REF" = refs/heads/beta ]; then
-            v="$v-beta.$GITHUB_RUN_NUMBER"
+            v=$(python3 scripts/beta_version.py "$GITHUB_RUN_NUMBER")
             sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
             summary="Bar beta $v from ${GITHUB_SHA::7}."
             if [ -n "$NOW" ]; then
@@ -562,6 +564,7 @@ jobs:
           python3 scripts/improv_scan.py --selftest
           python3 scripts/crash_report.py --selftest
           python3 scripts/site_seo.py --selftest
+          python3 scripts/beta_version.py --selftest
       - name: Site pages have their search and sharing tags
         run: python3 scripts/site_seo.py check docs/site
       - name: Device page mock matches the firmware's set table

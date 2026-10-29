@@ -25,10 +25,12 @@ CONF_BRIGHTNESS_ID = "brightness_id"
 CONF_SCROLL_SPEED_ID = "scroll_speed_id"
 CONF_ON_UPDATE = "on_update"
 CONF_ON_ACTION = "on_action"
-# Scores and finals of the game Home Assistant follows (ha_events.h), for
-# homeassistant.event in gameday-common.yaml.
+# The game events of the game Home Assistant follows (ha_events.h). The
+# component sends them to Home Assistant and the webhook itself; these
+# triggers are for a build's own YAML: scores, finals, or every event.
 CONF_ON_SCORE = "on_score"
 CONF_ON_FINAL = "on_final"
+CONF_ON_GAME_EVENT = "on_game_event"
 # The demo build (firmware/gameday-demo.yaml): a looping scripted game the
 # remote and the device page start and stop. Off in release firmware.
 CONF_DEMO = "demo"
@@ -62,6 +64,9 @@ ScoreTrigger = gameday_ns.class_(
 )
 FinalTrigger = gameday_ns.class_(
     "FinalTrigger", automation.Trigger.template(HaEventConstRef)
+)
+GameEventTrigger = gameday_ns.class_(
+    "GameEventTrigger", automation.Trigger.template(HaEventConstRef)
 )
 
 COMPONENT_DIR = Path(__file__).resolve().parent
@@ -129,6 +134,9 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
         cv.Optional(CONF_ON_SCORE): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ScoreTrigger)}
         ),
+        cv.Optional(CONF_ON_GAME_EVENT): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(GameEventTrigger)}
+        ),
         cv.Optional(CONF_ON_FINAL): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FinalTrigger)}
         ),
@@ -162,6 +170,8 @@ async def to_code(config):
                 conf[CONF_BETA],
             )
         )
+    # web_stack.cpp raises the web server task's stack above ESPHome's fixed size.
+    cg.add_build_flag("-Wl,--wrap=httpd_start")
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))
@@ -186,7 +196,7 @@ async def to_code(config):
     for conf in config.get(CONF_ON_ACTION, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [(cg.std_string, "x")], conf)
-    for key in (CONF_ON_SCORE, CONF_ON_FINAL):
+    for key in (CONF_ON_SCORE, CONF_ON_FINAL, CONF_ON_GAME_EVENT):
         for conf in config.get(key, []):
             trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
             await automation.build_automation(trigger, [(HaEventConstRef, "x")], conf)
