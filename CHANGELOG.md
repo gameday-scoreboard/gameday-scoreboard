@@ -29,6 +29,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ### 🐛 Fixes
 
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
+- 📅 A New Year's Day game seen on Dec 31 says **Tomorrow**, not a weekday
 
 ## v2026.10.2
 
