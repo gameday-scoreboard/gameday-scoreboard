@@ -331,7 +331,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // due (pages/gameday-live.yaml draws it in turns with the line score).
   ::espn::LeadersCardText leaders_card(int width_px) const;
   bool leaders_card_due() const;
-  // The page put the card up: at halftime it shows once.
+  // The card's turn ended: at halftime it shows once, for a whole turn.
   void leaders_turn_taken();
   // The college Top 25 card (rankings.h), on unless the owner turns it off.
   // It only takes turns while the panel follows a college team.
