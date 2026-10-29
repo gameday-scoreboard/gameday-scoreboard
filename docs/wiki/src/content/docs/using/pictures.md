@@ -50,3 +50,5 @@ Tap **Delete** next to it under **Pictures**. With no pictures left, the card is
 ## Room on the panel
 
 Pictures live in the same memory as the panel's settings. The panel always keeps room for its settings, so on a panel with a lot saved it may take fewer or smaller pictures; the device page says so when one doesn't fit.
+
+Because of that, **Factory Reset** deletes the pictures along with the settings. A [settings backup](/using/backup/) doesn't carry pictures either: keep your files, and add them again on a new or reset panel.
