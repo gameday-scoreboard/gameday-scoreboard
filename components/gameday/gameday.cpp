@@ -346,6 +346,7 @@ void GamedayComponent::setup() {
   bool remote_ok = this->remote_pref_.load(&this->remote_);
   for (const auto &b : this->remote_.btn)
     remote_ok = remote_ok && b.kind <= (uint8_t) ::espn::RemoteKind::SPORT &&
+                (b.kind != (uint8_t) ::espn::RemoteKind::SPORT || (b.league >= 1 && b.league <= ::espn::kSportCount)) &&
                 (b.gone == (uint8_t) ::espn::RemoteKind::FAV || b.gone == (uint8_t) ::espn::RemoteKind::TEAM ||
                  b.gone == (uint8_t) ::espn::RemoteKind::LIST || b.gone == (uint8_t) ::espn::RemoteKind::SPORT);
   if (!remote_ok)

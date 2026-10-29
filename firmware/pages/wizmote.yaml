@@ -3,7 +3,7 @@
 # four numbered buttons pick favorite teams instead of pages.
 #
 # Buttons: ON/OFF = panel power, 1-4 = what the owner set each to (a favorite,
-# a playlist, every favorite or nothing; favorite 1-4 until then, remote.h
+# a playlist, a sport row, every favorite or nothing; favorite 1-4 until then, remote.h
 # in the gameday component), brightness up/down,
 # NIGHT = dim to the night level. In the demo build 1-4 run the demo instead
 # (remote_number in components/gameday/demo.cpp).
