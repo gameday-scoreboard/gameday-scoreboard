@@ -28,8 +28,8 @@ While night mode is on, the device page says so under the board, like **Night mo
 :::note[Coming in the next release]
 You can always get past the schedule. During its hours, any of these turns night mode off for the rest of that night and brings the panel back to its normal brightness:
 
-- **ON**, the brighter button, **NIGHT** or a numbered button on the [WizMote](/using/remote/)
-- picking a team or a mode in the app or on the device page
+- **ON**, the brighter button, **NIGHT** (at the night level instead) or a numbered button on the [WizMote](/using/remote/)
+- picking a team or a mode, or changing your favorites, in the app or on the device page
 - **Panel on** on the device page
 - **Turn on for tonight** next to **Night mode until** on the device page
 
