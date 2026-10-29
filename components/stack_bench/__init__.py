@@ -6,7 +6,7 @@ the numbers survive a restart. GET /bench/stack prints them.
 """
 
 import esphome.codegen as cg
-from esphome.components import web_server_base
+from esphome.components import logger, web_server_base
 from esphome.components.web_server_base import CONF_WEB_SERVER_BASE_ID
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
@@ -30,6 +30,10 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
+    # Two log callbacks (one before the web server's and API's, one after);
+    # the logger sizes its listener list from these requests.
+    logger.request_log_listener()
+    logger.request_log_listener()
     early = cg.new_Pvariable(config[CONF_EARLY_ID])
     await cg.register_component(early, {})
     base = await cg.get_variable(config[CONF_WEB_SERVER_BASE_ID])
