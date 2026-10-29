@@ -187,6 +187,8 @@ packages:
   boot: !include pages/boot.yaml
   scoreboard: !include pages/gameday-live.yaml
   wizmote: !include pages/wizmote.yaml
+  # WLED effects full screen in place of the board (the Effects page)
+  effects: !include pages/effects.yaml
   # Factory check (the flag factory_flash.py leaves, or POST /gameday/action?do=qc)
   qc: !include pages/qc.yaml
   # Dims a hot panel and caps one on a weak power brick, and says why
@@ -254,9 +256,19 @@ api:
         - lambda: 'id(gameday_ctl).say(message, seconds);'
 
 ota:
+  # The panel sits on its last frame through an install; make that the
+  # scoreboard, not an effect (pages/effects.yaml).
   - platform: esphome
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
   - platform: http_request
     id: gd_ota_http
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
 
 # The panel remembers up to five networks (home, a phone hotspot, a friend's
 # house) and tries the last one that worked first. Setup from the app or the
@@ -892,6 +904,11 @@ switch:
       - hub75.set_brightness:
           id: matrix
           brightness: 0
+      # An effect would keep rendering to a dark panel, and the scoreboard
+      # is what Power on should bring back (pages/effects.yaml).
+      - script.execute:
+          id: gd_fx_yield
+          reason: "Power off"
   # Off unless the owner turns it on. The setting itself lives in the gameday
   # component (auto_update.h) with the rest of the device page's settings;
   # this switch is how Home Assistant sees and changes it.
