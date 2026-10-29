@@ -275,6 +275,7 @@ void GamedayComponent::setup() {
     ESP_LOGW(TAG, "Can't follow Wi-Fi disconnects; drops will show no cause");
 #endif
   this->logos_.setup();
+  this->pictures_.setup();
   this->pref_ = global_preferences->make_preference<Prefs>(fnv1_hash("gameday_prefs_v1"));
   if (!this->pref_.load(&this->prefs_)) {
     this->prefs_ = Prefs{};
@@ -1335,6 +1336,7 @@ void GamedayComponent::loop() {
   this->msg_tick_();
   this->top25_tick_();
   this->news_tick_();
+  this->picture_tick_();
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
   if (millis() - this->ha_tick_ms_ >= 15000) {
@@ -4178,6 +4180,25 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["countdown"] = this->countdown_on();
   doc["top25"] = this->top25_on();
   doc["news"] = this->news_on();
+  {
+    // The owner's pictures (picture.h), and how big the next upload can be.
+    ::espn::PicInfo slots[::espn::kPicSlots];
+    this->pictures_.slots(slots);
+    JsonArray pics = doc["pics"].to<JsonArray>();
+    for (int s = 0; s < ::espn::kPicSlots; s++) {
+      if (slots[s].kind == (uint8_t) ::espn::PicKind::NONE)
+        continue;
+      JsonObject p = pics.add<JsonObject>();
+      p["s"] = s + 1;
+      p["k"] = ::espn::pic_kind_name((::espn::PicKind) slots[s].kind);
+      p["w"] = slots[s].w;
+      p["h"] = slots[s].h;
+      p["f"] = slots[s].frames;
+      p["b"] = slots[s].bytes;
+      p["id"] = slots[s].id;
+    }
+    doc["picroom"] = (uint32_t) this->pictures_.room();
+  }
   doc["cdname"] = (const char *) this->countdown_.name;
   doc["cddate"] = ::espn::countdown_date_text(this->countdown_.ymd);
   doc["gameleaders"] = this->game_leaders_on();
@@ -4898,9 +4919,10 @@ void GamedayComponent::msg_tick_() {
     return;
   this->msg_tick_ms_ = now;
   const bool on = !this->msg_url_.empty() || !this->msg_text_.empty();
-  // Nor over the news or Top 25 card: the message waits for them to come down.
+  // Nor over the news, Top 25 or picture card: the message waits for them to come down.
   const bool between = this->card_between_(now) && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
   ::espn::MsgTurn turn =
       ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
@@ -5067,13 +5089,13 @@ void GamedayComponent::top25_tick_() {
     return;
   this->top25_tick_ms_ = now;
   const uint8_t slots = this->top25_on() ? this->top25_slots_() : 0;
-  // Between games only, as the message card (msg_tick_), and not over it or
-  // the news card.
+  // Between games only, as the message card (msg_tick_), and not over it,
+  // the news card or the picture card.
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && !this->demo_playing_() &&
                        this->last_fields_.game_state != "IN" && !trouble && !this->msg_shown_ && !this->news_shown_ &&
-                       (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+                       !this->pic_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
   if (!between) {
     this->top25_hide_();
     return;
@@ -5216,9 +5238,11 @@ void GamedayComponent::news_tick_() {
   if (now - this->news_tick_ms_ < 250)
     return;
   this->news_tick_ms_ = now;
-  // Nor over the message card (and 10 s after it) or the Top 25 card.
+  // Nor over the message card (and 10 s after it), the Top 25 card or the
+  // picture card (and 10 s after it).
   const bool between = this->card_between_(now) && !this->msg_shown_ &&
-                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
+                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->news_roll_ms_);
   ::espn::MsgTurn turn = ::espn::msg_turn(this->news_on(), between, this->news_shown_, now - this->news_since_ms_,
                                           ::espn::kNewsEveryMin, page_ms);
@@ -5299,6 +5323,116 @@ void GamedayComponent::apply_news_job_() {
   this->news_pos_ = 0;
   ESP_LOGI(TAG, "News: %u headlines for %s (%u bytes)", (unsigned) this->news_n_, j.news_head.c_str(),
            (unsigned) j.news_bytes);
+}
+
+// ---- The picture card (picture.h, picture_card.h) ---------------------------
+
+// slot -1 takes the card down.
+void GamedayComponent::picture_show_(int slot) {
+  this->pic_since_ms_ = millis();
+  if (slot < 0) {
+    if (!this->pic_shown_)
+      return;
+    this->pictures_.hide();
+    this->pic_shown_ = false;
+  } else {
+    this->pic_last_ = slot;
+    const bool was = this->pic_shown_;
+    // A picture that won't decode waits for the next turn, which tries the next one.
+    this->pic_shown_ = this->pictures_.show(slot);
+    if (this->pic_shown_)
+      ESP_LOGI(TAG, "Picture card: picture %d, %ux%u, up for %u s", slot + 1, this->pictures_.width(),
+               this->pictures_.height(), (unsigned) (this->pictures_.page_ms() / 1000));
+    if (!this->pic_shown_ && !was)
+      return;
+  }
+  this->fire_action_("picture");  // gd_picture_card in firmware/pages/gameday-live.yaml
+}
+
+void GamedayComponent::picture_tick_() {
+  const uint32_t now = millis();
+  // A GIF's frames keep their own time, checked every loop.
+  if (this->pic_shown_ && this->pictures_.tick(now))
+    this->fire_action_("picture_frame");
+  if (now - this->pic_tick_ms_ < 250)
+    return;
+  this->pic_tick_ms_ = now;
+  ::espn::PicInfo slots[::espn::kPicSlots];
+  this->pictures_.slots(slots);
+  // Deleted or replaced while it was up.
+  if (this->pic_shown_ && slots[this->pictures_.shown_slot()].id != this->pictures_.shown_id()) {
+    this->picture_show_(-1);
+    return;
+  }
+  // Nor over the message or news card (or 10 s after either), or the Top 25 card.
+  const bool between = this->card_between_(now) && !this->msg_shown_ &&
+                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
+  const int next = ::espn::pic_next_slot(slots, this->pic_last_);
+  ::espn::MsgTurn turn = ::espn::msg_turn(next >= 0, between, this->pic_shown_, now - this->pic_since_ms_,
+                                          ::espn::kPicEveryMin, this->pictures_.page_ms());
+  if (turn == ::espn::MsgTurn::NONE)
+    return;
+  this->picture_show_(turn == ::espn::MsgTurn::SHOW ? next : -1);
+}
+
+// GET ?slot=N: the file as uploaded. POST a PNG or GIF body: keep it in the
+// first free slot. POST delete=N: delete that one. Slots count from 1 here.
+void GamedayComponent::handle_picture_(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_GET) {
+    const int slot = atoi(request->arg("slot").c_str()) - 1;
+    ::espn::PicInfo slots[::espn::kPicSlots];
+    this->pictures_.slots(slots);
+    ::espn::PsVector<uint8_t> file;
+    if (slot < 0 || slot >= ::espn::kPicSlots || !this->pictures_.read(slot, file)) {
+      request->send(404, "application/json", "{\"error\":\"no picture there\"}");
+      return;
+    }
+    request->send(request->beginResponse(200, ::espn::pic_mime((::espn::PicKind) slots[slot].kind), file.data(),
+                                          file.size()));
+    return;
+  }
+  if (request->method() != HTTP_POST) {
+    request->send(400, "application/json", "{\"error\":\"GET or POST\"}");
+    return;
+  }
+  if (request->hasParam("delete")) {
+    if (!this->pictures_.remove(atoi(request->arg("delete").c_str()) - 1)) {
+      request->send(404, "application/json", "{\"error\":\"no picture there\"}");
+      return;
+    }
+    this->defer([this]() { this->rebuild_state_(&this->last_fields_); });
+    request->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+  PsString body;
+  body.swap(this->picture_body_);
+  const size_t length = request->contentLength();
+  std::string error;
+  int slot = -1;
+  if (length > ::espn::kPicMaxBytes) {
+    error = "That file is too big; a picture can be up to 64 KB.";
+  } else if (body.empty() || body.size() != length) {
+    // Nothing came, or what came is left from an upload that broke off.
+    error = "The upload broke off. Try again.";
+  } else {
+    error = this->pictures_.add(reinterpret_cast<const uint8_t *>(body.data()), body.size(), slot);
+  }
+  if (!error.empty()) {
+    ESP_LOGW(TAG, "Picture refused: %s", error.c_str());
+    // 400, not 413: ESPHome's web server sends any code it has no name for
+    // as 500. The texts are ours, with no quotes to escape.
+    request->send(400, "application/json", ("{\"error\":\"" + error + "\"}").c_str());
+    return;
+  }
+  // Up next between games, so the owner sees it soon.
+  this->defer([this, slot]() {
+    this->picture_show_(-1);
+    this->pic_last_ = slot - 1;
+    this->pic_since_ms_ = millis() - (uint32_t) ::espn::kPicEveryMin * 60u * 1000u;
+    this->rebuild_state_(&this->last_fields_);
+  });
+  request->send(200, "application/json", ("{\"ok\":true,\"slot\":" + std::to_string(slot + 1) + "}").c_str());
 }
 
 // The path without its query, read in place. url_to() copies it into a
@@ -5392,6 +5526,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
         cb(name);
     });
     request->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+  if (url == StringRef("/gameday/picture")) {
+    this->handle_picture_(request);
     return;
   }
 #ifdef GAMEDAY_DEMO
@@ -5704,11 +5842,22 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   this->end_sync_batch_();
 }
 
-// The import's body arrives here in pieces before handleRequest. The web
-// server hands over a JSON body only on its own path (the form posts of
-// /gameday/set never come here), one request at a time.
+// The import's body, or a picture's, arrives here in pieces before
+// handleRequest. The web server hands over a body that isn't a form on its
+// own path (the form posts of /gameday/set never come here), one request at
+// a time.
 void GamedayComponent::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
                                   size_t total) {
+  if (request_path(request) == StringRef("/gameday/picture")) {
+    if (index == 0) {
+      PsString().swap(this->picture_body_);
+      if (total <= ::espn::kPicMaxBytes)
+        this->picture_body_.reserve(total);
+    }
+    if (total <= ::espn::kPicMaxBytes)
+      this->picture_body_.append((const char *) data, len);
+    return;
+  }
   if (request_path(request) != StringRef("/gameday/settings"))
     return;
   if (index == 0) {
