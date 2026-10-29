@@ -30,6 +30,10 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 - 🔌 The panel no longer dims itself when hot or after a power dip, and the Clear button is gone: a thermometer or plug in the corner says what happened, and after a power dip it starts at half brightness for 3 seconds
 
+### ✨ New
+
+- 🎆 **Effects**: fill the panel with one of 52 moving patterns in place of the scoreboard, from the device page or Home Assistant; the board comes back when you turn it off or when the panel has something to tell you
+
 ### 🐛 Fixes
 
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**

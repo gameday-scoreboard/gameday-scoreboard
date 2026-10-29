@@ -41,6 +41,10 @@ A **Playlist** select picks the playlist Favorite teams plays: **All favorites**
 
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
 
+:::note[Coming in the next release]
+An **Effects** switch fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255). The switch is off after every restart, and the panel turns it off itself when it has something to show you, so an automation that wants the pattern back after that turns it on again. Three diagnostic sensors, **Effect FPS**, **Effect Render Time** and **Effect Output Time**, read the pattern's frame rate while one runs and are unknown otherwise. See [Effects](/using/effects/).
+:::
+
 **Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
 ## Score events

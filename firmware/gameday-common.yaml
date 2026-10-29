@@ -250,11 +250,15 @@ api:
         - lambda: 'id(gameday_ctl).say(message, seconds);'
 
 ota:
+  # The panel sits on its last frame through an install; make that the
+  # scoreboard, not an effect (pages/effects.yaml).
   - platform: esphome
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
   - platform: http_request
     id: gd_ota_http
-    # The panel sits on its last frame through an install; make that the
-    # scoreboard, not an effect (pages/effects.yaml).
     on_begin:
       - script.execute:
           id: gd_fx_yield

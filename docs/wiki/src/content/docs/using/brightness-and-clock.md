@@ -27,6 +27,10 @@ While night mode is on, the device page says so under the board, like **Night mo
 
 The schedule runs on the panel's own clock, set from the internet, in the timezone under Setup. Until the panel has the time after it starts, it stays at its normal brightness. The heat and power protection below still hold the night brightness down when they need to.
 
+:::note[Coming in the next release]
+A running [effect](/using/effects/) dims with the night brightness like the board. Screen-off turns Effects off, and while the screen is off for the night Effects stays off if you try to turn it on.
+:::
+
 ## Turning the panel off and on
 
 **Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game, so the board is up to date the moment it comes back on.
