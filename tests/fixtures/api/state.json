@@ -72,6 +72,27 @@
   "countdown": true,
   "top25": true,
   "news": false,
+  "pics": [
+    {
+      "s": 1,
+      "k": "gif",
+      "w": 128,
+      "h": 64,
+      "f": 12,
+      "b": 23514,
+      "id": 2849137201
+    },
+    {
+      "s": 3,
+      "k": "png",
+      "w": 64,
+      "h": 64,
+      "f": 1,
+      "b": 4180,
+      "id": 117440513
+    }
+  ],
+  "picroom": 65536,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
   "gameleaders": true,
@@ -81,6 +102,7 @@
     {"id": "countdown", "name": "Countdown to the next game", "on": true, "ok": true, "hint": ""},
     {"id": "custom", "name": "Your own countdown", "on": true, "ok": true, "hint": "Pick its day below first"},
     {"id": "message", "name": "Message card", "on": true, "ok": true, "hint": "Add text or a list in the Message card first"},
+    {"id": "picture", "name": "Pictures", "on": true, "ok": true, "hint": "Add a picture in the Pictures card first"},
     {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
     {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
     {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""}

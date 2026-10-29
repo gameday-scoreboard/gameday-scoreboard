@@ -103,7 +103,9 @@ The **Between games** card has **Countdown to the next game**, on unless you tur
 
 **News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
 
-The card becomes one list with a switch for each card the panel can show between games, in this order:
+A **Pictures** card, after Between games, keeps up to 4 of your own pictures or GIFs for the panel to show between games: **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
+
+The Between games card becomes one list with a switch for each card the panel can show between games, in this order:
 
 | Card | What it is |
 | --- | --- |
@@ -112,9 +114,10 @@ The card becomes one list with a switch for each card the panel can show between
 | **Countdown to the next game** | The same switch as before. |
 | **Your own countdown** | Your countdown's turn at the end of every minute. Set its **Name** and **Day** under the list. |
 | **Message card** | The [message card](/using/messages/)'s turns. Its text or list, and **Show it**, stay in the Message card. |
+| **Pictures** | Your [pictures](/using/pictures/)' turns. They stay saved while it's off. |
 | **Game leaders**, **College Top 25**, **News headlines** | The same switches as before. |
 
-Every card is on to start except News headlines, so a panel does what it did before the update. A card with nothing to show yet is grey, with what it needs under its name: a day for your own countdown, text or a list for the message card, a college football or basketball team for College Top 25. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
+Every card is on to start except News headlines, so a panel does what it did before the update. A card with nothing to show yet is grey, with what it needs under its name: a day for your own countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 :::
 
 ### Celebrations

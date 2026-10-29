@@ -4,7 +4,7 @@
 // the apps all read this table, so a new card is an enum value and a row here
 // (and a case in GamedayComponent::card_ok_ if it can have nothing to show);
 // its drawing then asks GamedayComponent::card_on.
-// Still to come: picture, effect and standings.
+// Still to come: standings, and effects between games.
 // Pure, no ESPHome includes, so the host tests compile it directly, and
 // tests/web/mock_device.py reads the table from this file.
 #pragma once
@@ -29,13 +29,15 @@ enum class Card : uint8_t {
   TOP25 = 5,
   COUNTDOWN = 6,
   NEWS = 7,
+  PICTURE = 8,
 };
 
 constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
 
 // The bits cards_off keeps; a saved blob's other bits are cleared on load.
 constexpr uint16_t kCardsOffBits = card_bit(Card::LEADERS) | card_bit(Card::NEXT) | card_bit(Card::CLOCK) |
-                                   card_bit(Card::CUSTOM) | card_bit(Card::MESSAGE) | card_bit(Card::TOP25);
+                                   card_bit(Card::CUSTOM) | card_bit(Card::MESSAGE) | card_bit(Card::TOP25) |
+                                   card_bit(Card::PICTURE);
 
 struct CardRow {
   Card card;
@@ -52,6 +54,7 @@ constexpr CardRow kCards[] = {
     {Card::COUNTDOWN, "countdown",   "Countdown to the next game", true,  ""},
     {Card::CUSTOM,    "custom",      "Your own countdown",         true,  "Pick its day below first"},
     {Card::MESSAGE,   "message",     "Message card",               true,  "Add text or a list in the Message card first"},
+    {Card::PICTURE,   "picture",     "Pictures",                   true,  "Add a picture in the Pictures card first"},
     {Card::LEADERS,   "gameleaders", "Game leaders",               true,  ""},
     {Card::TOP25,     "top25",       "College Top 25",             true,  "Only while you follow a college football or basketball team"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},

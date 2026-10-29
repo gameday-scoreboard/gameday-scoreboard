@@ -40,6 +40,7 @@
     "countdown": true,
     "custom": true,
     "message": true,
+    "picture": true,
     "gameleaders": true,
     "top25": true,
     "news": false

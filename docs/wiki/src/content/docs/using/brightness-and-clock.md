@@ -77,7 +77,7 @@ Favorite teams follows the same rule as Live games' first favorite: the clock co
 On a single 64x64 panel the date goes under the time, and the next game goes in the ticker. See [Show: Favorite teams, Live games](/using/modes/).
 
 :::note[Coming in the next release]
-Two switches under **Between games** on the [device page](/using/device-page/#between-games) change when this clock shows. With **Clock** off, the next game's board stays up between seasons instead. With **Next game** off, the clock shows whenever the panel is waiting for a game, in season too, with the next game under the time. A game in progress or just over still takes the panel, and in Favorite teams so does one about to start.
+Two switches under **Between games** on the [device page](/using/device-page/#between-games) change when this clock shows. With **Clock** off, the next game's board stays up between seasons instead. With **Next game** off, the clock shows whenever the panel is waiting for a game, in season too, with the next game under the time. A game in progress or just over still takes the panel, and in Favorite teams so does one about to start. In Live games, Next game matters only while nothing is live and the board shows your first favorite; the other teams' games and the final scores aren't affected.
 :::
 
 ## Heat and power protection
