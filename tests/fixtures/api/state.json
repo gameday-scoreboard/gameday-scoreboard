@@ -48,6 +48,8 @@
   ],
   "list": 2,
   "listmax": 16,
+  "sports": [],
+  "sport": "",
   "today": false,
   "jump": false,
   "banner": true,
@@ -79,6 +81,7 @@
   "autoupd": false,
   "beta": false,
   "update_failed": "2026.10.2",
+  "update_important": true,
   "bar": {
     "report": "support@gameday-scoreboard.com"
   },

@@ -46,6 +46,7 @@
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
+#include "update_nudge.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -172,6 +173,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
+//                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
@@ -413,15 +415,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The favorites in list order, empty slots included, for playlists.h.
   std::vector<::espn::TeamRef> fav_refs_all_() const;
   // Moves each playlist's teams to where the favorites list put them (before:
-  // fav_refs_all_() from before the change). No save.
+  // fav_refs_all_() from before the change), and drops a sport row the new
+  // list has no row for.
   void remap_lists_(const std::vector<::espn::TeamRef> &before);
   // keep: the playlist playing after the change (list= sent with lists=), or
   // -1 to keep the one playing by its name.
   void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = -1);
   // n: 1 to the playlist count, 0 = every favorite.
-  void set_active_list_(uint8_t n, bool announce);
+  void set_active_list_(uint8_t n, bool announce) { this->play_list_(n, 0, announce); }
+  // row: 1 + Sport, one of sport_rows_(); 0 = every favorite.
+  void set_sport_row_(uint8_t row, bool announce);
+  // Plays playlist n or sport row (one of them, or neither for every favorite).
+  void play_list_(uint8_t n, uint8_t row, bool announce);
   std::string list_name_(uint8_t n) const;  // n = 1..count
-  bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist
+  bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist or sport row
+  // The sport rows Playing offers now (playlists.h sport_rows), a bit per Sport.
+  uint8_t sport_rows_() const;
+  // The sport row playing, 1 + Sport, or 0 when none is (or its row is gone).
+  uint8_t sport_playing_() const;
   void publish_playlist_select_();
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
@@ -608,7 +619,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t count;
     uint16_t mask[::espn::kListMax];                       // bit i = favorite i
     char name[::espn::kListMax][::espn::kListNameMax];  // no terminator when full
-    uint8_t spare[2];
+    // The sport row playing instead (active is then 0), 1 + Sport; 0 = none.
+    // Was spare, so older firmware plays every favorite.
+    uint8_t sport;
+    uint8_t spare[1];
   } __attribute__((packed));
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
@@ -899,6 +913,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject update_mark_pref_;
   ::espn::UpdateMark update_mark_{};
   bool update_installing_{false};  // the update entity is installing, mark written
+  // "Update ready" on the ticker (update_nudge.h), looked at with the above.
+  ::espn::UpdateNudgeDay nudge_day_{};
+  bool nudge_on_{false};         // the line is in the ticker
+  bool update_important_{false};  // the release waiting is marked important
+  void update_nudge_tick_();
   void settle_update_mark_();
   void update_state_changed_();
 #ifdef GAMEDAY_BAR

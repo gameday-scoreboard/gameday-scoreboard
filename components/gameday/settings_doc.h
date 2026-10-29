@@ -57,7 +57,8 @@ inline SettingType setting_type(const char *k) {
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook"};
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "sport"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -107,7 +108,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
                                       "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
-                                      "lists",    "list",     "hook",     "pregame"};
+                                      "lists",    "list",     "sport",    "hook",       "pregame"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -149,6 +150,10 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     } else if (strcmp(k, "tzauto") == 0) {
       if (s["tz_auto"].is<bool>())
         out["tzauto"] = s["tz_auto"];
+    } else if (strcmp(k, "sport") == 0) {
+      // The sport row playing, or none: list then says what plays.
+      if (s["sport"].is<const char *>())
+        out["sport"] = *s["sport"].as<const char *>() != '\0' ? s["sport"].as<const char *>() : "none";
     } else if (!s[k].isNull()) {
       out[k] = s[k];
     }
@@ -291,8 +296,11 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, r == 0 ? "none" : text, op, target.fav_max);
           break;
         }
+        // A sport this firmware has no row for (newer firmware may have more)
+        // is left out and listed, like a team it doesn't know.
         if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
-            (k == "hook" && !hook_url_ok(text))) {
+            (k == "hook" && !hook_url_ok(text)) ||
+            (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0)) {
           out.skipped.push_back(k + "=" + text);
           continue;
         }
