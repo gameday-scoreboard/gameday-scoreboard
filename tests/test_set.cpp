@@ -56,8 +56,13 @@ struct Settings {
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
-  // Playlists as the firmware keeps them: a name and a mask over favs.
-  std::vector<std::pair<std::string, uint16_t>> lists;
+  // Playlists as the firmware keeps them: a name, a mask over favs and its options.
+  struct List {
+    std::string first;
+    uint16_t second;
+    ListOpts opts;
+  };
+  std::vector<List> lists;
   int list{0};
   uint16_t live_mask{0};
   std::string msg, msgurl, nick, hook;
@@ -93,7 +98,13 @@ void load(Settings &s, JsonObjectConst o) {
       uint16_t mask = 0;
       for (auto f : l["f"].as<JsonArrayConst>())
         mask |= (uint16_t) (1u << f.as<int>());
-      s.lists.emplace_back(l["n"].as<const char *>(), mask);
+      ListOpts o;
+      o.days = (uint8_t) (l["days"] | 0);
+      o.from = (uint16_t) night_parse_time(l["from"] | "00:00");
+      o.to = (uint16_t) night_parse_time(l["to"] | "00:00");
+      o.only = l["only"] | false;
+      o.today = (int8_t) (l["today"] | -1);
+      s.lists.push_back({l["n"].as<const char *>(), mask, o});
     }
   }
   if (o["list"].is<int>())
@@ -196,11 +207,17 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::LISTS: {
       // set_lists_: the one being played stays chosen by its name, or by
       // list= in the same request.
+      // A playlist sent without options keeps its own by name.
       std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
+      std::vector<Settings::List> old = s.lists;
       s.lists.clear();
       s.list = 0;
       for (const auto &d : parse_lists(op.text, kFavMax)) {
-        s.lists.emplace_back(d.name, list_mask(d.teams, before));
+        ListOpts o = d.opts;
+        for (const auto &l : old)
+          if (!d.has_opts && l.first == d.name)
+            o = l.opts;
+        s.lists.push_back({d.name, list_mask(d.teams, before), o});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
@@ -275,6 +292,11 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     for (int i = 0; i < kFavMax; i++)
       if (s.favs[i].id != 0 && ((l.second >> i) & 1u))
         f.add(i);
+    o["days"] = l.opts.days;
+    o["from"] = night_time_text(l.opts.from);
+    o["to"] = night_time_text(l.opts.to);
+    o["only"] = l.opts.only;
+    o["today"] = l.opts.today;
   }
   doc["list"] = s.list;
   doc["today"] = s.today;

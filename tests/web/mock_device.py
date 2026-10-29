@@ -211,6 +211,9 @@ def reset_state(overrides):
     # A null override drops the key, like firmware that doesn't send it.
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
+    # Every playlist has its options in the state, the defaults where a test leaves them out.
+    if "lists" in STATE:
+        STATE["lists"] = [{**pl, **{k: pl.get(k, v) for k, v in LIST_OPTS_DEFAULT.items()}} for pl in STATE["lists"]]
     LIVE_LIST[0] = [] if STATE.get("live_auto", True) else list(STATE.get("live", []))
 
 
