@@ -96,6 +96,9 @@ is the short version.
 
 - Branch from `dev` and open PRs against `dev`. `beta` and `main` only take
   promotion PRs, and CI enforces that.
+- Name the branch after the change (`espn-gzip`, `power-cut-boot`). The
+  name stays in the merge commit, so CI's Branch rules job refuses a head
+  branch with a tracker's ticket in it, like `card-123-...`.
 - A PR description says what changed and how it was tested. No links to
   private repos or trackers, no ticket numbers from them, and no AI
   attribution in PR text or comments. Maintainers keep reviews and
