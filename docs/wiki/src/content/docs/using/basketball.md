@@ -38,4 +38,8 @@ The ticker says "Final", or "Final/OT" after overtime, with the series or the re
 
 At halftime and the final the board takes turns, 10 seconds each, with the line score: each team's points by quarter (by half in men's college basketball) and the total, with one OT column after overtime. On a 64x64 panel it's by half, the teams side by side under their abbreviations. With **Last play** on, the final's ticker adds ESPN's headline for the game when it has one. Basketball has no list of scoring plays: nearly every trip down the floor scores.
 
+:::note[Coming in the next release]
+A **Game leaders** card joins the turns: each team's logo and abbreviation with its top scorer and top rebounder, like "Tatum 40 pts" and "George 7 reb". It shows once at halftime and takes its turn at the final. On a 64x64 panel it's the top scorer only, under each abbreviation. Turn it off under **Between games** on the [device page](/using/device-page/).
+:::
+
 A postponed, canceled or suspended game shows ESPN's word for it and gets no victory splash.

@@ -1021,6 +1021,27 @@ test("between games: the countdown switch is on by default, and the custom count
   await expect(page.locator("#cdCard")).toBeHidden();
 });
 
+test("between games: the Game leaders switch is on by default and posts gameleaders", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="gameleaders"]');
+  await expect(page.locator("#glRow")).toBeVisible();
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { gameleaders: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect.poll(async () => (await deviceState(request)).gameleaders).toBe(false);
+  await sw.click();
+  await expectSet(request, { gameleaders: "1" });
+
+  // Firmware from before the card keeps the rest of Between games.
+  await reset(request, { gameleaders: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#glRow")).toBeHidden();
+});
+
 test("between games: the Top 25 switch is on by default, posts 0 and 1, hidden for firmware without it", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
