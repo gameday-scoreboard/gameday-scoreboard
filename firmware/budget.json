@@ -1,5 +1,5 @@
 {
-  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there.",
+  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there. 2026-10-29: flash caps raised about 12 KB for the remote's button pickers (+7.7 KB, after the Top 25, news and game leaders cards used the rest of the room).",
   "max_growth": {
     "flash": 40960,
     "static_ram": 4096,
@@ -8,15 +8,15 @@
   },
   "firmware": {
     "moonhub75": {
-      "flash": 2434538,
+      "flash": 2446000,
       "static_ram": 173431
     },
     "moonhub75-2panel": {
-      "flash": 2434538,
+      "flash": 2446000,
       "static_ram": 173431
     },
     "scoreboard75": {
-      "flash": 2408860,
+      "flash": 2421000,
       "static_ram": 172568
     }
   },
