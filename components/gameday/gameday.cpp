@@ -8,6 +8,7 @@
 #include "esphome/core/log.h"
 
 #include <cstring>
+#include <type_traits>
 #include <strings.h>
 #include <vector>
 
@@ -79,11 +80,13 @@ RTC_NOINIT_ATTR static NightSkipRtc night_skip_rtc;  // NOLINT(cppcoreguidelines
 
 // The wake's state (wake.h) the same way: a panel After the game turned off
 // stays off through the nightly update, and one woken for a game isn't woken
-// again for it.
+// again for it. The state is kept as bytes: WakeState has default member
+// initializers, and a member with a constructor would be zeroed at every boot.
 struct WakeRtc {
   uint32_t mark;
-  ::espn::WakeState state;
+  uint8_t state[sizeof(::espn::WakeState)];
 };
+static_assert(std::is_trivially_copyable<::espn::WakeState>::value, "WakeState is copied to RTC memory as bytes");
 static const uint32_t WAKE_MARK = 0x57414B31;
 RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -399,7 +402,7 @@ void GamedayComponent::setup() {
     this->night_skip_until_ = night_skip_rtc.until;
   this->defer([this]() { this->night_tick_(); });
   if (wake_rtc.mark == WAKE_MARK) {
-    this->wake_state_ = wake_rtc.state;
+    memcpy(&this->wake_state_, wake_rtc.state, sizeof(this->wake_state_));
     if (this->wake_state_.asleep)
       ESP_LOGI(TAG, "Game-day wake: off since the last game, as After the game asks");
   }
@@ -1307,8 +1310,9 @@ void GamedayComponent::dump_config() {
                 t ? t->abbr : "none");
   ESP_LOGCONFIG(TAG, "  Timezone: %s", ::espn::kTimezones[this->prefs_.tz_index].name);
   ESP_LOGCONFIG(TAG, "  Flags: 0x%02X", this->prefs_.flags);
-  ESP_LOGCONFIG(TAG, "  Game-day wake: %s, %u min before; after the game: %s", this->wake_.on ? "on" : "off",
-                (unsigned) this->wake_.lead, ::espn::after_word(this->wake_.after));
+  ESP_LOGCONFIG(TAG, "  Game-day wake: %s, %u min before; after the game: %s%s", this->wake_.on ? "on" : "off",
+                (unsigned) this->wake_.lead, ::espn::after_word(this->wake_.after),
+                this->wake_state_.asleep ? " (off since the last game)" : "");
 #ifdef GAMEDAY_BAR
   ESP_LOGCONFIG(TAG, "  Bar beta: installs from the beta channel");
 #endif
@@ -1841,10 +1845,16 @@ void GamedayComponent::save_night_skip_() {
   night_skip_rtc.mark = this->night_skip_until_ != 0 ? NIGHT_SKIP_MARK : 0;
 }
 
-bool GamedayComponent::asleep_at_boot() { return wake_rtc.mark == WAKE_MARK && wake_rtc.state.asleep; }
+bool GamedayComponent::asleep_at_boot() {
+  if (wake_rtc.mark != WAKE_MARK)
+    return false;
+  ::espn::WakeState s;
+  memcpy(&s, wake_rtc.state, sizeof(s));
+  return s.asleep;
+}
 
 void GamedayComponent::save_wake_state_() {
-  wake_rtc.state = this->wake_state_;
+  memcpy(wake_rtc.state, &this->wake_state_, sizeof(wake_rtc.state));
   wake_rtc.mark = WAKE_MARK;
 }
 
@@ -1875,6 +1885,7 @@ void GamedayComponent::set_power(bool on) {
   this->power_on_ = on;
   if (!on || !this->wake_loaded_ || !this->wake_state_.asleep)
     return;
+  ESP_LOGI(TAG, "Game-day wake: the panel was turned on, so After the game no longer keeps it off");
   this->wake_state_.asleep = false;
   this->save_wake_state_();
   this->rebuild_state_(&this->last_fields_);
@@ -1950,8 +1961,11 @@ void GamedayComponent::wake_tick_() {
       if (this->power_on_) {
         ESP_LOGD(TAG, "Game-day wake: a game is near and the panel is already on");
       } else {
-        ESP_LOGI(TAG, "Game-day wake: a game starts in %d min, turning the panel on",
-                 (int) ((in.kick > in.now ? in.kick - in.now : 0) / 60));
+        if (in.owner_live)
+          ESP_LOGI(TAG, "Game-day wake: a game of yours is live, turning the panel on");
+        else
+          ESP_LOGI(TAG, "Game-day wake: a game starts in %d min, turning the panel on",
+                   (int) ((in.kick > in.now ? in.kick - in.now : 0) / 60));
         this->fire_action_("wake_on");
       }
       break;
