@@ -60,8 +60,9 @@ struct Settings {
   std::vector<std::pair<std::string, uint16_t>> lists;
   int list{0};
   uint16_t live_mask{0};
-  std::string msg, msgurl, nick;
+  std::string msg, msgurl, nick, hook;
   int msgevery{kMsgEveryDefault};
+  int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
 };
 constexpr int kFavMax = 16;
@@ -118,6 +119,9 @@ void load(Settings &s, JsonObjectConst o) {
   num("tz", s.tz);
   num("panels", s.panels);
   num("msgevery", s.msgevery);
+  num("pregame", s.pregame);
+  if (o["hook"].is<const char *>())
+    s.hook = o["hook"].as<const char *>();
   if (o["msg"].is<const char *>())
     s.msg = o["msg"].as<const char *>();
   if (o["msgurl"].is<const char *>())
@@ -235,6 +239,8 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
     case SetKind::NICK: s.nick = op.text; break;
+    case SetKind::HOOK: s.hook = op.text; break;
+    case SetKind::PREGAME: s.pregame = op.value; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -305,6 +311,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["msgurl"] = s.msgurl;
   doc["msgevery"] = s.msgevery;
   doc["nick"] = s.nick;
+  doc["hook"] = s.hook;
+  doc["pregame"] = s.pregame;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);

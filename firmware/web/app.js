@@ -3,9 +3,9 @@
 //   GET  /gameday/state           one JSON document with the game and every setting
 //   POST /gameday/set?key=value   change settings (mode=4, favs=nfl:6,ncaa:333, tz=3 ...)
 //   POST /gameday/settings        a settings document as JSON; the playlists go this way
-//   POST /gameday/action?do=name  refresh,
-//                                 say&text=...&secs=N (the banner), regulatory
-//                                 (the FCC information on the panel)
+//   POST /gameday/action?do=name  refresh, say&text=...&secs=N (the banner), regulatory
+//                                 (the FCC information on the panel),
+//                                 night_skip / night_resume (the rest of tonight)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -103,6 +103,7 @@
 
     <div class="teambar nightbar" id="nightbar" role="status" hidden>
       <div class="cur"><div><div class="name" id="nightName"></div><div class="lg" id="nightText"></div></div></div>
+      <button class="btn" id="nightBtn" hidden></button>
     </div>
 
     <section class="upnext" id="upnext" hidden>
@@ -190,6 +191,18 @@
         </select></div>
         <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
       </div>
+      <div class="card" id="evCard" hidden>
+        <h2>Game events</h2>
+        <p class="hint">The panel tells Home Assistant when the game starts, on every score, when the lead changes, at the end of each period and at the final, with both teams' colors, so an automation can flash your lights or sound a goal horn. The docs have ready-made blueprints.</p>
+        <div class="ctl"><label for="evPregame">Heads-up before the start<small>An event this long before your game starts, to turn the panel or the TV on.</small></label><select id="evPregame">
+          <option value="0">Off</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option>
+          <option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option>
+        </select></div>
+        <label class="fl" for="evHook">Also post them to a web address<small>For setups without Home Assistant, like Node-RED or a script on your network: each event as a small JSON post. Plain http:// only. Leave it empty to turn it off.</small></label>
+        <input type="url" id="evHook" class="field" maxlength="160" placeholder="http://192.168.1.20:1880/gameday" autocomplete="off">
+        <p class="hint" id="evHookRead" hidden></p>
+        <div class="actions"><button class="btn primary" id="evSave">Save</button><button class="btn" id="evTest">Send a test event</button></div>
+      </div>
       <div class="card">
         <h2>Panel</h2>
         <div id="nickRow" hidden>
@@ -198,7 +211,7 @@
         </div>
         <div id="panelCtls"></div>
         <div id="nightCtls" hidden>
-          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends. The remote, picking a team or Panel on turns it off for the rest of that night.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
           <div id="nightSet" hidden>
             <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
             <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
@@ -395,6 +408,7 @@
     }),
     list: Number,
     msg: String, msgurl: String, msgevery: Number, nick: String,
+    hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
@@ -1016,6 +1030,7 @@
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+    renderEvents();
   };
 
   // ---- night schedule (components/gameday/night.h) ---------------------------
@@ -1064,11 +1079,24 @@
     $("#nightScreenHint").textContent = S.nightscreen ? "On at the night brightness below." : "Off: the screen goes dark " + hours + ".";
     // A dark or dim panel that doesn't look broken
     const until = clock12(S.nightend, true);
-    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
+    const skipped = S.night_now === "skipped";
+    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game"
+      : skipped ? "Night mode off until " + clock12(S.nightstart, true) : "Night mode until " + until;
     $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
       : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
-        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
+        : skipped ? "The panel is at normal brightness for the rest of tonight. Night mode starts again at " + clock12(S.nightstart, true) + "."
+          : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
+    const btn = $("#nightBtn");
+    btn.hidden = S.night_now === "game";
+    btn.textContent = skipped ? "Back to night mode" : "Turn on for tonight";
   };
+  $("#nightBtn").onclick = async () => {
+    await doAction(S.night_now === "skipped" ? "night_resume" : "night_skip");
+    scheduleState(300);
+  };
+  // The schedule has the panel dim or dark: Power on from here skips the
+  // rest of the night, as the remote's ON does.
+  const nightHolding = () => !!S && (S.night_now === "dim" || S.night_now === "off");
 
   // ---- message: the banner and the message card ---------------------------------
   // The boxes take the panel's text when it changes there, never while
@@ -1123,6 +1151,52 @@
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- game events: the heads-up and the webhook ---------------------------------
+  const evSeen = { hook: null, pregame: null };
+  const renderEvents = () => {
+    // Older firmware sends no events of its own.
+    $("#evCard").hidden = S.pregame === undefined;
+    if (S.pregame === undefined) return;
+    const hook = String(S.hook || "");
+    if (hook !== evSeen.hook && document.activeElement !== $("#evHook")) {
+      evSeen.hook = hook;
+      $("#evHook").value = hook;
+    }
+    const sel = $("#evPregame");
+    const pre = String(S.pregame);
+    if (pre !== evSeen.pregame && document.activeElement !== sel) {
+      evSeen.pregame = pre;
+      // A lead the list lacks (set from the app or a backup) still shows.
+      if (![...sel.options].some((o) => o.value === pre)) sel.add(new Option(pre + " minutes", pre));
+      sel.value = pre;
+    }
+    const post = S.hookpost;
+    const line = $("#evHookRead");
+    line.hidden = !S.hook;
+    if (!S.hook) return;
+    if (!post || post.status === undefined) line.textContent = "Nothing posted yet. The next event goes there.";
+    else if (post.status === 0) line.textContent = "The last post got no answer. Check the address and that the listener is running.";
+    else if (post.status < 200 || post.status >= 300) line.textContent = "The last post got an error (HTTP " + post.status + ").";
+    else line.textContent = "Posting fine: " + post.sent + (post.sent === 1 ? " event" : " events") + " delivered" + (post.dropped ? ", " + post.dropped + " dropped while the listener was slow." : ".");
+  };
+  $("#evPregame").onchange = () => {
+    const v = $("#evPregame").value;
+    evSeen.pregame = null;
+    setGD({ pregame: v });
+    toast(v === "0" ? "No heads-up before the start" : "Heads-up " + $("#evPregame").selectedOptions[0].textContent + " before the start");
+  };
+  $("#evSave").onclick = () => {
+    const url = $("#evHook").value.trim();
+    if (url && !/^http:\/\/[^\s/?#]+\S*$/.test(url)) return toast(/^https:/.test(url) ? "Use plain http://, the panel posts on your home network" : "The address starts with http://");
+    evSeen.hook = null;
+    setGD({ hook: url });
+    toast(url ? "Events go to that address too" : "Webhook off");
+  };
+  $("#evTest").onclick = () => {
+    doAction("event_test");
+    toast(S.hook ? "Test event sent to Home Assistant and your address" : "Test event sent to Home Assistant");
   };
 
   // ---- nickname: the header, the tab title and the box ---------------------------
@@ -1297,6 +1371,7 @@
         const on = !sw.classList.contains("on");
         setOn(sw, on, "aria-checked");
         post(e.id, on ? "turn_on" : "turn_off");
+        if (def.name === "Power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
       };
       row.appendChild(sw);
       host.appendChild(row);

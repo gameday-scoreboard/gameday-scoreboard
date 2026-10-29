@@ -132,6 +132,10 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 Check **Night schedule** in the Panel card on the device page. While it's on, the device page says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
 
+:::note[Coming in the next release]
+To light the panel for the rest of one night, press **Turn on for tonight** next to **Night mode until**, or **ON** on the remote.
+:::
+
 **Why:** the night schedule dims the panel, or turns its screen off, between the times you set. A live game for your team or a favorite brings it back to normal brightness until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
 ## The panel is dim, or shows a thermometer or plug in the corner

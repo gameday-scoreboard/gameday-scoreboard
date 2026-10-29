@@ -3,6 +3,9 @@
   "qc",
   "say",
   "regulatory",
+  "night_skip",
+  "night_resume",
+  "event_test",
   "demo",
   "demo_stop"
 ]

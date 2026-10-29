@@ -33,6 +33,8 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ### ✨ New
 
 - 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
+- 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
 
 ### 🐛 Fixes
 
