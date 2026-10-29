@@ -25,7 +25,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
+                                    "beta",   "countdown", "cdname", "cddate", "gameleaders", "msg", "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list"};
@@ -186,6 +186,7 @@ enum class SetKind : uint8_t {
   COUNTDOWN,  // on, the next game's countdown card
   CD_NAME,    // text, the custom countdown's name
   CD_DATE,    // ymd, the custom countdown's day (0 clears it)
+  GAMELEADERS,  // on, this game's leaders card at halftime and the final (game_leaders.h)
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
@@ -413,6 +414,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.kind = SetKind::CD_DATE;
     return parse_countdown_date(v, op.ymd);
   }
+  if (k == "gameleaders")
+    return on(SetKind::GAMELEADERS);
   if (k == "best")
     return on(SetKind::BEST);
   if (k == "jump")

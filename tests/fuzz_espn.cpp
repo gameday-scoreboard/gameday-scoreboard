@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "espn_parse.h"
+#include "game_leaders.h"
 #include "line_score.h"
 #include "panel_text.h"
 #include "recap.h"
@@ -247,6 +248,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
 
     for (Sport sport : kSports) {
+      {
+        // The game summary at halftime and the final (game_leaders.h).
+        GameLeaders l;
+        ChunkReader r5(data, size, chunk);
+        if (parse_summary(r5, sport, p.team_id, p.event_id, LeadersStage::FINAL, l))
+          sink = sink + leaders_card_text(l, 128).team_body.size() + leaders_card_text(l, 64).opp_body.size();
+      }
       GameSnapshot e;
       ChunkReader r4(data, size, chunk);
       if (!parse_event(r4, sport, p.team_id, e, p.event_id))

@@ -92,6 +92,10 @@ Only the ticker switches for sports your panel follows are shown. Hockey and bas
 
 The **Between games** card has **Countdown to the next game**, on unless you turn it off, and **Your own countdown**: a **Name** and a **Day** to count down to, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/).
 
+:::note[Coming in the next release]
+**Game leaders**, on unless you turn it off, shows each team's top players at halftime and the final: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball. The card takes a turn with the board and the line score, 10 seconds each: once at halftime, and at the final for as long as the final is up. The panel reads the box score once at halftime and once at the final, never during play. See the sport's page for what it shows.
+:::
+
 ### Celebrations
 
 The panel fills the screen with a splash when someone scores, in the scoring team's color. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.

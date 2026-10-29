@@ -120,7 +120,7 @@ INITIAL = {
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
-    "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
+    "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "", "gameleaders": True,
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
@@ -391,8 +391,8 @@ def apply_set(kv):
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
                 STATE["panels"] = atoi(v)
-        elif k == "countdown":
-            STATE["countdown"] = v == "1"
+        elif k in ("countdown", "gameleaders"):
+            STATE[k] = v == "1"
         elif k == "cdname":
             STATE["cdname"] = countdown_name(v)
         elif k == "cddate":

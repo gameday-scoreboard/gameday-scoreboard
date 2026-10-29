@@ -316,6 +316,7 @@ void GamedayComponent::setup() {
       cd_ymd != this->countdown_.ymd)
     this->countdown_ = CountdownPrefs{};
   this->countdown_.name[::espn::kCountdownNameMax] = '\0';
+  this->countdown_.cards_off &= CARD_NO_LEADERS;
   this->pref9_ = global_preferences->make_preference<Prefs9>(fnv1_hash("gameday_prefs9_v1"));
   if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
       this->prefs9_.active > this->prefs9_.count)
@@ -1508,6 +1509,93 @@ void GamedayComponent::set_countdown(bool on) {
   this->save_countdown_();
 }
 
+void GamedayComponent::set_game_leaders(bool on) {
+  if (on == this->game_leaders_on())
+    return;
+  if (on)
+    this->countdown_.cards_off &= (uint8_t) ~CARD_NO_LEADERS;
+  else
+    this->countdown_.cards_off |= CARD_NO_LEADERS;
+  this->save_countdown_();
+}
+
+// ---- game leaders (game_leaders.h) ------------------------------------------------
+
+bool GamedayComponent::leaders_due_() const {
+  if (!this->game_leaders_on() || this->demo_playing_() || this->recap_on_ || this->game_.event_id.empty())
+    return false;
+  ::espn::LeadersStage st = ::espn::leaders_stage(this->game_);
+  if (st == ::espn::LeadersStage::NONE)
+    return false;
+  if (this->leaders_.valid && this->leaders_.event_id == this->game_.event_id && this->leaders_.stage == st)
+    return false;  // read already (with or without leaders in it)
+  if (this->leaders_try_event_ == this->game_.event_id && this->leaders_try_stage_ == st) {
+    if (this->leaders_tries_ >= ::espn::kLeadersTries)
+      return false;
+    if (this->leaders_tries_ > 0 && millis() - this->leaders_tried_ms_ < ::espn::kLeadersRetryMs)
+      return false;
+  }
+  return true;
+}
+
+League GamedayComponent::board_league_() const {
+  const ::espn::Team *first = this->fallback_team_();
+  League league = this->live_mode_() && this->schedule_.valid ? (League) this->schedule_.league
+                  : first != nullptr                         ? first->league
+                                                             : League::NFL;
+  if (this->favorites_mode_() && this->fav_shown_ >= 0 && this->fav_shown_ < (int) this->fav_.size())
+    league = this->fav_[this->fav_shown_].team->league;
+  return league;
+}
+
+bool GamedayComponent::leaders_card_due() const {
+  if (!this->game_leaders_on() || !this->leaders_.valid || !this->leaders_.any() ||
+      this->leaders_.event_id != this->game_.event_id)
+    return false;
+  ::espn::LeadersStage st = ::espn::leaders_stage(this->game_);
+  if (st != this->leaders_.stage)
+    return false;
+  return st == ::espn::LeadersStage::FINAL || !this->leaders_half_shown_;
+}
+
+::espn::LeadersCardText GamedayComponent::leaders_card(int width_px) const {
+  if (!this->leaders_card_due())
+    return ::espn::LeadersCardText{};
+  return ::espn::leaders_card_text(this->leaders_, width_px);
+}
+
+void GamedayComponent::leaders_turn_taken() {
+  if (this->leaders_.stage == ::espn::LeadersStage::HALF)
+    this->leaders_half_shown_ = true;
+}
+
+// Worker: the summary document, 400 KB to 1.2 MB, streamed through the
+// filter in game_leaders.h. The log line carries the internal heap before and
+// after, for the memory ledger.
+bool GamedayComponent::fetch_leaders_(Job &j) {
+  std::string url = ::espn::summary_url((League) j.leaders_league, j.leaders_event);
+  ESP_LOGD(TAG, "Fetching game leaders: %s", url.c_str());
+  const uint32_t start = millis();
+  const unsigned free_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024;
+  const unsigned block_before = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024;
+  auto container = this->open_(url);
+  if (container == nullptr)
+    return false;
+  ContainerReader reader(container, this->espn_bytes_);
+  ::espn::GameLeaders l;
+  bool ok = ::espn::parse_summary(reader, j.leaders_sport, j.leaders_our_id, j.leaders_event, j.leaders_stage, l);
+  container->end();
+  ESP_LOGI(TAG, "Game leaders at the %s: %s, %u + %u lines (%u bytes, %u ms, internal heap %u/%u KB before, %u/%u after)",
+           ::espn::leaders_stage_name(j.leaders_stage), ok ? "read" : "not parsed", (unsigned) l.team.count,
+           (unsigned) l.opp.count, (unsigned) reader.total(), (unsigned) (millis() - start), free_before,
+           block_before, (unsigned) (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+           (unsigned) (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
+  if (!ok)
+    return false;
+  j.leaders = l;
+  return true;
+}
+
 void GamedayComponent::set_custom_countdown_name(const std::string &name) {
   std::string n = ::espn::countdown_name(name);
   if (n == this->countdown_.name)
@@ -2361,6 +2449,25 @@ void GamedayComponent::start_job_() {
   j.mode = this->effective_mode_();
   j.scan_leagues = this->scan_leagues_();
   j.top25 = this->no_team_default();
+  // This game's leaders at halftime and the final (game_leaders.h): one
+  // summary read for the board's game, ahead of whatever the mode reads next.
+  if (this->leaders_due_()) {
+    j.need_leaders = true;
+    j.leaders_league = (uint8_t) this->board_league_();
+    j.leaders_sport = this->game_.sport;
+    j.leaders_event = this->game_.event_id;
+    j.leaders_our_id = this->game_.team_id;
+    j.leaders_stage = ::espn::leaders_stage(this->game_);
+    if (j.leaders_event != this->leaders_try_event_ || j.leaders_stage != this->leaders_try_stage_) {
+      this->leaders_try_event_ = j.leaders_event;
+      this->leaders_try_stage_ = j.leaders_stage;
+      this->leaders_tries_ = 0;
+    }
+    this->leaders_tries_++;
+    this->leaders_tried_ms_ = now == 0 ? 1 : now;
+    this->start_worker_();
+    return;
+  }
   if (this->favorites_mode_()) {
     this->start_fav_job_(now);
     return;
@@ -2570,6 +2677,10 @@ void GamedayComponent::run_job_() {
     container->end();
     return;
   }
+  if (j.need_leaders) {
+    j.leaders_ok = this->fetch_leaders_(j);
+    return;
+  }
   if (j.need_recap) {
     // One day's scoreboard: its finals going back, its first kickoff and that
     // game's matchup going forward. The live list is always empty for a day
@@ -2681,6 +2792,18 @@ void GamedayComponent::apply_job_() {
     return;
   }
   uint32_t now = millis();
+  if (j.need_leaders) {
+    if (j.leaders_ok) {
+      this->leaders_ = j.leaders;
+      this->leaders_half_shown_ = false;
+      this->emit_({});  // the page lays the card out
+    } else if (this->leaders_tries_ >= ::espn::kLeadersTries) {
+      ESP_LOGW(TAG, "Game leaders at the %s: giving up after %u reads", ::espn::leaders_stage_name(j.leaders_stage),
+               (unsigned) this->leaders_tries_);
+    }
+    this->schedule_next_(0);  // whatever the mode was about to read
+    return;
+  }
   if (j.fav_index >= 0) {
     this->apply_fav_job_(now);
     return;
@@ -3807,6 +3930,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["countdown"] = this->countdown_on();
   doc["cdname"] = (const char *) this->countdown_.name;
   doc["cddate"] = ::espn::countdown_date_text(this->countdown_.ymd);
+  doc["gameleaders"] = this->game_leaders_on();
   // The night schedule (night.h). night_now is what it is doing: "" (not
   // now), "dim", "off" or "game" (its hours, held off by a live game).
   this->load_night_();
@@ -3928,6 +4052,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     doc["splash_color"] = color;
   }
   game["id"] = g.event_id;
+  // The panel holds this game's leaders (game_leaders.h), from its last
+  // summary read at halftime or the final.
+  game["leaders"] = this->leaders_.valid && this->leaders_.any() && this->leaders_.event_id == g.event_id;
   if (g.sport != ::espn::Sport::FOOTBALL) {
     game["sport"] = (int) g.sport;
     if (f != nullptr) {
@@ -4632,6 +4759,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
       case ::espn::SetKind::COUNTDOWN:
         this->set_countdown(op.on);
+        break;
+      case ::espn::SetKind::GAMELEADERS:
+        this->set_game_leaders(op.on);
         break;
       case ::espn::SetKind::CD_NAME:
         this->set_custom_countdown_name(op.text);

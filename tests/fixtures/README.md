@@ -24,6 +24,23 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 
+Game summaries (`.../summary?event=<id>`, the document the Game leaders card
+reads at halftime and the final), recorded 2026-10-28. Each is trimmed to its
+`header`, `leaders`, `boxscore` and the small top-level objects; the plays,
+drives, videos and news that make up most of the 400 KB to 1.2 MB document are
+emptied but their keys kept, so the filter still skips them.
+
+| File | Source |
+| --- | --- |
+| `summary_nfl_final.json` | 401873009 DAL @ PHI, Final (10/26): passing, rushing and receiving leaders both sides |
+| `summary_ncaa_final.json` | 401858274 PITT @ MIA, Final (10/24), college football's leaders |
+| `summary_nba_final.json` | 401909877 BKN @ BOS, Final/OT (10/27): points, assists and rebounds |
+| `summary_nba_half.json` | 401909887 HOU @ MIL at halftime |
+| `summary_nba_no_leaders.json` | 401909889 DEN @ NO at halftime, with the `leaders` block removed by hand |
+| `summary_nhl_final.json` | 401892585 CBJ @ PHI, Final/OT (10/27): goals, assists and points |
+| `summary_nhl_end2.json` | 401892596 PHI @ WSH at the end of the 2nd |
+| `summary_mlb_final.json` | 401908045 MIL @ TB, Final/12 (10/27): no `leaders`; `boxscore.players` with the batting and pitching groups |
+
 MLB, recorded 2026-10-07 (postseason) from the single-event endpoint
 `.../baseball/mlb/scoreboard/<event id>` that per-event leagues poll:
 

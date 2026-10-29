@@ -26,6 +26,10 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+### ✨ New
+
+- 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
+
 ### 🐛 Fixes
 
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
