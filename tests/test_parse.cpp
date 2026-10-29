@@ -833,6 +833,20 @@ static void test_ha_game_events() {
   g.period = 5;
   g.short_detail = "10:00 - OT";
   CHECK_EQ(t.update(g, c)[0].period_name, std::string("4th quarter"));
+  // Two breaks missed in one gap: both periods, in order.
+  HaTracker gap;
+  GameSnapshot q1 = live(3, 0);
+  q1.period = 1;
+  q1.short_detail = "5:00 - 1st";
+  gap.update(q1, c);
+  q1.period = 3;
+  q1.short_detail = "12:00 - 3rd";
+  e = gap.update(q1, c);
+  CHECK_EQ(kinds(e), std::string("period,period"));
+  CHECK_EQ(e[0].period, 1);
+  CHECK_EQ(e[1].period, 2);
+  CHECK_EQ(e[1].period_name, std::string("2nd quarter"));
+  CHECK(gap.update(q1, c).empty());
   // The final ends the last period itself.
   g.state = GameState::POST;
   g.completed = true;
@@ -962,6 +976,23 @@ static void test_ha_pregame() {
   c.now_epoch = 0;
   clock.update(p, c);
   CHECK(clock.update(p, c).empty());
+  // A restart inside the window with the clock arriving on the second tick:
+  // still nothing, the decision waited for the clock.
+  HaTracker late;
+  c.now_epoch = 0;
+  CHECK(late.update(p, c).empty());
+  c.now_epoch = kick - 10 * 60;
+  CHECK(late.update(p, c).empty());
+  c.now_epoch = kick - 9 * 60;
+  CHECK(late.update(p, c).empty());
+  // The clock arriving an hour out leaves the reminder to come.
+  HaTracker early;
+  c.now_epoch = 0;
+  CHECK(early.update(p, c).empty());
+  c.now_epoch = kick - 3600;
+  CHECK(early.update(p, c).empty());
+  c.now_epoch = kick - 15 * 60;
+  CHECK_EQ(kinds(early.update(p, c)), std::string("pregame"));
   // A rounded-up minute: 14 min 10 s to go reads 15.
   HaTracker up;
   c.now_epoch = kick - 3600;
@@ -1007,6 +1038,13 @@ static void test_ha_events_stale() {
   CHECK_EQ(kinds(e), std::string("score,lead_change"));
   CHECK_EQ(e[0].points, 3);
   CHECK_EQ(e[0].play, std::string("field_goal"));
+  // A second step back right after one held waits its own 90 s.
+  r.team_score = 0;
+  CHECK(c.update(r, ha_ctx(210)).empty());
+  r.team_score = 3;
+  CHECK(c.update(r, ha_ctx(220)).empty());  // not taken: the score stayed 3
+  r.team_score = 6;
+  CHECK_EQ(c.update(r, ha_ctx(230))[0].points, 3);
   // A step back that comes and goes starts its wait again next time.
   HaTracker w;
   GameSnapshot s = live(7, 0);

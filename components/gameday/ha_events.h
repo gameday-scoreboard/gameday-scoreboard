@@ -376,12 +376,15 @@ class HaTracker {
         return out;
       this->store_(*s, cur);
       s->period_done = std::min<int>(s->period_done, cur.period);
+      s->back_since_set = false;  // the next step back waits its own 90 s
       return out;
     }
     s->back_since_set = false;
 
     if (cur.state == GameState::PRE) {
-      if (!s->pregame_done && ctx.pregame_minutes > 0) {
+      if (!s->pregame_known) {
+        pregame_decide_(*s, cur, ctx);  // the first read with a clock settles it, and fires nothing
+      } else if (!s->pregame_done && ctx.pregame_minutes > 0) {
         int64_t left = minutes_left_(cur, ctx);
         if (left >= 0 && left <= ctx.pregame_minutes) {
           HaEvent e = base_(cur, true, ctx);
@@ -416,15 +419,12 @@ class HaTracker {
       if (lead_now != lead_was)
         out.push_back(lead_(cur, lead_was, lead_now, ctx));
     }
-    // The end of a period: the break after it, or the next period under way
-    // when the panel missed the break. A final ends the last one itself.
+    // The end of a period: the break after it, or, when the panel missed a
+    // break or two, every period over by the time the next is under way, in
+    // order. A final ends the last one itself.
     if (cur.state == GameState::IN && !was_pre) {
-      int ended = 0;
-      if (ha_at_break(cur) && cur.period > s->period_done)
-        ended = cur.period;
-      else if (cur.period > s->period && s->period > s->period_done)
-        ended = s->period;
-      if (ended > 0) {
+      int last = ha_at_break(cur) ? cur.period : cur.period - 1;
+      for (int ended = s->period_done + 1; ended <= last; ended++) {
         HaEvent e = base_(cur, true, ctx);
         e.kind = HaKind::PERIOD;
         e.period = ended;
@@ -459,6 +459,7 @@ class HaTracker {
     int period{0};
     int period_done{0};  // the last period whose end has been reported
     bool pregame_done{false};
+    bool pregame_known{false};  // whether pregame_done has been settled by a read with the clock
     bool back_since_set{false};
     uint32_t back_since{0};  // mono_s when reads started going back
   };
@@ -506,9 +507,24 @@ class HaTracker {
     // Whatever already happened stays unreported: a period already over, a
     // reminder already due.
     s.period_done = cur.state != GameState::IN ? 0 : ha_at_break(cur) ? cur.period : cur.period - 1;
-    int64_t left = minutes_left_(cur, ctx);
-    s.pregame_done = cur.state != GameState::PRE || (left >= 0 && left <= ctx.pregame_minutes);
+    s.pregame_done = s.pregame_known = cur.state != GameState::PRE;
+    if (!s.pregame_known)
+      pregame_decide_(s, cur, ctx);
     this->seen_.push_back(s);
+  }
+
+  // Whether the reminder is still to come, settled once by the first read
+  // with the clock: a game already inside its window when the panel picks
+  // it up has had its reminder (before a restart, say) and gets no other.
+  // Before the clock is set there is no telling, so the decision waits: a
+  // panel turned on ten minutes before the start must not send one when
+  // its clock arrives a tick later.
+  static void pregame_decide_(Seen &s, const GameSnapshot &cur, const HaContext &ctx) {
+    if (ctx.now_epoch <= 0)
+      return;
+    int64_t left = minutes_left_(cur, ctx);
+    s.pregame_done = left >= 0 && left <= ctx.pregame_minutes;
+    s.pregame_known = true;
   }
 
   // An event about one side of the game, ours (left on the board) or theirs.

@@ -26,6 +26,10 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+### ✨ New
+
+- 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
+
 ### 🐛 Fixes
 
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**

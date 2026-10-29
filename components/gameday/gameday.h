@@ -857,6 +857,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::atomic<bool> hook_running_{false};
   std::atomic<bool> hook_task_done_{false};
   std::atomic<int> hook_task_status_{0};
+  std::atomic<uint32_t> hook_task_stack_{0};  // bytes of the task's stack it never used
   int hook_status_{-1};  // the last post's HTTP status, 0 no answer, -1 none yet
   uint32_t hook_sent_{0}, hook_dropped_{0};
   void queue_hook_(std::string body);

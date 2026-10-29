@@ -4359,7 +4359,8 @@ void GamedayComponent::hook_tick_() {
     this->hook_status_ = this->hook_task_status_;
     if (this->hook_status_ >= 200 && this->hook_status_ < 300) {
       this->hook_sent_++;
-      ESP_LOGD(TAG, "Webhook: HTTP %d", this->hook_status_);
+      ESP_LOGD(TAG, "Webhook: HTTP %d (%u bytes of the post's stack unused)", this->hook_status_,
+               (unsigned) this->hook_task_stack_.load());
     } else if (this->hook_status_ == 0) {
       ESP_LOGW(TAG, "Webhook: no answer from %s", this->hook_task_url_.c_str());
     } else {
@@ -4381,8 +4382,9 @@ void GamedayComponent::hook_tick_() {
   this->hook_queue_.erase(this->hook_queue_.begin());
   this->hook_task_done_ = false;
   this->hook_running_ = true;
-  // Plain HTTP and no response body: a small stack, freed when the post is done.
-  if (xTaskCreate(&GamedayComponent::hook_task_, "gameday_hook", 5120, this, 1, nullptr) != pdPASS) {
+  // Plain HTTP and no response body: the Wi-Fi check's stack, freed when
+  // the post is done.
+  if (xTaskCreate(&GamedayComponent::hook_task_, "gameday_hook", 6144, this, 1, nullptr) != pdPASS) {
     ESP_LOGW(TAG, "Webhook: could not start the post (largest free internal block %u bytes)",
              (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     this->hook_running_ = false;
@@ -4412,6 +4414,7 @@ void GamedayComponent::hook_task_(void *arg) {
     esp_http_client_cleanup(client);
   }
   self->hook_task_status_ = status;
+  self->hook_task_stack_ = (uint32_t) uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
   self->hook_task_done_ = true;
   vTaskDelete(nullptr);
 }
