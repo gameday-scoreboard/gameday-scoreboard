@@ -4823,6 +4823,28 @@ static void test_night() {
   p.screen_off = 1;
   CHECK(night_state(p, true, late, false) == Night::DARK);
   CHECK(night_state(p, true, late, true) == Night::GAME);  // a live game lights it
+  // A skipped night is lit, live game or not, and only inside its hours
+  CHECK(night_state(p, true, late, false, true) == Night::SKIPPED);
+  CHECK(night_state(p, true, late, true, true) == Night::SKIPPED);
+  CHECK(night_state(p, true, 12 * 60, false, true) == Night::DAY);
+  CHECK(night_state(p, false, late, false, true) == Night::DAY);
+  CHECK(night_holding(Night::DIM));
+  CHECK(night_holding(Night::DARK));
+  CHECK(!night_holding(Night::GAME));
+  CHECK(!night_holding(Night::SKIPPED));
+  CHECK(!night_holding(Night::DAY));
+  CHECK_EQ(std::string(night_word(Night::SKIPPED)), std::string("skipped"));
+  {
+    // Skipped until the end of the hours it was in: 7 AM, from 11:30:20 PM
+    // or 2:00:45 AM, and 6 AM inside a 1 AM to 6 AM night.
+    const int64_t t = 1792000000;
+    CHECK_EQ(night_skip_until(p, t, 23 * 60 + 30, 20), t - 20 + (int64_t) (7 * 60 + 30) * 60);
+    CHECK_EQ(night_skip_until(p, t, 2 * 60, 45), t - 45 + (int64_t) (5 * 60) * 60);
+    NightPrefs early = p;
+    early.start = 60;
+    early.end = 6 * 60;
+    CHECK_EQ(night_skip_until(early, t, 3 * 60 + 59, 0), t + (int64_t) (2 * 60 + 1) * 60);
+  }
 
   p.level = 20;
   CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);

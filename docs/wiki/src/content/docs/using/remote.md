@@ -32,6 +32,10 @@ The brightness buttons move the same **Brightness** setting as the device page a
 
 During the [night schedule](/using/brightness-and-clock/)'s hours the panel stays at its night setting: the brightness buttons change the daytime brightness for the morning, and a screen that's off for the night stays off, whatever you press, until the hours end or a game of yours goes live. To light it up at night, turn **Night schedule** off in the Panel card on the device page.
 
+:::note[Coming in the next release]
+During the night schedule's hours the remote can always light the panel. **ON**, the brighter button and the numbered buttons turn night mode off for the rest of that night, at the panel's normal brightness. **NIGHT** does the same at the night level, about 8% of full, and pressing it again goes back to the schedule. Dimmer does nothing while night mode has the panel dimmed or dark, since it's already as dim as you set it. The next night the schedule runs as usual.
+:::
+
 ## The numbered buttons
 
 Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.

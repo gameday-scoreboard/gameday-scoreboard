@@ -26,6 +26,10 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+### ✨ New
+
+- 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+
 ### 🐛 Fixes
 
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
