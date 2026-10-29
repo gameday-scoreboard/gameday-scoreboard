@@ -71,6 +71,11 @@ sys.path.insert(0, str(REPO / "components" / "gameday"))
 from leagues_table import leagues  # noqa: E402
 
 LEAGUES = [row["key"] for row in leagues()]
+LEAGUE_SPORT = {row["key"]: row["sport"].lower() for row in leagues()}
+# leagues.h kSportKeys: the sport rows' words, in Sport order.
+SPORT_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSportKeys\[kSportCount\] = \{(.*?)\};",
+                                                    (REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"),
+                                                    re.S).group(1)))
 TZ_TEXT = "\n".join(ln for ln in (REPO / "components/gameday/timezones.h").read_text(encoding="utf-8").splitlines()
                     if not ln.lstrip().startswith("//"))
 TZ_ROWS = TZ_RE.findall(TZ_TEXT)
@@ -83,7 +88,8 @@ MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
 LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
                                              SET_H + MESSAGE_H +
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
-                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/hook.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -121,11 +127,13 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
+    "hook": "", "pregame": 15,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
@@ -291,6 +299,15 @@ def msg_url_ok(v):
     return len(v) <= LIMITS["kMsgUrlMax"] and bool(rest) and all(0x20 < ord(c) < 0x7F for c in v)
 
 
+def hook_url_ok(v):
+    """hook_url_ok() in components/gameday/hook.h: plain http only."""
+    if not v:
+        return True
+    if len(v) > LIMITS["kHookUrlMax"] or not v.startswith("http://") or len(v) == 7 or v[7] in "/?#":
+        return False
+    return all(0x20 < ord(c) < 0x7F for c in v)
+
+
 def parse_team_ref(v):
     """parse_team_ref() plus known_team(): (league, id) of a team in teams.h, else None."""
     lg, colon, tid = v.partition(":")
@@ -316,9 +333,21 @@ def no_team_default():
     return STATE["mode"] == 4 and not any(STATE["favs"])
 
 
+def sport_rows():
+    """sport_rows_(): a row per sport among the favorites, with two sports or more."""
+    have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if t}
+    rows = [k for k in SPORT_KEYS if k in have]
+    return rows if len(rows) >= 2 else []
+
+
 def state_doc():
     """rebuild_state_() works the leagues out each time: every league with no
-    favorite picked (no_team_leagues()), else the auto leagues from the favorites."""
+    favorite picked (no_team_leagues()), else the auto leagues from the favorites.
+    The sport rows come from the favorites too."""
+    if "sport" in STATE:
+        STATE["sports"] = sport_rows()
+        if STATE["sport"] not in STATE["sports"]:
+            STATE["sport"] = ""
     if no_team_default():
         STATE["live"] = list(LEAGUES)
     elif STATE.get("live_auto"):
@@ -338,6 +367,9 @@ def remap_lists(before):
     for pl in STATE["lists"]:
         teams = [before[i] for i in pl["f"] if i < len(before) and before[i]]
         pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
+    # A sport row the favorites have no row for now stops.
+    if STATE.get("sport") and STATE["sport"] not in sport_rows():
+        STATE["sport"] = ""
 
 
 def parse_lists(v):
@@ -373,6 +405,8 @@ def apply_set(kv):
     # apply_ops_: list= with lists= names the playlist playing after the change.
     with_lists = any(k == "lists" for k, _ in kv)
     keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
+    # A sport row picked takes over list= in the same request.
+    sport_pick = any(k == "sport" and v in SPORT_KEYS for k, v in kv)
     for k, v in kv:
         before = fav_refs()
         if k == "mode":
@@ -414,10 +448,20 @@ def apply_set(kv):
             STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
             if 0 <= keep_list <= len(STATE["lists"]):
                 STATE["list"] = keep_list
+                STATE["sport"] = ""
         elif k == "list":
-            # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it.
-            if not with_lists and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
+            # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it,
+            # and with a sport row picked set_sport_row_() does.
+            if not with_lists and not sport_pick and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
                 STATE["list"] = atoi(v)
+                STATE["sport"] = ""
+                STATE["mode"] = 4
+        elif k == "sport":
+            # set_sport_row_() plays a row the favorites give; none stops the one
+            # playing unless list= says what plays.
+            if (v in sport_rows()) if v != "none" else (keep_list < 0 and STATE.get("sport")):
+                STATE["list"] = 0
+                STATE["sport"] = "" if v == "none" else v
                 STATE["mode"] = 4
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
@@ -455,6 +499,12 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k == "hook":
+            if hook_url_ok(v):
+                STATE["hook"] = v
+        elif k == "pregame":
+            if whole_int(v):
+                STATE["pregame"] = max(0, min(LIMITS["kPregameMax"], int(v)))
         elif k in ("night", "nightscreen"):
             STATE[k] = v == "1"
         elif k in ("nightstart", "nightend"):
@@ -496,6 +546,9 @@ def settings_doc():
             out["tz"] = s["tz_name"]
         elif k == "tzauto":
             out["tzauto"] = s["tz_auto"]
+        elif k == "sport":
+            if "sport" in s:
+                out["sport"] = s["sport"] or "none"
         elif k in s:
             out[k] = s[k]
     if s.get("panels"):
@@ -576,6 +629,7 @@ def import_settings(doc):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
+                      "pregame": (0, LIMITS["kPregameMax"]),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
@@ -599,7 +653,8 @@ def import_settings(doc):
                     skipped.append(f"{k}={v}")
                     continue
                 kv.append((k, v if r == 1 else "none"))
-            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)):
+            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
+                    k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
@@ -966,7 +1021,7 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "say", "regulatory", "night_skip", "night_resume"):
+            if q["do"] not in ("refresh", "qc", "say", "regulatory", "night_skip", "night_resume", "event_test"):
                 return self._json(404, {"error": "unknown action"})
             if q["do"] == "say":
                 STATE["say"] = message_clean(q.get("text", ""), LIMITS["kMsgTextMax"], True)

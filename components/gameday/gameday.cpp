@@ -30,6 +30,10 @@
 #ifdef USE_GAMEDAY_CRASH_REPORT
 #include "esphome/components/crash_report/crash_report.h"
 #endif
+#if defined(USE_API) && defined(USE_API_HOMEASSISTANT_SERVICES)
+#include "esphome/components/api/api_server.h"
+#define GAMEDAY_HA_EVENTS
+#endif
 #ifdef USE_WIFI
 #include "esphome/components/wifi/wifi_component.h"
 #include <esp_event.h>
@@ -39,6 +43,9 @@
 #include <esp_attr.h>
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
+#ifdef USE_MDNS
+#include <mdns.h>  // the webhook looks .local names up itself
+#endif
 #include <esp_sntp.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -330,8 +337,11 @@ void GamedayComponent::setup() {
   if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
       this->prefs9_.active > this->prefs9_.count)
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
+  if (this->prefs9_.sport > ::espn::kSportCount || this->prefs9_.active != 0)
+    this->prefs9_.sport = 0;
   this->load_msg_();
   this->load_nick_();
+  this->load_hook_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -494,13 +504,35 @@ std::vector<::espn::TeamRef> GamedayComponent::fav_refs_all_() const {
 }
 
 void GamedayComponent::remap_lists_(const std::vector<::espn::TeamRef> &before) {
-  if (this->prefs9_.count == 0)
+  // A sport row whose sport left the favorites, or the only sport left in
+  // them, has no row now: Favorite teams plays every favorite.
+  bool sport_gone = this->prefs9_.sport != 0 && this->sport_playing_() == 0;
+  if (sport_gone) {
+    ESP_LOGI(TAG, "Playlist: every favorite (no %s row now)", ::espn::kSportKeys[this->prefs9_.sport - 1]);
+    this->prefs9_.sport = 0;
+  }
+  // Sport rows come and go with the favorites.
+  this->publish_playlist_select_();
+  if (this->prefs9_.count == 0 && !sport_gone)
     return;
   std::vector<::espn::TeamRef> after = this->fav_refs_all_();
   for (uint8_t n = 0; n < this->prefs9_.count; n++)
     this->prefs9_.mask[n] = ::espn::remap_mask(this->prefs9_.mask[n], before, after);
   this->pref9_.save(&this->prefs9_);
   this->sync_prefs_();
+}
+
+uint8_t GamedayComponent::sport_rows_() const {
+  uint8_t sports = 0;
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    if (this->fav_id_(i) != 0)
+      sports |= ::espn::sport_bit(this->fav_league_(i));
+  return ::espn::sport_rows(sports);
+}
+
+uint8_t GamedayComponent::sport_playing_() const {
+  uint8_t row = this->prefs9_.sport;
+  return row != 0 && ::espn::sport_row_has(this->sport_rows_(), row) ? row : 0;
 }
 
 std::string GamedayComponent::list_name_(uint8_t n) const {
@@ -511,6 +543,9 @@ std::string GamedayComponent::list_name_(uint8_t n) const {
 }
 
 bool GamedayComponent::fav_in_list_(size_t i) const {
+  uint8_t row = this->sport_playing_();
+  if (row != 0)
+    return i < FAV_MAX && this->fav_id_(i) != 0 && ::espn::sport_row_has(::espn::sport_bit(this->fav_league_(i)), row);
   uint8_t a = this->prefs9_.active;
   return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
 }
@@ -529,6 +564,9 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   // The playlist being played stays chosen by its name; with that name gone
   // it is every favorite. keep (list= in the same request, as a rename sends
   // it) names it instead.
+  // A sport row playing goes on playing, unless list= names what plays.
+  uint8_t sport_before = this->prefs9_.sport;
+  p.sport = keep >= 0 && keep <= p.count ? 0 : sport_before;
   this->prefs9_ = p;
   uint8_t active = 0;
   if (keep >= 0 && keep <= p.count) {
@@ -545,7 +583,7 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   this->publish_playlist_select_();
   uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
   // A rename alone plays the same teams, so the board stays as it is.
-  if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask))
+  if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask || p.sport != sport_before))
     this->set_active_list_(active, false);  // other teams play now: pick again
   else
     this->rebuild_state_(&this->last_fields_);
@@ -554,18 +592,22 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
 // From the page, Home Assistant or the remote (announce: the name goes up on
 // the board, so a press in the dark says what it picked). Favorite teams
 // starts playing it, from its first card.
-void GamedayComponent::set_active_list_(uint8_t n, bool announce) {
+void GamedayComponent::play_list_(uint8_t n, uint8_t row, bool announce) {
   if (n > this->prefs9_.count)
     n = 0;
-  if (n != this->prefs9_.active) {
+  if (n != 0)
+    row = 0;
+  if (n != this->prefs9_.active || row != this->prefs9_.sport) {
     this->prefs9_.active = n;
+    this->prefs9_.sport = row;
     this->pref9_.save(&this->prefs9_);
     this->sync_prefs_();
-    ESP_LOGI(TAG, "Playlist: %s", n == 0 ? "every favorite" : this->list_name_(n).c_str());
+    ESP_LOGI(TAG, "Playlist: %s",
+             row != 0 ? ::espn::kSportRowNames[row - 1] : n == 0 ? "every favorite" : this->list_name_(n).c_str());
   }
   this->publish_playlist_select_();
   if (announce)
-    this->say(n == 0 ? "All favorites" : this->list_name_(n), 3);
+    this->say(row != 0 ? ::espn::kSportRowNames[row - 1] : n == 0 ? "All favorites" : this->list_name_(n), 3);
   if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES) {
     this->set_mode_((uint8_t) Mode::FAVORITES);
     return;
@@ -581,11 +623,26 @@ void GamedayComponent::set_active_list_(uint8_t n, bool announce) {
   this->schedule_next_(0);
 }
 
+void GamedayComponent::set_sport_row_(uint8_t row, bool announce) {
+  if (row != 0 && !::espn::sport_row_has(this->sport_rows_(), row)) {
+    ESP_LOGW(TAG, "No %s row: the favorites need it and another sport", ::espn::kSportKeys[row - 1]);
+    this->publish_playlist_select_();
+    return;
+  }
+  this->play_list_(0, row, announce);
+}
+
 void GamedayComponent::select_playlist(const std::string &option) {
   if (option == "All favorites") {
     this->set_active_list_(0, false);
     return;
   }
+  uint8_t rows = this->sport_rows_();
+  for (uint8_t row = 1; row <= ::espn::kSportCount; row++)
+    if (::espn::sport_row_has(rows, row) && option == ::espn::kSportRowNames[row - 1]) {
+      this->set_sport_row_(row, false);
+      return;
+    }
   for (uint8_t n = 1; n <= this->prefs9_.count; n++)
     if (this->list_name_(n) == option) {
       this->set_active_list_(n, false);
@@ -600,16 +657,29 @@ void GamedayComponent::select_playlist(const std::string &option) {
 void GamedayComponent::publish_playlist_select_() {
   if (this->playlist_select_ == nullptr)
     return;
+  // All favorites, the sport rows, then the owner's playlists, as Playing on
+  // the device page lists them.
   this->playlist_options_.clear();
   this->playlist_options_.push_back("All favorites");
+  uint8_t rows = this->sport_rows_(), playing = this->sport_playing_();
+  size_t current = 0;
+  for (uint8_t row = 1; row <= ::espn::kSportCount; row++)
+    if (::espn::sport_row_has(rows, row)) {
+      if (row == playing)
+        current = this->playlist_options_.size();
+      this->playlist_options_.push_back(::espn::kSportRowNames[row - 1]);
+    }
+  size_t first_list = this->playlist_options_.size();
   for (uint8_t n = 1; n <= this->prefs9_.count; n++)
     this->playlist_options_.push_back(this->list_name_(n));
+  if (playing == 0 && this->prefs9_.active != 0)
+    current = first_list + this->prefs9_.active - 1;
   FixedVector<const char *> options;
   options.init(this->playlist_options_.size());
   for (const auto &o : this->playlist_options_)
     options.push_back(o.c_str());
   this->playlist_select_->traits.set_options(options);
-  this->playlist_select_->publish_state(this->playlist_options_[this->prefs9_.active]);
+  this->playlist_select_->publish_state(this->playlist_options_[current]);
 }
 
 #ifndef GAMEDAY_DEMO
@@ -1241,6 +1311,7 @@ void GamedayComponent::loop() {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
     this->night_tick_();
+    this->update_nudge_tick_();
     if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
       // A settled run: the plug from this start's brownout comes down
       this->power_settled_ = true;
@@ -1259,6 +1330,13 @@ void GamedayComponent::loop() {
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the card down.
   this->msg_tick_();
+  // The game events' clock-driven part (the reminder before the start), and
+  // the webhook's posts. Before the demo's early return too.
+  if (millis() - this->ha_tick_ms_ >= 15000) {
+    this->ha_tick_ms_ = millis();
+    this->ha_track_();
+  }
+  this->hook_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -1935,6 +2013,42 @@ void GamedayComponent::auto_update_tick_() {
 #endif
       break;
   }
+#endif
+}
+
+// "Update ready" on the ticker (update_nudge.h). The board is redrawn when
+// the line comes or goes, or the release waiting turns important or stops
+// being, since a quiet board can go hours between redraws. Not in the bar
+// build, which always installs on its own.
+void GamedayComponent::update_nudge_tick_() {
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+  if (App.get_updates().empty() || this->time_ == nullptr)
+    return;
+  update::UpdateEntity *u = App.get_updates()[0];
+  ESPTime now = this->time_->now();
+  bool out = u->state == update::UPDATE_STATE_AVAILABLE &&
+             ::espn::version_newer(u->update_info.latest_version, u->update_info.current_version);
+  ::espn::UpdateNudgeInputs in;
+  in.waiting = out && !::espn::update_failed_here(this->update_mark_, u->update_info.latest_version);
+  in.auto_on = this->auto_update();
+  in.clock_valid = now.is_valid();
+  in.hour = now.hour;
+  in.today = ::espn::auto_update_day(now.year, now.day_of_year);
+  in.now = (int64_t) now.timestamp;
+  in.live = this->followed_game_live_();
+  in.dark = this->night_now_ == ::espn::Night::DARK;
+  bool on = ::espn::update_nudge_on(in, this->nudge_day_) && !this->demo_playing_();
+  bool important = out && ::espn::update_important(u->update_info.summary);
+  if (on == this->nudge_on_ && important == this->update_important_)
+    return;
+  if (on != this->nudge_on_)
+    ESP_LOGI(TAG, "Update ready on the ticker: %s", on ? u->update_info.latest_version.c_str() : "off");
+  this->nudge_on_ = on;
+  this->update_important_ = important;
+  if (this->board_ready_)
+    this->emit_({});
+  else
+    this->rebuild_state_(&this->last_fields_);
 #endif
 }
 
@@ -3207,17 +3321,16 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_opp_score = ha.opp_score;
     }
   }
-  // Redraws repeat the same read, which the tracker sees as no change. The
-  // demo's scripted game sends no events into someone's automations.
-  std::vector<::espn::HaEvent> ha_events;
-  if (!this->demo_playing_())
-    ha_events = this->ha_tracker_.update(ha, this->live_mode_() && !this->live_fallback_);
-  for (const auto &e : ha_events) {
-    ESP_LOGI(TAG, "Home Assistant event: %s %s %d-%d", e.team.c_str(), e.play.c_str(), e.team_score,
-             e.opponent_score);
-    for (auto &cb : this->ha_event_callbacks_)
-      cb(e);
+  if (ha.valid && ha.state != GameState::NOT_FOUND) {
+    f.ha_team = ha.team_abbr;
+    f.ha_opponent = ha.opp_abbr;
+    f.ha_team_rgb = ::espn::ha_rgb_text(::espn::ha_rgb(ha.team_color));
+    f.ha_opp_rgb = ::espn::ha_rgb_text(::espn::ha_rgb(ha.opp_color));
+    f.ha_period = ::espn::ha_period_text(ha);
+    f.ha_clock = ::espn::ha_clock_text(ha);
   }
+  // Redraws repeat the same read, which the tracker sees as no change.
+  this->ha_track_();
   // Before the Live mode prefixes, so a fallback team's Next line keeps "No
   // live X games, showing CHI |" in front of it.
   this->clock_fields_(f);
@@ -3234,6 +3347,12 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_last_play.clear();
       f.ha_live = false;
       f.ha_team_score = f.ha_opp_score = -1;
+      f.ha_team.clear();
+      f.ha_opponent.clear();
+      f.ha_team_rgb.clear();
+      f.ha_opp_rgb.clear();
+      f.ha_period.clear();
+      f.ha_clock.clear();
       f.message = this->recap_message_;
     } else if (this->live_fallback_ && saved != nullptr) {
       showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
@@ -3274,6 +3393,12 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       // Without the minutes, which would log a change every minute.
       f.ha_status_text += " | not updating";
     }
+  }
+  // Once a day while a release waits (update_nudge.h). A game going live
+  // takes it off at once, not at the next tick.
+  if (this->nudge_on_ && !this->followed_game_live_() && !this->demo_playing_()) {
+    std::string ready = std::string(::espn::update_nudge_text(this->update_important_)) + " | ";
+    f.status_text = ready + f.status_text;
   }
   // Until a team, mode or favorite has been picked once, the ticker asks for
   // one. The app comes first; the address is for setting up without an
@@ -3841,6 +3966,15 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   }
   doc["list"] = this->prefs9_.active;
   doc["listmax"] = ::espn::kListMax;
+  // The sport rows Playing offers, worked out from the favorites, and the one
+  // playing ("" for none; list is then 0).
+  JsonArray sports = doc["sports"].to<JsonArray>();
+  uint8_t rows = this->sport_rows_();
+  for (uint8_t row = 1; row <= ::espn::kSportCount; row++)
+    if (::espn::sport_row_has(rows, row))
+      sports.add(::espn::kSportKeys[row - 1]);
+  uint8_t sport_row = this->sport_playing_();
+  doc["sport"] = sport_row != 0 ? ::espn::kSportKeys[sport_row - 1] : "";
   doc["today"] = this->today_only();
   doc["jump"] = this->jump_to_action();
   doc["banner"] = this->score_banner();
@@ -3890,6 +4024,12 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   if (this->update_mark_.failed[0] != '\0')
     doc["update_failed"] = (const char *) this->update_mark_.failed;
 #endif
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+  // The release waiting is marked important (update_nudge.h); left out
+  // otherwise, and with nothing waiting.
+  if (this->update_important_)
+    doc["update_important"] = true;
+#endif
 #ifdef GAMEDAY_BAR
   // The device page shows the bar beta note and a "Something wrong?" link.
   doc["bar"]["report"] = this->report_email_;
@@ -3905,6 +4045,18 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     mr["status"] = this->msg_status_;
     if (this->msg_total_ > 0 || this->msg_eof_)
       mr["entries"] = this->msg_total_;
+  }
+  // The game events (ha_events.h): the webhook's address, "" for none, the
+  // reminder's lead in minutes, and with an address, how the posts went:
+  // the last one's HTTP status (0 for no answer), the posts that got a 2xx
+  // and the events dropped because the queue was full.
+  doc["hook"] = this->hook_url_;
+  doc["pregame"] = this->pregame_min_;
+  if (!this->hook_url_.empty() && this->hook_status_ >= 0) {
+    JsonObject hr = doc["hookpost"].to<JsonObject>();
+    hr["status"] = this->hook_status_;
+    hr["sent"] = this->hook_sent_;
+    hr["dropped"] = this->hook_dropped_;
   }
   doc["misses"] = this->misses_;
   // The Wi-Fi wants a sign-in (captive.h); the page and the app say how to
@@ -4207,6 +4359,271 @@ void GamedayComponent::set_nick_(const std::string &nick) {
   this->rebuild_state_(&this->last_fields_);
 }
 
+// ---- Game events (ha_events.h) and the webhook (hook.h) --------------------
+
+void GamedayComponent::load_hook_() {
+  this->hook_pref_ = global_preferences->make_preference<PrefsHook>(fnv1_hash("gameday_hook_v1"));
+  PrefsHook p{};
+  if (!this->hook_pref_.load(&p))
+    return;  // never set: no webhook, the default reminder
+  p.url[sizeof(p.url) - 1] = '\0';
+  this->hook_url_ = ::espn::hook_url_ok(p.url) ? p.url : "";
+  this->pregame_min_ = (uint8_t) ::espn::clamp_pregame_minutes(p.pregame);
+}
+
+void GamedayComponent::set_hook_(const std::string *url, int pregame) {
+  bool changed = false;
+  if (url != nullptr && *url != this->hook_url_) {
+    this->hook_url_ = *url;
+    this->hook_queue_.clear();  // nothing meant for the old address goes to the new one
+    this->hook_status_ = -1;
+    changed = true;
+  }
+  if (pregame >= 0 && pregame != this->pregame_min_) {
+    this->pregame_min_ = (uint8_t) pregame;
+    changed = true;
+  }
+  if (!changed)
+    return;
+  PrefsHook p{};
+  strncpy(p.url, this->hook_url_.c_str(), sizeof(p.url) - 1);
+  p.pregame = this->pregame_min_;
+  this->hook_pref_.save(&p);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Game events: webhook %s, reminder %u min before the start",
+           this->hook_url_.empty() ? "off" : this->hook_url_.c_str(), (unsigned) this->pregame_min_);
+  this->rebuild_state_(&this->last_fields_);
+}
+
+std::string GamedayComponent::ha_league_() const {
+#ifdef GAMEDAY_DEMO
+  if (this->demo_playing_())
+    return ::espn::league_key((League) this->demo_league_());
+#endif
+  if (this->favorites_mode_() && !this->fav_.empty()) {
+    int i = this->fav_locked_ ? this->fav_shown_ : ::espn::followed_favorite(this->fav_games_());
+    if (i < 0)
+      i = this->fav_shown_;
+    if (i >= 0 && i < (int) this->fav_.size())
+      return ::espn::league_key(this->fav_[i].team->league);
+  }
+  if (this->live_mode_() && this->schedule_.valid)
+    return ::espn::league_key((League) this->schedule_.league);
+  const ::espn::Team *first = this->fallback_team_();
+  return first != nullptr ? ::espn::league_key(first->league) : "";
+}
+
+// From every board update and every so often from loop(): the reminder
+// before the start goes by the clock, not by a read.
+void GamedayComponent::ha_track_() {
+  // The finals rotation turns through other games' cards, none of them followed.
+  if (this->recap_on_ && !this->demo_playing_())
+    return;
+  ::espn::HaContext ctx;
+  ctx.neutral = this->live_mode_() && !this->live_fallback_ && !this->demo_playing_();
+  ctx.league = this->ha_league_();
+  ctx.now_epoch = this->clock_set_() ? (int64_t) this->time_->timestamp_now() : 0;
+  ctx.pregame_minutes = this->pregame_min_;
+  ctx.mono_s = millis() / 1000;
+#ifdef GAMEDAY_DEMO
+  // The scripted game has no ESPN id; each run is a game of its own, so it
+  // starts, scores and ends like a real one, once. Demo builds are never
+  // released, so these reach only a bench or a show floor's automations.
+  if (this->demo_playing_()) {
+    GameSnapshot g = this->game_;
+    g.event_id = "demo-" + std::to_string(this->demo_run_);
+    for (const auto &e : this->ha_tracker_.update(g, ctx))
+      this->send_game_event_(e);
+    return;
+  }
+#endif
+  for (const auto &e : this->ha_tracker_.update(this->ha_game_(), ctx))
+    this->send_game_event_(e);
+}
+
+void GamedayComponent::send_game_event_(const ::espn::HaEvent &e) {
+  const char *kind = ::espn::ha_kind_name(e.kind);
+  const char *what = e.kind == ::espn::HaKind::LEAD     ? e.change.c_str()
+                     : e.kind == ::espn::HaKind::PERIOD ? e.period_name.c_str()
+                                                        : e.play.c_str();
+  ESP_LOGI(TAG, "Game event %s: %s %s %d-%d", kind, e.team.c_str(), what, e.team_score, e.opponent_score);
+  for (auto &cb : this->ha_event_callbacks_)
+    cb(e);
+  const std::string panel = this->hostname();
+#ifdef GAMEDAY_HA_EVENTS
+  // Home Assistant takes events from any ESPHome device; only actions need
+  // "Allow the device to perform Home Assistant actions". Nothing is sent,
+  // and nothing logged, with no Home Assistant connected.
+  auto *api = api::global_api_server;
+  if (api != nullptr && api->is_connected()) {
+    ::espn::HaFields fields = ::espn::ha_event_fields(e);
+    fields.emplace_back("panel", panel);
+    const std::string name = std::string("esphome.gameday_") + kind;
+    api::HomeassistantActionRequest req;
+    req.service = StringRef(name);
+    req.is_event = true;
+    req.data.init(fields.size());
+    for (const auto &kv : fields) {
+      auto &m = req.data.emplace_back();
+      m.key = StringRef(kv.first);
+      m.value = StringRef(kv.second);
+    }
+    api->send_homeassistant_action(req);
+  }
+#endif
+  if (!this->hook_url_.empty())
+    this->queue_hook_(::espn::ha_webhook_json(e, panel));
+}
+
+// The device page's "Send a test event": a made-up score for the game Home
+// Assistant follows, or for favorite #1 when there is none, so the owner
+// can watch their automation or webhook run.
+void GamedayComponent::send_test_event_() {
+  ::espn::HaEvent e;
+  e.kind = ::espn::HaKind::TEST;
+  e.league = this->ha_league_();
+  const GameSnapshot *g = &this->ha_game_();
+  if ((!g->valid || g->team_abbr.empty()) && !this->fav_.empty() && this->fav_[0].game.valid)
+    g = &this->fav_[0].game;
+  if (g->valid && !g->team_abbr.empty()) {
+    e.event_id = g->event_id;
+    e.team = g->team_abbr;
+    e.opponent = g->opp_abbr;
+    e.team_rgb = ::espn::ha_rgb(g->team_color);
+    e.opponent_rgb = ::espn::ha_rgb(g->opp_color);
+    e.sport = ::espn::ha_sport(g->sport);
+    e.team_score = g->state == GameState::PRE ? 0 : g->team_score;
+    e.opponent_score = g->state == GameState::PRE ? 0 : g->opp_score;
+    switch (g->sport) {
+      case ::espn::Sport::BASEBALL:
+        e.play = "home_run";
+        e.points = 1;
+        break;
+      case ::espn::Sport::HOCKEY:
+      case ::espn::Sport::SOCCER:
+        e.play = "goal";
+        e.points = 1;
+        break;
+      case ::espn::Sport::BASKETBALL:
+        e.play = "score";
+        e.points = 3;
+        break;
+      default:
+        e.play = "touchdown";
+        e.points = 7;
+        break;
+    }
+  } else {
+    const ::espn::Team *first = this->fallback_team_();
+    e.team = first != nullptr ? first->abbr : "HOME";
+    e.opponent = "AWAY";
+    e.sport = ::espn::ha_sport(first != nullptr ? ::espn::league_sport(first->league) : ::espn::Sport::FOOTBALL);
+    e.play = "touchdown";
+    e.points = 7;
+  }
+  e.team_score += e.points;
+  e.my_team = true;
+  this->send_game_event_(e);
+}
+
+void GamedayComponent::queue_hook_(std::string body) {
+  if (this->hook_queue_.size() >= kHookQueueMax) {
+    this->hook_queue_.erase(this->hook_queue_.begin());
+    this->hook_dropped_++;
+  }
+  this->hook_queue_.push_back(std::move(body));
+}
+
+void GamedayComponent::hook_tick_() {
+  if (this->hook_running_) {
+    if (!this->hook_task_done_)
+      return;
+    this->hook_running_ = false;
+    this->hook_status_ = this->hook_task_status_;
+    unsigned stack_left = (unsigned) this->hook_task_stack_.load();
+    if (this->hook_status_ >= 200 && this->hook_status_ < 300) {
+      this->hook_sent_++;
+      ESP_LOGD(TAG, "Webhook: HTTP %d (%u bytes of the post's stack unused)", this->hook_status_, stack_left);
+    } else if (this->hook_status_ == 0) {
+      ESP_LOGW(TAG, "Webhook: no answer from %s (%u bytes of the post's stack unused)", this->hook_task_url_.c_str(),
+               stack_left);
+    } else {
+      ESP_LOGW(TAG, "Webhook: HTTP %d from %s (%u bytes of the post's stack unused)", this->hook_status_,
+               this->hook_task_url_.c_str(), stack_left);
+    }
+    std::string().swap(this->hook_task_body_);
+    this->rebuild_state_(&this->last_fields_);  // the page shows how the last post went
+  }
+  if (this->hook_queue_.empty())
+    return;
+  if (this->hook_url_.empty()) {
+    this->hook_queue_.clear();
+    return;
+  }
+  if (!network::is_connected())
+    return;  // waits for Wi-Fi; the queue's cap keeps it short
+  this->hook_task_url_ = this->hook_url_;
+  this->hook_task_body_ = std::move(this->hook_queue_.front());
+  this->hook_queue_.erase(this->hook_queue_.begin());
+  this->hook_task_done_ = false;
+  this->hook_running_ = true;
+  // Plain HTTP and no response body: the Wi-Fi check's stack, freed when
+  // the post is done.
+  if (xTaskCreate(&GamedayComponent::hook_task_, "gameday_hook", 6144, this, 1, nullptr) != pdPASS) {
+    ESP_LOGW(TAG, "Webhook: could not start the post (largest free internal block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    this->hook_running_ = false;
+    this->hook_dropped_++;
+  }
+}
+
+// The post itself, on its own task: one try, three seconds at most to
+// connect and three for the answer, whose body is never read.
+void GamedayComponent::hook_task_(void *arg) {
+  auto *self = static_cast<GamedayComponent *>(arg);
+  std::string url = self->hook_task_url_;
+  std::string host;
+#ifdef USE_MDNS
+  // homeassistant.local and the like: lwIP would hand the name to the
+  // router's DNS, which doesn't know it. Ask mDNS, post to the address it
+  // gives, and keep the name in the Host header.
+  std::string name = ::espn::hook_mdns_name(url);
+  if (!name.empty()) {
+    esp_ip4_addr_t addr{};
+    size_t b, e;
+    if (mdns_query_a(name.c_str(), 2000, &addr) == ESP_OK && ::espn::hook_host_span(url, b, e)) {
+      char ip[16];
+      snprintf(ip, sizeof(ip), IPSTR, IP2STR(&addr));
+      host = url.substr(b, e - b);
+      url.replace(b, e - b, ip);
+    }
+  }
+#endif
+  esp_http_client_config_t cfg = {};
+  cfg.url = url.c_str();
+  cfg.method = HTTP_METHOD_POST;
+  cfg.timeout_ms = 3000;
+  cfg.disable_auto_redirect = true;
+  cfg.user_agent = "GameDayScoreboard";
+  cfg.buffer_size = 512;
+  cfg.buffer_size_tx = 512;
+  int status = 0;
+  esp_http_client_handle_t client = esp_http_client_init(&cfg);
+  if (client != nullptr) {
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    if (!host.empty())
+      esp_http_client_set_header(client, "Host", host.c_str());
+    esp_http_client_set_post_field(client, self->hook_task_body_.data(), (int) self->hook_task_body_.size());
+    if (esp_http_client_perform(client) == ESP_OK)
+      status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+  }
+  self->hook_task_status_ = status;
+  self->hook_task_stack_ = (uint32_t) uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
+  self->hook_task_done_ = true;
+  vTaskDelete(nullptr);
+}
+
 // Any of the three; a null pointer or a negative every leaves that one as it is.
 void GamedayComponent::set_msg_(const std::string *text, const std::string *url, int every) {
   bool reset = false;
@@ -4453,7 +4870,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     bool known = name == "refresh" || name == "qc" || name == "say" || name == "regulatory" ||
-                 name == "night_skip" || name == "night_resume";
+                 name == "night_skip" || name == "night_resume" || name == "event_test";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
@@ -4475,6 +4892,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
         this->night_skip("the device page");
       else if (name == "night_resume")
         this->night_resume();
+      else if (name == "event_test")
+        this->send_test_event_();
 #ifdef GAMEDAY_DEMO
       else if (name == "demo")
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);
@@ -4589,7 +5008,8 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   for (const auto &op : ops) {
     lists = lists || op.kind == ::espn::SetKind::LISTS;
     pick = pick || op.kind == ::espn::SetKind::MODE || op.kind == ::espn::SetKind::FAVS ||
-           op.kind == ::espn::SetKind::FAV_SLOT || op.kind == ::espn::SetKind::LIST;
+           op.kind == ::espn::SetKind::FAV_SLOT || op.kind == ::espn::SetKind::LIST ||
+           op.kind == ::espn::SetKind::SPORT;
   }
   if (pick && !lists)
     this->night_skip("a team pick");
@@ -4603,15 +5023,22 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   std::string msg_text, msg_url;
   uint8_t msg_keys = 0;
   int msg_every = -1;
+  // So are the game events'.
+  std::string hook_url;
+  bool hook_url_set = false;
+  int pregame = -1;
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
   // list= with lists= names the playlist playing after the change (a rename
   // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
-  bool with_lists = false;
+  // sport= picking a sport row takes over list= in the same request (the
+  // page sends list=0 with it); sport=none with list= leaves it to list=.
+  bool with_lists = false, sport_pick = false;
   int keep_list = -1;
   for (const auto &op : ops) {
     with_lists = with_lists || op.kind == ::espn::SetKind::LISTS;
+    sport_pick = sport_pick || (op.kind == ::espn::SetKind::SPORT && op.value != 0);
     if (op.kind == ::espn::SetKind::LIST)
       keep_list = op.value;
   }
@@ -4663,12 +5090,18 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         this->set_lists_(::espn::parse_lists(op.text, FAV_MAX), keep_list);
         break;
       case ::espn::SetKind::LIST:
-        if (with_lists)
-          break;  // set_lists_ took it
+        if (with_lists || sport_pick)
+          break;  // set_lists_ or the sport row took it
         if (op.value > this->prefs9_.count)
           ESP_LOGW(TAG, "No playlist %d", op.value);
         else
           this->set_active_list_((uint8_t) op.value, false);
+        break;
+      case ::espn::SetKind::SPORT:
+        if (op.value != 0)
+          this->set_sport_row_((uint8_t) op.value, false);
+        else if (keep_list < 0 && this->prefs9_.sport != 0)
+          this->set_active_list_(0, false);
         break;
       case ::espn::SetKind::TZ:
         this->select_timezone(::espn::kTimezones[op.value].name);
@@ -4737,6 +5170,13 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       case ::espn::SetKind::NICK:
         this->set_nick_(op.text);
         break;
+      case ::espn::SetKind::HOOK:
+        hook_url = op.text;
+        hook_url_set = true;
+        break;
+      case ::espn::SetKind::PREGAME:
+        pregame = op.value;
+        break;
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;
         break;
@@ -4758,6 +5198,8 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
     ESP_LOGW(TAG, "Night schedule: start and end can't be the same time; keeping %s to %s",
              ::espn::night_clock12(night.start).c_str(), ::espn::night_clock12(night.end).c_str());
   this->set_night_(night);
+  if (hook_url_set || pregame >= 0)
+    this->set_hook_(hook_url_set ? &hook_url : nullptr, pregame);
   if (msg_keys != 0 || msg_every >= 0)
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
   if (dirty)

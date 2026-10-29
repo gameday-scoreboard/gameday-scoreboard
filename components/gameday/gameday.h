@@ -32,6 +32,7 @@
 #include "ha_events.h"
 #include "board_text.h"
 #include "health.h"
+#include "hook.h"
 #include "line_score.h"
 #include "message.h"
 #include "night.h"
@@ -45,6 +46,7 @@
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
+#include "update_nudge.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -115,6 +117,12 @@ struct UpdateFields {
   bool ha_live{false};
   int ha_team_score{-1};
   int ha_opp_score{-1};
+  // The same game's sides, colors ("0,42,92", for a light's rgb_color), the
+  // period in words ("3rd quarter", "Halftime") and the clock ("4:32").
+  // Empty with no game; the period and clock also before the start.
+  std::string ha_team, ha_opponent;
+  std::string ha_team_rgb, ha_opp_rgb;
+  std::string ha_period, ha_clock;
   // The off-season clock (offseason.h) on the no-game screen, in team_color.
   // next_line is the next game for a wide board, its kickoff on a second
   // line; empty when none is known, and the page shows the date instead.
@@ -165,6 +173,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
+//                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
@@ -206,7 +215,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
   }
-  // Scores and finals of the game Home Assistant follows (ha_events.h).
+  // The game events of the game Home Assistant follows (ha_events.h).
   void add_on_ha_event_callback(std::function<void(const ::espn::HaEvent &)> &&cb) {
     this->ha_event_callbacks_.push_back(std::move(cb));
   }
@@ -406,15 +415,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The favorites in list order, empty slots included, for playlists.h.
   std::vector<::espn::TeamRef> fav_refs_all_() const;
   // Moves each playlist's teams to where the favorites list put them (before:
-  // fav_refs_all_() from before the change). No save.
+  // fav_refs_all_() from before the change), and drops a sport row the new
+  // list has no row for.
   void remap_lists_(const std::vector<::espn::TeamRef> &before);
   // keep: the playlist playing after the change (list= sent with lists=), or
   // -1 to keep the one playing by its name.
   void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = -1);
   // n: 1 to the playlist count, 0 = every favorite.
-  void set_active_list_(uint8_t n, bool announce);
+  void set_active_list_(uint8_t n, bool announce) { this->play_list_(n, 0, announce); }
+  // row: 1 + Sport, one of sport_rows_(); 0 = every favorite.
+  void set_sport_row_(uint8_t row, bool announce);
+  // Plays playlist n or sport row (one of them, or neither for every favorite).
+  void play_list_(uint8_t n, uint8_t row, bool announce);
   std::string list_name_(uint8_t n) const;  // n = 1..count
-  bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist
+  bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist or sport row
+  // The sport rows Playing offers now (playlists.h sport_rows), a bit per Sport.
+  uint8_t sport_rows_() const;
+  // The sport row playing, 1 + Sport, or 0 when none is (or its row is gone).
+  uint8_t sport_playing_() const;
   void publish_playlist_select_();
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
@@ -601,7 +619,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t count;
     uint16_t mask[::espn::kListMax];                       // bit i = favorite i
     char name[::espn::kListMax][::espn::kListNameMax];  // no terminator when full
-    uint8_t spare[2];
+    // The sport row playing instead (active is then 0), 1 + Sport; 0 = none.
+    // Was spare, so older firmware plays every favorite.
+    uint8_t sport;
+    uint8_t spare[1];
   } __attribute__((packed));
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
@@ -832,6 +853,39 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::vector<std::function<void(const UpdateFields &)>> callbacks_;
   std::vector<std::function<void(const ::espn::HaEvent &)>> ha_event_callbacks_;
   ::espn::HaTracker ha_tracker_;
+  // The game events (ha_events.h): Home Assistant's esphome.gameday_* and
+  // the owner's webhook (hook.h), with the reminder's lead, saved together.
+  struct PrefsHook {
+    char url[::espn::kHookUrlMax + 1];
+    uint8_t pregame;
+    uint8_t spare[3];
+  } __attribute__((packed));
+  ESPPreferenceObject hook_pref_;
+  std::string hook_url_;
+  uint8_t pregame_min_{(uint8_t) ::espn::kPregameDefault};
+  void load_hook_();
+  // Either; a null url or a negative pregame leaves that one as it is.
+  void set_hook_(const std::string *url, int pregame);
+  std::string ha_league_() const;  // the league key of the game Home Assistant follows
+  void ha_track_();                // reads ha_game_() for new events and sends them
+  void send_game_event_(const ::espn::HaEvent &e);
+  void send_test_event_();  // the "event_test" action
+  uint32_t ha_tick_ms_{0};
+  // The webhook's posts, one at a time on a short-lived task of their own,
+  // so a slow or missing listener never holds up the board or ESPN's reads.
+  // One try each, a few seconds at most; a full queue drops the oldest.
+  static constexpr size_t kHookQueueMax = 6;
+  std::vector<std::string> hook_queue_;  // main loop only
+  std::string hook_task_url_, hook_task_body_;  // set before the task starts, read only by it
+  std::atomic<bool> hook_running_{false};
+  std::atomic<bool> hook_task_done_{false};
+  std::atomic<int> hook_task_status_{0};
+  std::atomic<uint32_t> hook_task_stack_{0};  // bytes of the task's stack it never used
+  int hook_status_{-1};  // the last post's HTTP status, 0 no answer, -1 none yet
+  uint32_t hook_sent_{0}, hook_dropped_{0};
+  void queue_hook_(std::string body);
+  void hook_tick_();  // main loop: starts the next post, collects the last
+  static void hook_task_(void *arg);
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
@@ -859,6 +913,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject update_mark_pref_;
   ::espn::UpdateMark update_mark_{};
   bool update_installing_{false};  // the update entity is installing, mark written
+  // "Update ready" on the ticker (update_nudge.h), looked at with the above.
+  ::espn::UpdateNudgeDay nudge_day_{};
+  bool nudge_on_{false};         // the line is in the ticker
+  bool update_important_{false};  // the release waiting is marked important
+  void update_nudge_tick_();
   void settle_update_mark_();
   void update_state_changed_();
 #ifdef GAMEDAY_BAR
@@ -1070,6 +1129,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool demo_gap_{false};    // between runs: the normal board's turn
   uint8_t demo_resume_{0};  // a demo to pick back up after boot
   uint8_t demo_step_{0};
+  uint16_t demo_run_{0};  // runs started since boot, for the run's event id
   uint32_t demo_next_ms_{0};
   GameSnapshot demo_saved_game_, demo_saved_prev_;
   std::string demo_json_{"{}"};  // GET /gameday/demo, under state_mutex_
@@ -1150,12 +1210,15 @@ class UpdateTrigger : public Trigger<const UpdateFields &> {
   }
 };
 
-// Fire on the main loop when the game Home Assistant follows scores or ends.
+// Fire on the main loop when the game Home Assistant follows scores or ends
+// (on_score, on_final), or on any of its events (on_game_event). The panel
+// sends Home Assistant and the webhook these itself; the triggers are for a
+// build's own YAML.
 class ScoreTrigger : public Trigger<const ::espn::HaEvent &> {
  public:
   explicit ScoreTrigger(GamedayComponent *parent) {
     parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) {
-      if (e.play != "final")
+      if (e.kind == ::espn::HaKind::SCORE)
         this->trigger(e);
     });
   }
@@ -1165,9 +1228,16 @@ class FinalTrigger : public Trigger<const ::espn::HaEvent &> {
  public:
   explicit FinalTrigger(GamedayComponent *parent) {
     parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) {
-      if (e.play == "final")
+      if (e.kind == ::espn::HaKind::FINAL)
         this->trigger(e);
     });
+  }
+};
+
+class GameEventTrigger : public Trigger<const ::espn::HaEvent &> {
+ public:
+  explicit GameEventTrigger(GamedayComponent *parent) {
+    parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) { this->trigger(e); });
   }
 };
 

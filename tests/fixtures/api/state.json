@@ -48,6 +48,8 @@
   ],
   "list": 2,
   "listmax": 16,
+  "sports": [],
+  "sport": "",
   "today": false,
   "jump": false,
   "banner": true,
@@ -79,6 +81,7 @@
   "autoupd": false,
   "beta": false,
   "update_failed": "2026.10.2",
+  "update_important": true,
   "bar": {
     "report": "support@gameday-scoreboard.com"
   },
@@ -88,6 +91,13 @@
   "msgread": {
     "status": 200,
     "entries": 3
+  },
+  "hook": "http://192.168.1.20:1880/gameday",
+  "pregame": 15,
+  "hookpost": {
+    "status": 200,
+    "sent": 4,
+    "dropped": 0
   },
   "misses": 0,
   "captive": false,
