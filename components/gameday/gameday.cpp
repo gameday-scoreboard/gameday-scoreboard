@@ -1220,6 +1220,7 @@ void GamedayComponent::dump_config() {
 void GamedayComponent::on_shutdown() { ::espn::boot_log_planned(boot_log); }
 
 void GamedayComponent::loop() {
+  stack_bench::Meter whole_loop("gd_loop");  // bench only: everything below
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
   if (this->logo_held_ && this->logo_hold_done_())
@@ -1329,7 +1330,10 @@ void GamedayComponent::loop() {
              this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
-  this->start_job_();
+  {
+    stack_bench::Meter m("start_job");  // bench only: a Favorites switch emits from here
+    this->start_job_();
+  }
 }
 
 // lwIP's SNTP doubles its wait after each failed try, up to 150 s, and every
