@@ -47,6 +47,10 @@ If the app loses its connection to the panel for a moment while the panel still 
 - **Panels**: every panel saved in the app, and new ones nearby.
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
 
+:::note[Coming in the next release]
+On Android, **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
+:::
+
 ## Your panels
 
 The panel list is **Settings > Panels**, and it's what the Board shows until you have a panel. It shows each panel's nickname, with a dot for online and **Offline** next to a panel the app can't reach.
