@@ -5154,8 +5154,11 @@ void GamedayComponent::apply_news_job_() {
   if (!this->news_on())
     return;  // turned off meanwhile
   const uint32_t now = millis();
-  if (j.news_n < 0) {
-    // The headlines on hand stay up until the retry.
+  if (j.news_n <= 0) {
+    // The headlines on hand stay up until the retry, which reads the next
+    // source: a feed with nothing in it counts as a failed read.
+    if (j.news_n == 0)
+      ESP_LOGW(TAG, "News: no headlines for %s", j.news_head.c_str());
     this->news_fail_ms_ = now == 0 ? 1 : now;
     return;
   }

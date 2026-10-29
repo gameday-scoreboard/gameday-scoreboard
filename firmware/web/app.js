@@ -398,8 +398,7 @@
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
-    countdown: (v) => v === "1", top25: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    countdown: (v) => v === "1", news: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.

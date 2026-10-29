@@ -24,7 +24,7 @@ Where the headlines come from follows the panel's mode:
 - **Favorite teams**: your favorites' news, from the playlist that's playing. The panel reads one favorite's headlines, then the next favorite's an hour later, and so on down the list.
 - **Live games**: the news of the leagues the panel follows, one league each hour.
 
-The panel reads ESPN's news about once an hour, and only while the card is on. If a read fails, the headlines it already has stay, and it tries again in 10 minutes.
+The panel reads ESPN's news about once an hour, and only while the card is on. If a read fails, or a team has no news, the headlines it already has stay, and it tries again in 10 minutes, with the next team or league when it follows more than one.
 
 ## When it steps aside
 
