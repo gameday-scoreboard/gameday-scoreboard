@@ -37,6 +37,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - Every ticker switch and **Opponent scores too**
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
+- Game-day wake, its **Turns on** time and **After the game** (coming in the next release)
 - The message card's text, list address and timing
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**

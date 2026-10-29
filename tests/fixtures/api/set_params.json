@@ -43,5 +43,8 @@
   "lists",
   "list",
   "hook",
-  "pregame"
+  "pregame",
+  "wake",
+  "wakelead",
+  "after"
 ]

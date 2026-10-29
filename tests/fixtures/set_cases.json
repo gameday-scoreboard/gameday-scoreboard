@@ -12,7 +12,8 @@
     "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15,
-    "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
+    "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
+    "wake": false, "wakelead": 15, "after": "scoreboard"
   },
   "cases": [
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
@@ -166,6 +167,16 @@
      "expect": {"nightstart": "23:00", "nightend": "07:00"}},
     {"name": "a night time with AM or PM is refused", "set": [["nightstart", "11 PM"]], "expect": {"nightstart": "23:00"}},
     {"name": "midnight starts the night", "set": [["nightstart", "00:00"]], "expect": {"nightstart": "00:00"}},
+    {"name": "game-day wake on, 30 minutes before, off after the game", "set": [["wake", "1"], ["wakelead", "30"], ["after", "off"]],
+     "expect": {"wake": true, "wakelead": 30, "after": "off"}},
+    {"name": "wake lead under 5 minutes is 5", "set": [["wakelead", "1"]], "expect": {"wakelead": 5}},
+    {"name": "wake lead past 120 minutes is 120", "set": [["wakelead", "600"]], "expect": {"wakelead": 120}},
+    {"name": "wake lead that isn't a whole number is refused", "set": [["wakelead", "15m"]], "expect": {"wakelead": 15}},
+    {"name": "the clock after the game", "start": {"after": "off"}, "set": [["after", "clock"]], "expect": {"after": "clock"}},
+    {"name": "an after-the-game choice this firmware doesn't have is refused", "start": {"after": "clock"}, "set": [["after", "effects"]],
+     "expect": {"after": "clock"}},
+    {"name": "wake off keeps its lead and after-the-game choice", "start": {"wake": true, "wakelead": 45, "after": "off"},
+     "set": [["wake", "0"]], "expect": {"wake": false, "wakelead": 45, "after": "off"}},
     {"name": "lists sets playlists over the favorites", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "Football=nfl:6;Dallas=nfl:6,nba:6,nhl:25"]], "expect": {"lists": [{"n": "Football", "f": [0]}, {"n": "Dallas", "f": [0, 1, 2]}], "list": 0}},
     {"name": "a playlist keeps only favorites", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "Mix=nfl:6,nfl:21,nfl:99999,bogus,nfl:6"]], "expect": {"lists": [{"n": "Mix", "f": [0]}]}},
     {"name": "a playlist with no name is left out", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"]}, "set": [["lists", "=nfl:6;  =nba:6;Hockey=nhl:25"]], "expect": {"lists": [{"n": "Hockey", "f": [2]}]}},

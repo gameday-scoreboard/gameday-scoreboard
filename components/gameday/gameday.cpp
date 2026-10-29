@@ -77,6 +77,16 @@ struct NightSkipRtc {
 static const uint32_t NIGHT_SKIP_MARK = 0x4E534B31;
 RTC_NOINIT_ATTR static NightSkipRtc night_skip_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+// The wake's state (wake.h) the same way: a panel After the game turned off
+// stays off through the nightly update, and one woken for a game isn't woken
+// again for it.
+struct WakeRtc {
+  uint32_t mark;
+  ::espn::WakeState state;
+};
+static const uint32_t WAKE_MARK = 0x57414B31;
+RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
 // them, but accepts curl.
 static const char *const USER_AGENT = "curl/8.0";
@@ -358,6 +368,7 @@ void GamedayComponent::setup() {
 #endif
   this->team_cache_pref_ =
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
+  this->load_wake_();
   this->rebuild_favorites_(false);
   this->apply_timezone_();
   if (this->time_ != nullptr)
@@ -385,6 +396,12 @@ void GamedayComponent::setup() {
   if (night_skip_rtc.mark == NIGHT_SKIP_MARK)
     this->night_skip_until_ = night_skip_rtc.until;
   this->defer([this]() { this->night_tick_(); });
+  if (wake_rtc.mark == WAKE_MARK) {
+    this->wake_state_ = wake_rtc.state;
+    if (this->wake_state_.asleep)
+      ESP_LOGI(TAG, "Game-day wake: off since the last game, as After the game asks");
+  }
+  this->wake_loaded_ = true;
 }
 
 std::string GamedayComponent::hostname() const { return std::string(App.get_name().c_str()); }
@@ -1228,6 +1245,8 @@ void GamedayComponent::dump_config() {
                 t ? t->abbr : "none");
   ESP_LOGCONFIG(TAG, "  Timezone: %s", ::espn::kTimezones[this->prefs_.tz_index].name);
   ESP_LOGCONFIG(TAG, "  Flags: 0x%02X", this->prefs_.flags);
+  ESP_LOGCONFIG(TAG, "  Game-day wake: %s, %u min before; after the game: %s", this->wake_.on ? "on" : "off",
+                (unsigned) this->wake_.lead, ::espn::after_word(this->wake_.after));
 #ifdef GAMEDAY_BAR
   ESP_LOGCONFIG(TAG, "  Bar beta: installs from the beta channel");
 #endif
@@ -1249,6 +1268,7 @@ void GamedayComponent::loop() {
     this->auto_update_ms_ = millis();
     this->auto_update_tick_();
     this->night_tick_();
+    this->wake_tick_();
     if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
       // A settled run: the plug from this start's brownout comes down
       this->power_settled_ = true;
@@ -1756,6 +1776,148 @@ void GamedayComponent::night_resume() {
 void GamedayComponent::save_night_skip_() {
   night_skip_rtc.until = this->night_skip_until_;
   night_skip_rtc.mark = this->night_skip_until_ != 0 ? NIGHT_SKIP_MARK : 0;
+}
+
+bool GamedayComponent::asleep_at_boot() { return wake_rtc.mark == WAKE_MARK && wake_rtc.state.asleep; }
+
+void GamedayComponent::save_wake_state_() {
+  wake_rtc.state = this->wake_state_;
+  wake_rtc.mark = WAKE_MARK;
+}
+
+void GamedayComponent::load_wake_() {
+  this->wake_pref_ = global_preferences->make_preference<::espn::WakePrefs>(fnv1_hash("gameday_wake_v1"));
+  if (!this->wake_pref_.load(&this->wake_))
+    this->wake_ = ::espn::wake_defaults();
+  ::espn::wake_sanitize(this->wake_);
+}
+
+void GamedayComponent::set_wake_(const ::espn::WakePrefs &p) {
+  if (memcmp(&p, &this->wake_, sizeof(p)) == 0)
+    return;
+  this->wake_ = p;
+  this->wake_pref_.save(&this->wake_);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Game-day wake: %s, %u min before the start; after the game: %s", p.on ? "on" : "off",
+           (unsigned) p.lead, ::espn::after_word(p.after));
+  this->wake_tick_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
+// Every turn of the Power switch, from anywhere: the page, the remote, Home
+// Assistant, a team pick, or the wake itself. Any turn on ends a sleep After
+// the game started. The one at boot (ALWAYS_ON) comes before setup() and
+// doesn't, so the restart can turn the panel back off.
+void GamedayComponent::set_power(bool on) {
+  this->power_on_ = on;
+  if (!on || !this->wake_loaded_ || !this->wake_state_.asleep)
+    return;
+  this->wake_state_.asleep = false;
+  this->save_wake_state_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
+int64_t GamedayComponent::owner_next_kick_(int64_t now) const {
+  int64_t best = 0;
+  auto take = [&](int64_t kick, bool tbd) {
+    if (kick <= 0 || tbd || now >= kick + ::espn::kWakeLateS)
+      return;
+    if (best == 0 || kick < best)
+      best = kick;
+  };
+  if (this->favorites_mode_()) {
+    // Every favorite, in the playlist or not: one outside it still takes
+    // the panel near its start. A game polled "pre" can be past its listed
+    // start; one only on the schedule counts while its start is ahead, since
+    // it may be over already.
+    for (const auto &e : this->fav_) {
+      if (e.game.valid && e.game.event_id == e.sched.event_id) {
+        if (e.game.state == GameState::PRE)
+          take(e.game.kickoff_epoch, e.game.time_tbd);
+      } else if (e.sched.valid && !e.sched.event_id.empty() && e.sched.kickoff_epoch > now) {
+        take(e.sched.kickoff_epoch, e.sched.time_tbd);
+      }
+    }
+    return best;
+  }
+  if (this->live_mode_() && this->fallback_team_() != nullptr) {
+    // The board's own team while nothing is live, and with Favorites take
+    // over the favorites' next start from the last scan.
+    const GameSnapshot &g = this->game_;
+    if (this->live_fallback_ && g.valid && g.state == GameState::PRE)
+      take(g.kickoff_epoch, g.time_tbd);
+    take(this->take_kick_, false);
+  }
+  return best;
+}
+
+::espn::WakeInputs GamedayComponent::wake_inputs_() {
+  ::espn::WakeInputs in;
+  in.clock_valid = this->clock_set_();
+  in.has_team = this->fallback_team_() != nullptr && !this->demo_playing_();
+  if (!in.clock_valid)
+    return in;
+  in.now = (int64_t) this->time_->timestamp_now();
+  in.kick = this->owner_next_kick_(in.now);
+  in.owner_live = this->owner_game_live_();
+  // The final's linger is its own league's (a baseball doubleheader's is
+  // short), so the league is noted while the game is on.
+  const ::espn::Team *t = this->fallback_team_();
+  if (in.owner_live && t != nullptr) {
+    this->wake_league_ = this->live_mode_() && this->schedule_.valid ? (League) this->schedule_.league : t->league;
+    if (this->favorites_mode_())
+      for (const auto &e : this->fav_)
+        if (e.game.valid && e.game.state == GameState::IN) {
+          this->wake_league_ = e.team->league;
+          break;
+        }
+  }
+  const ::espn::LeagueInfo *info = ::espn::league_info(this->wake_league_);
+  in.linger_s = (uint32_t) (info != nullptr ? info->linger_min : 30) * 60;
+  return in;
+}
+
+void GamedayComponent::wake_tick_() {
+  if (!this->wake_loaded_)
+    return;
+  const ::espn::WakeInputs in = this->wake_inputs_();
+  const bool was_asleep = this->wake_state_.asleep;
+  switch (::espn::wake_step(this->wake_, this->wake_state_, in)) {
+    case ::espn::WakeStep::WAKE:
+      if (this->power_on_) {
+        ESP_LOGD(TAG, "Game-day wake: a game is near and the panel is already on");
+      } else {
+        ESP_LOGI(TAG, "Game-day wake: a game starts in %d min, turning the panel on",
+                 (int) ((in.kick > in.now ? in.kick - in.now : 0) / 60));
+        this->fire_action_("wake_on");
+      }
+      break;
+    case ::espn::WakeStep::SLEEP:
+      if (this->power_on_) {
+        ESP_LOGI(TAG, "Game-day wake: the game is over, turning the panel off as After the game asks");
+        this->fire_action_("wake_off");
+      } else {
+        this->wake_state_.asleep = false;  // the owner turned it off already: nothing to undo later
+      }
+      break;
+    case ::espn::WakeStep::NONE:
+      break;
+  }
+  this->save_wake_state_();
+  // A Live games board on another game, anyone's, keeps that game: the
+  // clock is only for its own team's card.
+  const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) &&
+                     !(this->live_mode_() && !this->live_fallback_);
+  const bool changed = clock != this->wake_clock_ || was_asleep != this->wake_state_.asleep;
+  if (clock != this->wake_clock_) {
+    ESP_LOGI(TAG, clock ? "After the game: the clock until the next game is near"
+                        : "After the game: back to the scoreboard");
+    this->wake_clock_ = clock;
+    if (this->board_ready_)
+      this->emit_({});
+  }
+  if (changed)
+    this->rebuild_state_(&this->last_fields_);
 }
 
 void GamedayComponent::set_chip_temp(float c) {
@@ -2780,8 +2942,11 @@ void GamedayComponent::apply_job_() {
       int64_t tnow = (int64_t) this->time_->timestamp_now();
       int64_t at = ::espn::take_over_rescan_at(tnow, j.fav_kickoff);
       this->take_scan_at_ = j.scan_ok ? at : ::espn::take_over_rescan_keep(tnow, at, this->take_scan_at_);
+      if (j.scan_ok)
+        this->take_kick_ = j.fav_kickoff;
     } else {
       this->take_scan_at_ = 0;
+      this->take_kick_ = 0;
     }
     this->live_fav_ = -1;
     // For the night schedule: a game of the owner's on now, whichever game
@@ -3370,6 +3535,10 @@ void GamedayComponent::draw_(const UpdateFields &f) {
 void GamedayComponent::clock_fields_(UpdateFields &f) {
   if (this->demo_playing_() || !this->clock_set_())
     return;
+  if (this->wake_clock_) {
+    this->wake_clock_fields_(f);
+    return;
+  }
   const GameSnapshot &g = this->game_;
   const ::espn::Team *team = this->fallback_team_();
   std::string color;  // hex, from the team endpoint or the game
@@ -3427,6 +3596,35 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
   f.team_color = ::espn::clock_color(team != nullptr, ::espn::parse_color(color));
 }
 
+// After the game's clock (wake.h): the time and the next game of the owner's,
+// in that team's color.
+void GamedayComponent::wake_clock_fields_(UpdateFields &f) {
+  const ::espn::Team *team = this->fallback_team_();
+  const GameSnapshot *next = nullptr;
+  std::string color;
+  if (this->favorites_mode_()) {
+    color = this->fav_[0].sched.team_color;
+    for (const auto &e : this->fav_) {
+      if (!e.game.valid || e.game.state != GameState::PRE || e.game.kickoff_epoch <= 0)
+        continue;
+      if (next == nullptr || e.game.kickoff_epoch < next->kickoff_epoch) {
+        next = &e.game;
+        team = e.team;
+        color = e.game.team_color;
+      }
+    }
+  } else {
+    const GameSnapshot &g = this->game_;
+    color = g.valid ? g.team_color : this->schedule_.team_color;
+    if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0)
+      next = &g;
+  }
+  if (next != nullptr)
+    this->clock_next_line_(f, *next);
+  f.clock = true;
+  f.team_color = ::espn::clock_color(team != nullptr, ::espn::parse_color(color));
+}
+
 // The clock's "Next: DAL vs PHI" and kickoff, for a game still ahead.
 void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) {
   int64_t at = g.time_tbd ? ::espn::tbd_day_epoch(g.kickoff_epoch) : g.kickoff_epoch;
@@ -3453,7 +3651,10 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
     return CountdownCard::NONE;
   int64_t start = this->custom_start_();
   bool custom = start != 0 && now < start + ::espn::kDayS;
-  bool next = this->countdown_on() && g.valid && g.state == GameState::PRE && !g.time_tbd && g.kickoff_epoch > now;
+  // After the game's clock keeps the screen between games; the owner's own
+  // countdown still gets its turn.
+  bool next = this->countdown_on() && !this->wake_clock_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
+              g.kickoff_epoch > now;
   if (this->live_mode_() && !this->live_fallback_)
     return custom && ::espn::custom_turn(now) ? CountdownCard::CUSTOM : CountdownCard::NONE;
   if (this->favorites_mode_()) {
@@ -3894,6 +4095,12 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["nightscreen"] = this->night_.screen_off == 0;
   doc["nightlevel"] = this->night_.level;
   doc["night_now"] = ::espn::night_word(this->night_now_);
+  // Game-day wake (wake.h). wake_now is what After the game is doing: ""
+  // (nothing), "asleep" (it turned the panel off) or "clock".
+  doc["wake"] = this->wake_.on != 0;
+  doc["wakelead"] = this->wake_.lead;
+  doc["after"] = ::espn::after_word(this->wake_.after);
+  doc["wake_now"] = ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_);
 #if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
   // Left out where nothing can be installed (the demo build) or there is no
   // choice (the bar build), so the page and the app hide the switch.
@@ -4908,6 +5115,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
+  ::espn::WakePrefs wake = this->wake_;
   // list= with lists= names the playlist playing after the change (a rename
   // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
   bool with_lists = false;
@@ -5061,12 +5269,22 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       case ::espn::SetKind::NIGHT_LEVEL:
         night.level = (uint8_t) op.value;
         break;
+      case ::espn::SetKind::WAKE:
+        wake.on = op.on ? 1 : 0;
+        break;
+      case ::espn::SetKind::WAKE_LEAD:
+        wake.lead = (uint8_t) op.value;
+        break;
+      case ::espn::SetKind::AFTER:
+        wake.after = (uint8_t) op.value;
+        break;
     }
   }
   if (::espn::night_keep_hours(night, this->night_))
     ESP_LOGW(TAG, "Night schedule: start and end can't be the same time; keeping %s to %s",
              ::espn::night_clock12(night.start).c_str(), ::espn::night_clock12(night.end).c_str());
   this->set_night_(night);
+  this->set_wake_(wake);
   if (hook_url_set || pregame >= 0)
     this->set_hook_(hook_url_set ? &hook_url : nullptr, pregame);
   if (msg_keys != 0 || msg_every >= 0)

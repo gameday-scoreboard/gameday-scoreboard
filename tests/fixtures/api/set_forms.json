@@ -43,5 +43,8 @@
   "lists": {"form": "Name=league:id,league:id;Name=... up to 16 playlists of favorites, names up to 16 bytes without ; or =; empty clears them", "ok": ["Football=nfl:6,ncaa:251;Hoops=nba:6", ""]},
   "list": {"form": "the playlist Favorite teams plays, 1 to 16 in the lists order, 0 for every favorite; past the last playlist is refused", "ok": ["0", "1", "16"], "bad": ["17", "", "x", "-1"]},
   "hook": {"form": "the game events' webhook, an http address on the home network, at most 160 bytes, or empty for none; https is refused", "ok": ["http://192.168.1.20:1880/gameday", ""], "bad": ["https://example.com/hook", "192.168.1.20/hook"]},
-  "pregame": {"form": "minutes before the start for the reminder event, a whole number, clamped to 0 to 120; 0 sends none", "ok": ["0", "15", "120"], "bad": ["", "soon"]}
+  "pregame": {"form": "minutes before the start for the reminder event, a whole number, clamped to 0 to 120; 0 sends none", "ok": ["0", "15", "120"], "bad": ["", "soon"]},
+  "wake": {"form": "1 turns Game-day wake on, anything else off", "ok": ["1", "0"]},
+  "wakelead": {"form": "minutes before the start the wake turns the panel on, a whole number, clamped to 5 to 120", "ok": ["5", "15", "120"], "bad": ["", "15m"]},
+  "after": {"form": "what the panel does once a final has lingered: scoreboard, off or clock; any other word is refused", "ok": ["scoreboard", "off", "clock"], "bad": ["effects", "", "Off"]}
 }

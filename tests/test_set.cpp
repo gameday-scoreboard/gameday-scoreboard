@@ -64,6 +64,7 @@ struct Settings {
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
+  WakePrefs wake{wake_defaults()};
 };
 constexpr int kFavMax = 16;
 constexpr int kMaxCols = 2;
@@ -164,6 +165,14 @@ void load(Settings &s, JsonObjectConst o) {
     s.night.start = (uint16_t) night_parse_time(o["nightstart"].as<const char *>());
   if (o["nightend"].is<const char *>())
     s.night.end = (uint16_t) night_parse_time(o["nightend"].as<const char *>());
+  bool wake = s.wake.on != 0;
+  flag("wake", wake);
+  s.wake.on = wake ? 1 : 0;
+  int lead = s.wake.lead;
+  num("wakelead", lead);
+  s.wake.lead = (uint8_t) lead;
+  if (o["after"].is<const char *>())
+    s.wake.after = (uint8_t) after_parse(o["after"].as<const char *>());
 }
 
 std::vector<TeamRef> fav_refs(const Settings &s) { return std::vector<TeamRef>(s.favs, s.favs + kFavMax); }
@@ -246,6 +255,9 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
     case SetKind::NIGHT_SCREEN: s.night.screen_off = op.on ? 0 : 1; break;
     case SetKind::NIGHT_LEVEL: s.night.level = (uint8_t) op.value; break;
+    case SetKind::WAKE: s.wake.on = op.on ? 1 : 0; break;
+    case SetKind::WAKE_LEAD: s.wake.lead = (uint8_t) op.value; break;
+    case SetKind::AFTER: s.wake.after = (uint8_t) op.value; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -318,6 +330,9 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["nightend"] = night_time_text(s.night.end);
   doc["nightscreen"] = s.night.screen_off == 0;
   doc["nightlevel"] = s.night.level;
+  doc["wake"] = s.wake.on != 0;
+  doc["wakelead"] = s.wake.lead;
+  doc["after"] = after_word(s.wake.after);
 }
 
 void test_fixture_cases() {
@@ -429,11 +444,22 @@ void test_parse_set() {
   SCHECK(parse_set("msgevery", "99", op, kFavMax) && op.value == kMsgEveryMax, "msgevery 99");
   SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");
   SCHECK(!parse_set("msgevery", "-1", op, kFavMax), "msgevery -1");
+  SCHECK(parse_set("wake", "1", op, kFavMax) && op.kind == SetKind::WAKE && op.on, "wake 1");
+  SCHECK(parse_set("wakelead", "30", op, kFavMax) && op.kind == SetKind::WAKE_LEAD && op.value == 30, "wakelead 30");
+  SCHECK(parse_set("wakelead", "1", op, kFavMax) && op.value == kWakeLeadMin, "wakelead is clamped up");
+  SCHECK(parse_set("wakelead", "900", op, kFavMax) && op.value == kWakeLeadMax, "wakelead is clamped down");
+  SCHECK(!parse_set("wakelead", "15m", op, kFavMax), "wakelead takes a whole number");
+  SCHECK(parse_set("after", "clock", op, kFavMax) && op.kind == SetKind::AFTER && op.value == (int) After::CLOCK,
+         "after clock");
+  SCHECK(parse_set("after", "off", op, kFavMax) && op.value == (int) After::OFF, "after off");
+  SCHECK(parse_set("after", "scoreboard", op, kFavMax) && op.value == (int) After::SCOREBOARD, "after scoreboard");
+  SCHECK(!parse_set("after", "effects", op, kFavMax), "after effects isn't in this firmware");
 
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
-                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax);
+                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
+                 parse_set(key, "clock", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }

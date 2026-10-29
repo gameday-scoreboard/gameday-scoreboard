@@ -33,6 +33,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ### ✨ New
 
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- ⏰ **Game-day wake** turns the panel on before your game, and **After the game** turns it off or shows the clock once the final has been up a while
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
 
 ### 🐛 Fixes

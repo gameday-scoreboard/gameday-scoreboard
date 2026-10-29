@@ -53,11 +53,14 @@ enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
 inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
-                                      "leaders", "night", "nightscreen", "favtake", "countdown"};
+                                      "leaders", "night", "nightscreen", "favtake", "countdown",
+                                      "wake"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
+                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame",
+                                     "wakelead"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook"};
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "after"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -105,7 +108,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
-                                      "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
+                                      "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
+                                      "after",    "countdown", "cdname",
                                       "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
                                       "lists",    "list",     "hook",     "pregame"};
   for (const char *k : kKeys) {
@@ -261,7 +265,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         in_range = in_range && parse_set(k, std::to_string(n), op, target.fav_max);
         bool clamped = op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
                        op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL ||
-                       op.kind == SetKind::PREGAME;
+                       op.kind == SetKind::PREGAME || op.kind == SetKind::WAKE_LEAD;
         if (!in_range || (clamped && op.value != n)) {
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;
@@ -292,7 +296,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           break;
         }
         if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
-            (k == "hook" && !hook_url_ok(text))) {
+            (k == "hook" && !hook_url_ok(text)) || (k == "after" && after_parse(text) < 0)) {
           out.skipped.push_back(k + "=" + text);
           continue;
         }

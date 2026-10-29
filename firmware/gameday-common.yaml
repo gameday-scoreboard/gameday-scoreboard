@@ -90,6 +90,13 @@ esphome:
     # so on this path there should be nothing dropped to redraw.
     - priority: 300.0
       then:
+        # After the game turned the panel off and it restarted (the nightly
+        # update): it stays off until the wake, or the owner, turns it on.
+        - if:
+            condition:
+              lambda: 'return gameday::GamedayComponent::asleep_at_boot();'
+            then:
+              - switch.turn_off: power
         - hub75.set_brightness:
             id: matrix
             brightness: !lambda 'return id(power).state ? id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state) : 0;'
@@ -661,6 +668,20 @@ gameday:
           lambda: 'return x == "logo_ready";'
         then:
           - script.execute: gd_show_logos
+    # Game-day wake: a game is near (the component only asks while Power is
+    # off), and After the game's Off once the final has lingered.
+    - if:
+        condition:
+          and:
+            - lambda: 'return x == "wake_on";'
+            - switch.is_off: power
+        then:
+          - switch.turn_on: power
+    - if:
+        condition:
+          lambda: 'return x == "wake_off";'
+        then:
+          - switch.turn_off: power
     # The heat or power hold changed (pages/guard.yaml)
     - if:
         condition:
@@ -866,12 +887,15 @@ switch:
     icon: "mdi:power"
     restore_mode: ALWAYS_ON
     optimistic: true
+    # set_power: Game-day wake follows every turn, wherever it came from.
     turn_on_action:
+      - lambda: 'id(gameday_ctl).set_power(true);'
       - hub75.set_brightness:
           id: matrix
           brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
       - script.execute: gd_repaint
     turn_off_action:
+      - lambda: 'id(gameday_ctl).set_power(false);'
       - hub75.set_brightness:
           id: matrix
           brightness: 0
