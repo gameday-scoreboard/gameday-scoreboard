@@ -60,6 +60,16 @@ static_assert(::espn::kResetPowerOn == ESP_RST_POWERON && ::espn::kResetSoftware
 // Survives a restart, a crash and a watchdog (health.h)
 RTC_NOINIT_ATTR static ::espn::BootLog boot_log;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+// A skipped night (night.h) outlives a restart inside it, the nightly update's
+// among them, but not a power cut, which leaves this memory random: hence
+// the mark.
+struct NightSkipRtc {
+  uint32_t mark;
+  int64_t until;
+};
+static const uint32_t NIGHT_SKIP_MARK = 0x4E534B31;
+RTC_NOINIT_ATTR static NightSkipRtc night_skip_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
 // them, but accepts curl.
 static const char *const USER_AGENT = "curl/8.0";
@@ -364,6 +374,8 @@ void GamedayComponent::setup() {
   // A restart keeps the clock, and the nightly update restarts inside the
   // default hours: the boot screen goes to the night's brightness on the
   // first loop rather than at full brightness until the first tick, 10 s on.
+  if (night_skip_rtc.mark == NIGHT_SKIP_MARK)
+    this->night_skip_until_ = night_skip_rtc.until;
   this->defer([this]() { this->night_tick_(); });
 }
 
@@ -1617,6 +1629,16 @@ void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
   this->sync_prefs_();
   ESP_LOGI(TAG, "Night schedule: %s, %s to %s, %s", p.on ? "on" : "off", ::espn::night_clock12(p.start).c_str(),
            ::espn::night_clock12(p.end).c_str(), p.screen_off ? "screen off" : "dimmed");
+  // A skipped night runs to the new end time. Hours that leave now outside
+  // the night end the skip at the tick below.
+  if (this->night_skip_until_ != 0 && this->time_ != nullptr) {
+    ESPTime now = this->time_->now();
+    if (now.is_valid()) {
+      this->night_skip_until_ =
+          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second);
+      this->save_night_skip_();
+    }
+  }
   this->night_tick_();
   // New hours or a new level with the state unchanged still need the
   // brightness applied again.
@@ -1658,7 +1680,16 @@ void GamedayComponent::night_tick_() {
   const bool owner_live = this->night_.on && valid &&
                           ::espn::night_window(this->night_.start, this->night_.end, minute) &&
                           this->owner_game_live_();
-  const ::espn::Night next = ::espn::night_state(this->night_, valid, minute, owner_live);
+  // A skip lasts to the end of the night it was made in; outside the hours,
+  // or with the schedule off, it is over.
+  if (this->night_skip_until_ != 0 && valid &&
+      (!this->night_.on || !::espn::night_window(this->night_.start, this->night_.end, minute) ||
+       (int64_t) now.timestamp >= this->night_skip_until_)) {
+    this->night_skip_until_ = 0;
+    this->save_night_skip_();
+  }
+  const bool skipped = this->night_skip_until_ != 0;
+  const ::espn::Night next = ::espn::night_state(this->night_, valid, minute, owner_live, skipped);
   if (next == this->night_now_)
     return;
   const std::string until = ::espn::night_clock12(this->night_.end);
@@ -1672,6 +1703,10 @@ void GamedayComponent::night_tick_() {
     case ::espn::Night::GAME:
       ESP_LOGI(TAG, "Night schedule: a game of yours is live, normal brightness until it ends");
       break;
+    case ::espn::Night::SKIPPED:
+      ESP_LOGI(TAG, "Night schedule: off for the rest of the night, back at %s",
+               ::espn::night_clock12(this->night_.start).c_str());
+      break;
     case ::espn::Night::DAY:
       ESP_LOGI(TAG, "Night schedule: over, normal brightness");
       break;
@@ -1679,6 +1714,34 @@ void GamedayComponent::night_tick_() {
   this->night_now_ = next;
   this->fire_action_("guard");  // pages/guard.yaml applies the brightness
   this->rebuild_state_(&this->last_fields_);
+}
+
+bool GamedayComponent::night_skip(const char *why) {
+  if (!this->night_holding() || this->time_ == nullptr)
+    return false;
+  ESPTime now = this->time_->now();
+  if (!now.is_valid())
+    return false;  // holding needs a clock, so this can't happen
+  ESP_LOGI(TAG, "Night schedule: %s skips the rest of the night", why);
+  this->night_skip_until_ =
+      ::espn::night_skip_until(this->night_, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second);
+  this->save_night_skip_();
+  this->night_tick_();
+  return true;
+}
+
+void GamedayComponent::night_resume() {
+  if (this->night_skip_until_ == 0)
+    return;
+  ESP_LOGI(TAG, "Night schedule: back on for the rest of the night");
+  this->night_skip_until_ = 0;
+  this->save_night_skip_();
+  this->night_tick_();
+}
+
+void GamedayComponent::save_night_skip_() {
+  night_skip_rtc.until = this->night_skip_until_;
+  night_skip_rtc.mark = this->night_skip_until_ != 0 ? NIGHT_SKIP_MARK : 0;
 }
 
 void GamedayComponent::set_chip_temp(float c) {
@@ -3803,7 +3866,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["cdname"] = (const char *) this->countdown_.name;
   doc["cddate"] = ::espn::countdown_date_text(this->countdown_.ymd);
   // The night schedule (night.h). night_now is what it is doing: "" (not
-  // now), "dim", "off" or "game" (its hours, held off by a live game).
+  // now), "dim", "off", "game" (its hours, held off by a live game) or
+  // "skipped" (the owner turned it off for the rest of the night).
   this->load_night_();
   doc["night"] = this->night_.on != 0;
   doc["nightstart"] = ::espn::night_time_text(this->night_.start);
@@ -4388,7 +4452,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc" || name == "say" || name == "regulatory";
+    bool known = name == "refresh" || name == "qc" || name == "say" || name == "regulatory" ||
+                 name == "night_skip" || name == "night_resume";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
@@ -4406,6 +4471,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     this->defer([this, name]() {
       if (name == "refresh")
         this->refresh_now();
+      else if (name == "night_skip")
+        this->night_skip("the device page");
+      else if (name == "night_resume")
+        this->night_resume();
 #ifdef GAMEDAY_DEMO
       else if (name == "demo")
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);
@@ -4513,6 +4582,17 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
     }
     ops.push_back(std::move(op));
   }
+  // A team or mode picked from the page or the app is somebody wanting to
+  // see the panel (a backup restored through apply_ops_ isn't, nor a
+  // playlist edit, whose list= only names the one playing).
+  bool lists = false, pick = false;
+  for (const auto &op : ops) {
+    lists = lists || op.kind == ::espn::SetKind::LISTS;
+    pick = pick || op.kind == ::espn::SetKind::MODE || op.kind == ::espn::SetKind::FAVS ||
+           op.kind == ::espn::SetKind::FAV_SLOT || op.kind == ::espn::SetKind::LIST;
+  }
+  if (pick && !lists)
+    this->night_skip("a team pick");
   this->apply_ops_(ops);
 }
 

@@ -32,6 +32,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ### ✨ New
 
+- 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
 - 🎆 **Effects**, a third page under **Showing**: one of 52 moving patterns fills the panel in place of the scoreboard; the board comes back when you pick the Scoreboard again or when the panel has something to tell you
 
 ### 🐛 Fixes

@@ -340,6 +340,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_chip_temp(float c);
   // What the panel's corner says: 0 nothing, 1 running warm, 2 power dipped.
   uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.hot, this->power_dipped_); }
+  // The night schedule (night.h). A remote press, a team pick or Power on
+  // from the page skips the rest of a night the schedule has dim or dark
+  // (false when it doesn't); the NIGHT button or the page goes back to it.
+  // Home Assistant never calls these, so its automations don't skip a night.
+  bool night_skip(const char *why);
+  void night_resume();
+  bool night_holding() const { return ::espn::night_holding(this->night_now_); }
+  bool night_skipped() const { return this->night_now_ == ::espn::Night::SKIPPED; }
   // "Follow beta": the update entity reads the beta manifest instead of the
   // release one. Off unless the owner turns it on; only in builds with
   // beta_channel (the release builds, gameday-common.yaml).
@@ -878,6 +886,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::NightPrefs night_{};
   bool night_loaded_{false};
   ::espn::Night night_now_{::espn::Night::DAY};
+  int64_t night_skip_until_{0};  // night_skip_until(), 0 when no night is skipped
+  void save_night_skip_();
   // Live games: both sides of every game in progress at the last scan, so
   // a team or favorite changed between scans counts at once. A game of the
   // owner's that ends between scans keeps the panel lit until the next one,
