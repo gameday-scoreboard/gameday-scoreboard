@@ -168,6 +168,25 @@ jobs:
           done
           echo "::error file=.github/workflows/build.yml::ESPHOME_VERSION is $ESPHOME_VERSION, a beta. main and release tags build only on a final ESPHome release: move the pin to a final release on dev, then promote again. To ship this beta anyway, the maintainer adds the esphome-beta-ok label to the promotion PR and re-runs this job."
           exit 1
+      # A branch name lands in the public merge history ("Merge pull request
+      # #N from ..."), so it carries no tracker numbers.
+      - name: Branch name has no card number
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          pattern='(^|/)card-[0-9]'
+          # Check the pattern itself first, so an edit can't quietly weaken it.
+          for b in card-123-fix card-7 someone/card-12-fix; do
+            grep -qE "$pattern" <<< "$b" || { echo "::error::The card-branch pattern misses $b"; exit 1; }
+          done
+          for b in espn-gzip dev scorecard-2 card-reader card-; do
+            grep -qE "$pattern" <<< "$b" && { echo "::error::The card-branch pattern wrongly catches $b"; exit 1; }
+          done
+          if grep -qE "$pattern" <<< "$HEAD_REF"; then
+            echo "::error::The branch $HEAD_REF carries a card number, which would land in the public merge history. Push the work to a branch named after the change (like espn-gzip) and open the PR from that one."
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           # Tags need history for the main check. The quotes matter: a bare 0
@@ -641,12 +660,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release
-          # MoonHub75 keeps the unsuffixed factory bin name it has always had.
+          # MoonHub75's factory image on its own, for flashing by hand (the board
+          # we build and the one DIY builders use), plus the variant zips below.
+          # scoreboard75 is the early test boards: its image stays in its zip.
+          # scripts/factory_flash.py reads the image out of a zip.
           f=$(ls artifacts/moonhub75/*.factory.bin | head -1)
-          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}.factory.bin"
-          f=$(ls artifacts/scoreboard75/*.factory.bin | head -1)
-          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-scoreboard75.factory.bin"
-          ASSETS="release/gameday-scoreboard-${GITHUB_REF_NAME}.factory.bin release/gameday-scoreboard-${GITHUB_REF_NAME}-scoreboard75.factory.bin"
+          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin"
+          ASSETS="release/gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin"
           # Also zip each variant's manifest folder (manifest.json plus the
           # OTA and factory bins it references, with relative paths that
           # resolve the same wherever the folder lands) so site.yml can
@@ -660,7 +680,9 @@ jobs:
           {
             cat notes/notes.md
             echo
-            echo "Install or update from the [flasher page](https://install.gameday-scoreboard.com/), or let a panel already running v0.2.2 or later update itself from its device page."
+            echo "Panels update themselves from their device page or the Game Day app. To install from scratch, use the [installer](https://install.gameday-scoreboard.com/) in your browser."
+            echo
+            echo "**Which file?** You don't need any of them for that. To flash a MoonHub75 over USB by hand, use \`gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin\`. The \`firmware-*.zip\` files are what the installer site is built from; you don't need them."
             if [ -n "$PREV" ]; then
               echo
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"

@@ -7,11 +7,9 @@ sidebar:
 
 ## My team's season is over. What does the panel show?
 
-A clock in your team's colors. Under the time is your team's next game once it's on the schedule, like **Next: at PHI Mar 26 7:05 PM**, or the date until then. Nothing is wrong with the panel, and it picks the next season up by itself.
+A clock in your first favorite's colors. Under the time is the next game once it's on the schedule, like **Next: at PHI Mar 26 7:05 PM**, or the date until then. Nothing is wrong with the panel, and it picks the next season up by itself. See [The off-season clock](/using/brightness-and-clock/#the-off-season-clock).
 
-Outside football, the clock comes up once the next game is more than 10 days away. In football it comes up only when ESPN lists no next game, so a bye week never shows it.
-
-To keep the board busy, switch to **Favorite teams** with teams from leagues that are in season, or to **Live games** for whatever is on right now. See [Modes](/using/modes/).
+To keep the board busy, add favorites from leagues that are in season, or switch to **Live games** for whatever is on right now. See [Modes](/using/modes/).
 
 ## Does it work during the offseason?
 

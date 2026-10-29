@@ -4,7 +4,7 @@ description: "Safety notes, the FCC compliance statement and the responsible par
 draft: true
 ---
 
-<!-- Before this page goes live: fill in the responsible party, add the steps that show this information on the panel's own screen, and remove `draft: true`. -->
+<!-- Before this page goes live: fill in the responsible party and remove `draft: true`. -->
 
 This page is for the Game Day Scoreboard sold at [gameday-scoreboard.com](https://gameday-scoreboard.com), model GDS-1. A panel you built yourself on another board isn't covered by it.
 
@@ -31,6 +31,15 @@ Note: This equipment complies with the limits for a Class B digital device, purs
 - Increase the separation between the equipment and receiver.
 - Connect the equipment into an outlet on a circuit different from that to which the receiver is connected.
 - Consult the dealer or an experienced radio/TV technician for help.
+
+## On the panel's screen
+
+The scoreboard has no label with this information on it. The panel shows it on its own screen instead:
+
+1. Open the panel's [device page](/using/device-page/).
+2. In the **Device** card, next to **FCC information**, tap **Show on panel**.
+
+The panel shows the name, model GDS-1, "Contains FCC ID: 2AC7Z-ESPS3WROOM1" and the compliance statement above, a page at a time, 8 seconds a page, twice through. Then it goes back to the board. A panel that was switched off turns on for it.
 
 ## Responsible party
 

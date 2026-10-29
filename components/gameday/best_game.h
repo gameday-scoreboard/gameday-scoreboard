@@ -141,7 +141,7 @@ inline int live_interest(const LiveGame &g) {
 // The index of the game to follow, the one on the board (current) winning
 // near-ties. current_over: the board's poll saw it end, though the scan may
 // still list it; any other game goes first. 0 for an empty list.
-inline size_t best_live_game(const std::vector<LiveGame> &games, const std::string &current,
+inline size_t best_live_game(const LiveList &games, const std::string &current,
                              bool current_over = false) {
   size_t best = 0;
   int top = -1;
@@ -166,6 +166,44 @@ inline bool at_break(const GameSnapshot &g) {
     return true;
   const std::string &d = g.short_detail;
   return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT";
+}
+
+// When Pick the best game may leave the game on the board: at a break, and
+// for soccer, whose clock never stops, once a match reaches 45' (the first
+// half's last minute and its stoppage time, "45'+2'") and from 90' on; the
+// second half starts at 46'. Play is still on then, so at_break stays false
+// for Jump to the action (in_action).
+inline bool pick_break(const GameSnapshot &g) {
+  if (at_break(g))
+    return true;
+  const std::string &d = g.short_detail;
+  if (g.sport != Sport::SOCCER || d.empty() || d[0] < '0' || d[0] > '9')
+    return false;
+  int minute = 0;
+  for (size_t i = 0; i < d.size() && i < 3 && d[i] >= '0' && d[i] <= '9'; i++)
+    minute = minute * 10 + (d[i] - '0');
+  return minute == 45 || minute >= 90;
+}
+
+// Live games following a game: whether this cycle looks for another one.
+// elapsed_ms since the last look, switch_ms the owner's Switch every.
+// - Stick with a favorite's game up (held): a slow look, Switch every but at
+//   least 5 minutes, so a higher favorite that went live without a kickoff
+//   time (TBD) still takes the board.
+// - Alternate with a favorite's game up (on_fav), or a random pick (not
+//   best): the plain timer.
+// - Pick the best game: only at a break in the game, and once per break
+//   (break_looked: a look at this break kept the game), so a long
+//   intermission doesn't scan every minute.
+inline bool rotate_due(uint32_t elapsed_ms, uint32_t switch_ms, bool held, bool on_fav, bool best, bool at_brk,
+                       bool break_looked) {
+  if (held)
+    return elapsed_ms >= (switch_ms > 5u * 60 * 1000 ? switch_ms : 5u * 60 * 1000);
+  if (elapsed_ms < switch_ms)
+    return false;
+  if (on_fav || !best)
+    return true;
+  return at_brk && !break_looked;
 }
 
 // The followed game as the scan would list it, from a poll of it, for the

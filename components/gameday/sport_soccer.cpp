@@ -415,7 +415,7 @@ std::string soccer_status_text(const GameSnapshot &s, const TickerOptions &o, co
       add_part(out, stage(f.note));
       add_part(out, pair_line("Form", s, f.team_form, f.opp_form));
       add_odds(out, s, o, odds_line(s));
-      add_part(out, s.venue);
+      add_part(out, detail::venue_line(s));
       return ascii_fold(out);
     case GameState::POST:
       out = final_line(s);

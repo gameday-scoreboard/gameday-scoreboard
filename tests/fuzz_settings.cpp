@@ -46,7 +46,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     for (const auto &op : in.ops) {
       switch (op.kind) {
         case SetKind::MODE:
-          require(op.value >= 0 && op.value < kModeCount, "the mode is past MODE_OPTIONS");
+          require(op.value > 0 && op.value < kModeCount, "the mode is out of range or My team's 0");
           break;
         case SetKind::TZ:
           require(op.value >= 0 && (size_t) op.value < kTimezoneCount, "the zone is past kTimezones");
@@ -54,7 +54,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         case SetKind::PANELS:
           require(op.value >= 1 && op.value <= target.max_panels, "the panel count is out of range");
           break;
-        case SetKind::TEAM:
         case SetKind::FAV_SLOT:
           require(op.team.id == 0 || known_team(op.team.league, op.team.id), "the team is unknown");
           break;

@@ -14,8 +14,12 @@ The next-game card shows both logos, your team on the left, with the records und
 - the first pitch day and time in the panel's timezone
 - the series, when ESPN has one
 - the probable starting pitchers for both teams, when ESPN lists both
-- the betting line, over/under and TV channel, when ESPN has them and **Pre-game odds and TV** is on
+- the betting line, over/under and TV channel, when ESPN has them and **Odds, TV and win chance** is on
 - the ballpark
+
+Before a playoff game the ticker starts with the round, like "NLCS - Game 2" or "World Series - Game 1".
+
+After the odds the ticker shows each team's home run leader for the season, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI". **Pre-game season leaders** on the device page turns them off. At an open-air ballpark the ballpark comes with ESPN's forecast for the game, like "82F Mostly clear at Petco Park"; a ballpark with a roof shows just its name.
 
 MLB has no Up next list on the device page: a team's season schedule is too large for the panel to read.
 
@@ -46,7 +50,7 @@ When your team wins, a victory splash with fireworks says your abbreviation and 
 
 ## The final
 
-The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. The final stays up for ten minutes in My team, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up your team's next game.
+The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for ten minutes, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game.
 
 At the final the board takes turns, 10 seconds each, with the line score: runs by inning in groups of three, then runs, hits and errors, like a box score. An inning the home team didn't need to bat in shows an x. A long extra-inning game drops the groups, and a very long one shows runs, hits and errors alone. On a 64x64 panel it's runs, hits and errors, the teams side by side under their abbreviations.
 
