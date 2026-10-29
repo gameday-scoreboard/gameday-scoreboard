@@ -4589,13 +4589,16 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
     ops.push_back(std::move(op));
   }
   // A team or mode picked from the page or the app is somebody wanting to
-  // see the panel (a backup restored through apply_ops_ isn't).
-  for (const auto &op : ops)
-    if (op.kind == ::espn::SetKind::MODE || op.kind == ::espn::SetKind::FAVS ||
-        op.kind == ::espn::SetKind::FAV_SLOT || op.kind == ::espn::SetKind::LIST) {
-      this->night_skip("a team pick");
-      break;
-    }
+  // see the panel (a backup restored through apply_ops_ isn't, nor a
+  // playlist edit, whose list= only names the one playing).
+  bool lists = false, pick = false;
+  for (const auto &op : ops) {
+    lists = lists || op.kind == ::espn::SetKind::LISTS;
+    pick = pick || op.kind == ::espn::SetKind::MODE || op.kind == ::espn::SetKind::FAVS ||
+           op.kind == ::espn::SetKind::FAV_SLOT || op.kind == ::espn::SetKind::LIST;
+  }
+  if (pick && !lists)
+    this->night_skip("a team pick");
   this->apply_ops_(ops);
 }
 
