@@ -54,6 +54,10 @@ The panel list is **Settings > Panels**, and it's what the Board shows until you
 - **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
 - **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
 
+## Try the app before your panel arrives
+
+With no panel saved yet, the panel list has **Try a demo panel**. It opens a demo panel inside the app, with made-up teams playing a game on a loop, so you can look around every tab. Nothing you change there reaches a real panel, and the demo isn't saved to your list. To leave it, tap its name at the top of the Board and choose **Close the demo**.
+
 ## If the app doesn't list your panel
 
 Add it by address. On the panel list, tap **+** and enter the panel's name, like `gameday-2f6a70.local`, or its IP address, like `192.168.1.50`. Both show on the panel when it starts. To see them again, hold the button on the controller for about 1.5 seconds.
