@@ -4894,8 +4894,10 @@ void GamedayComponent::news_show_(const std::string &headline) {
   this->news_card_ = headline;
   this->news_head_ = headline.empty() ? std::string() : this->news_src_head_;
   this->news_shown_ = !headline.empty();
-  if (this->news_shown_)
+  if (this->news_shown_) {
     this->news_roll_ms_ = 0;  // the page says how long it rolls when it goes up
+    ESP_LOGD(TAG, "News card: %s: %s", this->news_head_.c_str(), headline.c_str());
+  }
   this->fire_action_("news");  // gd_news_card in firmware/pages/gameday-live.yaml
 }
 
