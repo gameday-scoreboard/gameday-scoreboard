@@ -68,6 +68,8 @@ esp32:
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
+      # Bench only: uxTaskGetSystemState needs the trace facility.
+      CONFIG_FREERTOS_USE_TRACE_FACILITY: y
 
 esphome:
   name: "${name}"
@@ -166,7 +168,7 @@ external_components:
     # when a handover fails (components/improv_ble). saved_networks keeps up
     # to five Wi-Fi networks where ESPHome keeps one. crash_report keeps the
     # last crash's backtrace in flash.
-    components: [gameday, panel_layout, improv_ble, saved_networks, crash_report]
+    components: [gameday, panel_layout, improv_ble, saved_networks, crash_report, stack_bench]
   - source: github://pavlov-net/lvgl-page-manager@v0.3.0
     components: [lvgl_page_manager]
   # Fireworks behind the touchdown and win splashes
@@ -249,8 +251,14 @@ api:
 
 ota:
   - platform: esphome
+    # Bench only: the loop task's free stack while an OTA write runs.
+    on_progress:
+      - lambda: 'stack_bench::probe("ota_progress");'
   - platform: http_request
     id: gd_ota_http
+
+# Bench only: stack watermarks, GET /bench/stack. Not for a release.
+stack_bench:
 
 # The panel remembers up to five networks (home, a phone hotspot, a friend's
 # house) and tries the last one that worked first. Setup from the app or the
@@ -515,6 +523,14 @@ script:
                 wifi_sta_list_t hotspot{};
                 const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
                 const bool failed = imp != nullptr && imp->handover_failed();
+                // Bench only: a timed end to setup mode, set before Reset Wi-Fi.
+                if (stack_bench::setup_cut_s() > 0 && millis() / 1000 >= stack_bench::setup_cut_s()) {
+                  ESP_LOGW("wifi", "Bench: setup cut at %u s, restarting onto the saved networks",
+                           (unsigned) stack_bench::setup_cut_s());
+                  stack_bench::set_setup_cut(0);
+                  App.safe_reboot();
+                  return;
+                }
                 if (!window.restart_due(millis() / 1000, app || on_hotspot, failed))
                   return;
                 if (failed && millis() < saved_networks::SetupWindow::WINDOW_S * 1000)

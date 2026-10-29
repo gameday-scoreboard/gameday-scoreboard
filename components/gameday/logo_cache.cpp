@@ -1,6 +1,7 @@
 #include "logo_cache.h"
 
 #include "esphome/components/runtime_image/image_decoder.h"
+#include "esphome/components/stack_bench/stack_bench.h"  // bench only
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
@@ -225,7 +226,11 @@ bool LogoCache::download_(const std::string &url, Bytes &body, bool &throttled, 
       {"User-Agent", USER_AGENT},
       {"Accept", "image/png,*/*;q=0.8"},
   };
-  auto container = this->http_->get(url, headers, {"retry-after"});
+  std::shared_ptr<http_request::HttpContainer> container;
+  {
+    stack_bench::Meter m("logo_get");
+    container = this->http_->get(url, headers, {"retry-after"});
+  }
   if (container == nullptr)
     return false;
   if (container->status_code != 200) {
@@ -313,7 +318,11 @@ bool LogoCache::loop() {
     if (job == nullptr)
       return ready;
     // Only the main loop drops entries, so job stays valid without the lock.
-    bool ok = this->decode_(job->image, body);
+    bool ok;
+    {
+      stack_bench::Meter m("logo_decode");
+      ok = this->decode_(job->image, body);
+    }
     Locked guard(this->lock_);
     if (ok) {
       job->state = State::READY;

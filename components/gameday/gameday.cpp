@@ -1,6 +1,7 @@
 #include "gameday.h"
 
 #include "esphome/components/json/json_util.h"
+#include "esphome/components/stack_bench/stack_bench.h"  // bench only
 #include "esphome/components/network/util.h"
 #include "esphome/core/application.h"
 #include "esphome/core/hal.h"
@@ -1294,7 +1295,10 @@ void GamedayComponent::loop() {
     this->busy_ = false;
     this->busy_since_ms_ = 0;
     this->job_done_ = false;
-    this->apply_job_();
+    {
+      stack_bench::Meter m("apply_job");  // bench only
+      this->apply_job_();
+    }
     return;
   }
   // The message card's list, between ESPN reads and outside their timing,
@@ -1973,7 +1977,11 @@ std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::
       {"Accept", "application/json"},
   };
   this->espn_requests_++;
-  auto container = this->http_->get(url, headers, {"retry-after"});
+  std::shared_ptr<http_request::HttpContainer> container;
+  {
+    stack_bench::Meter m("espn_get");
+    container = this->http_->get(url, headers, {"retry-after"});
+  }
   this->espn_status_ = container == nullptr ? 0 : container->status_code;
   this->espn_answer_ms_ = millis() == 0 ? 1 : millis();
   if (container == nullptr) {
@@ -2050,6 +2058,7 @@ void GamedayComponent::probe_task_(void *arg) {
            redirect ? ::espn::detail::url_host(h.location).c_str() : "");
   self->probe_result_ = (uint8_t) r;
   self->probe_done_ = true;
+  stack_bench::note_exit();  // bench only
   vTaskDelete(nullptr);
 }
 
@@ -2157,7 +2166,11 @@ bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out, 
     return false;
   ContainerReader reader(container, this->espn_bytes_);
   Schedule s;
-  bool ok = ::espn::parse_team(reader, s);
+  bool ok;
+  {
+    stack_bench::Meter m("parse_team");
+    ok = ::espn::parse_team(reader, s);
+  }
   container->end();
   if (!ok) {
     ESP_LOGW(TAG, "Schedule parse failed after %u bytes", (unsigned) reader.total());
@@ -2182,7 +2195,11 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
   if (container == nullptr)
     return -1;
   ContainerReader reader(container, this->espn_bytes_);
-  int found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
+  int found;
+  {
+    stack_bench::Meter m("parse_team_game");
+    found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
+  }
   container->end();
   return found;
 }
@@ -2229,7 +2246,11 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
     return false;
   ContainerReader reader(container, this->espn_bytes_);
   // Four: the game on the board plus the three after it.
-  bool ok = ::espn::parse_upcoming(reader, team->espn_id, 4, out);
+  bool ok;
+  {
+    stack_bench::Meter m("parse_upcoming");
+    ok = ::espn::parse_upcoming(reader, team->espn_id, 4, out);
+  }
   container->end();
   ESP_LOGI(TAG, "Upcoming: %u game(s) (%u bytes)", (unsigned) out.size(), (unsigned) reader.total());
   return ok;
@@ -2249,7 +2270,11 @@ bool GamedayComponent::fetch_live_games_(League league, ::espn::LiveList &out, i
   size_t finals_before = finals != nullptr ? finals->size() : 0;
   size_t pending_before = pending != nullptr ? pending->size() : 0;
   int64_t next = 0, watched = 0;
-  bool ok = ::espn::parse_live_games(reader, out, &next, finals, pending, watch, &watched);
+  bool ok;
+  {
+    stack_bench::Meter m("parse_live");
+    ok = ::espn::parse_live_games(reader, out, &next, finals, pending, watch, &watched);
+  }
   for (size_t i = before; i < out.size(); i++)
     out[i].league = (uint8_t) league;
   if (finals != nullptr)
@@ -2287,7 +2312,11 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
   }
   ContainerReader reader(container, this->espn_bytes_);
   GameSnapshot g;
-  bool ok = ::espn::parse_event(reader, info->sport, this->our_id_(), g, schedule.event_id);
+  bool ok;
+  {
+    stack_bench::Meter m("parse_event");
+    ok = ::espn::parse_event(reader, info->sport, this->our_id_(), g, schedule.event_id);
+  }
   container->end();
   if (!ok) {
     ESP_LOGW(TAG, "Game %s not parsed (%u bytes)", schedule.event_id.c_str(),
@@ -2545,6 +2574,7 @@ void GamedayComponent::worker_(void *arg) {
   // was writing into belongs to a later cycle by now.
   if (self->worker_seq_ == mine)
     self->job_done_ = true;
+  stack_bench::note_exit();  // bench only
   vTaskDelete(nullptr);
 }
 
@@ -2559,7 +2589,11 @@ void GamedayComponent::run_job_() {
     // Any status will do, a 404 or a 503 carries the date just the same.
     std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
     this->espn_requests_++;
-    auto container = this->http_->get(HTTP_CLOCK_URL, headers, {"date"});
+    std::shared_ptr<http_request::HttpContainer> container;
+    {
+      stack_bench::Meter m("clock_get");
+      container = this->http_->get(HTTP_CLOCK_URL, headers, {"date"});
+    }
     if (container == nullptr) {
       ESP_LOGW(TAG, "Request failed: %s", HTTP_CLOCK_URL);
       return;
@@ -4277,7 +4311,11 @@ void GamedayComponent::start_msg_job_() {
 void GamedayComponent::run_msg_job_() {
   Job &j = this->job_;
   std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}, {"Accept", "text/plain"}};
-  auto container = this->http_->get(j.msg_url, headers);
+  std::shared_ptr<http_request::HttpContainer> container;
+  {
+    stack_bench::Meter m("msg_get");
+    container = this->http_->get(j.msg_url, headers);
+  }
   if (container == nullptr) {
     ESP_LOGW(TAG, "Message list: no answer from %s", j.msg_url.c_str());
     return;
