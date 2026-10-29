@@ -170,6 +170,7 @@
     "tz_iana": "string",
     "tz_name": "string",
     "update_failed": "string",
+    "update_important": "bool",
     "version": "string",
     "wifi": "object",
     "wifi.causes": "object",

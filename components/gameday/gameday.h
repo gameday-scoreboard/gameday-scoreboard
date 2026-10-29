@@ -46,6 +46,7 @@
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
+#include "update_nudge.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -912,6 +913,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject update_mark_pref_;
   ::espn::UpdateMark update_mark_{};
   bool update_installing_{false};  // the update entity is installing, mark written
+  // "Update ready" on the ticker (update_nudge.h), looked at with the above.
+  ::espn::UpdateNudgeDay nudge_day_{};
+  bool nudge_on_{false};         // the line is in the ticker
+  bool update_important_{false};  // the release waiting is marked important
+  void update_nudge_tick_();
   void settle_update_mark_();
   void update_state_changed_();
 #ifdef GAMEDAY_BAR
