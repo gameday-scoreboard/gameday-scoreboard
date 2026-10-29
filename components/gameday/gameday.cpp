@@ -5353,7 +5353,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   if (url == StringRef("/gameday/heap") && request->method() == HTTP_GET) {
     // The stack figures are bytes each task has never touched since boot, the
     // margin left in its worst moment so far: the loop (16 KB, gameday-common.yaml),
-    // this web server task (ESPHome's 4,512 B) and the fetch tasks (16 KB); -1
+    // this web server task (5,632 B, web_stack.h) and the fetch tasks (16 KB); -1
     // before there is a reading. This handler runs on the web server task,
     // whose stack is the tightest, so the buffer stays at 128 (the longest
     // reply is 105 bytes).
