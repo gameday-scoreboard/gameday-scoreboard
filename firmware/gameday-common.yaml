@@ -43,7 +43,7 @@ substitutions:
 # Favorites switch puts the new game on the board from deep in the loop
 # (fav_choose_ -> emit_ -> the display callbacks). On ESPHome 2026.10, during
 # QC with the device page's log stream open, that took the loop to about 9 KB
-# and overflowed it (backlog #84); the multi-sport build overflows the same
+# and overflowed it; the multi-sport build overflows the same
 # way on 2026.8.2. With 16 KB, internal RAM still never dropped below 32 KB
 # free on the bench.
 #
