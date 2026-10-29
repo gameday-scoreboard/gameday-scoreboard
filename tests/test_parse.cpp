@@ -5157,6 +5157,134 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"temp\":80.0,\"heat\":1,\"brownouts\":0,\"power\":\"ok\""));
 }
 
+static void test_rankings() {
+  CHECK_EQ(rankings_url(League::NCAA),
+           std::string("https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1"));
+  CHECK_EQ(rankings_url(League::MCBB),
+           std::string("https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1"));
+  set_core_root("http://192.168.1.103:8191/v2/sports/");
+  CHECK_EQ(rankings_url(League::NCAA), std::string("http://192.168.1.103:8191/v2/sports/football/leagues/college-football/rankings/1"));
+  set_core_root("https://sports.core.api.espn.com/v2/sports/");
+  CHECK_EQ(top25_ref_id("http://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/2026/teams/2390?lang=en"), 2390u);
+  CHECK_EQ(top25_ref_id("http://x/teams/?lang=en"), 0u);
+  CHECK_EQ(top25_ref_id("http://x/athletes/12"), 0u);
+  CHECK_EQ(top25_ref_id(nullptr), 0u);
+  CHECK_EQ(top25_ref_id("/teams/99999999999"), 0u);
+
+  // Football, week 9: Miami first, a tie at 20, two teams new to the poll.
+  std::string cfb = slurp("fixtures/rankings_cfb_20261025.json");
+  Poll f;
+  CHECK(parse_rankings(cfb, f));
+  CHECK_EQ(f.rows.size(), (size_t) 25);
+  CHECK_EQ(f.date, parse_iso8601_z("2026-10-25T07:00Z"));
+  CHECK_EQ(std::string(f.when), std::string("WK 9"));
+  CHECK_EQ((int) f.rows[0].rank, 1);
+  CHECK_EQ(f.rows[0].id, 2390u);
+  CHECK_EQ(std::string(f.rows[0].rec), std::string("7-0"));
+  CHECK_EQ((int) f.rows[1].prev, 3);
+  CHECK_EQ((int) f.rows[19].rank, 20);
+  CHECK_EQ((int) f.rows[20].rank, 20);
+  CHECK_EQ((int) f.rows[23].prev, 0);
+  // Every ranked team has an abbreviation on the panel.
+  for (const auto &r : f.rows)
+    CHECK(std::string(top25_abbr(League::NCAA, r.id)) != "?");
+  CHECK_EQ(top25_header(League::NCAA, f), std::string("CFB AP WK 9"));
+  CHECK_EQ(top25_row(League::NCAA, f.rows[0]), std::string(" 1 MIA  7-0"));
+  CHECK_EQ(top25_row(League::NCAA, f.rows[9]), std::string("10 ALA  6-2"));
+  // Five rows to a column: five pages on a single panel, three on a wide one.
+  CHECK_EQ(top25_pages(f, 1), 5u);
+  CHECK_EQ(top25_pages(f, 2), 3u);
+  CHECK_EQ(top25_column(League::NCAA, f, 0, 1, 0),
+           std::string(" 1 MIA  7-0\n 2 OSU  6-1\n 3 UGA  6-1\n 4 IU   7-1\n 5 ND   6-1"));
+  CHECK_EQ(top25_column(League::NCAA, f, 0, 2, 1), top25_column(League::NCAA, f, 1, 1, 0));
+  CHECK_EQ(top25_column(League::NCAA, f, 2, 2, 0), top25_column(League::NCAA, f, 4, 1, 0));
+  CHECK_EQ(top25_column(League::NCAA, f, 2, 2, 1), std::string(""));
+  for (uint32_t pg = 0; pg < 5; pg++) {
+    std::string col = top25_column(League::NCAA, f, pg, 1, 0);
+    size_t at = 0;
+    while (at <= col.size()) {
+      size_t nl = col.find('\n', at);
+      size_t len = (nl == std::string::npos ? col.size() : nl) - at;
+      CHECK(len <= 12);  // 12 columns of a 5x8 font fit a single panel's 62 px
+      if (nl == std::string::npos)
+        break;
+      at = nl + 1;
+    }
+  }
+  // Fresh for 50 days after it came out, not with no clock.
+  CHECK(top25_fresh(f, f.date + 3600));
+  CHECK(top25_fresh(f, f.date + kTop25StaleSecs));
+  CHECK(!top25_fresh(f, f.date + kTop25StaleSecs + 1));
+  CHECK(!top25_fresh(f, 0));
+  CHECK(!top25_fresh(Poll{}, f.date));
+
+  // Basketball's preseason poll: every record 0-0, left off the row.
+  std::string cbb = slurp("fixtures/rankings_mcbb_20261019.json");
+  Poll b;
+  CHECK(parse_rankings(cbb, b));
+  CHECK_EQ(b.rows.size(), (size_t) 25);
+  CHECK_EQ(std::string(b.when), std::string("PRE"));
+  CHECK_EQ(top25_header(League::MCBB, b), std::string("CBB AP PRE"));
+  for (const auto &r : b.rows)
+    CHECK(std::string(top25_abbr(League::MCBB, r.id)) != "?");
+  CHECK_EQ(top25_row(League::MCBB, b.rows[0]), std::string(" 1 FLA"));
+
+  // The poll's name for the header.
+  char when[8];
+  top25_when("Week 15", false, when);
+  CHECK_EQ(std::string(when), std::string("WK 15"));
+  top25_when("Final Rankings", false, when);
+  CHECK_EQ(std::string(when), std::string("FINAL"));
+  top25_when("Week 16", true, when);
+  CHECK_EQ(std::string(when), std::string("FINAL"));
+  Poll final_poll;
+  memcpy(final_poll.when, when, sizeof(when));
+  CHECK_EQ(top25_header(League::NCAA, final_poll), std::string("CFB AP FINAL"));
+  CHECK_EQ(top25_header(League::MCBB, final_poll), std::string("CBB AP FINAL"));
+  top25_when("Bowls", false, when);
+  CHECK_EQ(std::string(when), std::string(""));
+  Poll none;
+  none.rows.push_back(RankRow{});
+  CHECK_EQ(top25_header(League::NCAA, none), std::string("CFB AP TOP 25"));
+
+  // A record that isn't digits and dashes, or is too long, is left off;
+  // a row without a rank or a team is skipped; past 25 rows are dropped.
+  std::string odd = R"({"date":"2026-10-25T07:00Z","occurrence":{"displayValue":"Week 9"},"ranks":[)"
+                    R"J({"current":1,"record":{"summary":"7-0 (5-0)"},"team":{"$ref":"x/teams/2390?a"}},)J"
+                    R"({"current":0,"team":{"$ref":"x/teams/194"}},)"
+                    R"({"current":2,"record":{"summary":"7-0"}},)"
+                    R"({"current":3,"previous":250,"record":{"summary":"123-45-6"},"team":{"$ref":"x/teams/9999"}}]})";
+  Poll o;
+  CHECK(parse_rankings(odd, o));
+  CHECK_EQ(o.rows.size(), (size_t) 2);
+  CHECK_EQ(std::string(o.rows[0].rec), std::string(""));
+  CHECK_EQ(std::string(o.rows[1].rec), std::string(""));
+  CHECK_EQ((int) o.rows[1].prev, 0);
+  CHECK_EQ(top25_row(League::NCAA, o.rows[1]), std::string(" 3 ?"));
+  std::string many = R"({"date":"2026-10-25T07:00Z","ranks":[)";
+  for (int i = 1; i <= 30; i++)
+    many += std::string(i > 1 ? "," : "") + R"({"current":)" + std::to_string(i) + R"(,"team":{"$ref":"x/teams/2390"}})";
+  many += "]}";
+  Poll m;
+  CHECK(parse_rankings(many, m));
+  CHECK_EQ(m.rows.size(), (size_t) kTop25Max);
+  Poll keep = f;
+  std::string empty = R"({"date":"2026-10-25T07:00Z","ranks":[]})";
+  CHECK(!parse_rankings(empty, keep));
+  std::string broken = "{\"ranks\":[{\"current\":1";
+  CHECK(!parse_rankings(broken, keep));
+  CHECK_EQ(keep.rows.size(), (size_t) 25);  // a failed parse leaves the poll alone
+
+  // Football and basketball take turns; one alone takes every turn.
+  CHECK_EQ(top25_next(0, -1), -1);
+  CHECK_EQ(top25_next(3, -1), 0);
+  CHECK_EQ(top25_next(3, 0), 1);
+  CHECK_EQ(top25_next(3, 1), 0);
+  CHECK_EQ(top25_next(1, 0), 0);
+  CHECK_EQ(top25_next(2, 1), 1);
+  CHECK_EQ(top25_next(2, 0), 1);
+}
+
 static void test_countdown() {
   const int64_t m = 60, h = 3600, d = 24 * 3600;
   // Days and hours a day or more out, hours and minutes under a day, then
@@ -6743,6 +6871,7 @@ int main() {
   test_night();
   test_offseason();
   test_countdown();
+  test_rankings();
   test_panel_text();
   test_prefs_sync();
   test_message();

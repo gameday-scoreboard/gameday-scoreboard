@@ -322,6 +322,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The next game's countdown card, on unless the owner turns it off.
   bool countdown_on() const { return this->countdown_.off == 0; }
   void set_countdown(bool on);
+  // The college Top 25 card (rankings.h), on unless the owner turns it off.
+  // It only takes turns while the panel follows a college team.
+  bool top25_on() const { return (this->countdown_.cards_off & CARD_OFF_TOP25) == 0; }
+  void set_top25(bool on);
   // The custom countdown: a name and a day (YYYYMMDD, 0 clears it).
   void set_custom_countdown_name(const std::string &name);
   void set_custom_countdown_day(uint32_t ymd);
@@ -391,6 +395,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
+  // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
+  // its header, "" while the card is down, and up to two columns of rows.
+  // The page says how many columns the display has room for.
+  const std::string &top25_head() const { return this->top25_head_; }
+  const std::string &top25_col(int i) const { return this->top25_col_[i == 1 ? 1 : 0]; }
+  void set_top25_cols(uint32_t cols) { this->top25_cols_ = cols >= 2 ? 2 : 1; }
   // The news card's headline on the scoreboard page now, "" while it is
   // down, and its top line ("DAL NEWS"); gd_news_card draws them and says
   // how long a headline too tall for the panel takes to roll.
@@ -504,6 +514,25 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  // The Top 25 card: football's poll and basketball's (rankings.h slots),
+  // each read once a day while the panel follows that league.
+  ::espn::Poll top25_[2];
+  uint32_t top25_read_ms_[2]{};  // millis() of the last good read, 0 = none
+  uint32_t top25_fail_ms_[2]{};  // millis() of the last failed read, 0 = none since
+  bool top25_read_due_{false};
+  uint8_t top25_read_slot_{0};
+  int top25_slot_{-1};  // the poll up now, or the last one shown
+  uint32_t top25_page_{0};
+  uint32_t top25_pages_{0};
+  uint32_t top25_cols_{1};
+  bool top25_shown_{false};
+  uint32_t top25_since_ms_{0};  // when the page went up, or the card last came down
+  uint32_t top25_tick_ms_{0};
+  std::string top25_head_, top25_col_[2];
+  uint8_t top25_slots_() const;  // bit per slot: the college leagues the panel follows
+  void top25_tick_();
+  void top25_show_();
+  void top25_hide_();
   // The news card (news.h): the last read's headlines, one per line (PSRAM),
   // where they came from, and the card's turns. It and the message card take
   // turns with the board, never both up at once.
@@ -641,9 +670,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t off;  // 1 = no countdown to the next game
     uint32_t ymd;  // the custom countdown's day, 0 = none
     char name[::espn::kCountdownNameMax + 1];
-    uint8_t spare[2];
-    uint8_t news;  // 1 = the news card on (news.h). Was spare, so older firmware has it off.
+    // Between-games cards the owner turned off, a bit each (CARD_OFF_*), so
+    // a saved 0 is every card on. Was spare.
+    uint16_t cards_off;
+    // 1 = the news card on (news.h), off by default unlike the cards above.
+    // Was spare, so older firmware has it off. The blob has no spare left.
+    uint8_t news;
   } __attribute__((packed));
+  static constexpr uint16_t CARD_OFF_TOP25 = 1u << 5;
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
   void save_countdown_();
@@ -751,6 +785,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool msg_eof{false};
     bool msg_ok{false};
     int msg_status{0};  // HTTP status, 0 for no answer
+    // The Top 25 card's poll for one league (rankings.h), on this task too.
+    bool need_top25{false};
+    uint8_t top25_slot{0};
+    ::espn::Poll top25_poll;
+    bool top25_ok{false};
+    uint32_t top25_bytes{0};
     // The news card's headlines (news.h), from news_src, read on this task
     // like the message list.
     bool need_news{false};
@@ -770,6 +810,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_msg_job_();
   void run_msg_job_();
   void apply_msg_job_();
+  void start_top25_job_();
+  void run_top25_job_();
+  void apply_top25_job_();
   void start_news_job_();
   void run_news_job_();
   void apply_news_job_();

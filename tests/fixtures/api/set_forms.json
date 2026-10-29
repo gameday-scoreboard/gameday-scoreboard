@@ -24,6 +24,7 @@
   "match": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "beta": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "countdown": {"form": "1 shows the countdown to the next game between games, anything else off", "ok": ["1", "0"]},
+  "top25": {"form": "1 shows the college Top 25 card between games while the panel follows a college team, anything else off", "ok": ["1", "0"]},
   "news": {"form": "1 shows the news card (ESPN headlines) between games, anything else off", "ok": ["1", "0"]},
   "cdname": {"form": "the custom countdown's name, trimmed, up to 20 bytes cut on a whole character; control characters and bytes that aren't UTF-8 are dropped; empty clears it", "ok": ["Christmas", ""]},
   "cddate": {"form": "the custom countdown's day, YYYY-MM-DD, 2020 to 2099; none or empty clears it", "ok": ["2026-12-25", "none", ""], "bad": ["2026-02-30", "12/25/2026", "2026-1-5"]},

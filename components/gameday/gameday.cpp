@@ -1332,6 +1332,7 @@ void GamedayComponent::loop() {
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the cards down.
   this->msg_tick_();
+  this->top25_tick_();
   this->news_tick_();
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
@@ -1377,6 +1378,8 @@ void GamedayComponent::loop() {
         this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
           this->msg_fail_ms_ = this->gave_up_ms_;
+        if (this->job_.need_top25)
+          this->top25_fail_ms_[this->job_.top25_slot] = this->gave_up_ms_;
         if (this->job_.need_news)
           this->news_fail_ms_ = this->gave_up_ms_;
         // need_scan, like need_msg, was set before the task started, so the
@@ -1401,6 +1404,12 @@ void GamedayComponent::loop() {
   if (this->msg_read_due_ && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_msg_job_();
+    return;
+  }
+  // The Top 25 card's poll, the same way.
+  if (this->top25_read_due_ && network::is_connected() && this->clock_set_() &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
+    this->start_top25_job_();
     return;
   }
   // The news card's headlines, the same way.
@@ -1611,6 +1620,17 @@ void GamedayComponent::set_countdown(bool on) {
     return;
   this->countdown_.off = on ? 0 : 1;
   this->save_countdown_();
+}
+
+void GamedayComponent::set_top25(bool on) {
+  if (on == this->top25_on())
+    return;
+  if (on)
+    this->countdown_.cards_off &= (uint16_t) ~CARD_OFF_TOP25;
+  else
+    this->countdown_.cards_off |= CARD_OFF_TOP25;
+  this->save_countdown_();
+  ESP_LOGI(TAG, "Top 25 card %s", on ? "on" : "off");
 }
 
 void GamedayComponent::set_news(bool on) {
@@ -2746,6 +2766,10 @@ void GamedayComponent::run_job_() {
     this->run_msg_job_();
     return;
   }
+  if (j.need_top25) {
+    this->run_top25_job_();
+    return;
+  }
   if (j.need_news) {
     this->run_news_job_();
     return;
@@ -2865,6 +2889,10 @@ void GamedayComponent::apply_job_() {
   Job &j = this->job_;
   if (j.need_msg) {
     this->apply_msg_job_();  // whatever the board follows, the card is the same
+    return;
+  }
+  if (j.need_top25) {
+    this->apply_top25_job_();  // a poll is the same whatever the board follows
     return;
   }
   if (j.need_news) {
@@ -4024,6 +4052,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
   doc["countdown"] = this->countdown_on();
+  doc["top25"] = this->top25_on();
   doc["news"] = this->news_on();
   doc["cdname"] = (const char *) this->countdown_.name;
   doc["cddate"] = ::espn::countdown_date_text(this->countdown_.ymd);
@@ -4741,8 +4770,9 @@ void GamedayComponent::msg_tick_() {
     return;
   this->msg_tick_ms_ = now;
   const bool on = !this->msg_url_.empty() || !this->msg_text_.empty();
+  // Nor over the news or Top 25 card: the message waits for them to come down.
   const bool between = this->card_between_(now) && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs;
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
   ::espn::MsgTurn turn =
       ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
@@ -4857,6 +4887,158 @@ void GamedayComponent::apply_msg_job_() {
   this->rebuild_state_(&this->last_fields_);
 }
 
+// ---- The Top 25 card (rankings.h) -------------------------------------------
+
+// A college team among the favorites, or Live games reading a college
+// league. A panel with nothing picked yet follows every league, which isn't
+// following college, so it gets no card.
+uint8_t GamedayComponent::top25_slots_() const {
+  if (this->no_team_default())
+    return 0;
+  uint8_t slots = 0;
+  auto add = [&slots](League l) {
+    int s = ::espn::top25_slot(l);
+    if (s >= 0)
+      slots |= (uint8_t) (1u << s);
+  };
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    if (this->fav_id_(i) != 0)
+      add((League) this->fav_league_(i));
+  if (this->live_mode_())
+    for (League l : this->scan_leagues_())
+      add(l);
+  return slots;
+}
+
+void GamedayComponent::top25_hide_() {
+  if (!this->top25_shown_)
+    return;
+  this->top25_shown_ = false;
+  this->top25_head_.clear();
+  this->top25_col_[0].clear();
+  this->top25_col_[1].clear();
+  this->top25_since_ms_ = millis();
+  this->fire_action_("top25");  // gd_top25_card in firmware/pages/gameday-live.yaml
+}
+
+void GamedayComponent::top25_show_() {
+  const League l = ::espn::top25_slot_league(this->top25_slot_);
+  const ::espn::Poll &p = this->top25_[this->top25_slot_];
+  this->top25_shown_ = true;
+  this->top25_head_ = ::espn::top25_header(l, p);
+  for (uint32_t c = 0; c < 2; c++)
+    this->top25_col_[c] = c < this->top25_cols_ ? ::espn::top25_column(l, p, this->top25_page_, this->top25_cols_, c)
+                                                : std::string();
+  this->top25_since_ms_ = millis();
+  this->fire_action_("top25");
+}
+
+void GamedayComponent::top25_tick_() {
+  const uint32_t now = millis();
+  if (now - this->top25_tick_ms_ < 250)
+    return;
+  this->top25_tick_ms_ = now;
+  const uint8_t slots = this->top25_on() ? this->top25_slots_() : 0;
+  // Between games only, as the message card (msg_tick_), and not over it or
+  // the news card.
+  const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
+                                           ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
+  const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && !this->demo_playing_() &&
+                       this->last_fields_.game_state != "IN" && !trouble && !this->msg_shown_ && !this->news_shown_ &&
+                       (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+  if (!between) {
+    this->top25_hide_();
+    return;
+  }
+  // A poll the panel follows that has never been read, or not for a day.
+  if (!this->top25_read_due_ && !(this->busy_ && this->job_.need_top25)) {
+    for (uint8_t s = 0; s < 2; s++) {
+      if (!(slots & (1u << s)))
+        continue;
+      const bool may_read = this->top25_fail_ms_[s] == 0 || now - this->top25_fail_ms_[s] >= ::espn::kTop25RetryMs;
+      if (may_read && (this->top25_read_ms_[s] == 0 || now - this->top25_read_ms_[s] >= ::espn::kTop25ReadMs)) {
+        this->top25_read_due_ = true;
+        this->top25_read_slot_ = s;
+        break;
+      }
+    }
+  }
+  const int64_t epoch = (int64_t) this->time_->now().timestamp;
+  if (this->top25_shown_) {
+    if (now - this->top25_since_ms_ < ::espn::kTop25PageMs)
+      return;
+    if (this->top25_page_ + 1 < this->top25_pages_ && (slots & (1u << this->top25_slot_)) &&
+        ::espn::top25_fresh(this->top25_[this->top25_slot_], epoch)) {
+      this->top25_page_++;
+      this->top25_show_();
+    } else {
+      this->top25_hide_();
+    }
+    return;
+  }
+  // The first turn comes a minute after the card could first take one.
+  if (this->top25_since_ms_ == 0)
+    this->top25_since_ms_ = (now - ::espn::kTop25EveryMs + 60u * 1000u) | 1u;
+  if (now - this->top25_since_ms_ < ::espn::kTop25EveryMs)
+    return;
+  uint8_t ready = 0;
+  for (uint8_t s = 0; s < 2; s++)
+    if ((slots & (1u << s)) && ::espn::top25_fresh(this->top25_[s], epoch))
+      ready |= (uint8_t) (1u << s);
+  const int next = ::espn::top25_next(ready, this->top25_slot_);
+  if (next < 0)
+    return;
+  this->top25_slot_ = next;
+  this->top25_page_ = 0;
+  this->top25_pages_ = ::espn::top25_pages(this->top25_[next], this->top25_cols_);
+  ESP_LOGI(TAG, "Top 25: a turn, %s, %u pages",
+           ::espn::top25_header(::espn::top25_slot_league(next), this->top25_[next]).c_str(),
+           (unsigned) this->top25_pages_);
+  this->top25_show_();
+}
+
+void GamedayComponent::start_top25_job_() {
+  this->top25_read_due_ = false;
+  this->job_ = Job{};
+  this->job_.generation = this->generation_;
+  this->job_.need_top25 = true;
+  this->job_.top25_slot = this->top25_read_slot_;
+  this->start_worker_();
+}
+
+// Worker task. About 28 KB, streamed through the parse's filter.
+void GamedayComponent::run_top25_job_() {
+  Job &j = this->job_;
+  auto container = this->open_(::espn::rankings_url(::espn::top25_slot_league(j.top25_slot)));
+  if (container == nullptr)
+    return;
+  ContainerReader reader(container, this->espn_bytes_);
+  j.top25_ok = ::espn::parse_rankings(reader, j.top25_poll);
+  container->end();
+  j.top25_bytes = (uint32_t) reader.total();
+  if (!j.top25_ok)
+    ESP_LOGW(TAG, "Top 25: parse failed after %u bytes", (unsigned) reader.total());
+}
+
+void GamedayComponent::apply_top25_job_() {
+  Job &j = this->job_;
+  const uint8_t s = j.top25_slot;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  if (!j.top25_ok) {
+    this->top25_fail_ms_[s] = now;  // kTop25RetryMs is longer than any Retry-After ESPN has sent
+    return;
+  }
+  this->top25_fail_ms_[s] = 0;
+  this->top25_read_ms_[s] = now;
+  // A turn on the old poll ends here; the next turn shows the new one.
+  if (this->top25_shown_ && this->top25_slot_ == (int) s)
+    this->top25_hide_();
+  this->top25_[s] = std::move(j.top25_poll);
+  ESP_LOGI(TAG, "Top 25: %s, %u teams (%u bytes)",
+           ::espn::top25_header(::espn::top25_slot_league(s), this->top25_[s]).c_str(),
+           (unsigned) this->top25_[s].rows.size(), (unsigned) j.top25_bytes);
+}
+
 // ---- The news card (news.h) -------------------------------------------------
 
 std::vector<::espn::NewsSource> GamedayComponent::news_sources_() const {
@@ -4906,7 +5088,9 @@ void GamedayComponent::news_tick_() {
   if (now - this->news_tick_ms_ < 250)
     return;
   this->news_tick_ms_ = now;
-  const bool between = this->card_between_(now) && !this->msg_shown_ && now - this->msg_since_ms_ >= ::espn::kMsgPageMs;
+  // Nor over the message card (and 10 s after it) or the Top 25 card.
+  const bool between = this->card_between_(now) && !this->msg_shown_ &&
+                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->news_roll_ms_);
   ::espn::MsgTurn turn = ::espn::msg_turn(this->news_on(), between, this->news_shown_, now - this->news_since_ms_,
                                           ::espn::kNewsEveryMin, page_ms);
@@ -5312,6 +5496,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
       case ::espn::SetKind::COUNTDOWN:
         this->set_countdown(op.on);
+        break;
+      case ::espn::SetKind::TOP25:
+        this->set_top25(op.on);
         break;
       case ::espn::SetKind::NEWS:
         this->set_news(op.on);

@@ -505,6 +505,58 @@ template<typename TInput> bool parse_team(TInput &input, Schedule &out) {
   return true;
 }
 
+// Parses an AP poll from ESPN's core API (rankings.h), at most kTop25Max
+// rows. The rest of the document (the season's types and weeks, the teams
+// that got votes) is skipped as it streams.
+template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
+  JsonDocument filter(detail::json_allocator());
+  filter["date"] = true;
+  filter["occurrence"]["displayValue"] = true;
+  filter["occurrence"]["last"] = true;
+  JsonObject rank = filter["ranks"][0].to<JsonObject>();
+  rank["current"] = true;
+  rank["previous"] = true;
+  rank["record"]["summary"] = true;
+  rank["team"]["$ref"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                              DeserializationOption::NestingLimit(20));
+  if (err)
+    return false;
+  JsonArrayConst ranks = doc["ranks"];
+  if (ranks.isNull() || ranks.size() == 0)
+    return false;
+  Poll p;
+  p.date = parse_iso8601_z(detail::str_or_empty(doc["date"]));
+  top25_when(doc["occurrence"]["displayValue"] | "", doc["occurrence"]["last"] | false, p.when);
+  for (JsonObjectConst r : ranks) {
+    if (p.rows.size() >= kTop25Max)
+      break;
+    RankRow row;
+    int cur = r["current"] | 0;
+    int prev = r["previous"] | 0;
+    row.id = top25_ref_id(r["team"]["$ref"] | "");
+    if (cur < 1 || cur > 99 || row.id == 0)
+      continue;
+    row.rank = (uint8_t) cur;
+    row.prev = prev > 0 && prev < 100 ? (uint8_t) prev : 0;
+    const char *rec = r["record"]["summary"] | "";
+    // "10-2", "8-3-1": digits and dashes only, so a long or odd value can't
+    // spill out of its column.
+    size_t n = 0;
+    for (; rec[n] != '\0' && n < sizeof(row.rec) - 1; n++)
+      if (!((rec[n] >= '0' && rec[n] <= '9') || rec[n] == '-'))
+        break;
+    if (rec[n] == '\0')
+      memcpy(row.rec, rec, n);
+    p.rows.push_back(row);
+  }
+  if (p.rows.empty())
+    return false;
+  out = std::move(p);
+  return true;
+}
+
 // Games that have not started yet, in the order ESPN lists them (by date).
 template<typename TInput>
 bool parse_upcoming(TInput &input, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out) {

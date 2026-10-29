@@ -31,6 +31,7 @@ The panel reads ESPN's news about once an hour, and only while the card is on. I
 The news card works like the [message card](/using/messages/#a-message-card):
 
 - It never covers a live game, a celebration, or the panel's own trouble messages, like **No internet**. It comes back on its own once they're gone.
-- It and the message card take turns. Neither one comes up while the other is on the screen, and each waits 10 seconds after the other goes down. A message card set to hold the board between games keeps it, so the news waits.
+- It and the message card take turns. Neither one comes up while the other is on the screen, and each waits 10 seconds after the other goes down. A message card on **Whenever no game is on** keeps the board, so the news waits.
+- It doesn't come up over the [College Top 25](/using/top-25/) either, and the Top 25 waits while a headline is up.
 
 Headlines are in English, as ESPN writes them. Emoji are left out, since the panel can't draw them.

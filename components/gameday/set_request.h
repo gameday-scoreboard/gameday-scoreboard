@@ -26,7 +26,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
+                                    "beta",   "countdown", "top25", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
@@ -186,6 +186,7 @@ enum class SetKind : uint8_t {
   MATCH,     // on, soccer
   BETA,      // on, release builds only
   COUNTDOWN,  // on, the next game's countdown card
+  TOP25,      // on, the college Top 25 card (rankings.h)
   CD_NAME,    // text, the custom countdown's name
   CD_DATE,    // ymd, the custom countdown's day (0 clears it)
   MSG,       // text, the message card's own entries (message.h); "" clears it
@@ -428,6 +429,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::BETA);
   if (k == "countdown")
     return on(SetKind::COUNTDOWN);
+  if (k == "top25")
+    return on(SetKind::TOP25);
   if (k == "news")
     return on(SetKind::NEWS);
   if (k == "cdname") {

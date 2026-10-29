@@ -166,6 +166,7 @@
     "stale_s": "int",
     "status": "string",
     "today": "bool",
+    "top25": "bool",
     "tz": "int",
     "tz_auto": "bool",
     "tz_iana": "string",
@@ -253,6 +254,7 @@
     "scroll": "int",
     "sport": "string",
     "today": "bool",
+    "top25": "bool",
     "tz": "string",
     "tzauto": "bool",
     "version": "string"
