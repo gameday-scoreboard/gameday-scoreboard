@@ -655,7 +655,8 @@ void GamedayComponent::list_sched_tick_() {
   ::espn::ListSched sched{this->prefs10_.sched_on, this->prefs10_.sched_before};
   bool held = this->favorites_mode_() && this->fav_locked_;
   int next = ::espn::list_sched_step(sched, this->prefs9_.active, want, held);
-  if (sched.on != this->prefs10_.sched_on || sched.before != this->prefs10_.sched_before) {
+  bool changed = sched.on != this->prefs10_.sched_on || sched.before != this->prefs10_.sched_before;
+  if (changed) {
     if (want != 0)
       ESP_LOGI(TAG, "Playlist schedule: %s starts", this->list_name_(want).c_str());
     else
@@ -667,6 +668,8 @@ void GamedayComponent::list_sched_tick_() {
   }
   if (next >= 0)
     this->set_active_list_((uint8_t) next, true, false);
+  else if (changed)
+    this->rebuild_state_(&this->last_fields_);  // listsched changed with no switch
 }
 
 void GamedayComponent::select_playlist(const std::string &option) {
