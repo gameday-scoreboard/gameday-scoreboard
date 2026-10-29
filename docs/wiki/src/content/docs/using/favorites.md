@@ -61,6 +61,18 @@ A playlist is a group of your favorites with a name, like your football teams or
 - Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
 - **Playing**, under **Favorite teams** on the device page, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
 
+### A row for each sport
+
+:::note[Coming in the next release]
+When your favorites cover more than one sport, **Playing** has a row for each of them after **All favorites**, then your own playlists:
+
+- **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
+- Picking one plays every favorite in that sport, with the same rules as a playlist: **Only today's games**, **Take over** and the rest.
+- You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
+- They aren't playlists: they don't show in the **Playlists** card, don't count toward the 16, and aren't on the remote's buttons. A playlist of your own named Football sits beside **All football**.
+- The **One per sport** button is gone, since these rows do its job and never go out of date. Playlists it made before stay until you remove them.
+:::
+
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
 
 The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below.
@@ -70,10 +82,10 @@ A favorite you take out of your list leaves every playlist it was in. Adding it 
 :::note[Coming in the next release]
 Each playlist gets an **Options** row on the device page, under its teams. It's closed until you tap it, and once something is set it says what, like **Options: Sun 11 AM to 11 PM, only its games**.
 
-- **Schedule** plays the playlist on its own. Tap the days, then set **From** and **to**, like Sundays 11 AM to 11 PM. The same time twice is the whole day, so a playlist for Saturdays only needs Sat. A **to** earlier than **From** runs past midnight, so Saturday 8 PM to 1 AM keeps going until 1 AM Sunday. When the time comes, the panel switches **Playing** to the playlist, shows its name for a moment, and the bar says **(on its schedule)**. When it ends, the panel goes back to what it played before, **All favorites** if you hadn't picked a playlist.
+- **Schedule** plays the playlist on its own. Tap the days, then set **From** and **to**, like Sundays 11 AM to 11 PM. The same time twice is the whole day, so a playlist for Saturdays only needs Sat. A **to** earlier than **From** runs past midnight, so Saturday 8 PM to 1 AM keeps going until 1 AM Sunday. When the time comes, the panel switches **Playing** to the playlist, shows its name for a moment, and the bar says **(on its schedule)**. When it ends, the panel goes back to what it played before: a playlist, a sport row like **All football**, or **All favorites**.
   - A game the panel is locked on finishes first: the switch waits until it's over, both at the start and at the end.
   - When two schedules overlap, the playlist higher in the list wins.
-  - If you pick a playlist yourself while a schedule runs, your pick stays, even after the schedule ends.
+  - If you pick a playlist or a sport row yourself while a schedule runs, your pick stays, even after the schedule ends.
   - The schedule only changes the playlist. A panel on Live games stays on Live games, and plays the scheduled playlist when you switch it to Favorite teams.
 - **Only this playlist's games**, off to start. On, a favorite outside the playlist no longer takes the panel near its kickoff while the playlist plays, and the panel stays on the playlist's own teams.
 - **Only today's games** follows the switch in the **Favorites** card (**Like Favorites**) until you set it **On** or **Off** for this playlist.

@@ -85,6 +85,7 @@ script:
           // one page file serves 64x64, 128x64, and wider chains alike.
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
           const bool wide = W >= 128;
+          id(gameday_ctl).set_top25_cols(wide ? 2 : 1);  // gd_top25_card's columns
           lv_obj_set_size(id(tt_game_container), W, 64);
           lv_obj_set_size(id(tt_no_game_container), W, 64);
           lv_obj_set_size(id(tt_splash), W, 64);
@@ -535,7 +536,7 @@ script:
           }
       - lambda: |-
           // Halftime and the final: the line score takes turns with the board
-          // above the ticker, 10 s each (gd_line_turn, flipped by the interval
+          // above the ticker, 10 s each (gd_card_turn, stepped by the interval
           // below). The component lays it out for this width
           // (components/gameday/line_score.h); the Spleen fonts are monospaced,
           // so a character is 6 px in spleen_12 and 5 px in spleen_8.
@@ -543,7 +544,8 @@ script:
           ::espn::LineScoreText ls = id(gameday_ctl).line_score(W);
           if (ls.font == 0 || clock_card || (game_state != "IN" && game_state != "POST")) {
             id(gd_line_ready) = false;
-            id(gd_line_turn) = false;
+            if (id(gd_card_turn) == 1)
+              id(gd_card_turn) = 0;
             lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
             return;
           }
@@ -619,10 +621,107 @@ script:
             lv_obj_set_pos(id(tt_line_title_lbl), 0, y0 + 3 * pitch + 1);
             lv_obj_clear_flag(id(tt_line_title_lbl), LV_OBJ_FLAG_HIDDEN);
           }
-          if (id(gd_line_turn))
+          if (id(gd_card_turn) == 1)
             lv_obj_clear_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
           else
             lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+      - lambda: |-
+          // Halftime and the final: this game's leaders, a third card in the
+          // turns with the board and the line score (gd_card_turn 2). The
+          // component lays it out for this width (components/gameday/
+          // game_leaders.h): each side's logo at half size over its
+          // abbreviation down the left and its lines to the right; a single
+          // panel gets the abbreviation and one line a side.
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          ::espn::LeadersCardText lc = id(gameday_ctl).leaders_card(W);
+          if (lc.font == 0 || clock_card || (game_state != "IN" && game_state != "POST")) {
+            id(gd_leaders_ready) = false;
+            if (id(gd_card_turn) == 2)
+              id(gd_card_turn) = 0;
+            lv_obj_add_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          id(gd_leaders_ready) = true;
+          auto put = [](lv_obj_t *lbl, const std::string &text) {
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || text != cur)
+              lv_label_set_text(lbl, text.c_str());
+          };
+          auto bright = [](uint32_t c) -> lv_color_t {
+            uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+            uint32_t m = std::max(r, std::max(g, b));
+            if (m == 0)
+              return lv_color_hex(0xFFFFFF);
+            if (m < 0xC0) {
+              r = r * 0xC0 / m;
+              g = g * 0xC0 / m;
+              b = b * 0xC0 / m;
+            }
+            return lv_color_make(r, g, b);
+          };
+          const lv_font_t *f = lc.font == 12 ? id(spleen_12)->get_lv_font() : id(spleen_8)->get_lv_font();
+          const lv_font_t *small = id(spleen_8)->get_lv_font();
+          lv_obj_t *team = id(tt_ldr_team_lbl), *opp = id(tt_ldr_opp_lbl);
+          lv_obj_t *team_body = id(tt_ldr_team_body), *opp_body = id(tt_ldr_opp_body);
+          lv_obj_t *team_img = id(tt_ldr_team_img), *opp_img = id(tt_ldr_opp_img);
+          lv_obj_set_size(id(tt_leaders), W, 55);
+          lv_obj_set_style_text_font(team_body, f, 0);
+          lv_obj_set_style_text_font(opp_body, f, 0);
+          lv_obj_set_style_text_font(team, small, 0);
+          lv_obj_set_style_text_font(opp, small, 0);
+          lv_obj_set_style_text_color(team, bright((uint32_t) team_color), 0);
+          lv_obj_set_style_text_color(opp, bright((uint32_t) opponent_color), 0);
+          put(team, team_abbr);
+          put(opp, opponent_abbr);
+          put(team_body, lc.team_body);
+          put(opp_body, lc.opp_body);
+          const int line_h = lv_font_get_line_height(f);
+          lv_obj_set_style_text_line_space(team_body, lc.pitch - line_h, 0);
+          lv_obj_set_style_text_line_space(opp_body, lc.pitch - line_h, 0);
+          if (lc.logos) {
+            // Two blocks, one a side, stacked to fill the 55 px: the logo at
+            // half size with the abbreviation under it, the lines beside.
+            const int y0 = (55 - 2 * lc.block_h) / 2;
+            const int y1 = y0 + lc.block_h;
+            const int text_w = W - lc.text_x;
+            for (lv_obj_t *img : {team_img, opp_img}) {
+              lv_image_set_pivot(img, 0, 0);
+              lv_image_set_scale(img, 128);
+              lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
+            }
+            lv_obj_set_pos(team_img, 2, y0);
+            lv_obj_set_pos(opp_img, 2, y1);
+            lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_pos(team, 0, y0 + 17);
+            lv_obj_set_width(team, lc.text_x);
+            lv_obj_set_pos(opp, 0, y1 + 17);
+            lv_obj_set_width(opp, lc.text_x);
+            lv_obj_set_pos(team_body, lc.text_x, y0);
+            lv_obj_set_width(team_body, text_w);
+            lv_obj_set_pos(opp_body, lc.text_x, y1);
+            lv_obj_set_width(opp_body, text_w);
+          } else {
+            // A single panel: the abbreviation on one row, the top line under it.
+            const int y0 = (55 - 2 * lc.block_h) / 2;
+            const int y1 = y0 + lc.block_h;
+            lv_obj_add_flag(team_img, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(opp_img, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_pos(team, 0, y0);
+            lv_obj_set_width(team, W);
+            lv_obj_set_pos(opp, 0, y1);
+            lv_obj_set_width(opp, W);
+            lv_obj_set_pos(team_body, 0, y0 + lc.pitch);
+            lv_obj_set_width(team_body, W);
+            lv_obj_set_pos(opp_body, 0, y1 + lc.pitch);
+            lv_obj_set_width(opp_body, W);
+          }
+          if (id(gd_card_turn) == 2)
+            lv_obj_clear_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+          else
+            lv_obj_add_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
       - if:
           condition:
             lambda: 'return !splash_text.empty();'
@@ -670,6 +769,54 @@ script:
           lv_obj_move_foreground(id(tt_msg));
           lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
 
+  # The Top 25 card (components/gameday/rankings.h): a page of the poll, or
+  # nothing. The component turns the pages and sends "top25" for each.
+  - id: gd_top25_card
+    then:
+      - lambda: |-
+          const std::string &head = id(gameday_ctl).top25_head();
+          if (head.empty()) {
+            lv_obj_add_flag(id(tt_top25), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          // Two columns of 12 characters (60 px in spleen_8) from 128 px up.
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const bool two = W >= 128;
+          lv_obj_set_size(id(tt_top25), W, 64);
+          lv_obj_set_width(id(tt_top25_head_lbl), W);
+          lv_label_set_text(id(tt_top25_head_lbl), head.c_str());
+          lv_obj_set_x(id(tt_top25_col0_lbl), two ? W / 2 - 62 : 1);
+          lv_label_set_text(id(tt_top25_col0_lbl), id(gameday_ctl).top25_col(0).c_str());
+          if (two) {
+            lv_obj_set_x(id(tt_top25_col1_lbl), W / 2 + 4);
+            lv_label_set_text(id(tt_top25_col1_lbl), id(gameday_ctl).top25_col(1).c_str());
+            lv_obj_clear_flag(id(tt_top25_col1_lbl), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(id(tt_top25_col1_lbl), LV_OBJ_FLAG_HIDDEN);
+          }
+          lv_obj_move_foreground(id(tt_top25));
+          lv_obj_clear_flag(id(tt_top25), LV_OBJ_FLAG_HIDDEN);
+
+  # The news card (components/gameday/news.h): its top line ("DAL NEWS")
+  # and one headline under it, or nothing. Sent as "news", like "msg".
+  - id: gd_news_card
+    then:
+      - lambda: |-
+          const std::string &headline = id(gameday_ctl).news_card();
+          if (headline.empty()) {
+            lv_obj_add_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          lv_obj_set_size(id(tt_news), W, 64);
+          lv_obj_set_width(id(tt_news_head_lbl), W);
+          lv_label_set_text(id(tt_news_head_lbl), id(gameday_ctl).news_head().c_str());
+          const lv_font_t *fonts[2] = {id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font()};
+          id(gameday_ctl).set_news_roll_ms(
+              gameday::board_text(id(tt_news_body), id(tt_news_lbl), headline.c_str(), fonts, 2, 54));
+          lv_obj_move_foreground(id(tt_news));
+          lv_obj_clear_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
+
   # The off-season clock's time, and the date when that line has no next
   # game, in the panel's time zone; or the countdown card's digits. A label
   # is only rewritten when its text changes, so once a minute.
@@ -701,29 +848,52 @@ interval:
   - interval: 1s
     then:
       - script.execute: gd_clock_tick
-  # The line score's turn on the board (gd_update shows it); the board
-  # always comes first.
+  # The cards' turns on the board, 10 s each: the board (0), the line score
+  # (1) and the game leaders (2), skipping a card that is not ready. The
+  # board always comes first, and the halftime leaders card has one turn,
+  # counted as it ends: until then the polls in its 10 s keep it laid out.
   - interval: 10s
     then:
       - lambda: |-
-          if (!id(gd_line_ready))
+          if (!id(gd_line_ready) && !id(gd_leaders_ready))
             return;
-          id(gd_line_turn) = !id(gd_line_turn);
-          if (id(gd_line_turn))
+          const int prev = id(gd_card_turn);
+          int next = prev;
+          for (int i = 0; i < 3; i++) {
+            next = (next + 1) % 3;
+            if (next == 0 || (next == 1 && id(gd_line_ready)) ||
+                (next == 2 && id(gd_leaders_ready) && id(gameday_ctl).leaders_card_due()))
+              break;
+          }
+          id(gd_card_turn) = next;
+          if (next == 1)
             lv_obj_clear_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
           else
             lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+          if (next == 2) {
+            lv_obj_clear_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            if (prev == 2)
+              id(gameday_ctl).leaders_turn_taken();
+          }
 
 globals:
-  # The board has a line score (halftime or a final), and it is its turn.
+  # The board has a line score (halftime or a final), the game leaders card
+  # (game_leaders.h), and whose turn it is: 0 the board, 1 the line score,
+  # 2 the leaders.
   - id: gd_line_ready
     type: bool
     restore_value: no
     initial_value: 'false'
-  - id: gd_line_turn
+  - id: gd_leaders_ready
     type: bool
     restore_value: no
     initial_value: 'false'
+  - id: gd_card_turn
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 lvgl:
   style_definitions:
@@ -1096,6 +1266,52 @@ lvgl:
                         text_color: 0xC0C0C0
                         text_font: spleen_8
 
+              # Halftime and the final: this game's leaders over the board,
+              # above the ticker, a third card in the turns. Laid out and
+              # shown by gd_update; the logos come with gd_show_logos.
+              - obj:
+                  id: tt_leaders
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 55
+                  hidden: true
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  widgets:
+                    - image:
+                        id: tt_ldr_team_img
+                        src: gd_logo_blank
+                        x: 0
+                        y: 0
+                    - image:
+                        id: tt_ldr_opp_img
+                        src: gd_logo_blank
+                        x: 0
+                        y: 28
+                    - label:
+                        id: tt_ldr_team_lbl
+                        long_mode: CLIP
+                        text: ""
+                    - label:
+                        id: tt_ldr_opp_lbl
+                        long_mode: CLIP
+                        text: ""
+                    - label:
+                        id: tt_ldr_team_body
+                        long_mode: CLIP
+                        text: ""
+                        text_color: 0xFFFFFF
+                    - label:
+                        id: tt_ldr_opp_body
+                        long_mode: CLIP
+                        text: ""
+                        text_color: 0xFFFFFF
+
               - label:
                   id: tt_game_status_lbl
                   x: 0
@@ -1237,6 +1453,103 @@ lvgl:
                   long_mode: WRAP
                   text: ""
                   text_color: 0xFFFFFF
+
+        # The college Top 25, over the board between games (gd_top25_card):
+        # the poll's name, then five rows a column, one column on a single
+        # panel and two side by side on a wide display.
+        - obj:
+            id: tt_top25
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_top25_head_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0xFFB000
+                  text_font: spleen_8
+              - label:
+                  id: tt_top25_col0_lbl
+                  x: 1
+                  y: 10
+                  width: 62
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0xFFFFFF
+                  text_font: spleen_8
+                  text_line_space: 3
+              - label:
+                  id: tt_top25_col1_lbl
+                  x: 66
+                  y: 10
+                  width: 62
+                  long_mode: CLIP
+                  hidden: true
+                  text: ""
+                  text_color: 0xFFFFFF
+                  text_font: spleen_8
+                  text_line_space: 3
+
+        # The news card, over the board between games (gd_news_card): the
+        # top line, and the headline in the box under it, rolling when long.
+        - obj:
+            id: tt_news
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_news_head_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFB000
+              - obj:
+                  id: tt_news_body
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 10
+                  width: 64
+                  height: 54
+                  bg_opa: TRANSP
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: tt_news_lbl
+                        x: 1
+                        y: 0
+                        width: 62
+                        text_align: CENTER
+                        long_mode: WRAP
+                        text: ""
+                        text_color: 0xFFFFFF
 
       on_load:
         then:

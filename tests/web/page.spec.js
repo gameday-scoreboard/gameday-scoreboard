@@ -572,22 +572,19 @@ test("playlists post every playlist on new, teams, rename, move and remove", asy
   await expect(page.locator("#favHint")).toContainText("Your playlists have buttons 1 to 4");
 });
 
-test("One per sport makes a playlist for each sport in the favorites", async ({ page, request }) => {
+test("the playlists card has no One per sport button", async ({ page, request }) => {
   await reset(request, {
     favs: [
       { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" },
       { l: "nba", id: 6, abbr: "DAL", name: "Dallas Mavericks" },
-      { l: "ncaa", id: 251, abbr: "TEX", name: "Texas Longhorns" },
+      {},
       {},
     ],
   });
   await page.goto("/");
-  await page.locator("#listSport").click();
-  await expectSet(request, { lists: "Football=nfl:6,ncaa:251;Basketball=nba:6" });
-  await expect(page.locator("#listCtls .pname").nth(0)).toHaveValue("Football");
-  await expect(page.locator("#listCtls .pname").nth(1)).toHaveValue("Basketball");
-  await page.locator("#listSport").click();
-  await expect(page.locator("#toast")).toHaveText("Every sport in your favorites has a playlist");
+  await expect(page.locator("#listAdd")).toBeVisible();
+  await expect(page.locator("#listActions button")).toHaveCount(1);
+  await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
 });
 
 // All 16 playlists with every favorite are about 3 KB, far past the panel's
@@ -631,7 +628,7 @@ test("Favorite teams plays a playlist: the picker posts it, the bar names it, th
   await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
   await expect(page.locator("#upnextList .un.out")).toHaveCount(0);
   await page.locator("#favList").selectOption("1");
-  await expectSet(request, { mode: "4", list: "1" });
+  await expectSet(request, { mode: "4", list: "1", sport: "none" });
   await expect(page.locator("#favName")).toHaveText("Cycling through Texans");
   await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI"]);
 });
@@ -659,7 +656,7 @@ test("a playlist's options: a schedule, only its games, its own today, kept on a
   await expect.poll(() => lastLists(request)).toEqual([
     { n: "Sundays", t: ["nfl:6"], days: 1, from: "11:00", to: "23:00", only: false, today: -1 },
   ]);
-  await box.getByRole("switch", { name: "Only Sundays's games" }).click();
+  await box.getByRole("switch", { name: "Only the games in Sundays" }).click();
   await box.getByLabel("Only today's games in Sundays").selectOption("1");
   await expect.poll(() => lastLists(request)).toEqual([
     { n: "Sundays", t: ["nfl:6"], days: 1, from: "11:00", to: "23:00", only: true, today: 1 },
@@ -681,6 +678,56 @@ test("a playlist its schedule put on says so", async ({ page, request }) => {
     list: 1, listsched: 1 });
   await page.goto("/");
   await expect(page.locator("#favName")).toHaveText("Cycling through Sundays (on its schedule)");
+});
+
+test("Playing has a row per sport after All favorites, then the owner's playlists", async ({ page, request }) => {
+  const t = (l, abbr, name, id) => ({ l, id, abbr, name });
+  await reset(request, {
+    mode: 4,
+    favs: [t("nfl", "DAL", "Dallas Cowboys", 6), t("nba", "DAL", "Dallas Mavericks", 6), t("ncaa", "TEX", "Texas Longhorns", 251), {}],
+    lists: [{ n: "Football", f: [0] }],
+    list: 1,
+    next: [
+      { slot: 1, t: t("nfl", "DAL", "Dallas Cowboys", 6), id: "1", s: "PRE", kick: 1792531500, oi: 21, oa: "PHI", ts: 0, os: 0, tv: "FOX", detail: "" },
+      { slot: 2, t: t("nba", "DAL", "Dallas Mavericks", 6), id: "2", s: "PRE", kick: 1792540000, oi: 13, oa: "LAL", ts: 0, os: 0, tv: "ESPN", detail: "" },
+      { slot: 3, t: t("ncaa", "TEX", "Texas Longhorns", 251), id: "3", s: "PRE", kick: 1792620000, oi: 333, oa: "ALA", ts: 0, os: 0, tv: "ABC", detail: "" },
+    ],
+  });
+  await page.goto("/");
+  await expect(page.locator("#favList option")).toHaveText(["All favorites", "All football", "All basketball", "Football"]);
+  await expect(page.locator("#favList")).toHaveValue("1");
+  await page.locator("#favList").selectOption("s:basketball");
+  await expectSet(request, { mode: "4", list: "0", sport: "basketball" });
+  await expect(page.locator("#favList")).toHaveValue("s:basketball");
+  await expect(page.locator("#favName")).toHaveText("Cycling through your basketball favorites");
+  await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI", "TEX vs ALA"]);
+  expect((await deviceState(request)).sport).toBe("basketball");
+  // The sport rows aren't playlists: nothing in the Playlists card for them.
+  await expect(page.locator("#listCtls .plist")).toHaveCount(1);
+  await page.locator("#favList").selectOption("0");
+  await expectSet(request, { mode: "4", list: "0", sport: "none" });
+  await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
+  expect((await deviceState(request)).sport).toBe("");
+});
+
+test("sport rows come and go with the favorites", async ({ page, request }) => {
+  const t = (l, abbr, name, id) => ({ l, id, abbr, name });
+  await reset(request, { mode: 4, favs: [t("nfl", "DAL", "Dallas Cowboys", 6), t("ncaa", "TEX", "Texas Longhorns", 251), {}, {}] });
+  await page.goto("/");
+  // One sport: All favorites already is it, so there are no rows and no picker.
+  await expect(page.locator("#favbar")).toBeVisible();
+  await expect(page.locator("#favListRow")).toBeHidden();
+  await request.post("/gameday/set?favs=nfl:6,ncaa:251,nhl:25");
+  await page.reload();
+  await expect(page.locator("#favListRow")).toBeVisible();
+  await expect(page.locator("#favList option")).toHaveText(["All favorites", "All football", "All hockey"]);
+  await page.locator("#favList").selectOption("s:hockey");
+  await expectSet(request, { mode: "4", list: "0", sport: "hockey" });
+  // The hockey favorite goes: so does its row, and every favorite plays.
+  await request.post("/gameday/set?favs=nfl:6,ncaa:251");
+  await page.reload();
+  await expect(page.locator("#favListRow")).toBeHidden();
+  expect((await deviceState(request)).sport).toBe("");
 });
 
 test("the playing picker is hidden without playlists", async ({ page, request }) => {
@@ -1019,6 +1066,69 @@ test("between games: the countdown switch is on by default, and the custom count
   await page.goto("/");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#cdCard")).toBeHidden();
+});
+
+test("between games: the Game leaders switch is on by default and posts gameleaders", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="gameleaders"]');
+  await expect(page.locator("#glRow")).toBeVisible();
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { gameleaders: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect.poll(async () => (await deviceState(request)).gameleaders).toBe(false);
+  await sw.click();
+  await expectSet(request, { gameleaders: "1" });
+
+  // Firmware from before the card keeps the rest of Between games.
+  await reset(request, { gameleaders: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#glRow")).toBeHidden();
+});
+
+test("between games: the Top 25 switch is on by default, posts 0 and 1, hidden for firmware without it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="top25"]');
+  await expect(page.locator("#top25Row")).toBeVisible();
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { top25: "0" });
+  await expect.poll(async () => (await deviceState(request)).top25).toBe(false);
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { top25: "1" });
+  await expect(sw).toHaveClass(/\bon\b/);
+
+  await reset(request, { top25: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#top25Row")).toBeHidden();
+});
+
+test("between games: the news switch is off by default and posts 1 and 0", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="news"]');
+  await expect(page.locator("#newsRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { news: "1" });
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { news: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+
+  // Firmware from before the news card leaves the switch out.
+  await reset(request, { news: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#newsRow")).toBeHidden();
 });
 
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {

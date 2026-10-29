@@ -383,6 +383,19 @@ void test_playlists() {
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":[],"days":"Sunday"}]})", "days as text");
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":[],"only":1}]})", "only as a number");
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":[],"from":1100}]})", "from as a number");
+
+  // The sport row playing, by its word; one this firmware has no row for is listed.
+  in = import(R"({"schema":1,"list":0,"sport":"basketball"})");
+  SCHECK(in.error.empty() && find(in, SetKind::SPORT) != nullptr && find(in, SetKind::SPORT)->value == 3,
+         "sport wasn't applied");
+  in = import(R"({"schema":1,"sport":"racing"})");
+  SCHECK(in.error.empty() && skipped(in, "sport=racing") && find(in, SetKind::SPORT) == nullptr,
+         "a sport this firmware doesn't know wasn't listed");
+  refused(R"({"schema":1,"sport":3})", "sport as a number");
+  JsonDocument st, out;
+  deserializeJson(st, R"({"sport":"hockey"})");
+  settings_from_state(st.as<JsonObjectConst>(), 0, -1, -1, out);
+  SCHECK(std::string(out["sport"] | "") == "hockey", "the export left the sport row out");
 }
 
 // The fullest export the panel can write comes back through its own import:

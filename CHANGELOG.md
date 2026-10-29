@@ -24,6 +24,12 @@ that line is also the update summary on the device page, so keep it under
 240 characters. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+A release that fixes something broken for owners (scores gone after an ESPN
+change, a panel that won't start) starts its summary line with
+`Important:`. Panels read that word from the update summary: their ticker
+says "Important update ready" instead of "Update ready", and the app is told
+through `update_important` in the panel's state.
+
 ## Unreleased
 
 ### ⚠️ Heads up
@@ -32,8 +38,13 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ### ✨ New
 
+- 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- 🔔 While a new release waits, the ticker says **Update ready: open the Game Day app** for an hour a day, never during a live game, and **Important update ready** for a release that fixes something broken
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
+- 📰 A news card between games: ESPN headlines for your teams or leagues, one every 3 minutes, off until you turn on **News headlines**
+- 🎵 **Playing** has a row for each sport in your favorites, like **All football**, that keeps up with your list on its own; the **One per sport** button is gone
+- 🏈 While you follow a college team, the AP Top 25 takes a turn between games every 10 minutes, for college football and basketball
 - 📅 Playlists can play on a schedule, like Sundays 11 AM to 11 PM, keep the panel to their own games, and have their own **Only today's games**
 
 ### 🐛 Fixes
