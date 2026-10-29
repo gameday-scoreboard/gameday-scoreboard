@@ -5527,11 +5527,11 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     request->send(200, "application/json", "{\"ok\":true}");
     return;
   }
-#ifdef GAMEDAY_DEMO
   if (url == StringRef("/gameday/picture")) {
     this->handle_picture_(request);
     return;
   }
+#ifdef GAMEDAY_DEMO
   if (url == StringRef("/gameday/demo")) {
     this->handle_demo_(request);
     return;
