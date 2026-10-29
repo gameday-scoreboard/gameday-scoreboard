@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "psram.h"
+#include "rankings.h"
 #include "teams.h"
 
 namespace espn {
@@ -330,6 +331,10 @@ std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed,
 // touching the network. Pass a string literal: only the pointer is kept,
 // and the worker task reads it while the main loop may set it.
 void set_site_root(const char *root);
+// The same for the core API, which only the Top 25 card reads (rankings.h).
+void set_core_root(const char *root);
+// The league's AP poll, this week's.
+std::string rankings_url(League league);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.

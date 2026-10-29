@@ -14,6 +14,14 @@ static std::atomic<const char *> site_root{"https://site.api.espn.com/apis/site/
 
 void set_site_root(const char *root) { site_root.store(root, std::memory_order_relaxed); }
 
+static std::atomic<const char *> core_root{"https://sports.core.api.espn.com/v2/sports/"};
+
+void set_core_root(const char *root) { core_root.store(root, std::memory_order_relaxed); }
+
+std::string rankings_url(League league) {
+  return std::string(core_root.load(std::memory_order_relaxed)) + top25_path(league);
+}
+
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
   const LeagueInfo *l = league_info(league);
