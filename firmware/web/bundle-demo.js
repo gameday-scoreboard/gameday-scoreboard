@@ -215,6 +215,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
         <div id="panelCtls"></div>
+        <div id="fxCtls" hidden>
+          <p class="hint">The effect fills the panel until you pick another page under Showing. The board comes back on its own when the panel has something to tell you, like Wi-Fi lost or a message.</p>
+        </div>
         <div id="nightCtls" hidden>
           <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends. The remote, picking a team or Panel on turns it off for the rest of that night.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
           <div id="nightSet" hidden>
@@ -1331,7 +1334,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     { name: "Power", into: "#panelCtls", label: "Panel on" },
     { name: "Brightness", into: "#panelCtls", label: "Brightness" },
     { name: "Scroll Speed", into: "#panelCtls", label: "Ticker speed" },
-    { name: "Select Page", into: "#panelCtls", label: "Showing" },
+    // onValue: the effect controls show only while the panel is on its Effects
+    // page, whoever put it there (this page, Home Assistant, or the panel
+    // taking the screen back), so it follows the entity's value, not the tap.
+    { name: "Select Page", into: "#panelCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Effect", into: "#fxCtls", label: "Effect" },
+    { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
+    { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
+    { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
     { name: "WizMote Auto-Discovery", into: "#remoteCtls", label: "Discovery" },
     { name: "Clear WizMote Pairing", into: "#remoteActions", label: "Unpair remote", danger: true },
     { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
@@ -2140,6 +2150,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (def) {
       if (!built[e.id]) built[e.id] = buildControl(def, ents[e.id]);
       built[e.id].update(ents[e.id]);
+      if (def.onValue) def.onValue(ents[e.id].value);
     }
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is

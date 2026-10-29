@@ -644,6 +644,10 @@ script:
   - id: boot_show_address
     mode: restart
     then:
+      # Somebody at the panel asked for the address (pages/effects.yaml)
+      - script.execute:
+          id: gd_fx_yield
+          reason: "the boot button"
       - script.execute:
           id: boot_refresh
           via_button: true
@@ -738,6 +742,10 @@ script:
   # the panel again, exactly as it does on a fresh unit.
   - id: boot_wifi_lost
     then:
+      # The lines below can't show over an effect (pages/effects.yaml)
+      - script.execute:
+          id: gd_fx_yield
+          reason: "Wi-Fi lost"
       # boot_refresh only arms the hide timer when boot_ip_shown_ms is 0, so
       # clearing it lets the overlay hide itself again normally once Wi-Fi
       # comes back. What keeps the lines below on the screen is boot_refresh
