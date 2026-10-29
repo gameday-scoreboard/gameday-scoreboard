@@ -67,6 +67,10 @@ For the messages that take over the whole board, see [Panel messages](/help/pane
 
 A panel that is too warm or on a weak power supply says so on its bottom line every two minutes, for 15 seconds: "Too warm, dimming" in orange or "Check power supply" in red. See [Brightness, panel on and off, and the clock](/using/brightness-and-clock/#heat-and-power-protection).
 
+:::note[Coming in the next release]
+The two lines read "Running warm" and "Power dipped". The panel no longer dims itself for either.
+:::
+
 ## Ticker speed
 
 **Ticker speed** in the Panel card sets how fast the ticker scrolls, from 1 (slowest) to 10 (fastest). A new panel starts at 5. The speed stays the same whatever the length of the line, so a long last play scrolls at the same pace as a short one.
