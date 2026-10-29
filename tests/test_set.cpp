@@ -52,7 +52,7 @@ struct Settings {
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
-  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true};
+  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, top25{true}, news{false}, gameleaders{true};
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
@@ -151,6 +151,9 @@ void load(Settings &s, JsonObjectConst o) {
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
   flag("countdown", s.countdown);
+  flag("top25", s.top25);
+  flag("news", s.news);
+  flag("gameleaders", s.gameleaders);
   if (o["cdname"].is<const char *>())
     s.cdname = o["cdname"].as<const char *>();
   if (o["cddate"].is<const char *>())
@@ -261,6 +264,9 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
     case SetKind::COUNTDOWN: s.countdown = op.on; break;
+    case SetKind::TOP25: s.top25 = op.on; break;
+    case SetKind::NEWS: s.news = op.on; break;
+    case SetKind::GAMELEADERS: s.gameleaders = op.on; break;
     case SetKind::CD_NAME: s.cdname = op.text; break;
     case SetKind::CD_DATE: s.cdymd = op.ymd; break;
     case SetKind::MSG: s.msg = op.text; break;
@@ -337,6 +343,9 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
   doc["countdown"] = s.countdown;
+  doc["top25"] = s.top25;
+  doc["news"] = s.news;
+  doc["gameleaders"] = s.gameleaders;
   doc["cdname"] = s.cdname;
   doc["cddate"] = countdown_date_text(s.cdymd);
   doc["panels"] = s.panels;
@@ -442,6 +451,8 @@ void test_parse_set() {
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
   SCHECK(parse_set("down", "on", op, kFavMax) && !op.on, "down on is off");
   SCHECK(parse_set("countdown", "0", op, kFavMax) && op.kind == SetKind::COUNTDOWN && !op.on, "countdown 0");
+  SCHECK(parse_set("top25", "0", op, kFavMax) && op.kind == SetKind::TOP25 && !op.on, "top25 0");
+  SCHECK(parse_set("gameleaders", "0", op, kFavMax) && op.kind == SetKind::GAMELEADERS && !op.on, "gameleaders 0");
   SCHECK(parse_set("cdname", "  Christmas \n", op, kFavMax) && op.kind == SetKind::CD_NAME && op.text == "Christmas",
          "cdname trims");
   SCHECK(parse_set("cddate", "2026-12-25", op, kFavMax) && op.kind == SetKind::CD_DATE && op.ymd == 20261225,

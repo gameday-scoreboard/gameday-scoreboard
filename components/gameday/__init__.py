@@ -170,6 +170,8 @@ async def to_code(config):
                 conf[CONF_BETA],
             )
         )
+    # web_stack.cpp raises the web server task's stack above ESPHome's fixed size.
+    cg.add_build_flag("-Wl,--wrap=httpd_start")
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))

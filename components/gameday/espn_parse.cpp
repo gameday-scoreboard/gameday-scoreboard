@@ -1,4 +1,5 @@
 #include "espn_parse.h"
+#include "game_leaders.h"
 
 #include <atomic>
 #include <cstdio>
@@ -13,6 +14,14 @@ namespace espn {
 static std::atomic<const char *> site_root{"https://site.api.espn.com/apis/site/v2/sports/"};
 
 void set_site_root(const char *root) { site_root.store(root, std::memory_order_relaxed); }
+
+static std::atomic<const char *> core_root{"https://sports.core.api.espn.com/v2/sports/"};
+
+void set_core_root(const char *root) { core_root.store(root, std::memory_order_relaxed); }
+
+std::string rankings_url(League league) {
+  return std::string(core_root.load(std::memory_order_relaxed)) + top25_path(league);
+}
 
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
@@ -35,6 +44,13 @@ std::string team_option(const Team &t) {
 
 std::string team_url(League league, uint32_t espn_id) {
   return site_base(league) + "/teams/" + std::to_string(espn_id);
+}
+
+std::string news_url(League league, uint32_t team_id) {
+  std::string url = site_base(league) + "/news?limit=" + std::to_string(kNewsMax);
+  if (team_id != 0)
+    url += "&team=" + std::to_string(team_id);
+  return url;
 }
 
 std::string schedule_url(League league, uint32_t espn_id) {
@@ -85,6 +101,10 @@ std::string team_url(League league, uint32_t espn_id, const char *comp_slug) {
 
 std::string event_url(League league, const std::string &event_id, const char *comp_slug) {
   return comp_base(league, comp_slug) + "/scoreboard/" + event_id;
+}
+
+std::string summary_url(League league, const std::string &event_id) {
+  return site_base(league) + "/summary?event=" + event_id;
 }
 
 // Number of days since 1970-01-01 for a UTC epoch, then split into y/m/d.
@@ -236,6 +256,12 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
                      const std::string &event_id) {
   return parse_event(json, sport, our_team_id, out, event_id);
 }
+
+bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_id, const std::string &event_id,
+                       LeadersStage stage, GameLeaders &out) {
+  return parse_summary(json, sport, our_team_id, event_id, stage, out);
+}
+int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)

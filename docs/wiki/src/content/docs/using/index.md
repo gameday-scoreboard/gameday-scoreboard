@@ -13,6 +13,8 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Show: Favorite teams, Live games](/using/modes/): what the panel follows and what it shows when nothing is on.
 - [Favorite teams](/using/favorites/): up to 16 teams in priority order.
 - [Countdowns](/using/countdowns/): to the next game, and to a day you pick.
+- [College Top 25](/using/top-25/): the AP poll between games, while you follow a college team.
+- [News headlines](/using/news/): ESPN headlines for your teams between games (coming in the next release).
 - [Football: NFL and college](/using/football/)
 - [Baseball: MLB](/using/baseball/)
 - [Basketball: NBA, WNBA and college](/using/basketball/)

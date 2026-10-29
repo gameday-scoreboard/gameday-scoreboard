@@ -45,6 +45,10 @@
       "heap": 1850,
       "json": 14444
     },
+    "rankings_ncaa": {
+      "heap": 1042,
+      "json": 13380
+    },
     "scan_mlb_day": {
       "heap": 1075,
       "json": 7003
@@ -72,6 +76,22 @@
     "schedule_nfl": {
       "heap": 1936,
       "json": 6657
+    },
+    "summary_mlb": {
+      "heap": 1984,
+      "json": 21760
+    },
+    "summary_nba": {
+      "heap": 1024,
+      "json": 5912
+    },
+    "summary_nfl": {
+      "heap": 1056,
+      "json": 6309
+    },
+    "summary_nhl": {
+      "heap": 1024,
+      "json": 5882
     },
     "team_day_ncaa": {
       "heap": 1042,

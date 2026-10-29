@@ -11,7 +11,7 @@
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "sport": "", "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15,
+    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15,
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
   "cases": [
@@ -111,6 +111,10 @@
 
     {"name": "countdown off", "set": [["countdown", "0"]], "expect": {"countdown": false}},
     {"name": "countdown back on", "start": {"countdown": false}, "set": [["countdown", "1"]], "expect": {"countdown": true}},
+    {"name": "top 25 off", "set": [["top25", "0"]], "expect": {"top25": false}},
+    {"name": "top 25 back on", "start": {"top25": false}, "set": [["top25", "1"]], "expect": {"top25": true}},
+    {"name": "news on", "set": [["news", "1"]], "expect": {"news": true}},
+    {"name": "news back off", "start": {"news": true}, "set": [["news", "0"]], "expect": {"news": false}},
     {"name": "custom countdown", "set": [["cddate", "2026-12-25"], ["cdname", "Christmas"]],
      "expect": {"cdname": "Christmas", "cddate": "2026-12-25"}},
     {"name": "countdown name is trimmed", "set": [["cdname", "  Opening Day  "]], "expect": {"cdname": "Opening Day"}},

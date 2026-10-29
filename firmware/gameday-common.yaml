@@ -385,6 +385,9 @@ script:
           image::Image *opp = logos.get(id(gd_opp_logo_url));
           lv_image_set_src(id(gd_team_logo_img), team != nullptr ? team : id(gd_logo_blank));
           lv_image_set_src(id(gd_opp_logo_img), opp != nullptr ? opp : id(gd_logo_blank));
+          // The game leaders card (pages/gameday-live.yaml) shows the same two at half size.
+          lv_image_set_src(id(tt_ldr_team_img), team != nullptr ? team : id(gd_logo_blank));
+          lv_image_set_src(id(tt_ldr_opp_img), opp != nullptr ? opp : id(gd_logo_blank));
 
   # Bluetooth back on, but not for every two second blip. Bringing Bluedroid
   # up and down is a large internal-RAM alloc and free each time, and that
@@ -696,6 +699,18 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # The college Top 25 card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "top25";'
+        then:
+          - script.execute: gd_top25_card
+    # The news card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "news";'
+        then:
+          - script.execute: gd_news_card
     # Another favorite scored (pages/gameday-live.yaml)
     - if:
         condition:
