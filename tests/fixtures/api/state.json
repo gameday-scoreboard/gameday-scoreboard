@@ -70,6 +70,7 @@
   "best": true,
   "bootaddr": true,
   "countdown": true,
+  "top25": true,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
   "night": true,
