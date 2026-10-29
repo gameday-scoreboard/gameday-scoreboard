@@ -1042,6 +1042,27 @@ test("between games: the Top 25 switch is on by default, posts 0 and 1, hidden f
   await expect(page.locator("#top25Row")).toBeHidden();
 });
 
+test("between games: the news switch is off by default and posts 1 and 0", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="news"]');
+  await expect(page.locator("#newsRow")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { news: "1" });
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { news: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+
+  // Firmware from before the news card leaves the switch out.
+  await reset(request, { news: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#newsRow")).toBeHidden();
+});
+
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

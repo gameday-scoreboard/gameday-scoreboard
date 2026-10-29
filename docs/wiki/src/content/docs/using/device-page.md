@@ -94,6 +94,8 @@ The **Between games** card has **Countdown to the next game**, on unless you tur
 
 :::note[Coming in the next release]
 **College Top 25**, on unless you turn it off, shows the AP poll between games while you follow a college football or basketball team. See [College Top 25](/using/top-25/).
+
+**News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
 :::
 
 ### Celebrations

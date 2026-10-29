@@ -45,6 +45,13 @@ std::string team_url(League league, uint32_t espn_id) {
   return site_base(league) + "/teams/" + std::to_string(espn_id);
 }
 
+std::string news_url(League league, uint32_t team_id) {
+  std::string url = site_base(league) + "/news?limit=" + std::to_string(kNewsMax);
+  if (team_id != 0)
+    url += "&team=" + std::to_string(team_id);
+  return url;
+}
+
 std::string schedule_url(League league, uint32_t espn_id) {
   // A soccer team's schedule lists past results unless asked for fixtures.
   if (league_sport(league) == Sport::SOCCER)
@@ -244,6 +251,8 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
                      const std::string &event_id) {
   return parse_event(json, sport, our_team_id, out, event_id);
 }
+
+int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)

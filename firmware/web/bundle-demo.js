@@ -169,6 +169,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <p class="hint">What the panel shows while no game is on.</p>
         <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
         <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
+        <div class="ctl" id="newsRow"><label>News headlines<small>ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
         <div class="sub">Your own countdown</div>
         <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
@@ -400,7 +401,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
-    countdown: (v) => v === "1", top25: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -1011,6 +1012,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = S.countdown === undefined;
     $("#top25Row").hidden = S.top25 === undefined;
+    $("#newsRow").hidden = S.news === undefined;  // and before the news card
     if (document.activeElement !== cdName) cdName.value = S.cdname || "";
     if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
     $("#cdClear").hidden = !S.cdname && !S.cddate;

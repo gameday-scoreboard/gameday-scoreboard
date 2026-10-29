@@ -690,6 +690,12 @@ gameday:
           lambda: 'return x == "top25";'
         then:
           - script.execute: gd_top25_card
+    # The news card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "news";'
+        then:
+          - script.execute: gd_news_card
     # Another favorite scored (pages/gameday-live.yaml)
     - if:
         condition:
