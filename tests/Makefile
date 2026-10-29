@@ -10,9 +10,12 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache
 	./build/test_parse
 	./build/test_networks
+	./build/test_api
+	./build/test_settings
+	./build/test_logo_cache
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
@@ -20,9 +23,28 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) $(SRCS) -o $@ $(LDFLAGS)
 
-build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
+build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h ../components/saved_networks/setup_window.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
+
+# The device API (/gameday/state, set, action, wifi) against fixtures/api/,
+# which the companion app's tests read. It reads gameday.cpp's source when it
+# runs, so a change there needs no rebuild.
+build/test_api: test_api.cpp ../components/gameday/set_request.h ../components/gameday/health.h ../components/gameday/guard.h ../components/gameday/wifi_history.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_api.cpp -o $@ $(LDFLAGS)
+
+# The settings backup (GET and POST /gameday/settings) against
+# fixtures/api/settings.json, the export of fixtures/api/state.json.
+build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_settings.cpp -o $@ $(LDFLAGS)
+
+# The logo cache's state machine, with FreeRTOS, http_request and RuntimeImage
+# replaced by the stand-ins in logo_stubs/.
+build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the
@@ -47,7 +69,8 @@ build/heap_budget: heap_budget.cpp $(filter-out test_parse.cpp golden_football.c
 
 # Not part of `all`: fuzzing. fuzz_espn runs mutated ESPN documents through
 # every parser, the text code and the finals rotation; fuzz_set runs mutated
-# set requests through the device page's parser. Both build with the address
+# set requests through the device page's parser, fuzz_settings settings
+# backups through the import's checks. Both build with the address
 # and undefined behavior sanitizers, seeded from fixtures/ (fuzz_seeds.cpp).
 # With clang's libFuzzer the run is coverage guided; without it (g++, Apple
 # clang) fuzz_main.cpp mutates at random. A crash leaves its input in
@@ -79,6 +102,10 @@ build/fuzz_set: fuzz_set.cpp $(FUZZ_DEPS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_set.cpp -o $@
 
+build/fuzz_settings: fuzz_settings.cpp $(FUZZ_DEPS) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_settings.cpp -o $@
+
 build/fuzz_seeds: fuzz_seeds.cpp $(PARSER_SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) fuzz_seeds.cpp $(PARSER_SRCS) -o $@ $(LDFLAGS)
@@ -88,11 +115,14 @@ build/seeds/.done: build/fuzz_seeds $(wildcard fixtures/*.json)
 	./build/fuzz_seeds fixtures build/seeds/espn build/seeds/set
 	@touch $@
 
-fuzz: build/fuzz_espn build/fuzz_set build/seeds/.done
+fuzz: build/fuzz_espn build/fuzz_set build/fuzz_settings build/seeds/.done
 	@echo "Fuzzing with $(if $(LIBFUZZER),libFuzzer,fuzz_main.cpp) ($(FUZZ_CXX))"
 	@mkdir -p build/corpus/espn build/corpus/set
 	./build/fuzz_espn $(FUZZ_RUN) -dict=fuzz_espn.dict build/corpus/espn build/seeds/espn
 	./build/fuzz_set $(FUZZ_RUN) -dict=fuzz_set.dict build/corpus/set build/seeds/set
+	@mkdir -p build/corpus/settings build/seeds/settings
+	cp fixtures/api/settings.json build/seeds/settings/
+	./build/fuzz_settings $(FUZZ_RUN) -dict=fuzz_settings.dict build/corpus/settings build/seeds/settings
 
 fuzz-long:
 	$(MAKE) fuzz FUZZ_TIME=$(FUZZ_LONG_TIME)

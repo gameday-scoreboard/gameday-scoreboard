@@ -18,7 +18,6 @@ The controller has one button, the boot button. A quick press turns the panel on
 
 The address hold is the quickest way to find the panel again. See [Wi-Fi](/using/wifi/).
 
-:::note[Coming in the next release]
 Nothing resets until you let go, and the button gains a factory reset. Hold it and watch the screen:
 
 | Hold | The screen says | Let go then and |
@@ -30,35 +29,34 @@ Nothing resets until you let go, and the button gains a factory reset. Hold it a
 | Past 30 seconds | **Release to cancel** | nothing is reset |
 
 Holding the button on a panel that is off turns it on, so you can see the countdown.
-:::
 
 ## Reset Wi-Fi
 
 Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it with the 10 second hold, or with **Reset Wi-Fi** in the Device card on the device page.
 
-The panel forgets every Wi-Fi network it has saved and restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Set it up again from the app or the hotspot; see [Set up your panel](/get-started/setup/).
+The panel restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Give it the new network from the app or the hotspot; see [Set up your panel](/get-started/setup/).
 
 Your team, favorites and every other setting stay as they were.
 
-:::note[Coming in the next release]
 Reset Wi-Fi keeps the saved networks. The panel restarts into setup mode for 15 minutes, so you can put it on a new network from the Game Day app or its hotspot. The setup screen also says **Unplug it to rejoin saved Wi-Fi**: unplug the panel and plug it back in, and it goes back to the networks it already knows. It does that by itself after the 15 minutes too, or a little later if you're still setting it up from the app or the hotspot.
-:::
+
+If the network name or password you type in the app is wrong, the panel stays in setup and the app asks for them again. Close the app instead and, a minute later, the panel goes back to the networks it already knows.
 
 ## Factory reset
 
 Factory reset erases everything: the saved Wi-Fi networks, your team, your favorites and every setting, including a paired WizMote and the panel layout. The panel restarts into setup the way it came out of the box, with the layout its firmware starts on. Do this before you sell or give the panel away.
 
+Before a factory reset you mean to set up again from, save a backup: **Export settings** on the device page, then **Import settings** once the panel is back on Wi-Fi. See [Back up and restore settings](/using/backup/).
+
 Start it from **Factory reset** in the Device card on the device page. The page asks you to confirm first.
 
-:::note[Coming in the next release]
 With no app and no device page, hold the boot button until the screen says **Release to erase all**, at 20 seconds, then let go. If you change your mind, keep holding past 30 seconds until it says **Release to cancel**.
-:::
 
 ## What each reset keeps
 
 | | Reset Wi-Fi | Factory reset |
 | --- | --- | --- |
-| Saved Wi-Fi networks | Cleared | Cleared |
+| Saved Wi-Fi networks | Kept (setup for 15 minutes) | Cleared |
 | Team, mode and favorites | Kept | Cleared |
 | Settings (ticker, brightness, timezone and the rest) | Kept | Cleared |
 | WizMote pairing | Kept | Cleared |

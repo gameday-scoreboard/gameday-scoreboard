@@ -6,10 +6,10 @@
 # title plus up to four lines: small, big, small, small. boot_refresh tests
 # them in this order: connected, waiting, wifi lost, setup, connecting.
 #
-# Three of them carry a QR code for https://install.gameday-scoreboard.com/s, a
-# universal link: the iPhone Camera opens the Game Day app when it is
-# installed and the setup web page when it is not. The path is /s, not
-# /setup: LVGL encodes at error correction M, so 42 bytes is the most that
+# Three of them carry a QR code for https://app.gameday-scoreboard.com/setup,
+# an app link: the phone opens the Game Day app when it is installed and
+# the setup web page when it is not. Keep it at 42 bytes or less (it is
+# 40): LVGL encodes at error correction M, so 42 bytes is the most that
 # fits QR version 3, the largest that draws 2 px a module in 64 px. On a
 # 128 px chain the code sits on the left half and the lines move to the right half, so
 # nothing has to take turns with it. On a single 64 px panel there is no
@@ -65,7 +65,8 @@
 # width, with no QR, for 20 seconds. Off Wi-Fi the overlay never hides, so
 # the button cannot blank a panel that is in setup or has lost its network.
 # A panel with no team picked brings the QR back over the board for 13 s
-# every 3 minutes (boot_app_qr_turn) until one is.
+# every 3 minutes (boot_app_qr_turn) until one is: on 128 the QR beside Pick
+# your / team in / the app, on 64 those lines (5 s), then the QR (8 s).
 #
 # Nothing here should scroll. Lines are kept to 12 characters (60 px of
 # Spleen 5x8) on a 64 px column, the hostname is split at its dash to fit,
@@ -328,9 +329,11 @@ script:
           // here after "Reset Wi-Fi": that panel boots with an empty network in
           // memory, which still counts as has_sta(), and is in setup, not in
           // trouble. boot_had_creds carries a real network through a failed
-          // handover from the app, which clears the one in memory.
+          // handover from the app, which clears the one in memory. A network
+          // the app is still trying doesn't count: a panel in setup that is
+          // sent a wrong password is still in setup, not lost.
           const bool have_creds = w->has_sta() && !w->get_sta().get_ssid().empty();
-          if (have_creds) id(boot_had_creds) = true;
+          if (have_creds && !provisioning) id(boot_had_creds) = true;
           static const uint32_t GRACE_MS = 30000, ROUTER_MS = 3 * 60 * 1000;
           const bool never = id(boot_last_connected_ms) == 0;
           const bool waiting = id(boot_had_creds) && never && id(boot_power_cut_grace) &&
@@ -415,8 +418,14 @@ script:
               // who needs the app next. A panel with a team and the setting
               // off, or back on its network after a drop, hides straight
               // away (see the hide timers below) and only flashes the hold
-              // view here. boot_app_qr_turn borrows the same view.
-              if (id(boot_join_qr) || id(boot_app_qr_on)) {
+              // view here.
+              if (id(boot_app_qr_on)) {
+                // boot_app_qr_turn's 13 s: on 128 the QR beside the lines
+                // throughout, on 64 the lines (5 s), then the QR (8 s).
+                id(boot_qr_cycle).execute(6, false);
+                id(boot_view).execute(wide, wide || id(boot_qr_frame) == 1);
+                id(boot_set_lines).execute("Pick your", "team in", "the app", "", false);
+              } else if (id(boot_join_qr)) {
                 id(boot_qr_cycle).execute(1, id(gameday_ctl).show_boot_address());
                 const bool addr = id(boot_qr_frame) == 2;
                 id(boot_view).execute(wide, wide || !addr);
@@ -446,6 +455,18 @@ script:
             if (id(boot_hold_since_ms) != 0 && !via_button && !id(boot_show_address).is_running() &&
                 !id(gameday_ctl).boot_hold(id(boot_hold_since_ms)))
               id(boot_hide).execute();
+          } else if (!provisioning && improv_ble::global_improv_component != nullptr &&
+                     improv_ble::global_improv_component->failed_ms() != 0 &&
+                     millis() - improv_ble::global_improv_component->failed_ms() < 30000) {
+            // The network the app just handed over didn't work. Say so for
+            // 30 s, ahead of setup and Wi-Fi lost, so someone watching the
+            // panel rather than the phone knows why it is back where it was.
+            // The app asks for the name and password again.
+            id(boot_qr_cycle).execute(0, false);
+            id(boot_view).execute(false, false);
+            const std::string &tried = improv_ble::global_improv_component->failed_ssid();
+            id(boot_set_lines).execute("Can't join", tried.empty() ? std::string("Wi-Fi") : tried, "Check name",
+                                       "and password", false);
           } else if (waiting) {
             // Maybe a power cut, router still starting. Ahead of the setup
             // branch for the same reason as lost below: the hotspot comes up
@@ -749,10 +770,10 @@ script:
                 id(boot_set_lines).execute("Wi-Fi", "lost", "open app", "", true);
 
   # A panel nobody has picked a team on (no_team_default in the gameday
-  # component) shows the app's QR code for one turn every 3 minutes, the
-  # fresh panel's 13 s of QR, until a team is picked. Only over the board:
-  # not while the overlay is up for anything else, during QC, or with the
-  # boot button in use.
+  # component) shows the app's QR code with "Pick your / team in / the app"
+  # for one 13 s turn every 3 minutes, until a team is picked. Only over the
+  # board: not while the overlay is up for anything else, during QC, or with
+  # the boot button in use.
   - id: boot_app_qr_turn
     mode: single
     then:
@@ -767,6 +788,7 @@ script:
           then:
             - lambda: |-
                 id(boot_app_qr_on) = true;
+                id(boot_qr_since_ms) = 0;  // every turn opens on its first frame
                 ESP_LOGI("boot", "No team yet: the app's QR code takes a turn");
             - component.resume: boot_check
             - script.execute:
@@ -845,7 +867,8 @@ improv_ble:
         hidden: false
     # Draw the current state now rather than on the next poll. Improv also
     # starts 90 s into an outage, and this way that panel keeps saying
-    # Wi-Fi lost instead of flashing SETUP.
+    # Wi-Fi lost instead of flashing SETUP. It fires again on the way back to
+    # AUTHORIZED after a failed handover, which draws Can't join at once.
     - script.execute:
         id: boot_refresh
         via_button: false
@@ -1033,7 +1056,7 @@ lvgl:
                       size: 64
                       light_color: 0xA0A0A0
                       dark_color: 0x000000
-                      text: "https://install.gameday-scoreboard.com/s"
+                      text: "https://app.gameday-scoreboard.com/setup"
 
 esphome:
   on_boot:

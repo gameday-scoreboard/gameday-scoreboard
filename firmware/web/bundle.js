@@ -4,9 +4,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
-//   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
+//   POST /gameday/set?key=value   change settings (mode=4, favs=nfl:6,ncaa:333, tz=3 ...)
+//   POST /gameday/settings        a settings document as JSON; the playlists go this way
 //   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
-//                                 say&text=...&secs=N (the banner)
+//                                 say&text=...&secs=N (the banner), regulatory
+//                                 (the FCC information on the panel)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -103,27 +105,34 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <button class="btn" id="guardClear" hidden>Clear</button>
     </div>
 
+    <div class="teambar nightbar" id="nightbar" role="status" hidden>
+      <div class="cur"><div><div class="name" id="nightName"></div><div class="lg" id="nightText"></div></div></div>
+    </div>
+
     <section class="upnext" id="upnext" hidden>
       <div class="uh">Up next</div>
       <div class="ul" id="upnextList"></div>
     </section>
 
     <div class="modes" id="modes" role="group" aria-label="Mode">
-      <button data-mode="0" aria-pressed="false">My team</button>
-      <button data-mode="5" aria-pressed="false">Live games</button>
       <button data-mode="4" aria-pressed="false">Favorite teams</button>
-    </div>
-    <div class="teambar" id="teambar">
-      <div class="cur"><img id="curLogo" alt=""><div><div class="name" id="curName">No team chosen</div><div class="lg" id="curLg">Pick the team the panel should follow</div></div></div>
-      <button class="btn primary" id="pick">Change team</button>
+      <button data-mode="5" aria-pressed="false">Live games</button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
       <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
-      <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+      <div class="livectls">
+        <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
+        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
+        <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
+          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+        </select></div>
+      </div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
       <div class="favctls">
+        <div class="stepper" id="favListRow" hidden><label for="favList">Playing</label><select id="favList"></select></div>
         <div class="stepper"><label for="lockon">Take over</label><input type="number" id="lockon" min="5" max="120" step="1"><span>min before kickoff</span></div>
         <div class="stepper"><label for="release">After the final</label><select id="release">
           <option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option>
@@ -144,7 +153,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Pre-game odds and TV<small>The line, over/under and TV channel before the start, in every league, when ESPN has them.</small></label><button class="sw" data-set="odds" aria-label="Pre-game odds and TV"></button></div>
+          <div class="ctl"><label>Odds, TV and win chance<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Odds, TV and win chance"></button></div>
+          <div class="ctl" data-sport="football baseball basketball hockey"><label>Pre-game season leaders<small>Before the start, each team's season leader: passing in football, home runs in baseball, points in basketball and hockey.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -153,6 +163,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div id="celebCtls">
           <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
+      </div>
+      <div class="card" id="cdCard" hidden>
+        <h2>Between games</h2>
+        <p class="hint">What the panel shows while no game is on.</p>
+        <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+        <div class="sub">Your own countdown</div>
+        <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
+        <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
+        <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
+        <button class="btn" id="cdClear" hidden>Clear the countdown</button>
       </div>
       <div class="card" id="msgCard" hidden>
         <h2>Message</h2>
@@ -175,14 +195,35 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       </div>
       <div class="card">
         <h2>Panel</h2>
+        <div id="nickRow" hidden>
+          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the iPhone app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
+          <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
+        </div>
         <div id="panelCtls"></div>
+        <div id="nightCtls" hidden>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div id="nightSet" hidden>
+            <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
+            <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
+            <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
+            <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>Favorites</h2>
-        <p class="hint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
-        <div class="ctl"><label>Only today's games<small>The playlist skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+        <p class="hint" id="favHint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
+        <div class="ctl"><label>Only today's games<small>Between games, the panel skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+        <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
+        <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
         <div id="favCtls"></div>
         <button class="btn" id="favAdd">Add a favorite</button>
+      </div>
+      <div class="card">
+        <h2>Playlists</h2>
+        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <div id="listCtls"></div>
+        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button><button class="btn" id="listSport">One per sport</button></div>
       </div>
       <div class="card">
         <h2>Remote</h2>
@@ -215,6 +256,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
           <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
         </div>
+        <div id="backup" hidden>
+          <div class="sub">Backup</div>
+          <p class="hint">Save this panel's settings to a file, then load them back after a reset or onto another panel. Wi-Fi networks and the WizMote pairing aren't in the file.</p>
+          <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
+          <input type="file" id="bkFile" accept=".json,application/json" hidden>
+          <p class="hint" id="bkNote" role="status" hidden></p>
+        </div>
       </div>
       <div class="card">
         <h2>Device</h2>
@@ -243,6 +291,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
         <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+        <div class="ctl"><label>FCC information<small>The FCC ID and Part 15 statement on the panel's own screen, for about a minute.</small></label><button class="btn" id="fccShow">Show on panel</button></div>
         <div class="sub">Diagnostics</div>
         <div id="health" hidden>
           <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
@@ -279,8 +328,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       <div class="head">
         <input type="search" id="q" placeholder="Search teams" aria-label="Search teams" autocomplete="off">
         <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
-        <button class="btn" id="close">Close</button>
+        <button class="btn" id="close">Done</button>
       </div>
+      <div class="favcount" id="favCount" role="status" hidden></div>
       <div class="tiles" id="tiles" role="tabpanel"></div>
     </div>
   </div>
@@ -334,18 +384,28 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const ref = (key) => ({ l: key.split(":")[0], id: Number(key.split(":")[1]) });
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
-    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", opp: (v) => v === "1",
-    bootaddr: (v) => v === "1", today: (v) => v === "1",
+    down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    best: (v) => v === "1",
+    bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
+    countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
-    team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
-    msg: String, msgurl: String, msgevery: Number,
+    // Teams as places in favs, which is how the state document lists them.
+    lists: (v) => v.split(";").filter(Boolean).map((p) => {
+      const [n, refs] = p.split("=");
+      const keys = (refs || "").split(",");
+      return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
+    }),
+    list: Number,
+    msg: String, msgurl: String, msgevery: Number, nick: String,
+    night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
-    team: (a, b) => refKey(a) === refKey(b),
     live: (a, b) => (a || []).slice().sort().join(",") === (b || []).slice().sort().join(","),
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
+    lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
+    list: (a, b) => (a || 0) === (b || 0),
   };
   const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
   const overlay = () => {
@@ -394,9 +454,25 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (stateAgain) { stateAgain = false; fetchState(); }
   };
   const scheduleState = (ms) => { clearTimeout(stateTimer); stateTimer = setTimeout(fetchState, ms); };
+  // Playlists run to about 5 KB, past the 512 bytes the panel takes in a URL
+  // (and ESPHome reads a form body in one piece, so a long one can arrive cut
+  // short). They go to the settings import instead, which reads a JSON body
+  // whole, as {"schema": 1, "lists": [{"n": "Football", "t": ["nfl:6"]}], "list": 2}.
+  const setRequest = (params) => {
+    if (params.lists === undefined) return ["/gameday/set?" + qs(params), { method: "POST" }];
+    const doc = {
+      schema: 1,
+      lists: String(params.lists).split(";").filter(Boolean).map((p) => {
+        const [n, refs] = p.split("=");
+        return { n, t: (refs || "").split(",").filter(Boolean) };
+      }),
+    };
+    if (params.list !== undefined) doc.list = Number(params.list);
+    return ["/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) }];
+  };
   const postSet = async (params, attempt = 0) => {
     try {
-      const r = await fetch("/gameday/set?" + qs(params), { method: "POST" });
+      const r = await fetch(...setRequest(params));
       if (!r.ok) throw new Error("HTTP " + r.status);
       return true;
     } catch (e) {
@@ -531,17 +607,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const mode = S ? String(S.mode || 0) : "0";
-      const favMode = mode === "4" && S && (S.favs || []).some(refKey);
-      // With no team picked the panel runs the live board, unless Favorites has teams.
-      const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
+      // Favorites with no team set runs the live board.
+      const favMode = S && String(S.mode) === "4" && (S.favs || []).some(refKey);
       // why is the panel's own reason ("Can't reach ESPN", "Getting ready"),
       // sent only when its board says something other than its default.
       msg.textContent = !g ? "Waiting for the first fetch"
         : captive ? "This Wi-Fi needs a sign-in. Use a home network or a hotspot."
         : g.why ? g.why
-        : favMode ? "None of your favorites has a game coming up"
-          : liveMode ? "No live games right now" : "No upcoming game for this team";
+        : favMode ? "None of your favorites has a game coming up" : "No live games right now";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
       return;
@@ -565,9 +638,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
 
   // ---- mode pills ----------------------------------------------------------------
-  // Device modes: 0 my team, 4 favorite teams, 5 live games in the chosen
-  // leagues. 1-3 are the older football-only live modes; the page shows them
-  // as Live games and a chip tap moves the panel to mode 5.
+  // Device modes: 4 favorite teams, 5 live games in the chosen leagues. 1-3
+  // are the older football-only live modes; the page shows them as Live
+  // games and a chip tap moves the panel to mode 5.
   const isLive = (m) => m === "1" || m === "2" || m === "3" || m === "5";
   const modeButtons = Array.from(document.querySelectorAll("#modes button"));
   modeButtons.forEach((b) => {
@@ -580,14 +653,14 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   });
   const rotateInput = $("#rotate");
   rotateInput.onchange = () => {
-    const v = Math.min(30, Math.max(1, Number(rotateInput.value) || 1));
+    const v = Math.min(30, Math.max(1, Math.round(Number(rotateInput.value)) || 1));
     rotateInput.value = v;
     setGD({ rotate: v });
   };
   // Favorite teams mode settings (mode 4).
   const lockonInput = $("#lockon");
   lockonInput.onchange = () => {
-    const v = Math.min(120, Math.max(5, Number(lockonInput.value) || 15));
+    const v = Math.min(120, Math.max(5, Math.round(Number(lockonInput.value)) || 15));
     lockonInput.value = v;
     setGD({ lockon: v });
   };
@@ -604,8 +677,11 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     showFavRotate();
     setGD({ collide: collideSelect.value });
   };
+  // Live games' Favorites take over uses the same rule.
+  const liveCollide = $("#liveCollide");
+  liveCollide.onchange = () => setGD({ collide: liveCollide.value });
   favRotate.onchange = () => {
-    const v = Math.min(30, Math.max(1, Number(favRotate.value) || 1));
+    const v = Math.min(30, Math.max(1, Math.round(Number(favRotate.value)) || 1));
     favRotate.value = v;
     setGD({ rotate: v });
   };
@@ -617,33 +693,45 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (m === "3") return ["nfl", "ncaa"];
     return S.live || [];
   };
-  // No leagues picked: the device follows the leagues of the team and the
-  // favorites, and that list changes by itself when a favorite is added.
+  // No leagues picked: the device follows the favorites' leagues, and that
+  // list changes by itself when a favorite is added.
   const liveAuto = () => String(S.mode || 0) === "5" && !!S.live_auto;
   $("#liveAuto").onclick = () => {
     setGD({ live: "" });
-    toast("Leagues follow your team and favorites");
+    toast("Leagues follow your favorites");
   };
   const renderLiveBar = () => {
     const auto = liveAuto();
-    // With nothing live the device shows the saved team's card, or with no
-    // team a rotation of recent finals, and keeps scanning.
-    $("#liveName").textContent = S.fallback ? "No live game right now, showing your team until one starts"
-      : S.recap ? "No live game right now, showing recent finals"
-        : "Following a random game in progress";
-    $("#liveLg").textContent = (S.fallback || S.recap ? "" : "Moves on when it ends, or after Switch every. ")
-      + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
+    // With nothing live the device shows the first favorite's card, or with
+    // no favorites a rotation of recent finals, and keeps scanning.
+    // Favorites take over: a favorite's game in progress has the panel.
+    const lock = S.favlock && S.favlock.id ? S.favlock : null;
+    $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
+      : S.fallback ? "No live game right now, showing your first favorite until one starts"
+        : S.recap ? "No live game right now, showing recent finals"
+          : S.best ? "Following the best game on" : "Following a random game in progress";
+    $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
+      : S.fallback || S.recap ? ""
+        : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
+          : "Moves on when it ends, or after Switch every. ")
+      + (auto ? "Leagues follow your favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
   };
+  // Built once and updated in place: every state read redraws the bar, and a
+  // rebuilt chip would take keyboard and screen reader focus with it.
   const renderLiveChips = () => {
     const host = $("#liveChips");
-    host.innerHTML = "";
     const on = liveKeys();
+    if (host.children.length) {
+      for (const b of host.children) setOn(b, on.includes(b.dataset.lg), "aria-pressed");
+      return;
+    }
     for (const lg of Object.keys(LEAGUES)) {
       if (!TEAMS.some((t) => t[0] === lg)) continue;
       const b = el("button", "chip", LEAGUES[lg].tab);
+      b.dataset.lg = lg;
       setOn(b, on.includes(lg), "aria-pressed");
       // From the list as it is now, not as it was when the chips were drawn:
       // a second tap can come before the redraw.
@@ -664,8 +752,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     modeButtons.forEach((b) => setOn(b, b.dataset.mode === mode || (b.dataset.mode === "5" && isLive(mode)), "aria-pressed"));
     const live = isLive(mode);
     if (live) renderLiveBar();
-    const favs = mode === "4";
-    $("#teambar").hidden = live || favs;
+    const favs = !live;
     $("#livebar").hidden = !live;
     $("#favbar").hidden = !favs;
     if (document.activeElement !== rotateInput) rotateInput.value = S.rotate;
@@ -676,15 +763,19 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
     }
+    $("#liveCollideRow").hidden = !S.favtake;
+    if (document.activeElement !== liveCollide) liveCollide.value = String(S.collide || 0);
     if (favs) {
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);
+      const playing = playingList();
       $("#favName").textContent = !set
         ? "No favorites set yet"
         : S.locked && shown
           ? "Locked on " + (shown.t.name || shown.t.abbr)
-          : "Cycling through your favorites";
+          : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
     }
+    renderListPick();
   };
 
   // ---- toggles and favorites (static controls on the state document) --------
@@ -693,6 +784,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
+  // The custom countdown: the name and the day post on their own, as they change.
+  const cdName = $("#cdname");
+  const cdDate = $("#cddate");
+  cdName.onchange = () => setGD({ cdname: cdName.value.trim() });
+  cdDate.onchange = () => setGD({ cddate: cdDate.value || "none" });
+  $("#cdClear").onclick = () => setGD({ cdname: "", cddate: "none" });
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
@@ -737,13 +834,141 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (!favKeys.length) host.appendChild(el("p", "hint", "No favorites yet."));
     $("#favAdd").hidden = favKeys.length >= favMax();
   };
-  const addFav = (t) => {
+  // The favorites picker stays open: a tap adds a team, or takes out one
+  // already in the list (checked).
+  const toggleFav = (t) => {
     const key = keyOf(t);
-    if (favKeys.includes(key)) return toast(t[3] + " is already a favorite");
+    if (favKeys.includes(key)) {
+      postFavs(favKeys.filter((k) => k !== key));
+      return toast("Removed the " + t[3]);
+    }
     if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
   };
+  // Playlists (components/gameday/playlists.h): named groups of favorites.
+  // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
+  const lists = () => (S && S.lists) || [];
+  const playingList = () => (S && S.list ? lists()[S.list - 1] : null);
+  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
+  // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
+  const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
+  // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
+  const cleanName = (v) => {
+    let out = "", bytes = 0;
+    for (const ch of v.replace(/[;=]/g, "").replace(/\s+/g, " ").trim()) {
+      bytes += new TextEncoder().encode(ch).length;
+      if (bytes > 16) break;
+      out += ch;
+    }
+    return out.trim();
+  };
+  const SPORTS = [["Football", ["nfl", "ncaa"]], ["Baseball", ["mlb"]], ["Basketball", ["nba", "wnba", "mcbb"]],
+    ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
+  const listMax = () => (S && S.listmax) || 16;
+  let listSig = "";
+  const renderLists = () => {
+    const host = $("#listCtls");
+    host.innerHTML = "";
+    const ls = lists();
+    ls.forEach((l, i) => {
+      const box = el("div", "plist");
+      const row = el("div", "ctl");
+      const name = el("input", "field pname");
+      name.value = l.n;
+      name.maxLength = 16;
+      name.setAttribute("aria-label", "Playlist name");
+      name.onchange = () => {
+        const n = cleanName(name.value);
+        if (!n || n === l.n) { name.value = l.n; return; }
+        if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another playlist has that name"); }
+        const next = ls.map((o, k) => (k === i ? { n, f: o.f } : o));
+        postLists(next, S.list === i + 1 ? i + 1 : undefined);
+      };
+      row.appendChild(name);
+      if (i < 4) row.appendChild(el("small", "pbtn", "Button " + (i + 1)));
+      const ctl = el("span", "favmove");
+      const mk = (label, title, fn) => {
+        const b = el("button", null, label);
+        b.title = title;
+        b.setAttribute("aria-label", title + " " + l.n);
+        b.onclick = fn;
+        ctl.appendChild(b);
+      };
+      const swap = (j) => {
+        if (j < 0 || j >= ls.length) return;
+        const next = ls.slice();
+        next[i] = ls[j];
+        next[j] = ls[i];
+        postLists(next);
+      };
+      mk("\u25B2", "Move up", () => swap(i - 1));
+      mk("\u25BC", "Move down", () => swap(i + 1));
+      mk("\u2715", "Remove", () => postLists(ls.filter((_, k) => k !== i)));
+      row.appendChild(ctl);
+      box.appendChild(row);
+      const chips = el("div", "chips");
+      chips.setAttribute("role", "group");
+      chips.setAttribute("aria-label", "Teams in " + l.n);
+      favKeys.forEach((key, fi) => {
+        const t = teamByKey(key);
+        const on = l.f.includes(fi);
+        const c = el("button", "chip", t ? t[2] : key);
+        c.title = t ? t[3] : key;
+        setOn(c, on, "aria-pressed");
+        c.onclick = () => {
+          const f = on ? l.f.filter((x) => x !== fi) : l.f.concat([fi]).sort((a, b) => a - b);
+          postLists(ls.map((o, k) => (k === i ? { n: o.n, f } : o)));
+        };
+        chips.appendChild(c);
+      });
+      box.appendChild(chips);
+      host.appendChild(box);
+    });
+    const none = !favKeys.length;
+    if (none) host.appendChild(el("p", "hint", "Add favorites first, then group them here."));
+    else if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
+    $("#listActions").hidden = none;
+    $("#listAdd").hidden = ls.length >= listMax();
+    $("#favHint").textContent = "Up to 16 teams from any league. In Favorite teams mode the order is the priority. "
+      + (ls.length ? "Your playlists have buttons 1 to 4 on a WizMote remote." : "Buttons 1 to 4 on a WizMote remote jump to the first four.");
+  };
+  $("#listAdd").onclick = () => {
+    const ls = lists();
+    let n = ls.length + 1;
+    while (ls.some((l) => l.n === "Playlist " + n)) n++;
+    postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
+  };
+  $("#listSport").onclick = () => {
+    const ls = lists().slice();
+    let added = 0;
+    for (const [n, lgs] of SPORTS) {
+      const f = favKeys.map((k, i) => (lgs.includes(k.split(":")[0]) ? i : -1)).filter((i) => i >= 0);
+      if (!f.length || ls.some((l) => l.n === n) || ls.length >= listMax()) continue;
+      ls.push({ n, f });
+      added++;
+    }
+    if (!added) return toast("Every sport in your favorites has a playlist");
+    postLists(ls);
+    toast(added === 1 ? "Added a playlist" : "Added " + added + " playlists");
+  };
+  const listPick = $("#favList");
+  const renderListPick = () => {
+    const ls = lists();
+    $("#favListRow").hidden = !ls.length;
+    if (document.activeElement === listPick) return;
+    const opts = ["All favorites"].concat(ls.map((l) => l.n));
+    if (opts.join("\n") !== Array.from(listPick.options).map((o) => o.text).join("\n")) {
+      listPick.innerHTML = "";
+      opts.forEach((t, i) => {
+        const o = el("option", null, t);
+        o.value = String(i);
+        listPick.appendChild(o);
+      });
+    }
+    listPick.value = String(S.list || 0);
+  };
+  listPick.onchange = () => setGD({ mode: 4, list: listPick.value });
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
@@ -751,19 +976,31 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
       renderFavs();
+      if ($("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
-    // A situation switch for each sport the panel follows (team, favorites,
-    // Live games leagues picked by hand), all of them before anything is
+    // Redrawn only when something changed, so a name being typed keeps its place.
+    const sig = favKeys.join(",") + "|" + JSON.stringify(lists());
+    if (sig !== listSig && !(document.activeElement && document.activeElement.classList.contains("pname"))) {
+      listSig = sig;
+      renderLists();
+    }
+    // A situation switch for each sport the panel follows (favorites, Live
+    // games leagues picked by hand), all of them before anything is
     // picked. The automatic Live list is no help here: it never comes back
     // empty (NFL on a new panel). Hockey and basketball have no situation
-    // line, so no switch.
-    const sports = new Set([S.team].concat(S.favs || []).filter((t) => t && t.id).map((t) => t.l)
+    // line, so no switch of their own; a switch for several sports lists them.
+    const sports = new Set((S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
     document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
-      row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
+      row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
+    // Firmware from before the countdown card leaves these out.
+    $("#cdCard").hidden = S.countdown === undefined;
+    if (document.activeElement !== cdName) cdName.value = S.cdname || "";
+    if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
+    $("#cdClear").hidden = !S.cdname && !S.cddate;
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
@@ -781,6 +1018,58 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+  };
+
+  // ---- night schedule (components/gameday/night.h) ---------------------------
+  // Times come as "23:00". 12-hour for people: "11 PM", "7:30 AM", and with
+  // full set the minutes always show, "7:00 AM".
+  const clock12 = (hhmm, full) => {
+    const [h, m] = String(hhmm || "0:0").split(":").map(Number);
+    const mm = String(m || 0).padStart(2, "0");
+    return ((h % 12) || 12) + (full || m ? ":" + mm : "") + (h < 12 ? " AM" : " PM");
+  };
+  const nightStart = $("#nightStart");
+  const nightEnd = $("#nightEnd");
+  const nightLevel = $("#nightLevel");
+  const nightTime = (input, key, other) => {
+    input.onchange = () => {
+      if (!input.value) { input.value = S[key]; return; }
+      if (input.value === S[key]) return;
+      if (input.value === other.value) {
+        toast("The night has to end at a different time than it starts");
+        input.value = S[key];
+        return;
+      }
+      setGD({ [key]: input.value });
+    };
+  };
+  nightTime(nightStart, "nightstart", nightEnd);
+  nightTime(nightEnd, "nightend", nightStart);
+  nightLevel.oninput = () => ($("#nightLevelVal").textContent = nightLevel.value);
+  nightLevel.onchange = () => setGD({ nightlevel: nightLevel.value });
+  const renderNight = () => {
+    if (!S) return;
+    // Older firmware has no night schedule.
+    $("#nightCtls").hidden = S.night === undefined;
+    $("#nightbar").hidden = !S.night_now;
+    if (S.night === undefined) return;
+    $("#nightSet").hidden = !S.night;
+    if (document.activeElement !== nightStart) nightStart.value = S.nightstart;
+    if (document.activeElement !== nightEnd) nightEnd.value = S.nightend;
+    if (document.activeElement !== nightLevel) {
+      nightLevel.value = S.nightlevel;
+      $("#nightLevelVal").textContent = S.nightlevel;
+    }
+    const hours = "between " + clock12(S.nightstart) + " and " + clock12(S.nightend);
+    $("#nightLevelRow").hidden = !S.nightscreen;
+    $("#nightLevelHint").textContent = "How bright the panel is " + hours + ".";
+    $("#nightScreenHint").textContent = S.nightscreen ? "On at the night brightness below." : "Off: the screen goes dark " + hours + ".";
+    // A dark or dim panel that doesn't look broken
+    const until = clock12(S.nightend, true);
+    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
+    $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
+      : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
+        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
   };
 
   // ---- message: the banner and the message card ---------------------------------
@@ -819,6 +1108,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     toast("Banner up for " + secs + " s");
   };
   $("#sayStop").onclick = () => doAction("say", { text: "" });
+  $("#fccShow").onclick = () => {
+    doAction("regulatory");
+    toast("FCC information on the panel");
+  };
   $("#msgSave").onclick = () => {
     const url = $("#msgUrl").value.trim();
     if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The list's address starts with http:// or https://");
@@ -832,6 +1125,36 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- nickname: the header, the tab title and the box ---------------------------
+  let pingTitle = "";  // the device's own name, from the event stream
+  let nickSeen = null;
+  // ESPHome's own page script names the tab after the device on each of its
+  // pings; while there is a nickname the tab keeps it.
+  let nickTitle = "";
+  new MutationObserver(() => {
+    if (nickTitle && document.title !== nickTitle) document.title = nickTitle;
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
+  const renderNick = () => {
+    const nick = (S && S.nick) || "";
+    $("#devname").textContent = nick || pingTitle || (S && S.name) || "connecting";
+    nickTitle = nick ? nick + " · Game Day Scoreboard" : "";
+    const title = nickTitle || pingTitle || "Game Day Scoreboard";
+    if (document.title !== title) document.title = title;
+    // Older firmware has no nickname.
+    $("#nickRow").hidden = !S || S.nick === undefined;
+    const input = $("#nick");
+    if (nick === nickSeen || document.activeElement === input) return;
+    nickSeen = nick;
+    input.value = nick;
+  };
+  $("#nick").onchange = () => {
+    const nick = $("#nick").value.trim();
+    $("#nick").value = nick;
+    nickSeen = null;
+    setGD({ nick });
+    toast(nick ? "Nickname saved" : "Nickname cleared");
   };
 
   // ---- panel picker ------------------------------------------------------------
@@ -851,6 +1174,78 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         toBoard();
       };
     });
+  };
+
+  // ---- settings backup ---------------------------------------------------------
+  // GET /gameday/settings is the file; POST takes one back, checked whole on
+  // the panel before anything changes. Firmware without it answers 404 and the
+  // section stays hidden.
+  const BACKUP_MAX = 4096;
+  const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
+  const probeBackup = async (retry) => {
+    try {
+      const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
+      // Only a 404 is firmware without it; a 500 is a panel still starting.
+      if (r.status === 404) $("#backup").hidden = true;
+      else if (r.ok) $("#backup").hidden = false;
+      else if (retry) setTimeout(() => probeBackup(false), 5000);
+      return r.ok ? await r.json() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  $("#bkExport").onclick = async () => {
+    const doc = await probeBackup();
+    if (!doc) { toast("Device did not respond. Try again."); return; }
+    const day = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const a = el("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    backupNote("Saved " + name + ".");
+  };
+  $("#bkImport").onclick = () => { $("#bkFile").value = ""; $("#bkFile").click(); };
+  $("#bkFile").onchange = async () => {
+    const f = $("#bkFile").files[0];
+    if (!f) return;
+    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    const text = await f.text();
+    let doc;
+    try { doc = JSON.parse(text); } catch (_) { doc = null; }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
+      backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const other = !!S && doc.name !== S.name;
+    const from = other && typeof doc.name === "string" ? " (saved from " + doc.name + ")" : "";
+    const own = other ? ", and so do this panel's nickname and layout" : "";
+    if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are" + own + ".")) return;
+    let r, j;
+    try {
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { backupNote("Not restored: " + (j.error || "the panel answered " + r.status + ".") + " Nothing was changed."); return; }
+    const left = (j.skipped || []).join(", ");
+    const kept = (j.kept || []).map((k) => ({ nick: "nickname", panels: "panel layout" })[k] || k).join(" and ");
+    backupNote("Restored." + (kept ? " This panel kept its own " + kept + "." : "") +
+      (left ? " This panel's firmware doesn't have: " + left + "." : ""));
+    if (j.restart) {
+      waitForReboot("", "Restarting with the restored panel layout. This page reconnects when the panel is back.");
+      toBoard();
+      return;
+    }
+    toast("Settings restored");
+    scheduleState(APPLY_MS + 100);
   };
 
   // ---- controls --------------------------------------------------------
@@ -942,16 +1337,12 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   let games = null;        // [{league, id, state, detail, away:{...}, home:{...}}]
   let gamesAt = 0;
   const teamById = (lg, id) => TEAMS.find((t) => t[0] === lg && t[1] === id);
-  const easternDate = () => {
-    // ESPN's dates parameter is US Eastern
-    const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-    const g = (t) => p.find((x) => x.type === t).value;
-    return g("year") + g("month") + g("day");
-  };
+  // The day the panel reads (scan_day_shift in espn_parse.h) turns over at
+  // 4 AM Eastern, so a late West Coast game stays on today's list.
+  const scanDate = () => new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
   const loadGames = async (force) => {
     if (!force && games && Date.now() - gamesAt < 60000) return games;
-    const d = easternDate();
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${d}`]);
+    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       try {
@@ -991,7 +1382,6 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       tiles.appendChild(el("div", "none", list.length ? "No game matches" : "No games today"));
       return;
     }
-    const cur = S ? refKey(S.team) : "";
     let lastState = null;
     for (const g of shown) {
       if (g.state !== lastState) {
@@ -1002,9 +1392,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       const card = el("div", "game" + (g.state === "in" ? " live" : ""));
       const mkSide = (s) => {
         const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && keyOf(t) === cur ? " on" : ""));
+        const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
         b.disabled = !t;
-        b.title = t ? "Follow the " + t[3] : "Not in the team list";
+        b.title = t ? t[3] : "Not in the team list";
+        if (t) {
+          b.dataset.key = keyOf(t);
+          b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+        }
         const img = el("img");
         img.loading = "lazy";
         img.src = logoUrl(g.league, s.id, s.abbr);
@@ -1016,11 +1410,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         b.appendChild(txt);
         b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
         b.onclick = () => {
-          if (!t) return;
-          if (pickFav) return choose(t);
-          setGD({ team: keyOf(t) });
-          toast("Now following the " + t[3]);
-          $("#modal").classList.remove("open");
+          if (t) toggleFav(t);
         };
         return b;
       };
@@ -1035,22 +1425,27 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
 
   // ---- team chooser ------------------------------------------------------
-  // The picker sets My team, or with pickFav adds a favorite.
-  let pickFav = false;
-  const choose = (t) => {
-    if (pickFav) addFav(t);
-    else {
-      setGD({ team: keyOf(t) });
-      toast("Now following the " + t[3]);
-    }
-    $("#modal").classList.remove("open");
+  // The picker edits the favorites and stays open: favorites show checked,
+  // a line counts them, Done closes.
+  // After a favorites change, mark the tiles in place so the list keeps its scroll.
+  const markPicked = () => {
+    document.querySelectorAll("#tiles [data-key]").forEach((b) => {
+      const on = favKeys.includes(b.dataset.key);
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    renderFavCount();
+  };
+  const renderFavCount = () => {
+    const line = $("#favCount");
+    line.hidden = false;
+    line.textContent = favKeys.length + " of " + favMax() + " favorites";
   };
   let league = "now";
   const renderTiles = () => {
     if (league === "now") return renderGames();
     $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
-    const cur = S ? refKey(S.team) : "";
     const tiles = $("#tiles");
     tiles.innerHTML = "";
     const list = TEAMS.filter((t) => (q ? (t[3] + " " + t[2]).toLowerCase().includes(q) : t[0] === league));
@@ -1059,7 +1454,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       return;
     }
     for (const t of list) {
-      const tile = el("button", "tile" + (keyOf(t) === cur ? " on" : ""));
+      const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
+      tile.dataset.key = keyOf(t);
+      tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
       const img = el("img");
       img.loading = "lazy";
       img.src = logoUrl(t[0], t[1], t[2]);
@@ -1067,7 +1464,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       tile.appendChild(img);
       tile.appendChild(el("div", "n", t[3]));
       tile.appendChild(el("div", "a", lgInfo(t[0]).prefix + " · " + t[2]));
-      tile.onclick = () => choose(t);
+      tile.onclick = () => toggleFav(t);
       tiles.appendChild(tile);
     }
   };
@@ -1075,18 +1472,18 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     await doAction("power_ok");
     scheduleState(300);
   };
-  $("#pick").onclick = () => openPicker(false);
-  $("#favAdd").onclick = () => openPicker(true);
-  const openPicker = async (fav) => {
-    pickFav = fav;
-    const cur = S ? teamByKey(refKey(S.team)) : null;
-    league = cur ? cur[0] : "nfl";
+  $("#favAdd").onclick = () => openPicker();
+  const openPicker = async () => {
+    // On the first favorite's league, or On now while a game is live.
+    const first = teamByKey(favKeys[0] || "");
+    league = first ? first[0] : "nfl";
     try {
       const list = await loadGames(false);
       if (list.some((g) => g.state === "in")) league = "now";
     } catch (_) {}
     $$tabs(league);
     $("#q").value = "";
+    renderFavCount();
     renderTiles();
     $("#modal").classList.add("open");
     setTimeout(() => $("#q").focus(), 50);
@@ -1119,19 +1516,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     };
   });
   $("#q").oninput = renderTiles;
-  $("#close").onclick = () => $("#modal").classList.remove("open");
-  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") $("#modal").classList.remove("open"); };
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("#modal").classList.remove("open"); });
-
-  const renderCurrentTeam = () => {
-    const t = S ? teamByKey(refKey(S.team)) : null;
-    const img = $("#curLogo");
-    if (!t) { img.style.visibility = "hidden"; $("#curName").textContent = "No team chosen"; return; }
-    img.style.visibility = "visible";
-    img.src = logoUrl(t[0], t[1], t[2]);
-    $("#curName").textContent = t[3];
-    $("#curLg").textContent = lgInfo(t[0]).name;
-  };
+  const closePicker = () => $("#modal").classList.remove("open");
+  $("#close").onclick = closePicker;
+  $("#modal").onclick = (ev) => { if (ev.target.id === "modal") closePicker(); };
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("#modal").classList.contains("open")) closePicker(); });
 
   // ---- timezone suggestion from the browser --------------------------------
   // Browsers report an IANA zone; the device's list carries one IANA name per
@@ -1168,6 +1556,19 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const tzsel = $("#tzsel");
   TZS.forEach((z, i) => { const o = el("option", null, z[0]); o.value = String(i); tzsel.appendChild(o); });
   tzsel.onchange = () => { setGD({ tzauto: 0, tz: tzsel.value }); $("#tzpick").hidden = true; };
+  // Built once and updated in place, like the Live games chips: every state
+  // read redraws the line, and a rebuilt button would take keyboard focus with it.
+  const tzName = el("b");
+  const tzNote = el("span", "muted");
+  const tzLink = el("button", "linkbtn lnk");
+  // Reads the state at tap time, not as it was when the line was drawn.
+  tzLink.onclick = () => {
+    const pick = $("#tzpick");
+    if (!S || S.tz_auto || !browserZoneName()) { pick.hidden = !pick.hidden; return; }
+    tzApplied = false;
+    setGD({ tzauto: 1 });
+    pick.hidden = true;
+  };
   const renderTime = () => {
     if (!S) return;
     const cur = S.tz_name || "";
@@ -1175,29 +1576,21 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const mine = browserZoneName();
     const mineIdx = mine ? TZS.findIndex((z) => z[0] === mine) : -1;
     const line = $("#tzline");
-    const pick = $("#tzpick");
     if (document.activeElement !== tzsel) tzsel.value = String(S.tz);
-    line.innerHTML = "";
-    line.appendChild(el("b", null, cur || "Not set"));
-    const link = el("a", "lnk");
+    if (tzName.parentNode !== line) line.replaceChildren(tzName, tzNote, tzLink);
+    tzName.textContent = cur || "Not set";
     if (auto) {
-      line.appendChild(el("span", "muted", mine ? " · set from this browser" : " · this browser's zone is not in the list"));
-      link.textContent = "choose manually";
-      link.onclick = () => { pick.hidden = !pick.hidden; };
+      tzNote.textContent = mine ? " · set from this browser" : " · this browser's zone is not in the list";
+      tzLink.textContent = "choose manually";
       if (mine && mine !== cur && mineIdx >= 0 && !tzApplied) {
         tzApplied = true;
         setGD({ tz: mineIdx });
         toast("Timezone set to " + mine + " from this browser");
       }
     } else {
-      line.appendChild(el("span", "muted", " · chosen by hand"));
-      link.textContent = mine ? "follow this browser (" + mine + ")" : "change";
-      link.onclick = () => {
-        if (mine) { tzApplied = false; setGD({ tzauto: 1 }); pick.hidden = true; }
-        else pick.hidden = !pick.hidden;
-      };
+      tzNote.textContent = " · chosen by hand";
+      tzLink.textContent = mine ? "follow this browser (" + mine + ")" : "change";
     }
-    line.appendChild(link);
   };
 
   // ---- up next + splash (from the state document) -------------------------------
@@ -1218,7 +1611,10 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     const host = $("#upnextList");
     host.innerHTML = "";
     for (const n of list) {
-      const row = el("div", "un fav" + (n.slot === S.shown ? " shown" : ""));
+      // A favorite outside the playlist being played only shows near its kickoff.
+      // slot is the favorite's place counted from 1; a playlist counts from 0.
+      const out = playingList() && playingList().f.length && !playingList().f.includes(n.slot - 1);
+      const row = el("div", "un fav" + (n.slot === S.shown ? " shown" : "") + (out ? " out" : ""));
       const img = el("img");
       img.loading = "lazy";
       img.alt = "";
@@ -1239,26 +1635,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const renderUpNext = () => {
     const box = $("#upnext");
     if (S && (S.mode || 0) === 4) { renderFavNext(box); return; }
-    if (!S || (S.mode || 0) !== 0) { box.hidden = true; return; }
-    const curId = game && game.s !== "NOT_FOUND" ? String(game.id || "") : "";
-    const list = (S.next || []).filter((u) => String(u.id) !== curId).slice(0, 3);
-    box.hidden = !list.length;
-    const host = $("#upnextList");
-    host.innerHTML = "";
-    const lg = S.team ? S.team.l : "nfl";
-    for (const u of list) {
-      const row = el("div", "un");
-      const img = el("img");
-      img.loading = "lazy";
-      img.alt = "";
-      img.src = logoUrl(lg, u.oi, u.oa);
-      row.appendChild(img);
-      const txt = el("div", "ut");
-      txt.appendChild(el("div", "n", (u.neutral ? "vs " : u.home ? "vs " : "@ ") + (u.on || u.oa)));
-      txt.appendChild(el("div", "w", kickLabel(u.kick, u.tbd) + (u.tv ? " · " + u.tv : "")));
-      row.appendChild(txt);
-      host.appendChild(row);
-    }
+    box.hidden = true;
   };
   let lastSplashKey = "";
   let splashTimer = null;
@@ -1280,12 +1657,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     renderBoard();
     renderUpNext();
     renderSplash();
-    renderCurrentTeam();
     renderMode();
     renderSettings();
+    renderNight();
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
+    renderNick();
     renderData();
     renderHealth();
     renderWifi();
@@ -1320,12 +1698,17 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
     return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
   };
+  // 2nd, 3rd, 11th, 22nd.
+  const ordinal = (n) => {
+    const t = n % 100;
+    return n + (t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+  };
   const renderHealth = () => {
     const h = S && S.health;
     $("#health").hidden = !h;
     if (!h) return;
     $("#hStart").textContent = restartName(h.start) + ", " + span(h.up) + " ago";
-    $("#hBoots").textContent = h.boots > 1 ? "Start " + h.boots + " since the power came on" : "";
+    $("#hBoots").textContent = h.boots > 1 ? ordinal(h.boots) + " start since the power came on" : "";
     $("#hFault").textContent = !h.fault ? "None"
       : restartName(h.fault) + (h.fault_ago != null ? ", " + span(h.fault_ago) + " ago" : "");
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
@@ -1705,7 +2088,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       if (!ev.data) return;
       try {
         const p = JSON.parse(ev.data);
-        if (p.title) $("#devname").textContent = p.title;
+        if (p.title) { pingTitle = p.title; renderNick(); }
         if (p.comment) $("#ver").textContent = p.comment;
       } catch (_) {}
     });
@@ -1720,6 +2103,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   connect();
   fetchState();
   loadNetworks();
+  probeBackup(true);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();

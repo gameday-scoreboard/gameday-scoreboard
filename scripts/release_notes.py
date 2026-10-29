@@ -40,9 +40,16 @@ def section(version: str) -> str:
 
 
 def summary(body: str, limit: int = 240) -> str:
-    """Bullets joined into one line with " | " (the page splits on it), trimmed to fit an ESPHome text field."""
+    """The plain line above the bullets if there is one, else the bullets joined into one line with " | "
+    (the page splits on it), trimmed to fit an ESPHome text field."""
+    lead = []
+    for ln in body.splitlines():
+        if ln.startswith("- ") or ln.startswith("#"):
+            break
+        if ln.strip():
+            lead.append(ln.strip())
     bullets = [ln[2:].strip() for ln in body.splitlines() if ln.startswith("- ")]
-    out = " | ".join(bullets) if bullets else body.strip().splitlines()[0]
+    out = " ".join(lead) if lead else " | ".join(bullets) if bullets else body.strip().splitlines()[0]
     return out if len(out) <= limit else out[: limit - 3].rstrip() + "..."
 
 
@@ -63,7 +70,7 @@ def headline(body: str) -> str:
     """The section's one-line summary: a plain line above the bullets if it has one, else the first bullet's first sentence."""
     lead = []
     for ln in body.splitlines():
-        if ln.startswith("- "):
+        if ln.startswith("- ") or ln.startswith("#"):
             break
         if ln.strip():
             lead.append(ln.strip())

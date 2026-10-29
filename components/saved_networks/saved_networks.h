@@ -43,12 +43,14 @@
 #include "esphome/core/preferences.h"
 
 #include "network_list.h"
+#include "setup_window.h"
 
 namespace esphome {
 namespace saved_networks {
 
 using wifi_list::MAX_NETWORKS;
 using wifi_list::NetworkList;
+using wifi_list::SetupWindow;
 
 // One row of the list as the API and the device page see it: never a password.
 struct Entry {

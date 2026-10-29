@@ -17,6 +17,9 @@ namespace espn {
 
 constexpr size_t kMsgTextMax = 200;  // the saved text, and a banner, in bytes
 constexpr size_t kMsgUrlMax = 160;
+// The panel's nickname ("Living room"), in bytes: about 32 letters, fewer
+// with accents. One line, cleaned like a message.
+constexpr size_t kNickMax = 32;
 constexpr size_t kMsgLineMax = 64;  // one entry from a URL; a longer line is cut
 constexpr uint32_t kMsgChunkLines = 100;  // entries one read keeps
 constexpr uint32_t kMsgPageLines = 4;     // entries on the board at once
@@ -124,6 +127,25 @@ inline std::string message_clean(const std::string &in, size_t max, bool lines) 
     out.resize(cut);
     while (!out.empty() && (out.back() == ' ' || out.back() == '\n'))
       out.pop_back();
+  }
+  return out;
+}
+
+// Text with every byte that isn't part of a valid UTF-8 character left out
+// (stray and cut-off bytes, overlong forms, surrogates), for text the panel
+// hands on to the apps (the nickname) rather than draws: their JSON readers
+// refuse a document with any of those.
+inline std::string utf8_only(const std::string &in) {
+  std::string out;
+  for (size_t i = 0; i < in.size();) {
+    size_t n = detail::utf8_len(in, i);
+    uint32_t cp = detail::utf8_cp(in, i, n);
+    bool ok = n == 1 ? cp < 0x80
+                     : !((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
+                         (cp >= 0xD800 && cp <= 0xDFFF));
+    if (ok)
+      out.append(in, i, n);
+    i += n;
   }
   return out;
 }
@@ -270,6 +292,18 @@ inline MsgPage msg_next_page(uint32_t pos, uint32_t from, uint32_t n, bool eof, 
 // page_ms; every N gives it one page for page_ms every N minutes. since_ms is
 // the time since the card last went up (shown) or down (not shown).
 enum class MsgTurn : uint8_t { NONE, SHOW, NEXT, HIDE };
+
+// Missed ESPN reads in a row at which the panel's trouble line wins over the
+// card; the ticker says "no update" from the same count.
+constexpr uint32_t kMsgTroubleMisses = 3;
+
+// Whether the panel has trouble to say between games, which the card must
+// not cover: ESPN missed kMsgTroubleMisses reads in a row, the Wi-Fi wants a
+// sign-in, or no internet (espn_parse.h, clock_late). The card comes back
+// on its own schedule once it clears.
+inline bool msg_trouble(uint32_t misses, bool captive, bool no_internet) {
+  return captive || no_internet || misses >= kMsgTroubleMisses;
+}
 
 inline MsgTurn msg_turn(bool on, bool between, bool shown, uint32_t since_ms, int every, uint32_t page_ms) {
   if (!on || !between)

@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "espn_parse.h"
+#include "line_score.h"
 #include "panel_text.h"
 #include "recap.h"
+#include "score_log.h"
 
 using namespace espn;
 
@@ -129,12 +131,22 @@ size_t render(const GameSnapshot &prev, const GameSnapshot &g, int64_t now) {
   }
   if (g.sport == Sport::BASKETBALL)
     n += basketball_series(g).size();
+  // The halftime and final boards: the line score at both widths, and the
+  // scoring log from the two reads.
+  for (int width : {64, 128, 256}) {
+    LineScoreText t = line_score_text(g, width);
+    n += t.head.size() + t.body.size() + t.title.size();
+  }
+  ScoreLog log;
+  log.update(prev);
+  log.update(g);
+  n += with_score_log(status_text(g, TickerOptions{}, kick_local), g.headline, log.lines(g.event_id)).size();
   return n;
 }
 
 // The finals rotation as the live modes run it: absorb the scan, build a
 // loop of cards and draw each one the way recap_show_() does.
-size_t recap(std::vector<Final> finals, std::vector<Pending> pending, int64_t next_kickoff, int64_t now,
+size_t recap(FinalList finals, PendingList pending, int64_t next_kickoff, int64_t now,
              uint8_t league) {
   for (auto &f : finals)
     f.league = league;
@@ -186,9 +198,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   std::vector<Pick> picks = find_picks(data, size);
 
   for (uint8_t league = 0; league < kLeagueCount; league += 4) {
-    std::vector<LiveGame> live;
-    std::vector<Final> finals;
-    std::vector<Pending> pending;
+    LiveList live;
+    FinalList finals;
+    PendingList pending;
     int64_t next = 0;
     ChunkReader r(data, size, chunk);
     if (parse_live_games(r, live, &next, &finals, &pending))
@@ -196,7 +208,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   }
   {
     // The plain scan, with nothing kept for the rotation.
-    std::vector<LiveGame> live;
+    LiveList live;
     ChunkReader r(data, size, chunk);
     parse_live_games(r, live);
     for (const auto &g : live)

@@ -99,7 +99,7 @@ A fix we want that is only in an ESPHome beta, in order:
 
 ### Setup
 
-- [ESPHome](https://esphome.io/) 2026.10.0b3, the version CI builds with.
+- [ESPHome](https://esphome.io/) 2026.10.0, the version CI builds with.
 - g++ for the host tests.
 - Node and Python 3 for the device page tests.
 
@@ -133,9 +133,11 @@ the panel shows, a setting, a button hold or anything else an owner or
 DIY builder would notice, update or add the page for it under
 `docs/wiki/src/content/docs/` in the same pull request. CI fails a PR
 into `dev` that changes `firmware/` or `components/` without a docs
-change; a maintainer adds the label `docs: not needed` when nothing
-visible changed. `docs/wiki/README.md` has the page conventions, and
-`npm install` then `npm run dev` in `docs/wiki` previews the site.
+change. When nothing visible changed, add a line to the PR
+description saying why: `No owner-visible change, no docs: <why>`.
+A maintainer checks that claim in review. `docs/wiki/README.md` has the
+page conventions, and `npm install` then `npm run dev` in `docs/wiki`
+previews the site.
 
 ### Style
 
@@ -143,8 +145,14 @@ visible changed. `docs/wiki/README.md` has the page conventions, and
 - Commit messages are one plain sentence about what changed for the
   person watching the panel, like "Name each panel's hotspot after its
   suffix".
-- Leave the version number and CHANGELOG.md alone; the maintainers write
-  both when a release goes out.
+- If owners will notice your change, add one bullet for it under
+  `## Unreleased` at the top of CHANGELOG.md, in the group it belongs to
+  (`### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`): one short line
+  for the person who owns the panel, starting with an emoji, like
+  "- 🎵 Playlists: group your favorites and play just that group". The
+  detail belongs on the docs page. Leave the released sections and the version number
+  alone; the maintainers turn `## Unreleased` into the release when it
+  goes out.
 
 ### Things we won't merge
 

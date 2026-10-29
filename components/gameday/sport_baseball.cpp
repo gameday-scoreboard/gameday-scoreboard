@@ -6,6 +6,7 @@ namespace espn {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
 static std::string hits_line(const GameSnapshot &s) {
@@ -28,12 +29,16 @@ std::string baseball_status_text(const GameSnapshot &s, const TickerOptions &o, 
     case GameState::NOT_FOUND:
       return "No upcoming game";
     case GameState::PRE:
+      add_part(out, s.game_name);  // a playoff round, like "NLCS - Game 2"
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
+      if (o.records)
+        add_part(out, pregame_records(s));
       if (!b.team_probable.empty() && !b.opp_probable.empty())
         add_part(out, s.team_abbr + " " + b.team_probable + " vs " + s.opp_abbr + " " + b.opp_probable);
       add_odds(out, s, o);
-      add_part(out, s.venue);
+      detail::add_leaders(out, s, o);
+      add_part(out, detail::venue_line(s));
       return out;
     case GameState::POST:
       // Postponed, Canceled or Suspended: ESPN's post state without a result.

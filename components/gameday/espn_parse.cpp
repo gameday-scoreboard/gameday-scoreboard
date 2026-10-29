@@ -124,7 +124,7 @@ std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch,
   return url;
 }
 
-std::string scan_url(League league, int64_t now_epoch) {
+std::string scan_url(League league, int64_t now_epoch, bool top25) {
   std::string url = site_base(league) + "/scoreboard";
   int y, m, d;
   civil_from_epoch(now_epoch - scan_day_shift(league), y, m, d);
@@ -133,7 +133,7 @@ std::string scan_url(League league, int64_t now_epoch) {
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
-  else if (league == League::MCBB)
+  else if (league == League::MCBB && !top25)
     snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
@@ -171,21 +171,6 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   bool scoreboard = league == League::NFL || league == League::MLB || league == League::NBA || league == League::NHL;
   return dark_logo(std::string("https://a.espncdn.com/i/teamlogos/") + l->logo_dir +
                    (scoreboard ? "/500/scoreboard/" : "/500/") + file + ".png");
-}
-
-GameSnapshot team_placeholder(const Team &t) {
-  GameSnapshot g;
-  g.valid = true;
-  g.state = GameState::PRE;
-  g.team_abbr = t.abbr;
-  g.team_id = t.espn_id;
-  g.team_logo = team_logo_url(t.league, t.espn_id, t.abbr);
-  return g;
-}
-
-// Every game read from ESPN has an event id; a final card is POST.
-bool is_team_placeholder(const GameSnapshot &g) {
-  return g.valid && g.state == GameState::PRE && g.event_id.empty();
 }
 
 GameSnapshot final_snapshot(const Final &f) {
@@ -334,6 +319,97 @@ std::string records_line(const GameSnapshot &s) {
   return out;
 }
 
+std::string pregame_records(const GameSnapshot &s) {
+  std::string out;
+  if (!s.team_record.empty())
+    out = s.team_abbr + " " + s.team_record;
+  if (!s.opp_record.empty())
+    out += (out.empty() ? "" : ", ") + s.opp_abbr + " " + s.opp_record;
+  return out;
+}
+
+// "1381" to "1,381". Anything but digits is dropped first, so a count ESPN
+// already wrote as "1,381" comes out the same instead of "1,,381".
+static std::string with_commas(const std::string &number) {
+  std::string digits, out;
+  for (char c : number)
+    if (c >= '0' && c <= '9')
+      digits += c;
+  size_t n = digits.size();
+  for (size_t i = 0; i < n; i++) {
+    if (i > 0 && (n - i) % 3 == 0)
+      out += ',';
+    out += digits[i];
+  }
+  return out;
+}
+
+// "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix.
+static std::string surname(const std::string &short_name) {
+  std::string name = short_name;
+  while (name.size() > 3 && name[1] == '.' && name[2] == ' ')
+    name.erase(0, 3);
+  return name;
+}
+
+std::string leader_line(const std::string &short_name, const std::string &display_value) {
+  std::string name = surname(short_name);
+  std::string yards, tds;
+  size_t start = 0;
+  while (start <= display_value.size()) {
+    size_t comma = display_value.find(", ", start);
+    std::string tok = display_value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    size_t sp = tok.find(' ');
+    if (sp != std::string::npos) {
+      std::string num = tok.substr(0, sp), unit = tok.substr(sp + 1);
+      if (unit == "YDS")
+        yards = num;
+      else if (unit == "TD")
+        tds = num;
+    }
+    if (comma == std::string::npos)
+      break;
+    start = comma + 2;
+  }
+  std::string yds = with_commas(yards);
+  if (name.empty() || yds.empty())
+    return "";
+  std::string out = name + " " + yds + " yds";
+  if (!tds.empty())
+    out += " " + tds + " TD";
+  return out;
+}
+
+std::string stat_leader(const std::string &short_name, const std::string &value, const char *unit) {
+  // Digits with at most one point, and not all zeros: "35.0", "42", ".291"
+  bool point = false, nonzero = false;
+  for (char c : value) {
+    if (c == '.' && !point)
+      point = true;
+    else if (c >= '0' && c <= '9')
+      nonzero |= c != '0';
+    else
+      return "";
+  }
+  std::string name = surname(short_name);
+  if (name.empty() || !nonzero)
+    return "";
+  return name + " " + value + " " + unit;
+}
+
+std::string pregame_name(const GameSnapshot &s) {
+  if (!s.game_name.empty() || s.week == 0)
+    return s.game_name;
+  return "Week " + std::to_string(s.week);
+}
+
+std::string venue_line(const GameSnapshot &s) {
+  std::string venue = s.venue == s.game_name ? std::string() : s.venue;
+  if (s.weather.empty())
+    return venue;
+  return venue.empty() ? s.weather : s.weather + " at " + venue;
+}
+
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
   if (!o.odds)
     return;
@@ -344,6 +420,13 @@ void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, c
 }
 
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o) { add_odds(out, s, o, s.odds); }
+
+void add_leaders(std::string &out, const GameSnapshot &s, const TickerOptions &o) {
+  if (!o.leaders)
+    return;
+  add_part(out, s.team_leader);
+  add_part(out, s.opp_leader);
+}
 
 void add_last_play(std::string &out, std::string play) {
   if (play.size() > 160)
@@ -356,11 +439,17 @@ void add_last_play(std::string &out, std::string play) {
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_name;
+using detail::pregame_records;
 using detail::records_line;
+using detail::venue_line;
 
-std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive) {
+std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses, bool captive,
+                         uint32_t since_join_ms) {
   if (captive)
     return "Wi-Fi needs a sign-in";
+  if (clock_late(clock_set, since_join_ms))
+    return "No internet";
   if (!clock_set)
     return "Getting ready";
   if (live_mode)
@@ -384,11 +473,13 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     case GameState::NOT_FOUND:
       return "No upcoming game";
     case GameState::PRE:
-      add_part(out, s.game_name);
+      add_part(out, pregame_name(s));
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
+      if (o.records)
+        add_part(out, pregame_records(s));
       add_odds(out, s, o);
-      if (s.venue != s.game_name)  // "Rose Bowl | ... | Rose Bowl"
-        add_part(out, s.venue);
+      detail::add_leaders(out, s, o);
+      add_part(out, venue_line(s));
       return out;
     case GameState::POST:
       // A game that ended without being completed says why: Postponed,
@@ -408,11 +499,25 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play)
+  if (o.last_play) {
     add_last_play(out, s.last_play);
+    if (!s.drive.empty())
+      add_part(out, "Drive: " + s.drive);
+  }
+  if (o.odds)
+    add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+std::string win_chance(const GameSnapshot &s) {
+  if (s.team_win_pct < 1)
+    return "";
+  // The side ahead in ESPN's model, so the number is always 50 or more.
+  bool ours = s.team_win_pct >= 50;
+  int pct = ours ? s.team_win_pct : 100 - s.team_win_pct;
+  return (ours ? s.team_abbr : s.opp_abbr) + " " + std::to_string(pct) + "% to win";
 }
 
 std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_local) {
@@ -478,14 +583,21 @@ std::string short_game_name(const std::string &headline) {
     c = (char) tolower((unsigned char) c);
   if (has_time_of_day(lower))
     return "";
-  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk"
-  for (const char *tail : {" presented by ", " powered by ", " hosted by "}) {
+  // Sponsor tails: "... Presented by AT&T", "LA Bowl Hosted by Gronk",
+  // "Ivy League Tournament pres. by TIAA"
+  for (const char *tail : {" presented by ", " pres. by ", " powered by ", " hosted by "}) {
     size_t at = lower.find(tail);
     if (at != std::string::npos) {
       s.resize(at);
       lower.resize(at);
     }
   }
+  // Notes that report a result or a schedule change, not a name: "Paris
+  // Saint-Germain win 4-3 on penalties", "Rain - Makeup date April 5". After
+  // the tail, so a sponsor's name can't wipe out the game's.
+  for (const char *note : {" win ", " wins ", "makeup", "postponed", "suspended"})
+    if (lower.find(note) != std::string::npos)
+      return "";
   // A playoff game at a bowl goes by the bowl
   size_t at = s.find(" at the ");
   if (at != std::string::npos && s.find(" Bowl", at) != std::string::npos)
@@ -525,9 +637,7 @@ std::string kickoff_label(const struct tm &kick_local, const struct tm &now_loca
   // -1: no kickoff time to show.
   if (kick_local.tm_mon < 0 || kick_local.tm_mon > 11 || kick_local.tm_wday < 0 || kick_local.tm_wday > 6)
     return "";
-  int64_t now_day = (int64_t) now_local.tm_year * 366 + now_local.tm_yday;
-  int64_t kick_day = (int64_t) kick_local.tm_year * 366 + kick_local.tm_yday;
-  int64_t diff = kick_day - now_day;
+  int64_t diff = local_day(kick_local) - local_day(now_local);
   std::string when;
   if (diff == 0)
     when = "Today";

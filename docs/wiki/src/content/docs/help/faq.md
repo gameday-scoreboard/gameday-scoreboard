@@ -7,15 +7,17 @@ sidebar:
 
 ## My team's season is over. What does the panel show?
 
-A clock in your team's colors. Under the time is your team's next game once it's on the schedule, like **Next: at PHI Mar 26 7:05 PM**, or the date until then. Nothing is wrong with the panel, and it picks the next season up by itself.
+A clock in your first favorite's colors. Under the time is the next game once it's on the schedule, like **Next: at PHI Mar 26 7:05 PM**, or the date until then. Nothing is wrong with the panel, and it picks the next season up by itself. See [The off-season clock](/using/brightness-and-clock/#the-off-season-clock).
 
-Outside football, the clock comes up once the next game is more than 10 days away. In football it comes up only when ESPN lists no next game, so a bye week never shows it.
-
-To keep the board busy, switch to **Favorite teams** with teams from leagues that are in season, or to **Live games** for whatever is on right now. See [Modes](/using/modes/).
+To keep the board busy, add favorites from leagues that are in season, or switch to **Live games** for whatever is on right now. See [Modes](/using/modes/).
 
 ## Does it work during the offseason?
 
 Yes. Between seasons it shows the clock above, with your team's next game when ESPN has one. You can also show the clock page any time: set **Showing** in the Panel card on the device page. See [Brightness and the clock](/using/brightness-and-clock/).
+
+## Can it turn off at night?
+
+Yes. Turn on **Night schedule** in the Panel card on the device page and pick the hours. It can dim the panel to a night brightness or turn the screen off, and a live game for your team or a favorite keeps it bright until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
 ## Can I use it outside?
 
@@ -67,10 +69,6 @@ See [Remote](/using/remote/).
 It checks for a new release every six hours, and the device page shows an **Install** button when one is out. If you turn on **Install updates automatically** in the Device card, the panel installs a new release on its own between 3 and 5 AM, never during a live game it's showing. That switch is off unless you turn it on.
 
 Your team and settings stay through an update. See [Updates](/using/updates/).
-
-:::note[Coming in the next release]
-If the update server doesn't answer, the panel checks a second copy of the same files at `updates.gameday-scoreboard.com`.
-:::
 
 ## How fast does support answer?
 

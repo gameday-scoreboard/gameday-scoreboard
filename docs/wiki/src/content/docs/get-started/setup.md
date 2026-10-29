@@ -13,7 +13,7 @@ Connect the power supply that came with the panel. The panel lights up with **GA
 
 A panel that isn't on Wi-Fi yet then shows **SETUP** and a QR code. On the 128x64 panel the QR code sits on the left half and the words **SETUP / Game Day / app** sit beside it. On a single 64x64 panel there is no room for both, so the words and the QR code take turns: about 5 seconds of words, then 8 seconds of QR code.
 
-The QR code opens `https://install.gameday-scoreboard.com/s`. On an iPhone, point the Camera at it: it opens the Game Day app if you have it, or the setup page in your browser if you don't.
+The QR code opens `https://app.gameday-scoreboard.com/setup`. On an iPhone, point the Camera at it: it opens the Game Day app if you have it, or the setup page in your browser if you don't.
 
 ## Set it up in the Game Day app
 
@@ -23,7 +23,15 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 2. Pick your Wi-Fi network from the list. The list comes from the panel itself, strongest network first, so it shows what the panel can actually reach.
 3. Enter the password.
 
-While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app lets you pick your team.
+While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app opens it so you can add your teams. On iPhone a short walkthrough takes you through your teams, what the panel shows, the ticker and the timezone.
+
+If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
+
+:::note[Coming in the next release]
+After those 30 seconds a new panel goes back to **SETUP**. Before, it said it was waiting for that network after a power cut, and later that Wi-Fi was lost.
+:::
+
+About a second after the panel joins your Wi-Fi, it ends the Bluetooth connection with the app and turns Bluetooth off, and the app carries on over Wi-Fi. Before, a panel could restart a few seconds after joining while the app was still connected, and the app then said it couldn't reach the panel.
 
 :::note[Coming in the next release]
 On iPhone, a network that isn't in the list, like a hidden one, goes in with **Type a network name** at the bottom of the list. While the panel joins, the app shows each step as it happens. If the panel can't get on your Wi-Fi, the app says which problem it most likely is:
@@ -48,9 +56,7 @@ The panel only joins 2.4 GHz networks. If your router has separate names for 2.4
 
 Use your main network, not a guest network. A guest network can let the panel join but keep your phone from reaching it afterwards.
 
-:::note[Coming in the next release]
 Some bar, hotel and dorm Wi-Fi lets the panel join and then wants a sign-in on a web page before anything else gets through. The panel can't sign in to those pages. On a network like that it says **Wi-Fi needs sign-in, use home or a hotspot** with the QR code for the app. Set it up on a home network or a phone hotspot instead. The message goes away by itself once scores come through.
-:::
 
 ## What the panel shows once it's online
 
@@ -87,6 +93,4 @@ The Device card on the device page lists the saved networks under **Wi-Fi networ
 
 **Reset Wi-Fi** and **Factory reset** on the device page clear the whole list. See [Wi-Fi](/using/wifi/) for more.
 
-:::note[Coming in the next release]
 **Reset Wi-Fi** keeps the saved networks. The panel restarts into setup for 15 minutes so you can give it a new network. If you unplug it and plug it back in, or the 15 minutes run out, it goes back to the networks it already knows. While it's in setup, the panel takes a turn saying **Unplug it to rejoin saved Wi-Fi**. **Factory reset** still erases everything.
-:::

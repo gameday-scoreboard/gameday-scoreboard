@@ -10,7 +10,7 @@ is the short version.
 ## Layout
 
 - `firmware/gameday.yaml` (MoonHub75 pinout) and
-  `firmware/gameday-scoreboard75.yaml` (our controller board) are the two
+  `firmware/gameday-scoreboard75.yaml` (the early scoreboard75 test boards) are the two
   release builds. Each only names itself and picks a pin map from
   `firmware/controllers/`; everything else is in
   `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
@@ -52,7 +52,7 @@ is the short version.
 
 ## Build and test
 
-- ESPHome 2026.10.0b3, the version CI pins (`ESPHOME_VERSION` in
+- ESPHome 2026.10.0, the version CI pins (`ESPHOME_VERSION` in
   `.github/workflows/build.yml`). Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
@@ -110,12 +110,17 @@ is the short version.
   passwords or keys to the default build. The README section "On your
   network" explains why.
 - Team logos come from ESPN at runtime. Don't commit league or team logos.
-- Version bumps and CHANGELOG sections are written by maintainers at
-  release time. Leave both alone in a feature PR.
+- A PR that changes what an owner sees or does adds one bullet under
+  `## Unreleased` at the top of CHANGELOG.md, in its group (`### ⚠️ Heads
+  up`, `### ✨ New` or `### 🐛 Fixes`): one short line for the owner,
+  starting with an emoji. The detail goes on the docs page.
+  Never edit a released section or the version number; the maintainers
+  rename `## Unreleased` and bump the version when a release goes out.
 - A change an owner or DIY builder can see or do comes with its docs
   page, updated or added under `docs/wiki/src/content/docs/` in the same
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
-  `firmware/` or `components/` without one, unless the PR carries the
-  label `docs: not needed`. Describe behavior `main` doesn't have yet in a
+  `firmware/` or `components/` without one, unless the PR description
+  has a line `No owner-visible change, no docs: <why>` (the reviewer checks
+  that claim). Describe behavior `main` doesn't have yet in a
   `:::note[Coming in the next release]` aside. `npm run build` in
   `docs/wiki` must pass.

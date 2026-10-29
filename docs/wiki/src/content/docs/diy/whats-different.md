@@ -23,9 +23,7 @@ The Game Day Scoreboard ships with one 128x64 panel and starts two panels wide. 
 
 On a Game Day Scoreboard the button is on the controller. On your board it's whatever you wired to GPIO0, usually the BOOT button. It does the same things: a click turns the panel on or off, a 1.5 second hold shows the panel's address and IP address, and a longer hold resets Wi-Fi. See [Buttons and resets](/using/buttons-and-resets/).
 
-:::note[Coming in the next release]
 Nothing resets until you let go of the button. Hold it and the screen counts down from 5 seconds. Let go after 10 seconds to reset Wi-Fi, or after 20 seconds for a factory reset. At 30 seconds it says "Release to cancel".
-:::
 
 ## No factory check
 
@@ -36,6 +34,10 @@ curl -X POST "http://gameday-xxxxxx.local/gameday/action?do=qc"
 ```
 
 Put your panel's name in place of `gameday-xxxxxx`. The panel lights red, green, blue and white for 2 seconds each, walks a white line down all 64 rows, then shows the firmware version, the PSRAM size, the Wi-Fi signal and the panel size. It runs round and round. Press the button once to pass the button test and finish, or it stops by itself after 2 minutes.
+
+## The FCC information isn't yours
+
+**Show on panel** next to **FCC information** on the device page puts the Game Day Scoreboard's model (GDS-1), FCC ID and FCC statement on the screen. Your board runs the same firmware, so it shows them too, but they describe the Game Day Scoreboard that was sold, not a board you built. Getting your own build through the FCC rules is up to you.
 
 ## Support is on GitHub
 

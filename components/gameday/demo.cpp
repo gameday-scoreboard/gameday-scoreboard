@@ -225,7 +225,7 @@ void GamedayComponent::demo_badges_(UpdateFields &f) const {
   bool college = kind == (uint8_t) DemoKind::COLLEGE;
   return ::espn::demo_matchup((DemoKind) kind, college ? this->demo_prefs_.college_home : this->demo_prefs_.pro_home,
                               college ? this->demo_prefs_.college_away : this->demo_prefs_.pro_away,
-                              (League) this->prefs_.league, this->prefs_.team_id);
+                              this->fallback_team_());
 }
 
 uint8_t GamedayComponent::demo_league_() const {

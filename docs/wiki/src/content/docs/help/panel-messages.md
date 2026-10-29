@@ -22,10 +22,16 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | **Open gameday-2f6a70.local** | The panel's device page address. | Open it in a browser on the same Wi-Fi. |
 | **Looking up scores** | The panel is loading its first scoreboard, at start-up or after you change the team. It shows for up to 10 seconds. | Wait. |
 
-:::note[Coming in the next release]
 | The panel says | What it means | What to do |
 | --- | --- | --- |
 | **Unplug it to rejoin saved Wi-Fi** | The panel is in setup after a Wi-Fi reset and still knows its old networks. | Set it up on a new network, or unplug it and plug it back in to go back to the old one. It goes back by itself after 15 minutes. |
+
+| The panel says | What it means | What to do |
+| --- | --- | --- |
+| **Can't join**, a network name, **Check name / and password** | The network the app just sent didn't work: the name or the password is wrong, or the panel can't see that network. It shows for 30 seconds. | Check both in the app, which asks for them again. After a Wi-Fi reset, close the app instead and the panel goes back to its saved networks a minute later. |
+
+:::note[Coming in the next release]
+After **Can't join**, a new panel goes back to **SETUP / Game Day / app**. Before, it went on to **Waiting for** and later **Wi-Fi lost / open app**.
 :::
 
 ## When the Wi-Fi is the problem
@@ -34,12 +40,10 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | --- | --- | --- |
 | **Wi-Fi lost / open app**, with a QR code | The panel has been off its Wi-Fi for more than about 10 seconds. | If the router or internet is down, wait: the panel rejoins by itself. If you changed the router or the password, give the panel the new one in the app. See [New router or Wi-Fi password](/get-started/setup/#new-router-or-wi-fi-password). |
 
-:::note[Coming in the next release]
 | The panel says | What it means | What to do |
 | --- | --- | --- |
 | **Waiting for** and a network name, with **Just had a power cut? / Routers take a few min** | The panel just started and hasn't found its Wi-Fi yet. After a power cut the panel is up in seconds, and the router takes a few minutes. | Wait. The panel joins by itself once the router is back. If it still can't after 3 minutes, it says **Wi-Fi lost / open app**. |
 | **Wi-Fi needs sign-in / use home or a hotspot**, with a QR code | The network wants a sign-in on a web page, like many bar, hotel and dorm networks. The panel can't sign in. | Set it up on a home network or a phone hotspot. The message goes by itself once scores come through. |
-:::
 
 ## On the scoreboard
 
@@ -56,7 +60,7 @@ These show on the board or in the ticker.
 | **Looking for a live game** | In Live games, the panel is checking what's on. With one league picked, it names it, like **Looking for a live NHL game**. | Wait. |
 | **No live games right now** | In Live games, nothing is being played in the leagues you picked. | Nothing. The panel shows today's later games and recent final scores, and picks up the next game when it starts. |
 | **No live NFL games, showing CHI** | In Live games with nothing on, the panel shows your own team until a game starts. | Nothing. |
-| **Favorites: add teams in the app or on the page** | The panel is in Favorite teams with no favorites. | Add favorites, or switch to My team. See [Favorite teams](/using/favorites/). |
+| **Favorites: add teams in the app or on the page** | The panel is in Favorite teams with no favorites. | Add a favorite, or switch to Live games. See [Favorite teams](/using/favorites/). |
 | **Later today** | A card before the games still to come today, each with both logos, the start time and the TV channel. | Nothing. |
 | **Yesterday's NHL scores**, or another day and league | A card before that day's final scores. | Nothing. |
 | **Next: BOS at NYR Thu 6:00 PM** | No game is left today. This is the next one. | Nothing. |
@@ -64,7 +68,15 @@ These show on the board or in the ticker.
 | **Postponed**, **Canceled** or **Suspended** | The game ended without being played out. | Nothing. |
 | **Sat TBD** | ESPN hasn't set the game's start time yet. | Nothing. The time shows once ESPN has it. |
 
+**No internet** on the board: the panel joined Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered. Check that other devices on the network can get online. See [Troubleshooting](/help/troubleshooting/#the-panel-says-no-internet). **Getting ready** now lasts only those first 30 seconds.
+
+Your own [message card](/using/messages/) also steps aside while three reads from ESPN in a row have failed (**no update** in the ticker), while the Wi-Fi wants a sign-in, and while the panel says **No internet**.
+
+**Can't reach ESPN** also shows in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and after **No live NFL games, showing CHI** when your team's card can't be read. A panel that can't reach ESPN for days keeps saying so instead of switching to **No upcoming game** every couple of days.
+
 A panel with no team picked also brings the app's QR code back over the board for 13 seconds every 3 minutes, until you pick one.
+
+That QR code comes with **Pick your team in the app** beside it on a 128x64 panel. On a single 64x64 panel the words show for 5 seconds, then the QR code for 8.
 
 ## When you hold the button
 
@@ -76,7 +88,6 @@ The button on the controller shows the panel's address and resets it. See [Butto
 | **Keep holding to reset Wi-Fi**, with a bar filling | You've held it for 5 seconds. Let go now and nothing resets. |
 | **Wi-Fi reset / restarting** | You held it for 10 seconds. The panel forgets its Wi-Fi and restarts into setup. |
 
-:::note[Coming in the next release]
 Nothing resets until you let go, and the screen says what letting go will do.
 
 | The panel says | Let go and |
@@ -85,11 +96,9 @@ Nothing resets until you let go, and the screen says what letting go will do.
 | **Release to reset Wi-Fi**, then **Hold 10s to erase all**, counting down | The Wi-Fi resets. The panel says **Wi-Fi reset / restarting**. |
 | **Release to erase all**, then **Hold 10s to cancel**, counting down | Factory reset. The panel says **Erasing all / restarting**. |
 | **Release to cancel** | Nothing resets. |
-:::
 
 ## Icons in the corner
 
-:::note[Coming in the next release]
 A small icon pulsing slowly in the top right corner means the panel is holding its brightness down. Every two minutes the bottom line says why, for 15 seconds.
 
 | You see | What it means | What to do |
@@ -98,7 +107,6 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 | A red plug and **Check power supply** | The panel restarted twice in a row because its power dipped, so it keeps its brightness low. | Use the power supply that came with it, not a phone charger or a USB port. Then press **Clear** on the device page. |
 
 More in [Troubleshooting](/help/troubleshooting/#the-panel-is-dim-or-shows-a-thermometer-or-plug-in-the-corner).
-:::
 
 ## Red, green, blue and white screens
 
@@ -116,8 +124,6 @@ The panel shows no message of its own while it updates. It restarts when the upd
 | **Could not reach the update server. Try again in a minute.** | After you tap **Check for updates**, the check didn't get an answer. |
 | **Not checked yet** | The panel hasn't checked for updates since it started. It checks a few seconds after its clock is set, or tap **Check for updates**. |
 
-:::note[Coming in the next release]
 | The device page says | What it means |
 | --- | --- |
 | **The update to** a version **didn't take and the panel went back to** another | The new version crashed as it started, so the panel went back to the one it had. It won't install that version on its own again. **Install** tries it once more. |
-:::
