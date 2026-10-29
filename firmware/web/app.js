@@ -165,7 +165,7 @@
         <h2>Between games</h2>
         <p class="hint">What the panel shows while no game is on.</p>
         <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
-        <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, five teams at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
+        <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
         <div class="sub">Your own countdown</div>
         <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>

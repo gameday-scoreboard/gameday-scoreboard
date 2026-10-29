@@ -9,7 +9,7 @@ sidebar:
 Everything on this page is new in the next release.
 :::
 
-While you follow a college team, the panel shows this week's AP Top 25 between games: each team's rank, its abbreviation and its record, five teams at a time.
+While you follow a college team, the panel shows this week's AP Top 25 between games: each team's rank, its abbreviation and its record, a page at a time.
 
 ## When it shows
 
@@ -26,7 +26,7 @@ If you follow both sports, football and basketball take turns. A poll more than 
 
 ## What it looks like
 
-The top line names the poll, like **CFB AP WK 9** for college football's week 9 poll, **CBB AP PRE** for basketball's preseason poll, or **FINAL** for the last poll of the season. Each row below has the rank, the team and its record:
+The top line names the poll, like **CFB AP WK 9** for college football's week 9 poll, **CBB AP PRE** for basketball's preseason poll, or **CFB AP FINAL** for the last poll of the season. Each row below has the rank, the team and its record:
 
 ```
  1 MIA  7-0

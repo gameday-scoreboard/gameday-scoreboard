@@ -4957,7 +4957,9 @@ void GamedayComponent::top25_tick_() {
   this->top25_slot_ = next;
   this->top25_page_ = 0;
   this->top25_pages_ = ::espn::top25_pages(this->top25_[next], this->top25_cols_);
-  ESP_LOGI(TAG, "Top 25: a turn, %u pages", (unsigned) this->top25_pages_);
+  ESP_LOGI(TAG, "Top 25: a turn, %s, %u pages",
+           ::espn::top25_header(::espn::top25_slot_league(next), this->top25_[next]).c_str(),
+           (unsigned) this->top25_pages_);
   this->top25_show_();
 }
 

@@ -5170,7 +5170,7 @@ static void test_rankings() {
   CHECK_EQ(top25_ref_id(nullptr), 0u);
   CHECK_EQ(top25_ref_id("/teams/99999999999"), 0u);
 
-  // Football, week 9: Indiana first, a tie at 20, two teams new to the poll.
+  // Football, week 9: Miami first, a tie at 20, two teams new to the poll.
   std::string cfb = slurp("fixtures/rankings_cfb_20261025.json");
   Poll f;
   CHECK(parse_rankings(cfb, f));
@@ -5236,6 +5236,10 @@ static void test_rankings() {
   CHECK_EQ(std::string(when), std::string("FINAL"));
   top25_when("Week 16", true, when);
   CHECK_EQ(std::string(when), std::string("FINAL"));
+  Poll final_poll;
+  memcpy(final_poll.when, when, sizeof(when));
+  CHECK_EQ(top25_header(League::NCAA, final_poll), std::string("CFB AP FINAL"));
+  CHECK_EQ(top25_header(League::MCBB, final_poll), std::string("CBB AP FINAL"));
   top25_when("Bowls", false, when);
   CHECK_EQ(std::string(when), std::string(""));
   Poll none;
