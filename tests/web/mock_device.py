@@ -69,6 +69,11 @@ sys.path.insert(0, str(REPO / "components" / "gameday"))
 from leagues_table import leagues  # noqa: E402
 
 LEAGUES = [row["key"] for row in leagues()]
+LEAGUE_SPORT = {row["key"]: row["sport"].lower() for row in leagues()}
+# leagues.h kSportKeys: the sport rows' words, in Sport order.
+SPORT_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSportKeys\[kSportCount\] = \{(.*?)\};",
+                                                    (REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"),
+                                                    re.S).group(1)))
 TZ_TEXT = "\n".join(ln for ln in (REPO / "components/gameday/timezones.h").read_text(encoding="utf-8").splitlines()
                     if not ln.lstrip().startswith("//"))
 TZ_ROWS = TZ_RE.findall(TZ_TEXT)
@@ -82,7 +87,8 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
                                              SET_H + MESSAGE_H +
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
-                                             (REPO / "components/gameday/hook.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/hook.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/weather.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -120,13 +126,16 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
-    "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
+    "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
+    "gameleaders": True,
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
+    # The weather card (weather.h): the town and the switch; wx once a town is set.
+    "town": "", "wxon": False,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
@@ -286,9 +295,21 @@ def no_team_default():
     return STATE["mode"] == 4 and not any(STATE["favs"])
 
 
+def sport_rows():
+    """sport_rows_(): a row per sport among the favorites, with two sports or more."""
+    have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if t}
+    rows = [k for k in SPORT_KEYS if k in have]
+    return rows if len(rows) >= 2 else []
+
+
 def state_doc():
     """rebuild_state_() works the leagues out each time: every league with no
-    favorite picked (no_team_leagues()), else the auto leagues from the favorites."""
+    favorite picked (no_team_leagues()), else the auto leagues from the favorites.
+    The sport rows come from the favorites too."""
+    if "sport" in STATE:
+        STATE["sports"] = sport_rows()
+        if STATE["sport"] not in STATE["sports"]:
+            STATE["sport"] = ""
     if no_team_default():
         STATE["live"] = list(LEAGUES)
     elif STATE.get("live_auto"):
@@ -308,6 +329,9 @@ def remap_lists(before):
     for pl in STATE["lists"]:
         teams = [before[i] for i in pl["f"] if i < len(before) and before[i]]
         pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
+    # A sport row the favorites have no row for now stops.
+    if STATE.get("sport") and STATE["sport"] not in sport_rows():
+        STATE["sport"] = ""
 
 
 def parse_lists(v):
@@ -337,12 +361,29 @@ def night_time(v):
     return f"{int(m[1]):02d}:{m[2]}"
 
 
+def wx_lookup(town):
+    """The lookup and first forecast read, answered at once. A town starting
+    with "nowhere" is one Open-Meteo doesn't know."""
+    if not town:
+        STATE.pop("wx", None)
+        return
+    if town.lower().startswith("nowhere"):
+        STATE["wx"] = {"place": "", "lat": 0, "lon": 0, "lookup": 200, "read": -1}
+        return
+    place = "Coppell, Texas" if town == "75019" else f"{town}, Texas"
+    STATE["wx"] = {"place": place, "lat": 32.95, "lon": -97.02, "lookup": 200, "read": 200, "read_s": 60,
+                   "temp": 71, "hi": 81, "lo": 61, "code": 3, "cond": "Cloudy", "night": False,
+                   "days": [{"d": "Thu", "hi": 80, "lo": 66, "code": 61}, {"d": "Fri", "hi": 75, "lo": 67, "code": 2}]}
+
+
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
     hours = (STATE["nightstart"], STATE["nightend"])
     # apply_ops_: list= with lists= names the playlist playing after the change.
     with_lists = any(k == "lists" for k, _ in kv)
     keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
+    # A sport row picked takes over list= in the same request.
+    sport_pick = any(k == "sport" and v in SPORT_KEYS for k, v in kv)
     for k, v in kv:
         before = fav_refs()
         if k == "mode":
@@ -384,10 +425,20 @@ def apply_set(kv):
             STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
             if 0 <= keep_list <= len(STATE["lists"]):
                 STATE["list"] = keep_list
+                STATE["sport"] = ""
         elif k == "list":
-            # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it.
-            if not with_lists and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
+            # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it,
+            # and with a sport row picked set_sport_row_() does.
+            if not with_lists and not sport_pick and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
                 STATE["list"] = atoi(v)
+                STATE["sport"] = ""
+                STATE["mode"] = 4
+        elif k == "sport":
+            # set_sport_row_() plays a row the favorites give; none stops the one
+            # playing unless list= says what plays.
+            if (v in sport_rows()) if v != "none" else (keep_list < 0 and STATE.get("sport")):
+                STATE["list"] = 0
+                STATE["sport"] = "" if v == "none" else v
                 STATE["mode"] = 4
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
@@ -406,8 +457,8 @@ def apply_set(kv):
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
                 STATE["panels"] = atoi(v)
-        elif k == "countdown":
-            STATE["countdown"] = v == "1"
+        elif k in ("countdown", "top25", "news", "gameleaders"):
+            STATE[k] = v == "1"
         elif k == "cdname":
             STATE["cdname"] = countdown_name(v)
         elif k == "cddate":
@@ -416,6 +467,15 @@ def apply_set(kv):
                 STATE["cddate"] = day
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
+        elif k == "town":
+            # set_town(): a new town turns the card on and is looked up; the
+            # same town again leaves the switch alone.
+            town = message_clean(v.replace("\ufffd", ""), LIMITS["kTownMax"], False)
+            if town != STATE.get("town", ""):
+                STATE["town"], STATE["wxon"] = town, bool(town)
+                wx_lookup(town)
+        elif k == "wxon":
+            STATE["wxon"] = v == "1"
         elif k == "nick":
             # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
             STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)
@@ -472,6 +532,9 @@ def settings_doc():
             out["tz"] = s["tz_name"]
         elif k == "tzauto":
             out["tzauto"] = s["tz_auto"]
+        elif k == "sport":
+            if "sport" in s:
+                out["sport"] = s["sport"] or "none"
         elif k in s:
             out[k] = s[k]
     if s.get("panels"):
@@ -577,7 +640,7 @@ def import_settings(doc):
                     continue
                 kv.append((k, v if r == 1 else "none"))
             elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
-                    k == "hook" and not hook_url_ok(v)):
+                    k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):

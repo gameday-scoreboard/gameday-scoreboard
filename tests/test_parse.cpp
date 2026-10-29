@@ -16,6 +16,7 @@
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "game_leaders.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -23,6 +24,8 @@
 #include "line_score.h"
 #include "logo_lru.h"
 #include "message.h"
+#include "news.h"
+#include "weather.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
@@ -32,6 +35,7 @@
 #include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
+#include "update_nudge.h"
 #include "wifi_history.h"
 
 using namespace espn;
@@ -4754,6 +4758,88 @@ static void test_auto_update() {
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
+static void test_update_nudge() {
+  CHECK(update_important("Important: scores show again after an ESPN change."));
+  CHECK(update_important("  Important: scores show again"));
+  CHECK(!update_important("Scores show again. Important: none"));
+  CHECK(!update_important("important: lower case is a plain release"));
+  CHECK(!update_important("Development build"));
+  CHECK(!update_important(""));
+  CHECK(std::string(update_nudge_text(false)) == "Update ready: open the Game Day app");
+  CHECK(std::string(update_nudge_text(true)) == "Important update ready: open the Game Day app");
+
+  UpdateNudgeInputs in;
+  in.waiting = true;
+  in.clock_valid = true;
+  in.hour = 17;
+  in.today = auto_update_day(2026, 301);
+  in.now = 1000000;
+  UpdateNudgeInputs t = in;
+  UpdateNudgeDay d;
+
+  // Not before 5 PM: the day's hour hasn't started.
+  t.hour = 16;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.day, 0);
+  // A live game or a dark screen at 5 PM holds the start back.
+  t.hour = 17;
+  t.live = true;
+  CHECK(!update_nudge_on(t, d));
+  t.live = false;
+  t.dark = true;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.day, 0);
+  // It starts the first time it may show and runs an hour.
+  t.dark = false;
+  t.now = in.now + 600;
+  CHECK(update_nudge_on(t, d));
+  CHECK_EQ(d.day, in.today);
+  CHECK_EQ(d.since, in.now + 600);
+  t.now += 30 * 60;
+  CHECK(update_nudge_on(t, d));
+  // A live game inside the hour hides it, and the hour keeps running.
+  t.live = true;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.since, in.now + 600);
+  t.live = false;
+  CHECK(update_nudge_on(t, d));
+  t.now = in.now + 600 + kUpdateNudgeS - 1;
+  CHECK(update_nudge_on(t, d));
+  // Once the hour is up it waits for tomorrow, even at 9 PM.
+  t.now = in.now + 600 + kUpdateNudgeS;
+  CHECK(!update_nudge_on(t, d));
+  t.hour = 21;
+  t.now += 3 * 3600;
+  CHECK(!update_nudge_on(t, d));
+  // The next day it starts again at 5 PM, not past midnight.
+  t.today = in.today + 1;
+  t.hour = 0;
+  t.now = in.now + 8 * 3600;
+  CHECK(!update_nudge_on(t, d));
+  t.hour = 17;
+  t.now = in.now + 24 * 3600;
+  CHECK(update_nudge_on(t, d));
+  CHECK_EQ(d.day, in.today + 1);
+  // A clock set back inside the hour hides it rather than stretching it.
+  t.now = in.now + 24 * 3600 - 10;
+  CHECK(!update_nudge_on(t, d));
+
+  // Nothing waiting, Install updates automatically on, or no clock: never,
+  // and the day's hour isn't used up.
+  UpdateNudgeDay fresh;
+  t = in;
+  t.waiting = false;
+  CHECK(!update_nudge_on(t, fresh));
+  t = in;
+  t.auto_on = true;
+  CHECK(!update_nudge_on(t, fresh));
+  t = in;
+  t.clock_valid = false;
+  CHECK(!update_nudge_on(t, fresh));
+  CHECK_EQ(fresh.day, 0);
+  CHECK(update_nudge_on(in, fresh));
+}
+
 static void test_update_mark() {
   UpdateMark m{};
   CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
@@ -5073,6 +5159,134 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"temp\":80.0,\"heat\":1,\"brownouts\":0,\"power\":\"ok\""));
 }
 
+static void test_rankings() {
+  CHECK_EQ(rankings_url(League::NCAA),
+           std::string("https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1"));
+  CHECK_EQ(rankings_url(League::MCBB),
+           std::string("https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1"));
+  set_core_root("http://192.168.1.103:8191/v2/sports/");
+  CHECK_EQ(rankings_url(League::NCAA), std::string("http://192.168.1.103:8191/v2/sports/football/leagues/college-football/rankings/1"));
+  set_core_root("https://sports.core.api.espn.com/v2/sports/");
+  CHECK_EQ(top25_ref_id("http://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/2026/teams/2390?lang=en"), 2390u);
+  CHECK_EQ(top25_ref_id("http://x/teams/?lang=en"), 0u);
+  CHECK_EQ(top25_ref_id("http://x/athletes/12"), 0u);
+  CHECK_EQ(top25_ref_id(nullptr), 0u);
+  CHECK_EQ(top25_ref_id("/teams/99999999999"), 0u);
+
+  // Football, week 9: Miami first, a tie at 20, two teams new to the poll.
+  std::string cfb = slurp("fixtures/rankings_cfb_20261025.json");
+  Poll f;
+  CHECK(parse_rankings(cfb, f));
+  CHECK_EQ(f.rows.size(), (size_t) 25);
+  CHECK_EQ(f.date, parse_iso8601_z("2026-10-25T07:00Z"));
+  CHECK_EQ(std::string(f.when), std::string("WK 9"));
+  CHECK_EQ((int) f.rows[0].rank, 1);
+  CHECK_EQ(f.rows[0].id, 2390u);
+  CHECK_EQ(std::string(f.rows[0].rec), std::string("7-0"));
+  CHECK_EQ((int) f.rows[1].prev, 3);
+  CHECK_EQ((int) f.rows[19].rank, 20);
+  CHECK_EQ((int) f.rows[20].rank, 20);
+  CHECK_EQ((int) f.rows[23].prev, 0);
+  // Every ranked team has an abbreviation on the panel.
+  for (const auto &r : f.rows)
+    CHECK(std::string(top25_abbr(League::NCAA, r.id)) != "?");
+  CHECK_EQ(top25_header(League::NCAA, f), std::string("CFB AP WK 9"));
+  CHECK_EQ(top25_row(League::NCAA, f.rows[0]), std::string(" 1 MIA  7-0"));
+  CHECK_EQ(top25_row(League::NCAA, f.rows[9]), std::string("10 ALA  6-2"));
+  // Five rows to a column: five pages on a single panel, three on a wide one.
+  CHECK_EQ(top25_pages(f, 1), 5u);
+  CHECK_EQ(top25_pages(f, 2), 3u);
+  CHECK_EQ(top25_column(League::NCAA, f, 0, 1, 0),
+           std::string(" 1 MIA  7-0\n 2 OSU  6-1\n 3 UGA  6-1\n 4 IU   7-1\n 5 ND   6-1"));
+  CHECK_EQ(top25_column(League::NCAA, f, 0, 2, 1), top25_column(League::NCAA, f, 1, 1, 0));
+  CHECK_EQ(top25_column(League::NCAA, f, 2, 2, 0), top25_column(League::NCAA, f, 4, 1, 0));
+  CHECK_EQ(top25_column(League::NCAA, f, 2, 2, 1), std::string(""));
+  for (uint32_t pg = 0; pg < 5; pg++) {
+    std::string col = top25_column(League::NCAA, f, pg, 1, 0);
+    size_t at = 0;
+    while (at <= col.size()) {
+      size_t nl = col.find('\n', at);
+      size_t len = (nl == std::string::npos ? col.size() : nl) - at;
+      CHECK(len <= 12);  // 12 columns of a 5x8 font fit a single panel's 62 px
+      if (nl == std::string::npos)
+        break;
+      at = nl + 1;
+    }
+  }
+  // Fresh for 50 days after it came out, not with no clock.
+  CHECK(top25_fresh(f, f.date + 3600));
+  CHECK(top25_fresh(f, f.date + kTop25StaleSecs));
+  CHECK(!top25_fresh(f, f.date + kTop25StaleSecs + 1));
+  CHECK(!top25_fresh(f, 0));
+  CHECK(!top25_fresh(Poll{}, f.date));
+
+  // Basketball's preseason poll: every record 0-0, left off the row.
+  std::string cbb = slurp("fixtures/rankings_mcbb_20261019.json");
+  Poll b;
+  CHECK(parse_rankings(cbb, b));
+  CHECK_EQ(b.rows.size(), (size_t) 25);
+  CHECK_EQ(std::string(b.when), std::string("PRE"));
+  CHECK_EQ(top25_header(League::MCBB, b), std::string("CBB AP PRE"));
+  for (const auto &r : b.rows)
+    CHECK(std::string(top25_abbr(League::MCBB, r.id)) != "?");
+  CHECK_EQ(top25_row(League::MCBB, b.rows[0]), std::string(" 1 FLA"));
+
+  // The poll's name for the header.
+  char when[8];
+  top25_when("Week 15", false, when);
+  CHECK_EQ(std::string(when), std::string("WK 15"));
+  top25_when("Final Rankings", false, when);
+  CHECK_EQ(std::string(when), std::string("FINAL"));
+  top25_when("Week 16", true, when);
+  CHECK_EQ(std::string(when), std::string("FINAL"));
+  Poll final_poll;
+  memcpy(final_poll.when, when, sizeof(when));
+  CHECK_EQ(top25_header(League::NCAA, final_poll), std::string("CFB AP FINAL"));
+  CHECK_EQ(top25_header(League::MCBB, final_poll), std::string("CBB AP FINAL"));
+  top25_when("Bowls", false, when);
+  CHECK_EQ(std::string(when), std::string(""));
+  Poll none;
+  none.rows.push_back(RankRow{});
+  CHECK_EQ(top25_header(League::NCAA, none), std::string("CFB AP TOP 25"));
+
+  // A record that isn't digits and dashes, or is too long, is left off;
+  // a row without a rank or a team is skipped; past 25 rows are dropped.
+  std::string odd = R"({"date":"2026-10-25T07:00Z","occurrence":{"displayValue":"Week 9"},"ranks":[)"
+                    R"J({"current":1,"record":{"summary":"7-0 (5-0)"},"team":{"$ref":"x/teams/2390?a"}},)J"
+                    R"({"current":0,"team":{"$ref":"x/teams/194"}},)"
+                    R"({"current":2,"record":{"summary":"7-0"}},)"
+                    R"({"current":3,"previous":250,"record":{"summary":"123-45-6"},"team":{"$ref":"x/teams/9999"}}]})";
+  Poll o;
+  CHECK(parse_rankings(odd, o));
+  CHECK_EQ(o.rows.size(), (size_t) 2);
+  CHECK_EQ(std::string(o.rows[0].rec), std::string(""));
+  CHECK_EQ(std::string(o.rows[1].rec), std::string(""));
+  CHECK_EQ((int) o.rows[1].prev, 0);
+  CHECK_EQ(top25_row(League::NCAA, o.rows[1]), std::string(" 3 ?"));
+  std::string many = R"({"date":"2026-10-25T07:00Z","ranks":[)";
+  for (int i = 1; i <= 30; i++)
+    many += std::string(i > 1 ? "," : "") + R"({"current":)" + std::to_string(i) + R"(,"team":{"$ref":"x/teams/2390"}})";
+  many += "]}";
+  Poll m;
+  CHECK(parse_rankings(many, m));
+  CHECK_EQ(m.rows.size(), (size_t) kTop25Max);
+  Poll keep = f;
+  std::string empty = R"({"date":"2026-10-25T07:00Z","ranks":[]})";
+  CHECK(!parse_rankings(empty, keep));
+  std::string broken = "{\"ranks\":[{\"current\":1";
+  CHECK(!parse_rankings(broken, keep));
+  CHECK_EQ(keep.rows.size(), (size_t) 25);  // a failed parse leaves the poll alone
+
+  // Football and basketball take turns; one alone takes every turn.
+  CHECK_EQ(top25_next(0, -1), -1);
+  CHECK_EQ(top25_next(3, -1), 0);
+  CHECK_EQ(top25_next(3, 0), 1);
+  CHECK_EQ(top25_next(3, 1), 0);
+  CHECK_EQ(top25_next(1, 0), 0);
+  CHECK_EQ(top25_next(2, 1), 1);
+  CHECK_EQ(top25_next(2, 0), 1);
+}
+
 static void test_countdown() {
   const int64_t m = 60, h = 3600, d = 24 * 3600;
   // Days and hours a day or more out, hours and minutes under a day, then
@@ -5374,6 +5588,218 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
   if (more)
     r.finish();
   return r;
+}
+
+// The news card (news.h): the feed, its headlines, the source in turn and the
+// hourly read.
+static void test_news() {
+  CHECK_EQ(news_url(League::NFL, 0), std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=6"));
+  CHECK_EQ(news_url(League::NCAA, 251),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=6&team=251"));
+  // The recorded feed: six headlines in ESPN's order, one per line.
+  std::string list;
+  CHECK_EQ(parse_news_str(slurp("fixtures/news_nfl.json"), list), 6);
+  CHECK_EQ(msg_count(list), 6u);
+  CHECK_EQ(msg_entries(list, 0, 1), std::string("Cardinals' Budda Baker hopes to stay with Arizona at trade deadline"));
+  CHECK_EQ(msg_entries(list, 5, 1),
+           std::string("Justin Jefferson on down year amid Vikes' 6-0 start: 'What we're doing is working'"));
+  // Cleaned like a message entry: one line, no emoji, cut at kNewsLineMax;
+  // an empty headline is skipped, and no more than kNewsMax are kept.
+  std::string json = "{\"articles\":[{\"headline\":\"  Two\\nlines \xF0\x9F\x8F\x88 here \"},{\"headline\":\"\"},"
+                     "{\"type\":\"Media\"},{\"headline\":\"" + std::string(200, 'x') + "\"}";
+  for (int i = 0; i < 8; i++)
+    json += ",{\"headline\":\"h" + std::to_string(i) + "\"}";
+  json += "]}";
+  CHECK_EQ(parse_news_str(json, list), 6);
+  CHECK_EQ(msg_entries(list, 0, 1), std::string("Two lines here"));
+  CHECK_EQ(msg_entries(list, 1, 1).size(), kNewsLineMax);
+  CHECK_EQ(msg_entries(list, 5, 1), std::string("h3"));
+  // No articles list, or not JSON: a failed read that leaves the list as it was.
+  list = "kept";
+  CHECK_EQ(parse_news_str("{\"header\":\"NFL News\"}", list), -1);
+  CHECK_EQ(parse_news_str("<html>", list), -1);
+  CHECK_EQ(list, std::string("kept"));
+  CHECK_EQ(parse_news_str("{\"articles\":[]}", list), 0);
+  CHECK(list.empty());
+
+  CHECK_EQ(news_header("DAL", "NFL"), std::string("DAL NEWS"));
+  CHECK_EQ(news_header("", "NCAAF"), std::string("NCAAF NEWS"));
+  CHECK_EQ(news_header(nullptr, "MLB"), std::string("MLB NEWS"));
+
+  // One source per read, in turn.
+  std::vector<NewsSource> c = {{League::NFL, 6}, {League::MLB, 0}, {League::NCAA, 251}};
+  NewsSource s;
+  CHECK(news_source(c, 0, s) && s == (NewsSource{League::NFL, 6}));
+  CHECK(news_source(c, 1, s) && s == (NewsSource{League::MLB, 0}));
+  CHECK(news_source(c, 5, s) && s == (NewsSource{League::NCAA, 251}));
+  CHECK(news_source(c, 6, s) && s == (NewsSource{League::NFL, 6}));
+  CHECK(!news_source({}, 0, s));
+
+  // Read once an hour, sooner when the panel stopped following the source,
+  // and not again for kNewsRetryMs after a failure.
+  const uint32_t t = 5000000;
+  CHECK(news_read_due(t, 0, true, 0));
+  CHECK(!news_read_due(t, t - 1000, true, 0));
+  CHECK(!news_read_due(t, t - kNewsReadMs + 1, true, 0));
+  CHECK(news_read_due(t, t - kNewsReadMs, true, 0));
+  CHECK(news_read_due(t, t - 1000, false, 0));
+  CHECK(!news_read_due(t, 0, true, t - 1000));
+  CHECK(!news_read_due(t, t - kNewsReadMs, true, t - kNewsRetryMs + 1));
+  CHECK(news_read_due(t, t - kNewsReadMs, true, t - kNewsRetryMs));
+  // Wraps with millis().
+  CHECK(!news_read_due(1000, 0xFFFFFF00u, true, 0));
+  CHECK(news_showable(3, true));
+  CHECK(!news_showable(3, false));
+  CHECK(!news_showable(0, true));
+  // The card's clock is the message card's, every kNewsEveryMin.
+  CHECK(msg_turn(true, true, false, (uint32_t) kNewsEveryMin * 60000u, kNewsEveryMin, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, false, (uint32_t) kNewsEveryMin * 60000u - 1, kNewsEveryMin, kMsgPageMs) ==
+        MsgTurn::NONE);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, kNewsEveryMin, kMsgPageMs) == MsgTurn::HIDE);
+}
+
+// The weather card (weather.h): the town's lookup, the forecast, the words
+// and icons, and when the card has a turn.
+static void test_weather() {
+  // A US ZIP asks for the US only ("75019" alone is Paris); anything else
+  // travels percent-encoded.
+  CHECK(town_is_us_zip("75019"));
+  CHECK(!town_is_us_zip("7501"));
+  CHECK(!town_is_us_zip("7501a"));
+  CHECK_EQ(geocode_url("75019"),
+           std::string("https://geocoding-api.open-meteo.com/v1/search?name=75019&count=1&language=en&format=json"
+                       "&countryCode=US"));
+  CHECK_EQ(geocode_url("St. Mary's, Ga"),
+           std::string("https://geocoding-api.open-meteo.com/v1/search?name=St.%20Mary%27s%2C%20Ga&count=1&language=en"
+                       "&format=json"));
+  CHECK_EQ(url_encode("S\xC3\xA3o"), std::string("S%C3%A3o"));
+  CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
+           std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
+                       "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
+                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=3"));
+  // The town as kept: one line, no emoji, at most kTownMax bytes.
+  CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
+  CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);
+
+  // The recorded lookups: the state in the US, the country elsewhere.
+  WxPlace p;
+  std::string json = slurp("fixtures/wx_geocode_75019.json");
+  CHECK(parse_geocode(json, p));
+  CHECK(p.valid);
+  CHECK_EQ(p.name, std::string("Coppell, Texas"));
+  CHECK(std::fabs(p.lat - 32.95457f) < 0.0001f && std::fabs(p.lon + 97.01501f) < 0.0001f);
+  json = slurp("fixtures/wx_geocode_paris.json");
+  CHECK(parse_geocode(json, p));
+  CHECK_EQ(p.name, std::string("Paris, France"));
+  // Open-Meteo answered and knows no such place: valid, with no name.
+  json = slurp("fixtures/wx_geocode_none.json");
+  CHECK(parse_geocode(json, p));
+  CHECK(p.valid && p.name.empty());
+  // A result without coordinates, or out of range, is no place either.
+  json = "{\"results\":[{\"name\":\"Nowhere\",\"latitude\":95,\"longitude\":0}]}";
+  CHECK(parse_geocode(json, p) && p.name.empty());
+  json = "{\"results\":[{\"name\":\"Nowhere\"}]}";
+  CHECK(parse_geocode(json, p) && p.name.empty());
+  // Not the geocoder's document: a failed read.
+  json = "<html>";
+  CHECK(!parse_geocode(json, p));
+  CHECK_EQ(place_text(std::string(50, 'y'), "", "Chile", "CL").size(), kPlaceMax);
+  // The firmware's entry points read through a WxSource, a byte at a time.
+  struct StringSource : WxSource {
+    explicit StringSource(const std::string &s) : s(s) {}
+    int read() override { return pos < s.size() ? (unsigned char) s[pos++] : -1; }
+    size_t readBytes(char *dst, size_t n) override {
+      size_t take = std::min(n, s.size() - pos);
+      memcpy(dst, s.data() + pos, take);
+      pos += take;
+      return take;
+    }
+    const std::string &s;
+    size_t pos{0};
+  };
+  json = slurp("fixtures/wx_geocode_75019.json");
+  StringSource geo(json);
+  CHECK(parse_geocode_from(geo, p) && p.name == "Coppell, Texas");
+  std::string fc = slurp("fixtures/wx_forecast_coppell.json");
+  StringSource fsrc(fc);
+  WxForecast f0;
+  CHECK(parse_forecast_from(fsrc, f0) && f0.valid && f0.temp == 76);
+
+  // The recorded forecast, rounded to whole degrees, the days from its dates.
+  WxForecast f;
+  json = slurp("fixtures/wx_forecast_coppell.json");
+  CHECK(parse_forecast(json, f));
+  CHECK(f.valid);
+  CHECK_EQ(f.temp, 76);
+  CHECK_EQ(f.code, 3);
+  CHECK(!f.night);
+  CHECK_EQ(f.today.hi, 82);
+  CHECK_EQ(f.today.lo, 67);
+  CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Thu"));
+  CHECK_EQ(f.next[0].hi, 73);
+  CHECK_EQ(f.next[0].lo, 66);
+  CHECK_EQ(f.next[0].code, 51);
+  CHECK_EQ(std::string(weekday_text(f.next[0].wday)), std::string("Fri"));
+  CHECK_EQ(f.next[1].hi, 68);
+  CHECK_EQ(f.next[1].code, 63);
+  CHECK_EQ(std::string(weekday_text(f.next[1].wday)), std::string("Sat"));
+  // Below zero rounds away from it; night comes from is_day.
+  json = "{\"current\":{\"temperature_2m\":-3.5,\"weather_code\":0,\"is_day\":0},\"daily\":{\"time\":[\"2027-01-03\","
+         "\"2027-01-04\",\"2027-01-05\"],\"weather_code\":[71,73,0],\"temperature_2m_max\":[1,2,3],"
+         "\"temperature_2m_min\":[-10.4,-9,-8]}}";
+  CHECK(parse_forecast(json, f));
+  CHECK_EQ(f.temp, -4);
+  CHECK(f.night);
+  CHECK_EQ(f.today.lo, -10);
+  CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Sun"));
+  // Short of three days, or no reading now: a failed read.
+  json = "{\"current\":{\"temperature_2m\":70},\"daily\":{\"temperature_2m_max\":[1,2],\"temperature_2m_min\":[1,2]}}";
+  CHECK(!parse_forecast(json, f));
+  json = "{\"daily\":{\"temperature_2m_max\":[1,2,3],\"temperature_2m_min\":[1,2,3]}}";
+  CHECK(!parse_forecast(json, f));
+  json = "{\"error\":true,\"reason\":\"Invalid timezone\"}";
+  CHECK(!parse_forecast(json, f));
+
+  // Icons and words for the WMO codes; the moon for a clear night.
+  CHECK(wx_icon(0, false) == WxIcon::SUN);
+  CHECK(wx_icon(1, true) == WxIcon::MOON);
+  CHECK(wx_icon(2, true) == WxIcon::PART);
+  CHECK(wx_icon(45, false) == WxIcon::FOG);
+  CHECK(wx_icon(63, false) == WxIcon::RAIN);
+  CHECK(wx_icon(81, false) == WxIcon::RAIN);
+  CHECK(wx_icon(75, false) == WxIcon::SNOW);
+  CHECK(wx_icon(86, false) == WxIcon::SNOW);
+  CHECK(wx_icon(95, false) == WxIcon::STORM);
+  CHECK(wx_icon(255, false) == WxIcon::CLOUD);
+  CHECK_EQ(std::string(wx_words(2, true)), std::string("Partly cloudy"));
+  CHECK_EQ(std::string(wx_words(66, false)), std::string("Icy rain"));
+  CHECK_EQ(std::string(wx_words(255, true)), std::string(""));
+  // Every word fits a single panel at 5x8 (12 characters) on the narrow form.
+  for (int c = 0; c < 100; c++)
+    CHECK(strlen(wx_words((uint8_t) c, false)) <= 12);
+  CHECK_EQ(wx_temp_text(71), std::string("71\xC2\xB0"));
+  CHECK_EQ(wx_hilo_text(80, -2), std::string("80/-2"));
+
+  // What the card says with nothing to draw, and when it has a turn.
+  CHECK_EQ(wx_card_text(false, "", false, false), std::string(""));
+  CHECK_EQ(wx_card_text(true, "", false, false), std::string("Set a town on the device page"));
+  CHECK_EQ(wx_card_text(true, "Xyzzy", true, false), std::string("Town not found"));
+  CHECK_EQ(wx_card_text(true, "Coppell", false, false), std::string(""));  // still looking
+  CHECK(!wx_card_ready(false, "Coppell", true, true, true, 0, true));
+  CHECK(wx_card_ready(true, "", false, false, false, 0, false));
+  CHECK(!wx_card_ready(true, "Coppell", false, false, false, 0, false));  // before the first read
+  CHECK(wx_card_ready(true, "Coppell", true, true, true, kWxFreshMs - 1, true));
+  CHECK(!wx_card_ready(true, "Coppell", true, true, true, kWxFreshMs, true));  // three hours of failed reads
+
+  // Its turn is seconds 40 to 49, after the custom countdown and never over
+  // the next game's turn.
+  const int64_t min0 = 1760000000 - 1760000000 % 60;
+  CHECK(countdown_turn(min0 + 40, false, false, true) == CountdownCard::WEATHER);
+  CHECK(countdown_turn(min0 + 49, true, true, true) == CountdownCard::WEATHER);
+  CHECK(countdown_turn(min0 + 50, false, true, true) == CountdownCard::CUSTOM);
+  CHECK(countdown_turn(min0 + 50, false, false, true) == CountdownCard::NONE);
+  CHECK(countdown_turn(min0 + 39, true, false, true) == CountdownCard::NEXT);
+  CHECK(countdown_turn(min0 + 40, true, false, false) == CountdownCard::NONE);
 }
 
 // The FCC screen (regulatory.h): every page fits its board, and the words
@@ -6499,6 +6925,260 @@ static void test_logo_url_matches_game() {
   }
 }
 
+// This game's leaders at halftime and the final (game_leaders.h), from the
+// recorded summary documents: each sport, a game with no leaders yet, a
+// document cut short, and the card at both widths.
+static void test_game_leaders() {
+  // When the read happens: football and basketball halftime, hockey's second
+  // intermission, baseball after the 5th, and a completed final. Never soccer.
+  GameSnapshot h = hoops_event("fixtures/event_wnba_half.json", kLiberty);
+  CHECK(leaders_stage(h) == LeadersStage::HALF);
+  GameSnapshot live = nhl_event("fixtures/event_nhl_live.json", kAvalanche);
+  CHECK(leaders_stage(live) == LeadersStage::NONE);
+  GameSnapshot end = nhl_event("fixtures/event_nhl_end.json", kPenguins);
+  CHECK(leaders_stage(end) == (end.period == 2 ? LeadersStage::HALF : LeadersStage::NONE));
+  GameSnapshot end2 = end;
+  end2.period = 2;
+  end2.short_detail = "End of 2nd";
+  CHECK(leaders_stage(end2) == LeadersStage::HALF);
+  end2.period = 1;
+  CHECK(leaders_stage(end2) == LeadersStage::NONE);
+  GameSnapshot fifth = mlb_event("fixtures/event_mlb_end.json", kBraves);  // End 5th
+  CHECK_EQ(fifth.period, 5);
+  CHECK(leaders_stage(fifth) == LeadersStage::HALF);
+  GameSnapshot top = mlb_event("fixtures/event_mlb_top.json", kBraves);  // Top 7th
+  CHECK(leaders_stage(top) == LeadersStage::NONE);
+  GameSnapshot fin = nhl_event("fixtures/event_nhl_final.json", kCapitals);
+  CHECK(leaders_stage(fin) == LeadersStage::FINAL);
+  GameSnapshot soc;
+  CHECK(parse_event_str(slurp("fixtures/event_soccer_halftime.json"), Sport::SOCCER, kVasco, soc));
+  CHECK(leaders_stage(soc) == LeadersStage::NONE);
+  GameSnapshot pre;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 6, pre, "401873007"));
+  CHECK(leaders_stage(pre) == LeadersStage::NONE);
+  CHECK_EQ(std::string(leaders_stage_name(LeadersStage::HALF)), std::string("halftime"));
+
+  CHECK_EQ(summary_url(League::NFL, "401873009"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401873009"));
+  CHECK_EQ(summary_url(League::MLB, "401908045"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401908045"));
+
+  // NFL final, DAL 24 at PHI, read as Dallas: passing, rushing, receiving
+  GameLeaders l;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nfl_final.json"), Sport::FOOTBALL, 6, "401873009",
+                          LeadersStage::FINAL, l));
+  CHECK(l.valid && l.any());
+  CHECK_EQ(l.event_id, std::string("401873009"));
+  CHECK(l.stage == LeadersStage::FINAL);
+  CHECK_EQ((int) l.team.count, 3);
+  CHECK_EQ(l.team.lines[0].name, std::string("Prescott"));
+  CHECK_EQ(l.team.lines[0].stat, std::string("212 yds 3 TD"));
+  CHECK_EQ(l.team.lines[1].name, std::string("Williams"));
+  CHECK_EQ(l.team.lines[1].stat, std::string("155 yds 1 TD"));
+  CHECK_EQ(l.team.lines[2].name, std::string("Lamb"));
+  CHECK_EQ(l.team.lines[2].stat, std::string("74 yds 2 TD"));
+  CHECK_EQ((int) l.opp.count, 3);
+  CHECK_EQ(l.opp.lines[0].name, std::string("McKee"));
+  CHECK_EQ(l.opp.lines[0].stat, std::string("211 yds 1 TD"));
+  CHECK_EQ(l.opp.lines[1].stat, std::string("62 yds 1 TD"));
+  // Read as Philadelphia the sides swap
+  GameLeaders phi;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nfl_final.json"), Sport::FOOTBALL, 21, "401873009",
+                          LeadersStage::FINAL, phi));
+  CHECK_EQ(phi.team.lines[0].name, std::string("McKee"));
+  CHECK_EQ(phi.opp.lines[0].name, std::string("Prescott"));
+  // Some other game's document is refused
+  CHECK(!parse_summary_str(slurp("fixtures/summary_nfl_final.json"), Sport::FOOTBALL, 6, "401873010",
+                           LeadersStage::FINAL, phi));
+
+  // College football has the same leaders
+  GameLeaders cfb;
+  CHECK(parse_summary_str(slurp("fixtures/summary_ncaa_final.json"), Sport::FOOTBALL, 2390, "401858274",
+                          LeadersStage::FINAL, cfb));
+  CHECK_EQ(cfb.team.lines[0].name, std::string("Mensah"));
+  CHECK_EQ(cfb.team.lines[0].stat, std::string("387 yds 4 TD"));
+  CHECK_EQ(cfb.team.lines[2].name, std::string("Toney"));
+  CHECK_EQ(cfb.team.lines[2].stat, std::string("194 yds 3 TD"));
+
+  // NBA final, BKN at BOS, read as Boston: points and rebounds
+  GameLeaders nba;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nba_final.json"), Sport::BASKETBALL, 2, "401909877",
+                          LeadersStage::FINAL, nba));
+  CHECK_EQ((int) nba.team.count, 2);
+  CHECK_EQ(nba.team.lines[0].name, std::string("Tatum"));
+  CHECK_EQ(nba.team.lines[0].stat, std::string("40 pts"));
+  CHECK_EQ(nba.team.lines[1].name, std::string("George"));
+  CHECK_EQ(nba.team.lines[1].stat, std::string("7 reb"));
+  CHECK_EQ(nba.opp.lines[0].name, std::string("Porter Jr."));
+  CHECK_EQ(nba.opp.lines[0].stat, std::string("27 pts"));
+  CHECK_EQ(nba.opp.lines[1].stat, std::string("12 reb"));
+
+  // At halftime the leaders are the half's
+  GameLeaders half;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nba_half.json"), Sport::BASKETBALL, 15, "401909887",
+                          LeadersStage::HALF, half));
+  CHECK(half.stage == LeadersStage::HALF);
+  CHECK_EQ(half.team.lines[0].name, std::string("Herro"));
+  CHECK_EQ(half.team.lines[0].stat, std::string("14 pts"));
+  CHECK_EQ(half.opp.lines[0].name, std::string("Thompson"));
+  CHECK_EQ(half.opp.lines[1].name, std::string("Eason"));
+  CHECK_EQ(half.opp.lines[1].stat, std::string("8 reb"));
+
+  // No leaders in the document: valid, nothing to show, no retry needed
+  GameLeaders none;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nba_no_leaders.json"), Sport::BASKETBALL, 3, "401909889",
+                          LeadersStage::HALF, none));
+  CHECK(none.valid);
+  CHECK(!none.any());
+  CHECK_EQ((int) leaders_card_text(none, 128).font, 0);
+
+  // NHL final, CBJ at PHI, read as Columbus: goals and assists
+  GameLeaders nhl;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nhl_final.json"), Sport::HOCKEY, 29, "401892585",
+                          LeadersStage::FINAL, nhl));
+  CHECK_EQ((int) nhl.team.count, 2);
+  CHECK_EQ(nhl.team.lines[0].name, std::string("Johnson"));
+  CHECK_EQ(nhl.team.lines[0].stat, std::string("2 goals"));
+  CHECK_EQ(nhl.team.lines[1].name, std::string("Werenski"));
+  CHECK_EQ(nhl.team.lines[1].stat, std::string("2 assists"));
+  CHECK_EQ(nhl.opp.lines[0].name, std::string("Zegras"));
+  CHECK_EQ(nhl.opp.lines[0].stat, std::string("1 goal"));
+  CHECK_EQ(nhl.opp.lines[1].stat, std::string("1 assist"));
+  // The second intermission
+  GameLeaders end2l;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nhl_end2.json"), Sport::HOCKEY, 23, "401892596",
+                          LeadersStage::HALF, end2l));
+  CHECK_EQ(end2l.team.lines[0].name, std::string("Tuch"));
+  CHECK_EQ(end2l.team.lines[1].name, std::string("Strome"));
+  CHECK_EQ(end2l.team.lines[1].stat, std::string("2 assists"));
+
+  // MLB final, MIL at TB in 12, read as Tampa Bay: the starter's line, then
+  // the top hitter, from the box score (the summary has no leaders)
+  GameLeaders mlb;
+  CHECK(parse_summary_str(slurp("fixtures/summary_mlb_final.json"), Sport::BASEBALL, 30, "401908045",
+                          LeadersStage::FINAL, mlb));
+  CHECK_EQ((int) mlb.team.count, 2);
+  CHECK_EQ(mlb.team.lines[0].name, std::string("Jax"));
+  CHECK_EQ(mlb.team.lines[0].stat, std::string("4.0 IP 2 ER 6 K"));
+  CHECK_EQ(mlb.opp.lines[0].name, std::string("May"));
+  CHECK_EQ(mlb.opp.lines[0].stat, std::string("3.0 IP 2 ER 3 K"));
+  CHECK(!mlb.team.lines[1].name.empty());
+  CHECK(mlb.team.lines[1].stat.find('-') != std::string::npos);
+  CHECK(!mlb.opp.lines[1].name.empty());
+
+  // A document cut short, at every tenth of its length, is a failed read,
+  // never a crash or a half-filled card
+  {
+    std::string json = slurp("fixtures/summary_nba_final.json");
+    for (int i = 1; i < 10; i++) {
+      GameLeaders cut;
+      CHECK(!parse_summary_str(json.substr(0, json.size() * i / 10), Sport::BASKETBALL, 2, "401909877",
+                               LeadersStage::FINAL, cut));
+      CHECK(!cut.valid);
+    }
+    GameLeaders bad;
+    CHECK(!parse_summary_str("not json", Sport::BASKETBALL, 2, "401909877", LeadersStage::FINAL, bad));
+    CHECK(!parse_summary_str("{}", Sport::BASKETBALL, 2, "401909877", LeadersStage::FINAL, bad));
+  }
+
+  // The stat text on its own
+  CHECK_EQ(espn::detail::football_game_stat("23/35, 211 YDS, 1 TD, 1 INT"), std::string("211 yds 1 TD"));
+  CHECK_EQ(espn::detail::football_game_stat("7 CAR, 62 YDS"), std::string("62 yds"));
+  CHECK_EQ(espn::detail::football_game_stat("7 CAR, 62 YDS, 0 TD"), std::string("62 yds"));
+  CHECK_EQ(espn::detail::football_game_stat("5 REC"), std::string(""));
+  CHECK_EQ(espn::detail::count_stat("1", "goal", "goals"), std::string("1 goal"));
+  CHECK_EQ(espn::detail::count_stat("0", "goal", "goals"), std::string(""));
+  CHECK_EQ(espn::detail::count_stat("35.5", "pt", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::count_stat("", "pt", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::pitching_stat({"IP", "H", "R", "ER", "BB", "K"}, {"7.0", "3", "1", "1", "2", "9"}),
+           std::string("7.0 IP 1 ER 9 K"));
+  CHECK_EQ(espn::detail::pitching_stat({"H", "R"}, {"3", "1"}), std::string(""));
+  CHECK_EQ(espn::detail::batting_stat({"H-AB", "AB", "R", "H", "RBI", "HR"}, {"2-4", "4", "1", "2", "3", "1"}),
+           std::string("2-4 1 HR"));
+  CHECK_EQ(espn::detail::batting_stat({"H-AB", "AB", "R", "H", "RBI", "HR"}, {"2-4", "4", "1", "2", "3", "0"}),
+           std::string("2-4 3 RBI"));
+  CHECK_EQ(espn::detail::batting_stat({"H-AB", "AB", "R", "H", "RBI", "HR"}, {"0-4", "4", "0", "0", "0", "0"}),
+           std::string(""));
+  CHECK_EQ(espn::detail::fit_leader({"Alexander-Walker", "23 pts"}, 17), std::string("Alexander- 23 pts"));
+  CHECK_EQ(espn::detail::fit_leader({"Tatum", "40 pts"}, 17), std::string("Tatum 40 pts"));
+  CHECK_EQ(espn::detail::fit_leader({"Antetokounmpo", "12 reb"}, 8), std::string("Ant 12 reb"));
+  // A stat too long for its room loses whole pairs from its end, never part
+  // of a number, and keeps its first
+  CHECK_EQ(espn::detail::fit_leader({"Prescott", "212 yds 3 TD"}, 12), std::string("Pres 212 yds"));
+  CHECK_EQ(espn::detail::fit_leader({"Jax", "4.0 IP 2 ER 6 K"}, 12), std::string("Jax 4.0 IP"));
+  CHECK_EQ(espn::detail::fit_leader({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17), std::string("Rasmu 4.0 IP 1 ER"));
+  CHECK_EQ(espn::detail::fit_leader({"Simpson", "2-4 1 HR"}, 9), std::string("Simps 2-4"));
+  CHECK(espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 21));
+  CHECK(!espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17));
+
+  // The card: football's three lines a side take the small font at 128 wide
+  LeadersCardText c = leaders_card_text(l, 128);
+  CHECK_EQ((int) c.font, 8);
+  CHECK(c.logos);
+  CHECK_EQ((int) c.text_x, 22);
+  CHECK_EQ((int) c.pitch, 9);
+  CHECK_EQ((int) c.block_h, 27);
+  CHECK_EQ(c.team_body, std::string("Prescott 212 yds 3 TD\nWilliams 155 yds 1 TD\nLamb 74 yds 2 TD"));
+  CHECK_EQ(c.opp_body, std::string("McKee 211 yds 1 TD\nBarkley 62 yds 1 TD\nLemon 67 yds 1 TD"));
+  // Two lines a side read in the big font
+  c = leaders_card_text(nba, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK_EQ((int) c.pitch, 13);
+  CHECK_EQ((int) c.block_h, 26);
+  CHECK_EQ(c.team_body, std::string("Tatum 40 pts\nGeorge 7 reb"));
+  CHECK_EQ(c.opp_body, std::string("Porter Jr. 27 pts\nPorter Jr. 12 reb"));
+  // Baseball's pitching line doesn't fit the big font whole, so it takes the
+  // small one, with the line whole
+  c = leaders_card_text(mlb, 128);
+  CHECK_EQ((int) c.font, 8);
+  CHECK_EQ((int) c.pitch, 13);
+  CHECK_EQ((int) c.block_h, 26);
+  CHECK_EQ(c.team_body.substr(0, c.team_body.find('\n')), std::string("Jax 4.0 IP 2 ER 6 K"));
+  // One line a side still leaves room for the logo and the abbreviation
+  GameLeaders single = nba;
+  single.team.count = 1;
+  single.opp.count = 1;
+  c = leaders_card_text(single, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK_EQ((int) c.block_h, 26);
+  // A 64 wide panel: one line a side, in the small font
+  c = leaders_card_text(l, 64);
+  CHECK_EQ((int) c.font, 8);
+  CHECK(!c.logos);
+  CHECK_EQ((int) c.block_h, 18);
+  CHECK_EQ(c.team_body, std::string("Pres 212 yds"));
+  c = leaders_card_text(nba, 64);
+  CHECK_EQ(c.team_body, std::string("Tatum 40 pts"));
+  CHECK_EQ(c.opp_body, std::string("Porte 27 pts"));
+  c = leaders_card_text(mlb, 64);
+  CHECK_EQ(c.team_body, std::string("Jax 4.0 IP"));
+  // No line is wider than its room, at either width, for any sport
+  for (const GameLeaders *g : {&l, &nba, &mlb}) {
+    for (int w : {64, 128}) {
+      LeadersCardText t = leaders_card_text(*g, w);
+      const size_t room = (size_t) (w - t.text_x) / (t.font == 12 ? 6 : 5);
+      for (const std::string &body : {t.team_body, t.opp_body}) {
+        size_t start = 0;
+        while (start <= body.size()) {
+          size_t end = body.find('\n', start);
+          std::string line = body.substr(start, end == std::string::npos ? std::string::npos : end - start);
+          CHECK(line.size() <= room);
+          if (end == std::string::npos)
+            break;
+          start = end + 1;
+        }
+      }
+    }
+  }
+  // A side with nothing leaves its block empty
+  GameLeaders one = nba;
+  one.opp = LeaderSide{};
+  c = leaders_card_text(one, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK(c.opp_body.empty());
+  CHECK_EQ((int) leaders_card_text(GameLeaders{}, 128).font, 0);
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -6580,6 +7260,7 @@ int main() {
   test_fav_side_polls();
   test_reread_after_poll();
   test_auto_update();
+  test_update_nudge();
   test_update_mark();
   test_boot_log();
   test_health_json();
@@ -6590,9 +7271,12 @@ int main() {
   test_night();
   test_offseason();
   test_countdown();
+  test_rankings();
   test_panel_text();
   test_prefs_sync();
   test_message();
+  test_news();
+  test_weather();
   test_regulatory();
   test_wifi_history();
   test_ha_events();
@@ -6601,6 +7285,7 @@ int main() {
   test_ha_events_stale();
   test_ha_fields();
   test_line_score();
+  test_game_leaders();
   test_score_log();
   test_best_game();
   failures += run_set_tests(checks);

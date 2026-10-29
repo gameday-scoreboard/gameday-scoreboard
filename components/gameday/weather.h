@@ -246,6 +246,21 @@ template<typename TInput> bool parse_forecast(TInput &input, WxForecast &out) {
   return true;
 }
 
+// What the firmware's parsers read from: the HTTP reply, straight from the
+// socket (gameday.cpp). They are compiled once for it, in espn_parse.cpp:
+// instantiated in gameday.cpp, their literal pools landed out of reach of
+// their code and the link failed.
+class WxSource {
+ public:
+  virtual int read() = 0;
+  virtual size_t readBytes(char *dst, size_t n) = 0;
+
+ protected:
+  ~WxSource() = default;
+};
+bool parse_geocode_from(WxSource &input, WxPlace &out);
+bool parse_forecast_from(WxSource &input, WxForecast &out);
+
 // The icon for a WMO weather code. Clear skies at night get the moon.
 inline WxIcon wx_icon(uint8_t code, bool night) {
   if (code <= 1)

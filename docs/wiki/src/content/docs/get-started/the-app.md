@@ -33,6 +33,10 @@ The panel's name is at the top. Tap it to switch to another panel, to add one, o
 
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
 
+:::note[Coming in the next release]
+On Android, when the panel shows its thermometer or plug in the corner, the Board shows the same words under the game, **Running warm** or **Power dipped**, with what to do. There's nothing to press: it goes when the panel's icon does. See [Icons in the corner](/help/panel-messages/#icons-in-the-corner).
+:::
+
 ### Teams
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
@@ -46,6 +50,10 @@ If the app loses its connection to the panel for a moment while the panel still 
 - **Device**: the panel's **Nickname**, **Setup**, firmware updates, **Reboot**, **Reset Wi-Fi**, the panel's saved Wi-Fi networks and the remote. **Setup** has the timezone, and on iPhone the walkthrough again. **Backup** saves and restores the panel's settings. On iPhone, **Advanced** has the panel layout, the remote and the panel's memory. On Android the panel layout is under **Setup** and the remote under **Remote**. See [Back up and restore settings](/using/backup/), [Wi-Fi](/using/wifi/) and [WizMote remote](/using/remote/).
 - **Panels**: every panel saved in the app, and new ones nearby.
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
+
+:::note[Coming in the next release]
+On Android, **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
+:::
 
 ## Your panels
 
