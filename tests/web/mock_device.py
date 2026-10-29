@@ -33,7 +33,9 @@ second), "down" for every route but the test hooks. "wifi" replaces the saved
 network list; null stands for firmware without the list, whose /gameday/wifi
 answers 404. "settings" is firmware without the backup: /gameday/settings
 answers 404. GET /_log lists the /gameday/set, /gameday/action,
-/gameday/wifi and /gameday/settings requests seen since the last reset.
+/gameday/wifi and /gameday/settings requests seen since the last reset, and
+the entity posts (/select/Effect/set and the like), which change the entity
+and go out on every open /events stream as the panel's do.
 
 Started by playwright.config.js. Run by hand with `python mock_device.py 8765`
 and open http://127.0.0.1:8765/.
@@ -182,7 +184,17 @@ ENTITIES = [
     {"id": "number/Scroll Speed", "domain": "number", "name": "Scroll Speed", "state": "5", "value": "5",
      "min_value": "1", "max_value": "10", "step": "1"},
     {"id": "select/Select Page", "domain": "select", "name": "Select Page", "state": "Scoreboard",
-     "value": "Scoreboard", "option": ["Scoreboard", "Clock"]},
+     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects"]},
+    # Effects mode (firmware/pages/effects.yaml): wled_fx's entities, shown
+    # while Select Page is on Effects.
+    {"id": "select/Effect", "domain": "select", "name": "Effect", "state": "Matrix", "value": "Matrix",
+     "option": ["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]},
+    {"id": "select/Effect Palette", "domain": "select", "name": "Effect Palette", "state": "Default",
+     "value": "Default", "option": ["Default", "Rainbow", "Ocean", "Fire"]},
+    {"id": "number/Effect Speed", "domain": "number", "name": "Effect Speed", "state": "128", "value": "128",
+     "min_value": "0", "max_value": "255", "step": "1"},
+    {"id": "number/Effect Intensity", "domain": "number", "name": "Effect Intensity", "state": "128",
+     "value": "128", "min_value": "0", "max_value": "255", "step": "1"},
     {"id": "text_sensor/Game Status", "domain": "text_sensor", "name": "Game Status",
      "state": INITIAL["status"], "value": INITIAL["status"]},
     {"id": "update/Firmware", "domain": "update", "name": "Firmware", "state": "NO UPDATE", "value": "1.5.4",
@@ -207,6 +219,36 @@ def entity_post_ok(path):
     if len(parts) != 4 or parts[1] not in ENTITY_ACTIONS or parts[3] not in ENTITY_ACTIONS[parts[1]]:
         return False
     return any(e["domain"] == parts[1] and e["name"] == unquote(parts[2]) for e in ENTITIES)
+
+
+# Entity states changed since the mock started, in order; each open /events
+# stream sends the ones it hasn't yet, as the panel pushes a change to every
+# listener.
+PUSHED = []
+
+
+def entity_post(path, q):
+    """A control post the way ESPHome's web server applies it: the switch turns,
+    the number takes value=, the select takes option= from its options. True when
+    something changed; a value the entity doesn't take changes nothing."""
+    domain, name, action = path.split("/")[1:]
+    e = next(x for x in ENTITIES if x["domain"] == domain and x["name"] == unquote(name))
+    if domain == "switch":
+        on = action == "turn_on" or (action == "toggle" and e["state"] != "ON")
+        e["state"], e["value"] = ("ON", True) if on else ("OFF", False)
+    elif domain == "number":
+        m = re.fullmatch(r"-?\d+(\.\d+)?", q.get("value", ""))
+        if not m or not float(e["min_value"]) <= float(m.group()) <= float(e["max_value"]):
+            return False
+        e["state"] = e["value"] = m.group()
+    elif domain == "select":
+        if q.get("option") not in e["option"]:
+            return False
+        e["state"] = e["value"] = q["option"]
+    else:
+        return True
+    PUSHED.append(copy.deepcopy(e))
+    return True
 
 STATE = copy.deepcopy(INITIAL)
 FAIL = set()
@@ -839,10 +881,23 @@ def selftest():
             print(f"FAIL POST {path} should {'pass' if want else 'get a 404'}")
     # The names the mock takes are the firmware's, so renaming one there fails here.
     yaml = (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8")
+    yaml += (REPO / "firmware/pages/effects.yaml").read_text(encoding="utf-8")
     for e in ENTITIES:
         if e["domain"] in ENTITY_ACTIONS and f'name: "{e["name"]}"' not in yaml:
             bad += 1
-            print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml")
+            print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml or pages/effects.yaml")
+    # Control posts change the entity and are pushed to the event stream.
+    entity_post("/select/Select%20Page/set", {"option": "Effects"})
+    entity_post("/number/Effect%20Speed/set", {"value": "40"})
+    if entity("Select Page")["value"] != "Effects" or entity("Effect Speed")["value"] != "40" or len(PUSHED) != 2:
+        bad += 1
+        print("FAIL an entity post didn't change the entity or wasn't pushed")
+    if entity_post("/select/Effect/set", {"option": "Lava Lamp"}) or entity_post("/number/Effect%20Speed/set", {"value": "300"}):
+        bad += 1
+        print("FAIL an option or value the entity doesn't take was applied")
+    for e in ENTITIES:
+        e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
+    PUSHED.clear()
     print(f"entity URLs: {bad} failures in all")
     return bad == 0
 
@@ -956,13 +1011,19 @@ class Handler(BaseHTTPRequestHandler):
             for e in ENTITIES:
                 self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
             self.wfile.flush()
+            sent = len(PUSHED)
             for tick in itertools.count():
                 time.sleep(0.5)
                 if "down" in FAIL or "events" in FAIL:
                     return
+                # A reset empties the list under an open stream
+                sent = min(sent, len(PUSHED))
+                for e in PUSHED[sent:]:
+                    self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
+                sent = len(PUSHED)
                 if tick % 10 == 9:
                     self.wfile.write(b"event: ping\ndata: \n\n")
-                    self.wfile.flush()
+                self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
 
@@ -983,6 +1044,7 @@ class Handler(BaseHTTPRequestHandler):
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
             for e in ENTITIES:
                 e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
+            PUSHED.clear()
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":
             q = {k: v[0] for k, v in pairs.items()}
@@ -1050,6 +1112,10 @@ class Handler(BaseHTTPRequestHandler):
         if u.path.startswith("/gameday/"):
             return self._json(404, {"error": "unknown route"})
         if entity_post_ok(u.path):
+            q = {k: v[0] for k, v in pairs.items()}
+            LOG.append({"path": u.path, "q": q})
+            if not entity_post(u.path, q):
+                return self._send(400, "text/plain", "")
             return self._send(200, "text/plain", "")
         self._send(404, "text/plain", "Not Found")
 

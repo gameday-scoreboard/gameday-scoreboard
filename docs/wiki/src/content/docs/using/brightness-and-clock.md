@@ -38,6 +38,10 @@ The device page then says **Night mode off until 11:00 PM**, the next start time
 
 The schedule runs on the panel's own clock, set from the internet, in the timezone under Setup. Until the panel has the time after it starts, it stays at its normal brightness. The heat and power protection below still hold the night brightness down when they need to.
 
+:::note[Coming in the next release]
+A running [effect](/using/effects/) dims with the night brightness like the board. Screen-off puts **Showing** back to the Scoreboard; picking Effects while the panel is dim or dark for the night turns night mode off for the rest of the night, like **Panel on**.
+:::
+
 ## Turning the panel off and on
 
 **Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game, so the board is up to date the moment it comes back on.
