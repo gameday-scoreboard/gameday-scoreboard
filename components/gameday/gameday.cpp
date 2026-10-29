@@ -5143,7 +5143,7 @@ void GamedayComponent::top25_tick_() {
 
 void GamedayComponent::start_top25_job_() {
   this->top25_read_due_ = false;
-  this->job_ = Job{};
+  ::espn::reset_in_place(this->job_);
   this->job_.generation = this->generation_;
   this->job_.need_top25 = true;
   this->job_.top25_slot = this->top25_read_slot_;
@@ -5270,7 +5270,7 @@ void GamedayComponent::start_news_job_() {
   if (!::espn::news_source(this->news_sources_(), this->news_reads_++, src))
     return;
   const ::espn::LeagueInfo *info = ::espn::league_info(src.league);
-  this->job_ = Job{};
+  ::espn::reset_in_place(this->job_);
   this->job_.generation = this->generation_;
   this->job_.need_news = true;
   this->job_.news_src = src;
