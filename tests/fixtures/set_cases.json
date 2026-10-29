@@ -11,7 +11,7 @@
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15,
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
   "cases": [
@@ -143,6 +143,12 @@
     {"name": "a list address", "set": [["msgurl", "http://192.168.1.20/names.txt"]], "expect": {"msgurl": "http://192.168.1.20/names.txt"}},
     {"name": "a list address that isn't http is refused", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", "file:///etc/passwd"]], "expect": {"msgurl": "https://example.com/a.txt"}},
     {"name": "an empty list address clears it", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", ""]], "expect": {"msgurl": ""}},
+    {"name": "a webhook address", "set": [["hook", "http://192.168.1.20:1880/gameday"]], "expect": {"hook": "http://192.168.1.20:1880/gameday"}},
+    {"name": "a webhook over https is refused", "start": {"hook": "http://192.168.1.20/a"}, "set": [["hook", "https://example.com/hook"]], "expect": {"hook": "http://192.168.1.20/a"}},
+    {"name": "an empty webhook address turns it off", "start": {"hook": "http://192.168.1.20/a"}, "set": [["hook", ""]], "expect": {"hook": ""}},
+    {"name": "the reminder 0 sends none", "set": [["pregame", "0"]], "expect": {"pregame": 0}},
+    {"name": "the reminder past 120 is 120", "set": [["pregame", "500"]], "expect": {"pregame": 120}},
+    {"name": "the reminder as text is refused", "start": {"pregame": 30}, "set": [["pregame", "soon"]], "expect": {"pregame": 30}},
     {"name": "msgevery 0 holds the board between games", "set": [["msgevery", "0"]], "expect": {"msgevery": 0}},
     {"name": "msgevery past 30 is 30", "set": [["msgevery", "45"]], "expect": {"msgevery": 30}},
     {"name": "msgevery as text is refused", "start": {"msgevery": 5}, "set": [["msgevery", "soon"]], "expect": {"msgevery": 5}},

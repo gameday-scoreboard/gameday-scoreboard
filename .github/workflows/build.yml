@@ -89,6 +89,25 @@ jobs:
       # The override label on a promotion PR.
       pull-requests: read
     steps:
+      # The head branch's name stays in the merge commit for good, and this
+      # repo is public, so a branch is named after the change, not a ticket in
+      # a private tracker.
+      - name: Branch names say what the change is
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          ticket='(^|[/_.-])card-[0-9]'
+          for b in card-123-ha-log-noise fix/card-7; do
+            grep -qE "$ticket" <<< "$b" || { echo "::error::The ticket pattern misses $b"; exit 1; }
+          done
+          for b in dev espn-gzip scorecard-2x power-cut-boot; do
+            grep -qE "$ticket" <<< "$b" && { echo "::error::The ticket pattern wrongly takes $b"; exit 1; }
+          done
+          if grep -qE "$ticket" <<< "$HEAD_REF"; then
+            echo "::error::The branch $HEAD_REF names a ticket. Push the change to a branch named after it, like espn-gzip, and open the PR from there."
+            exit 1
+          fi
       - name: PRs into beta come from dev
         if: github.event_name == 'pull_request' && github.base_ref == 'beta'
         env:

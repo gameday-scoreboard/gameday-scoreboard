@@ -24,6 +24,22 @@ that line is also the update summary on the device page, so keep it under
 240 characters. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+## Unreleased
+
+### ⚠️ Heads up
+
+- 🔌 The panel no longer dims itself when hot or after a power dip, and the Clear button is gone: a thermometer or plug in the corner says what happened, and after a power dip it starts at half brightness for 3 seconds
+
+### ✨ New
+
+- 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
+
+### 🐛 Fixes
+
+- 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
+- 📅 A New Year's Day game seen on Dec 31 says **Tomorrow**, not a weekday
+
 ## v2026.10.2
 
 Favorite teams replaces My team, with playlists, countdowns to the next game and to your own day, a second try after a wrong Wi-Fi password, and fixes for Bluetooth setup restarts, memory and missed scores.

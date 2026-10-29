@@ -1288,7 +1288,7 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await expect(page.locator("#health")).toBeHidden();
 });
 
-test("a hot or under-powered panel says why it is dimmed, and the power cap clears", async ({ page, request }) => {
+test("a warm panel or one whose power dipped says so, with nothing to press", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   await expect(page.locator("#hTemp")).toHaveText("47 C");
@@ -1296,25 +1296,27 @@ test("a hot or under-powered panel says why it is dimmed, and the power cap clea
   await expect(page.locator("#guard")).toBeHidden();
 
   const h = (await deviceState(request)).health;
-  await reset(request, { health: { ...h, temp: 78.4, heat: 2 } });
+  await reset(request, { health: { ...h, temp: 78.4, heat: 1 } });
   await page.reload();
   await expect(page.locator("#guard")).toBeVisible();
-  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
-  await expect(page.locator("#guardText")).toContainText("at 45% of its brightness");
-  await expect(page.locator("#guardClear")).toBeHidden();
-  await expect(page.locator("#hTemp")).toHaveText("78 C, dimmed to 45%");
+  await expect(page.locator("#guardName")).toHaveText("Running warm");
+  await expect(page.locator("#guardText")).toContainText("Keep it out of direct sun");
+  await expect(page.locator("#guard button")).toHaveCount(0);
+  await expect(page.locator("#hTemp")).toHaveText("78 C, running warm");
 
-  // The power cap wins over the heat, and Clear posts power_ok.
-  await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "capped" } });
+  // The plug wins over the thermometer while both are up.
+  await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "dipped" } });
   await page.reload();
-  await expect(page.locator("#guardName")).toHaveText("Check the power supply");
-  await expect(page.locator("#hPower")).toHaveText("3, brightness capped");
-  await page.locator("#guardClear").click();
-  await expect.poll(async () =>
-    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/action").map((p) => p.q.do),
-  ).toContain("power_ok");
-  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
-  await expect(page.locator("#guardClear")).toBeHidden();
+  await expect(page.locator("#guardName")).toHaveText("Power dipped");
+  await expect(page.locator("#guardText")).toContainText("not a phone charger or a USB port");
+  await expect(page.locator("#guard button")).toHaveCount(0);
+  await expect(page.locator("#hPower")).toHaveText("3, one at this start");
+
+  // Settled after the dip: the bar goes, the count stays.
+  await reset(request, { health: { ...h, brownouts: 3, power: "ok" } });
+  await page.reload();
+  await expect(page.locator("#guard")).toBeHidden();
+  await expect(page.locator("#hPower")).toHaveText("3");
 
   // Before the first temperature reading there is no temperature row.
   await reset(request, { health: { ...h, temp: undefined } });
@@ -1603,6 +1605,39 @@ test("the message card posts its text, address and timing, and Clear turns it of
   await expect(page.locator("#msgUrl")).toHaveValue("");
 });
 
+test("the game events card saves the heads-up and the webhook, refuses https, and sends a test", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#evCard")).toBeVisible();
+  await expect(page.locator("#evPregame")).toHaveValue("15");
+  await page.locator("#evPregame").selectOption("30");
+  await expectSet(request, { pregame: "30" });
+
+  await page.locator("#evHook").fill("https://example.com/hook");
+  await page.locator("#evSave").click();
+  await expect(page.locator("#toast")).toHaveText("Use plain http://, the panel posts on your home network");
+  await page.locator("#evHook").fill("http://192.168.1.20:1880/gameday");
+  await page.locator("#evSave").click();
+  await expectSet(request, { hook: "http://192.168.1.20:1880/gameday" });
+  await expect(page.locator("#evHookRead")).toHaveText("Nothing posted yet. The next event goes there.");
+
+  await page.locator("#evTest").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "event_test" });
+});
+
+test("the game events card says how the last post went, and hides on firmware without it", async ({ page, request }) => {
+  await reset(request, { hook: "http://192.168.1.20/a", hookpost: { status: 200, sent: 3, dropped: 0 } });
+  await page.goto("/");
+  await expect(page.locator("#evHookRead")).toHaveText("Posting fine: 3 events delivered.");
+  await reset(request, { hook: "http://192.168.1.20/a", hookpost: { status: 0, sent: 0, dropped: 0 } });
+  await page.reload();
+  await expect(page.locator("#evHookRead")).toHaveText("The last post got no answer. Check the address and that the listener is running.");
+  await reset(request, { pregame: null, hook: null });
+  await page.reload();
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#evCard")).toBeHidden();
+});
+
 test("the message card says how the list's last read went, and hides on firmware without it", async ({ page, request }) => {
   const url = "https://example.com/plates.txt";
   await reset(request, { msgurl: url, msgread: { status: 200, entries: 412 } });
@@ -1688,6 +1723,39 @@ test("night mode says it is on, until when, and when a live game holds it off", 
   await page.reload();
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#nightbar")).toBeHidden();
+});
+
+test("night mode can be turned off for the rest of tonight and back on, from its bar or Panel on", async ({ page, request }) => {
+  await reset(request, { night: true, nightscreen: false, night_now: "off" });
+  await page.goto("/");
+  await expect(page.locator("#nightBtn")).toHaveText("Turn on for tonight");
+  await page.locator("#nightBtn").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "night_skip" });
+  await expect(page.locator("#nightName")).toHaveText("Night mode off until 11:00 PM");
+  await expect(page.locator("#nightText")).toHaveText(
+    "The panel is at normal brightness for the rest of tonight. Night mode starts again at 11:00 PM.");
+  await expect(page.locator("#nightBtn")).toHaveText("Back to night mode");
+  await page.locator("#nightBtn").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "night_resume" });
+  await expect(page.locator("#nightName")).toHaveText("Night mode until 7:00 AM");
+
+  // A live game already has it lit: nothing to turn on.
+  await reset(request, { night: true, night_now: "game" });
+  await page.reload();
+  await expect(page.locator("#nightName")).toHaveText("Night mode paused for a live game");
+  await expect(page.locator("#nightBtn")).toBeHidden();
+
+  // Panel on while the night has it dim skips the night too; off doesn't.
+  await reset(request, { night: true, night_now: "dim" });
+  await page.reload();
+  const power = page.getByRole("switch", { name: "Panel on" });
+  await expect(power).toBeChecked();
+  await power.click();
+  await expect(power).not.toBeChecked();
+  expect((await actions(request)).some((q) => q.do === "night_skip")).toBe(false);
+  await power.click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "night_skip" });
+  await expect(page.locator("#nightName")).toHaveText("Night mode off until 11:00 PM");
 });
 
 test("Export downloads the settings, and Import restores a backup checked whole", async ({ page, request }) => {

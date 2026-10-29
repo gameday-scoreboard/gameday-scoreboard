@@ -11,8 +11,10 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          A URL past 512 bytes answers 414 and a body past 1024 bytes
                          400, as the panel's server does
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
-                         power_ok sets health.power back to "ok"; say keeps its cleaned
-                         text in "say" for tests to read (the panel has no such key)
+                         say keeps its cleaned text in "say" for tests to read (the
+                         panel has no such key); night_skip turns a "dim" or "off"
+                         night_now to "skipped" and night_resume a "skipped" one back
+                         to "dim" or "off"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
@@ -79,7 +81,8 @@ MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
 LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
                                              SET_H + MESSAGE_H +
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
-                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/hook.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -122,14 +125,17 @@ INITIAL = {
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
-    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
+    # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
+    "hook": "", "pregame": 15,
+    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
                "heap_kb": 143.2, "block_kb": 40.0, "psram_kb": 4100.5, "rssi": -58, "espn": 200,
                "espn_ago": 9, "version": "1.5.4", "built": 1792285260, "channel": "stable",
-               # guard_json_keys() (components/gameday/guard.h)
+               # guard_json_keys() (components/gameday/guard.h): heat 1 while the
+               # thermometer shows, power "dipped" while the plug does
                "temp": 46.5, "heat": 0, "brownouts": 0, "power": "ok"},
     # Spliced in live by the firmware (wifi_history.h): an hour up, one drop.
     "wifi": {"rssi": -61, "step": 300, "hist": [-58, -59, -60, None, -64, -62, -61, -61, -60, -62, -61, -61],
@@ -244,6 +250,15 @@ def msg_url_ok(v):
         return True
     rest = v[7:] if v.startswith("http://") else v[8:] if v.startswith("https://") else ""
     return len(v) <= LIMITS["kMsgUrlMax"] and bool(rest) and all(0x20 < ord(c) < 0x7F for c in v)
+
+
+def hook_url_ok(v):
+    """hook_url_ok() in components/gameday/hook.h: plain http only."""
+    if not v:
+        return True
+    if len(v) > LIMITS["kHookUrlMax"] or not v.startswith("http://") or len(v) == 7 or v[7] in "/?#":
+        return False
+    return all(0x20 < ord(c) < 0x7F for c in v)
 
 
 def parse_team_ref(v):
@@ -410,6 +425,12 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k == "hook":
+            if hook_url_ok(v):
+                STATE["hook"] = v
+        elif k == "pregame":
+            if whole_int(v):
+                STATE["pregame"] = max(0, min(LIMITS["kPregameMax"], int(v)))
         elif k in ("night", "nightscreen"):
             STATE[k] = v == "1"
         elif k in ("nightstart", "nightend"):
@@ -531,6 +552,7 @@ def import_settings(doc):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
+                      "pregame": (0, LIMITS["kPregameMax"]),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
@@ -554,7 +576,8 @@ def import_settings(doc):
                     skipped.append(f"{k}={v}")
                     continue
                 kv.append((k, v if r == 1 else "none"))
-            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)):
+            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
+                    k == "hook" and not hook_url_ok(v)):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
@@ -901,12 +924,14 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "power_ok", "say", "regulatory"):
+            if q["do"] not in ("refresh", "qc", "say", "regulatory", "night_skip", "night_resume", "event_test"):
                 return self._json(404, {"error": "unknown action"})
-            if q["do"] == "power_ok" and STATE.get("health"):
-                STATE["health"]["power"] = "ok"
             if q["do"] == "say":
                 STATE["say"] = message_clean(q.get("text", ""), LIMITS["kMsgTextMax"], True)
+            if q["do"] == "night_skip" and STATE.get("night_now") in ("dim", "off"):
+                STATE["night_now"] = "skipped"
+            if q["do"] == "night_resume" and STATE.get("night_now") == "skipped":
+                STATE["night_now"] = "dim" if STATE.get("nightscreen") else "off"
             return self._json(200, {"ok": True})
         if u.path == "/gameday/demo":
             q = {k: v[0] for k, v in pairs.items()}

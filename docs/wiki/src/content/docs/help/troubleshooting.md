@@ -132,6 +132,10 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 Check **Night schedule** in the Panel card on the device page. While it's on, the device page says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
 
+:::note[Coming in the next release]
+To light the panel for the rest of one night, press **Turn on for tonight** next to **Night mode until**, or **ON** on the remote.
+:::
+
 **Why:** the night schedule dims the panel, or turns its screen off, between the times you set. A live game for your team or a favorite brings it back to normal brightness until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
 ## The panel is dim, or shows a thermometer or plug in the corner
@@ -143,6 +147,16 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 **A plug, and Check power supply:** the panel restarted twice in a row because its power dipped, so it keeps its brightness low to stay on. Use the power supply that came with it, not a phone charger or a USB port. Then press **Clear** on the device page. The icon stays until you do.
 
 **Why:** above a 75 C reading from the controller's chip, the panel steps its brightness down, a step every two minutes while it stays hot, as far as a quarter of your setting. Once the chip reads under 70 C, it comes back a step at a time. A power supply too weak for the panel makes it restart when it lights up, and a lower brightness draws less power. The device page shows the same message, and the chip temperature under Diagnostics.
+
+:::note[Coming in the next release]
+The panel stays at your brightness and there is no Clear button. The icon in the corner only says what happened:
+
+**A thermometer, and Running warm:** the controller's chip reads 75 C or more. Keep the panel out of direct sun and give it some air behind it. The icon goes once the chip reads under 70 C.
+
+**A plug, and Power dipped:** the panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. Use the power supply that came with it, not a phone charger or a USB port. The icon goes once the panel has run 10 minutes without another dip.
+
+The device page shows the same words under the board. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
+:::
 
 ## The device page says an update didn't take
 

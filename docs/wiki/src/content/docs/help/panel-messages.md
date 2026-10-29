@@ -30,6 +30,10 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | --- | --- | --- |
 | **Can't join**, a network name, **Check name / and password** | The network the app just sent didn't work: the name or the password is wrong, or the panel can't see that network. It shows for 30 seconds. | Check both in the app, which asks for them again. After a Wi-Fi reset, close the app instead and the panel goes back to its saved networks a minute later. |
 
+:::note[Coming in the next release]
+After **Can't join**, a new panel goes back to **SETUP / Game Day / app**. Before, it went on to **Waiting for** and later **Wi-Fi lost / open app**.
+:::
+
 ## When the Wi-Fi is the problem
 
 | The panel says | What it means | What to do |
@@ -103,6 +107,15 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 | A red plug and **Check power supply** | The panel restarted twice in a row because its power dipped, so it keeps its brightness low. | Use the power supply that came with it, not a phone charger or a USB port. Then press **Clear** on the device page. |
 
 More in [Troubleshooting](/help/troubleshooting/#the-panel-is-dim-or-shows-a-thermometer-or-plug-in-the-corner).
+
+:::note[Coming in the next release]
+The panel no longer dims itself and there is nothing to clear. The icons only say what happened:
+
+| You see | What it means | What to do |
+| --- | --- | --- |
+| An orange thermometer and **Running warm** | The controller's chip reads 75 C or more. | Keep the panel out of direct sun and give it air behind it. The icon goes once the chip reads under 70 C. |
+| A red plug and **Power dipped** | The panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. | Use the power supply that came with it, not a phone charger or a USB port. The icon goes after 10 minutes without another dip. |
+:::
 
 ## Red, green, blue and white screens
 

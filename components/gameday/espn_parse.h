@@ -340,9 +340,15 @@ std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_loc
 // kickoff window, not a name.
 std::string short_game_name(const std::string &headline);
 // The local calendar day of a broken-down time, as a number that changes at
-// local midnight. kickoff_label counts "Today" and "Tomorrow" in these, so a
-// board drawn on an earlier one has a stale label.
-inline int64_t local_day(const struct tm &t) { return (int64_t) t.tm_year * 366 + t.tm_yday; }
+// local midnight and goes up by one a day across New Year too. kickoff_label
+// counts "Today" and "Tomorrow" in these, so a board drawn on an earlier one
+// has a stale label. tm_year * 366 + tm_yday was off by one or two from
+// Dec 31 to Jan 1, so a New Year's Day game seen on Dec 31 read "Fri" rather
+// than "Tomorrow".
+inline int64_t local_day(const struct tm &t) {
+  const int64_t y = (int64_t) t.tm_year + 1899;  // the full year before this one
+  return (int64_t) t.tm_year * 365 + y / 4 - y / 100 + y / 400 + t.tm_yday;
+}
 // "Sat 3:30 PM", or "Sat TBD" with time_tbd, when ESPN has no kickoff time
 // yet (then kick_local is from tbd_day_epoch).
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd = false);

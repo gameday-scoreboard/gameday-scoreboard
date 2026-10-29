@@ -32,6 +32,7 @@
 #include "ha_events.h"
 #include "board_text.h"
 #include "health.h"
+#include "hook.h"
 #include "line_score.h"
 #include "message.h"
 #include "night.h"
@@ -115,6 +116,12 @@ struct UpdateFields {
   bool ha_live{false};
   int ha_team_score{-1};
   int ha_opp_score{-1};
+  // The same game's sides, colors ("0,42,92", for a light's rgb_color), the
+  // period in words ("3rd quarter", "Halftime") and the clock ("4:32").
+  // Empty with no game; the period and clock also before the start.
+  std::string ha_team, ha_opponent;
+  std::string ha_team_rgb, ha_opp_rgb;
+  std::string ha_period, ha_clock;
   // The off-season clock (offseason.h) on the no-game screen, in team_color.
   // next_line is the next game for a wide board, its kickoff on a second
   // line; empty when none is known, and the page shows the date instead.
@@ -206,7 +213,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
   }
-  // Scores and finals of the game Home Assistant follows (ha_events.h).
+  // The game events of the game Home Assistant follows (ha_events.h).
   void add_on_ha_event_callback(std::function<void(const ::espn::HaEvent &)> &&cb) {
     this->ha_event_callbacks_.push_back(std::move(cb));
   }
@@ -330,17 +337,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void sync_soon() {
     this->defer("prefs_sync", [this]() { this->sync_prefs_(); });
   }
-  // Heat and power protection (guard.h). guard_brightness() is what the
-  // display gets for the owner's Brightness, after the night schedule
-  // (night.h) unless night is false (the QC screen); it runs from on_boot
+  // Heat and power marks (guard.h). guard_brightness() is what the display
+  // gets for the owner's Brightness, after the night schedule (night.h)
+  // unless night is false (the QC screen): the setting itself, or half of it
+  // for the first kDipMs after a brownout restart. It runs from on_boot
   // before setup(), so it loads the power log itself the first time.
   uint8_t guard_brightness(uint8_t want, bool night = true);
   // The chip temperature sensor's readings (firmware/pages/guard.yaml).
   void set_chip_temp(float c);
-  // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
-  uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.step, this->power_log_.capped != 0); }
-  // The owner's clear of the power cap: /gameday/action?do=power_ok.
-  void clear_power_cap();
+  // What the panel's corner says: 0 nothing, 1 running warm, 2 power dipped.
+  uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.hot, this->power_dipped_); }
+  // The night schedule (night.h). A remote press, a team pick or Power on
+  // from the page skips the rest of a night the schedule has dim or dark
+  // (false when it doesn't); the NIGHT button or the page goes back to it.
+  // Home Assistant never calls these, so its automations don't skip a night.
+  bool night_skip(const char *why);
+  void night_resume();
+  bool night_holding() const { return ::espn::night_holding(this->night_now_); }
+  bool night_skipped() const { return this->night_now_ == ::espn::Night::SKIPPED; }
   // "Follow beta": the update entity reads the beta manifest instead of the
   // release one. Off unless the owner turns it on; only in builds with
   // beta_channel (the release builds, gameday-common.yaml).
@@ -428,8 +442,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string health_json_();
   ::espn::Restart start_reason_{::espn::Restart::NONE};
   bool boot_clock_noted_{false};  // boot_log_clock() ran
-  // guard.h. heat_ and power_log_ are main loop only; the HTTP task reads
-  // their small fields for the health block.
+  // guard.h. heat_, power_log_ and power_dip_ are main loop only; the HTTP
+  // task reads their small fields for the health block.
   void load_power_log_();
   void save_power_log_();
   // The banner and the message card (message.h). The card's settings are
@@ -479,8 +493,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_nick_(const std::string &nick);
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
+  ::espn::PowerDip power_dip_;
   ESPPreferenceObject power_pref_;
   bool power_loaded_{false};
+  bool power_dipped_{false};   // this start was a brownout: the plug shows
   bool power_settled_{false};  // ran kPowerSettledMs without a brownout
   // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
@@ -823,6 +839,39 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::vector<std::function<void(const UpdateFields &)>> callbacks_;
   std::vector<std::function<void(const ::espn::HaEvent &)>> ha_event_callbacks_;
   ::espn::HaTracker ha_tracker_;
+  // The game events (ha_events.h): Home Assistant's esphome.gameday_* and
+  // the owner's webhook (hook.h), with the reminder's lead, saved together.
+  struct PrefsHook {
+    char url[::espn::kHookUrlMax + 1];
+    uint8_t pregame;
+    uint8_t spare[3];
+  } __attribute__((packed));
+  ESPPreferenceObject hook_pref_;
+  std::string hook_url_;
+  uint8_t pregame_min_{(uint8_t) ::espn::kPregameDefault};
+  void load_hook_();
+  // Either; a null url or a negative pregame leaves that one as it is.
+  void set_hook_(const std::string *url, int pregame);
+  std::string ha_league_() const;  // the league key of the game Home Assistant follows
+  void ha_track_();                // reads ha_game_() for new events and sends them
+  void send_game_event_(const ::espn::HaEvent &e);
+  void send_test_event_();  // the "event_test" action
+  uint32_t ha_tick_ms_{0};
+  // The webhook's posts, one at a time on a short-lived task of their own,
+  // so a slow or missing listener never holds up the board or ESPN's reads.
+  // One try each, a few seconds at most; a full queue drops the oldest.
+  static constexpr size_t kHookQueueMax = 6;
+  std::vector<std::string> hook_queue_;  // main loop only
+  std::string hook_task_url_, hook_task_body_;  // set before the task starts, read only by it
+  std::atomic<bool> hook_running_{false};
+  std::atomic<bool> hook_task_done_{false};
+  std::atomic<int> hook_task_status_{0};
+  std::atomic<uint32_t> hook_task_stack_{0};  // bytes of the task's stack it never used
+  int hook_status_{-1};  // the last post's HTTP status, 0 no answer, -1 none yet
+  uint32_t hook_sent_{0}, hook_dropped_{0};
+  void queue_hook_(std::string body);
+  void hook_tick_();  // main loop: starts the next post, collects the last
+  static void hook_task_(void *arg);
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
@@ -877,6 +926,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::NightPrefs night_{};
   bool night_loaded_{false};
   ::espn::Night night_now_{::espn::Night::DAY};
+  int64_t night_skip_until_{0};  // night_skip_until(), 0 when no night is skipped
+  void save_night_skip_();
   // Live games: both sides of every game in progress at the last scan, so
   // a team or favorite changed between scans counts at once. A game of the
   // owner's that ends between scans keeps the panel lit until the next one,
@@ -1059,6 +1110,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool demo_gap_{false};    // between runs: the normal board's turn
   uint8_t demo_resume_{0};  // a demo to pick back up after boot
   uint8_t demo_step_{0};
+  uint16_t demo_run_{0};  // runs started since boot, for the run's event id
   uint32_t demo_next_ms_{0};
   GameSnapshot demo_saved_game_, demo_saved_prev_;
   std::string demo_json_{"{}"};  // GET /gameday/demo, under state_mutex_
@@ -1139,12 +1191,15 @@ class UpdateTrigger : public Trigger<const UpdateFields &> {
   }
 };
 
-// Fire on the main loop when the game Home Assistant follows scores or ends.
+// Fire on the main loop when the game Home Assistant follows scores or ends
+// (on_score, on_final), or on any of its events (on_game_event). The panel
+// sends Home Assistant and the webhook these itself; the triggers are for a
+// build's own YAML.
 class ScoreTrigger : public Trigger<const ::espn::HaEvent &> {
  public:
   explicit ScoreTrigger(GamedayComponent *parent) {
     parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) {
-      if (e.play != "final")
+      if (e.kind == ::espn::HaKind::SCORE)
         this->trigger(e);
     });
   }
@@ -1154,9 +1209,16 @@ class FinalTrigger : public Trigger<const ::espn::HaEvent &> {
  public:
   explicit FinalTrigger(GamedayComponent *parent) {
     parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) {
-      if (e.play == "final")
+      if (e.kind == ::espn::HaKind::FINAL)
         this->trigger(e);
     });
+  }
+};
+
+class GameEventTrigger : public Trigger<const ::espn::HaEvent &> {
+ public:
+  explicit GameEventTrigger(GamedayComponent *parent) {
+    parent->add_on_ha_event_callback([this](const ::espn::HaEvent &e) { this->trigger(e); });
   }
 };
 

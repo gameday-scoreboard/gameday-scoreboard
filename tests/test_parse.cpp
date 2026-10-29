@@ -19,6 +19,7 @@
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
+#include "hook.h"
 #include "line_score.h"
 #include "logo_lru.h"
 #include "message.h"
@@ -575,14 +576,23 @@ static void test_best_game() {
   CHECK(!upset_alert(live_view(p, (uint8_t) League::NCAA, 2, 99)));
 }
 
-// Home Assistant's score and final events (ha_events.h).
+// Home Assistant's score and final events (ha_events.h). The scores and finals of a tracker's events, for the tests that predate
+// the other kinds.
+static std::vector<HaEvent> sf(std::vector<HaEvent> v) {
+  std::vector<HaEvent> out;
+  for (auto &e : v)
+    if (e.kind == HaKind::SCORE || e.kind == HaKind::FINAL)
+      out.push_back(e);
+  return out;
+}
+
 static void test_ha_events() {
   HaTracker t;
   // The first read of a game fires nothing, a repeat of it nothing either.
-  CHECK(t.update(live(7, 0), false).empty());
-  CHECK(t.update(live(7, 0), false).empty());
+  CHECK(sf(t.update(live(7, 0), false)).empty());
+  CHECK(sf(t.update(live(7, 0), false)).empty());
   // A field goal for us, then a touchdown for them.
-  auto e = t.update(live(10, 0), false);
+  auto e = sf(t.update(live(10, 0), false));
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK_EQ(e[0].team, std::string("DAL"));
   CHECK_EQ(e[0].opponent, std::string("PHI"));
@@ -592,7 +602,7 @@ static void test_ha_events() {
   CHECK_EQ(e[0].opponent_score, 0);
   CHECK_EQ(e[0].sport, std::string("football"));
   CHECK(e[0].my_team);
-  e = t.update(live(10, 7), false);
+  e = sf(t.update(live(10, 7), false));
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK_EQ(e[0].team, std::string("PHI"));
   CHECK_EQ(e[0].play, std::string("touchdown"));
@@ -600,13 +610,18 @@ static void test_ha_events() {
   CHECK_EQ(e[0].opponent_score, 10);
   CHECK(!e[0].my_team);
   // Both sides between two reads, ours first; a score taken back fires nothing.
-  e = t.update(live(12, 8), false);
+  e = sf(t.update(live(12, 8), false));
   CHECK_EQ(e.size(), (size_t) 2);
   CHECK_EQ(e[0].play, std::string("two_point"));
   CHECK_EQ(e[1].play, std::string("extra_point"));
-  CHECK(t.update(live(10, 8), false).empty());
+  // (It holds kHaStepBackHoldS before it counts: an old copy of the
+  // document would go back the same way, ha_events_stale below.)
+  HaContext later;
+  CHECK(t.update(live(10, 8), later).empty());
+  later.mono_s = kHaStepBackHoldS;
+  CHECK(t.update(live(10, 8), later).empty());
   // A score on the last play comes with the final.
-  e = t.update(live(13, 8, GameState::POST), false);
+  e = sf(t.update(live(13, 8, GameState::POST), false));
   CHECK_EQ(e.size(), (size_t) 2);
   CHECK_EQ(e[0].play, std::string("field_goal"));
   CHECK_EQ(e[1].play, std::string("final"));
@@ -614,28 +629,28 @@ static void test_ha_events() {
   CHECK_EQ(e[1].result, std::string("win"));
   CHECK_EQ(e[1].winner, std::string("DAL"));
   CHECK(e[1].my_team);
-  CHECK(t.update(live(13, 8, GameState::POST), false).empty());  // once
+  CHECK(sf(t.update(live(13, 8, GameState::POST), false)).empty());  // once
 
   // A suspended game goes to post without completed: no final.
   HaTracker s;
-  s.update(live(3, 0), false);
+  sf(s.update(live(3, 0), false));
   GameSnapshot sus = live(3, 0, GameState::POST);
   sus.completed = false;
-  CHECK(s.update(sus, false).empty());
+  CHECK(sf(s.update(sus, false)).empty());
   // A game first seen as a final, or before kickoff, fires nothing.
   HaTracker f;
-  CHECK(f.update(live(20, 3, GameState::POST), false).empty());
+  CHECK(sf(f.update(live(20, 3, GameState::POST), false)).empty());
   HaTracker pre;
-  CHECK(pre.update(live(0, 0, GameState::PRE), false).empty());
-  CHECK(pre.update(live(0, 0), false).empty());
+  CHECK(sf(pre.update(live(0, 0, GameState::PRE), false)).empty());
+  CHECK(sf(pre.update(live(0, 0), false)).empty());
 
   // The Live modes: nobody's team. The final names the left side.
   HaTracker n;
-  n.update(live(0, 0), true);
-  e = n.update(live(6, 0), true);
+  sf(n.update(live(0, 0), true));
+  e = sf(n.update(live(6, 0), true));
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK(!e[0].my_team);
-  e = n.update(live(6, 9, GameState::POST), true);
+  e = sf(n.update(live(6, 9, GameState::POST), true));
   CHECK_EQ(e.size(), (size_t) 2);
   CHECK_EQ(e[1].result, std::string("loss"));
   CHECK_EQ(e[1].winner, std::string("PHI"));
@@ -647,44 +662,44 @@ static void test_ha_events() {
   g2.event_id = "2";
   g2.team_abbr = "KC";
   g2.opp_abbr = "BUF";
-  a.update(live(0, 0), false);
-  a.update(g2, false);
-  CHECK_EQ(a.update(live(7, 0), false).size(), (size_t) 1);
+  sf(a.update(live(0, 0), false));
+  sf(a.update(g2, false));
+  CHECK_EQ(sf(a.update(live(7, 0), false)).size(), (size_t) 1);
   g2.opp_score = 3;
-  e = a.update(g2, false);
+  e = sf(a.update(g2, false));
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK_EQ(e[0].team, std::string("BUF"));
   // The same game read from the other side doesn't fire.
   GameSnapshot flip = live(0, 7);
   flip.team_abbr = "PHI";
   flip.opp_abbr = "DAL";
-  CHECK(a.update(flip, false).empty());
+  CHECK(sf(a.update(flip, false)).empty());
 
   // The game followed least recently is the one forgotten: game 2, read
   // again in the middle of twelve other games, is still known; game 1 isn't.
   for (int i = 3; i <= 8; i++) {
     GameSnapshot o = live(0, 0);
     o.event_id = std::to_string(i);
-    a.update(o, false);
+    sf(a.update(o, false));
   }
-  a.update(g2, false);
+  sf(a.update(g2, false));
   for (int i = 9; i <= 14; i++) {
     GameSnapshot o = live(0, 0);
     o.event_id = std::to_string(i);
-    a.update(o, false);
+    sf(a.update(o, false));
   }
   g2.opp_score = 6;
-  CHECK_EQ(a.update(g2, false).size(), (size_t) 1);
-  CHECK(a.update(live(14, 0), false).empty());  // a first read again
+  CHECK_EQ(sf(a.update(g2, false)).size(), (size_t) 1);
+  CHECK(sf(a.update(live(14, 0), false)).empty());  // a first read again
 
   // Other sports' plays.
   HaTracker b;
   GameSnapshot mlb = live(1, 0);
   mlb.sport = Sport::BASEBALL;
-  b.update(mlb, false);
+  sf(b.update(mlb, false));
   mlb.team_score = 3;
   mlb.mlb.play_type = "Home Run";
-  e = b.update(mlb, false);
+  e = sf(b.update(mlb, false));
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK_EQ(e[0].play, std::string("home_run"));
   CHECK_EQ(e[0].points, 2);
@@ -692,40 +707,444 @@ static void test_ha_events() {
   mlb.mlb.play_type = "Single";
   mlb.last_play = "Smith singled to left, Jones scored.";
   mlb.opp_score = 1;
-  CHECK_EQ(b.update(mlb, false)[0].play, std::string("run"));
+  CHECK_EQ(sf(b.update(mlb, false))[0].play, std::string("run"));
   HaTracker nhl;
   GameSnapshot h = live(0, 0);
   h.sport = Sport::HOCKEY;
-  nhl.update(h, false);
+  sf(nhl.update(h, false));
   h.opp_score = 1;
-  CHECK_EQ(nhl.update(h, false)[0].play, std::string("goal"));
+  CHECK_EQ(sf(nhl.update(h, false))[0].play, std::string("goal"));
   HaTracker nba;
   GameSnapshot bb = live(50, 48);
   bb.sport = Sport::BASKETBALL;
-  nba.update(bb, false);
+  sf(nba.update(bb, false));
   bb.team_score = 53;
-  CHECK_EQ(nba.update(bb, false)[0].play, std::string("score"));
+  CHECK_EQ(sf(nba.update(bb, false))[0].play, std::string("score"));
   // A level soccer game decided on penalties.
   HaTracker soc;
   GameSnapshot fc = live(1, 1);
   fc.sport = Sport::SOCCER;
-  soc.update(fc, false);
+  sf(soc.update(fc, false));
   fc.state = GameState::POST;
   fc.completed = true;
   fc.soc.team_shootout = 3;
   fc.soc.opp_shootout = 4;
-  e = soc.update(fc, false);
+  e = sf(soc.update(fc, false));
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK_EQ(e[0].result, std::string("loss"));
   CHECK_EQ(e[0].winner, std::string("PHI"));
   fc.soc.team_shootout = fc.soc.opp_shootout = -1;
   HaTracker draw;
   fc.state = GameState::IN;
-  draw.update(fc, false);
+  sf(draw.update(fc, false));
   fc.state = GameState::POST;
-  e = draw.update(fc, false);
+  e = sf(draw.update(fc, false));
   CHECK_EQ(e[0].result, std::string("draw"));
   CHECK_EQ(e[0].winner, std::string(""));
+}
+
+// The kinds of a tracker's events, in order: "start,score,lead_change".
+static std::string kinds(const std::vector<HaEvent> &v) {
+  std::string out;
+  for (const auto &e : v)
+    out += (out.empty() ? "" : ",") + std::string(ha_kind_name(e.kind));
+  return out;
+}
+
+static HaContext ha_ctx(uint32_t mono = 0) {
+  HaContext c;
+  c.league = "nfl";
+  c.mono_s = mono;
+  return c;
+}
+
+// The start, a change of lead and the end of each period (ha_events.h).
+static void test_ha_game_events() {
+  HaTracker t;
+  HaContext c = ha_ctx();
+  // Seen before the start, then under way: the start, with the colors.
+  CHECK(t.update(live(0, 0, GameState::PRE), c).empty());
+  CHECK(t.update(live(0, 0, GameState::PRE), c).empty());
+  GameSnapshot g = live(0, 0);
+  g.period = 1;
+  g.short_detail = "15:00 - 1st";
+  auto e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("start"));
+  CHECK_EQ(e[0].team, std::string("DAL"));
+  CHECK_EQ(e[0].league, std::string("nfl"));
+  CHECK_EQ(e[0].team_rgb, (uint32_t) 0x002a5c);
+  CHECK_EQ(e[0].opponent_rgb, (uint32_t) 0x004c54);
+  CHECK(e[0].my_team);
+  CHECK(t.update(g, c).empty());  // once
+  // The first score takes the lead; the other side's goes ahead; a tie.
+  g.team_score = 7;
+  e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("score,lead_change"));
+  CHECK_EQ(e[1].change, std::string("took_lead"));
+  CHECK_EQ(e[1].leader, std::string("DAL"));
+  CHECK_EQ(e[1].previous_leader, std::string(""));
+  CHECK_EQ(e[1].team, std::string("DAL"));
+  CHECK(e[1].my_team);
+  g.opp_score = 10;
+  e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("score,lead_change"));
+  CHECK_EQ(e[1].change, std::string("lead_change"));
+  CHECK_EQ(e[1].leader, std::string("PHI"));
+  CHECK_EQ(e[1].previous_leader, std::string("DAL"));
+  CHECK_EQ(e[1].team, std::string("PHI"));
+  CHECK_EQ(e[1].team_score, 10);
+  CHECK_EQ(e[1].opponent_score, 7);
+  CHECK(!e[1].my_team);
+  g.team_score = 10;
+  e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("score,lead_change"));
+  CHECK_EQ(e[1].change, std::string("tied"));
+  CHECK_EQ(e[1].leader, std::string(""));
+  CHECK_EQ(e[1].team, std::string("DAL"));
+  // A score that keeps the lead where it was has no lead event.
+  g.team_score = 17;
+  CHECK_EQ(kinds(t.update(g, c)), std::string("score,lead_change"));
+  g.team_score = 20;
+  CHECK_EQ(kinds(t.update(g, c)), std::string("score"));
+
+  // The break after a period, once; the next period has nothing more.
+  g.short_detail = "End of 1st";
+  e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("period"));
+  CHECK_EQ(e[0].period, 1);
+  CHECK_EQ(e[0].period_name, std::string("1st quarter"));
+  CHECK(t.update(g, c).empty());
+  g.period = 2;
+  g.short_detail = "14:55 - 2nd";
+  CHECK(t.update(g, c).empty());
+  g.short_detail = "Halftime";
+  e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("period"));
+  CHECK_EQ(e[0].period_name, std::string("2nd quarter"));
+  g.period = 3;
+  g.short_detail = "15:00 - 3rd";
+  CHECK(t.update(g, c).empty());
+  // A break the panel missed: the next period under way ends the last one.
+  g.period = 4;
+  g.short_detail = "11:20 - 4th";
+  e = t.update(g, c);
+  CHECK_EQ(kinds(e), std::string("period"));
+  CHECK_EQ(e[0].period, 3);
+  g.period = 5;
+  g.short_detail = "10:00 - OT";
+  CHECK_EQ(t.update(g, c)[0].period_name, std::string("4th quarter"));
+  // Two breaks missed in one gap: both periods, in order.
+  HaTracker gap;
+  GameSnapshot q1 = live(3, 0);
+  q1.period = 1;
+  q1.short_detail = "5:00 - 1st";
+  gap.update(q1, c);
+  q1.period = 3;
+  q1.short_detail = "12:00 - 3rd";
+  e = gap.update(q1, c);
+  CHECK_EQ(kinds(e), std::string("period,period"));
+  CHECK_EQ(e[0].period, 1);
+  CHECK_EQ(e[1].period, 2);
+  CHECK_EQ(e[1].period_name, std::string("2nd quarter"));
+  CHECK(gap.update(q1, c).empty());
+  // The final ends the last period itself.
+  g.state = GameState::POST;
+  g.completed = true;
+  CHECK_EQ(kinds(t.update(g, c)), std::string("final"));
+
+  // The words for each sport's periods.
+  GameSnapshot w = live(0, 0);
+  CHECK_EQ(ha_period_name(w, 5), std::string("overtime"));
+  CHECK_EQ(ha_period_name(w, 6), std::string("2nd overtime"));
+  w.sport = Sport::HOCKEY;
+  CHECK_EQ(ha_period_name(w, 3), std::string("3rd period"));
+  CHECK_EQ(ha_period_name(w, 4), std::string("overtime"));
+  w.sport = Sport::SOCCER;
+  CHECK_EQ(ha_period_name(w, 1), std::string("1st half"));
+  w.sport = Sport::BASKETBALL;
+  w.nba.regulation = 2;
+  CHECK_EQ(ha_period_name(w, 2), std::string("2nd half"));
+  w.nba.regulation = 4;
+  CHECK_EQ(ha_period_name(w, 2), std::string("2nd quarter"));
+  w.sport = Sport::BASEBALL;
+  CHECK_EQ(ha_period_name(w, 11), std::string("11th inning"));
+  CHECK_EQ(ha_period_name(w, 12), std::string("12th inning"));
+  CHECK_EQ(ha_period_name(w, 22), std::string("22nd inning"));
+
+  // Each sport's breaks.
+  HaTracker h;
+  GameSnapshot hk = live(1, 0);
+  hk.sport = Sport::HOCKEY;
+  hk.period = 1;
+  h.update(hk, c);
+  hk.short_detail = "End of 1st";
+  CHECK_EQ(h.update(hk, c)[0].period_name, std::string("1st period"));
+  HaTracker bk;
+  GameSnapshot nb = live(40, 38);
+  nb.sport = Sport::BASKETBALL;
+  nb.nba.regulation = 2;
+  nb.period = 1;
+  bk.update(nb, c);
+  nb.nba.phase = Phase::HALFTIME;
+  CHECK_EQ(bk.update(nb, c)[0].period_name, std::string("1st half"));
+  HaTracker mb;
+  GameSnapshot ml = live(2, 1);
+  ml.sport = Sport::BASEBALL;
+  ml.period = 3;
+  ml.mlb.half = Half::BOTTOM;
+  mb.update(ml, c);
+  ml.mlb.half = Half::MID;
+  CHECK(mb.update(ml, c).empty());  // the middle of an inning isn't its end
+  ml.mlb.half = Half::END;
+  CHECK_EQ(mb.update(ml, c)[0].period_name, std::string("3rd inning"));
+  ml.period = 4;
+  ml.mlb.half = Half::TOP;
+  CHECK(mb.update(ml, c).empty());
+  HaTracker sc;
+  GameSnapshot fc = live(0, 1);
+  fc.sport = Sport::SOCCER;
+  fc.period = 1;
+  sc.update(fc, c);
+  fc.soc.status = "STATUS_HALFTIME";
+  CHECK_EQ(sc.update(fc, c)[0].period_name, std::string("1st half"));
+
+  // A restart at halftime: that break is already over as far as the
+  // events go, and the 3rd quarter's start brings nothing.
+  HaTracker r;
+  GameSnapshot half = live(10, 7);
+  half.period = 2;
+  half.short_detail = "Halftime";
+  CHECK(r.update(half, c).empty());
+  CHECK(r.update(half, c).empty());
+  half.period = 3;
+  half.short_detail = "15:00 - 3rd";
+  CHECK(r.update(half, c).empty());
+
+  // Live games: nobody's team, so my_team is false all through.
+  HaTracker n;
+  HaContext nc = ha_ctx();
+  nc.neutral = true;
+  n.update(live(0, 0, GameState::PRE), nc);
+  e = n.update(live(3, 0), nc);
+  CHECK_EQ(kinds(e), std::string("start,score,lead_change"));
+  for (const auto &x : e)
+    CHECK(!x.my_team);
+}
+
+// The reminder before the start goes by the clock.
+static void test_ha_pregame() {
+  const int64_t kick = 1790000000;
+  GameSnapshot p = live(0, 0, GameState::PRE);
+  p.kickoff_epoch = kick;
+  HaContext c = ha_ctx();
+  c.pregame_minutes = 15;
+  c.now_epoch = kick - 3600;
+  HaTracker t;
+  CHECK(t.update(p, c).empty());
+  c.now_epoch = kick - 16 * 60;
+  CHECK(t.update(p, c).empty());
+  c.now_epoch = kick - 15 * 60;
+  auto e = t.update(p, c);
+  CHECK_EQ(kinds(e), std::string("pregame"));
+  CHECK_EQ(e[0].minutes, 15);
+  CHECK(e[0].my_team);
+  c.now_epoch = kick - 14 * 60;
+  CHECK(t.update(p, c).empty());  // once
+  // A panel that starts inside the window has missed it: nothing, even
+  // though the reminder never went out (it may have, before the restart).
+  HaTracker r;
+  c.now_epoch = kick - 10 * 60;
+  CHECK(r.update(p, c).empty());
+  c.now_epoch = kick - 9 * 60;
+  CHECK(r.update(p, c).empty());
+  // No time yet, no clock, a reminder of 0 or a kickoff to be decided: none.
+  HaTracker z;
+  c.now_epoch = kick - 3600;
+  z.update(p, c);
+  c.pregame_minutes = 0;
+  c.now_epoch = kick - 60;
+  CHECK(z.update(p, c).empty());
+  HaTracker tbd;
+  GameSnapshot q = p;
+  q.time_tbd = true;
+  c.pregame_minutes = 15;
+  c.now_epoch = kick - 3600;
+  tbd.update(q, c);
+  c.now_epoch = kick - 60;
+  CHECK(tbd.update(q, c).empty());
+  HaTracker clock;
+  c.now_epoch = 0;
+  clock.update(p, c);
+  CHECK(clock.update(p, c).empty());
+  // A restart inside the window with the clock arriving on the second tick:
+  // still nothing, the decision waited for the clock.
+  HaTracker late;
+  c.now_epoch = 0;
+  CHECK(late.update(p, c).empty());
+  c.now_epoch = kick - 10 * 60;
+  CHECK(late.update(p, c).empty());
+  c.now_epoch = kick - 9 * 60;
+  CHECK(late.update(p, c).empty());
+  // The clock arriving an hour out leaves the reminder to come.
+  HaTracker early;
+  c.now_epoch = 0;
+  CHECK(early.update(p, c).empty());
+  c.now_epoch = kick - 3600;
+  CHECK(early.update(p, c).empty());
+  c.now_epoch = kick - 15 * 60;
+  CHECK_EQ(kinds(early.update(p, c)), std::string("pregame"));
+  // A rounded-up minute: 14 min 10 s to go reads 15.
+  HaTracker up;
+  c.now_epoch = kick - 3600;
+  up.update(p, c);
+  c.now_epoch = kick - 14 * 60 - 10;
+  CHECK_EQ(up.update(p, c)[0].minutes, 15);
+}
+
+// Old copies of the document from ESPN's cache never repeat an event.
+static void test_ha_events_stale() {
+  HaTracker t;
+  GameSnapshot g = live(14, 10);
+  g.period = 3;
+  t.update(g, ha_ctx(100));
+  GameSnapshot old = live(7, 10);
+  old.period = 2;
+  CHECK(t.update(old, ha_ctx(110)).empty());
+  CHECK(t.update(g, ha_ctx(120)).empty());  // back to where it was: nothing again
+  g.team_score = 17;
+  auto e = t.update(g, ha_ctx(130));
+  CHECK_EQ(kinds(e), std::string("score"));
+  CHECK_EQ(e[0].points, 3);
+  // A final, then an old live copy, then the final again: one final.
+  g.state = GameState::POST;
+  g.completed = true;
+  CHECK_EQ(kinds(t.update(g, ha_ctx(140))), std::string("final"));
+  GameSnapshot live_copy = g;
+  live_copy.state = GameState::IN;
+  live_copy.completed = false;
+  CHECK(t.update(live_copy, ha_ctx(150)).empty());
+  CHECK(t.update(g, ha_ctx(160)).empty());
+  // A correction that holds becomes the last read, without an event, and
+  // the score after it counts from there.
+  HaTracker c;
+  GameSnapshot r = live(7, 0);
+  c.update(r, ha_ctx(0));
+  r.team_score = 0;
+  CHECK(c.update(r, ha_ctx(10)).empty());
+  CHECK(c.update(r, ha_ctx(10 + kHaStepBackHoldS - 1)).empty());
+  CHECK(c.update(r, ha_ctx(10 + kHaStepBackHoldS)).empty());
+  r.team_score = 3;
+  e = c.update(r, ha_ctx(200));
+  CHECK_EQ(kinds(e), std::string("score,lead_change"));
+  CHECK_EQ(e[0].points, 3);
+  CHECK_EQ(e[0].play, std::string("field_goal"));
+  // A second step back right after one held waits its own 90 s.
+  r.team_score = 0;
+  CHECK(c.update(r, ha_ctx(210)).empty());
+  r.team_score = 3;
+  CHECK(c.update(r, ha_ctx(220)).empty());  // not taken: the score stayed 3
+  r.team_score = 6;
+  CHECK_EQ(c.update(r, ha_ctx(230))[0].points, 3);
+  // A step back that comes and goes starts its wait again next time.
+  HaTracker w;
+  GameSnapshot s = live(7, 0);
+  w.update(s, ha_ctx(0));
+  s.team_score = 0;
+  w.update(s, ha_ctx(10));
+  s.team_score = 7;
+  w.update(s, ha_ctx(20));
+  s.team_score = 0;
+  w.update(s, ha_ctx(10 + kHaStepBackHoldS));
+  s.team_score = 7;
+  CHECK(w.update(s, ha_ctx(11 + kHaStepBackHoldS)).empty());
+}
+
+// The fields Home Assistant and the webhook get, and the sensors' words.
+static void test_ha_fields() {
+  HaTracker t;
+  HaContext c = ha_ctx();
+  t.update(live(0, 0), c);
+  auto e = t.update(live(7, 0), c);
+  HaFields f = ha_event_fields(e[0]);
+  std::string keys;
+  for (const auto &kv : f)
+    keys += std::string(kv.first) + "=" + kv.second + ";";
+  CHECK_EQ(keys, std::string("kind=score;league=nfl;sport=football;team=DAL;opponent=PHI;team_score=7;"
+                             "opponent_score=0;my_team=true;team_color=#002A5C;team_rgb=0,42,92;"
+                             "opponent_color=#004C54;opponent_rgb=0,76,84;game_id=1;play=touchdown;points=7;"));
+  f = ha_event_fields(e[1]);
+  CHECK_EQ(std::string(f.back().first), std::string("previous_leader"));
+  CHECK_EQ(ha_webhook_json(e[0], "gameday-\"x\""),
+           std::string("{\"event\":\"gameday_score\",\"panel\":\"gameday-\\\"x\\\"\",\"kind\":\"score\","
+                       "\"league\":\"nfl\",\"sport\":\"football\",\"team\":\"DAL\",\"opponent\":\"PHI\","
+                       "\"team_score\":\"7\",\"opponent_score\":\"0\",\"my_team\":\"true\","
+                       "\"team_color\":\"#002A5C\",\"team_rgb\":\"0,42,92\",\"opponent_color\":\"#004C54\","
+                       "\"opponent_rgb\":\"0,76,84\",\"game_id\":\"1\",\"play\":\"touchdown\",\"points\":\"7\"}"));
+  CHECK_EQ(ha_kind_name(HaKind::TEST), std::string("test"));
+  CHECK_EQ(ha_rgb("#FFb612"), (uint32_t) 0xFFB612);
+  CHECK_EQ(ha_rgb(""), (uint32_t) 0xFFFFFF);
+  CHECK_EQ(ha_rgb("12345"), (uint32_t) 0xFFFFFF);
+  CHECK_EQ(ha_rgb("zz0000"), (uint32_t) 0xFFFFFF);
+  std::string esc;
+  ha_json_escape(esc, std::string("a\\b\n"));
+  CHECK_EQ(esc, std::string("a\\\\b\\u000a"));
+
+  // The Period and Game Clock sensors.
+  GameSnapshot g = live(3, 0);
+  g.period = 2;
+  g.display_clock = "4:32";
+  g.short_detail = "4:32 - 2nd";
+  CHECK_EQ(ha_period_text(g), std::string("2nd quarter"));
+  CHECK_EQ(ha_clock_text(g), std::string("4:32"));
+  g.short_detail = "Halftime";
+  CHECK_EQ(ha_period_text(g), std::string("Halftime"));
+  CHECK_EQ(ha_clock_text(g), std::string(""));
+  g.state = GameState::POST;
+  g.completed = true;
+  CHECK_EQ(ha_period_text(g), std::string("Final"));
+  CHECK_EQ(ha_clock_text(g), std::string(""));
+  g.state = GameState::PRE;
+  CHECK_EQ(ha_period_text(g), std::string(""));
+  g = live(1, 0);
+  g.sport = Sport::BASEBALL;
+  g.period = 5;
+  g.mlb.half = Half::TOP;
+  CHECK_EQ(ha_period_text(g), std::string("Top of the 5th"));
+  CHECK_EQ(ha_clock_text(g), std::string(""));
+  g.sport = Sport::HOCKEY;
+  g.period = 1;
+  g.short_detail = "End of 1st";
+  CHECK_EQ(ha_period_text(g), std::string("End of 1st"));
+
+  // The webhook's address and the reminder's lead.
+  CHECK(hook_url_ok(""));
+  CHECK(hook_url_ok("http://192.168.1.20:1880/gameday"));
+  CHECK(hook_url_ok("http://homeassistant.local:8123/api/webhook/gameday-abc"));
+  CHECK(!hook_url_ok("https://example.com/hook"));
+  CHECK(!hook_url_ok("http://"));
+  CHECK(!hook_url_ok("http:///path"));
+  CHECK(!hook_url_ok("ftp://192.168.1.20/"));
+  CHECK(!hook_url_ok("192.168.1.20/hook"));
+  CHECK(!hook_url_ok("http://exa mple.com/"));
+  CHECK(!hook_url_ok("http://example.com/\xC3\xA9"));
+  CHECK(!hook_url_ok("http://" + std::string(kHookUrlMax, 'a')));
+  // A .local name is looked up over mDNS, by its name alone; the port stays
+  // out of it.
+  CHECK_EQ(hook_mdns_name("http://homeassistant.local:8123/api/webhook/x"), std::string("homeassistant"));
+  CHECK_EQ(hook_mdns_name("http://HomeAssistant.LOCAL/"), std::string("HomeAssistant"));
+  CHECK_EQ(hook_mdns_name("http://192.168.1.20:1880/gameday"), std::string(""));
+  CHECK_EQ(hook_mdns_name("http://nas.home.arpa/hook"), std::string(""));
+  CHECK_EQ(hook_mdns_name("http://.local/"), std::string(""));
+  size_t hb = 0, he = 0;
+  CHECK(hook_host_span("http://homeassistant.local:8123/api", hb, he));
+  CHECK_EQ(hb, (size_t) 7);
+  CHECK_EQ(he, (size_t) 26);
+  CHECK(hook_host_span("http://192.168.1.20", hb, he));
+  CHECK_EQ(he, (size_t) 19);
+  CHECK(!hook_host_span("http:///x", hb, he));
+  CHECK_EQ(clamp_pregame_minutes(-5), 0);
+  CHECK_EQ(clamp_pregame_minutes(30), 30);
+  CHECK_EQ(clamp_pregame_minutes(500), kPregameMax);
 }
 
 static void test_splash() {
@@ -1033,6 +1452,20 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
   // A year far enough out to overflow the day count in int.
   CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
+  // Across New Year: a Jan 1 bowl game seen on Dec 31 is "Tomorrow", in a
+  // year that isn't a leap year (2025, Dec 31 is day 364) and one that is
+  // (2028, day 365). It read "Fri" while local_day counted 366 days a year.
+  struct tm nye25 = mk(2025, 364, 3, 20, 0, 11, 31);  // Wed Dec 31 2025 8:00 PM
+  CHECK_EQ(kickoff_label(mk(2026, 0, 4, 12, 0, 0, 1), nye25), std::string("Tomorrow 12:00 PM"));
+  CHECK_EQ(kickoff_label(mk(2026, 1, 5, 19, 30, 0, 2), nye25), std::string("Fri 7:30 PM"));
+  struct tm nye28 = mk(2028, 365, 0, 20, 0, 11, 31);  // Sun Dec 31 2028
+  CHECK_EQ(kickoff_label(mk(2029, 0, 1, 12, 0, 0, 1), nye28), std::string("Tomorrow 12:00 PM"));
+  // A week out across New Year: six days is a weekday, seven is the date.
+  struct tm dec28 = mk(2025, 361, 0, 10, 0, 11, 28);  // Sun Dec 28 2025
+  CHECK_EQ(kickoff_label(mk(2026, 2, 6, 15, 0, 0, 3), dec28), std::string("Sat 3:00 PM"));
+  CHECK_EQ(kickoff_label(mk(2026, 3, 0, 15, 0, 0, 4), dec28), std::string("Jan 4 3:00 PM"));
+  // Still one day apart on every other night of the year.
+  CHECK_EQ(local_day(mk(2026, 59, 0, 0, 0, 2, 1)) - local_day(mk(2026, 58, 6, 0, 0, 1, 28)), (int64_t) 1);
 }
 
 // The label counts days in local time and the panel redraws it when
@@ -4546,100 +4979,98 @@ static void test_health_json() {
 
 static void test_heat_guard() {
   HeatGuard g;
-  uint32_t t = 1000;
-  CHECK(!g.feed(NAN, t));
-  CHECK(!g.feed(60.0f, t));
-  CHECK_EQ((int) g.step, 0);
-  // The first hot reading steps down at once, then one step per kHotStepMs.
-  CHECK(g.feed(kHotC, t += 15000));
-  CHECK_EQ((int) g.step, 1);
-  CHECK(!g.feed(kHotC + 1, t += kHotStepMs - 1));
-  CHECK(g.feed(kHotC + 1, t += 1));
-  CHECK_EQ((int) g.step, 2);
-  CHECK(g.feed(kHotC + 1, t += kHotStepMs));
-  CHECK(!g.feed(kHotC + 1, t += kHotStepMs));  // already the dimmest
-  CHECK_EQ((int) g.step, (int) kHeatSteps);
-  // Between the two limits it holds, however long.
-  CHECK(!g.feed(kCoolC + 1, t += 10 * kCoolStepMs));
-  CHECK_EQ((int) g.step, (int) kHeatSteps);
-  // Under kCoolC it waits a whole kCoolStepMs before each step back.
-  CHECK(!g.feed(kCoolC - 1, t += 15000));
-  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 15001));
-  CHECK(g.feed(kCoolC - 1, t += 15001));
-  CHECK_EQ((int) g.step, (int) kHeatSteps - 1);
-  CHECK(!g.feed(kCoolC - 1, t += kCoolStepMs - 1));
-  CHECK(g.feed(kCoolC - 1, t += 1));
-  // Warm again in between restarts the wait.
-  CHECK(!g.feed(kCoolC, t += kCoolStepMs));
-  CHECK(!g.feed(kCoolC - 1, t += 15000));
-  CHECK_EQ((int) g.step, 1);
-  CHECK(g.feed(kCoolC - 1, t += kCoolStepMs));
-  CHECK_EQ((int) g.step, 0);
-  CHECK(!g.feed(20.0f, t += kCoolStepMs));
-  // Past the floor it goes straight to the dimmest step.
-  CHECK(g.feed(kHotFloorC, t += 15000));
-  CHECK_EQ((int) g.step, (int) kHeatSteps);
-  CHECK(g.last_c == kHotFloorC);
-  // millis() wrapping doesn't stall it.
-  HeatGuard w;
-  uint32_t m = 0xFFFFFFFFu - 1000;
-  CHECK(w.feed(kHotC, m));
-  CHECK(w.feed(kHotC, m + kHotStepMs));
-  CHECK_EQ((int) w.step, 2);
+  CHECK(!g.feed(NAN));
+  CHECK(std::isnan(g.last_c));
+  CHECK(!g.feed(60.0f));
+  CHECK(!g.hot);
+  // The thermometer goes up at kHotC and stays up between the two limits,
+  // however long.
+  CHECK(!g.feed(kHotC - 0.1f));
+  CHECK(g.feed(kHotC));
+  CHECK(g.hot);
+  CHECK(!g.feed(kHotC + 10));
+  CHECK(!g.feed(kCoolC + 1));
+  CHECK(!g.feed(kCoolC));
+  CHECK(g.hot);
+  // Down once it reads under kCoolC
+  CHECK(g.feed(kCoolC - 0.1f));
+  CHECK(!g.hot);
+  CHECK(!g.feed(20.0f));
+  CHECK(g.last_c == 20.0f);
+  // A NAN in between changes nothing
+  CHECK(g.feed(kHotC));
+  CHECK(!g.feed(NAN));
+  CHECK(g.hot);
+  CHECK(g.last_c == kHotC);
 }
 
 static void test_power_log() {
   PowerLog log{};
+  CHECK_EQ(sizeof(PowerLog), (size_t) 8);  // the flash blob from the earlier guard
   CHECK(!power_log_start(log, false));
+  CHECK_EQ(log.brownouts, 0u);
   CHECK(power_log_start(log, true));
-  CHECK_EQ(log.brownouts, 1u);
-  CHECK_EQ((int) log.capped, 0);
-  // A settled run ends the streak; the count stays.
-  CHECK(power_log_settled(log));
-  CHECK(!power_log_settled(log));
   CHECK(power_log_start(log, true));
-  CHECK_EQ((int) log.capped, 0);
-  // Two in a row cap it, and power cuts in between don't count either way.
+  CHECK_EQ(log.brownouts, 2u);
   CHECK(!power_log_start(log, false));
-  CHECK(power_log_start(log, true));
-  CHECK_EQ((int) log.capped, 1);
-  CHECK_EQ(log.brownouts, 3u);
-  // Settling doesn't lift the cap; only the owner does.
-  CHECK(power_log_settled(log));
-  CHECK_EQ((int) log.capped, 1);
-  CHECK(power_log_clear(log));
-  CHECK(!power_log_clear(log));
-  CHECK_EQ((int) log.capped, 0);
-  CHECK_EQ(log.brownouts, 3u);
-  // The streak doesn't wrap.
-  log.streak = 255;
-  power_log_start(log, true);
-  CHECK_EQ((int) log.streak, 255);
+  CHECK_EQ(log.brownouts, 2u);
+}
+
+static void test_power_dip() {
+  // A normal start: never dims, whatever the clock says.
+  PowerDip none;
+  CHECK(!none.light(0));
+  CHECK(!none.light(1000));
+  CHECK(!none.tick(5000));
+  // A brownout start: the window opens when the display first lights, not
+  // at boot, and holds for kDipMs.
+  PowerDip d;
+  d.pending = true;
+  CHECK(!d.tick(400));  // nothing lit yet
+  CHECK(d.light(500));
+  CHECK(!d.pending);
+  CHECK(d.light(500 + kDipMs - 1));
+  CHECK(!d.tick(500 + kDipMs - 1));
+  CHECK(d.tick(500 + kDipMs));  // once, when it closes
+  CHECK(!d.tick(500 + kDipMs));
+  CHECK(!d.light(500 + kDipMs));
+  CHECK(!d.light(10 * kDipMs));
+  // A brightness change inside the window stays dimmed; the window closes
+  // on the next light() too, when the loop hasn't ticked yet.
+  PowerDip e;
+  e.pending = true;
+  CHECK(e.light(100));
+  CHECK(e.light(1100));
+  CHECK(!e.light(100 + kDipMs));
+  CHECK(!e.tick(100 + kDipMs + 1));
+  // millis() wrapping doesn't stall it.
+  PowerDip w;
+  w.pending = true;
+  const uint32_t m = 0xFFFFFFFFu - 1000;
+  CHECK(w.light(m));
+  CHECK(w.light(m + 2000));
+  CHECK(w.tick(m + kDipMs));
 }
 
 static void test_guarded_brightness() {
-  CHECK_EQ((int) guarded_brightness(128, 0, false), 128);
-  CHECK_EQ((int) guarded_brightness(255, 0, false), 255);
-  CHECK_EQ((int) guarded_brightness(200, 1, false), 140);
-  CHECK_EQ((int) guarded_brightness(200, kHeatSteps, false), 50);
-  CHECK_EQ((int) guarded_brightness(200, 9, false), 50);  // past the last step
-  CHECK_EQ((int) guarded_brightness(200, 0, true), (int) kPowerCap);
-  CHECK_EQ((int) guarded_brightness(40, 0, true), 40);  // already under the cap
-  CHECK_EQ((int) guarded_brightness(255, kHeatSteps, true), (int) kPowerCap);
-  CHECK_EQ((int) guarded_brightness(1, kHeatSteps, true), 1);  // never off
-  CHECK(guard_mark(0, false) == GuardMark::NONE);
-  CHECK(guard_mark(2, false) == GuardMark::HEAT);
-  CHECK(guard_mark(2, true) == GuardMark::POWER);
+  CHECK_EQ((int) dipped_brightness(128, false), 128);
+  CHECK_EQ((int) dipped_brightness(255, false), 255);
+  CHECK_EQ((int) dipped_brightness(128, true), 64);
+  CHECK_EQ((int) dipped_brightness(255, true), 127);
+  CHECK_EQ((int) dipped_brightness(1, true), 1);  // never off
+  CHECK_EQ((int) dipped_brightness(0, true), 0);
+  CHECK(guard_mark(false, false) == GuardMark::NONE);
+  CHECK(guard_mark(true, false) == GuardMark::HEAT);
+  CHECK(guard_mark(false, true) == GuardMark::POWER);
+  CHECK(guard_mark(true, true) == GuardMark::POWER);
 
   char buf[96];
-  PowerLog log{};
-  log.brownouts = 4;
-  log.capped = 1;
-  guard_json_keys(buf, sizeof(buf), 47.25f, 2, log);
-  CHECK_EQ(std::string(buf), std::string(",\"temp\":47.2,\"heat\":2,\"brownouts\":4,\"power\":\"capped\""));
-  log.capped = 0;
-  guard_json_keys(buf, sizeof(buf), NAN, 0, log);
+  guard_json_keys(buf, sizeof(buf), 47.25f, true, 4, true);
+  CHECK_EQ(std::string(buf), std::string(",\"temp\":47.2,\"heat\":1,\"brownouts\":4,\"power\":\"dipped\""));
+  guard_json_keys(buf, sizeof(buf), NAN, false, 4, false);
   CHECK_EQ(std::string(buf), std::string(",\"heat\":0,\"brownouts\":4,\"power\":\"ok\""));
+  guard_json_keys(buf, sizeof(buf), 80.0f, true, 0, false);
+  CHECK_EQ(std::string(buf), std::string(",\"temp\":80.0,\"heat\":1,\"brownouts\":0,\"power\":\"ok\""));
 }
 
 static void test_countdown() {
@@ -4809,14 +5240,36 @@ static void test_night() {
   p.screen_off = 1;
   CHECK(night_state(p, true, late, false) == Night::DARK);
   CHECK(night_state(p, true, late, true) == Night::GAME);  // a live game lights it
+  // A skipped night is lit, live game or not, and only inside its hours
+  CHECK(night_state(p, true, late, false, true) == Night::SKIPPED);
+  CHECK(night_state(p, true, late, true, true) == Night::SKIPPED);
+  CHECK(night_state(p, true, 12 * 60, false, true) == Night::DAY);
+  CHECK(night_state(p, false, late, false, true) == Night::DAY);
+  CHECK(night_holding(Night::DIM));
+  CHECK(night_holding(Night::DARK));
+  CHECK(!night_holding(Night::GAME));
+  CHECK(!night_holding(Night::SKIPPED));
+  CHECK(!night_holding(Night::DAY));
+  CHECK_EQ(std::string(night_word(Night::SKIPPED)), std::string("skipped"));
+  {
+    // Skipped until the end of the hours it was in: 7 AM, from 11:30:20 PM
+    // or 2:00:45 AM, and 6 AM inside a 1 AM to 6 AM night.
+    const int64_t t = 1792000000;
+    CHECK_EQ(night_skip_until(p, t, 23 * 60 + 30, 20), t - 20 + (int64_t) (7 * 60 + 30) * 60);
+    CHECK_EQ(night_skip_until(p, t, 2 * 60, 45), t - 45 + (int64_t) (5 * 60) * 60);
+    NightPrefs early = p;
+    early.start = 60;
+    early.end = 6 * 60;
+    CHECK_EQ(night_skip_until(early, t, 3 * 60 + 59, 0), t + (int64_t) (2 * 60 + 1) * 60);
+  }
 
   p.level = 20;
   CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
   CHECK_EQ((int) night_brightness(128, Night::DARK, p), 0);
   CHECK_EQ((int) night_brightness(128, Night::GAME, p), 128);
   CHECK_EQ((int) night_brightness(128, Night::DAY, p), 128);
-  // Heat and power still hold the night level down
-  CHECK_EQ((int) guarded_brightness(night_brightness(128, Night::DIM, p), kHeatSteps, false), 5);
+  // The dim start after a brownout halves the night level too
+  CHECK_EQ((int) dipped_brightness(night_brightness(128, Night::DIM, p), true), 10);
   CHECK_EQ(std::string(night_word(Night::DAY)), std::string(""));
   CHECK_EQ(std::string(night_word(Night::DARK)), std::string("off"));
 
@@ -6132,6 +6585,7 @@ int main() {
   test_health_json();
   test_heat_guard();
   test_power_log();
+  test_power_dip();
   test_guarded_brightness();
   test_night();
   test_offseason();
@@ -6142,6 +6596,10 @@ int main() {
   test_regulatory();
   test_wifi_history();
   test_ha_events();
+  test_ha_game_events();
+  test_ha_pregame();
+  test_ha_events_stale();
+  test_ha_fields();
   test_line_score();
   test_score_log();
   test_best_game();
