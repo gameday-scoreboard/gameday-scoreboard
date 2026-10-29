@@ -58,6 +58,8 @@ You pick what each numbered button plays, and making a playlist no longer change
 - **All favorites**: switches the panel to Favorite teams with every favorite.
 - **Nothing**: the button does nothing, and doesn't turn on a panel that is off.
 
+If your buttons played your first four playlists before this update, they start on your first four favorites after it. Pick a playlist for each one again.
+
 A button stays on what you pick: adding, moving or renaming a favorite or a playlist never changes it. If you take out the team a button plays, remove its playlist, or its sport row goes (your favorites are down to one sport, or none in that sport), that button goes back to its own favorite, and the Remote card says so under it until you pick for that button again.
 
 The Favorites card marks the teams a button plays, and the Playlists card marks the playlists. Your picks are in a settings backup.

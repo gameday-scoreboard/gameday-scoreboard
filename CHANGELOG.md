@@ -35,6 +35,7 @@ through `update_important` in the panel's state.
 ### ⚠️ Heads up
 
 - 🔌 The panel no longer dims itself when hot or after a power dip, and the Clear button is gone: a thermometer or plug in the corner says what happened, and after a power dip it starts at half brightness for 3 seconds
+- 🎛️ If your remote's buttons 1 to 4 played your playlists, they go back to your first four favorites after this update. Set them again under **Remote** on the device page
 
 ### ✨ New
 
