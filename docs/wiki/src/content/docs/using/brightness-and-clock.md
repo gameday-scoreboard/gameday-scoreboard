@@ -72,6 +72,10 @@ Favorite teams follows the same rule as Live games' first favorite: the clock co
 
 On a single 64x64 panel the date goes under the time, and the next game goes in the ticker. See [Show: Favorite teams, Live games](/using/modes/).
 
+:::note[Coming in the next release]
+Two switches under **Between games** on the [device page](/using/device-page/#between-games) change when this clock shows. With **Clock** off, the next game's board stays up between seasons instead. With **Next game** off, the clock shows whenever the panel is waiting for a game, in season too, with the next game under the time. A game in progress or just over still takes the panel, and in Favorite teams so does one about to start.
+:::
+
 ## Heat and power protection
 
 **Too warm.** If the controller's chip reads above 75 C, in a sunny window or a closed cabinet for example, the panel dims itself a step at a time: to 70%, then 45%, then 25% of your brightness, one step every two minutes while it stays hot, and straight to 25% at 85 C. A small thermometer pulses slowly in the top right corner, and every two minutes the bottom line says **Too warm, dimming** in orange for 15 seconds. Once the chip is back under 70 C, the panel steps back up every five minutes until it's at your brightness again. Keep it out of direct sun and give it some air behind it.

@@ -41,7 +41,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
-The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (coming in the next release: or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. Coming in the next release: the [news card](/using/news/)'s **News headlines** switch too.
+The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (coming in the next release: or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. Coming in the next release: the [news card](/using/news/)'s **News headlines** switch too, and every switch in the **Between games** list. A backup from older firmware leaves the cards it doesn't name as they are.
 
 ## What isn't
 

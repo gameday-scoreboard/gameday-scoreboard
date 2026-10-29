@@ -163,11 +163,14 @@
       </div>
       <div class="card" id="cdCard" hidden>
         <h2>Between games</h2>
-        <p class="hint">What the panel shows while no game is on.</p>
-        <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
-        <div class="ctl" id="glRow"><label>Game leaders<small>At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.</small></label><button class="sw" data-set="gameleaders" aria-label="Game leaders"></button></div>
-        <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
-        <div class="ctl" id="newsRow"><label>News headlines<small>ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
+        <p class="hint">What the panel shows while no game is on. Turn on the cards you want; they take turns.</p>
+        <div id="cardList"></div>
+        <div id="cardsOld">
+          <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+          <div class="ctl" id="glRow"><label>Game leaders<small>At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.</small></label><button class="sw" data-set="gameleaders" aria-label="Game leaders"></button></div>
+          <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
+          <div class="ctl" id="newsRow"><label>News headlines<small>ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
+        </div>
         <div class="sub">Your own countdown</div>
         <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
@@ -400,6 +403,11 @@
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
+    // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
+    cards: (v) => {
+      const pairs = new Map(v.split(",").map((p) => p.split(":")));
+      return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
+    },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
@@ -421,6 +429,7 @@
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
     lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
     list: (a, b) => (a || 0) === (b || 0),
+    cards: (a, b) => (a || []).map((c) => c.id + ":" + c.on).join() === (b || []).map((c) => c.id + ":" + c.on).join(),
   };
   const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
   const overlay = () => {
@@ -800,6 +809,54 @@
     setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
+  // The Between games list: a row per card in the state's cards, in its
+  // order, so a card newer firmware adds shows with no change here. A card
+  // with nothing to show yet is greyed with what it needs; its switch still
+  // works.
+  const cardAbout = {
+    next: "The next game's board: the teams, the day and the time.",
+    clock: "The time in your team's colors, when no game is coming up for weeks. With Next game off, the clock shows instead of the next game.",
+    countdown: "Big digits to the start, \"2d 14h\", taking turns with the next game every 10 seconds.",
+    custom: "A day you pick below, like Christmas, in the last 10 seconds of every minute until that day ends.",
+    message: "The Message card's text or list, taking turns with the scoreboard.",
+    gameleaders: "At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.",
+    top25: "The AP poll, a page at a time, every 10 minutes.",
+    news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
+  };
+  const cardRows = {};
+  const renderCards = () => {
+    const host = $("#cardList");
+    const cards = S.cards || [];
+    if (cards.map((c) => c.id).join() !== Object.keys(cardRows).join()) {
+      host.textContent = "";
+      for (const k of Object.keys(cardRows)) delete cardRows[k];
+      for (const c of cards) {
+        const row = el("div", "ctl card-row");
+        row.dataset.card = c.id;
+        const label = el("label", null, c.name);
+        const about = el("small", null, cardAbout[c.id] || "");
+        const hint = el("small", "card-hint");
+        label.append(about, hint);
+        const sw = el("button", "sw");
+        sw.setAttribute("role", "switch");
+        sw.setAttribute("aria-label", c.name);
+        sw.onclick = () => {
+          const now = (S.cards || []).find((x) => x.id === c.id);
+          setGD({ cards: c.id + ":" + (now && now.on ? 0 : 1) });
+        };
+        row.append(label, sw);
+        host.appendChild(row);
+        cardRows[c.id] = { row, hint, sw };
+      }
+    }
+    for (const c of cards) {
+      const r = cardRows[c.id];
+      setOn(r.sw, !!c.on, "aria-checked");
+      r.row.classList.toggle("waiting", !c.ok);
+      r.hint.hidden = c.ok || !c.hint;
+      r.hint.textContent = c.ok ? "" : c.hint || "";
+    }
+  };
   // The custom countdown: the name and the day post on their own, as they change.
   const cdName = $("#cdname");
   const cdDate = $("#cddate");
@@ -1010,6 +1067,9 @@
     });
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = S.countdown === undefined;
+    // The Between games list; firmware from before it has a switch per card.
+    $("#cardsOld").hidden = !!S.cards;
+    renderCards();
     $("#glRow").hidden = S.gameleaders === undefined;  // firmware from before the card
     $("#top25Row").hidden = S.top25 === undefined;
     $("#newsRow").hidden = S.news === undefined;  // and before the news card

@@ -34,6 +34,16 @@
   "nightend": "07:00",
   "nightscreen": true,
   "nightlevel": 16,
+  "cards": {
+    "next": true,
+    "clock": false,
+    "countdown": true,
+    "custom": true,
+    "message": true,
+    "gameleaders": true,
+    "top25": true,
+    "news": false
+  },
   "countdown": true,
   "top25": true,
   "news": false,

@@ -333,7 +333,7 @@ void GamedayComponent::setup() {
       cd_ymd != this->countdown_.ymd)
     this->countdown_ = CountdownPrefs{};
   this->countdown_.name[::espn::kCountdownNameMax] = '\0';
-  this->countdown_.cards_off &= CARD_OFF_LEADERS | CARD_OFF_TOP25;
+  this->countdown_.cards_off &= ::espn::kCardsOffBits;
   if (this->countdown_.news > 1)
     this->countdown_.news = 0;
   this->pref9_ = global_preferences->make_preference<Prefs9>(fnv1_hash("gameday_prefs9_v1"));
@@ -1623,15 +1623,66 @@ void GamedayComponent::set_countdown(bool on) {
   this->save_countdown_();
 }
 
-void GamedayComponent::set_game_leaders(bool on) {
-  if (on == this->game_leaders_on())
+bool GamedayComponent::card_on(::espn::Card c) const {
+  switch (c) {
+    case ::espn::Card::COUNTDOWN:
+      return this->countdown_on();
+    case ::espn::Card::NEWS:
+      return this->news_on();
+    default:
+      return (this->countdown_.cards_off & ::espn::card_bit(c)) == 0;
+  }
+}
+
+void GamedayComponent::set_card(::espn::Card c, bool on) {
+  if (c == ::espn::Card::COUNTDOWN)
+    return this->set_countdown(on);
+  if (c == ::espn::Card::NEWS)
+    return this->set_news(on);
+  if (on == this->card_on(c))
     return;
   if (on)
-    this->countdown_.cards_off &= (uint16_t) ~CARD_OFF_LEADERS;
+    this->countdown_.cards_off &= (uint16_t) ~::espn::card_bit(c);
   else
-    this->countdown_.cards_off |= CARD_OFF_LEADERS;
+    this->countdown_.cards_off |= ::espn::card_bit(c);
   this->save_countdown_();
+  for (const auto &r : ::espn::kCards)
+    if (r.card == c)
+      ESP_LOGI(TAG, "Between games: %s %s", r.name, on ? "on" : "off");
+  // The cards that take turns see their switch at their next tick; the
+  // board's own card, the next game or the clock, is drawn again now.
+  if (c == ::espn::Card::NEXT || c == ::espn::Card::CLOCK)
+    this->redraw_board_();
 }
+
+bool GamedayComponent::card_ok_(::espn::Card c) const {
+  switch (c) {
+    case ::espn::Card::CUSTOM: {
+      if (this->countdown_.ymd == 0)
+        return false;
+      // Its day is over: nothing until the owner picks another.
+      return !this->clock_set_() || (int64_t) this->time_->timestamp_now() < this->custom_start_() + ::espn::kDayS;
+    }
+    case ::espn::Card::MESSAGE:
+      return !this->msg_url_.empty() || !this->msg_text_.empty();
+    case ::espn::Card::TOP25:
+      return this->top25_slots_() != 0;
+    default:
+      return true;
+  }
+}
+
+void GamedayComponent::redraw_board_() {
+  if (this->demo_playing_() || !this->board_ready_)
+    return;
+  // The finals rotation keeps its card's ticker, so the card is put up again.
+  if (this->recap_on_ && this->live_mode_())
+    this->recap_show_();
+  else
+    this->emit_({});
+}
+
+void GamedayComponent::set_game_leaders(bool on) { this->set_card(::espn::Card::LEADERS, on); }
 
 // ---- game leaders (game_leaders.h) ------------------------------------------------
 
@@ -1710,16 +1761,7 @@ bool GamedayComponent::fetch_leaders_(Job &j) {
   return true;
 }
 
-void GamedayComponent::set_top25(bool on) {
-  if (on == this->top25_on())
-    return;
-  if (on)
-    this->countdown_.cards_off &= (uint16_t) ~CARD_OFF_TOP25;
-  else
-    this->countdown_.cards_off |= CARD_OFF_TOP25;
-  this->save_countdown_();
-  ESP_LOGI(TAG, "Top 25 card %s", on ? "on" : "off");
-}
+void GamedayComponent::set_top25(bool on) { this->set_card(::espn::Card::TOP25, on); }
 
 void GamedayComponent::set_news(bool on) {
   if (on == this->news_on())
@@ -3647,30 +3689,33 @@ void GamedayComponent::draw_(const UpdateFields &f) {
     cb(f);
 }
 
-// The off-season clock (offseason.h): favorite #1 between seasons as a Live
+// The clock card (offseason.h): favorite #1 between seasons as a Live
 // mode's card when nothing is live, a Live mode whose rotation has no cards,
-// or Favorites with no card at all. Team colors, or neutral gray with no
-// team.
+// or Favorites with no card at all. With Next game off (cards.h,
+// clock_instead) it also stands in for the next game's card. Team colors, or
+// neutral gray with no team.
 void GamedayComponent::clock_fields_(UpdateFields &f) {
   if (this->demo_playing_() || !this->clock_set_())
     return;
   const GameSnapshot &g = this->game_;
   const ::espn::Team *team = this->fallback_team_();
+  const bool next_on = this->card_on(::espn::Card::NEXT), clock_on = this->card_on(::espn::Card::CLOCK);
   std::string color;  // hex, from the team endpoint or the game
   if (this->live_mode_() && !this->live_fallback_) {
     // Nothing in the last week and no kickoff in the next (recap_show_).
-    if (!this->recap_on_ || !this->recap_cards_.empty())
+    if (!clock_on || !this->recap_on_ || !this->recap_cards_.empty())
       return;
   } else if (this->favorites_mode_()) {
     // A favorite's game locked on has the board, playlist or not (a favorite
     // outside the playlist still takes the panel near its kickoff).
     if (this->fav_locked_)
       return;
-    // Every favorite in the playlist has been read, and each is between
-    // seasons: no game, or the next one past the season horizon (often next
-    // season's opener). The Next line is the soonest of those games.
+    // Between seasons: every favorite in the playlist has been read, and each
+    // has no game, or the next one past the season horizon (often next
+    // season's opener). The Next line is the soonest game ahead.
     int64_t tnow = (int64_t) this->time_->timestamp_now();
     const FavEntry *first = nullptr, *next = nullptr;
+    bool off_season = true;
     for (const auto &e : this->fav_) {
       if (!this->fav_in_list_(e.slot - 1))
         continue;
@@ -3680,12 +3725,13 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
       int64_t kick = polled ? e.game.kickoff_epoch : e.sched.kickoff_epoch;
       if (::espn::fav_off_season(e.sched.valid, !e.sched.event_id.empty(), polled, e.game.state, kick, tnow,
                                  ::espn::season_horizon(::espn::league_sport(e.team->league))) != 1)
-        return;
+        off_season = false;
       if (polled && e.game.state == GameState::PRE && e.game.kickoff_epoch > 0 &&
           (next == nullptr || e.game.kickoff_epoch < next->game.kickoff_epoch))
         next = &e;
     }
-    if (first == nullptr)
+    // Unlocked, no favorite's game is under way or just over.
+    if (first == nullptr || !::espn::clock_instead(next_on, clock_on, true, off_season))
       return;
     const FavEntry &shown = next != nullptr ? *next : *first;
     team = shown.team;
@@ -3700,8 +3746,11 @@ void GamedayComponent::clock_fields_(UpdateFields &f) {
     if (!none && !g.valid)
       return;
     int64_t tnow = (int64_t) this->time_->timestamp_now();
-    if (!::espn::off_season(none ? GameState::NOT_FOUND : g.state, g.kickoff_epoch, tnow,
-                            ::espn::season_horizon(::espn::league_sport(team->league))))
+    GameState state = none ? GameState::NOT_FOUND : g.state;
+    bool upcoming = state == GameState::PRE || state == GameState::NOT_FOUND;
+    if (!::espn::clock_instead(next_on, clock_on, upcoming,
+                               ::espn::off_season(state, g.kickoff_epoch, tnow,
+                                                  ::espn::season_horizon(::espn::league_sport(team->league)))))
       return;
     color = g.valid ? g.team_color : this->schedule_.team_color;
     if (g.valid && g.state == GameState::PRE && g.kickoff_epoch > 0)
@@ -3736,7 +3785,7 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   if (g.valid && g.state == GameState::IN)
     return CountdownCard::NONE;
   int64_t start = this->custom_start_();
-  bool custom = start != 0 && now < start + ::espn::kDayS;
+  bool custom = this->card_on(::espn::Card::CUSTOM) && start != 0 && now < start + ::espn::kDayS;
   bool next = this->countdown_on() && g.valid && g.state == GameState::PRE && !g.time_tbd && g.kickoff_epoch > now;
   if (this->live_mode_() && !this->live_fallback_)
     return custom && ::espn::custom_turn(now) ? CountdownCard::CUSTOM : CountdownCard::NONE;
@@ -3817,11 +3866,7 @@ void GamedayComponent::day_tick_() {
   if (this->demo_playing_() || (this->game_.valid && this->game_.state == GameState::IN))
     return;
   ESP_LOGI(TAG, "New local day, redrawing the kickoff labels");
-  // The finals rotation keeps its card's ticker, so the card is put up again.
-  if (this->recap_on_ && this->live_mode_())
-    this->recap_show_();
-  else
-    this->emit_({});
+  this->redraw_board_();
 }
 
 // ---- finals rotation ------------------------------------------------------------
@@ -4180,6 +4225,18 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["cdname"] = (const char *) this->countdown_.name;
   doc["cddate"] = ::espn::countdown_date_text(this->countdown_.ymd);
   doc["gameleaders"] = this->game_leaders_on();
+  // The Between games list (cards.h): on is the owner's switch, ok whether
+  // the card has something to show, and hint what it needs while ok is
+  // false ("" for a card that always has something).
+  JsonArray cards = doc["cards"].to<JsonArray>();
+  for (const auto &r : ::espn::kCards) {
+    JsonObject c = cards.add<JsonObject>();
+    c["id"] = r.id;
+    c["name"] = r.name;
+    c["on"] = this->card_on(r.card);
+    c["ok"] = this->card_ok_(r.card);
+    c["hint"] = r.hint;
+  }
   // The night schedule (night.h). night_now is what it is doing: "" (not
   // now), "dim", "off", "game" (its hours, held off by a live game) or
   // "skipped" (the owner turned it off for the rest of the night).
@@ -4896,7 +4953,7 @@ void GamedayComponent::msg_tick_() {
   if (now - this->msg_tick_ms_ < 250)
     return;
   this->msg_tick_ms_ = now;
-  const bool on = !this->msg_url_.empty() || !this->msg_text_.empty();
+  const bool on = this->card_on(::espn::Card::MESSAGE) && this->card_ok_(::espn::Card::MESSAGE);
   // Nor over the news or Top 25 card: the message waits for them to come down.
   const bool between = this->card_between_(now) && !this->news_shown_ &&
                        now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
@@ -5635,6 +5692,13 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
       case ::espn::SetKind::GAMELEADERS:
         this->set_game_leaders(op.on);
+        break;
+      case ::espn::SetKind::CARDS:
+        for (const auto &id : op.refused)
+          ESP_LOGW(TAG, "Between games: no card %s here, leaving it", id.c_str());
+        for (const auto &r : ::espn::kCards)
+          if (op.mask & ::espn::card_bit(r.card))
+            this->set_card(r.card, (op.value & ::espn::card_bit(r.card)) != 0);
         break;
       case ::espn::SetKind::CD_NAME:
         this->set_custom_countdown_name(op.text);

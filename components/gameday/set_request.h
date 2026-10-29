@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "cards.h"
 #include "countdown.h"
 #include "hook.h"
 #include "leagues.h"
@@ -31,7 +32,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "news"};
+                                    "news",   "cards"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -211,6 +212,7 @@ enum class SetKind : uint8_t {
   HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
   PREGAME,      // value, minutes before the start for the reminder event, 0 = none
   NEWS,         // on, the news card between games (news.h)
+  CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
 };
 
 struct TeamRef {
@@ -435,6 +437,15 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TOP25);
   if (k == "news")
     return on(SetKind::NEWS);
+  if (k == "cards") {
+    op.kind = SetKind::CARDS;
+    uint16_t named = 0, cards_on = 0;
+    if (!parse_cards(v, named, cards_on, op.refused))
+      return false;
+    op.mask = named;
+    op.value = cards_on;
+    return true;
+  }
   if (k == "cdname") {
     op.kind = SetKind::CD_NAME;
     op.text = countdown_name(v);

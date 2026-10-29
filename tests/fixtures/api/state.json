@@ -75,6 +75,16 @@
   "cdname": "Christmas",
   "cddate": "2026-12-25",
   "gameleaders": true,
+  "cards": [
+    {"id": "next", "name": "Next game", "on": true, "ok": true, "hint": ""},
+    {"id": "clock", "name": "Clock", "on": false, "ok": true, "hint": ""},
+    {"id": "countdown", "name": "Countdown to the next game", "on": true, "ok": true, "hint": ""},
+    {"id": "custom", "name": "Your own countdown", "on": true, "ok": true, "hint": "Pick its day below first"},
+    {"id": "message", "name": "Message card", "on": true, "ok": true, "hint": "Add text or a list in the Message card first"},
+    {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
+    {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
+    {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""}
+  ],
   "night": true,
   "nightstart": "23:00",
   "nightend": "07:00",
