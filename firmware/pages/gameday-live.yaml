@@ -670,6 +670,26 @@ script:
           lv_obj_move_foreground(id(tt_msg));
           lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
 
+  # The news card (components/gameday/news.h): its top line ("DAL NEWS")
+  # and one headline under it, or nothing. Sent as "news", like "msg".
+  - id: gd_news_card
+    then:
+      - lambda: |-
+          const std::string &headline = id(gameday_ctl).news_card();
+          if (headline.empty()) {
+            lv_obj_add_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          lv_obj_set_size(id(tt_news), W, 64);
+          lv_obj_set_width(id(tt_news_head_lbl), W);
+          lv_label_set_text(id(tt_news_head_lbl), id(gameday_ctl).news_head().c_str());
+          const lv_font_t *fonts[2] = {id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font()};
+          id(gameday_ctl).set_news_roll_ms(
+              gameday::board_text(id(tt_news_body), id(tt_news_lbl), headline.c_str(), fonts, 2, 54));
+          lv_obj_move_foreground(id(tt_news));
+          lv_obj_clear_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
+
   # The off-season clock's time, and the date when that line has no next
   # game, in the panel's time zone; or the countdown card's digits. A label
   # is only rewritten when its text changes, so once a minute.
@@ -1237,6 +1257,54 @@ lvgl:
                   long_mode: WRAP
                   text: ""
                   text_color: 0xFFFFFF
+
+        # The news card, over the board between games (gd_news_card): the
+        # top line, and the headline in the box under it, rolling when long.
+        - obj:
+            id: tt_news
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_news_head_lbl
+                  x: 0
+                  y: 1
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFB000
+              - obj:
+                  id: tt_news_body
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 10
+                  width: 64
+                  height: 54
+                  bg_opa: TRANSP
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: tt_news_lbl
+                        x: 1
+                        y: 0
+                        width: 62
+                        text_align: CENTER
+                        long_mode: WRAP
+                        text: ""
+                        text_color: 0xFFFFFF
 
       on_load:
         then:

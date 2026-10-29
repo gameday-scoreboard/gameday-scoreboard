@@ -35,6 +35,7 @@
 #include "hook.h"
 #include "line_score.h"
 #include "message.h"
+#include "news.h"
 #include "night.h"
 #include "playlists.h"
 #include "offseason.h"
@@ -324,6 +325,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The custom countdown: a name and a day (YYYYMMDD, 0 clears it).
   void set_custom_countdown_name(const std::string &name);
   void set_custom_countdown_day(uint32_t ymd);
+  // The news card (news.h), off unless the owner turns it on.
+  bool news_on() const { return this->countdown_.news == 1; }
+  void set_news(bool on);
   // "Install updates automatically", off unless the owner turns it on.
 #ifdef GAMEDAY_BAR
   // The bar build (firmware/pages/bar.yaml) always installs from the beta
@@ -387,6 +391,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
+  // The news card's headline on the scoreboard page now, "" while it is
+  // down, and its top line ("DAL NEWS"); gd_news_card draws them and says
+  // how long a headline too tall for the panel takes to roll.
+  const std::string &news_card() const { return this->news_card_; }
+  const std::string &news_head() const { return this->news_head_; }
+  void set_news_roll_ms(uint32_t ms) { this->news_roll_ms_ = ms; }
 
   void setup() override;
   void loop() override;
@@ -472,6 +482,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_msg_(const std::string *text, const std::string *url, int every);
   void msg_reset_();    // a new text or address: back to the top, up soon
   void msg_tick_();     // main loop: the card's turns and the reads they need
+  bool card_between_(uint32_t now) const;  // the message and news cards may be up
   void msg_show_(const std::string &page);
   std::string say_text_;
   int say_secs_{::espn::kSayDefaultSecs};
@@ -493,6 +504,30 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  // The news card (news.h): the last read's headlines, one per line (PSRAM),
+  // where they came from, and the card's turns. It and the message card take
+  // turns with the board, never both up at once.
+  PsString news_list_;
+  uint32_t news_n_{0};
+  ::espn::NewsSource news_src_;
+  std::string news_src_head_;  // "DAL NEWS" for the headlines on hand
+  uint32_t news_list_ms_{0};   // millis() of the read, 0 = none
+  uint32_t news_fail_ms_{0};   // millis() of the last failed read, 0 = none since
+  uint32_t news_reads_{0};     // reads started: which source the next one takes
+  uint32_t news_pos_{0};       // the headline the next turn shows
+  bool news_read_due_{false};
+  std::string news_card_, news_head_;
+  bool news_shown_{false};
+  uint32_t news_since_ms_{0};  // when the card last went up or down
+  uint32_t news_tick_ms_{0};
+  uint32_t news_roll_ms_{0};
+  uint32_t news_bytes_{0};  // the last good read's size, for the state's newsread
+  // The sources the panel follows now: Favorite teams' teams in the playlist
+  // playing, else the leagues the Live games scan reads.
+  std::vector<::espn::NewsSource> news_sources_() const;
+  void news_tick_();
+  void news_show_(const std::string &headline);
+  void news_reset_();
   // The panel's nickname ("Living room"), shown by the device page and the
   // apps. The hostname, Wi-Fi hotspot and Home Assistant name stay as they are.
   struct PrefsNick {
@@ -607,7 +642,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t off;  // 1 = no countdown to the next game
     uint32_t ymd;  // the custom countdown's day, 0 = none
     char name[::espn::kCountdownNameMax + 1];
-    uint8_t spare[3];
+    uint8_t spare[2];
+    uint8_t news;  // 1 = the news card on (news.h). Was spare, so older firmware has it off.
   } __attribute__((packed));
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
@@ -716,6 +752,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool msg_eof{false};
     bool msg_ok{false};
     int msg_status{0};  // HTTP status, 0 for no answer
+    // The news card's headlines (news.h), from news_src, read on this task
+    // like the message list.
+    bool need_news{false};
+    ::espn::NewsSource news_src;
+    std::string news_head;
+    PsString news_list;
+    int news_n{-1};  // headlines read, -1 for a failed read
+    uint32_t news_bytes{0};
   };
   void start_job_();
   void start_worker_();
@@ -727,6 +771,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_msg_job_();
   void run_msg_job_();
   void apply_msg_job_();
+  void start_news_job_();
+  void run_news_job_();
+  void apply_news_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);

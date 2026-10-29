@@ -21,6 +21,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
 | `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
+| `news_nfl.json` | `.../football/nfl/news?limit=6`, the league's six latest headlines (recorded 2026-10-29) |
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 

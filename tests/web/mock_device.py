@@ -128,7 +128,7 @@ INITIAL = {
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
-    "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
+    "autoupd": False, "beta": False, "countdown": True, "news": False, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
@@ -440,6 +440,8 @@ def apply_set(kv):
                 STATE["panels"] = atoi(v)
         elif k == "countdown":
             STATE["countdown"] = v == "1"
+        elif k == "news":
+            STATE["news"] = v == "1"
         elif k == "cdname":
             STATE["cdname"] = countdown_name(v)
         elif k == "cddate":

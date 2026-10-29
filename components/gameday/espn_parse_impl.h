@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <cctype>
 
+#include "message.h"
+#include "news.h"
+
 namespace espn {
 namespace detail {
 
@@ -780,6 +783,34 @@ bool parse_scoreboard(TInput &input, const std::string &event_id, uint32_t our_t
     return detail::snapshot_from_event(ev, our_team_id, out);
   }
   return false;
+}
+
+// Parses a news feed (news_url) into its headlines, up to kNewsMax, each one
+// line cleaned like a message entry and joined by '\n' into list (S is the
+// string type it fills, PSRAM on the panel). Returns how many, or -1 on a
+// JSON error or a document with no articles list.
+template<typename TInput, typename S> int parse_news(TInput &input, S &list) {
+  JsonDocument filter(detail::json_allocator());
+  filter["articles"][0]["headline"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                              DeserializationOption::NestingLimit(40));
+  if (err || !doc["articles"].is<JsonArrayConst>())
+    return -1;
+  list.clear();
+  int n = 0;
+  for (JsonObjectConst a : doc["articles"].as<JsonArrayConst>()) {
+    if (n >= (int) kNewsMax)
+      break;
+    std::string h = message_clean(detail::str_or_empty(a["headline"]), kNewsLineMax, false);
+    if (h.empty())
+      continue;
+    if (!list.empty())
+      list += '\n';
+    list.append(h.data(), h.size());
+    n++;
+  }
+  return n;
 }
 
 }  // namespace espn

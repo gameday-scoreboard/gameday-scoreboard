@@ -52,7 +52,7 @@ struct Settings {
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
-  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true};
+  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, news{false};
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
@@ -151,6 +151,7 @@ void load(Settings &s, JsonObjectConst o) {
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
   flag("countdown", s.countdown);
+  flag("news", s.news);
   if (o["cdname"].is<const char *>())
     s.cdname = o["cdname"].as<const char *>();
   if (o["cddate"].is<const char *>())
@@ -261,6 +262,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
     case SetKind::COUNTDOWN: s.countdown = op.on; break;
+    case SetKind::NEWS: s.news = op.on; break;
     case SetKind::CD_NAME: s.cdname = op.text; break;
     case SetKind::CD_DATE: s.cdymd = op.ymd; break;
     case SetKind::MSG: s.msg = op.text; break;
@@ -337,6 +339,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
   doc["countdown"] = s.countdown;
+  doc["news"] = s.news;
   doc["cdname"] = s.cdname;
   doc["cddate"] = countdown_date_text(s.cdymd);
   doc["panels"] = s.panels;

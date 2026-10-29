@@ -29,7 +29,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list",   "sport",   "hook",    "pregame"};
+                                    "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
+                                    "news"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -206,6 +207,7 @@ enum class SetKind : uint8_t {
   SPORT,        // value, the sport row Favorite teams plays, 1 + Sport; 0 = none (every favorite)
   HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
   PREGAME,      // value, minutes before the start for the reminder event, 0 = none
+  NEWS,         // on, the news card between games (news.h)
 };
 
 struct TeamRef {
@@ -426,6 +428,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::BETA);
   if (k == "countdown")
     return on(SetKind::COUNTDOWN);
+  if (k == "news")
+    return on(SetKind::NEWS);
   if (k == "cdname") {
     op.kind = SetKind::CD_NAME;
     op.text = countdown_name(v);

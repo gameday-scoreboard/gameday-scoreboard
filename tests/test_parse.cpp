@@ -23,6 +23,7 @@
 #include "line_score.h"
 #include "logo_lru.h"
 #include "message.h"
+#include "news.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
@@ -5461,6 +5462,72 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
 
 // The FCC screen (regulatory.h): every page fits its board, and the words
 // come out whole.
+static void test_news() {
+  CHECK_EQ(news_url(League::NFL, 0), std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=6"));
+  CHECK_EQ(news_url(League::NCAA, 251),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=6&team=251"));
+  // The recorded feed: six headlines in ESPN's order, one per line.
+  std::string list;
+  CHECK_EQ(parse_news_str(slurp("fixtures/news_nfl.json"), list), 6);
+  CHECK_EQ(msg_count(list), 6u);
+  CHECK_EQ(msg_entries(list, 0, 1), std::string("Cardinals' Budda Baker hopes to stay with Arizona at trade deadline"));
+  CHECK_EQ(msg_entries(list, 5, 1),
+           std::string("Justin Jefferson on down year amid Vikes' 6-0 start: 'What we're doing is working'"));
+  // Cleaned like a message entry: one line, no emoji, cut at kNewsLineMax;
+  // an empty headline is skipped, and no more than kNewsMax are kept.
+  std::string json = "{\"articles\":[{\"headline\":\"  Two\\nlines \xF0\x9F\x8F\x88 here \"},{\"headline\":\"\"},"
+                     "{\"type\":\"Media\"},{\"headline\":\"" + std::string(200, 'x') + "\"}";
+  for (int i = 0; i < 8; i++)
+    json += ",{\"headline\":\"h" + std::to_string(i) + "\"}";
+  json += "]}";
+  CHECK_EQ(parse_news_str(json, list), 6);
+  CHECK_EQ(msg_entries(list, 0, 1), std::string("Two lines here"));
+  CHECK_EQ(msg_entries(list, 1, 1).size(), kNewsLineMax);
+  CHECK_EQ(msg_entries(list, 5, 1), std::string("h3"));
+  // No articles list, or not JSON: a failed read that leaves the list as it was.
+  list = "kept";
+  CHECK_EQ(parse_news_str("{\"header\":\"NFL News\"}", list), -1);
+  CHECK_EQ(parse_news_str("<html>", list), -1);
+  CHECK_EQ(list, std::string("kept"));
+  CHECK_EQ(parse_news_str("{\"articles\":[]}", list), 0);
+  CHECK(list.empty());
+
+  CHECK_EQ(news_header("DAL", "NFL"), std::string("DAL NEWS"));
+  CHECK_EQ(news_header("", "NCAAF"), std::string("NCAAF NEWS"));
+  CHECK_EQ(news_header(nullptr, "MLB"), std::string("MLB NEWS"));
+
+  // One source per read, in turn.
+  std::vector<NewsSource> c = {{League::NFL, 6}, {League::MLB, 0}, {League::NCAA, 251}};
+  NewsSource s;
+  CHECK(news_source(c, 0, s) && s == (NewsSource{League::NFL, 6}));
+  CHECK(news_source(c, 1, s) && s == (NewsSource{League::MLB, 0}));
+  CHECK(news_source(c, 5, s) && s == (NewsSource{League::NCAA, 251}));
+  CHECK(news_source(c, 6, s) && s == (NewsSource{League::NFL, 6}));
+  CHECK(!news_source({}, 0, s));
+
+  // Read once an hour, sooner when the panel stopped following the source,
+  // and not again for kNewsRetryMs after a failure.
+  const uint32_t t = 5000000;
+  CHECK(news_read_due(t, 0, true, 0));
+  CHECK(!news_read_due(t, t - 1000, true, 0));
+  CHECK(!news_read_due(t, t - kNewsReadMs + 1, true, 0));
+  CHECK(news_read_due(t, t - kNewsReadMs, true, 0));
+  CHECK(news_read_due(t, t - 1000, false, 0));
+  CHECK(!news_read_due(t, 0, true, t - 1000));
+  CHECK(!news_read_due(t, t - kNewsReadMs, true, t - kNewsRetryMs + 1));
+  CHECK(news_read_due(t, t - kNewsReadMs, true, t - kNewsRetryMs));
+  // Wraps with millis().
+  CHECK(!news_read_due(1000, 0xFFFFFF00u, true, 0));
+  CHECK(news_showable(3, true));
+  CHECK(!news_showable(3, false));
+  CHECK(!news_showable(0, true));
+  // The card's clock is the message card's, every kNewsEveryMin.
+  CHECK(msg_turn(true, true, false, (uint32_t) kNewsEveryMin * 60000u, kNewsEveryMin, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, false, (uint32_t) kNewsEveryMin * 60000u - 1, kNewsEveryMin, kMsgPageMs) ==
+        MsgTurn::NONE);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, kNewsEveryMin, kMsgPageMs) == MsgTurn::HIDE);
+}
+
 static void test_regulatory() {
   CHECK(reg_wrap("Contains FCC~ID:", 13) == (std::vector<std::string>{"Contains", "FCC ID:"}));
   CHECK(reg_wrap("Contains FCC~ID:", 21) == (std::vector<std::string>{"Contains FCC ID:"}));
@@ -6677,6 +6744,7 @@ int main() {
   test_panel_text();
   test_prefs_sync();
   test_message();
+  test_news();
   test_regulatory();
   test_wifi_history();
   test_ha_events();
