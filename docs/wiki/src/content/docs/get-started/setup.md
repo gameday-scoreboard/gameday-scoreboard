@@ -33,12 +33,7 @@ After those 30 seconds a new panel goes back to **SETUP**. Before, it said it wa
 
 About a second after the panel joins your Wi-Fi, it ends the Bluetooth connection with the app and turns Bluetooth off, and the app carries on over Wi-Fi. Before, a panel could restart a few seconds after joining while the app was still connected, and the app then said it couldn't reach the panel.
 
-:::note[Coming in the next release]
-On iPhone, a network that isn't in the list, like a hidden one, goes in with **Type a network name** at the bottom of the list. While the panel joins, the app shows each step as it happens. If the panel can't get on your Wi-Fi, the app says which problem it most likely is:
-
-- **Check the password**: the panel can see the network, so the password is the likely problem. Passwords are case sensitive.
-- **The panel can't see** the network: it isn't in the panel's list, which usually means a 5 GHz network. Pick the 2.4 GHz name from the list and try again.
-:::
+On iPhone the app also says which problem it most likely is: **Check the password** when the panel can see the network (passwords are case sensitive), or **The panel can't see** it when it isn't in the panel's list, which usually means a 5 GHz network. A network that isn't in the list, like a hidden one, goes in with **Type a network name** at the bottom of the list.
 
 ## Without the app: use the panel's hotspot
 
