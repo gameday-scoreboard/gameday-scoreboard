@@ -1477,6 +1477,7 @@ void GamedayComponent::wait_for_clock_() {
     ESP_LOGW(TAG, "No clock %us after Wi-Fi: no time server or ESPN answer, the board says No internet",
              (unsigned) ((now - this->wifi_up_ms_) / 1000));
     this->emit_({});
+    this->fire_action_("no_internet");  // an effect gives the board back (pages/effects.yaml)
   }
   if (this->sntp_asked_ms_ != 0 && now - this->sntp_asked_ms_ < SNTP_ASK_INTERVAL)
     return;

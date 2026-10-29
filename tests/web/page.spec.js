@@ -43,6 +43,9 @@ const sets = async (request) =>
     .filter(Boolean);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
 const deviceState = async (request) => (await request.get("/gameday/state")).json();
+// The entity control posts (/select/Effect/set?option=..., /number/Effect%20Speed/set?value=...)
+const entityPosts = async (request) =>
+  (await (await request.get("/_log")).json()).filter((p) => !p.path.startsWith("/gameday/")).map((p) => ({ path: p.path, q: p.q }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A busy panel answers late. Each /gameday/state read is taken when it
@@ -450,6 +453,51 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
   await expectSet(request, { banner: "0" });
   await expect(page.locator('.sw[data-set="down"]')).not.toHaveClass(/\bon\b/);
   await expect(page.locator('.sw[data-set="play"]')).toHaveClass(/\bon\b/);
+});
+
+test("Showing Effects reveals the effect controls, and they post", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const showing = page.getByRole("combobox", { name: "Showing" });
+  await expect(showing).toHaveValue("Scoreboard");
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects"]);
+  await expect(page.locator("#fxCtls")).toBeHidden();
+  // The Panel card's own controls are untouched by the hidden effect rows.
+  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
+
+  // Picking the Effects page: the mock applies it and pushes the new value on
+  // the event stream, which is what reveals the controls.
+  await showing.selectOption("Effects");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Select%20Page/set", q: { option: "Effects" } });
+  await expect(page.locator("#fxCtls")).toBeVisible();
+  await expect(page.locator("#fxCtls p.hint")).toContainText("fills the panel until you pick another page");
+  const effect = page.getByRole("combobox", { name: "Effect", exact: true });
+  const palette = page.getByRole("combobox", { name: "Palette" });
+  const speed = page.getByRole("slider", { name: "Speed", exact: true });
+  const intensity = page.getByRole("slider", { name: "Intensity", exact: true });
+  await expect(effect).toHaveValue("Matrix");
+  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]);
+  await expect(palette).toHaveValue("Default");
+  await expect(speed).toHaveValue("128");
+  await expect(speed).toHaveAttribute("max", "255");
+  await expect(intensity).toHaveValue("128");
+
+  await effect.selectOption("DNA");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Effect/set", q: { option: "DNA" } });
+  await palette.selectOption("Ocean");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Effect%20Palette/set", q: { option: "Ocean" } });
+  await speed.fill("200");
+  await speed.dispatchEvent("change");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/number/Effect%20Speed/set", q: { value: "200" } });
+  await expect(page.locator("#fxCtls .val").first()).toHaveText("200");
+  await intensity.fill("40");
+  await intensity.dispatchEvent("change");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/number/Effect%20Intensity/set", q: { value: "40" } });
+
+  // Back to the scoreboard hides them again.
+  await showing.selectOption("Scoreboard");
+  await expect(page.locator("#fxCtls")).toBeHidden();
+  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
 });
 
 test("a screen reader gets each control's name, role and state", async ({ page, request }) => {
