@@ -55,9 +55,9 @@ inline SettingType setting_type(const char *k) {
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
                                       "leaders", "night", "nightscreen", "favtake", "countdown"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel", "list"};
+                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -107,7 +107,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
                                       "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
-                                      "lists",    "list"};
+                                      "lists",    "list",     "hook",     "pregame"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -260,7 +260,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
                                          : true;
         in_range = in_range && parse_set(k, std::to_string(n), op, target.fav_max);
         bool clamped = op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
-                       op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL;
+                       op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL ||
+                       op.kind == SetKind::PREGAME;
         if (!in_range || (clamped && op.value != n)) {
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;
@@ -290,7 +291,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, r == 0 ? "none" : text, op, target.fav_max);
           break;
         }
-        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text))) {
+        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
+            (k == "hook" && !hook_url_ok(text))) {
           out.skipped.push_back(k + "=" + text);
           continue;
         }

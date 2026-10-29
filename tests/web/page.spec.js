@@ -1605,6 +1605,39 @@ test("the message card posts its text, address and timing, and Clear turns it of
   await expect(page.locator("#msgUrl")).toHaveValue("");
 });
 
+test("the game events card saves the heads-up and the webhook, refuses https, and sends a test", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#evCard")).toBeVisible();
+  await expect(page.locator("#evPregame")).toHaveValue("15");
+  await page.locator("#evPregame").selectOption("30");
+  await expectSet(request, { pregame: "30" });
+
+  await page.locator("#evHook").fill("https://example.com/hook");
+  await page.locator("#evSave").click();
+  await expect(page.locator("#toast")).toHaveText("Use plain http://, the panel posts on your home network");
+  await page.locator("#evHook").fill("http://192.168.1.20:1880/gameday");
+  await page.locator("#evSave").click();
+  await expectSet(request, { hook: "http://192.168.1.20:1880/gameday" });
+  await expect(page.locator("#evHookRead")).toHaveText("Nothing posted yet. The next event goes there.");
+
+  await page.locator("#evTest").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "event_test" });
+});
+
+test("the game events card says how the last post went, and hides on firmware without it", async ({ page, request }) => {
+  await reset(request, { hook: "http://192.168.1.20/a", hookpost: { status: 200, sent: 3, dropped: 0 } });
+  await page.goto("/");
+  await expect(page.locator("#evHookRead")).toHaveText("Posting fine: 3 events delivered.");
+  await reset(request, { hook: "http://192.168.1.20/a", hookpost: { status: 0, sent: 0, dropped: 0 } });
+  await page.reload();
+  await expect(page.locator("#evHookRead")).toHaveText("The last post got no answer. Check the address and that the listener is running.");
+  await reset(request, { pregame: null, hook: null });
+  await page.reload();
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#evCard")).toBeHidden();
+});
+
 test("the message card says how the list's last read went, and hides on firmware without it", async ({ page, request }) => {
   const url = "https://example.com/plates.txt";
   await reset(request, { msgurl: url, msgread: { status: 200, entries: 412 } });
