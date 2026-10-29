@@ -1,7 +1,6 @@
 [
   "refresh",
   "qc",
-  "power_ok",
   "say",
   "regulatory",
   "event_test",

@@ -26,6 +26,10 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ## Unreleased
 
+### ⚠️ Heads up
+
+- 🔌 The panel no longer dims itself when hot or after a power dip, and the Clear button is gone: a thermometer or plug in the corner says what happened, and after a power dip it starts at half brightness for 3 seconds
+
 ### ✨ New
 
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network

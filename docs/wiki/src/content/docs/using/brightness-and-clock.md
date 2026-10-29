@@ -64,3 +64,12 @@ On a single 64x64 panel the date goes under the time, and the next game goes in 
 **Weak power supply.** If the panel restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, it holds its brightness at about a quarter of full so it stays on. A small plug pulses slowly in the top right corner, and every two minutes the bottom line says **Check power supply** in red. Use the power supply that came with the panel, not a phone charger or a USB port, then press **Clear** in the notice on the device page.
 
 The device page shows both notices under the board, and the chip temperature under Diagnostics.
+
+:::note[Coming in the next release]
+The panel no longer dims itself, and there is nothing to clear. It stays at your brightness and only tells you what happened:
+
+- **Running warm.** When the controller's chip reads 75 C or more, a small thermometer pulses slowly in the top right corner, and every two minutes the bottom line says **Running warm** in orange for 15 seconds. Both go away once the chip reads under 70 C. Keep the panel out of direct sun and give it some air behind it.
+- **Power dipped.** When the panel restarts because its power dipped, as on a phone charger or a supply too weak for it, it lights up at half your brightness for 3 seconds, then goes to your brightness and stays there. A small plug pulses in the top right corner, and every two minutes the bottom line says **Power dipped** in red. Both go away once the panel has run 10 minutes without another dip. Use the power supply that came with the panel, not a phone charger or a USB port.
+
+The device page shows the same words under the board, with a sentence on what to do and no button.
+:::
