@@ -4235,18 +4235,22 @@ std::string GamedayComponent::health_json_() {
 #else
   h.channel = "none";
 #endif
-  char buf[384];
-  int n = ::espn::health_json(buf, sizeof(buf), h);
-  if (n <= 0 || n >= (int) sizeof(buf))
+  // Written into the reply's own heap buffer: this runs on the web server
+  // task, whose stack is small.
+  static constexpr size_t HEALTH_MAX = 384, GUARD_MAX = 96;
+  std::string out(HEALTH_MAX + GUARD_MAX, '\0');
+  int n = ::espn::health_json(&out[0], HEALTH_MAX, h);
+  if (n <= 0 || n >= (int) HEALTH_MAX)
     return "{}";
-  // The heat and power keys go in before its closing brace (guard.h)
-  char guard[96];
-  int g = ::espn::guard_json_keys(guard, sizeof(guard), this->heat_.last_c, this->heat_.hot,
+  // The heat and power keys go in over its closing brace (guard.h)
+  int g = ::espn::guard_json_keys(&out[n - 1], GUARD_MAX, this->heat_.last_c, this->heat_.hot,
                                   this->power_log_.brownouts, this->power_dipped_);
-  if (g <= 0 || g >= (int) sizeof(guard))
-    return std::string(buf, n);
-  std::string out(buf, n - 1);
-  out.append(guard, g);
+  if (g <= 0 || g >= (int) GUARD_MAX) {
+    out[n - 1] = '}';
+    out.resize(n);
+    return out;
+  }
+  out.resize(n - 1 + g);
   out += '}';
   return out;
 }
@@ -4819,14 +4823,21 @@ void GamedayComponent::apply_msg_job_() {
   this->rebuild_state_(&this->last_fields_);
 }
 
+// The path without its query, read in place. url_to() copies it into a
+// 513-byte buffer on the web server task's small stack, and our routes have
+// nothing in them to URL-decode.
+static StringRef request_path(AsyncWebServerRequest *request) {
+  const char *uri = static_cast<httpd_req_t *>(*request)->uri;
+  const char *query = strchr(uri, '?');
+  return StringRef(uri, query != nullptr ? (size_t) (query - uri) : strlen(uri));
+}
+
 bool GamedayComponent::canHandle(AsyncWebServerRequest *request) const {
-  char buf[AsyncWebServerRequest::URL_BUF_SIZE];
-  return request->url_to(buf).starts_with("/gameday/");
+  return request_path(request).starts_with("/gameday/");
 }
 
 void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
-  char buf[AsyncWebServerRequest::URL_BUF_SIZE];
-  StringRef url = request->url_to(buf);
+  StringRef url = request_path(request);
   if (url == StringRef("/gameday/state") && request->method() == HTTP_GET) {
     PsString body = this->current_state_json_();
     // The cached document is rebuilt on changes; the health and Wi-Fi
@@ -5211,8 +5222,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
 // /gameday/set never come here), one request at a time.
 void GamedayComponent::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
                                   size_t total) {
-  char buf[AsyncWebServerRequest::URL_BUF_SIZE];
-  if (request->url_to(buf) != StringRef("/gameday/settings"))
+  if (request_path(request) != StringRef("/gameday/settings"))
     return;
   if (index == 0) {
     PsString().swap(this->settings_body_);
