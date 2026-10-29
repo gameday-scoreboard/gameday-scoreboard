@@ -24,6 +24,12 @@ that line is also the update summary on the device page, so keep it under
 240 characters. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+A release that fixes something broken for owners (scores gone after an ESPN
+change, a panel that won't start) starts its summary line with
+`Important:`. Panels read that word from the update summary: their ticker
+says "Important update ready" instead of "Update ready", and the app is told
+through `update_important` in the panel's state.
+
 ## Unreleased
 
 ### ⚠️ Heads up
@@ -33,6 +39,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 ### ✨ New
 
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- 🔔 While a new release waits, the ticker says **Update ready: open the Game Day app** for an hour a day, never during a live game, and **Important update ready** for a release that fixes something broken
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
 
 ### 🐛 Fixes
