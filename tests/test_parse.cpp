@@ -1033,6 +1033,20 @@ static void test_kickoff_label() {
   CHECK_EQ(kickoff_label(mk(1900, -1, -1, 0, 0, -1, 0), now), std::string(""));
   // A year far enough out to overflow the day count in int.
   CHECK_EQ(kickoff_label(mk(2147481747, 0, 4, 19, 30, 0, 1), now), std::string("Jan 1 7:30 PM"));
+  // Across New Year: a Jan 1 bowl game seen on Dec 31 is "Tomorrow", in a
+  // year that isn't a leap year (2025, Dec 31 is day 364) and one that is
+  // (2028, day 365). It read "Fri" while local_day counted 366 days a year.
+  struct tm nye25 = mk(2025, 364, 3, 20, 0, 11, 31);  // Wed Dec 31 2025 8:00 PM
+  CHECK_EQ(kickoff_label(mk(2026, 0, 4, 12, 0, 0, 1), nye25), std::string("Tomorrow 12:00 PM"));
+  CHECK_EQ(kickoff_label(mk(2026, 1, 5, 19, 30, 0, 2), nye25), std::string("Fri 7:30 PM"));
+  struct tm nye28 = mk(2028, 365, 0, 20, 0, 11, 31);  // Sun Dec 31 2028
+  CHECK_EQ(kickoff_label(mk(2029, 0, 1, 12, 0, 0, 1), nye28), std::string("Tomorrow 12:00 PM"));
+  // A week out across New Year: six days is a weekday, seven is the date.
+  struct tm dec28 = mk(2025, 361, 0, 10, 0, 11, 28);  // Sun Dec 28 2025
+  CHECK_EQ(kickoff_label(mk(2026, 2, 6, 15, 0, 0, 3), dec28), std::string("Sat 3:00 PM"));
+  CHECK_EQ(kickoff_label(mk(2026, 3, 0, 15, 0, 0, 4), dec28), std::string("Jan 4 3:00 PM"));
+  // Still one day apart on every other night of the year.
+  CHECK_EQ(local_day(mk(2026, 59, 0, 0, 0, 2, 1)) - local_day(mk(2026, 58, 6, 0, 0, 1, 28)), (int64_t) 1);
 }
 
 // The label counts days in local time and the panel redraws it when
