@@ -27,6 +27,14 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 
+`pictures/` holds the picture card's test files (`test_picture.cpp`,
+`fuzz_picture.cpp`, the device page tests), made with Pillow 11.1 on
+2026-10-29: `noise.gif` (64x32, two interlaced frames of 256-color noise,
+so the LZW code size reaches 12 bits), `box_d2.gif` and `box_d3.gif` (a red
+box stepping 20 px right over four 128x64 frames cropped to what changed,
+disposal 2 and 3), `still.gif` (a yellow box on a transparent 40x30),
+`wide.gif` (129x64), `blue.png` (64x32) and `tall.png` (64x65).
+
 Game summaries (`.../summary?event=<id>`, the document the Game leaders card
 reads at halftime and the final), recorded 2026-10-28. Each is trimmed to its
 `header`, `leaders`, `boxscore` and the small top-level objects; the plays,

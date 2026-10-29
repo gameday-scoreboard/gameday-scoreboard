@@ -47,6 +47,7 @@ The file also has your playlists, with their teams and their order, and the one 
 
 - **Wi-Fi networks.** Passwords never leave the panel. A new or reset panel joins Wi-Fi through the Game Day app or its own setup hotspot first, then you restore. See [Wi-Fi](/using/wifi/).
 - **The WizMote pairing.** Pair the remote again. See [WizMote remote](/using/remote/).
+- **Your pictures** (coming in the next release). Add them again from your own files. See [Pictures](/using/pictures/).
 
 ## When it won't restore
 

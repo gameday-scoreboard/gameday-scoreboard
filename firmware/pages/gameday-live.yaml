@@ -914,6 +914,39 @@ script:
           }
           lv_obj_clear_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
 
+  # The picture card (components/gameday/picture.h): the owner's picture,
+  # centered on black, at half size when it is wider than the display, or
+  # nothing. The component owns the pixels; this points the image at them.
+  # The build keeps no LVGL image cache (LV_CACHE_DEF_SIZE 0), so nothing
+  # holds on to a canvas the component has freed.
+  - id: gd_picture_card
+    then:
+      - lambda: |-
+          static lv_image_dsc_t dsc;
+          if (!id(gameday_ctl).picture_shown()) {
+            lv_obj_add_flag(id(tt_picture), LV_OBJ_FLAG_HIDDEN);
+            lv_image_set_src(id(tt_picture_img), id(gd_logo_blank)->get_lv_image_dsc());
+            return;
+          }
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          const uint16_t w = id(gameday_ctl).picture_width(), h = id(gameday_ctl).picture_height();
+          memset(&dsc, 0, sizeof(dsc));
+          dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+          dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+          dsc.header.w = w;
+          dsc.header.h = h;
+          dsc.header.stride = w * 2;
+          dsc.data = id(gameday_ctl).picture_pixels();
+          dsc.data_size = (uint32_t) w * h * 2;
+          lv_obj_set_size(id(tt_picture), W, 64);
+          lv_image_set_src(id(tt_picture_img), &dsc);
+          lv_obj_set_size(id(tt_picture_img), w, h);
+          lv_image_set_pivot(id(tt_picture_img), w / 2, h / 2);
+          lv_image_set_scale(id(tt_picture_img), ::espn::pic_scale(w, W));
+          lv_obj_center(id(tt_picture_img));
+          lv_obj_move_foreground(id(tt_picture));
+          lv_obj_clear_flag(id(tt_picture), LV_OBJ_FLAG_HIDDEN);
+
   # The off-season clock's time, and the date when that line has no next
   # game, in the panel's time zone; or the countdown card's digits. A label
   # is only rewritten when its text changes, so once a minute.
@@ -1824,6 +1857,27 @@ lvgl:
                         long_mode: WRAP
                         text: ""
                         text_color: 0xFFFFFF
+
+        # The picture card, over the board between games (gd_picture_card).
+        - obj:
+            id: tt_picture
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - image:
+                  id: tt_picture_img
+                  src: gd_logo_blank
+                  x: 0
+                  y: 0
 
       on_load:
         then:

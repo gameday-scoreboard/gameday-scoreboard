@@ -15,6 +15,7 @@
 #include "esphome/components/web_server_base/web_server_base.h"
 
 #include "logo_cache.h"
+#include "picture_card.h"
 #include "esphome/core/automation.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/component.h"
@@ -442,6 +443,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &news_card() const { return this->news_card_; }
   const std::string &news_head() const { return this->news_head_; }
   void set_news_roll_ms(uint32_t ms) { this->news_roll_ms_ = ms; }
+  // The picture card (picture.h): gd_picture_card draws the picture up now
+  // (RGB565, picture_width() x picture_height()) or hides the card when none
+  // is; "picture_frame" says a GIF's next frame is on the canvas.
+  bool picture_shown() const { return this->pictures_.shown(); }
+  uint16_t picture_width() const { return this->pictures_.width(); }
+  uint16_t picture_height() const { return this->pictures_.height(); }
+  const uint8_t *picture_pixels() const { return this->pictures_.pixels(); }
 
   void setup() override;
   void loop() override;
@@ -591,6 +599,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void news_tick_();
   void news_show_(const std::string &headline);
   void news_reset_();
+  // The picture card (picture.h, picture_card.h): the owner's pictures,
+  // shown in turn between games like the news card.
+  PictureCard pictures_;
+  int pic_last_{-1};           // the slot shown last, so the next turn shows the next one
+  bool pic_shown_{false};
+  uint32_t pic_since_ms_{0};   // when the card last went up or down
+  uint32_t pic_tick_ms_{0};
+  void picture_tick_();
+  void picture_show_(int slot);
+  void handle_picture_(AsyncWebServerRequest *request);
+  PsString picture_body_;  // an upload's body, gathered by handleBody
   // The panel's nickname ("Living room"), shown by the device page and the
   // apps. The hostname, Wi-Fi hotspot and Home Assistant name stay as they are.
   struct PrefsNick {
