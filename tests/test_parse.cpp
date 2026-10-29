@@ -5460,8 +5460,8 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
   return r;
 }
 
-// The FCC screen (regulatory.h): every page fits its board, and the words
-// come out whole.
+// The news card (news.h): the feed, its headlines, the source in turn and the
+// hourly read.
 static void test_news() {
   CHECK_EQ(news_url(League::NFL, 0), std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=6"));
   CHECK_EQ(news_url(League::NCAA, 251),
@@ -5528,6 +5528,8 @@ static void test_news() {
   CHECK(msg_turn(true, true, true, kMsgPageMs, kNewsEveryMin, kMsgPageMs) == MsgTurn::HIDE);
 }
 
+// The FCC screen (regulatory.h): every page fits its board, and the words
+// come out whole.
 static void test_regulatory() {
   CHECK(reg_wrap("Contains FCC~ID:", 13) == (std::vector<std::string>{"Contains", "FCC ID:"}));
   CHECK(reg_wrap("Contains FCC~ID:", 21) == (std::vector<std::string>{"Contains FCC ID:"}));

@@ -521,7 +521,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t news_since_ms_{0};  // when the card last went up or down
   uint32_t news_tick_ms_{0};
   uint32_t news_roll_ms_{0};
-  uint32_t news_bytes_{0};  // the last good read's size, for the state's newsread
   // The sources the panel follows now: Favorite teams' teams in the playlist
   // playing, else the leagues the Live games scan reads.
   std::vector<::espn::NewsSource> news_sources_() const;
