@@ -1132,6 +1132,46 @@ test("between games: the news switch is off by default and posts 1 and 0", async
   await expect(page.locator("#newsRow")).toBeHidden();
 });
 
+test("between games: a town is looked up, turns the weather card on, and the page says what was read", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="wxon"]');
+  await expect(page.locator("#wxBox")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#wxPlace")).toBeHidden();
+  await page.locator("#town").fill("75019");
+  await page.locator("#townGo").click();
+  await expectSet(request, { town: "75019" });
+  await expect(page.locator("#wxPlace")).toHaveText("Found: Coppell, Texas");
+  await expect(page.locator("#wxRead")).toHaveText("Read a minute ago: 71°F, cloudy, high 81, low 61.");
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { wxon: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+
+  // A town Open-Meteo doesn't know; Enter posts it too.
+  await page.locator("#town").fill("Nowhere");
+  await page.locator("#town").press("Enter");
+  await expectSet(request, { town: "Nowhere" });
+  await expect(page.locator("#wxPlace")).toContainText('No place found for "Nowhere"');
+  await expect(page.locator("#wxRead")).toBeHidden();
+
+  // A read that failed, waiting to try again, and one held for a live game.
+  await reset(request, { town: "75019", wxon: true, wx: { place: "Coppell, Texas", lat: 32.95, lon: -97.02, lookup: 200, read: 0, wait_s: 240 } });
+  await page.goto("/");
+  await expect(page.locator("#wxRead")).toHaveText("Couldn't reach Open-Meteo, tries again in 4 minutes.");
+  await reset(request, { town: "75019", wxon: true, wx: { place: "Coppell, Texas", lat: 32.95, lon: -97.02, lookup: 200, read: -1, held: true } });
+  await page.goto("/");
+  await expect(page.locator("#wxRead")).toHaveText("Not read yet: waiting for the game to end.");
+
+  // Firmware from before the weather card leaves the block out.
+  await reset(request, { town: null, wxon: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#wxBox")).toBeHidden();
+});
+
 test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wide GIF, deletes", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

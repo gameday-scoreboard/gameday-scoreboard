@@ -264,6 +264,7 @@ script:
       message: string
       clock_card: bool
       countdown_card: bool
+      weather_card: bool
       next_line: string
     then:
       - lambda: |-
@@ -380,7 +381,8 @@ script:
       - lambda: |-
           // Toggle between the game layout and the "no game" layout
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          if (clock_card || countdown_card || game_state == "NOT_FOUND" || game_state == "BYE" || game_state == "") {
+          if (clock_card || countdown_card || weather_card || game_state == "NOT_FOUND" || game_state == "BYE" ||
+              game_state == "") {
             // The component's words for this screen (the finals rotation's
             // headers and next kickoff, "No live games"), else the default.
             const char *msg = message.empty() ? "No upcoming game" : message.c_str();
@@ -393,13 +395,30 @@ script:
             lv_obj_clear_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(tt_no_game_container), LV_OBJ_FLAG_HIDDEN);
           }
-          // The off-season clock and the countdown take the message's place,
-          // and borrow the ticker from the hidden game layout so it keeps
-          // running under them.
-          lv_obj_t *ticker_parent = clock_card || countdown_card ? id(tt_no_game_container) : id(tt_game_container);
+          // The off-season clock, the countdown and the weather take the
+          // message's place, and borrow the ticker from the hidden game
+          // layout so it keeps running under them.
+          lv_obj_t *ticker_parent =
+              clock_card || countdown_card || weather_card ? id(tt_no_game_container) : id(tt_game_container);
           if (lv_obj_get_parent(id(tt_game_status_lbl)) != ticker_parent)
             lv_obj_set_parent(id(tt_game_status_lbl), ticker_parent);
-          if (countdown_card) {
+          if (!weather_card)
+            lv_obj_add_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
+          if (weather_card) {
+            // gd_wx_card draws the forecast; with none to draw, the card's
+            // words ("Set a town on the device page") are the message.
+            lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+            id(gd_clock_date) = false;
+            if (id(gameday_ctl).last_update().wx_text.empty()) {
+              lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+              id(gd_wx_card).execute();
+            } else {
+              lv_obj_add_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
+              lv_obj_clear_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+            }
+          } else if (countdown_card) {
             // gd_clock_tick writes the digits from gd_countdown_at.
             lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
@@ -817,6 +836,84 @@ script:
           lv_obj_move_foreground(id(tt_news));
           lv_obj_clear_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
 
+  # The weather card (components/gameday/weather.h), from the board's last
+  # update: the icon and the temperature now, today's high and low, the
+  # words for the sky, and the next two days small underneath. The ticker
+  # keeps the bottom row, as under the clock and the countdown.
+  - id: gd_wx_card
+    then:
+      - lambda: |-
+          const gameday::UpdateFields &u = id(gameday_ctl).last_update();
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const bool wide = W >= 128;
+          const int x0 = (W - (wide ? 128 : 64)) / 2;  // a longer chain centers the card
+          image::Image *big[8] = {id(gd_wx16_cloud), id(gd_wx16_sun),  id(gd_wx16_moon), id(gd_wx16_part),
+                                  id(gd_wx16_fog),   id(gd_wx16_rain), id(gd_wx16_snow), id(gd_wx16_storm)};
+          image::Image *small[8] = {id(gd_wx8_cloud), id(gd_wx8_sun),  id(gd_wx8_moon), id(gd_wx8_part),
+                                    id(gd_wx8_fog),   id(gd_wx8_rain), id(gd_wx8_snow), id(gd_wx8_storm)};
+          auto put = [](lv_obj_t *lbl, const std::string &text) {
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || text != cur)
+              lv_label_set_text(lbl, text.c_str());
+          };
+          lv_obj_set_size(id(gd_wx), W, 54);
+          lv_image_set_src(id(gd_wx_icon), big[u.wx_icon % 8]);
+          lv_image_set_src(id(gd_wx_d1_icon), small[u.wx_d1_icon % 8]);
+          lv_image_set_src(id(gd_wx_d2_icon), small[u.wx_d2_icon % 8]);
+          put(id(gd_wx_temp_lbl), ::espn::wx_temp_text(u.wx_temp));
+          put(id(gd_wx_words_lbl), u.wx_words);
+          put(id(gd_wx_d1_lbl), u.wx_d1);
+          put(id(gd_wx_d1_hilo_lbl), u.wx_d1_hilo);
+          put(id(gd_wx_d2_lbl), u.wx_d2);
+          put(id(gd_wx_d2_hilo_lbl), u.wx_d2_hilo);
+          lv_obj_set_width(id(gd_wx_words_lbl), W);
+          if (wide) {
+            // 128x64: the icon, the temperature in 16x32 and today's high and
+            // low beside it; the words; the next two days side by side.
+            put(id(gd_wx_hi_lbl), "Hi " + std::to_string(u.wx_hi));
+            put(id(gd_wx_lo_lbl), "Lo " + std::to_string(u.wx_lo));
+            lv_obj_set_pos(id(gd_wx_icon), x0 + 4, 8);
+            lv_obj_set_style_text_font(id(gd_wx_temp_lbl), id(spleen_32)->get_lv_font(), 0);
+            lv_obj_set_pos(id(gd_wx_temp_lbl), x0 + 24, 0);
+            lv_obj_set_width(id(gd_wx_temp_lbl), 54);
+            lv_obj_set_style_text_font(id(gd_wx_hi_lbl), id(spleen_12)->get_lv_font(), 0);
+            lv_obj_set_style_text_align(id(gd_wx_hi_lbl), LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_pos(id(gd_wx_hi_lbl), x0 + 80, 4);
+            lv_obj_set_width(id(gd_wx_hi_lbl), 46);
+            lv_obj_set_pos(id(gd_wx_lo_lbl), x0 + 80, 18);
+            lv_obj_clear_flag(id(gd_wx_lo_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_font(id(gd_wx_words_lbl), id(spleen_12)->get_lv_font(), 0);
+            lv_obj_set_y(id(gd_wx_words_lbl), 33);
+            lv_obj_set_pos(id(gd_wx_d1_lbl), x0 + 2, 46);
+            lv_obj_set_pos(id(gd_wx_d1_icon), x0 + 19, 46);
+            lv_obj_set_pos(id(gd_wx_d1_hilo_lbl), x0 + 29, 46);
+            lv_obj_set_pos(id(gd_wx_d2_lbl), x0 + 66, 46);
+            lv_obj_set_pos(id(gd_wx_d2_icon), x0 + 83, 46);
+            lv_obj_set_pos(id(gd_wx_d2_hilo_lbl), x0 + 93, 46);
+          } else {
+            // 64x64: the icon and the temperature in 8x16, the words, today's
+            // high and low on one line, then a line for each next day.
+            put(id(gd_wx_hi_lbl), "Hi " + std::to_string(u.wx_hi) + " Lo " + std::to_string(u.wx_lo));
+            lv_obj_set_pos(id(gd_wx_icon), x0 + 2, 1);
+            lv_obj_set_style_text_font(id(gd_wx_temp_lbl), id(spleen_16)->get_lv_font(), 0);
+            lv_obj_set_pos(id(gd_wx_temp_lbl), x0 + 22, 1);
+            lv_obj_set_width(id(gd_wx_temp_lbl), 42);
+            lv_obj_set_style_text_font(id(gd_wx_hi_lbl), id(spleen_8)->get_lv_font(), 0);
+            lv_obj_set_style_text_align(id(gd_wx_hi_lbl), LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_pos(id(gd_wx_hi_lbl), 0, 27);
+            lv_obj_set_width(id(gd_wx_hi_lbl), W);
+            lv_obj_add_flag(id(gd_wx_lo_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_text_font(id(gd_wx_words_lbl), id(spleen_8)->get_lv_font(), 0);
+            lv_obj_set_y(id(gd_wx_words_lbl), 18);
+            lv_obj_set_pos(id(gd_wx_d1_lbl), x0 + 2, 37);
+            lv_obj_set_pos(id(gd_wx_d1_icon), x0 + 19, 37);
+            lv_obj_set_pos(id(gd_wx_d1_hilo_lbl), x0 + 29, 37);
+            lv_obj_set_pos(id(gd_wx_d2_lbl), x0 + 2, 46);
+            lv_obj_set_pos(id(gd_wx_d2_icon), x0 + 19, 46);
+            lv_obj_set_pos(id(gd_wx_d2_hilo_lbl), x0 + 29, 46);
+          }
+          lv_obj_clear_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
+
   # The picture card (components/gameday/picture.h): the owner's picture,
   # centered on black, at half size when it is wider than the display, or
   # nothing. The component owns the pixels; this points the image at them.
@@ -927,6 +1024,90 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+
+# The weather card's icons (scripts/build_weather_icons.py draws them): 16x16
+# for today, 8x8 for the next two days, in WxIcon's order (weather.h).
+image:
+  - platform: file
+    file: images/wx-cloud.png
+    id: gd_wx16_cloud
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-sun.png
+    id: gd_wx16_sun
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-moon.png
+    id: gd_wx16_moon
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-part.png
+    id: gd_wx16_part
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-fog.png
+    id: gd_wx16_fog
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-rain.png
+    id: gd_wx16_rain
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-snow.png
+    id: gd_wx16_snow
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx-storm.png
+    id: gd_wx16_storm
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-cloud.png
+    id: gd_wx8_cloud
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-sun.png
+    id: gd_wx8_sun
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-moon.png
+    id: gd_wx8_moon
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-part.png
+    id: gd_wx8_part
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-fog.png
+    id: gd_wx8_fog
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-rain.png
+    id: gd_wx8_rain
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-snow.png
+    id: gd_wx8_snow
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    file: images/wx8-storm.png
+    id: gd_wx8_storm
+    type: RGB565
+    transparency: alpha_channel
 
 lvgl:
   style_definitions:
@@ -1461,6 +1642,99 @@ lvgl:
                   hidden: true
                   text: ""
                   styles: ["tt_st_status_text"]
+              # The weather card, above the ticker; gd_wx_card lays it out
+              - obj:
+                  id: gd_wx
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 54
+                  hidden: true
+                  bg_opa: TRANSP
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  widgets:
+                    - image:
+                        id: gd_wx_icon
+                        src: gd_wx16_cloud
+                        x: 2
+                        y: 1
+                    - label:
+                        id: gd_wx_temp_lbl
+                        x: 22
+                        y: 1
+                        width: 42
+                        long_mode: CLIP
+                        text: ""
+                        styles: ["tt_st_score_text"]
+                    - label:
+                        id: gd_wx_hi_lbl
+                        x: 0
+                        y: 27
+                        width: 64
+                        long_mode: CLIP
+                        text: ""
+                        styles: ["tt_st_team_text"]
+                    - label:
+                        id: gd_wx_lo_lbl
+                        x: 80
+                        y: 18
+                        width: 46
+                        long_mode: CLIP
+                        text_font: spleen_12
+                        hidden: true
+                        text: ""
+                        styles: ["tt_st_team_text"]
+                    - label:
+                        id: gd_wx_words_lbl
+                        x: 0
+                        y: 18
+                        width: 64
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_font: spleen_8
+                        text: ""
+                        styles: ["tt_st_status_text"]
+                    - label:
+                        id: gd_wx_d1_lbl
+                        x: 2
+                        y: 37
+                        text_font: spleen_8
+                        text: ""
+                        styles: ["tt_st_status_text"]
+                    - image:
+                        id: gd_wx_d1_icon
+                        src: gd_wx8_cloud
+                        x: 19
+                        y: 37
+                    - label:
+                        id: gd_wx_d1_hilo_lbl
+                        x: 29
+                        y: 37
+                        text_font: spleen_8
+                        text: ""
+                        styles: ["tt_st_status_text"]
+                    - label:
+                        id: gd_wx_d2_lbl
+                        x: 2
+                        y: 46
+                        text_font: spleen_8
+                        text: ""
+                        styles: ["tt_st_status_text"]
+                    - image:
+                        id: gd_wx_d2_icon
+                        src: gd_wx8_cloud
+                        x: 19
+                        y: 46
+                    - label:
+                        id: gd_wx_d2_hilo_lbl
+                        x: 29
+                        y: 46
+                        text_font: spleen_8
+                        text: ""
+                        styles: ["tt_st_status_text"]
 
         # The owner's message card, over the board between games (gd_msg_card)
         - obj:

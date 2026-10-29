@@ -92,7 +92,8 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
                                              SET_H + MESSAGE_H +
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
-                                             (REPO / "components/gameday/hook.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/hook.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/weather.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -140,6 +141,8 @@ INITIAL = {
     "pics": [], "picroom": 65536,
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
+    # The weather card (weather.h): the town and the switch; wx once a town is set.
+    "town": "", "wxon": False,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
@@ -438,6 +441,21 @@ def night_time(v):
     return f"{int(m[1]):02d}:{m[2]}"
 
 
+def wx_lookup(town):
+    """The lookup and first forecast read, answered at once. A town starting
+    with "nowhere" is one Open-Meteo doesn't know."""
+    if not town:
+        STATE.pop("wx", None)
+        return
+    if town.lower().startswith("nowhere"):
+        STATE["wx"] = {"place": "", "lat": 0, "lon": 0, "lookup": 200, "read": -1}
+        return
+    place = "Coppell, Texas" if town == "75019" else f"{town}, Texas"
+    STATE["wx"] = {"place": place, "lat": 32.95, "lon": -97.02, "lookup": 200, "read": 200, "read_s": 60,
+                   "temp": 71, "hi": 81, "lo": 61, "code": 3, "cond": "Cloudy", "night": False,
+                   "days": [{"d": "Thu", "hi": 80, "lo": 66, "code": 61}, {"d": "Fri", "hi": 75, "lo": 67, "code": 2}]}
+
+
 def apply_set(kv):
     """GamedayComponent::apply_set_ through set_request.h's parse_set."""
     hours = (STATE["nightstart"], STATE["nightend"])
@@ -529,6 +547,15 @@ def apply_set(kv):
                 STATE["cddate"] = day
         elif k == "msg":
             STATE["msg"] = message_clean(v, LIMITS["kMsgTextMax"], True)
+        elif k == "town":
+            # set_town(): a new town turns the card on and is looked up; the
+            # same town again leaves the switch alone.
+            town = message_clean(v.replace("\ufffd", ""), LIMITS["kTownMax"], False)
+            if town != STATE.get("town", ""):
+                STATE["town"], STATE["wxon"] = town, bool(town)
+                wx_lookup(town)
+        elif k == "wxon":
+            STATE["wxon"] = v == "1"
         elif k == "nick":
             # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
             STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)

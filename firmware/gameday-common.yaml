@@ -225,11 +225,12 @@ font:
   - id: !extend spleen_16
     glyphs: *panel_glyphs
   # The countdown card's big digits on a wide board (gameday-live.yaml), cut
-  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today".
+  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today"; and the
+  # weather card's temperature ("71°", "-4°", weather.h).
   - file: "https://github.com/fcambus/spleen/raw/refs/tags/2.1.0/spleen-16x32.bdf"
     id: spleen_32
     size: 32
-    glyphs: ["0123456789 Tadhmoy"]
+    glyphs: ["0123456789 Tadhmoy-°"]
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -872,6 +873,7 @@ gameday:
         message: !lambda 'return gameday::panel_text(x.message);'
         clock_card: !lambda 'return x.clock;'
         countdown_card: !lambda 'return x.countdown_at != 0;'
+        weather_card: !lambda 'return x.wx_card;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'

@@ -15,6 +15,7 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Countdowns](/using/countdowns/): to the next game, and to a day you pick.
 - [College Top 25](/using/top-25/): the AP poll between games, while you follow a college team.
 - [News headlines](/using/news/): ESPN headlines for your teams between games (coming in the next release).
+- [Weather](/using/weather/): your town's forecast between games (coming in the next release).
 - [Pictures](/using/pictures/): your own picture or animated GIF between games (coming in the next release).
 - [Football: NFL and college](/using/football/)
 - [Baseball: MLB](/using/baseball/)

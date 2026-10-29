@@ -27,6 +27,8 @@
   "top25": {"form": "1 shows the college Top 25 card between games while the panel follows a college team, anything else off", "ok": ["1", "0"]},
   "news": {"form": "1 shows the news card (ESPN headlines) between games, anything else off", "ok": ["1", "0"]},
   "gameleaders": {"form": "1 shows the Game leaders card at halftime and the final, anything else off", "ok": ["1", "0"]},
+  "town": {"form": "the weather card's town or US ZIP code, trimmed, up to 40 bytes cut on a whole character; control characters, emoji and bytes that aren't UTF-8 are dropped; a new town is looked up with Open-Meteo and turns the card on, the same town again only retries a lookup that found nothing; empty clears the town and turns the card off", "ok": ["Coppell", "75019", "Paris, France", ""]},
+  "wxon": {"form": "1 shows the weather card between games, anything else off; applied after town in the same request", "ok": ["1", "0"]},
   "cdname": {"form": "the custom countdown's name, trimmed, up to 20 bytes cut on a whole character; control characters and bytes that aren't UTF-8 are dropped; empty clears it", "ok": ["Christmas", ""]},
   "cddate": {"form": "the custom countdown's day, YYYY-MM-DD, 2020 to 2099; none or empty clears it", "ok": ["2026-12-25", "none", ""], "bad": ["2026-02-30", "12/25/2026", "2026-1-5"]},
   "msg": {"form": "the message card's own text; cleaned to what the panel can draw", "ok": ["Go team", ""]},

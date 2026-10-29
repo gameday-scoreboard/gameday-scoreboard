@@ -176,6 +176,16 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
         <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
         <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+        <div id="wxBox" hidden>
+          <div class="sub">Weather</div>
+          <p class="hint">Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days, in °F. Read every 30 minutes, never during your game.</p>
+          <div class="ctl"><label for="town">Town or ZIP code</label><input type="text" id="town" maxlength="40" placeholder="Coppell, TX" autocomplete="off"></div>
+          <div class="actions"><button class="btn" id="townGo">Look up</button></div>
+          <p class="hint" id="wxPlace" hidden></p>
+          <div class="ctl"><label>Weather card</label><button class="sw" data-set="wxon" aria-label="Weather card"></button></div>
+          <p class="hint" id="wxRead" hidden></p>
+          <p class="hint">Your town goes to Open-Meteo for the forecast.</p>
+        </div>
       </div>
       <div class="card" id="picCard" hidden>
         <h2>Pictures</h2>
@@ -415,6 +425,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    town: String, wxon: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -820,6 +831,44 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   cdName.onchange = () => setGD({ cdname: cdName.value.trim() });
   cdDate.onchange = () => setGD({ cddate: cdDate.value || "none" });
   $("#cdClear").onclick = () => setGD({ cdname: "", cddate: "none" });
+  // The weather card's town: Look up (or Enter) posts it; the same town again
+  // retries a lookup that found nothing.
+  const town = $("#town");
+  const postTown = () => setGD({ town: town.value.trim() });
+  $("#townGo").onclick = postTown;
+  town.onkeydown = (e) => { if (e.key === "Enter") postTown(); };
+  // The weather block: the place the lookup found and how the reads go.
+  const mins = (s) => Math.max(1, Math.round(s / 60));
+  const ago = (s) => (s < 60 ? "just now" : mins(s) === 1 ? "a minute ago" : `${mins(s)} minutes ago`);
+  const renderWeather = () => {
+    $("#wxBox").hidden = S.town === undefined;  // firmware from before the card
+    if (S.town === undefined) return;
+    if (document.activeElement !== town) town.value = S.town || "";
+    const w = S.wx;
+    const place = $("#wxPlace");
+    const read = $("#wxRead");
+    const retry = w && w.wait_s > 0 ? `, tries again in ${mins(w.wait_s)} minute${mins(w.wait_s) === 1 ? "" : "s"}` : "";
+    place.hidden = !w;
+    read.hidden = true;
+    if (!w) return;
+    if (w.place) place.textContent = `Found: ${w.place}`;
+    else if (w.lookup === -1) place.textContent = "Looking up...";
+    else if (w.lookup === 200) place.textContent = `No place found for "${S.town}". Try the town and state, or a ZIP code.`;
+    else place.textContent = `Couldn't reach Open-Meteo${retry}.`;
+    if (!w.place) return;
+    read.hidden = false;
+    if (w.read_s !== undefined) {
+      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°F, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
+      if (w.held) read.textContent += " The next read waits for the game to end.";
+      else if (w.read !== 200 && w.read !== -1) read.textContent += ` The last read failed${retry}.`;
+    } else if (w.held) {
+      read.textContent = "Not read yet: waiting for the game to end.";
+    } else if (w.read !== -1) {
+      read.textContent = `Couldn't reach Open-Meteo${retry}.`;
+    } else {
+      read.textContent = "Not read yet.";
+    }
+  };
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
@@ -1030,6 +1079,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (document.activeElement !== cdName) cdName.value = S.cdname || "";
     if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
     $("#cdClear").hidden = !S.cdname && !S.cddate;
+    renderWeather();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.

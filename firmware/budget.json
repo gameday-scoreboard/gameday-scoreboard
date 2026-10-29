@@ -8,15 +8,15 @@
   },
   "firmware": {
     "moonhub75": {
-      "flash": 2534000,
+      "flash": 2574000,
       "static_ram": 173431
     },
     "moonhub75-2panel": {
-      "flash": 2534000,
+      "flash": 2574000,
       "static_ram": 173431
     },
     "scoreboard75": {
-      "flash": 2510000,
+      "flash": 2550000,
       "static_ram": 172568
     }
   },
@@ -100,6 +100,14 @@
     "team_nfl": {
       "heap": 1042,
       "json": 6277
+    },
+    "weather_forecast": {
+      "heap": 1024,
+      "json": 5700
+    },
+    "weather_lookup": {
+      "heap": 1046,
+      "json": 5700
     }
   }
 }

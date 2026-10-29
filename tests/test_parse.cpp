@@ -25,6 +25,7 @@
 #include "logo_lru.h"
 #include "message.h"
 #include "news.h"
+#include "weather.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
@@ -5657,6 +5658,150 @@ static void test_news() {
   CHECK(msg_turn(true, true, true, kMsgPageMs, kNewsEveryMin, kMsgPageMs) == MsgTurn::HIDE);
 }
 
+// The weather card (weather.h): the town's lookup, the forecast, the words
+// and icons, and when the card has a turn.
+static void test_weather() {
+  // A US ZIP asks for the US only ("75019" alone is Paris); anything else
+  // travels percent-encoded.
+  CHECK(town_is_us_zip("75019"));
+  CHECK(!town_is_us_zip("7501"));
+  CHECK(!town_is_us_zip("7501a"));
+  CHECK_EQ(geocode_url("75019"),
+           std::string("https://geocoding-api.open-meteo.com/v1/search?name=75019&count=1&language=en&format=json"
+                       "&countryCode=US"));
+  CHECK_EQ(geocode_url("St. Mary's, Ga"),
+           std::string("https://geocoding-api.open-meteo.com/v1/search?name=St.%20Mary%27s%2C%20Ga&count=1&language=en"
+                       "&format=json"));
+  CHECK_EQ(url_encode("S\xC3\xA3o"), std::string("S%C3%A3o"));
+  CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
+           std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
+                       "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
+                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=3"));
+  // The town as kept: one line, no emoji, at most kTownMax bytes.
+  CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
+  CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);
+
+  // The recorded lookups: the state in the US, the country elsewhere.
+  WxPlace p;
+  std::string json = slurp("fixtures/wx_geocode_75019.json");
+  CHECK(parse_geocode(json, p));
+  CHECK(p.valid);
+  CHECK_EQ(p.name, std::string("Coppell, Texas"));
+  CHECK(std::fabs(p.lat - 32.95457f) < 0.0001f && std::fabs(p.lon + 97.01501f) < 0.0001f);
+  json = slurp("fixtures/wx_geocode_paris.json");
+  CHECK(parse_geocode(json, p));
+  CHECK_EQ(p.name, std::string("Paris, France"));
+  // Open-Meteo answered and knows no such place: valid, with no name.
+  json = slurp("fixtures/wx_geocode_none.json");
+  CHECK(parse_geocode(json, p));
+  CHECK(p.valid && p.name.empty());
+  // A result without coordinates, or out of range, is no place either.
+  json = "{\"results\":[{\"name\":\"Nowhere\",\"latitude\":95,\"longitude\":0}]}";
+  CHECK(parse_geocode(json, p) && p.name.empty());
+  json = "{\"results\":[{\"name\":\"Nowhere\"}]}";
+  CHECK(parse_geocode(json, p) && p.name.empty());
+  // Not the geocoder's document: a failed read.
+  json = "<html>";
+  CHECK(!parse_geocode(json, p));
+  CHECK_EQ(place_text(std::string(50, 'y'), "", "Chile", "CL").size(), kPlaceMax);
+  // The firmware's entry points read through a WxSource, a byte at a time.
+  struct StringSource : WxSource {
+    explicit StringSource(const std::string &s) : s(s) {}
+    int read() override { return pos < s.size() ? (unsigned char) s[pos++] : -1; }
+    size_t readBytes(char *dst, size_t n) override {
+      size_t take = std::min(n, s.size() - pos);
+      memcpy(dst, s.data() + pos, take);
+      pos += take;
+      return take;
+    }
+    const std::string &s;
+    size_t pos{0};
+  };
+  json = slurp("fixtures/wx_geocode_75019.json");
+  StringSource geo(json);
+  CHECK(parse_geocode_from(geo, p) && p.name == "Coppell, Texas");
+  std::string fc = slurp("fixtures/wx_forecast_coppell.json");
+  StringSource fsrc(fc);
+  WxForecast f0;
+  CHECK(parse_forecast_from(fsrc, f0) && f0.valid && f0.temp == 76);
+
+  // The recorded forecast, rounded to whole degrees, the days from its dates.
+  WxForecast f;
+  json = slurp("fixtures/wx_forecast_coppell.json");
+  CHECK(parse_forecast(json, f));
+  CHECK(f.valid);
+  CHECK_EQ(f.temp, 76);
+  CHECK_EQ(f.code, 3);
+  CHECK(!f.night);
+  CHECK_EQ(f.today.hi, 82);
+  CHECK_EQ(f.today.lo, 67);
+  CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Thu"));
+  CHECK_EQ(f.next[0].hi, 73);
+  CHECK_EQ(f.next[0].lo, 66);
+  CHECK_EQ(f.next[0].code, 51);
+  CHECK_EQ(std::string(weekday_text(f.next[0].wday)), std::string("Fri"));
+  CHECK_EQ(f.next[1].hi, 68);
+  CHECK_EQ(f.next[1].code, 63);
+  CHECK_EQ(std::string(weekday_text(f.next[1].wday)), std::string("Sat"));
+  // Below zero rounds away from it; night comes from is_day.
+  json = "{\"current\":{\"temperature_2m\":-3.5,\"weather_code\":0,\"is_day\":0},\"daily\":{\"time\":[\"2027-01-03\","
+         "\"2027-01-04\",\"2027-01-05\"],\"weather_code\":[71,73,0],\"temperature_2m_max\":[1,2,3],"
+         "\"temperature_2m_min\":[-10.4,-9,-8]}}";
+  CHECK(parse_forecast(json, f));
+  CHECK_EQ(f.temp, -4);
+  CHECK(f.night);
+  CHECK_EQ(f.today.lo, -10);
+  CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Sun"));
+  // Short of three days, or no reading now: a failed read.
+  json = "{\"current\":{\"temperature_2m\":70},\"daily\":{\"temperature_2m_max\":[1,2],\"temperature_2m_min\":[1,2]}}";
+  CHECK(!parse_forecast(json, f));
+  json = "{\"daily\":{\"temperature_2m_max\":[1,2,3],\"temperature_2m_min\":[1,2,3]}}";
+  CHECK(!parse_forecast(json, f));
+  json = "{\"error\":true,\"reason\":\"Invalid timezone\"}";
+  CHECK(!parse_forecast(json, f));
+
+  // Icons and words for the WMO codes; the moon for a clear night.
+  CHECK(wx_icon(0, false) == WxIcon::SUN);
+  CHECK(wx_icon(1, true) == WxIcon::MOON);
+  CHECK(wx_icon(2, true) == WxIcon::PART);
+  CHECK(wx_icon(45, false) == WxIcon::FOG);
+  CHECK(wx_icon(63, false) == WxIcon::RAIN);
+  CHECK(wx_icon(81, false) == WxIcon::RAIN);
+  CHECK(wx_icon(75, false) == WxIcon::SNOW);
+  CHECK(wx_icon(86, false) == WxIcon::SNOW);
+  CHECK(wx_icon(95, false) == WxIcon::STORM);
+  CHECK(wx_icon(255, false) == WxIcon::CLOUD);
+  CHECK_EQ(std::string(wx_words(2, true)), std::string("Partly cloudy"));
+  CHECK_EQ(std::string(wx_words(66, false)), std::string("Icy rain"));
+  CHECK_EQ(std::string(wx_words(255, true)), std::string(""));
+  // Every word fits a single panel at 5x8 (12 characters) on the narrow form.
+  for (int c = 0; c < 100; c++)
+    CHECK(strlen(wx_words((uint8_t) c, false)) <= 12);
+  CHECK_EQ(wx_temp_text(71), std::string("71\xC2\xB0"));
+  CHECK_EQ(wx_hilo_text(80, -2), std::string("80/-2"));
+
+  // What the card says with nothing to draw, and when it has a turn.
+  CHECK_EQ(wx_card_text(false, "", false, false), std::string(""));
+  CHECK_EQ(wx_card_text(true, "", false, false), std::string("Set a town on the device page"));
+  CHECK_EQ(wx_card_text(true, "Xyzzy", true, false), std::string("Town not found"));
+  CHECK_EQ(wx_card_text(true, "Coppell", false, false), std::string(""));  // still looking
+  CHECK(!wx_card_ready(false, "Coppell", true, true, true, 0, true));
+  CHECK(wx_card_ready(true, "", false, false, false, 0, false));
+  CHECK(!wx_card_ready(true, "Coppell", false, false, false, 0, false));  // before the first read
+  CHECK(wx_card_ready(true, "Coppell", true, true, true, kWxFreshMs - 1, true));
+  CHECK(!wx_card_ready(true, "Coppell", true, true, true, kWxFreshMs, true));  // three hours of failed reads
+
+  // Its turn is seconds 40 to 49, after the custom countdown and never over
+  // the next game's turn.
+  const int64_t min0 = 1760000000 - 1760000000 % 60;
+  CHECK(countdown_turn(min0 + 40, false, false, true) == CountdownCard::WEATHER);
+  CHECK(countdown_turn(min0 + 49, true, true, true) == CountdownCard::WEATHER);
+  CHECK(countdown_turn(min0 + 50, false, true, true) == CountdownCard::CUSTOM);
+  CHECK(countdown_turn(min0 + 50, false, false, true) == CountdownCard::NONE);
+  CHECK(countdown_turn(min0 + 39, true, false, true) == CountdownCard::NEXT);
+  CHECK(countdown_turn(min0 + 40, true, false, false) == CountdownCard::NONE);
+}
+
 // The FCC screen (regulatory.h): every page fits its board, and the words
 // come out whole.
 static void test_regulatory() {
@@ -7131,6 +7276,7 @@ int main() {
   test_prefs_sync();
   test_message();
   test_news();
+  test_weather();
   test_regulatory();
   test_wifi_history();
   test_ha_events();

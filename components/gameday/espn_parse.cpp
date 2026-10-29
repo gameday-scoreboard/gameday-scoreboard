@@ -1,5 +1,6 @@
 #include "espn_parse.h"
 #include "game_leaders.h"
+#include "weather.h"
 
 #include <atomic>
 #include <cstdio>
@@ -262,6 +263,9 @@ bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_i
   return parse_summary(json, sport, our_team_id, event_id, stage, out);
 }
 int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
+
+bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
+bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)
