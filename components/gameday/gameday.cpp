@@ -43,6 +43,9 @@
 #include <esp_attr.h>
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
+#ifdef USE_MDNS
+#include <mdns.h>  // the webhook looks .local names up itself
+#endif
 #include <esp_sntp.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -4357,14 +4360,16 @@ void GamedayComponent::hook_tick_() {
       return;
     this->hook_running_ = false;
     this->hook_status_ = this->hook_task_status_;
+    unsigned stack_left = (unsigned) this->hook_task_stack_.load();
     if (this->hook_status_ >= 200 && this->hook_status_ < 300) {
       this->hook_sent_++;
-      ESP_LOGD(TAG, "Webhook: HTTP %d (%u bytes of the post's stack unused)", this->hook_status_,
-               (unsigned) this->hook_task_stack_.load());
+      ESP_LOGD(TAG, "Webhook: HTTP %d (%u bytes of the post's stack unused)", this->hook_status_, stack_left);
     } else if (this->hook_status_ == 0) {
-      ESP_LOGW(TAG, "Webhook: no answer from %s", this->hook_task_url_.c_str());
+      ESP_LOGW(TAG, "Webhook: no answer from %s (%u bytes of the post's stack unused)", this->hook_task_url_.c_str(),
+               stack_left);
     } else {
-      ESP_LOGW(TAG, "Webhook: HTTP %d from %s", this->hook_status_, this->hook_task_url_.c_str());
+      ESP_LOGW(TAG, "Webhook: HTTP %d from %s (%u bytes of the post's stack unused)", this->hook_status_,
+               this->hook_task_url_.c_str(), stack_left);
     }
     std::string().swap(this->hook_task_body_);
     this->rebuild_state_(&this->last_fields_);  // the page shows how the last post went
@@ -4396,8 +4401,26 @@ void GamedayComponent::hook_tick_() {
 // connect and three for the answer, whose body is never read.
 void GamedayComponent::hook_task_(void *arg) {
   auto *self = static_cast<GamedayComponent *>(arg);
+  std::string url = self->hook_task_url_;
+  std::string host;
+#ifdef USE_MDNS
+  // homeassistant.local and the like: lwIP would hand the name to the
+  // router's DNS, which doesn't know it. Ask mDNS, post to the address it
+  // gives, and keep the name in the Host header.
+  std::string name = ::espn::hook_mdns_name(url);
+  if (!name.empty()) {
+    esp_ip4_addr_t addr{};
+    size_t b, e;
+    if (mdns_query_a(name.c_str(), 2000, &addr) == ESP_OK && ::espn::hook_host_span(url, b, e)) {
+      char ip[16];
+      snprintf(ip, sizeof(ip), IPSTR, IP2STR(&addr));
+      host = url.substr(b, e - b);
+      url.replace(b, e - b, ip);
+    }
+  }
+#endif
   esp_http_client_config_t cfg = {};
-  cfg.url = self->hook_task_url_.c_str();
+  cfg.url = url.c_str();
   cfg.method = HTTP_METHOD_POST;
   cfg.timeout_ms = 3000;
   cfg.disable_auto_redirect = true;
@@ -4408,6 +4431,8 @@ void GamedayComponent::hook_task_(void *arg) {
   esp_http_client_handle_t client = esp_http_client_init(&cfg);
   if (client != nullptr) {
     esp_http_client_set_header(client, "Content-Type", "application/json");
+    if (!host.empty())
+      esp_http_client_set_header(client, "Host", host.c_str());
     esp_http_client_set_post_field(client, self->hook_task_body_.data(), (int) self->hook_task_body_.size());
     if (esp_http_client_perform(client) == ESP_OK)
       status = esp_http_client_get_status_code(client);

@@ -1128,6 +1128,20 @@ static void test_ha_fields() {
   CHECK(!hook_url_ok("http://exa mple.com/"));
   CHECK(!hook_url_ok("http://example.com/\xC3\xA9"));
   CHECK(!hook_url_ok("http://" + std::string(kHookUrlMax, 'a')));
+  // A .local name is looked up over mDNS, by its name alone; the port stays
+  // out of it.
+  CHECK_EQ(hook_mdns_name("http://homeassistant.local:8123/api/webhook/x"), std::string("homeassistant"));
+  CHECK_EQ(hook_mdns_name("http://HomeAssistant.LOCAL/"), std::string("HomeAssistant"));
+  CHECK_EQ(hook_mdns_name("http://192.168.1.20:1880/gameday"), std::string(""));
+  CHECK_EQ(hook_mdns_name("http://nas.home.arpa/hook"), std::string(""));
+  CHECK_EQ(hook_mdns_name("http://.local/"), std::string(""));
+  size_t hb = 0, he = 0;
+  CHECK(hook_host_span("http://homeassistant.local:8123/api", hb, he));
+  CHECK_EQ(hb, (size_t) 7);
+  CHECK_EQ(he, (size_t) 26);
+  CHECK(hook_host_span("http://192.168.1.20", hb, he));
+  CHECK_EQ(he, (size_t) 19);
+  CHECK(!hook_host_span("http:///x", hb, he));
   CHECK_EQ(clamp_pregame_minutes(-5), 0);
   CHECK_EQ(clamp_pregame_minutes(30), 30);
   CHECK_EQ(clamp_pregame_minutes(500), kPregameMax);

@@ -4,6 +4,7 @@
 // before the start the reminder goes out (ha_events.h). Pure, so the host
 // tests and set_request.h use it.
 
+#include <cctype>
 #include <string>
 
 namespace espn {
@@ -26,6 +27,35 @@ inline bool hook_url_ok(const std::string &url) {
     if (c <= ' ' || c >= 0x7F)
       return false;
   return true;
+}
+
+// Where the host sits in an http:// address: [begin, end) is the name or
+// IP without the port. False when there is none.
+inline bool hook_host_span(const std::string &url, size_t &begin, size_t &end) {
+  if (url.compare(0, 7, "http://") != 0)
+    return false;
+  begin = 7;
+  end = url.find_first_of(":/?#", begin);
+  if (end == std::string::npos)
+    end = url.size();
+  return end > begin;
+}
+
+// The host without its ".local" when the address names one (homeassistant.local),
+// "" for an IP or any other name. The panel's resolver hands .local names to
+// the router's DNS, which doesn't know them, so the post looks them up over
+// mDNS itself.
+inline std::string hook_mdns_name(const std::string &url) {
+  size_t b, e;
+  if (!hook_host_span(url, b, e) || e - b <= 6)
+    return "";
+  std::string host = url.substr(b, e - b);
+  std::string tail = host.substr(host.size() - 6);
+  for (auto &c : tail)
+    c = (char) tolower((unsigned char) c);
+  if (tail != ".local")
+    return "";
+  return host.substr(0, host.size() - 6);
 }
 
 constexpr int kPregameMax = 120;
