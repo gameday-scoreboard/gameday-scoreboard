@@ -1389,6 +1389,12 @@ void GamedayComponent::loop() {
         if (this->job_.need_wx != 0) {
           this->wx_fail_ms_ = this->gave_up_ms_;
           this->wx_backoff_ms_ = this->wx_fail_.fail(false, 0, random_uint32());
+          // start_wx_job_ took the lookup; it is due again after the wait,
+          // like a lookup that failed (apply_wx_job_).
+          if (this->job_.need_wx == 1 && this->job_.wx_town == this->wx_.town) {
+            this->wx_lookup_status_ = 0;
+            this->wx_lookup_due_ = true;
+          }
         }
         // need_scan, like need_msg, was set before the task started, so the
         // abandoned task can't have changed it.
@@ -3843,9 +3849,12 @@ void GamedayComponent::load_wx_() {
       this->wx_.lon > 180.0f)
     this->wx_ = PrefsWx{};  // a later firmware's blob, or damage
   this->wx_.on = this->wx_.on ? 1 : 0;
-  // A town saved before its lookup answered (a power cut) is looked up now.
+  // A town saved before its lookup answered (a power cut) is looked up now;
+  // a saved place stands for a lookup that answered.
   if (this->wx_.town[0] != '\0' && !this->wx_place_known_())
     this->wx_lookup_due_ = true;
+  else if (this->wx_place_known_())
+    this->wx_lookup_status_ = 200;
 }
 
 void GamedayComponent::save_wx_() {
