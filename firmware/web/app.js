@@ -1,7 +1,7 @@
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
-//   POST /gameday/set?key=value   change settings (team=nfl:6, mode=1, fav2=ncaa:333, tz=3 ...)
+//   POST /gameday/set?key=value   change settings (mode=4, favs=nfl:6,ncaa:333, tz=3 ...)
 //   POST /gameday/settings        a settings document as JSON; the playlists go this way
 //   POST /gameday/action?do=name  refresh, power_ok (clears the brownout cap),
 //                                 say&text=...&secs=N (the banner), regulatory
@@ -112,13 +112,8 @@
     </section>
 
     <div class="modes" id="modes" role="group" aria-label="Mode">
-      <button data-mode="0" aria-pressed="false">My team</button>
-      <button data-mode="5" aria-pressed="false">Live games</button>
       <button data-mode="4" aria-pressed="false">Favorite teams</button>
-    </div>
-    <div class="teambar" id="teambar">
-      <div class="cur"><img id="curLogo" alt=""><div><div class="name" id="curName">No team chosen</div><div class="lg" id="curLg">Pick the team the panel should follow</div></div></div>
-      <button class="btn primary" id="pick">Change team</button>
+      <button data-mode="5" aria-pressed="false">Live games</button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
       <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
@@ -156,7 +151,7 @@
           <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
           <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
           <div class="ctl"><label>Odds, TV and win chance<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Odds, TV and win chance"></button></div>
-          <div class="ctl" data-sport="football"><label>Pre-game season leaders<small>Football: before kickoff, each team's passing leader with yards and touchdowns.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
+          <div class="ctl" data-sport="football baseball basketball hockey"><label>Pre-game season leaders<small>Before the start, each team's season leader: passing in football, home runs in baseball, points in basketball and hockey.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
         </div>
       </div>
       <div class="card">
@@ -330,7 +325,7 @@
       <div class="head">
         <input type="search" id="q" placeholder="Search teams" aria-label="Search teams" autocomplete="off">
         <div class="tabs" role="tablist" aria-label="Leagues"><button data-lg="now" class="on" role="tab" aria-selected="true" aria-controls="tiles">On now</button></div>
-        <button class="btn" id="close">Close</button>
+        <button class="btn" id="close">Done</button>
       </div>
       <div class="favcount" id="favCount" role="status" hidden></div>
       <div class="tiles" id="tiles" role="tabpanel"></div>
@@ -391,7 +386,6 @@
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
-    team: (v) => ref(v),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
@@ -405,7 +399,6 @@
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
-    team: (a, b) => refKey(a) === refKey(b),
     live: (a, b) => (a || []).slice().sort().join(",") === (b || []).slice().sort().join(","),
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
     lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
@@ -611,17 +604,14 @@
       st.textContent = g ? "NO GAME" : "WAITING";
       st.classList.remove("live");
       msg.hidden = false;
-      const mode = S ? String(S.mode || 0) : "0";
-      const favMode = mode === "4" && S && (S.favs || []).some(refKey);
-      // With no team picked the panel runs the live board, unless Favorites has teams.
-      const liveMode = S && !favMode && (mode !== "0" || S.recap || !(S.team && S.team.id));
+      // Favorites with no team set runs the live board.
+      const favMode = S && String(S.mode) === "4" && (S.favs || []).some(refKey);
       // why is the panel's own reason ("Can't reach ESPN", "Getting ready"),
       // sent only when its board says something other than its default.
       msg.textContent = !g ? "Waiting for the first fetch"
         : captive ? "This Wi-Fi needs a sign-in. Use a home network or a hotspot."
         : g.why ? g.why
-        : favMode ? "None of your favorites has a game coming up"
-          : liveMode ? "No live games right now" : "No upcoming game for this team";
+        : favMode ? "None of your favorites has a game coming up" : "No live games right now";
       $("#clock").innerHTML = "&nbsp;";
       $("#down").textContent = "";
       return;
@@ -645,9 +635,9 @@
   };
 
   // ---- mode pills ----------------------------------------------------------------
-  // Device modes: 0 my team, 4 favorite teams, 5 live games in the chosen
-  // leagues. 1-3 are the older football-only live modes; the page shows them
-  // as Live games and a chip tap moves the panel to mode 5.
+  // Device modes: 4 favorite teams, 5 live games in the chosen leagues. 1-3
+  // are the older football-only live modes; the page shows them as Live
+  // games and a chip tap moves the panel to mode 5.
   const isLive = (m) => m === "1" || m === "2" || m === "3" || m === "5";
   const modeButtons = Array.from(document.querySelectorAll("#modes button"));
   modeButtons.forEach((b) => {
@@ -700,28 +690,28 @@
     if (m === "3") return ["nfl", "ncaa"];
     return S.live || [];
   };
-  // No leagues picked: the device follows the leagues of the team and the
-  // favorites, and that list changes by itself when a favorite is added.
+  // No leagues picked: the device follows the favorites' leagues, and that
+  // list changes by itself when a favorite is added.
   const liveAuto = () => String(S.mode || 0) === "5" && !!S.live_auto;
   $("#liveAuto").onclick = () => {
     setGD({ live: "" });
-    toast("Leagues follow your team and favorites");
+    toast("Leagues follow your favorites");
   };
   const renderLiveBar = () => {
     const auto = liveAuto();
-    // With nothing live the device shows the saved team's card, or with no
-    // team a rotation of recent finals, and keeps scanning.
+    // With nothing live the device shows the first favorite's card, or with
+    // no favorites a rotation of recent finals, and keeps scanning.
     // Favorites take over: a favorite's game in progress has the panel.
     const lock = S.favlock && S.favlock.id ? S.favlock : null;
     $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
-      : S.fallback ? "No live game right now, showing your team until one starts"
+      : S.fallback ? "No live game right now, showing your first favorite until one starts"
         : S.recap ? "No live game right now, showing recent finals"
           : S.best ? "Following the best game on" : "Following a random game in progress";
     $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
       : S.fallback || S.recap ? ""
         : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
           : "Moves on when it ends, or after Switch every. ")
-      + (auto ? "Leagues follow your team and favorites. Tap a league to choose by hand:" : "Leagues:");
+      + (auto ? "Leagues follow your favorites. Tap a league to choose by hand:" : "Leagues:");
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
@@ -759,8 +749,7 @@
     modeButtons.forEach((b) => setOn(b, b.dataset.mode === mode || (b.dataset.mode === "5" && isLive(mode)), "aria-pressed"));
     const live = isLive(mode);
     if (live) renderLiveBar();
-    const favs = mode === "4";
-    $("#teambar").hidden = live || favs;
+    const favs = !live;
     $("#livebar").hidden = !live;
     $("#favbar").hidden = !favs;
     if (document.activeElement !== rotateInput) rotateInput.value = S.rotate;
@@ -984,7 +973,7 @@
     if (keys.join(",") !== favKeys.join(",")) {
       favKeys = keys;
       renderFavs();
-      if (pickFav && $("#modal").classList.contains("open")) markPicked();
+      if ($("#modal").classList.contains("open")) markPicked();
     } else {
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
@@ -994,15 +983,15 @@
       listSig = sig;
       renderLists();
     }
-    // A situation switch for each sport the panel follows (team, favorites,
-    // Live games leagues picked by hand), all of them before anything is
+    // A situation switch for each sport the panel follows (favorites, Live
+    // games leagues picked by hand), all of them before anything is
     // picked. The automatic Live list is no help here: it never comes back
     // empty (NFL on a new panel). Hockey and basketball have no situation
-    // line, so no switch.
-    const sports = new Set([S.team].concat(S.favs || []).filter((t) => t && t.id).map((t) => t.l)
+    // line, so no switch of their own; a switch for several sports lists them.
+    const sports = new Set((S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
     document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
-      row.hidden = sports.size > 0 && !sports.has(row.dataset.sport);
+      row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = S.countdown === undefined;
@@ -1345,16 +1334,12 @@
   let games = null;        // [{league, id, state, detail, away:{...}, home:{...}}]
   let gamesAt = 0;
   const teamById = (lg, id) => TEAMS.find((t) => t[0] === lg && t[1] === id);
-  // The day the panel reads for a league (scan_day_shift in espn_parse.h):
-  // football's turns over at midnight Eastern, the other leagues' at 4 AM
-  // Eastern, so a late West Coast game stays on today's list.
-  const scanDate = (lg) => {
-    const shift = LEAGUES[lg].path.startsWith("football/") ? 5 : 9;
-    return new Date(Date.now() - shift * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
-  };
+  // The day the panel reads (scan_day_shift in espn_parse.h) turns over at
+  // 4 AM Eastern, so a late West Coast game stays on today's list.
+  const scanDate = () => new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
   const loadGames = async (force) => {
     if (!force && games && Date.now() - gamesAt < 60000) return games;
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate(lg)}`]);
+    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       try {
@@ -1394,7 +1379,6 @@
       tiles.appendChild(el("div", "none", list.length ? "No game matches" : "No games today"));
       return;
     }
-    const cur = S ? refKey(S.team) : "";
     let lastState = null;
     for (const g of shown) {
       if (g.state !== lastState) {
@@ -1405,12 +1389,12 @@
       const card = el("div", "game" + (g.state === "in" ? " live" : ""));
       const mkSide = (s) => {
         const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && picked(keyOf(t), cur) ? " on" : ""));
+        const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
         b.disabled = !t;
-        b.title = t ? (pickFav ? t[3] : "Follow the " + t[3]) : "Not in the team list";
+        b.title = t ? t[3] : "Not in the team list";
         if (t) {
           b.dataset.key = keyOf(t);
-          if (pickFav) b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+          b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
         }
         const img = el("img");
         img.loading = "lazy";
@@ -1423,11 +1407,7 @@
         b.appendChild(txt);
         b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
         b.onclick = () => {
-          if (!t) return;
-          if (pickFav) return toggleFav(t);
-          setGD({ team: keyOf(t) });
-          toast("Now following the " + t[3]);
-          $("#modal").classList.remove("open");
+          if (t) toggleFav(t);
         };
         return b;
       };
@@ -1442,16 +1422,8 @@
   };
 
   // ---- team chooser ------------------------------------------------------
-  // The picker sets My team and closes. With pickFav it edits the favorites
-  // and stays open: favorites show checked, a line counts them, Done closes.
-  let pickFav = false;
-  const choose = (t) => {
-    if (pickFav) return toggleFav(t);
-    setGD({ team: keyOf(t) });
-    toast("Now following the " + t[3]);
-    $("#modal").classList.remove("open");
-  };
-  const picked = (key, cur) => (pickFav ? favKeys.includes(key) : key === cur);
+  // The picker edits the favorites and stays open: favorites show checked,
+  // a line counts them, Done closes.
   // After a favorites change, mark the tiles in place so the list keeps its scroll.
   const markPicked = () => {
     document.querySelectorAll("#tiles [data-key]").forEach((b) => {
@@ -1463,16 +1435,14 @@
   };
   const renderFavCount = () => {
     const line = $("#favCount");
-    line.hidden = !pickFav;
-    line.textContent = pickFav ? favKeys.length + " of " + favMax() + " favorites" : "";
-    $("#close").textContent = pickFav ? "Done" : "Close";
+    line.hidden = false;
+    line.textContent = favKeys.length + " of " + favMax() + " favorites";
   };
   let league = "now";
   const renderTiles = () => {
     if (league === "now") return renderGames();
     $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
-    const cur = S ? refKey(S.team) : "";
     const tiles = $("#tiles");
     tiles.innerHTML = "";
     const list = TEAMS.filter((t) => (q ? (t[3] + " " + t[2]).toLowerCase().includes(q) : t[0] === league));
@@ -1481,9 +1451,9 @@
       return;
     }
     for (const t of list) {
-      const tile = el("button", "tile" + (picked(keyOf(t), cur) ? " on" : ""));
+      const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
       tile.dataset.key = keyOf(t);
-      if (pickFav) tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+      tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
       const img = el("img");
       img.loading = "lazy";
       img.src = logoUrl(t[0], t[1], t[2]);
@@ -1491,7 +1461,7 @@
       tile.appendChild(img);
       tile.appendChild(el("div", "n", t[3]));
       tile.appendChild(el("div", "a", lgInfo(t[0]).prefix + " · " + t[2]));
-      tile.onclick = () => choose(t);
+      tile.onclick = () => toggleFav(t);
       tiles.appendChild(tile);
     }
   };
@@ -1499,12 +1469,11 @@
     await doAction("power_ok");
     scheduleState(300);
   };
-  $("#pick").onclick = () => openPicker(false);
-  $("#favAdd").onclick = () => openPicker(true);
-  const openPicker = async (fav) => {
-    pickFav = fav;
-    const cur = S ? teamByKey(refKey(S.team)) : null;
-    league = cur ? cur[0] : "nfl";
+  $("#favAdd").onclick = () => openPicker();
+  const openPicker = async () => {
+    // On the first favorite's league, or On now while a game is live.
+    const first = teamByKey(favKeys[0] || "");
+    league = first ? first[0] : "nfl";
     try {
       const list = await loadGames(false);
       if (list.some((g) => g.state === "in")) league = "now";
@@ -1544,21 +1513,10 @@
     };
   });
   $("#q").oninput = renderTiles;
-  // Leaving the picker ends favorites mode until the next Add a favorite.
-  const closePicker = () => { pickFav = false; $("#modal").classList.remove("open"); };
+  const closePicker = () => $("#modal").classList.remove("open");
   $("#close").onclick = closePicker;
   $("#modal").onclick = (ev) => { if (ev.target.id === "modal") closePicker(); };
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("#modal").classList.contains("open")) closePicker(); });
-
-  const renderCurrentTeam = () => {
-    const t = S ? teamByKey(refKey(S.team)) : null;
-    const img = $("#curLogo");
-    if (!t) { img.style.visibility = "hidden"; $("#curName").textContent = "No team chosen"; return; }
-    img.style.visibility = "visible";
-    img.src = logoUrl(t[0], t[1], t[2]);
-    $("#curName").textContent = t[3];
-    $("#curLg").textContent = lgInfo(t[0]).name;
-  };
 
   // ---- timezone suggestion from the browser --------------------------------
   // Browsers report an IANA zone; the device's list carries one IANA name per
@@ -1595,6 +1553,19 @@
   const tzsel = $("#tzsel");
   TZS.forEach((z, i) => { const o = el("option", null, z[0]); o.value = String(i); tzsel.appendChild(o); });
   tzsel.onchange = () => { setGD({ tzauto: 0, tz: tzsel.value }); $("#tzpick").hidden = true; };
+  // Built once and updated in place, like the Live games chips: every state
+  // read redraws the line, and a rebuilt button would take keyboard focus with it.
+  const tzName = el("b");
+  const tzNote = el("span", "muted");
+  const tzLink = el("button", "linkbtn lnk");
+  // Reads the state at tap time, not as it was when the line was drawn.
+  tzLink.onclick = () => {
+    const pick = $("#tzpick");
+    if (!S || S.tz_auto || !browserZoneName()) { pick.hidden = !pick.hidden; return; }
+    tzApplied = false;
+    setGD({ tzauto: 1 });
+    pick.hidden = true;
+  };
   const renderTime = () => {
     if (!S) return;
     const cur = S.tz_name || "";
@@ -1602,29 +1573,21 @@
     const mine = browserZoneName();
     const mineIdx = mine ? TZS.findIndex((z) => z[0] === mine) : -1;
     const line = $("#tzline");
-    const pick = $("#tzpick");
     if (document.activeElement !== tzsel) tzsel.value = String(S.tz);
-    line.innerHTML = "";
-    line.appendChild(el("b", null, cur || "Not set"));
-    const link = el("button", "linkbtn lnk");
+    if (tzName.parentNode !== line) line.replaceChildren(tzName, tzNote, tzLink);
+    tzName.textContent = cur || "Not set";
     if (auto) {
-      line.appendChild(el("span", "muted", mine ? " · set from this browser" : " · this browser's zone is not in the list"));
-      link.textContent = "choose manually";
-      link.onclick = () => { pick.hidden = !pick.hidden; };
+      tzNote.textContent = mine ? " · set from this browser" : " · this browser's zone is not in the list";
+      tzLink.textContent = "choose manually";
       if (mine && mine !== cur && mineIdx >= 0 && !tzApplied) {
         tzApplied = true;
         setGD({ tz: mineIdx });
         toast("Timezone set to " + mine + " from this browser");
       }
     } else {
-      line.appendChild(el("span", "muted", " · chosen by hand"));
-      link.textContent = mine ? "follow this browser (" + mine + ")" : "change";
-      link.onclick = () => {
-        if (mine) { tzApplied = false; setGD({ tzauto: 1 }); pick.hidden = true; }
-        else pick.hidden = !pick.hidden;
-      };
+      tzNote.textContent = " · chosen by hand";
+      tzLink.textContent = mine ? "follow this browser (" + mine + ")" : "change";
     }
-    line.appendChild(link);
   };
 
   // ---- up next + splash (from the state document) -------------------------------
@@ -1669,26 +1632,7 @@
   const renderUpNext = () => {
     const box = $("#upnext");
     if (S && (S.mode || 0) === 4) { renderFavNext(box); return; }
-    if (!S || (S.mode || 0) !== 0) { box.hidden = true; return; }
-    const curId = game && game.s !== "NOT_FOUND" ? String(game.id || "") : "";
-    const list = (S.next || []).filter((u) => String(u.id) !== curId).slice(0, 3);
-    box.hidden = !list.length;
-    const host = $("#upnextList");
-    host.innerHTML = "";
-    const lg = S.team ? S.team.l : "nfl";
-    for (const u of list) {
-      const row = el("div", "un");
-      const img = el("img");
-      img.loading = "lazy";
-      img.alt = "";
-      img.src = logoUrl(lg, u.oi, u.oa);
-      row.appendChild(img);
-      const txt = el("div", "ut");
-      txt.appendChild(el("div", "n", (u.neutral ? "vs " : u.home ? "vs " : "@ ") + (u.on || u.oa)));
-      txt.appendChild(el("div", "w", kickLabel(u.kick, u.tbd) + (u.tv ? " · " + u.tv : "")));
-      row.appendChild(txt);
-      host.appendChild(row);
-    }
+    box.hidden = true;
   };
   let lastSplashKey = "";
   let splashTimer = null;
@@ -1710,7 +1654,6 @@
     renderBoard();
     renderUpNext();
     renderSplash();
-    renderCurrentTeam();
     renderMode();
     renderSettings();
     renderNight();

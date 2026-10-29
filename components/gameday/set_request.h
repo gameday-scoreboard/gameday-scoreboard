@@ -21,7 +21,7 @@
 namespace espn {
 
 // In the order the firmware applies them, whatever order the request uses.
-constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "fav2",    "fav3",
+constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "fav3",
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
@@ -30,13 +30,23 @@ constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list"};
 
-// LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
-// the football-only live modes from before, kept for panels that saved them.
-enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
+// FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
+// the leagues of the live mask. Modes 1-3 are the football-only live modes
+// from before, kept for panels that saved them. 0 was My team, which
+// Favorites replaced: a saved or sent 0 reads as Favorites (read_mode).
+enum class Mode : uint8_t { LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
 
-// Mode 0 (My team) to 5 (Live games).
+// The modes parse_set and a saved setting take, 0 to kModeCount - 1.
 constexpr int kModeCount = 6;
 static_assert((int) Mode::LIVE + 1 == kModeCount, "parse_set takes modes 0 to kModeCount - 1");
+
+// A mode number from the page, an app, a backup or flash, as the panel runs
+// it: My team's 0 is Favorites. -1 when it is out of range.
+inline int read_mode(int m) {
+  if (m < 0 || m >= kModeCount)
+    return -1;
+  return m == 0 ? (int) Mode::FAVORITES : m;
+}
 
 constexpr int kLockonMinMinutes = 5;
 constexpr int kLockonMaxMinutes = 120;
@@ -90,14 +100,10 @@ inline uint16_t live_mask_from_keys(const std::string &keys) {
   return mask;
 }
 
-// The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: the
-// saved team's league and each favorite's. team_league is the league byte
-// the panel keeps, which stays after the team is cleared. NFL when nothing
-// is left.
-inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, const std::vector<uint8_t> &fav_leagues) {
+// The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: each
+// favorite's league, NFL when there are none.
+inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t> &fav_leagues) {
   if (mask == 0) {
-    if (team_league < 16)
-      mask |= (uint16_t) (1u << team_league);
     for (uint8_t l : fav_leagues)
       if (l < 16)
         mask |= (uint16_t) (1u << l);
@@ -111,11 +117,11 @@ inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, cons
   return out;
 }
 
-// No team picked: My team with no team, or Favorites with no favorite set.
-// Any Live mode counts as a choice. The panel then runs Live games over
-// no_team_leagues() and the state document's live list is that set.
-inline bool no_team_default(bool have_team, uint8_t mode, bool have_favorite) {
-  return !have_team && (mode == (uint8_t) Mode::MY_TEAM || (mode == (uint8_t) Mode::FAVORITES && !have_favorite));
+// No team picked: Favorites with no favorite set. Any Live mode counts as a
+// choice. The panel then runs Live games over no_team_leagues() and the
+// state document's live list is that set.
+inline bool no_team_default(uint8_t mode, bool have_favorite) {
+  return mode == (uint8_t) Mode::FAVORITES && !have_favorite;
 }
 
 // The leagues a panel with no team picked scans: every league, in kLeagues
@@ -131,7 +137,7 @@ inline std::vector<League> no_team_leagues() {
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
 // (live_leagues above, or no_team_leagues for the no-team default). A mode
-// that follows a team scans none.
+// that follows teams (Favorites) scans none.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
     case Mode::LIVE_NFL:
@@ -148,7 +154,7 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
 }
 
 // Live games' leagues went from before to after (its list, or with the list
-// on auto the team or favorites it follows). True when the scan now reads
+// on auto the favorites it follows). True when the scan now reads
 // other leagues, so the board has to drop what the old ones put up and scan
 // again; a mode that doesn't read the list never does.
 inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, const std::vector<League> &after) {
@@ -156,8 +162,7 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 }
 
 enum class SetKind : uint8_t {
-  TEAM,      // team, id 0 clears it
-  MODE,      // value
+  MODE,      // value, read_mode's
   ROTATE,    // value, minutes
   FAV_SLOT,  // slot (1-4), team (id 0 clears the slot)
   TZ,        // value, index into kTimezones
@@ -188,7 +193,7 @@ enum class SetKind : uint8_t {
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
   FAVTAKE,   // on, Live games locks onto a favorite's game while it is live (favorites.h)
-  LEADERS,   // on, football's season leaders in the pre-game ticker
+  LEADERS,   // on, the season leaders in the pre-game ticker
   NIGHT,        // on, the night schedule (night.h)
   NIGHT_START,  // value, minutes after midnight
   NIGHT_END,    // value, minutes after midnight
@@ -206,7 +211,7 @@ struct TeamRef {
 };
 
 struct SetOp {
-  SetKind kind{SetKind::TEAM};
+  SetKind kind{SetKind::MODE};
   int value{0};
   bool on{false};
   uint8_t slot{0};
@@ -245,15 +250,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.on = v == "1";
     return true;
   };
-  if (k == "team") {
-    op.kind = SetKind::TEAM;
-    if (v == "none")
-      return true;
-    return parse_team_ref(v, op.team.league, op.team.id) && known_team(op.team.league, op.team.id);
-  }
   if (k == "mode") {
     op.kind = SetKind::MODE;
-    return parse_whole_int(v, op.value) && op.value >= 0 && op.value < kModeCount;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = read_mode(op.value);
+    return op.value >= 0;
   }
   if (k == "rotate") {
     op.kind = SetKind::ROTATE;

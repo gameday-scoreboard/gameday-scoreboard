@@ -141,7 +141,7 @@ inline int live_interest(const LiveGame &g) {
 // The index of the game to follow, the one on the board (current) winning
 // near-ties. current_over: the board's poll saw it end, though the scan may
 // still list it; any other game goes first. 0 for an empty list.
-inline size_t best_live_game(const std::vector<LiveGame> &games, const std::string &current,
+inline size_t best_live_game(const LiveList &games, const std::string &current,
                              bool current_over = false) {
   size_t best = 0;
   int top = -1;

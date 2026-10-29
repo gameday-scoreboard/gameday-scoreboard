@@ -1,7 +1,6 @@
 # libFuzzer dictionary for fuzz_settings: the backup's keys and values.
 "\"schema\":1"
 "\"schema\":2"
-"\"team\":"
 "\"mode\":"
 "\"favs\":"
 "\"live\":"

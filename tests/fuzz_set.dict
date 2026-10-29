@@ -1,5 +1,4 @@
 # libFuzzer dictionary for fuzz_set: the set keys and values it treats specially.
-"team="
 "mode="
 "rotate="
 "fav1="

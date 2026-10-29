@@ -36,13 +36,16 @@ import argparse
 import csv
 import datetime
 import hashlib
+import io
 import re
 import struct
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -65,10 +68,37 @@ NVS_PAGE_SIZE = 0x1000
 
 
 def release_asset(tag, variant):
-    """File name of the factory image on the GitHub release (see build.yml)."""
-    if variant == "moonhub75":
-        return f"gameday-scoreboard-{tag}.factory.bin"
+    """Local file name for a release's factory image."""
     return f"gameday-scoreboard-{tag}-{variant}.factory.bin"
+
+
+def release_zip(variant):
+    """The release asset that holds a variant's factory image (see build.yml)."""
+    return f"firmware-{variant}.zip"
+
+
+def old_release_assets(tag, variant):
+    """Releases up to v2026.10.2 also carried factory images on their own: MoonHub75's
+    with no board in its name (renamed with -moonhub75 on v2026.10.2), scoreboard75's with it."""
+    names = [f"gameday-scoreboard-{tag}-{variant}.factory.bin"]
+    if variant == "moonhub75":
+        names.append(f"gameday-scoreboard-{tag}.factory.bin")
+    return names
+
+
+def factory_from_zip(data, variant):
+    """The factory image inside a variant zip (<variant>/<name>.factory.bin)."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = sorted(n for n in z.namelist() if n.startswith(f"{variant}/") and n.endswith(".factory.bin"))
+        if not names:
+            raise SystemExit(f"{release_zip(variant)} has no factory image for {variant}")
+        return z.read(names[0])
+
+
+def download(url):
+    print(f"Downloading {url}")
+    with urllib.request.urlopen(url, timeout=120) as r:
+        return r.read()
 
 
 def version_from(text):
@@ -297,13 +327,24 @@ def print_label(cmd, label):
 
 def fetch_release(tag, variant, folder):
     folder.mkdir(parents=True, exist_ok=True)
-    name = release_asset(tag, variant)
-    path = folder / name
+    path = folder / release_asset(tag, variant)
     if not path.exists():
-        url = f"https://github.com/{REPO}/releases/download/{tag}/{name}"
-        print(f"Downloading {url}")
-        with urllib.request.urlopen(url, timeout=60) as r:
-            data = r.read()
+        base = f"https://github.com/{REPO}/releases/download/{tag}"
+        try:
+            data = factory_from_zip(download(f"{base}/{release_zip(variant)}"), variant)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            data = None
+            for name in old_release_assets(tag, variant):
+                try:
+                    data = download(f"{base}/{name}")
+                    break
+                except urllib.error.HTTPError as e2:
+                    if e2.code != 404:
+                        raise
+            if data is None:
+                raise SystemExit(f"{tag} has no factory image for {variant}")
         tmp = path.with_suffix(".part")
         tmp.write_bytes(data)
         tmp.replace(path)
@@ -403,7 +444,16 @@ def selftest():
     assert panel_name("34:85:18:2f:6a:70") == "gameday-2f6a70"
 
     assert release_asset("v1.5.5", "scoreboard75") == "gameday-scoreboard-v1.5.5-scoreboard75.factory.bin"
-    assert release_asset("v1.5.5", "moonhub75") == "gameday-scoreboard-v1.5.5.factory.bin"
+    assert release_asset("v2026.10.3", "moonhub75") == "gameday-scoreboard-v2026.10.3-moonhub75.factory.bin"
+    assert release_zip("moonhub75") == "firmware-moonhub75.zip"
+    assert old_release_assets("v1.5.5", "moonhub75") == ["gameday-scoreboard-v1.5.5-moonhub75.factory.bin",
+                                                         "gameday-scoreboard-v1.5.5.factory.bin"]
+    assert old_release_assets("v1.5.5", "scoreboard75") == ["gameday-scoreboard-v1.5.5-scoreboard75.factory.bin"]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("moonhub75/manifest.json", "{}")
+        z.writestr("moonhub75/gameday-esp32s3.factory.bin", b"image")
+    assert factory_from_zip(buf.getvalue(), "moonhub75") == b"image"
     assert version_from("gameday-scoreboard-v1.5.5-scoreboard75.factory.bin") == "1.5.5"
     assert version_from("firmware.factory.bin") == ""
 
@@ -530,7 +580,8 @@ def main():
     src = ap.add_mutually_exclusive_group()
     src.add_argument("--release", help="release tag to download the factory image from, e.g. v1.5.5")
     src.add_argument("--image", type=Path, help="local .factory.bin to flash")
-    ap.add_argument("--variant", default="scoreboard75", choices=["scoreboard75", "moonhub75"])
+    # The product board is on the MoonHub75 pinout; scoreboard75 is the early test boards.
+    ap.add_argument("--variant", default="moonhub75", choices=["moonhub75", "scoreboard75"])
     ap.add_argument("--port", help="serial port, for one board only (default: find the Espressif USB device "
                     "for each unit)")
     ap.add_argument("--baud", type=int, default=460800)

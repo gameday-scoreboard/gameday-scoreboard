@@ -293,6 +293,18 @@ inline MsgPage msg_next_page(uint32_t pos, uint32_t from, uint32_t n, bool eof, 
 // the time since the card last went up (shown) or down (not shown).
 enum class MsgTurn : uint8_t { NONE, SHOW, NEXT, HIDE };
 
+// Missed ESPN reads in a row at which the panel's trouble line wins over the
+// card; the ticker says "no update" from the same count.
+constexpr uint32_t kMsgTroubleMisses = 3;
+
+// Whether the panel has trouble to say between games, which the card must
+// not cover: ESPN missed kMsgTroubleMisses reads in a row, the Wi-Fi wants a
+// sign-in, or no internet (espn_parse.h, clock_late). The card comes back
+// on its own schedule once it clears.
+inline bool msg_trouble(uint32_t misses, bool captive, bool no_internet) {
+  return captive || no_internet || misses >= kMsgTroubleMisses;
+}
+
 inline MsgTurn msg_turn(bool on, bool between, bool shown, uint32_t since_ms, int every, uint32_t page_ms) {
   if (!on || !between)
     return shown ? MsgTurn::HIDE : MsgTurn::NONE;

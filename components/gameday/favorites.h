@@ -303,7 +303,7 @@ inline int live_fav_rank(const LiveGame &g, const std::vector<FavRef> &favs) {
 // game moves to the next favorite's, in list order, wrapping; a lone
 // favorite's game stays. Any other scan with alternate (a kickoff) keeps the
 // favorite's game on the board while it is still on.
-inline int take_over_pick(const std::vector<LiveGame> &live, const std::vector<FavRef> &favs,
+inline int take_over_pick(const LiveList &live, const std::vector<FavRef> &favs,
                           const std::string &current, bool skip_current, bool alternate, bool rotate = true) {
   // Candidates by priority: (rank, index), insertion-sorted, a few at most.
   std::vector<std::pair<int, int>> cand;

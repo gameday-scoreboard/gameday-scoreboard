@@ -115,8 +115,7 @@ def team(lg, tid):
 
 INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
-    "team": team("nfl", 6),
-    "mode": 0, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
+    "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
@@ -143,12 +142,14 @@ INITIAL = {
              "tc": "041E42", "oc": "004C54", "id": "401772001"},
     "status": "DAL vs PHI | Sun 3:25 PM | on FOX",
     "splash": "", "splash_color": "000000",
-    "next": [{"id": "401772001", "kick": 1792531500, "oi": 21, "oa": "PHI", "on": "Eagles", "home": True,
-              "neutral": False, "tv": "FOX"},
-             {"id": "401772002", "kick": 1793136300, "oi": 28, "oa": "WSH", "on": "Commanders", "home": False,
-              "neutral": False, "tv": "CBS"},
-             {"id": "401772003", "kick": 1793741100, "oi": 34, "oa": "HOU", "on": "Texans", "home": True,
-              "neutral": False, "tv": "NBC"}],
+    # Favorite teams: one row per favorite, its next game (rebuild_state_).
+    "shown": 1, "locked": False,
+    "next": [{"slot": 1, "t": team("nfl", 6), "id": "401772001", "s": "PRE", "kick": 1792531500, "oi": 21, "oa": "PHI",
+              "ts": 0, "os": 0, "tv": "FOX", "detail": "Sun 3:25 PM", "done": False},
+             {"slot": 2, "t": team("nfl", 34), "id": "401772002", "s": "PRE", "kick": 1793136300, "oi": 28, "oa": "WSH",
+              "ts": 0, "os": 0, "tv": "CBS", "detail": "Sun 12:00 PM", "done": False},
+             {"slot": 3, "t": team("ncaa", 145), "id": "401772003", "s": "PRE", "kick": 1793741100, "oi": 99, "oa": "LSU",
+              "ts": 0, "os": 0, "tv": "ESPN", "detail": "Sat 6:30 PM", "done": False}],
 }
 
 # ESPHome 2026.x state events (detail=all shape) for the entities app.js uses.
@@ -192,11 +193,8 @@ LOG = []
 # first. None: firmware without the list.
 WIFI_INITIAL = [{"ssid": "Home", "connected": True}, {"ssid": "iPhone", "connected": False}]
 WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
-# The saved team's league byte, which outlives a cleared team and counts in
-# Live auto. A fresh panel's is NFL.
-TEAM_LEAGUE = ["nfl"]
 # Live games' own list (the live mask), kept apart from the state's live list,
-# which shows every league instead while no team is picked.
+# which shows every league instead while no favorite is picked.
 LIVE_LIST = [[]]
 
 
@@ -207,7 +205,6 @@ def reset_state(overrides):
     # A null override drops the key, like firmware that doesn't send it.
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
-    TEAM_LEAGUE[0] = (STATE.get("team") or {}).get("l", "nfl")
     LIVE_LIST[0] = [] if STATE.get("live_auto", True) else list(STATE.get("live", []))
 
 
@@ -264,21 +261,19 @@ def timezone_index(v):
 
 
 def live_auto_leagues():
-    """live_leagues() with a mask of 0: the saved team's league and the favorites'."""
-    used = {TEAM_LEAGUE[0]} | {t["l"] for t in STATE["favs"] if t}
+    """live_leagues() with a mask of 0: the favorites' leagues, NFL with none."""
+    used = {t["l"] for t in STATE["favs"] if t}
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
 def no_team_default():
-    """set_request.h no_team_default(): My team with no team, or Favorites with none set."""
-    if STATE["team"]:
-        return False
-    return STATE["mode"] == 0 or (STATE["mode"] == 4 and not any(STATE["favs"]))
+    """set_request.h no_team_default(): Favorites with none set."""
+    return STATE["mode"] == 4 and not any(STATE["favs"])
 
 
 def state_doc():
-    """rebuild_state_() works the leagues out each time: every league with no team
-    picked (no_team_leagues()), else the auto leagues from the team and favorites."""
+    """rebuild_state_() works the leagues out each time: every league with no
+    favorite picked (no_team_leagues()), else the auto leagues from the favorites."""
     if no_team_default():
         STATE["live"] = list(LEAGUES)
     elif STATE.get("live_auto"):
@@ -335,16 +330,10 @@ def apply_set(kv):
     keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
     for k, v in kv:
         before = fav_refs()
-        if k == "team":
-            ref = parse_team_ref(v)
-            if ref:
-                STATE["team"] = team(*ref)
-                TEAM_LEAGUE[0] = ref[0]
-            elif v == "none":
-                STATE["team"] = {}
-        elif k == "mode":
+        if k == "mode":
+            # read_mode(): My team's 0 is Favorites.
             if whole_int(v) and 0 <= int(v) < LIMITS["kModeCount"]:
-                STATE["mode"] = int(v)
+                STATE["mode"] = int(v) or 4
         elif k == "rotate":
             if whole_int(v):
                 STATE["rotate"] = clamp(int(v), "kRotateMinMinutes", "kRotateMaxMinutes")
@@ -446,9 +435,7 @@ def settings_doc():
     s = state_doc()
     out = {"schema": SETTINGS_SCHEMA, "version": s["version"], "name": s["name"]}
     for k in SETTINGS_ORDER:
-        if k == "team":
-            out["team"] = team_text(s["team"]) or "none"
-        elif k == "favs":
+        if k == "favs":
             favs = [team_text(t) for t in s["favs"]]
             while favs and not favs[-1]:
                 favs.pop()
@@ -458,7 +445,7 @@ def settings_doc():
             out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
                             for pl in s.get("lists", [])]
         elif k == "live":
-            # Live games' own list, not the state's (every league with no team picked).
+            # Live games' own list, not the state's (every league with no favorite picked).
             out["live"] = list(LIVE_LIST[0])
         elif k == "tz":
             out["tz"] = s["tz_name"]
@@ -559,7 +546,7 @@ def import_settings(doc):
         elif kind == "Text":
             if not isinstance(v, str):
                 return fail(k + " should be text.")
-            if k == "team" or re.fullmatch(r"fav[1-4]", k):
+            if re.fullmatch(r"fav[1-4]", k):
                 r = team_ref(v)
                 if r == -2:
                     return fail(k + " should be a team like nfl:6, or none.")
@@ -665,12 +652,8 @@ def selftest():
     bad = 0
     for case in fx["cases"]:
         start = {**fx["base"], **case.get("start", {})}
-        team_league = start.pop("team_league", "nfl")
-        start["team"] = to_team(start["team"])
         start["favs"] = [to_team(r) for r in start["favs"]]
         reset_state(start)
-        if not STATE["team"]:
-            TEAM_LEAGUE[0] = team_league
         kv = [(k, v) for key in SET_KEYS for k, v in case["set"] if k == key]
         status = 200 if kv else 400
         if kv:

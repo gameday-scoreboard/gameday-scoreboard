@@ -22,18 +22,17 @@ namespace espn {
 // panel with no team keeps every league's, up to kRecapCap a day each, about
 // 200 bytes a game with its short strings stored inline: more than internal
 // RAM can spare.
-template<class T> using RecapList = std::vector<T, PsramAllocator<T>>;
+template<class T> using RecapList = PsVector<T>;
 
 // A day the way ESPN's scoreboard `dates=` parameter counts it for a league:
-// US Eastern, shifted like scan_url() (5 h for football, 9 h for the rest),
-// so a West Coast game that ends at 1 AM Eastern lands on the day it started.
+// US Eastern, shifted like scan_url() (to 4 AM Eastern), so a West Coast
+// game that ends at 1 AM Eastern lands on the day it started.
 inline int32_t espn_day(int64_t epoch, uint8_t league) {
   int64_t s = epoch - scan_day_shift((League) league);
   return (int32_t) (s >= 0 ? s / 86400 : (s - 86399) / 86400);
 }
 
-// Back to an epoch inside that day (noon Eastern), for scan_url(). Noon is
-// inside the day for either shift.
+// Back to an epoch inside that day (noon Eastern), for scan_url().
 inline int64_t espn_day_epoch(int32_t day) { return (int64_t) day * 86400 + 17 * 3600; }
 
 // One game day of one league, newest day first in a list: its finals, and
@@ -247,9 +246,9 @@ inline void recap_share(const size_t (&have)[kLeagueCount], size_t cap, size_t (
 // had for today, so the rotation fills up as games end and drops the ones
 // that started. A league with neither keeps its days, so a scan that failed
 // for one league never empties it. Each league keeps only the games to come
-// its share of a loop could show, since every one is internal RAM.
-inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &finals,
-                         const std::vector<Pending> &pending, int64_t now) {
+// its share of a loop could show.
+inline void recap_absorb(std::vector<RecapDay> &days, const FinalList &finals, const PendingList &pending,
+                         int64_t now) {
   size_t have[kLeagueCount] = {}, keep[kLeagueCount];
   auto today = [now](const Pending &p) {
     return p.kickoff_epoch > now && espn_day(p.kickoff_epoch, p.league) == espn_day(now, p.league);
@@ -280,7 +279,7 @@ inline void recap_absorb(std::vector<RecapDay> &days, const std::vector<Final> &
 // past its kickoff, and the scan's first kickoff is then behind us with
 // other games still to come today, so fall back on the first kept game
 // ahead.
-inline int64_t recap_scan_next(int64_t next_kickoff, const std::vector<Pending> &pending, int64_t now) {
+inline int64_t recap_scan_next(int64_t next_kickoff, const PendingList &pending, int64_t now) {
   if (next_kickoff > now)
     return next_kickoff;
   int64_t best = 0;
@@ -385,18 +384,6 @@ inline std::vector<RecapCard> recap_cards(const std::vector<RecapDay> &days, uin
   if (have_next && later.empty())
     out.push_back({RecapKind::NEXT, 0, 0});
   return out;
-}
-
-// Panels flashed before "no team" existed saved Dallas (ESPN id 6) as the
-// team on first boot. Whether that Dallas was ever really picked: not when
-// setup was never finished, and not on a panel that is in a Live mode,
-// which is how an owner who chose only a mode ends up with it. Dallas in My
-// team or Favorites mode is kept, since there is no telling it apart from a
-// pick. Any other team was picked.
-inline bool legacy_team_unpicked(uint8_t league, uint32_t team_id, bool setup_done, bool live_mode) {
-  if (league != (uint8_t) League::NFL || team_id != 6)
-    return false;
-  return !setup_done || live_mode;
 }
 
 }  // namespace espn

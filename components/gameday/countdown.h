@@ -146,9 +146,9 @@ enum class CountdownCard : uint8_t { NONE, NEXT, CUSTOM };
 // so it comes up at the same moment on every panel in the house.
 inline bool custom_turn(int64_t now) { return now % kCountdownCycleS >= kCountdownCycleS - kCountdownTurnS; }
 
-// My team between games: which card has the board at now. The next game's
-// card and its countdown take turns; the custom countdown the last turn of
-// each minute. next and custom say whether each has something to show.
+// Live games' fallback card between games: which card has the board at now.
+// The next game's card and its countdown take turns; the custom countdown the
+// last turn of each minute. next and custom say whether each has something to show.
 inline CountdownCard countdown_turn(int64_t now, bool next, bool custom) {
   if (custom && custom_turn(now))
     return CountdownCard::CUSTOM;

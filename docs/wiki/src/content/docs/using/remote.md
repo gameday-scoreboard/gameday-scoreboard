@@ -9,7 +9,7 @@ The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart 
 
 ## Pairing
 
-1. Open the device page, or the Remote section in the Game Day app, and find the **Remote** card.
+1. Open the **Remote** card on the device page, or **Remote** in the Game Day app (**Settings > Device**, then **Advanced** on iPhone or **Remote** on Android).
 2. Turn on **Discovery**. The status line says **Discovery on: press any button on the remote**.
 3. Press any button on the WizMote.
 
@@ -37,11 +37,9 @@ During the [night schedule](/using/brightness-and-clock/)'s hours the panel stay
 Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.
 
 - In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the panel carries on through your favorites.
-- In **My team** or **Live games**, a button switches the panel to My team, following that favorite.
+- In **Live games**, a button switches the panel to Favorite teams and jumps to that favorite.
 - A button for an empty slot does nothing.
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
 
-:::note[Coming in the next release]
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
-:::

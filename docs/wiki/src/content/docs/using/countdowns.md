@@ -5,7 +5,6 @@ sidebar:
   order: 4
 ---
 
-:::note[Coming in the next release]
 Between games the panel counts down to the next one in big digits, and it can count down to a day you pick.
 
 ## The countdown to the next game
@@ -18,9 +17,8 @@ While your team's next game is still to come, the board takes turns: the next ga
 
 It works the same way in each mode:
 
-- **My team**: your team's next game, every 10 seconds.
 - **Favorite teams**: each favorite's board in the playlist gets a second turn for its countdown before the playlist moves on. Once a game takes the panel shortly before kickoff, the countdown stops.
-- **Live games** with a team picked and nothing live: your team's card, the same as My team.
+- **Live games** with favorites and nothing live: your first favorite's next game, every 10 seconds.
 
 Between seasons, when the board shows the [off-season clock](/using/brightness-and-clock/#the-off-season-clock) and the next game is on the schedule, the clock and the countdown take turns, so the panel counts down to opening night on its own.
 
@@ -39,4 +37,3 @@ The name can be up to 20 characters long, fewer with accented letters. Emoji are
 ## On a 64x64 panel
 
 A single 64x64 panel shows the countdown in the same size as the off-season clock's time, with the matchup or the name under it.
-:::

@@ -26,6 +26,14 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | --- | --- | --- |
 | **Unplug it to rejoin saved Wi-Fi** | The panel is in setup after a Wi-Fi reset and still knows its old networks. | Set it up on a new network, or unplug it and plug it back in to go back to the old one. It goes back by itself after 15 minutes. |
 
+| The panel says | What it means | What to do |
+| --- | --- | --- |
+| **Can't join**, a network name, **Check name / and password** | The network the app just sent didn't work: the name or the password is wrong, or the panel can't see that network. It shows for 30 seconds. | Check both in the app, which asks for them again. After a Wi-Fi reset, close the app instead and the panel goes back to its saved networks a minute later. |
+
+:::note[Coming in the next release]
+After **Can't join**, a new panel goes back to **SETUP / Game Day / app**. Before, it went on to **Waiting for** and later **Wi-Fi lost / open app**.
+:::
+
 ## When the Wi-Fi is the problem
 
 | The panel says | What it means | What to do |
@@ -52,7 +60,7 @@ These show on the board or in the ticker.
 | **Looking for a live game** | In Live games, the panel is checking what's on. With one league picked, it names it, like **Looking for a live NHL game**. | Wait. |
 | **No live games right now** | In Live games, nothing is being played in the leagues you picked. | Nothing. The panel shows today's later games and recent final scores, and picks up the next game when it starts. |
 | **No live NFL games, showing CHI** | In Live games with nothing on, the panel shows your own team until a game starts. | Nothing. |
-| **Favorites: add teams in the app or on the page** | The panel is in Favorite teams with no favorites. | Add favorites, or switch to My team. See [Favorite teams](/using/favorites/). |
+| **Favorites: add teams in the app or on the page** | The panel is in Favorite teams with no favorites. | Add a favorite, or switch to Live games. See [Favorite teams](/using/favorites/). |
 | **Later today** | A card before the games still to come today, each with both logos, the start time and the TV channel. | Nothing. |
 | **Yesterday's NHL scores**, or another day and league | A card before that day's final scores. | Nothing. |
 | **Next: BOS at NYR Thu 6:00 PM** | No game is left today. This is the next one. | Nothing. |
@@ -60,9 +68,11 @@ These show on the board or in the ticker.
 | **Postponed**, **Canceled** or **Suspended** | The game ended without being played out. | Nothing. |
 | **Sat TBD** | ESPN hasn't set the game's start time yet. | Nothing. The time shows once ESPN has it. |
 
-:::note[Coming in the next release]
+**No internet** on the board: the panel joined Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered. Check that other devices on the network can get online. See [Troubleshooting](/help/troubleshooting/#the-panel-says-no-internet). **Getting ready** now lasts only those first 30 seconds.
+
+Your own [message card](/using/messages/) also steps aside while three reads from ESPN in a row have failed (**no update** in the ticker), while the Wi-Fi wants a sign-in, and while the panel says **No internet**.
+
 **Can't reach ESPN** also shows in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and after **No live NFL games, showing CHI** when your team's card can't be read. A panel that can't reach ESPN for days keeps saying so instead of switching to **No upcoming game** every couple of days.
-:::
 
 A panel with no team picked also brings the app's QR code back over the board for 13 seconds every 3 minutes, until you pick one.
 

@@ -18,7 +18,11 @@ The ticker along the bottom carries:
 - the betting line, the over/under ("O/U") and the TV network, when ESPN has them and **Odds, TV and win chance** is on
 - the venue
 
+In the regular season the ticker starts with the week, like "Week 8", where a bowl or playoff game has its name. At an open-air stadium the venue comes with ESPN's forecast for the game, like "76F Cloudy at Hard Rock Stadium". A dome, or a game with no forecast yet, shows just the venue.
+
 A game whose kickoff time isn't set yet, like a college game a couple of weeks out, shows the day and "TBD", like "Sat TBD".
+
+The day changes at midnight in the panel's timezone, so a game that read "Tomorrow 1:30 PM" in the evening reads "Today 1:30 PM" from 12:00 AM.
 
 After the odds, the ticker also shows each team's passing leader for the season with yards and touchdowns, like "Prescott 1,381 yds 9 TD", when ESPN has one. Early in the season, before a team has a passing line, it shows the rushing or receiving leader instead. **Pre-game season leaders** on the device page turns them off.
 

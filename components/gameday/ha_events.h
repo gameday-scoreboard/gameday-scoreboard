@@ -15,7 +15,7 @@
 namespace espn {
 
 // One event for Home Assistant. A score names the side that scored as team;
-// a final names the panel's own side (the team on the left of a My team or
+// a final names the panel's own side (the team on the left of a fallback or
 // Favorites board) as team, with the result from its side.
 struct HaEvent {
   std::string team, opponent;

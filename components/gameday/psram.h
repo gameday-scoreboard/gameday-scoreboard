@@ -1,12 +1,13 @@
 // PSRAM for the component's own containers: logos, the favorites list, the
-// finals rotation. Plain new and malloc only use internal RAM in this build.
-// Pure, with no ESPHome includes, so the host tests compile it; there it is
-// the plain heap. JSON documents use ESPHome's json::SpiRamAllocator instead
-// (espn_parse_impl.h's json_allocator()).
+// finals rotation, a scan's games. Plain new and malloc only use internal
+// RAM in this build. Pure, with no ESPHome includes, so the host tests
+// compile it; there it is the plain heap. JSON documents use ESPHome's
+// json::SpiRamAllocator instead (espn_parse_impl.h's json_allocator()).
 #pragma once
 
 #include <cstddef>
 #include <cstdlib>
+#include <vector>
 
 #ifdef ESP_PLATFORM
 #include <esp_heap_caps.h>
@@ -39,5 +40,7 @@ template<class T> struct PsramAllocator {
   template<class U> bool operator==(const PsramAllocator<U> &) const { return true; }
   template<class U> bool operator!=(const PsramAllocator<U> &) const { return false; }
 };
+
+template<class T> using PsVector = std::vector<T, PsramAllocator<T>>;
 
 }  // namespace espn

@@ -37,8 +37,8 @@ std::string baseball_status_text(const GameSnapshot &s, const TickerOptions &o, 
       if (!b.team_probable.empty() && !b.opp_probable.empty())
         add_part(out, s.team_abbr + " " + b.team_probable + " vs " + s.opp_abbr + " " + b.opp_probable);
       add_odds(out, s, o);
-      if (s.venue != s.game_name)
-        add_part(out, s.venue);
+      detail::add_leaders(out, s, o);
+      add_part(out, detail::venue_line(s));
       return out;
     case GameState::POST:
       // Postponed, Canceled or Suspended: ESPN's post state without a result.
