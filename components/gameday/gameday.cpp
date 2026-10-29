@@ -3933,6 +3933,8 @@ void GamedayComponent::start_wx_job_() {
     this->job_.wx_url = ::espn::geocode_url(this->wx_.town);
   } else {
     this->job_.need_wx = 2;
+    this->job_.wx_lat = this->wx_.lat;
+    this->job_.wx_lon = this->wx_.lon;
     this->job_.wx_url =
         ::espn::forecast_url(this->wx_.lat, this->wx_.lon, ::espn::kTimezones[this->prefs_.tz_index].iana);
   }
@@ -3980,6 +3982,8 @@ void GamedayComponent::apply_wx_job_() {
   const uint32_t now = millis();
   if (j.need_wx == 1 && j.wx_town != this->wx_.town)
     return;  // the town changed meanwhile; set_town started a new lookup
+  if (j.need_wx == 2 && (j.wx_lat != this->wx_.lat || j.wx_lon != this->wx_.lon))
+    return;  // a forecast for the town before; the new one's is due now
   if (!j.wx_ok) {
     this->wx_fail_ms_ = now == 0 ? 1 : now;
     this->wx_backoff_ms_ =

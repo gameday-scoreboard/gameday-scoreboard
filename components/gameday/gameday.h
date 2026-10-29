@@ -900,6 +900,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t need_wx{0};
     std::string wx_url;
     std::string wx_town;  // the town the lookup is for
+    float wx_lat{0}, wx_lon{0};  // the place the forecast is for
     ::espn::WxPlace wx_place;
     ::espn::WxForecast wx_forecast;
     bool wx_ok{false};
