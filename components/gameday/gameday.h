@@ -330,17 +330,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void sync_soon() {
     this->defer("prefs_sync", [this]() { this->sync_prefs_(); });
   }
-  // Heat and power protection (guard.h). guard_brightness() is what the
-  // display gets for the owner's Brightness, after the night schedule
-  // (night.h) unless night is false (the QC screen); it runs from on_boot
+  // Heat and power marks (guard.h). guard_brightness() is what the display
+  // gets for the owner's Brightness, after the night schedule (night.h)
+  // unless night is false (the QC screen): the setting itself, or half of it
+  // for the first kDipMs after a brownout restart. It runs from on_boot
   // before setup(), so it loads the power log itself the first time.
   uint8_t guard_brightness(uint8_t want, bool night = true);
   // The chip temperature sensor's readings (firmware/pages/guard.yaml).
   void set_chip_temp(float c);
-  // What the panel's corner says: 0 nothing, 1 too warm, 2 check power.
-  uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.step, this->power_log_.capped != 0); }
-  // The owner's clear of the power cap: /gameday/action?do=power_ok.
-  void clear_power_cap();
+  // What the panel's corner says: 0 nothing, 1 running warm, 2 power dipped.
+  uint8_t guard_mark() const { return (uint8_t) ::espn::guard_mark(this->heat_.hot, this->power_dipped_); }
   // The night schedule (night.h). A remote press, a team pick or Power on
   // from the page skips the rest of a night the schedule has dim or dark
   // (false when it doesn't); the NIGHT button or the page goes back to it.
@@ -436,8 +435,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string health_json_();
   ::espn::Restart start_reason_{::espn::Restart::NONE};
   bool boot_clock_noted_{false};  // boot_log_clock() ran
-  // guard.h. heat_ and power_log_ are main loop only; the HTTP task reads
-  // their small fields for the health block.
+  // guard.h. heat_, power_log_ and power_dip_ are main loop only; the HTTP
+  // task reads their small fields for the health block.
   void load_power_log_();
   void save_power_log_();
   // The banner and the message card (message.h). The card's settings are
@@ -487,8 +486,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_nick_(const std::string &nick);
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
+  ::espn::PowerDip power_dip_;
   ESPPreferenceObject power_pref_;
   bool power_loaded_{false};
+  bool power_dipped_{false};   // this start was a brownout: the plug shows
   bool power_settled_{false};  // ran kPowerSettledMs without a brownout
   // Wi-Fi history (wifi_history.h): sampled and fed link changes on the main
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.

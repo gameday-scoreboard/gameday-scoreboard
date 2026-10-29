@@ -119,4 +119,10 @@ Under **Name**, **FCC information** has a **Show on panel** button. The panel sh
 
 A **Diagnostics** section in the Device card says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal** it draws the last day of Wi-Fi signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one.
 
+A notice under the board says when the panel is holding its brightness down: **Too warm, dimming**, or **Check the power supply** with a **Clear** button after two restarts in a row from a power dip. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
+
+:::note[Coming in the next release]
+The notice under the board reads **Running warm** or **Power dipped**, the same words as the panel's corner, with one sentence on what to do and no button. The panel no longer dims itself for either, so there is nothing to clear.
+:::
+
 The Device card can also show a **Follow beta** switch. Beta versions are test builds for test panels and can have bugs. Leave it off.

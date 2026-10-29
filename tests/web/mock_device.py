@@ -11,10 +11,10 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          A URL past 512 bytes answers 414 and a body past 1024 bytes
                          400, as the panel's server does
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
-                         power_ok sets health.power back to "ok"; say keeps its cleaned
-                         text in "say" for tests to read (the panel has no such key);
-                         night_skip turns a "dim" or "off" night_now to "skipped" and
-                         night_resume a "skipped" one back to "dim" or "off"
+                         say keeps its cleaned text in "say" for tests to read (the
+                         panel has no such key); night_skip turns a "dim" or "off"
+                         night_now to "skipped" and night_resume a "skipped" one back
+                         to "dim" or "off"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
@@ -131,7 +131,8 @@ INITIAL = {
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
                "heap_kb": 143.2, "block_kb": 40.0, "psram_kb": 4100.5, "rssi": -58, "espn": 200,
                "espn_ago": 9, "version": "1.5.4", "built": 1792285260, "channel": "stable",
-               # guard_json_keys() (components/gameday/guard.h)
+               # guard_json_keys() (components/gameday/guard.h): heat 1 while the
+               # thermometer shows, power "dipped" while the plug does
                "temp": 46.5, "heat": 0, "brownouts": 0, "power": "ok"},
     # Spliced in live by the firmware (wifi_history.h): an hour up, one drop.
     "wifi": {"rssi": -61, "step": 300, "hist": [-58, -59, -60, None, -64, -62, -61, -61, -60, -62, -61, -61],
@@ -903,10 +904,8 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "power_ok", "say", "regulatory", "night_skip", "night_resume"):
+            if q["do"] not in ("refresh", "qc", "say", "regulatory", "night_skip", "night_resume"):
                 return self._json(404, {"error": "unknown action"})
-            if q["do"] == "power_ok" and STATE.get("health"):
-                STATE["health"]["power"] = "ok"
             if q["do"] == "say":
                 STATE["say"] = message_clean(q.get("text", ""), LIMITS["kMsgTextMax"], True)
             if q["do"] == "night_skip" and STATE.get("night_now") in ("dim", "off"):
