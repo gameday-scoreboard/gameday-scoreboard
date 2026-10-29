@@ -95,6 +95,6 @@ The 52 patterns in the list. Some, like **Scrolling Text** (it says GAME DAY) an
 - Tartan
 - Waving Cell
 
-The patterns that react to sound are not in the list: the panel has no microphone.
+The patterns that react to sound are left out.
 
-Every pattern runs at the panel's full frame rate on a 64x64 panel. On a 128x64 display the busiest ones, **Distortion Waves** and **Soap** among them, run at a lower frame rate and look slower, which suits some rooms.
+Most patterns run at the panel's full frame rate, about 43 frames a second, on a 64x64 panel. The busiest ones, **Distortion Waves**, **Soap**, **Plasma Ball** and **Tartan**, run slower, and on a 128x64 display more of them do. A slower pattern just moves more slowly, which suits some rooms.
