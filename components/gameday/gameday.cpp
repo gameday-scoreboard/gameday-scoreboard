@@ -240,6 +240,7 @@ static void on_wifi_disconnected(void *, esp_event_base_t, int32_t, void *data) 
 #endif
 
 void GamedayComponent::setup() {
+  this->loop_task_ = xTaskGetCurrentTaskHandle();  // setup() runs on the loop task
 #ifdef USE_PSRAM
   ::espn::set_json_allocator(&json_psram);
 #endif
@@ -2602,6 +2603,11 @@ void GamedayComponent::worker_(void *arg) {
   // was writing into belongs to a later cycle by now.
   if (self->worker_seq_ == mine)
     self->job_done_ = true;
+  // The least stack a fetch task has left untouched, for /gameday/heap.
+  uint32_t left = uxTaskGetStackHighWaterMark(nullptr);
+  uint32_t low = self->fetch_stack_low_.load();
+  while (left < low && !self->fetch_stack_low_.compare_exchange_weak(low, left)) {
+  }
   vTaskDelete(nullptr);
 }
 
@@ -4429,11 +4435,22 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
   // Free heap right now, in KiB, for bench and burn-in scripts. The Free Heap
   // sensors only read every 5 minutes so Home Assistant isn't logging them.
   if (url == StringRef("/gameday/heap") && request->method() == HTTP_GET) {
+    // The stack figures are bytes each task has never touched since boot, the
+    // margin left in its worst moment so far: the loop (16 KB, gameday-common.yaml),
+    // this web server task (ESPHome's 4,512 B) and the fetch tasks (16 KB); -1
+    // before there is a reading. This handler runs on the web server task,
+    // whose stack is the tightest, so the buffer stays at 128 (the longest
+    // reply is 105 bytes).
     char body[128];
-    snprintf(body, sizeof(body), "{\"internal\":%.1f,\"block\":%.1f,\"psram\":%.1f}",
+    const uint32_t fetch = this->fetch_stack_low_.load();
+    snprintf(body, sizeof(body),
+             "{\"internal\":%.1f,\"block\":%.1f,\"psram\":%.1f,\"loop_stack\":%d,\"web_stack\":%u,"
+             "\"fetch_stack\":%d}",
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024.0f,
              heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024.0f,
-             heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f);
+             heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f,
+             this->loop_task_ == nullptr ? -1 : (int) uxTaskGetStackHighWaterMark(this->loop_task_),
+             (unsigned) uxTaskGetStackHighWaterMark(nullptr), fetch == UINT32_MAX ? -1 : (int) fetch);
     request->send(200, "application/json", body);
     return;
   }
