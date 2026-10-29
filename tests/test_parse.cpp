@@ -16,6 +16,7 @@
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "favorites.h"
+#include "game_leaders.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -6779,6 +6780,260 @@ static void test_logo_url_matches_game() {
   }
 }
 
+// This game's leaders at halftime and the final (game_leaders.h), from the
+// recorded summary documents: each sport, a game with no leaders yet, a
+// document cut short, and the card at both widths.
+static void test_game_leaders() {
+  // When the read happens: football and basketball halftime, hockey's second
+  // intermission, baseball after the 5th, and a completed final. Never soccer.
+  GameSnapshot h = hoops_event("fixtures/event_wnba_half.json", kLiberty);
+  CHECK(leaders_stage(h) == LeadersStage::HALF);
+  GameSnapshot live = nhl_event("fixtures/event_nhl_live.json", kAvalanche);
+  CHECK(leaders_stage(live) == LeadersStage::NONE);
+  GameSnapshot end = nhl_event("fixtures/event_nhl_end.json", kPenguins);
+  CHECK(leaders_stage(end) == (end.period == 2 ? LeadersStage::HALF : LeadersStage::NONE));
+  GameSnapshot end2 = end;
+  end2.period = 2;
+  end2.short_detail = "End of 2nd";
+  CHECK(leaders_stage(end2) == LeadersStage::HALF);
+  end2.period = 1;
+  CHECK(leaders_stage(end2) == LeadersStage::NONE);
+  GameSnapshot fifth = mlb_event("fixtures/event_mlb_end.json", kBraves);  // End 5th
+  CHECK_EQ(fifth.period, 5);
+  CHECK(leaders_stage(fifth) == LeadersStage::HALF);
+  GameSnapshot top = mlb_event("fixtures/event_mlb_top.json", kBraves);  // Top 7th
+  CHECK(leaders_stage(top) == LeadersStage::NONE);
+  GameSnapshot fin = nhl_event("fixtures/event_nhl_final.json", kCapitals);
+  CHECK(leaders_stage(fin) == LeadersStage::FINAL);
+  GameSnapshot soc;
+  CHECK(parse_event_str(slurp("fixtures/event_soccer_halftime.json"), Sport::SOCCER, kVasco, soc));
+  CHECK(leaders_stage(soc) == LeadersStage::NONE);
+  GameSnapshot pre;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre_dal.json"), Sport::FOOTBALL, 6, pre, "401873007"));
+  CHECK(leaders_stage(pre) == LeadersStage::NONE);
+  CHECK_EQ(std::string(leaders_stage_name(LeadersStage::HALF)), std::string("halftime"));
+
+  CHECK_EQ(summary_url(League::NFL, "401873009"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401873009"));
+  CHECK_EQ(summary_url(League::MLB, "401908045"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401908045"));
+
+  // NFL final, DAL 24 at PHI, read as Dallas: passing, rushing, receiving
+  GameLeaders l;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nfl_final.json"), Sport::FOOTBALL, 6, "401873009",
+                          LeadersStage::FINAL, l));
+  CHECK(l.valid && l.any());
+  CHECK_EQ(l.event_id, std::string("401873009"));
+  CHECK(l.stage == LeadersStage::FINAL);
+  CHECK_EQ((int) l.team.count, 3);
+  CHECK_EQ(l.team.lines[0].name, std::string("Prescott"));
+  CHECK_EQ(l.team.lines[0].stat, std::string("212 yds 3 TD"));
+  CHECK_EQ(l.team.lines[1].name, std::string("Williams"));
+  CHECK_EQ(l.team.lines[1].stat, std::string("155 yds 1 TD"));
+  CHECK_EQ(l.team.lines[2].name, std::string("Lamb"));
+  CHECK_EQ(l.team.lines[2].stat, std::string("74 yds 2 TD"));
+  CHECK_EQ((int) l.opp.count, 3);
+  CHECK_EQ(l.opp.lines[0].name, std::string("McKee"));
+  CHECK_EQ(l.opp.lines[0].stat, std::string("211 yds 1 TD"));
+  CHECK_EQ(l.opp.lines[1].stat, std::string("62 yds 1 TD"));
+  // Read as Philadelphia the sides swap
+  GameLeaders phi;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nfl_final.json"), Sport::FOOTBALL, 21, "401873009",
+                          LeadersStage::FINAL, phi));
+  CHECK_EQ(phi.team.lines[0].name, std::string("McKee"));
+  CHECK_EQ(phi.opp.lines[0].name, std::string("Prescott"));
+  // Some other game's document is refused
+  CHECK(!parse_summary_str(slurp("fixtures/summary_nfl_final.json"), Sport::FOOTBALL, 6, "401873010",
+                           LeadersStage::FINAL, phi));
+
+  // College football has the same leaders
+  GameLeaders cfb;
+  CHECK(parse_summary_str(slurp("fixtures/summary_ncaa_final.json"), Sport::FOOTBALL, 2390, "401858274",
+                          LeadersStage::FINAL, cfb));
+  CHECK_EQ(cfb.team.lines[0].name, std::string("Mensah"));
+  CHECK_EQ(cfb.team.lines[0].stat, std::string("387 yds 4 TD"));
+  CHECK_EQ(cfb.team.lines[2].name, std::string("Toney"));
+  CHECK_EQ(cfb.team.lines[2].stat, std::string("194 yds 3 TD"));
+
+  // NBA final, BKN at BOS, read as Boston: points and rebounds
+  GameLeaders nba;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nba_final.json"), Sport::BASKETBALL, 2, "401909877",
+                          LeadersStage::FINAL, nba));
+  CHECK_EQ((int) nba.team.count, 2);
+  CHECK_EQ(nba.team.lines[0].name, std::string("Tatum"));
+  CHECK_EQ(nba.team.lines[0].stat, std::string("40 pts"));
+  CHECK_EQ(nba.team.lines[1].name, std::string("George"));
+  CHECK_EQ(nba.team.lines[1].stat, std::string("7 reb"));
+  CHECK_EQ(nba.opp.lines[0].name, std::string("Porter Jr."));
+  CHECK_EQ(nba.opp.lines[0].stat, std::string("27 pts"));
+  CHECK_EQ(nba.opp.lines[1].stat, std::string("12 reb"));
+
+  // At halftime the leaders are the half's
+  GameLeaders half;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nba_half.json"), Sport::BASKETBALL, 15, "401909887",
+                          LeadersStage::HALF, half));
+  CHECK(half.stage == LeadersStage::HALF);
+  CHECK_EQ(half.team.lines[0].name, std::string("Herro"));
+  CHECK_EQ(half.team.lines[0].stat, std::string("14 pts"));
+  CHECK_EQ(half.opp.lines[0].name, std::string("Thompson"));
+  CHECK_EQ(half.opp.lines[1].name, std::string("Eason"));
+  CHECK_EQ(half.opp.lines[1].stat, std::string("8 reb"));
+
+  // No leaders in the document: valid, nothing to show, no retry needed
+  GameLeaders none;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nba_no_leaders.json"), Sport::BASKETBALL, 3, "401909889",
+                          LeadersStage::HALF, none));
+  CHECK(none.valid);
+  CHECK(!none.any());
+  CHECK_EQ((int) leaders_card_text(none, 128).font, 0);
+
+  // NHL final, CBJ at PHI, read as Columbus: goals and assists
+  GameLeaders nhl;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nhl_final.json"), Sport::HOCKEY, 29, "401892585",
+                          LeadersStage::FINAL, nhl));
+  CHECK_EQ((int) nhl.team.count, 2);
+  CHECK_EQ(nhl.team.lines[0].name, std::string("Johnson"));
+  CHECK_EQ(nhl.team.lines[0].stat, std::string("2 goals"));
+  CHECK_EQ(nhl.team.lines[1].name, std::string("Werenski"));
+  CHECK_EQ(nhl.team.lines[1].stat, std::string("2 assists"));
+  CHECK_EQ(nhl.opp.lines[0].name, std::string("Zegras"));
+  CHECK_EQ(nhl.opp.lines[0].stat, std::string("1 goal"));
+  CHECK_EQ(nhl.opp.lines[1].stat, std::string("1 assist"));
+  // The second intermission
+  GameLeaders end2l;
+  CHECK(parse_summary_str(slurp("fixtures/summary_nhl_end2.json"), Sport::HOCKEY, 23, "401892596",
+                          LeadersStage::HALF, end2l));
+  CHECK_EQ(end2l.team.lines[0].name, std::string("Tuch"));
+  CHECK_EQ(end2l.team.lines[1].name, std::string("Strome"));
+  CHECK_EQ(end2l.team.lines[1].stat, std::string("2 assists"));
+
+  // MLB final, MIL at TB in 12, read as Tampa Bay: the starter's line, then
+  // the top hitter, from the box score (the summary has no leaders)
+  GameLeaders mlb;
+  CHECK(parse_summary_str(slurp("fixtures/summary_mlb_final.json"), Sport::BASEBALL, 30, "401908045",
+                          LeadersStage::FINAL, mlb));
+  CHECK_EQ((int) mlb.team.count, 2);
+  CHECK_EQ(mlb.team.lines[0].name, std::string("Jax"));
+  CHECK_EQ(mlb.team.lines[0].stat, std::string("4.0 IP 2 ER 6 K"));
+  CHECK_EQ(mlb.opp.lines[0].name, std::string("May"));
+  CHECK_EQ(mlb.opp.lines[0].stat, std::string("3.0 IP 2 ER 3 K"));
+  CHECK(!mlb.team.lines[1].name.empty());
+  CHECK(mlb.team.lines[1].stat.find('-') != std::string::npos);
+  CHECK(!mlb.opp.lines[1].name.empty());
+
+  // A document cut short, at every tenth of its length, is a failed read,
+  // never a crash or a half-filled card
+  {
+    std::string json = slurp("fixtures/summary_nba_final.json");
+    for (int i = 1; i < 10; i++) {
+      GameLeaders cut;
+      CHECK(!parse_summary_str(json.substr(0, json.size() * i / 10), Sport::BASKETBALL, 2, "401909877",
+                               LeadersStage::FINAL, cut));
+      CHECK(!cut.valid);
+    }
+    GameLeaders bad;
+    CHECK(!parse_summary_str("not json", Sport::BASKETBALL, 2, "401909877", LeadersStage::FINAL, bad));
+    CHECK(!parse_summary_str("{}", Sport::BASKETBALL, 2, "401909877", LeadersStage::FINAL, bad));
+  }
+
+  // The stat text on its own
+  CHECK_EQ(espn::detail::football_game_stat("23/35, 211 YDS, 1 TD, 1 INT"), std::string("211 yds 1 TD"));
+  CHECK_EQ(espn::detail::football_game_stat("7 CAR, 62 YDS"), std::string("62 yds"));
+  CHECK_EQ(espn::detail::football_game_stat("7 CAR, 62 YDS, 0 TD"), std::string("62 yds"));
+  CHECK_EQ(espn::detail::football_game_stat("5 REC"), std::string(""));
+  CHECK_EQ(espn::detail::count_stat("1", "goal", "goals"), std::string("1 goal"));
+  CHECK_EQ(espn::detail::count_stat("0", "goal", "goals"), std::string(""));
+  CHECK_EQ(espn::detail::count_stat("35.5", "pt", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::count_stat("", "pt", "pts"), std::string(""));
+  CHECK_EQ(espn::detail::pitching_stat({"IP", "H", "R", "ER", "BB", "K"}, {"7.0", "3", "1", "1", "2", "9"}),
+           std::string("7.0 IP 1 ER 9 K"));
+  CHECK_EQ(espn::detail::pitching_stat({"H", "R"}, {"3", "1"}), std::string(""));
+  CHECK_EQ(espn::detail::batting_stat({"H-AB", "AB", "R", "H", "RBI", "HR"}, {"2-4", "4", "1", "2", "3", "1"}),
+           std::string("2-4 1 HR"));
+  CHECK_EQ(espn::detail::batting_stat({"H-AB", "AB", "R", "H", "RBI", "HR"}, {"2-4", "4", "1", "2", "3", "0"}),
+           std::string("2-4 3 RBI"));
+  CHECK_EQ(espn::detail::batting_stat({"H-AB", "AB", "R", "H", "RBI", "HR"}, {"0-4", "4", "0", "0", "0", "0"}),
+           std::string(""));
+  CHECK_EQ(espn::detail::fit_leader({"Alexander-Walker", "23 pts"}, 17), std::string("Alexander- 23 pts"));
+  CHECK_EQ(espn::detail::fit_leader({"Tatum", "40 pts"}, 17), std::string("Tatum 40 pts"));
+  CHECK_EQ(espn::detail::fit_leader({"Antetokounmpo", "12 reb"}, 8), std::string("Ant 12 reb"));
+  // A stat too long for its room loses whole pairs from its end, never part
+  // of a number, and keeps its first
+  CHECK_EQ(espn::detail::fit_leader({"Prescott", "212 yds 3 TD"}, 12), std::string("Pres 212 yds"));
+  CHECK_EQ(espn::detail::fit_leader({"Jax", "4.0 IP 2 ER 6 K"}, 12), std::string("Jax 4.0 IP"));
+  CHECK_EQ(espn::detail::fit_leader({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17), std::string("Rasmu 4.0 IP 1 ER"));
+  CHECK_EQ(espn::detail::fit_leader({"Simpson", "2-4 1 HR"}, 9), std::string("Simps 2-4"));
+  CHECK(espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 21));
+  CHECK(!espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17));
+
+  // The card: football's three lines a side take the small font at 128 wide
+  LeadersCardText c = leaders_card_text(l, 128);
+  CHECK_EQ((int) c.font, 8);
+  CHECK(c.logos);
+  CHECK_EQ((int) c.text_x, 22);
+  CHECK_EQ((int) c.pitch, 9);
+  CHECK_EQ((int) c.block_h, 27);
+  CHECK_EQ(c.team_body, std::string("Prescott 212 yds 3 TD\nWilliams 155 yds 1 TD\nLamb 74 yds 2 TD"));
+  CHECK_EQ(c.opp_body, std::string("McKee 211 yds 1 TD\nBarkley 62 yds 1 TD\nLemon 67 yds 1 TD"));
+  // Two lines a side read in the big font
+  c = leaders_card_text(nba, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK_EQ((int) c.pitch, 13);
+  CHECK_EQ((int) c.block_h, 26);
+  CHECK_EQ(c.team_body, std::string("Tatum 40 pts\nGeorge 7 reb"));
+  CHECK_EQ(c.opp_body, std::string("Porter Jr. 27 pts\nPorter Jr. 12 reb"));
+  // Baseball's pitching line doesn't fit the big font whole, so it takes the
+  // small one, with the line whole
+  c = leaders_card_text(mlb, 128);
+  CHECK_EQ((int) c.font, 8);
+  CHECK_EQ((int) c.pitch, 13);
+  CHECK_EQ((int) c.block_h, 26);
+  CHECK_EQ(c.team_body.substr(0, c.team_body.find('\n')), std::string("Jax 4.0 IP 2 ER 6 K"));
+  // One line a side still leaves room for the logo and the abbreviation
+  GameLeaders single = nba;
+  single.team.count = 1;
+  single.opp.count = 1;
+  c = leaders_card_text(single, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK_EQ((int) c.block_h, 26);
+  // A 64 wide panel: one line a side, in the small font
+  c = leaders_card_text(l, 64);
+  CHECK_EQ((int) c.font, 8);
+  CHECK(!c.logos);
+  CHECK_EQ((int) c.block_h, 18);
+  CHECK_EQ(c.team_body, std::string("Pres 212 yds"));
+  c = leaders_card_text(nba, 64);
+  CHECK_EQ(c.team_body, std::string("Tatum 40 pts"));
+  CHECK_EQ(c.opp_body, std::string("Porte 27 pts"));
+  c = leaders_card_text(mlb, 64);
+  CHECK_EQ(c.team_body, std::string("Jax 4.0 IP"));
+  // No line is wider than its room, at either width, for any sport
+  for (const GameLeaders *g : {&l, &nba, &mlb}) {
+    for (int w : {64, 128}) {
+      LeadersCardText t = leaders_card_text(*g, w);
+      const size_t room = (size_t) (w - t.text_x) / (t.font == 12 ? 6 : 5);
+      for (const std::string &body : {t.team_body, t.opp_body}) {
+        size_t start = 0;
+        while (start <= body.size()) {
+          size_t end = body.find('\n', start);
+          std::string line = body.substr(start, end == std::string::npos ? std::string::npos : end - start);
+          CHECK(line.size() <= room);
+          if (end == std::string::npos)
+            break;
+          start = end + 1;
+        }
+      }
+    }
+  }
+  // A side with nothing leaves its block empty
+  GameLeaders one = nba;
+  one.opp = LeaderSide{};
+  c = leaders_card_text(one, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK(c.opp_body.empty());
+  CHECK_EQ((int) leaders_card_text(GameLeaders{}, 128).font, 0);
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -6884,6 +7139,7 @@ int main() {
   test_ha_events_stale();
   test_ha_fields();
   test_line_score();
+  test_game_leaders();
   test_score_log();
   test_best_game();
   failures += run_set_tests(checks);

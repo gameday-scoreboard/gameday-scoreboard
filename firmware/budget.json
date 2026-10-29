@@ -77,6 +77,22 @@
       "heap": 1936,
       "json": 6657
     },
+    "summary_mlb": {
+      "heap": 1984,
+      "json": 21760
+    },
+    "summary_nba": {
+      "heap": 1024,
+      "json": 5912
+    },
+    "summary_nfl": {
+      "heap": 1056,
+      "json": 6309
+    },
+    "summary_nhl": {
+      "heap": 1024,
+      "json": 5882
+    },
     "team_day_ncaa": {
       "heap": 1042,
       "json": 6101

@@ -132,6 +132,7 @@ INITIAL = {
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
+    "gameleaders": True,
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # The picture card (picture.h): what each kept file is, and how big the next upload can be.
     "pics": [], "picroom": 65536,
@@ -476,12 +477,8 @@ def apply_set(kv):
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
                 STATE["panels"] = atoi(v)
-        elif k == "countdown":
-            STATE["countdown"] = v == "1"
-        elif k == "top25":
-            STATE["top25"] = v == "1"
-        elif k == "news":
-            STATE["news"] = v == "1"
+        elif k in ("countdown", "top25", "news", "gameleaders"):
+            STATE[k] = v == "1"
         elif k == "cdname":
             STATE["cdname"] = countdown_name(v)
         elif k == "cddate":

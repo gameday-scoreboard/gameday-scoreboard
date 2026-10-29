@@ -29,6 +29,7 @@
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "game_leaders.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
@@ -323,6 +324,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The next game's countdown card, on unless the owner turns it off.
   bool countdown_on() const { return this->countdown_.off == 0; }
   void set_countdown(bool on);
+  // Game leaders (game_leaders.h): the between-games card with this game's
+  // leaders at halftime and the final, on by default.
+  bool game_leaders_on() const { return (this->countdown_.cards_off & CARD_OFF_LEADERS) == 0; }
+  void set_game_leaders(bool on);
+  // The card for the board's game, laid out for width_px; font 0 when none is
+  // due (pages/gameday-live.yaml draws it in turns with the line score).
+  ::espn::LeadersCardText leaders_card(int width_px) const;
+  bool leaders_card_due() const;
+  // The card's turn ended: at halftime it shows once, for a whole turn.
+  void leaders_turn_taken();
   // The college Top 25 card (rankings.h), on unless the owner turns it off.
   // It only takes turns while the panel follows a college team.
   bool top25_on() const { return (this->countdown_.cards_off & CARD_OFF_TOP25) == 0; }
@@ -696,6 +707,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // Was spare, so older firmware has it off. The blob has no spare left.
     uint8_t news;
   } __attribute__((packed));
+  static constexpr uint16_t CARD_OFF_LEADERS = 1u << 0;  // Game leaders (game_leaders.h)
   static constexpr uint16_t CARD_OFF_TOP25 = 1u << 5;
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
@@ -781,6 +793,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool want_finals{false};
     ::espn::FinalList finals;
     ::espn::PendingList pending;
+    // This game's leaders (game_leaders.h): one summary read at halftime or
+    // the final, for the board's game.
+    bool need_leaders{false};
+    uint8_t leaders_league{0};
+    ::espn::Sport leaders_sport{::espn::Sport::FOOTBALL};
+    std::string leaders_event;
+    uint32_t leaders_our_id{0};
+    ::espn::LeadersStage leaders_stage{::espn::LeadersStage::NONE};
+    ::espn::GameLeaders leaders;
+    bool leaders_ok{false};
     bool need_recap{false};
     bool recap_forward{false};  // looking for the next kickoff, not for finals
     uint8_t recap_league{0};
@@ -840,6 +862,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_cup_job_(uint32_t now);
   bool fetch_upcoming_(const ::espn::Team *team, std::vector<::espn::Upcoming> &out);
   bool fetch_game_(const ::espn::Team *team, const Schedule &schedule, GameSnapshot &out);
+  // The game summary for the board's game (game_leaders.h), into j.leaders.
+  bool fetch_leaders_(Job &j);
+  // A summary read is due: the board's game is at a stage the card reads at,
+  // that stage hasn't been read for it, and a failed read's minute is up.
+  bool leaders_due_() const;
+  // The league of the game on the board: the followed live game's, the shown
+  // favorite's, else favorite #1's.
+  League board_league_() const;
   // epoch picks the day (now when 0); finals and pending, when given, also
   // get that day's finished games and the ones not started yet.
   bool fetch_live_games_(League league, ::espn::LiveList &out, int64_t &next_kickoff,
@@ -1201,6 +1231,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void recap_tick_();
   void recap_show_();
 
+  // This game's leaders (game_leaders.h): the last summary read, the read
+  // being tried (event and stage, how many times and when last), and whether
+  // the halftime card has had its one turn.
+  ::espn::GameLeaders leaders_;
+  std::string leaders_try_event_;
+  ::espn::LeadersStage leaders_try_stage_{::espn::LeadersStage::NONE};
+  uint8_t leaders_tries_{0};
+  uint32_t leaders_tried_ms_{0};
+  bool leaders_half_shown_{false};
   Schedule schedule_;
   uint32_t schedule_fetched_ms_{0};
   // Soccer: the fallback team's reads per competition (as Job::comps), the cup
