@@ -25,7 +25,7 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 
 Building your own? [Runs on your own panel](https://install.gameday-scoreboard.com/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
 
-- The Game Day Scoreboard controller (build `gameday-scoreboard75.yaml`), or an ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
+- An ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
 
 The MoonHub75 pinout, under the names ESPHome uses (that board's README calls the upper half R0/G0/B0):

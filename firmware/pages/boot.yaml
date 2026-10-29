@@ -329,9 +329,11 @@ script:
           // here after "Reset Wi-Fi": that panel boots with an empty network in
           // memory, which still counts as has_sta(), and is in setup, not in
           // trouble. boot_had_creds carries a real network through a failed
-          // handover from the app, which clears the one in memory.
+          // handover from the app, which clears the one in memory. A network
+          // the app is still trying doesn't count: a panel in setup that is
+          // sent a wrong password is still in setup, not lost.
           const bool have_creds = w->has_sta() && !w->get_sta().get_ssid().empty();
-          if (have_creds) id(boot_had_creds) = true;
+          if (have_creds && !provisioning) id(boot_had_creds) = true;
           static const uint32_t GRACE_MS = 30000, ROUTER_MS = 3 * 60 * 1000;
           const bool never = id(boot_last_connected_ms) == 0;
           const bool waiting = id(boot_had_creds) && never && id(boot_power_cut_grace) &&
@@ -453,6 +455,18 @@ script:
             if (id(boot_hold_since_ms) != 0 && !via_button && !id(boot_show_address).is_running() &&
                 !id(gameday_ctl).boot_hold(id(boot_hold_since_ms)))
               id(boot_hide).execute();
+          } else if (!provisioning && improv_ble::global_improv_component != nullptr &&
+                     improv_ble::global_improv_component->failed_ms() != 0 &&
+                     millis() - improv_ble::global_improv_component->failed_ms() < 30000) {
+            // The network the app just handed over didn't work. Say so for
+            // 30 s, ahead of setup and Wi-Fi lost, so someone watching the
+            // panel rather than the phone knows why it is back where it was.
+            // The app asks for the name and password again.
+            id(boot_qr_cycle).execute(0, false);
+            id(boot_view).execute(false, false);
+            const std::string &tried = improv_ble::global_improv_component->failed_ssid();
+            id(boot_set_lines).execute("Can't join", tried.empty() ? std::string("Wi-Fi") : tried, "Check name",
+                                       "and password", false);
           } else if (waiting) {
             // Maybe a power cut, router still starting. Ahead of the setup
             // branch for the same reason as lost below: the hotspot comes up
@@ -853,7 +867,8 @@ improv_ble:
         hidden: false
     # Draw the current state now rather than on the next poll. Improv also
     # starts 90 s into an outage, and this way that panel keeps saying
-    # Wi-Fi lost instead of flashing SETUP.
+    # Wi-Fi lost instead of flashing SETUP. It fires again on the way back to
+    # AUTHORIZED after a failed handover, which draws Can't join at once.
     - script.execute:
         id: boot_refresh
         via_button: false

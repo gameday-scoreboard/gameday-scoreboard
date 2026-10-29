@@ -31,17 +31,13 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
-:::note[Coming in the next release]
-The **Team** entity is gone, along with My team. Until then, **Team** picks the team My team follows, and **Mode** also lists My team and the older Live NFL, Live college and Live anything.
-:::
+The **Team** entity is gone, along with My team.
 
 A few diagnostic sensors, the Wi-Fi signal and the free memory readings, are there but turned off until you turn them on in Home Assistant.
 
 Favorites, the timezone, the ticker switches, the celebrations, the Live games leagues and the panel layout have no entities. Set them on the device page or in the app.
 
-:::note[Coming in the next release]
 A **Playlist** select picks the playlist Favorite teams plays: **All favorites** or one of your playlists by name. Choosing one switches the panel to Favorite teams. Home Assistant reads the names when it connects to the panel, so a playlist you add or rename shows in the list after the panel restarts or Home Assistant reconnects. See [Playlists](/using/favorites/#playlists).
-:::
 
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
 

@@ -11,11 +11,9 @@ NHL games get their own board. This page describes a 128x64 display and notes wh
 
 The next-game card shows both logos, your team on the left, with the records under them. The ticker carries the puck drop day and time in the panel's timezone, the playoff series when there is one, the betting line, over/under and TV channel when ESPN has them and **Odds, TV and win chance** is on, and the arena.
 
-:::note[Coming in the next release]
 Before a playoff game the ticker starts with the round, like "East 1st Round - Game 2".
 
 After the odds the ticker shows each team's points leader for the season, like "McDavid 9 pts". **Pre-game season leaders** on the device page turns them off.
-:::
 
 NHL teams have no Up next list on the device page: their season schedules are too large for the panel to read.
 

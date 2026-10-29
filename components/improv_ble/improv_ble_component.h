@@ -83,6 +83,16 @@ class ImprovBLEComponent final : public Component,
   // Advertised so the app can tell a panel that lost its network from a new one.
   // Set from on_boot and on every Wi-Fi connect.
   void set_has_saved_network(bool saved);
+  // The boot after "Reset Wi-Fi": a failed handover puts the blank network
+  // back, so the panel stays in setup with Bluetooth up for another try
+  // instead of joining a saved network (which turns Bluetooth off).
+  void set_setup_mode(bool setup) { this->setup_mode_ = setup; }
+  // A handover from the app timed out this boot (gd_setup_window).
+  bool handover_failed() const { return this->handover_failed_; }
+  // The network the last failed handover tried, and millis() when it failed
+  // (0 for none). The setup screen says so for a while (pages/boot.yaml).
+  const std::string &failed_ssid() const { return this->failed_ssid_; }
+  uint32_t failed_ms() const { return this->failed_ms_; }
   // Bluetooth links open right now, as Bluedroid counts them; 0 while
   // Bluedroid is down. A phone's link can outlast its BLE server client by a
   // moment after a hangup, so this, not the client count, says when turning
@@ -121,6 +131,10 @@ class ImprovBLEComponent final : public Component,
   wifi::WiFiAP restore_sta_;
   wifi::WiFiAP last_connected_sta_;  // see remember_sta()
   bool has_saved_network_{false};    // see set_has_saved_network()
+  bool setup_mode_{false};           // see set_setup_mode()
+  bool handover_failed_{false};      // see handover_failed()
+  uint32_t failed_ms_{0};            // see failed_ms()
+  std::string failed_ssid_;          // see failed_ssid()
   // GAMEDAY: end
 
   BLEService *service_{nullptr};
