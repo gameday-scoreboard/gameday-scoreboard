@@ -1309,7 +1309,7 @@ test("diagnostics say why the panel restarted and how it is doing", async ({ pag
   await expect(page.locator("#health")).toBeHidden();
 });
 
-test("a hot or under-powered panel says why it is dimmed, and the power cap clears", async ({ page, request }) => {
+test("a warm panel or one whose power dipped says so, with nothing to press", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   await expect(page.locator("#hTemp")).toHaveText("47 C");
@@ -1317,25 +1317,27 @@ test("a hot or under-powered panel says why it is dimmed, and the power cap clea
   await expect(page.locator("#guard")).toBeHidden();
 
   const h = (await deviceState(request)).health;
-  await reset(request, { health: { ...h, temp: 78.4, heat: 2 } });
+  await reset(request, { health: { ...h, temp: 78.4, heat: 1 } });
   await page.reload();
   await expect(page.locator("#guard")).toBeVisible();
-  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
-  await expect(page.locator("#guardText")).toContainText("at 45% of its brightness");
-  await expect(page.locator("#guardClear")).toBeHidden();
-  await expect(page.locator("#hTemp")).toHaveText("78 C, dimmed to 45%");
+  await expect(page.locator("#guardName")).toHaveText("Running warm");
+  await expect(page.locator("#guardText")).toContainText("Keep it out of direct sun");
+  await expect(page.locator("#guard button")).toHaveCount(0);
+  await expect(page.locator("#hTemp")).toHaveText("78 C, running warm");
 
-  // The power cap wins over the heat, and Clear posts power_ok.
-  await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "capped" } });
+  // The plug wins over the thermometer while both are up.
+  await reset(request, { health: { ...h, heat: 1, brownouts: 3, power: "dipped" } });
   await page.reload();
-  await expect(page.locator("#guardName")).toHaveText("Check the power supply");
-  await expect(page.locator("#hPower")).toHaveText("3, brightness capped");
-  await page.locator("#guardClear").click();
-  await expect.poll(async () =>
-    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/action").map((p) => p.q.do),
-  ).toContain("power_ok");
-  await expect(page.locator("#guardName")).toHaveText("Too warm, dimming");
-  await expect(page.locator("#guardClear")).toBeHidden();
+  await expect(page.locator("#guardName")).toHaveText("Power dipped");
+  await expect(page.locator("#guardText")).toContainText("not a phone charger or a USB port");
+  await expect(page.locator("#guard button")).toHaveCount(0);
+  await expect(page.locator("#hPower")).toHaveText("3, one at this start");
+
+  // Settled after the dip: the bar goes, the count stays.
+  await reset(request, { health: { ...h, brownouts: 3, power: "ok" } });
+  await page.reload();
+  await expect(page.locator("#guard")).toBeHidden();
+  await expect(page.locator("#hPower")).toHaveText("3");
 
   // Before the first temperature reading there is no temperature row.
   await reset(request, { health: { ...h, temp: undefined } });

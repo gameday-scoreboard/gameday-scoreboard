@@ -239,9 +239,8 @@ std::string full_health_json() {
   h.channel = "stable";
   char buf[384];
   int n = espn::health_json(buf, sizeof(buf), h);
-  espn::PowerLog log{};
   char guard[96];
-  int g = espn::guard_json_keys(guard, sizeof(guard), 41.5f, 0, log);
+  int g = espn::guard_json_keys(guard, sizeof(guard), 41.5f, false, 0, false);
   SCHECK(n > 0 && n < (int) sizeof(buf) && g > 0 && g < (int) sizeof(guard), "health JSON didn't fit");
   std::string out(buf, n - 1);
   out.append(guard, g);

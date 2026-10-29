@@ -108,6 +108,15 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 
 More in [Troubleshooting](/help/troubleshooting/#the-panel-is-dim-or-shows-a-thermometer-or-plug-in-the-corner).
 
+:::note[Coming in the next release]
+The panel no longer dims itself and there is nothing to clear. The icons only say what happened:
+
+| You see | What it means | What to do |
+| --- | --- | --- |
+| An orange thermometer and **Running warm** | The controller's chip reads 75 C or more. | Keep the panel out of direct sun and give it air behind it. The icon goes once the chip reads under 70 C. |
+| A red plug and **Power dipped** | The panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. | Use the power supply that came with it, not a phone charger or a USB port. The icon goes after 10 minutes without another dip. |
+:::
+
 ## Red, green, blue and white screens
 
 If the whole panel lights red, green, blue and white in turn, then a white line runs down it and a screen of details ends with **Press button**, the panel is running its factory check. Press the button on the controller once. The panel says **Button OK** and goes back to normal.
