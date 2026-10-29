@@ -68,6 +68,11 @@ esp32:
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
+      # NVS keeps an index of every item on each page it uses, in internal RAM
+      # by default. The owner's pictures (picture.h) fill dozens of pages of
+      # the settings partition, which cost about 2.6 KB of internal RAM with
+      # four kept; in PSRAM the settings' own index moves out too.
+      CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM: y
 
 esphome:
   name: "${name}"
