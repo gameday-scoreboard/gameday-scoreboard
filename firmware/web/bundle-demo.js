@@ -6,9 +6,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 //   GET  /gameday/state           one JSON document with the game and every setting
 //   POST /gameday/set?key=value   change settings (mode=4, favs=nfl:6,ncaa:333, tz=3 ...)
 //   POST /gameday/settings        a settings document as JSON; the playlists go this way
-//   POST /gameday/action?do=name  refresh,
-//                                 say&text=...&secs=N (the banner), regulatory
-//                                 (the FCC information on the panel)
+//   POST /gameday/action?do=name  refresh, say&text=...&secs=N (the banner), regulatory
+//                                 (the FCC information on the panel),
+//                                 night_skip / night_resume (the rest of tonight)
 // The ESPHome event stream (/events) still carries the entities that stay
 // for Home Assistant (Power, Brightness, Firmware, WizMote...) and its
 // "Game Status" event, sent on every board update, is the cue to re-read the
@@ -106,6 +106,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
 
     <div class="teambar nightbar" id="nightbar" role="status" hidden>
       <div class="cur"><div><div class="name" id="nightName"></div><div class="lg" id="nightText"></div></div></div>
+      <button class="btn" id="nightBtn" hidden></button>
     </div>
 
     <section class="upnext" id="upnext" hidden>
@@ -212,7 +213,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
         <div id="panelCtls"></div>
         <div id="nightCtls" hidden>
-          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends. The remote, picking a team or Panel on turns it off for the rest of that night.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
           <div id="nightSet" hidden>
             <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
             <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
@@ -1079,11 +1080,24 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#nightScreenHint").textContent = S.nightscreen ? "On at the night brightness below." : "Off: the screen goes dark " + hours + ".";
     // A dark or dim panel that doesn't look broken
     const until = clock12(S.nightend, true);
-    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game" : "Night mode until " + until;
+    const skipped = S.night_now === "skipped";
+    $("#nightName").textContent = S.night_now === "game" ? "Night mode paused for a live game"
+      : skipped ? "Night mode off until " + clock12(S.nightstart, true) : "Night mode until " + until;
     $("#nightText").textContent = S.night_now === "off" ? "The screen is off for the night. A live game of your team or a favorite turns it back on."
       : S.night_now === "dim" ? "The panel is dimmed for the night. A live game of your team or a favorite brings it back to normal brightness."
-        : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
+        : skipped ? "The panel is at normal brightness for the rest of tonight. Night mode starts again at " + clock12(S.nightstart, true) + "."
+          : "Your game keeps the panel at normal brightness. Night mode comes back when it ends, until " + until + ".";
+    const btn = $("#nightBtn");
+    btn.hidden = S.night_now === "game";
+    btn.textContent = skipped ? "Back to night mode" : "Turn on for tonight";
   };
+  $("#nightBtn").onclick = async () => {
+    await doAction(S.night_now === "skipped" ? "night_resume" : "night_skip");
+    scheduleState(300);
+  };
+  // The schedule has the panel dim or dark: Power on from here skips the
+  // rest of the night, as the remote's ON does.
+  const nightHolding = () => !!S && (S.night_now === "dim" || S.night_now === "off");
 
   // ---- message: the banner and the message card ---------------------------------
   // The boxes take the panel's text when it changes there, never while
@@ -1358,6 +1372,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         const on = !sw.classList.contains("on");
         setOn(sw, on, "aria-checked");
         post(e.id, on ? "turn_on" : "turn_off");
+        if (def.name === "Power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
       };
       row.appendChild(sw);
       host.appendChild(row);

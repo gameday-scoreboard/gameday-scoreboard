@@ -1725,6 +1725,39 @@ test("night mode says it is on, until when, and when a live game holds it off", 
   await expect(page.locator("#nightbar")).toBeHidden();
 });
 
+test("night mode can be turned off for the rest of tonight and back on, from its bar or Panel on", async ({ page, request }) => {
+  await reset(request, { night: true, nightscreen: false, night_now: "off" });
+  await page.goto("/");
+  await expect(page.locator("#nightBtn")).toHaveText("Turn on for tonight");
+  await page.locator("#nightBtn").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "night_skip" });
+  await expect(page.locator("#nightName")).toHaveText("Night mode off until 11:00 PM");
+  await expect(page.locator("#nightText")).toHaveText(
+    "The panel is at normal brightness for the rest of tonight. Night mode starts again at 11:00 PM.");
+  await expect(page.locator("#nightBtn")).toHaveText("Back to night mode");
+  await page.locator("#nightBtn").click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "night_resume" });
+  await expect(page.locator("#nightName")).toHaveText("Night mode until 7:00 AM");
+
+  // A live game already has it lit: nothing to turn on.
+  await reset(request, { night: true, night_now: "game" });
+  await page.reload();
+  await expect(page.locator("#nightName")).toHaveText("Night mode paused for a live game");
+  await expect(page.locator("#nightBtn")).toBeHidden();
+
+  // Panel on while the night has it dim skips the night too; off doesn't.
+  await reset(request, { night: true, night_now: "dim" });
+  await page.reload();
+  const power = page.getByRole("switch", { name: "Panel on" });
+  await expect(power).toBeChecked();
+  await power.click();
+  await expect(power).not.toBeChecked();
+  expect((await actions(request)).some((q) => q.do === "night_skip")).toBe(false);
+  await power.click();
+  await expect.poll(() => actions(request)).toContainEqual({ do: "night_skip" });
+  await expect(page.locator("#nightName")).toHaveText("Night mode off until 11:00 PM");
+});
+
 test("Export downloads the settings, and Import restores a backup checked whole", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

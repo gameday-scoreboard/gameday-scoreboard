@@ -1,7 +1,8 @@
 // The night schedule: between two times the owner sets, the panel runs at
 // its own night brightness or turns the screen off. A live game of the
 // owner's team or one of their favorites lights it at the normal brightness
-// until the game ends. Off out of the box. Pure, with no ESPHome includes,
+// until the game ends, and the owner can skip the rest of a night (a remote
+// press, a team pick, Power on). Off out of the box. Pure, with no ESPHome includes,
 // so the host tests compile it directly.
 #pragma once
 
@@ -114,16 +115,32 @@ enum class Night : uint8_t {
   DIM,       // at the night brightness
   DARK,      // screen off
   GAME,      // its hours, but a live game of the owner's has the panel lit
+  SKIPPED,   // its hours, but the owner turned it off for the rest of this night
 };
 
 // clock_valid false (no time yet) never darkens the panel: a dark panel
 // that can't say why looks broken.
-inline Night night_state(const NightPrefs &p, bool clock_valid, int minute, bool owner_live) {
+inline Night night_state(const NightPrefs &p, bool clock_valid, int minute, bool owner_live, bool skipped = false) {
   if (!p.on || !clock_valid || !night_window(p.start, p.end, minute))
     return Night::DAY;
+  if (skipped)
+    return Night::SKIPPED;
   if (owner_live)
     return Night::GAME;
   return p.screen_off ? Night::DARK : Night::DIM;
+}
+
+// True when the schedule has the panel dim or dark, the states an owner's
+// press takes it out of. A live game already has it lit.
+inline bool night_holding(Night state) { return state == Night::DIM || state == Night::DARK; }
+
+// When a night skipped at `now` (seconds, local minute `minute`) is over:
+// the end of the hours it is in. Kept as a time, not a flag, so a restart
+// inside the same night (the nightly update) still knows it was skipped
+// and the next night can't.
+inline int64_t night_skip_until(const NightPrefs &p, int64_t now, int minute, int second) {
+  const int left = (p.end - minute + kMinutesPerDay) % kMinutesPerDay;
+  return now - second + (int64_t) left * 60;
 }
 
 // The brightness the owner wants right now, before heat and power have their
@@ -148,6 +165,8 @@ inline const char *night_word(Night state) {
       return "off";
     case Night::GAME:
       return "game";
+    case Night::SKIPPED:
+      return "skipped";
     default:
       return "";
   }

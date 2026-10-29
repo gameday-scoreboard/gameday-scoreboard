@@ -12,7 +12,9 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          400, as the panel's server does
   POST /gameday/action   400 without do=, 404 for a name the firmware does not know;
                          say keeps its cleaned text in "say" for tests to read (the
-                         panel has no such key)
+                         panel has no such key); night_skip turns a "dim" or "off"
+                         night_now to "skipped" and night_resume a "skipped" one back
+                         to "dim" or "off"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
@@ -125,7 +127,7 @@ INITIAL = {
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
-    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
+    # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
@@ -922,10 +924,14 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "say", "regulatory", "event_test"):
+            if q["do"] not in ("refresh", "qc", "say", "regulatory", "night_skip", "night_resume", "event_test"):
                 return self._json(404, {"error": "unknown action"})
             if q["do"] == "say":
                 STATE["say"] = message_clean(q.get("text", ""), LIMITS["kMsgTextMax"], True)
+            if q["do"] == "night_skip" and STATE.get("night_now") in ("dim", "off"):
+                STATE["night_now"] = "skipped"
+            if q["do"] == "night_resume" and STATE.get("night_now") == "skipped":
+                STATE["night_now"] = "dim" if STATE.get("nightscreen") else "off"
             return self._json(200, {"ok": True})
         if u.path == "/gameday/demo":
             q = {k: v[0] for k, v in pairs.items()}
