@@ -53,6 +53,10 @@ A new install starts at about half brightness (128 of 255). Change it with the B
 
 A panel that restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, holds its brightness low so it stays on. A small plug pulses in its top right corner, and every two minutes the bottom line says "Check power supply", until you press Clear on the device page. A panel that runs hot dims itself a step at a time and says "Too warm, dimming" until it cools.
 
+:::note[Coming in the next release]
+The panel no longer dims itself. After a restart because its power dipped, it lights up at half brightness for 3 seconds, then goes to your brightness; a small plug pulses in its top right corner and the bottom line says "Power dipped" every two minutes, until it has run 10 minutes without another dip. A panel whose chip reads 75 C or more shows a thermometer and "Running warm" until it reads under 70 C. Nothing to clear. A supply that keeps browning out the panel needs replacing, not a setting.
+:::
+
 ## Ribbon cables and wiring checks
 
 If part of the panel is dark or shows the wrong colors, reseat the ribbon cable at both ends first. R1, G1 and B1 carry the top half of the panel and R2, G2 and B2 the bottom half, so a problem in one half points at those three wires. If the whole panel flickers or the colors are off, try 5 V level shifters (see [Boards](/diy/boards/)).

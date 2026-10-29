@@ -144,6 +144,16 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 
 **Why:** above a 75 C reading from the controller's chip, the panel steps its brightness down, a step every two minutes while it stays hot, as far as a quarter of your setting. Once the chip reads under 70 C, it comes back a step at a time. A power supply too weak for the panel makes it restart when it lights up, and a lower brightness draws less power. The device page shows the same message, and the chip temperature under Diagnostics.
 
+:::note[Coming in the next release]
+The panel stays at your brightness and there is no Clear button. The icon in the corner only says what happened:
+
+**A thermometer, and Running warm:** the controller's chip reads 75 C or more. Keep the panel out of direct sun and give it some air behind it. The icon goes once the chip reads under 70 C.
+
+**A plug, and Power dipped:** the panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. Use the power supply that came with it, not a phone charger or a USB port. The icon goes once the panel has run 10 minutes without another dip.
+
+The device page shows the same words under the board. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
+:::
+
 ## The device page says an update didn't take
 
 Nothing needs doing. The panel is running the version it had before, and it works as it did.
