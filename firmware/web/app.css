@@ -128,6 +128,9 @@ button { font: inherit; color: inherit; }
 .ctl:first-of-type { border-top: 0; }
 .ctl label { flex: 1; }
 .ctl label small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
+/* A between-games card with nothing to show yet: greyed, with what it needs. */
+.ctl.waiting label { color: var(--muted); }
+.ctl.waiting .card-hint { color: var(--gold); }
 .ctl.pic img { width: auto; height: 32px; max-width: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 3px; }
 .card .sub { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
 .card .sub:first-of-type { margin-top: 4px; }

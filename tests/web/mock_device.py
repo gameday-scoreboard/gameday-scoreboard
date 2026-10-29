@@ -101,6 +101,15 @@ MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-commo
 FIXTURE = REPO / "tests/fixtures/set_cases.json"
 COUNTDOWN_NAME_MAX = int(re.search(r"kCountdownNameMax = (\d+);",
                                    (REPO / "components/gameday/countdown.h").read_text(encoding="utf-8"))[1])
+# The Between games list (components/gameday/cards.h kCards): id, name, a new
+# panel's choice and the hint while the card has nothing to show.
+CARDS = [(m[1], m[2], m[3] == "true", m[4]) for m in re.finditer(
+    r'\{Card::\w+,\s*"(\w+)",\s*"([^"]*)",\s*(true|false),\s*"([^"]*)"\}',
+    (REPO / "components/gameday/cards.h").read_text(encoding="utf-8"))]
+# Cards that kept the switch they had before the list, by id: that state key
+# is their truth (GamedayComponent::card_on).
+OWN_SWITCH_CARDS = {"countdown": "countdown", "top25": "top25", "news": "news", "gameleaders": "gameleaders",
+                    "weather": "wxon"}
 # The settings backup's key types and export order (settings_doc.h).
 SETTINGS_H = (REPO / "components/gameday/settings_doc.h").read_text(encoding="utf-8")
 
@@ -136,6 +145,8 @@ INITIAL = {
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
+    # cards.h: the Between games list, rebuilt by state_doc() from these choices.
+    "cards": [{"id": cid, "on": on} for cid, _name, on, _hint in CARDS],
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     # The picture card (picture.h): what each kept file is, and how big the next upload can be.
     "pics": [], "picroom": 65536,
@@ -396,7 +407,51 @@ def state_doc():
         STATE["live"] = live_auto_leagues()
     else:
         STATE["live"] = list(LIVE_LIST[0])
+    if "cards" in STATE:
+        on = cards_on()
+        STATE["cards"] = []
+        for cid, name, _default, hint in CARDS:
+            STATE["cards"].append({"id": cid, "name": name, "on": on[cid], "ok": card_ok(cid), "hint": hint})
     return STATE
+
+
+def cards_on():
+    """card_on() for each card: its own key for the cards that kept one, else the list."""
+    listed = {c["id"]: c["on"] for c in STATE.get("cards", []) if "id" in c}
+    key = OWN_SWITCH_CARDS.get
+    return {cid: STATE[key(cid)] if key(cid) in STATE else listed.get(cid, default)
+            for cid, _name, default, _hint in CARDS}
+
+
+def card_ok(cid):
+    """card_ok_(): the custom countdown needs a day, the message card text or a
+    list, Top 25 a college football or men's basketball team (top25_slots_)."""
+    if cid == "custom":
+        return bool(STATE.get("cddate"))
+    if cid == "message":
+        return bool(STATE.get("msg") or STATE.get("msgurl"))
+    if cid == "picture":
+        return bool(STATE.get("pics"))
+    if cid == "weather":
+        return bool((STATE.get("wx") or {}).get("place"))
+    if cid == "top25":
+        leagues = {t["l"] for t in STATE["favs"] if t} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
+        return not no_team_default() and bool(leagues & {"ncaa", "mcbb"})
+    return True
+
+
+def set_cards(v):
+    """cards= (cards.h parse_cards): the cards named, on for 1 and off for 0;
+    an id this firmware lacks, or a value other than 0 or 1, is left out."""
+    on = cards_on()
+    for pair in v.split(","):
+        cid, _colon, val = pair.partition(":")
+        if cid in on and val in ("0", "1"):
+            on[cid] = val == "1"
+    for cid, key in OWN_SWITCH_CARDS.items():
+        if key in STATE:
+            STATE[key] = on[cid]
+    STATE["cards"] = [{"id": cid, "on": on[cid]} for cid, _name, _default, _hint in CARDS]
 
 
 def fav_refs():
@@ -539,6 +594,9 @@ def apply_set(kv):
                 STATE["panels"] = atoi(v)
         elif k in ("countdown", "top25", "news", "gameleaders"):
             STATE[k] = v == "1"
+        elif k == "cards":
+            if "cards" in STATE:
+                set_cards(v)
         elif k == "cdname":
             STATE["cdname"] = countdown_name(v)
         elif k == "cddate":
@@ -615,6 +673,9 @@ def settings_doc():
         elif k == "sport":
             if "sport" in s:
                 out["sport"] = s["sport"] or "none"
+        elif k == "cards":
+            if "cards" in s:
+                out["cards"] = {c["id"]: c["on"] for c in s["cards"]}
         elif k in s:
             out[k] = s[k]
     if s.get("panels"):
@@ -682,6 +743,17 @@ def import_settings(doc):
                     continue
                 parts.append(name + "=" + ",".join(refs))
             kv.append(("lists", ";".join(parts)))
+            continue
+        if k == "cards":
+            # The CARDS case: into cards= text, a card this firmware lacks left out and listed.
+            bad = 'cards should be cards like {"next": true}.'
+            if not isinstance(v, dict) or any(not isinstance(e, bool) for e in v.values()):
+                return fail(bad)
+            ids = [cid for cid, _name, _default, _hint in CARDS]
+            skipped += ["cards=" + cid for cid in v if cid not in ids]
+            pairs = [f"{cid}:{1 if on else 0}" for cid, on in v.items() if cid in ids]
+            if pairs:
+                kv.append(("cards", ",".join(pairs)))
             continue
         if kind == "Bool":
             if not isinstance(v, bool):
@@ -813,12 +885,17 @@ def selftest():
             return f'{value["l"]}:{value["id"]}' if value else ""
         if key == "favs":
             return [compact("team", t) for t in value]
+        if key == "cards":
+            # set_cases.json lists the cards as the backup does: {"next": true, ...}.
+            return {c["id"]: c["on"] for c in value}
         return value
 
     bad = 0
     for case in fx["cases"]:
         start = {**fx["base"], **case.get("start", {})}
         start["favs"] = [to_team(r) for r in start["favs"]]
+        if "cards" in start:
+            start["cards"] = [{"id": cid, "on": on} for cid, on in start["cards"].items()]
         reset_state(start)
         kv = [(k, v) for key in SET_KEYS for k, v in case["set"] if k == key]
         status = 200 if kv else 400

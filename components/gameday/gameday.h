@@ -26,6 +26,7 @@
 #include "badge.h"
 #include "best_game.h"
 #include "captive.h"
+#include "cards.h"
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -334,12 +335,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_last_play(bool on) { this->set_flag_(FLAG_PLAY, on); }
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
+  // The between-games cards' switches (cards.h): the device page's list,
+  // cards= and the backup. The countdown, the news card and the weather card
+  // keep the switches they had before the list.
+  bool card_on(::espn::Card c) const;
+  void set_card(::espn::Card c, bool on);
   // The next game's countdown card, on unless the owner turns it off.
   bool countdown_on() const { return this->countdown_.off == 0; }
   void set_countdown(bool on);
   // Game leaders (game_leaders.h): the between-games card with this game's
   // leaders at halftime and the final, on by default.
-  bool game_leaders_on() const { return (this->countdown_.cards_off & CARD_OFF_LEADERS) == 0; }
+  bool game_leaders_on() const { return this->card_on(::espn::Card::LEADERS); }
   void set_game_leaders(bool on);
   // The card for the board's game, laid out for width_px; font 0 when none is
   // due (pages/gameday-live.yaml draws it in turns with the line score).
@@ -349,7 +355,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void leaders_turn_taken();
   // The college Top 25 card (rankings.h), on unless the owner turns it off.
   // It only takes turns while the panel follows a college team.
-  bool top25_on() const { return (this->countdown_.cards_off & CARD_OFF_TOP25) == 0; }
+  bool top25_on() const { return this->card_on(::espn::Card::TOP25); }
   void set_top25(bool on);
   // The custom countdown: a name and a day (YYYYMMDD, 0 clears it).
   void set_custom_countdown_name(const std::string &name);
@@ -724,15 +730,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t off;  // 1 = no countdown to the next game
     uint32_t ymd;  // the custom countdown's day, 0 = none
     char name[::espn::kCountdownNameMax + 1];
-    // Between-games cards the owner turned off, a bit each (CARD_OFF_*), so
-    // a saved 0 is every card on. Was spare.
+    // Between-games cards the owner turned off, a bit each (cards.h,
+    // card_bit), so a saved 0 is every card on. Was spare.
     uint16_t cards_off;
     // 1 = the news card on (news.h), off by default unlike the cards above.
     // Was spare, so older firmware has it off. The blob has no spare left.
     uint8_t news;
   } __attribute__((packed));
-  static constexpr uint16_t CARD_OFF_LEADERS = 1u << 0;  // Game leaders (game_leaders.h)
-  static constexpr uint16_t CARD_OFF_TOP25 = 1u << 5;
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
   void save_countdown_();
@@ -992,9 +996,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string shown_team_logo_, shown_opp_logo_;
   uint32_t logo_hold_ms_{0};
   bool logo_held_{false};
-  // Turns f into the off-season clock card when the board has nothing to
-  // show for months (offseason.h); leaves it alone otherwise.
+  // Turns f into the clock card when the board has nothing to show for
+  // months (offseason.h), or between games with Next game off (cards.h,
+  // clock_instead); leaves it alone otherwise.
   void clock_fields_(UpdateFields &f);
+  // Whether a between-games card has something to show now: the custom
+  // countdown a day, the message card its text or list, Top 25 a college
+  // team to follow. The page greys the others' rows with their hint.
+  bool card_ok_(::espn::Card c) const;
+  // Draws the board again after a change in what it shows between games.
+  void redraw_board_();
   void clock_next_line_(UpdateFields &f, const GameSnapshot &g);
   // The countdown card (countdown.h): which one has the board now, the
   // fields that draw it, and the once-a-second check that turns the card.

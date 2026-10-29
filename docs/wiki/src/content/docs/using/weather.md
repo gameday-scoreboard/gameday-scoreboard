@@ -21,7 +21,7 @@ Under **Between games** on the [device page](/using/device-page/), type your tow
 
 The panel looks the town up once and shows what it found under the box, like **Found: Coppell, Texas**. If it says **No place found**, try the town and state, or a ZIP code.
 
-Setting a town turns the **Weather card** switch on. Turn the switch off to keep the town and hide the card; clear the box and press **Look up** to forget the town.
+Setting a town turns the **Weather** switch in the **Between games** list on. Turn the switch off to keep the town and hide the card; clear the box and press **Look up** to forget the town.
 
 ## What it shows
 

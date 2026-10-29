@@ -277,6 +277,24 @@ void test_left_out() {
          "an address this firmware can't read wasn't left out alone: '%s'", in.error.c_str());
   refused(R"({"schema":1,"msgurl":7})", "msgurl as a number");
 
+  // The Between games list: a card from newer firmware is left out and
+  // listed, the rest applied; a card the backup doesn't name stays as it is.
+  in = import(R"({"schema":1,"cards":{"next":false,"standings":true,"news":true}})");
+  const SetOp *cards = find(in, SetKind::CARDS);
+  SCHECK(in.error.empty() && skipped(in, "cards=standings") && cards != nullptr &&
+             cards->mask == (card_bit(Card::NEXT) | card_bit(Card::NEWS)) && cards->value == card_bit(Card::NEWS),
+         "the cards list didn't come back as next off, news on: '%s'", in.error.c_str());
+  in = import(R"({"schema":1,"cards":{"standings":true},"down":false})");
+  SCHECK(in.error.empty() && skipped(in, "cards=standings") && find(in, SetKind::CARDS) == nullptr &&
+             find(in, SetKind::DOWN) != nullptr,
+         "a list naming only a card this firmware lacks wasn't left out alone");
+  // A backup from before the list: the countdown's own key still restores it.
+  in = import(R"({"schema":1,"countdown":false})");
+  SCHECK(in.error.empty() && find(in, SetKind::COUNTDOWN) != nullptr && find(in, SetKind::CARDS) == nullptr,
+         "a backup from before the list didn't restore the countdown");
+  refused(R"({"schema":1,"cards":["next"]})", "cards as a list");
+  refused(R"({"schema":1,"cards":{"next":1}})", "a card as a number");
+
   // A bar or demo build: no update switches, no panel layout, no numbers.
   SettingsTarget bare;
   in = import(R"({"schema":1,"autoupd":true,"beta":true,"panels":2,"brightness":40,"scroll":3,"down":false})", bare);

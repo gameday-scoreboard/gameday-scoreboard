@@ -49,6 +49,10 @@ The card makes way for the panel's own trouble line. When three reads from ESPN 
 
 **Clear** empties the text and the address, and the card stops.
 
+:::note[Coming in the next release]
+**Message card** in the **Between games** list on the [device page](/using/device-page/#between-games) turns the card's turns off and on without clearing it, so your text or list is there when you turn it back on.
+:::
+
 ### A list from a web address
 
 For a long list, like every member of a club, put a plain text file somewhere the panel can read it and give the card its address under **Or a list from a web address**. The file has one entry per line: names, specials, anything. Blank lines are skipped, and a line longer than 64 characters is cut.
