@@ -200,16 +200,36 @@ inline bool batter_before(int h_a, int rbi_a, int hr_a, int h_b, int rbi_b, int 
   return hr_a > hr_b;
 }
 
-// The line as the card draws it, at most max_chars: the name is cut, never
-// the stat, and a name keeps at least three characters.
+// A name keeps at least this many characters when it is cut.
+static constexpr size_t kLeaderNameMin = 3;
+
+// Does the line fit max_chars whole, its name cut to no fewer than three?
+inline bool leader_fits(const LeaderLine &l, size_t max_chars) {
+  return std::min(l.name.size(), kLeaderNameMin) + 1 + l.stat.size() <= max_chars;
+}
+
+// The line as the card draws it, at most max_chars: the name is cut first,
+// keeping at least three characters. A stat still too long loses whole
+// pairs from its end ("212 yds 3 TD" to "212 yds"), never part of a number;
+// its first pair always stays.
 inline std::string fit_leader(const LeaderLine &l, size_t max_chars) {
   std::string line = l.name + " " + l.stat;
   if (line.size() <= max_chars)
     return line;
-  size_t room = max_chars > l.stat.size() + 1 ? max_chars - l.stat.size() - 1 : 0;
-  if (room < 3)
-    room = 3;
-  return l.name.substr(0, std::min(room, l.name.size())) + " " + l.stat;
+  std::string stat = l.stat;
+  const size_t name_min = std::min(l.name.size(), kLeaderNameMin);
+  while (name_min + 1 + stat.size() > max_chars) {
+    // The last two words: a number and its unit ("3 TD", "6 K").
+    size_t cut = stat.rfind(' ');
+    cut = cut == std::string::npos || cut == 0 ? std::string::npos : stat.rfind(' ', cut - 1);
+    if (cut == std::string::npos || cut == 0)
+      break;
+    stat.resize(cut);
+  }
+  size_t room = max_chars > stat.size() + 1 ? max_chars - stat.size() - 1 : 0;
+  if (room < name_min)
+    room = name_min;
+  return l.name.substr(0, std::min(room, l.name.size())) + " " + stat;
 }
 
 }  // namespace detail
@@ -231,9 +251,13 @@ struct LeadersCardText {
   std::string opp_body;
 };
 
+// The half-size logo (16 px) with the abbreviation 17 px down, in px.
+static constexpr int kLeaderLogoBlock = 26;
+
 // Pixels per character and lines per side decide the font: the big one when
-// both sides have at most two lines, so basketball, hockey and baseball read
-// from across the room; football's three lines a side take the small one.
+// both sides have at most two lines that fit it, so basketball and hockey
+// read from across the room; football's three lines a side and baseball's
+// pitching line take the small one.
 inline LeadersCardText leaders_card_text(const GameLeaders &l, int width_px, int height_px = 55) {
   LeadersCardText out;
   if (!l.valid || !l.any())
@@ -262,14 +286,20 @@ inline LeadersCardText leaders_card_text(const GameLeaders &l, int width_px, int
   out.logos = true;
   out.text_x = 22;  // a 16 px logo, or a four letter abbreviation, and a gap
   const int avail = height_px / 2;
-  if (lines <= 2 && 2 * 13 <= avail) {
-    out.font = 12;
-    out.pitch = 13;
-  } else {
-    out.font = 8;
-    out.pitch = 9;
-  }
-  out.block_h = (uint8_t) (lines * out.pitch);
+  // The big font only when every line fits it whole: a pitcher's
+  // "4.0 IP 2 ER 6 K" doesn't, so baseball takes the small one.
+  const size_t big_chars = (size_t) (width_px - out.text_x) / 6;
+  bool big_fits = true;
+  for (const LeaderSide *s : {&l.team, &l.opp})
+    for (uint8_t i = 0; i < s->count; i++)
+      big_fits = big_fits && detail::leader_fits(s->lines[i], big_chars);
+  // Two lines a side keep the big font's 13 px pitch in either font, so they
+  // sit level with the logo and the abbreviation.
+  out.font = lines <= 2 && 2 * 13 <= avail && big_fits ? 12 : 8;
+  out.pitch = lines <= 2 && 2 * 13 <= avail ? 13 : 9;
+  // A block holds the half-size logo with the abbreviation under it (26 px)
+  // however few lines it has.
+  out.block_h = (uint8_t) std::min(std::max((int) lines * out.pitch, kLeaderLogoBlock), avail);
   size_t chars = (size_t) (width_px - out.text_x) / (out.font == 12 ? 6 : 5);
   out.team_body = body(l.team, chars, kLeaderLines);
   out.opp_body = body(l.opp, chars, kLeaderLines);

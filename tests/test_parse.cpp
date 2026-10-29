@@ -6957,6 +6957,14 @@ static void test_game_leaders() {
   CHECK_EQ(espn::detail::fit_leader({"Alexander-Walker", "23 pts"}, 17), std::string("Alexander- 23 pts"));
   CHECK_EQ(espn::detail::fit_leader({"Tatum", "40 pts"}, 17), std::string("Tatum 40 pts"));
   CHECK_EQ(espn::detail::fit_leader({"Antetokounmpo", "12 reb"}, 8), std::string("Ant 12 reb"));
+  // A stat too long for its room loses whole pairs from its end, never part
+  // of a number, and keeps its first
+  CHECK_EQ(espn::detail::fit_leader({"Prescott", "212 yds 3 TD"}, 12), std::string("Pres 212 yds"));
+  CHECK_EQ(espn::detail::fit_leader({"Jax", "4.0 IP 2 ER 6 K"}, 12), std::string("Jax 4.0 IP"));
+  CHECK_EQ(espn::detail::fit_leader({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17), std::string("Rasmu 4.0 IP 1 ER"));
+  CHECK_EQ(espn::detail::fit_leader({"Simpson", "2-4 1 HR"}, 9), std::string("Simps 2-4"));
+  CHECK(espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 21));
+  CHECK(!espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17));
 
   // The card: football's three lines a side take the small font at 128 wide
   LeadersCardText c = leaders_card_text(l, 128);
@@ -6974,19 +6982,49 @@ static void test_game_leaders() {
   CHECK_EQ((int) c.block_h, 26);
   CHECK_EQ(c.team_body, std::string("Tatum 40 pts\nGeorge 7 reb"));
   CHECK_EQ(c.opp_body, std::string("Porter Jr. 27 pts\nPorter Jr. 12 reb"));
+  // Baseball's pitching line doesn't fit the big font whole, so it takes the
+  // small one, with the line whole
   c = leaders_card_text(mlb, 128);
-  CHECK_EQ((int) c.font, 12);
+  CHECK_EQ((int) c.font, 8);
+  CHECK_EQ((int) c.pitch, 13);
+  CHECK_EQ((int) c.block_h, 26);
   CHECK_EQ(c.team_body.substr(0, c.team_body.find('\n')), std::string("Jax 4.0 IP 2 ER 6 K"));
+  // One line a side still leaves room for the logo and the abbreviation
+  GameLeaders single = nba;
+  single.team.count = 1;
+  single.opp.count = 1;
+  c = leaders_card_text(single, 128);
+  CHECK_EQ((int) c.font, 12);
+  CHECK_EQ((int) c.block_h, 26);
   // A 64 wide panel: one line a side, in the small font
   c = leaders_card_text(l, 64);
   CHECK_EQ((int) c.font, 8);
   CHECK(!c.logos);
   CHECK_EQ((int) c.block_h, 18);
-  CHECK_EQ(c.team_body, std::string("Prescott 212 yds 3 TD").substr(0, 12) == "Prescott 212" ? c.team_body : "");
-  CHECK_EQ(c.team_body, std::string("Pre 212 yds 3 TD"));
+  CHECK_EQ(c.team_body, std::string("Pres 212 yds"));
   c = leaders_card_text(nba, 64);
   CHECK_EQ(c.team_body, std::string("Tatum 40 pts"));
   CHECK_EQ(c.opp_body, std::string("Porte 27 pts"));
+  c = leaders_card_text(mlb, 64);
+  CHECK_EQ(c.team_body, std::string("Jax 4.0 IP"));
+  // No line is wider than its room, at either width, for any sport
+  for (const GameLeaders *g : {&l, &nba, &mlb}) {
+    for (int w : {64, 128}) {
+      LeadersCardText t = leaders_card_text(*g, w);
+      const size_t room = (size_t) (w - t.text_x) / (t.font == 12 ? 6 : 5);
+      for (const std::string &body : {t.team_body, t.opp_body}) {
+        size_t start = 0;
+        while (start <= body.size()) {
+          size_t end = body.find('\n', start);
+          std::string line = body.substr(start, end == std::string::npos ? std::string::npos : end - start);
+          CHECK(line.size() <= room);
+          if (end == std::string::npos)
+            break;
+          start = end + 1;
+        }
+      }
+    }
+  }
   // A side with nothing leaves its block empty
   GameLeaders one = nba;
   one.opp = LeaderSide{};
