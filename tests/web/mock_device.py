@@ -20,6 +20,9 @@ routes with the response shapes from components/gameday/gameday.cpp:
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
   POST /gameday/settings a backup as a JSON body: checked whole, then applied through
                          apply_set; 400 with "error" when refused
+  GET  /gameday/picture  ?slot=N, a kept picture's file as uploaded; 404 for an empty slot
+  POST /gameday/picture  a PNG or GIF body kept in the first free slot, or delete=N;
+                         400 with "error" when refused (picture.h)
 
 /?demo loads bundle-demo.js instead, the demo build's page, and
 GET/POST /gameday/demo answer as demo.cpp does.
@@ -130,6 +133,8 @@ INITIAL = {
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    # The picture card (picture.h): what each kept file is, and how big the next upload can be.
+    "pics": [], "picroom": 65536,
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
@@ -209,7 +214,40 @@ WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
 LIVE_LIST = [[]]
 
 
+PIC_FILES = {}  # slot (1 to 4) -> the bytes uploaded
+PIC_MAX = 64 * 1024
+
+
+def add_picture(raw):
+    """PictureCard::add(): the first free slot, with the checks the page can hit
+    in tests (pic_check() itself is in the host tests)."""
+    if not raw:
+        return 400, {"error": "That file is empty."}
+    if len(raw) > PIC_MAX:
+        return 400, {"error": "That file is too big; a picture can be up to 64 KB."}
+    if raw[:8] == b"\x89PNG\r\n\x1a\n" and raw[12:16] == b"IHDR":
+        kind, w, h, frames = "png", int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big"), 1
+    elif raw[:6] in (b"GIF87a", b"GIF89a"):
+        kind, w, h = "gif", int.from_bytes(raw[6:8], "little"), int.from_bytes(raw[8:10], "little")
+        frames = max(1, raw.count(b"\x21\xf9\x04"))
+    else:
+        return 400, {"error": "Pictures can be PNG or GIF files."}
+    if w > 128 or h > 64:
+        return 400, {"error": "Pictures can be up to 128 by 64 pixels."}
+    free = [s for s in range(1, 5) if s not in PIC_FILES]
+    if not free:
+        return 400, {"error": "The panel keeps 4 pictures. Delete one to add another."}
+    slot = free[0]
+    PIC_FILES[slot] = raw
+    STATE["pics"] = [p for p in STATE["pics"] if p["s"] != slot] + [
+        {"s": slot, "k": kind, "w": w, "h": h, "f": frames, "b": len(raw), "id": 1000 + len(LOG)}]
+    STATE["pics"].sort(key=lambda p: p["s"])
+    STATE["picroom"] = 0 if len(PIC_FILES) == 4 else PIC_MAX
+    return 200, {"ok": True, "slot": slot}
+
+
 def reset_state(overrides):
+    PIC_FILES.clear()
     STATE.clear()
     STATE.update(copy.deepcopy(INITIAL))
     STATE.update(overrides)
@@ -871,6 +909,12 @@ class Handler(BaseHTTPRequestHandler):
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
             return self._json(200, {"networks": WIFI["list"], "max": 5})
+        if u.path == "/gameday/picture":
+            slot = atoi(parse_qs(u.query).get("slot", ["0"])[0])
+            if slot not in PIC_FILES:
+                return self._json(404, {"error": "no picture there"})
+            kind = next(p["k"] for p in STATE["pics"] if p["s"] == slot)
+            return self._send(200, "image/" + kind, PIC_FILES[slot])
         if u.path == "/events":
             return self._events()
         if u.path == "/_log":
@@ -928,6 +972,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"error": "not a saved network"})
             WIFI["list"] = keep
             return self._json(200, {"ok": True})
+        if u.path == "/gameday/picture":
+            n = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(n)
+            q = {k: v[0] for k, v in pairs.items()}
+            LOG.append({"path": u.path, "q": q, "bytes": n, "type": self.headers.get("Content-Type", "")})
+            if "delete" in q:
+                slot = atoi(q["delete"])
+                if PIC_FILES.pop(slot, None) is None:
+                    return self._json(404, {"error": "no picture there"})
+                STATE["pics"] = [p for p in STATE["pics"] if p["s"] != slot]
+                STATE["picroom"] = PIC_MAX
+                return self._json(200, {"ok": True})
+            return self._json(*add_picture(raw))
         if u.path == "/gameday/settings":
             n = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(n)

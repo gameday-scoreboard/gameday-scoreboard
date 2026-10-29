@@ -696,6 +696,20 @@ gameday:
           lambda: 'return x == "news";'
         then:
           - script.execute: gd_news_card
+    # The picture card, and a GIF's next frame on its canvas (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "picture";'
+        then:
+          - script.execute: gd_picture_card
+    - if:
+        condition:
+          lambda: 'return x == "picture_frame";'
+        then:
+          # The build keeps no image cache, so a redraw reads the canvas as it is now.
+          - lambda: |-
+              if (id(gameday_ctl).picture_shown())
+                lv_obj_invalidate(id(tt_picture_img));
     # Another favorite scored (pages/gameday-live.yaml)
     - if:
         condition:

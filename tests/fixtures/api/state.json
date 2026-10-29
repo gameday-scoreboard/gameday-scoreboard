@@ -72,6 +72,27 @@
   "countdown": true,
   "top25": true,
   "news": false,
+  "pics": [
+    {
+      "s": 1,
+      "k": "gif",
+      "w": 128,
+      "h": 64,
+      "f": 12,
+      "b": 23514,
+      "id": 2849137201
+    },
+    {
+      "s": 3,
+      "k": "png",
+      "w": 64,
+      "h": 64,
+      "f": 1,
+      "b": 4180,
+      "id": 117440513
+    }
+  ],
+  "picroom": 65536,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
   "night": true,

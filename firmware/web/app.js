@@ -173,6 +173,14 @@
         <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
         <button class="btn" id="cdClear" hidden>Clear the countdown</button>
       </div>
+      <div class="card" id="picCard" hidden>
+        <h2>Pictures</h2>
+        <p class="hint">Your own picture or animated GIF between games, up to 4, one every 3 minutes for about 10 seconds. A photo is fitted to the panel. A GIF goes as it is, up to 128 by 64 pixels.</p>
+        <div id="picList"></div>
+        <p class="hint" id="picNote" hidden></p>
+        <div class="actions"><button class="btn primary" id="picAdd">Add a picture</button></div>
+        <input type="file" id="picFile" accept="image/png,image/gif,image/jpeg,image/webp" hidden>
+      </div>
       <div class="card" id="msgCard" hidden>
         <h2>Message</h2>
         <div class="sub">Banner</div>
@@ -1030,6 +1038,7 @@
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+    renderPics();
     renderEvents();
   };
 
@@ -1151,6 +1160,114 @@
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- pictures ----------------------------------------------------------------
+  // The panel keeps up to four PNG or GIF files (GET /gameday/picture?slot=N
+  // is one as uploaded). A still image is fitted to the panel here and sent
+  // as a PNG; a GIF can't be redrawn in the browser, so it goes as it is.
+  const PIC_MAX = 64 * 1024;
+  const picNote = (t) => { const n = $("#picNote"); n.textContent = t; n.hidden = !t; };
+  let picShown = null;
+  const renderPics = () => {
+    // Older firmware has no picture card.
+    $("#picCard").hidden = S.pics === undefined;
+    if (S.pics === undefined) return;
+    const pics = S.pics || [];
+    $("#picAdd").disabled = !S.picroom;
+    $("#picAdd").textContent = pics.length >= 4 ? "4 pictures kept" : "Add a picture";
+    // The thumbnails load from the panel, so only when the list changes.
+    const key = JSON.stringify(pics);
+    if (key === picShown) return;
+    picShown = key;
+    const list = $("#picList");
+    list.textContent = "";
+    pics.forEach((p) => {
+      const row = el("div", "ctl pic");
+      const img = el("img");
+      img.src = "/gameday/picture?slot=" + p.s + "&id=" + p.id;
+      img.alt = "Picture " + p.s;
+      img.width = p.w;
+      img.height = p.h;
+      const kb = Math.max(1, Math.round(p.b / 1024));
+      const what = p.k === "gif" && p.f > 1 ? "GIF, " + p.f + " frames" : p.k.toUpperCase();
+      const label = el("label", "", what);
+      label.appendChild(el("small", "", p.w + " by " + p.h + ", " + kb + " KB"));
+      const del = el("button", "btn danger", "Delete");
+      del.onclick = async () => {
+        if (!confirm("Delete this picture from the panel?")) return;
+        try {
+          const r = await fetch("/gameday/picture?delete=" + p.s, { method: "POST" });
+          if (!r.ok) throw new Error();
+        } catch (_) {
+          toast("Device did not respond. Try again.");
+          return;
+        }
+        toast("Picture deleted");
+        scheduleState(APPLY_MS + 100);
+      };
+      row.append(img, label, del);
+      list.appendChild(row);
+    });
+  };
+  // A still image drawn into the panel's size, all of it showing, on black.
+  const fitPicture = (file, maxW, maxH) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const s = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+      const c = el("canvas");
+      c.width = Math.max(1, Math.round(img.naturalWidth * s));
+      c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      const g = c.getContext("2d");
+      g.imageSmoothingQuality = "high";
+      g.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob((b) => (b ? resolve(b) : reject(new Error())), "image/png");
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error()); };
+    img.src = url;
+  });
+  $("#picAdd").onclick = () => { $("#picFile").value = ""; $("#picFile").click(); };
+  $("#picFile").onchange = async () => {
+    const f = $("#picFile").files[0];
+    if (!f) return;
+    const maxW = Math.min(128, 64 * (S.panels || 1));
+    let body = f;
+    if (f.type === "image/gif") {
+      const head = new Uint8Array(await f.slice(0, 10).arrayBuffer());
+      const w = head[6] | (head[7] << 8), h = head[8] | (head[9] << 8);
+      if (w > 128 || h > 64) { picNote("That GIF is " + w + " by " + h + " pixels. A GIF can be up to 128 by 64; resize it first."); return; }
+    } else {
+      try {
+        // A PNG that already fits goes as it is, so pixel art stays exact.
+        const fits = f.type === "image/png" && f.size <= PIC_MAX && await new Promise((ok) => {
+          const u = URL.createObjectURL(f);
+          const i = new Image();
+          i.onload = () => { URL.revokeObjectURL(u); ok(i.naturalWidth <= maxW && i.naturalHeight <= 64); };
+          i.onerror = () => { URL.revokeObjectURL(u); ok(false); };
+          i.src = u;
+        });
+        if (!fits) body = await fitPicture(f, maxW, 64);
+      } catch (_) {
+        picNote("That file isn't a picture the browser can open.");
+        return;
+      }
+    }
+    if (body.size > PIC_MAX) { picNote("That file is " + Math.round(body.size / 1024) + " KB. A picture can be up to 64 KB."); return; }
+    picNote("Sending...");
+    let r, j;
+    try {
+      r = await fetch("/gameday/picture", { method: "POST", headers: { "Content-Type": body.type || "application/octet-stream" }, body });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      picNote("");
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { picNote("Not added: " + (j.error || "the panel answered " + r.status + ".")); return; }
+    picNote("Added. It's up next between games.");
+    scheduleState(APPLY_MS + 100);
   };
 
   // ---- game events: the heads-up and the webhook ---------------------------------

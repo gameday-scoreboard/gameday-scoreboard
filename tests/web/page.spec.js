@@ -1063,6 +1063,61 @@ test("between games: the news switch is off by default and posts 1 and 0", async
   await expect(page.locator("#newsRow")).toBeHidden();
 });
 
+test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wide GIF, deletes", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#picCard")).toBeVisible();
+  const pic = (name, mimeType) => ({ name, mimeType,
+    buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures", name)) });
+  const uploads = async () => (await (await request.get("/_log")).json())
+    .filter((p) => p.path === "/gameday/picture" && !p.q.delete);
+
+  // A PNG that fits the panel goes byte for byte.
+  await page.setInputFiles("#picFile", pic("blue.png", "image/png"));
+  await expect(page.locator("#picNote")).toHaveText("Added. It's up next between games.");
+  await expect(page.locator("#picList .pic")).toHaveCount(1);
+  await expect(page.locator("#picList .pic label").first()).toHaveText("PNG64 by 32, 1 KB");
+  await expect(page.locator("#picList img").first()).toHaveAttribute("src", /^\/gameday\/picture\?slot=1&id=/);
+  expect((await uploads())[0]).toMatchObject({ bytes: 121, type: "image/png" });
+
+  // So does a GIF.
+  await page.setInputFiles("#picFile", pic("box_d2.gif", "image/gif"));
+  await expect(page.locator("#picList .pic")).toHaveCount(2);
+  await expect(page.locator("#picList .pic label").nth(1)).toHaveText(/^GIF, 4 frames128 by 64/);
+
+  // A still too tall for the panel is redrawn to fit, as a PNG.
+  await page.setInputFiles("#picFile", pic("tall.png", "image/png"));
+  await expect(page.locator("#picList .pic")).toHaveCount(3);
+  const st = await deviceState(request);
+  expect(st.pics[2]).toMatchObject({ s: 3, k: "png", w: 63, h: 64 });
+
+  // A GIF too wide never leaves the browser.
+  await page.setInputFiles("#picFile", pic("wide.gif", "image/gif"));
+  await expect(page.locator("#picNote")).toHaveText("That GIF is 129 by 64 pixels. A GIF can be up to 128 by 64; resize it first.");
+  expect(await uploads()).toHaveLength(3);
+
+  // Delete the first.
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#picList .pic").first().locator("button").click();
+  await expect(page.locator("#picList .pic")).toHaveCount(2);
+  expect((await deviceState(request)).pics.map((p) => p.s)).toEqual([2, 3]);
+
+  // Firmware from before the picture card leaves the card out.
+  await reset(request, { pics: null, picroom: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#picCard")).toBeHidden();
+});
+
+test("pictures: the add button says when the panel keeps 4", async ({ page, request }) => {
+  const four = [1, 2, 3, 4].map((s) => ({ s, k: "png", w: 64, h: 64, f: 1, b: 900, id: s }));
+  await reset(request, { pics: four, picroom: 0 });
+  await page.goto("/");
+  await expect(page.locator("#picList .pic")).toHaveCount(4);
+  await expect(page.locator("#picAdd")).toBeDisabled();
+  await expect(page.locator("#picAdd")).toHaveText("4 pictures kept");
+});
+
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
