@@ -48,6 +48,8 @@
   ],
   "list": 2,
   "listmax": 16,
+  "sports": [],
+  "sport": "",
   "today": false,
   "jump": false,
   "banner": true,

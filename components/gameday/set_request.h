@@ -30,8 +30,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list",   "hook",    "pregame", "wake",
-                                    "wakelead", "after"};
+                                    "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
+                                    "wake",   "wakelead", "after"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -205,6 +205,7 @@ enum class SetKind : uint8_t {
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  SPORT,        // value, the sport row Favorite teams plays, 1 + Sport; 0 = none (every favorite)
   HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
   PREGAME,      // value, minutes before the start for the reminder event, 0 = none
   WAKE,         // on, Game-day wake (wake.h)
@@ -380,6 +381,13 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     long n = strtol(v.c_str(), nullptr, 10);
     op.value = n >= 0 && n <= 16 ? (int) n : -1;
     return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
+  if (k == "sport") {
+    // A sport row (playlists.h) by its kSportKeys word; "none" stops the one
+    // playing. A sport with no row is refused where the favorites are known.
+    op.kind = SetKind::SPORT;
+    op.value = v == "none" ? 0 : sport_row_from_key(v.c_str());
+    return v == "none" || op.value != 0;
   }
   if (k == "hook") {
     op.kind = SetKind::HOOK;

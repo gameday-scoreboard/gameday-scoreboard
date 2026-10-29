@@ -240,9 +240,9 @@
       </div>
       <div class="card">
         <h2>Playlists</h2>
-        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <p class="hint">Your own groups of favorites. Pick one under Favorite teams, where favorites in more than one sport also get a row for each sport on its own. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
         <div id="listCtls"></div>
-        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button><button class="btn" id="listSport">One per sport</button></div>
+        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
       </div>
       <div class="card">
         <h2>Remote</h2>
@@ -416,6 +416,7 @@
       return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
     }),
     list: Number,
+    sport: (v) => (v === "none" ? "" : v),
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
@@ -794,7 +795,8 @@
         ? "No favorites set yet"
         : S.locked && shown
           ? "Locked on " + (shown.t.name || shown.t.abbr)
-          : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
+          : playingSport() ? "Cycling through your " + playingSport() + " favorites"
+            : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
     }
     renderListPick();
   };
@@ -871,6 +873,11 @@
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
   const playingList = () => (S && S.list ? lists()[S.list - 1] : null);
+  // Sport rows: one per sport among the favorites, worked out by the panel
+  // (state sports, in its order) and never edited here. sport is the one playing.
+  const sportRows = () => (S && S.sports) || [];
+  const playingSport = () => (S && S.sport && sportRows().includes(S.sport) ? S.sport : "");
+  const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
@@ -884,8 +891,6 @@
     }
     return out.trim();
   };
-  const SPORTS = [["Football", ["nfl", "ncaa"]], ["Baseball", ["mlb"]], ["Basketball", ["nba", "wnba", "mcbb"]],
-    ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
   const listMax = () => (S && S.listmax) || 16;
   let listSig = "";
   const renderLists = () => {
@@ -960,36 +965,29 @@
     while (ls.some((l) => l.n === "Playlist " + n)) n++;
     postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
   };
-  $("#listSport").onclick = () => {
-    const ls = lists().slice();
-    let added = 0;
-    for (const [n, lgs] of SPORTS) {
-      const f = favKeys.map((k, i) => (lgs.includes(k.split(":")[0]) ? i : -1)).filter((i) => i >= 0);
-      if (!f.length || ls.some((l) => l.n === n) || ls.length >= listMax()) continue;
-      ls.push({ n, f });
-      added++;
-    }
-    if (!added) return toast("Every sport in your favorites has a playlist");
-    postLists(ls);
-    toast(added === 1 ? "Added a playlist" : "Added " + added + " playlists");
-  };
   const listPick = $("#favList");
+  // All favorites, the sport rows, then the owner's playlists, as the panel's
+  // Home Assistant select lists them. A sport row's value is "s:" + its sport.
   const renderListPick = () => {
     const ls = lists();
-    $("#favListRow").hidden = !ls.length;
+    const sp = sportRows();
+    $("#favListRow").hidden = !ls.length && !sp.length;
     if (document.activeElement === listPick) return;
-    const opts = ["All favorites"].concat(ls.map((l) => l.n));
-    if (opts.join("\n") !== Array.from(listPick.options).map((o) => o.text).join("\n")) {
+    const opts = [["0", "All favorites"]].concat(sp.map((k) => ["s:" + k, "All " + k]), ls.map((l, i) => [String(i + 1), l.n]));
+    if (opts.map((o) => o.join("=")).join("\n") !== Array.from(listPick.options).map((o) => o.value + "=" + o.text).join("\n")) {
       listPick.innerHTML = "";
-      opts.forEach((t, i) => {
+      opts.forEach(([v, t]) => {
         const o = el("option", null, t);
-        o.value = String(i);
+        o.value = v;
         listPick.appendChild(o);
       });
     }
-    listPick.value = String(S.list || 0);
+    listPick.value = playingSport() ? "s:" + playingSport() : String(S.list || 0);
   };
-  listPick.onchange = () => setGD({ mode: 4, list: listPick.value });
+  // Both keys each time, so the one not picked shows as off while the panel answers.
+  listPick.onchange = () => setGD(listPick.value.startsWith("s:")
+    ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
+    : { mode: 4, list: listPick.value, sport: "none" });
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
@@ -1730,7 +1728,9 @@
     for (const n of list) {
       // A favorite outside the playlist being played only shows near its kickoff.
       // slot is the favorite's place counted from 1; a playlist counts from 0.
-      const out = playingList() && playingList().f.length && !playingList().f.includes(n.slot - 1);
+      // A sport row plays its sport's favorites.
+      const out = playingSport() ? sportOf(n.t.l) !== playingSport()
+        : playingList() && playingList().f.length && !playingList().f.includes(n.slot - 1);
       const row = el("div", "un fav" + (n.slot === S.shown ? " shown" : "") + (out ? " out" : ""));
       const img = el("img");
       img.loading = "lazy";
