@@ -42,6 +42,7 @@ through `update_important` in the panel's state.
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
 - 🔔 While a new release waits, the ticker says **Update ready: open the Game Day app** for an hour a day, never during a live game, and **Important update ready** for a release that fixes something broken
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
+- 🌤️ A weather card between games: your town's temperature, today's high and low and the next two days, once you set a town under **Between games** on the device page
 - 📰 A news card between games: ESPN headlines for your teams or leagues, one every 3 minutes, off until you turn on **News headlines**
 - 🎵 **Playing** has a row for each sport in your favorites, like **All football**, that keeps up with your list on its own; the **One per sport** button is gone
 - 🏈 While you follow a college team, the AP Top 25 takes a turn between games every 10 minutes, for college football and basketball

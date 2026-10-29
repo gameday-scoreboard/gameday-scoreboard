@@ -98,6 +98,8 @@ The **Between games** card has **Countdown to the next game**, on unless you tur
 **College Top 25**, on unless you turn it off, shows the AP poll between games while you follow a college football or basketball team. See [College Top 25](/using/top-25/).
 
 **News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
+
+**Weather** has a **Town or ZIP code** box with **Look up**, the place the panel found, and the **Weather card** switch, which setting a town turns on. Under the switch it says when the forecast was last read and what it said. See [Weather](/using/weather/).
 :::
 
 ### Celebrations

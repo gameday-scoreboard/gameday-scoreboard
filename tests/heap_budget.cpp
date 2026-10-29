@@ -21,6 +21,7 @@
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
 #include "game_leaders.h"
+#include "weather.h"
 
 using namespace espn;
 
@@ -219,6 +220,22 @@ int main() {
     measure("rankings_ncaa", [&] {
       Poll p;
       return parse_rankings(json, p);
+    });
+  }
+  // The weather card's reads from Open-Meteo (weather.h): the town's lookup,
+  // once per town, and the forecast every half hour.
+  {
+    std::string json = slurp("fixtures/wx_geocode_paris.json");
+    measure("weather_lookup", [&] {
+      WxPlace p;
+      return parse_geocode(json, p) && !p.name.empty();
+    });
+  }
+  {
+    std::string json = slurp("fixtures/wx_forecast_coppell.json");
+    measure("weather_forecast", [&] {
+      WxForecast f;
+      return parse_forecast(json, f);
     });
   }
   {
