@@ -35,6 +35,8 @@
   "nightscreen": true,
   "nightlevel": 16,
   "countdown": true,
+  "top25": true,
+  "news": false,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
   "gameleaders": true,
@@ -59,6 +61,7 @@
     }
   ],
   "list": 2,
+  "sport": "none",
   "hook": "http://192.168.1.20:1880/gameday",
   "pregame": 15,
   "panels": 2,

@@ -48,6 +48,8 @@
   ],
   "list": 2,
   "listmax": 16,
+  "sports": [],
+  "sport": "",
   "today": false,
   "jump": false,
   "banner": true,
@@ -68,6 +70,8 @@
   "best": true,
   "bootaddr": true,
   "countdown": true,
+  "top25": true,
+  "news": false,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
   "gameleaders": true,
@@ -80,6 +84,7 @@
   "autoupd": false,
   "beta": false,
   "update_failed": "2026.10.2",
+  "update_important": true,
   "bar": {
     "report": "support@gameday-scoreboard.com"
   },

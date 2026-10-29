@@ -215,6 +215,13 @@ int main() {
     });
   }
   {
+    std::string json = slurp("fixtures/rankings_cfb_20261025.json");
+    measure("rankings_ncaa", [&] {
+      Poll p;
+      return parse_rankings(json, p);
+    });
+  }
+  {
     std::string json = slurp("fixtures/schedule_nfl_dal.json");
     measure("schedule_nfl", [&] {
       std::vector<Upcoming> up;

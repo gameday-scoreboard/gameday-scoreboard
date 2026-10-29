@@ -24,6 +24,8 @@
   "match",
   "beta",
   "countdown",
+  "top25",
+  "news",
   "cdname",
   "cddate",
   "gameleaders",
@@ -43,6 +45,7 @@
   "nick",
   "lists",
   "list",
+  "sport",
   "hook",
   "pregame"
 ]

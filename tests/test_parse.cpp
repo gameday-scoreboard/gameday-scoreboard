@@ -24,6 +24,7 @@
 #include "line_score.h"
 #include "logo_lru.h"
 #include "message.h"
+#include "news.h"
 #include "offseason.h"
 #include "panel_text.h"
 #include "recap.h"
@@ -33,6 +34,7 @@
 #include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
+#include "update_nudge.h"
 #include "wifi_history.h"
 
 using namespace espn;
@@ -4755,6 +4757,88 @@ static void test_auto_update() {
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
+static void test_update_nudge() {
+  CHECK(update_important("Important: scores show again after an ESPN change."));
+  CHECK(update_important("  Important: scores show again"));
+  CHECK(!update_important("Scores show again. Important: none"));
+  CHECK(!update_important("important: lower case is a plain release"));
+  CHECK(!update_important("Development build"));
+  CHECK(!update_important(""));
+  CHECK(std::string(update_nudge_text(false)) == "Update ready: open the Game Day app");
+  CHECK(std::string(update_nudge_text(true)) == "Important update ready: open the Game Day app");
+
+  UpdateNudgeInputs in;
+  in.waiting = true;
+  in.clock_valid = true;
+  in.hour = 17;
+  in.today = auto_update_day(2026, 301);
+  in.now = 1000000;
+  UpdateNudgeInputs t = in;
+  UpdateNudgeDay d;
+
+  // Not before 5 PM: the day's hour hasn't started.
+  t.hour = 16;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.day, 0);
+  // A live game or a dark screen at 5 PM holds the start back.
+  t.hour = 17;
+  t.live = true;
+  CHECK(!update_nudge_on(t, d));
+  t.live = false;
+  t.dark = true;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.day, 0);
+  // It starts the first time it may show and runs an hour.
+  t.dark = false;
+  t.now = in.now + 600;
+  CHECK(update_nudge_on(t, d));
+  CHECK_EQ(d.day, in.today);
+  CHECK_EQ(d.since, in.now + 600);
+  t.now += 30 * 60;
+  CHECK(update_nudge_on(t, d));
+  // A live game inside the hour hides it, and the hour keeps running.
+  t.live = true;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.since, in.now + 600);
+  t.live = false;
+  CHECK(update_nudge_on(t, d));
+  t.now = in.now + 600 + kUpdateNudgeS - 1;
+  CHECK(update_nudge_on(t, d));
+  // Once the hour is up it waits for tomorrow, even at 9 PM.
+  t.now = in.now + 600 + kUpdateNudgeS;
+  CHECK(!update_nudge_on(t, d));
+  t.hour = 21;
+  t.now += 3 * 3600;
+  CHECK(!update_nudge_on(t, d));
+  // The next day it starts again at 5 PM, not past midnight.
+  t.today = in.today + 1;
+  t.hour = 0;
+  t.now = in.now + 8 * 3600;
+  CHECK(!update_nudge_on(t, d));
+  t.hour = 17;
+  t.now = in.now + 24 * 3600;
+  CHECK(update_nudge_on(t, d));
+  CHECK_EQ(d.day, in.today + 1);
+  // A clock set back inside the hour hides it rather than stretching it.
+  t.now = in.now + 24 * 3600 - 10;
+  CHECK(!update_nudge_on(t, d));
+
+  // Nothing waiting, Install updates automatically on, or no clock: never,
+  // and the day's hour isn't used up.
+  UpdateNudgeDay fresh;
+  t = in;
+  t.waiting = false;
+  CHECK(!update_nudge_on(t, fresh));
+  t = in;
+  t.auto_on = true;
+  CHECK(!update_nudge_on(t, fresh));
+  t = in;
+  t.clock_valid = false;
+  CHECK(!update_nudge_on(t, fresh));
+  CHECK_EQ(fresh.day, 0);
+  CHECK(update_nudge_on(in, fresh));
+}
+
 static void test_update_mark() {
   UpdateMark m{};
   CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
@@ -5074,6 +5158,134 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"temp\":80.0,\"heat\":1,\"brownouts\":0,\"power\":\"ok\""));
 }
 
+static void test_rankings() {
+  CHECK_EQ(rankings_url(League::NCAA),
+           std::string("https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1"));
+  CHECK_EQ(rankings_url(League::MCBB),
+           std::string("https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1"));
+  set_core_root("http://192.168.1.103:8191/v2/sports/");
+  CHECK_EQ(rankings_url(League::NCAA), std::string("http://192.168.1.103:8191/v2/sports/football/leagues/college-football/rankings/1"));
+  set_core_root("https://sports.core.api.espn.com/v2/sports/");
+  CHECK_EQ(top25_ref_id("http://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/2026/teams/2390?lang=en"), 2390u);
+  CHECK_EQ(top25_ref_id("http://x/teams/?lang=en"), 0u);
+  CHECK_EQ(top25_ref_id("http://x/athletes/12"), 0u);
+  CHECK_EQ(top25_ref_id(nullptr), 0u);
+  CHECK_EQ(top25_ref_id("/teams/99999999999"), 0u);
+
+  // Football, week 9: Miami first, a tie at 20, two teams new to the poll.
+  std::string cfb = slurp("fixtures/rankings_cfb_20261025.json");
+  Poll f;
+  CHECK(parse_rankings(cfb, f));
+  CHECK_EQ(f.rows.size(), (size_t) 25);
+  CHECK_EQ(f.date, parse_iso8601_z("2026-10-25T07:00Z"));
+  CHECK_EQ(std::string(f.when), std::string("WK 9"));
+  CHECK_EQ((int) f.rows[0].rank, 1);
+  CHECK_EQ(f.rows[0].id, 2390u);
+  CHECK_EQ(std::string(f.rows[0].rec), std::string("7-0"));
+  CHECK_EQ((int) f.rows[1].prev, 3);
+  CHECK_EQ((int) f.rows[19].rank, 20);
+  CHECK_EQ((int) f.rows[20].rank, 20);
+  CHECK_EQ((int) f.rows[23].prev, 0);
+  // Every ranked team has an abbreviation on the panel.
+  for (const auto &r : f.rows)
+    CHECK(std::string(top25_abbr(League::NCAA, r.id)) != "?");
+  CHECK_EQ(top25_header(League::NCAA, f), std::string("CFB AP WK 9"));
+  CHECK_EQ(top25_row(League::NCAA, f.rows[0]), std::string(" 1 MIA  7-0"));
+  CHECK_EQ(top25_row(League::NCAA, f.rows[9]), std::string("10 ALA  6-2"));
+  // Five rows to a column: five pages on a single panel, three on a wide one.
+  CHECK_EQ(top25_pages(f, 1), 5u);
+  CHECK_EQ(top25_pages(f, 2), 3u);
+  CHECK_EQ(top25_column(League::NCAA, f, 0, 1, 0),
+           std::string(" 1 MIA  7-0\n 2 OSU  6-1\n 3 UGA  6-1\n 4 IU   7-1\n 5 ND   6-1"));
+  CHECK_EQ(top25_column(League::NCAA, f, 0, 2, 1), top25_column(League::NCAA, f, 1, 1, 0));
+  CHECK_EQ(top25_column(League::NCAA, f, 2, 2, 0), top25_column(League::NCAA, f, 4, 1, 0));
+  CHECK_EQ(top25_column(League::NCAA, f, 2, 2, 1), std::string(""));
+  for (uint32_t pg = 0; pg < 5; pg++) {
+    std::string col = top25_column(League::NCAA, f, pg, 1, 0);
+    size_t at = 0;
+    while (at <= col.size()) {
+      size_t nl = col.find('\n', at);
+      size_t len = (nl == std::string::npos ? col.size() : nl) - at;
+      CHECK(len <= 12);  // 12 columns of a 5x8 font fit a single panel's 62 px
+      if (nl == std::string::npos)
+        break;
+      at = nl + 1;
+    }
+  }
+  // Fresh for 50 days after it came out, not with no clock.
+  CHECK(top25_fresh(f, f.date + 3600));
+  CHECK(top25_fresh(f, f.date + kTop25StaleSecs));
+  CHECK(!top25_fresh(f, f.date + kTop25StaleSecs + 1));
+  CHECK(!top25_fresh(f, 0));
+  CHECK(!top25_fresh(Poll{}, f.date));
+
+  // Basketball's preseason poll: every record 0-0, left off the row.
+  std::string cbb = slurp("fixtures/rankings_mcbb_20261019.json");
+  Poll b;
+  CHECK(parse_rankings(cbb, b));
+  CHECK_EQ(b.rows.size(), (size_t) 25);
+  CHECK_EQ(std::string(b.when), std::string("PRE"));
+  CHECK_EQ(top25_header(League::MCBB, b), std::string("CBB AP PRE"));
+  for (const auto &r : b.rows)
+    CHECK(std::string(top25_abbr(League::MCBB, r.id)) != "?");
+  CHECK_EQ(top25_row(League::MCBB, b.rows[0]), std::string(" 1 FLA"));
+
+  // The poll's name for the header.
+  char when[8];
+  top25_when("Week 15", false, when);
+  CHECK_EQ(std::string(when), std::string("WK 15"));
+  top25_when("Final Rankings", false, when);
+  CHECK_EQ(std::string(when), std::string("FINAL"));
+  top25_when("Week 16", true, when);
+  CHECK_EQ(std::string(when), std::string("FINAL"));
+  Poll final_poll;
+  memcpy(final_poll.when, when, sizeof(when));
+  CHECK_EQ(top25_header(League::NCAA, final_poll), std::string("CFB AP FINAL"));
+  CHECK_EQ(top25_header(League::MCBB, final_poll), std::string("CBB AP FINAL"));
+  top25_when("Bowls", false, when);
+  CHECK_EQ(std::string(when), std::string(""));
+  Poll none;
+  none.rows.push_back(RankRow{});
+  CHECK_EQ(top25_header(League::NCAA, none), std::string("CFB AP TOP 25"));
+
+  // A record that isn't digits and dashes, or is too long, is left off;
+  // a row without a rank or a team is skipped; past 25 rows are dropped.
+  std::string odd = R"({"date":"2026-10-25T07:00Z","occurrence":{"displayValue":"Week 9"},"ranks":[)"
+                    R"J({"current":1,"record":{"summary":"7-0 (5-0)"},"team":{"$ref":"x/teams/2390?a"}},)J"
+                    R"({"current":0,"team":{"$ref":"x/teams/194"}},)"
+                    R"({"current":2,"record":{"summary":"7-0"}},)"
+                    R"({"current":3,"previous":250,"record":{"summary":"123-45-6"},"team":{"$ref":"x/teams/9999"}}]})";
+  Poll o;
+  CHECK(parse_rankings(odd, o));
+  CHECK_EQ(o.rows.size(), (size_t) 2);
+  CHECK_EQ(std::string(o.rows[0].rec), std::string(""));
+  CHECK_EQ(std::string(o.rows[1].rec), std::string(""));
+  CHECK_EQ((int) o.rows[1].prev, 0);
+  CHECK_EQ(top25_row(League::NCAA, o.rows[1]), std::string(" 3 ?"));
+  std::string many = R"({"date":"2026-10-25T07:00Z","ranks":[)";
+  for (int i = 1; i <= 30; i++)
+    many += std::string(i > 1 ? "," : "") + R"({"current":)" + std::to_string(i) + R"(,"team":{"$ref":"x/teams/2390"}})";
+  many += "]}";
+  Poll m;
+  CHECK(parse_rankings(many, m));
+  CHECK_EQ(m.rows.size(), (size_t) kTop25Max);
+  Poll keep = f;
+  std::string empty = R"({"date":"2026-10-25T07:00Z","ranks":[]})";
+  CHECK(!parse_rankings(empty, keep));
+  std::string broken = "{\"ranks\":[{\"current\":1";
+  CHECK(!parse_rankings(broken, keep));
+  CHECK_EQ(keep.rows.size(), (size_t) 25);  // a failed parse leaves the poll alone
+
+  // Football and basketball take turns; one alone takes every turn.
+  CHECK_EQ(top25_next(0, -1), -1);
+  CHECK_EQ(top25_next(3, -1), 0);
+  CHECK_EQ(top25_next(3, 0), 1);
+  CHECK_EQ(top25_next(3, 1), 0);
+  CHECK_EQ(top25_next(1, 0), 0);
+  CHECK_EQ(top25_next(2, 1), 1);
+  CHECK_EQ(top25_next(2, 0), 1);
+}
+
 static void test_countdown() {
   const int64_t m = 60, h = 3600, d = 24 * 3600;
   // Days and hours a day or more out, hours and minutes under a day, then
@@ -5375,6 +5587,74 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
   if (more)
     r.finish();
   return r;
+}
+
+// The news card (news.h): the feed, its headlines, the source in turn and the
+// hourly read.
+static void test_news() {
+  CHECK_EQ(news_url(League::NFL, 0), std::string("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=6"));
+  CHECK_EQ(news_url(League::NCAA, 251),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=6&team=251"));
+  // The recorded feed: six headlines in ESPN's order, one per line.
+  std::string list;
+  CHECK_EQ(parse_news_str(slurp("fixtures/news_nfl.json"), list), 6);
+  CHECK_EQ(msg_count(list), 6u);
+  CHECK_EQ(msg_entries(list, 0, 1), std::string("Cardinals' Budda Baker hopes to stay with Arizona at trade deadline"));
+  CHECK_EQ(msg_entries(list, 5, 1),
+           std::string("Justin Jefferson on down year amid Vikes' 6-0 start: 'What we're doing is working'"));
+  // Cleaned like a message entry: one line, no emoji, cut at kNewsLineMax;
+  // an empty headline is skipped, and no more than kNewsMax are kept.
+  std::string json = "{\"articles\":[{\"headline\":\"  Two\\nlines \xF0\x9F\x8F\x88 here \"},{\"headline\":\"\"},"
+                     "{\"type\":\"Media\"},{\"headline\":\"" + std::string(200, 'x') + "\"}";
+  for (int i = 0; i < 8; i++)
+    json += ",{\"headline\":\"h" + std::to_string(i) + "\"}";
+  json += "]}";
+  CHECK_EQ(parse_news_str(json, list), 6);
+  CHECK_EQ(msg_entries(list, 0, 1), std::string("Two lines here"));
+  CHECK_EQ(msg_entries(list, 1, 1).size(), kNewsLineMax);
+  CHECK_EQ(msg_entries(list, 5, 1), std::string("h3"));
+  // No articles list, or not JSON: a failed read that leaves the list as it was.
+  list = "kept";
+  CHECK_EQ(parse_news_str("{\"header\":\"NFL News\"}", list), -1);
+  CHECK_EQ(parse_news_str("<html>", list), -1);
+  CHECK_EQ(list, std::string("kept"));
+  CHECK_EQ(parse_news_str("{\"articles\":[]}", list), 0);
+  CHECK(list.empty());
+
+  CHECK_EQ(news_header("DAL", "NFL"), std::string("DAL NEWS"));
+  CHECK_EQ(news_header("", "NCAAF"), std::string("NCAAF NEWS"));
+  CHECK_EQ(news_header(nullptr, "MLB"), std::string("MLB NEWS"));
+
+  // One source per read, in turn.
+  std::vector<NewsSource> c = {{League::NFL, 6}, {League::MLB, 0}, {League::NCAA, 251}};
+  NewsSource s;
+  CHECK(news_source(c, 0, s) && s == (NewsSource{League::NFL, 6}));
+  CHECK(news_source(c, 1, s) && s == (NewsSource{League::MLB, 0}));
+  CHECK(news_source(c, 5, s) && s == (NewsSource{League::NCAA, 251}));
+  CHECK(news_source(c, 6, s) && s == (NewsSource{League::NFL, 6}));
+  CHECK(!news_source({}, 0, s));
+
+  // Read once an hour, sooner when the panel stopped following the source,
+  // and not again for kNewsRetryMs after a failure.
+  const uint32_t t = 5000000;
+  CHECK(news_read_due(t, 0, true, 0));
+  CHECK(!news_read_due(t, t - 1000, true, 0));
+  CHECK(!news_read_due(t, t - kNewsReadMs + 1, true, 0));
+  CHECK(news_read_due(t, t - kNewsReadMs, true, 0));
+  CHECK(news_read_due(t, t - 1000, false, 0));
+  CHECK(!news_read_due(t, 0, true, t - 1000));
+  CHECK(!news_read_due(t, t - kNewsReadMs, true, t - kNewsRetryMs + 1));
+  CHECK(news_read_due(t, t - kNewsReadMs, true, t - kNewsRetryMs));
+  // Wraps with millis().
+  CHECK(!news_read_due(1000, 0xFFFFFF00u, true, 0));
+  CHECK(news_showable(3, true));
+  CHECK(!news_showable(3, false));
+  CHECK(!news_showable(0, true));
+  // The card's clock is the message card's, every kNewsEveryMin.
+  CHECK(msg_turn(true, true, false, (uint32_t) kNewsEveryMin * 60000u, kNewsEveryMin, kMsgPageMs) == MsgTurn::SHOW);
+  CHECK(msg_turn(true, true, false, (uint32_t) kNewsEveryMin * 60000u - 1, kNewsEveryMin, kMsgPageMs) ==
+        MsgTurn::NONE);
+  CHECK(msg_turn(true, true, true, kMsgPageMs, kNewsEveryMin, kMsgPageMs) == MsgTurn::HIDE);
 }
 
 // The FCC screen (regulatory.h): every page fits its board, and the words
@@ -6797,6 +7077,7 @@ int main() {
   test_fav_side_polls();
   test_reread_after_poll();
   test_auto_update();
+  test_update_nudge();
   test_update_mark();
   test_boot_log();
   test_health_json();
@@ -6807,9 +7088,11 @@ int main() {
   test_night();
   test_offseason();
   test_countdown();
+  test_rankings();
   test_panel_text();
   test_prefs_sync();
   test_message();
+  test_news();
   test_regulatory();
   test_wifi_history();
   test_ha_events();

@@ -15,6 +15,14 @@ static std::atomic<const char *> site_root{"https://site.api.espn.com/apis/site/
 
 void set_site_root(const char *root) { site_root.store(root, std::memory_order_relaxed); }
 
+static std::atomic<const char *> core_root{"https://sports.core.api.espn.com/v2/sports/"};
+
+void set_core_root(const char *root) { core_root.store(root, std::memory_order_relaxed); }
+
+std::string rankings_url(League league) {
+  return std::string(core_root.load(std::memory_order_relaxed)) + top25_path(league);
+}
+
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
   const LeagueInfo *l = league_info(league);
@@ -36,6 +44,13 @@ std::string team_option(const Team &t) {
 
 std::string team_url(League league, uint32_t espn_id) {
   return site_base(league) + "/teams/" + std::to_string(espn_id);
+}
+
+std::string news_url(League league, uint32_t team_id) {
+  std::string url = site_base(league) + "/news?limit=" + std::to_string(kNewsMax);
+  if (team_id != 0)
+    url += "&team=" + std::to_string(team_id);
+  return url;
 }
 
 std::string schedule_url(League league, uint32_t espn_id) {
@@ -246,6 +261,7 @@ bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_i
                        LeadersStage stage, GameLeaders &out) {
   return parse_summary(json, sport, our_team_id, event_id, stage, out);
 }
+int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)

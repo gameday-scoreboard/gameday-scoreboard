@@ -45,6 +45,10 @@
       "heap": 1850,
       "json": 14444
     },
+    "rankings_ncaa": {
+      "heap": 1042,
+      "json": 13380
+    },
     "scan_mlb_day": {
       "heap": 1075,
       "json": 7003

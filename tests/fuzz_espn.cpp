@@ -226,6 +226,15 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
   }
 
+  {
+    // The Top 25 card's poll, and the rows it draws.
+    Poll poll;
+    ChunkReader r(data, size, chunk);
+    if (parse_rankings(r, poll))
+      for (uint32_t pg = 0; pg < top25_pages(poll, 2); pg++)
+        sink = sink + top25_column(League::NCAA, poll, pg, 2, 1).size() + top25_header(League::MCBB, poll).size();
+  }
+
   GameSnapshot prev;
   for (const Pick &p : picks) {
     std::vector<Upcoming> up;

@@ -78,7 +78,7 @@ The Favorites card has two more switches: **Jump to the action** (off to start) 
 
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).
 
-A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. See [Playlists](/using/favorites/#playlists).
+A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. Coming in the next release: **Playing** also has a row for each sport in your favorites, and the **One per sport** button is gone. See [Playlists](/using/favorites/#playlists).
 
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).
 
@@ -94,6 +94,10 @@ The **Between games** card has **Countdown to the next game**, on unless you tur
 
 :::note[Coming in the next release]
 **Game leaders**, on unless you turn it off, shows each team's top players at halftime and the final: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball. The card takes a turn with the board and the line score, 10 seconds each: once at halftime, and at the final for as long as the final is up. The panel reads the box score once at halftime and once at the final, never during play. See the sport's page for what it shows.
+
+**College Top 25**, on unless you turn it off, shows the AP poll between games while you follow a college football or basketball team. See [College Top 25](/using/top-25/).
+
+**News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
 :::
 
 ### Celebrations
