@@ -1,0 +1,7 @@
+# Bench only, not for merging: stack use on a MoonHub75 panel (bench-stack.h).
+packages:
+  product: !include gameday.yaml
+  bench: !include bench-stack-common.yaml
+
+esphome:
+  build_path: build/bench-stack-moonhub75

@@ -1,0 +1,56 @@
+# Bench only, not for merging. Shared by bench-stack-moonhub75.yaml and
+# bench-stack-scoreboard75.yaml.
+esphome:
+  includes:
+    - bench-stack.h
+  # Per-function frame sizes, in a .su file next to each object file.
+  build_flags:
+    - -fstack-usage
+
+esp32:
+  framework:
+    sdkconfig_options:
+      # uxTaskGetSystemState needs the trace facility.
+      CONFIG_FREERTOS_USE_TRACE_FACILITY: y
+
+interval:
+  - interval: 30s
+    then:
+      - lambda: bench_stack::log_tasks();
+  - interval: 1s
+    then:
+      - lambda: bench_stack::check_loop();
+
+number:
+  - platform: template
+    id: bench_stack_depth
+    name: "Bench Stack Watch Depth"
+    optimistic: true
+    min_value: 2048
+    max_value: 16000
+    step: 32
+    initial_value: 8800
+    restore_value: false
+  - platform: template
+    id: bench_httpd_depth
+    name: "Bench Httpd Watch Depth"
+    optimistic: true
+    min_value: 1024
+    max_value: 4480
+    step: 32
+    initial_value: 3900
+    restore_value: false
+
+button:
+  - platform: template
+    name: "Bench Stack Watch Arm"
+    on_press:
+      - lambda: bench_stack::arm_watch((uint32_t) id(bench_stack_depth).state);
+  - platform: template
+    name: "Bench Stack Watch Clear"
+    on_press:
+      - lambda: bench_stack::disarm_watch();
+  - platform: template
+    name: "Bench Httpd Watch Arm"
+    on_press:
+      - lambda: bench_stack::arm_task_watch("httpd", 4512, (uint32_t) id(bench_httpd_depth).state);

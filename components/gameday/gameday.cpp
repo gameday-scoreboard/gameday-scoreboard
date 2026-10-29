@@ -2050,6 +2050,7 @@ void GamedayComponent::probe_task_(void *arg) {
            redirect ? ::espn::detail::url_host(h.location).c_str() : "");
   self->probe_result_ = (uint8_t) r;
   self->probe_done_ = true;
+  ESP_LOGI("stack", "hwm bytes: gameday_probe=%u (at exit)", (unsigned) uxTaskGetStackHighWaterMark(nullptr));
   vTaskDelete(nullptr);
 }
 
@@ -2545,6 +2546,7 @@ void GamedayComponent::worker_(void *arg) {
   // was writing into belongs to a later cycle by now.
   if (self->worker_seq_ == mine)
     self->job_done_ = true;
+  ESP_LOGI("stack", "hwm bytes: gameday_fetch=%u (at exit)", (unsigned) uxTaskGetStackHighWaterMark(nullptr));
   vTaskDelete(nullptr);
 }
 
