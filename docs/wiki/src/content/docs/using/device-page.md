@@ -92,6 +92,10 @@ Only the ticker switches for sports your panel follows are shown. Hockey and bas
 
 The **Between games** card has **Countdown to the next game**, on unless you turn it off, and **Your own countdown**: a **Name** and a **Day** to count down to, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/).
 
+:::note[Coming in the next release]
+**College Top 25**, on unless you turn it off, shows the AP poll between games while you follow a college football or basketball team. See [College Top 25](/using/top-25/).
+:::
+
 ### Celebrations
 
 The panel fills the screen with a splash when someone scores, in the scoring team's color. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.
