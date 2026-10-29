@@ -1,6 +1,7 @@
 #include "stack_bench.h"
 
 #include <cstring>
+#include <memory>
 
 #include <esp_attr.h>
 #include <esp_cpu.h>
@@ -305,11 +306,17 @@ void StackBench::loop() {
 }
 
 static std::string table_text() {
+  // Called on the web server task, whose 4.5 KB stack has a few hundred bytes
+  // spare: the copy goes on the heap, never on that stack.
+  std::unique_ptr<Table> snap(new Table);
+  if (!snap)
+    return "no memory\n";
+  portENTER_CRITICAL(&mux);
+  memcpy(snap.get(), &table, sizeof(Table));
+  portEXIT_CRITICAL(&mux);
+  const Table &copy = *snap;
   std::string out;
   char buf[160];
-  portENTER_CRITICAL(&mux);
-  Table copy = table;
-  portEXIT_CRITICAL(&mux);
   snprintf(buf, sizeof(buf), "label=%s uptime_s=%u resets=%u setup_cut_s=%u\n", copy.label,
            (unsigned) (millis() / 1000), (unsigned) copy.resets, (unsigned) copy.setup_cut_s);
   out += buf;
