@@ -33,6 +33,7 @@
 #include "startup.h"
 #include "timezones.h"
 #include "wake.h"
+#include "update_nudge.h"
 #include "wifi_history.h"
 
 using namespace espn;
@@ -4755,6 +4756,88 @@ static void test_auto_update() {
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
+static void test_update_nudge() {
+  CHECK(update_important("Important: scores show again after an ESPN change."));
+  CHECK(update_important("  Important: scores show again"));
+  CHECK(!update_important("Scores show again. Important: none"));
+  CHECK(!update_important("important: lower case is a plain release"));
+  CHECK(!update_important("Development build"));
+  CHECK(!update_important(""));
+  CHECK(std::string(update_nudge_text(false)) == "Update ready: open the Game Day app");
+  CHECK(std::string(update_nudge_text(true)) == "Important update ready: open the Game Day app");
+
+  UpdateNudgeInputs in;
+  in.waiting = true;
+  in.clock_valid = true;
+  in.hour = 17;
+  in.today = auto_update_day(2026, 301);
+  in.now = 1000000;
+  UpdateNudgeInputs t = in;
+  UpdateNudgeDay d;
+
+  // Not before 5 PM: the day's hour hasn't started.
+  t.hour = 16;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.day, 0);
+  // A live game or a dark screen at 5 PM holds the start back.
+  t.hour = 17;
+  t.live = true;
+  CHECK(!update_nudge_on(t, d));
+  t.live = false;
+  t.dark = true;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.day, 0);
+  // It starts the first time it may show and runs an hour.
+  t.dark = false;
+  t.now = in.now + 600;
+  CHECK(update_nudge_on(t, d));
+  CHECK_EQ(d.day, in.today);
+  CHECK_EQ(d.since, in.now + 600);
+  t.now += 30 * 60;
+  CHECK(update_nudge_on(t, d));
+  // A live game inside the hour hides it, and the hour keeps running.
+  t.live = true;
+  CHECK(!update_nudge_on(t, d));
+  CHECK_EQ(d.since, in.now + 600);
+  t.live = false;
+  CHECK(update_nudge_on(t, d));
+  t.now = in.now + 600 + kUpdateNudgeS - 1;
+  CHECK(update_nudge_on(t, d));
+  // Once the hour is up it waits for tomorrow, even at 9 PM.
+  t.now = in.now + 600 + kUpdateNudgeS;
+  CHECK(!update_nudge_on(t, d));
+  t.hour = 21;
+  t.now += 3 * 3600;
+  CHECK(!update_nudge_on(t, d));
+  // The next day it starts again at 5 PM, not past midnight.
+  t.today = in.today + 1;
+  t.hour = 0;
+  t.now = in.now + 8 * 3600;
+  CHECK(!update_nudge_on(t, d));
+  t.hour = 17;
+  t.now = in.now + 24 * 3600;
+  CHECK(update_nudge_on(t, d));
+  CHECK_EQ(d.day, in.today + 1);
+  // A clock set back inside the hour hides it rather than stretching it.
+  t.now = in.now + 24 * 3600 - 10;
+  CHECK(!update_nudge_on(t, d));
+
+  // Nothing waiting, Install updates automatically on, or no clock: never,
+  // and the day's hour isn't used up.
+  UpdateNudgeDay fresh;
+  t = in;
+  t.waiting = false;
+  CHECK(!update_nudge_on(t, fresh));
+  t = in;
+  t.auto_on = true;
+  CHECK(!update_nudge_on(t, fresh));
+  t = in;
+  t.clock_valid = false;
+  CHECK(!update_nudge_on(t, fresh));
+  CHECK_EQ(fresh.day, 0);
+  CHECK(update_nudge_on(in, fresh));
+}
+
 static void test_update_mark() {
   UpdateMark m{};
   CHECK(update_mark_boot(m, "2026.10.0", false) == UpdateOutcome::NONE);
@@ -6789,6 +6872,7 @@ int main() {
   test_fav_side_polls();
   test_reread_after_poll();
   test_auto_update();
+  test_update_nudge();
   test_update_mark();
   test_boot_log();
   test_health_json();

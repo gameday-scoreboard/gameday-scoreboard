@@ -171,6 +171,7 @@
     "tz_iana": "string",
     "tz_name": "string",
     "update_failed": "string",
+    "update_important": "bool",
     "version": "string",
     "wake": "bool",
     "wake_now": "string",

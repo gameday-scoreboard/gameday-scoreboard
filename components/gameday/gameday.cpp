@@ -1331,6 +1331,7 @@ void GamedayComponent::loop() {
     this->auto_update_tick_();
     this->night_tick_();
     this->wake_tick_();
+    this->update_nudge_tick_();
     if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
       // A settled run: the plug from this start's brownout comes down
       this->power_settled_ = true;
@@ -2173,6 +2174,42 @@ void GamedayComponent::auto_update_tick_() {
 #endif
       break;
   }
+#endif
+}
+
+// "Update ready" on the ticker (update_nudge.h). The board is redrawn when
+// the line comes or goes, or the release waiting turns important or stops
+// being, since a quiet board can go hours between redraws. Not in the bar
+// build, which always installs on its own.
+void GamedayComponent::update_nudge_tick_() {
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+  if (App.get_updates().empty() || this->time_ == nullptr)
+    return;
+  update::UpdateEntity *u = App.get_updates()[0];
+  ESPTime now = this->time_->now();
+  bool out = u->state == update::UPDATE_STATE_AVAILABLE &&
+             ::espn::version_newer(u->update_info.latest_version, u->update_info.current_version);
+  ::espn::UpdateNudgeInputs in;
+  in.waiting = out && !::espn::update_failed_here(this->update_mark_, u->update_info.latest_version);
+  in.auto_on = this->auto_update();
+  in.clock_valid = now.is_valid();
+  in.hour = now.hour;
+  in.today = ::espn::auto_update_day(now.year, now.day_of_year);
+  in.now = (int64_t) now.timestamp;
+  in.live = this->followed_game_live_();
+  in.dark = this->night_now_ == ::espn::Night::DARK;
+  bool on = ::espn::update_nudge_on(in, this->nudge_day_) && !this->demo_playing_();
+  bool important = out && ::espn::update_important(u->update_info.summary);
+  if (on == this->nudge_on_ && important == this->update_important_)
+    return;
+  if (on != this->nudge_on_)
+    ESP_LOGI(TAG, "Update ready on the ticker: %s", on ? u->update_info.latest_version.c_str() : "off");
+  this->nudge_on_ = on;
+  this->update_important_ = important;
+  if (this->board_ready_)
+    this->emit_({});
+  else
+    this->rebuild_state_(&this->last_fields_);
 #endif
 }
 
@@ -3521,6 +3558,12 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.ha_status_text += " | not updating";
     }
   }
+  // Once a day while a release waits (update_nudge.h). A game going live
+  // takes it off at once, not at the next tick.
+  if (this->nudge_on_ && !this->followed_game_live_() && !this->demo_playing_()) {
+    std::string ready = std::string(::espn::update_nudge_text(this->update_important_)) + " | ";
+    f.status_text = ready + f.status_text;
+  }
   // Until a team, mode or favorite has been picked once, the ticker asks for
   // one. The app comes first; the address is for setting up without an
   // iPhone, over the hotspot and the device page.
@@ -4186,6 +4229,12 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // one; left out when there is none.
   if (this->update_mark_.failed[0] != '\0')
     doc["update_failed"] = (const char *) this->update_mark_.failed;
+#endif
+#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+  // The release waiting is marked important (update_nudge.h); left out
+  // otherwise, and with nothing waiting.
+  if (this->update_important_)
+    doc["update_important"] = true;
 #endif
 #ifdef GAMEDAY_BAR
   // The device page shows the bar beta note and a "Something wrong?" link.
