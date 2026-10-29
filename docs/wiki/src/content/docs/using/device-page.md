@@ -62,7 +62,6 @@ Settings are grouped in cards. In the order the page shows them:
 | **Brightness** | Panel brightness, 1 to 255. |
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. |
 | **Showing** | The Scoreboard page or the Clock page. |
-| **Effects** | Fills the panel with a moving pattern in place of the scoreboard, with an **Effect**, a **Palette**, **Speed** and **Intensity**. Off every time the panel starts. See [Effects](/using/effects/). |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Only today's games** | Between games, Favorite teams skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
@@ -88,7 +87,7 @@ The Panel card starts with a **Nickname** box. Give each panel a name, like "Liv
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
 
 :::note[Coming in the next release]
-An **Effects** card, after Message, fills the panel with one of 52 moving patterns in place of the scoreboard: an **Effects** switch, **Effect** and **Palette** pick lists, and **Speed** and **Intensity** sliders. The board comes back when you turn it off, or when the panel has something to tell you. See [Effects](/using/effects/).
+**Showing** gets a third page, **Effects**: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under it while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. See [Effects](/using/effects/).
 :::
 
 Only the ticker switches for sports your panel follows are shown. Hockey and basketball have no game situation line, so they have no switch of their own.

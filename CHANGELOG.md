@@ -32,7 +32,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 ### ✨ New
 
-- 🎆 **Effects**: fill the panel with one of 52 moving patterns in place of the scoreboard, from the device page or Home Assistant; the board comes back when you turn it off or when the panel has something to tell you
+- 🎆 **Effects**, a third page under **Showing**: one of 52 moving patterns fills the panel in place of the scoreboard; the board comes back when you pick the Scoreboard again or when the panel has something to tell you
 
 ### 🐛 Fixes
 

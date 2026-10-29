@@ -6,37 +6,37 @@ sidebar:
 ---
 
 :::note[Coming in the next release]
-Effects arrive in the next release. A panel on v2026.10.2 doesn't have the **Effects** card yet; everything on this page describes the release after it.
+Effects arrive in the next release. A panel on v2026.10.2 has only the Scoreboard and the Clock under **Showing**; everything on this page describes the release after it.
 :::
 
-**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. The panel keeps following your games underneath, so the moment you turn Effects off the board is up to date, and the device page, the app, Home Assistant and the remote all keep working while a pattern runs.
+**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. The panel keeps following your games underneath, so the moment you go back to the Scoreboard the board is up to date, and the device page, the app, Home Assistant and the remote all keep working while a pattern runs.
 
-Effects is off every time the panel starts. It never comes on by itself.
+Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own.
 
 ## Turning it on
 
-On the [device page](/using/device-page/), the **Effects** card sits after **Message**:
+On the [device page](/using/device-page/), in the Panel card:
 
-1. Turn on **Effects**. A panel that was switched off lights up for it.
-2. Pick an **Effect** and a **Palette**. **Default** is the palette the effect was designed with.
+1. Set **Showing** to **Effects**. A panel that was switched off lights up for it.
+2. Pick an **Effect** and a **Palette** from the controls that appear under it. **Default** is the palette the effect was designed with.
 3. Set **Speed** and **Intensity**, 0 to 255. What intensity does depends on the effect: how many drops in **Rain**, how big the blobs in **Metaballs**, how many fireworks go up.
 
-Turn **Effects** off to get the scoreboard back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
+Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
 
-In [Home Assistant](/using/home-assistant/), the panel has an **Effects** switch, **Effect** and **Effect Palette** selects, and **Effect Speed** and **Effect Intensity** numbers, so an automation can turn a pattern on for a party and off at bedtime. The Game Day app gets the same controls in a later release.
+In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. The Game Day app gets the same controls in a later release.
 
 ## What the panel does while an effect runs
 
-The effect has the whole screen, so the things the panel draws on the board wait until Effects is off: a score and its celebration, the countdown, the line score, another favorite's score banner, your [message card](/using/messages/) and the clock page. Scores still reach Home Assistant and the device page, which show the game as usual.
+The effect has the whole screen, so the things the panel draws on the board wait until you leave the Effects page: a score and its celebration, the countdown, the line score, another favorite's score banner and your [message card](/using/messages/). Scores still reach Home Assistant and the device page, which show the game as usual.
 
-When the panel has something to tell you, or you ask it for the screen, it turns Effects off and the board comes back. The device page and Home Assistant show the switch off, and the panel's log says why. That happens for:
+When the panel has something to tell you, or you ask it for the screen, it switches **Showing** back to **Scoreboard** itself. The device page and Home Assistant show the change, and the panel's log says why. That happens for:
 
 - **Wi-Fi lost**, a Wi-Fi that wants a sign-in, and **No internet** (see [Panel messages](/help/panel-messages/)).
 - The heat or power mark in the corner: **Running warm** or **Power dipped**.
 - A **banner** you send from the device page, the app or Home Assistant. It shows over the board, not over the effect.
 - Holding the button on the controller for the panel's address, and **Show on panel** under **FCC information**.
 - A firmware install, so the panel sits on the board, not a pattern, until it restarts.
-- The night schedule's screen-off, and turning **Panel on** off. While the screen is off for the night, Effects stays off if you try to turn it on.
+- The night schedule's screen-off, and turning **Panel on** off. While the screen is off for the night, picking Effects goes straight back to the Scoreboard.
 
 ## The effects
 

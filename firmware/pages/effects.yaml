@@ -1,22 +1,29 @@
-# Effects mode: WLED's 2D effects (bharvey88/esphome-wled-fx) full screen in
-# place of the scoreboard. wled_fx needs the display handed over to it, so
-# while the Effects switch is on it draws every frame straight into the HUB75
-# display and LVGL is paused; switching off hands the screen back and repaints
-# the scoreboard. The scoreboard keeps polling ESPN underneath, and the
-# device page, Home Assistant and the remote keep working.
+# Effects: WLED's 2D effects (bharvey88/esphome-wled-fx) full screen in place
+# of the scoreboard, as the third page under "Showing" (the lvgl_page_manager
+# select "Select Page": Scoreboard, Clock, Effects). wled_fx needs the display
+# handed over to it, so while the Effects page is showing it draws every frame
+# straight into the HUB75 display and LVGL is paused; leaving the page resumes
+# LVGL and repaints the board. The scoreboard keeps polling ESPN underneath,
+# and the device page, Home Assistant and the remote keep working.
+#
+# The Effects page is an empty black LVGL page: its on_load starts the effect
+# (gd_fx_start), and the page select's state callback stops it (gd_fx_stop)
+# whenever the selection is anything else, whoever changed it. The page
+# manager has no saved page, so every boot starts on the Scoreboard and an
+# effect never comes back on its own.
 #
 # What shows while an effect runs: the effect, nothing else. The panel's own
 # pages are LVGL, which is paused, so a score, the countdown, the line score,
-# a favorite's score banner and the message card wait until Effects is off.
+# a favorite's score banner and the message card wait until the page changes.
 # Anything that tells the owner something is wrong, or is the owner asking
-# for the screen, takes it back by turning Effects off, with the reason in the
-# log (gd_fx_yield): Wi-Fi lost and a Wi-Fi that wants a sign-in
+# for the screen, takes it back by putting the Scoreboard page up, with the
+# reason in the log (gd_fx_yield): Wi-Fi lost and a Wi-Fi that wants a sign-in
 # (pages/boot.yaml, the captive action), no internet, the heat or power mark
 # (pages/guard.yaml), a banner the owner sent (pages/message.yaml), the boot
 # button's address, the QC and FCC screens, a firmware install
 # (gameday-common.yaml ota), the night schedule's screen-off, and Power off.
-# Effects is off after every reboot. The brightness, Brightness number and
-# night dimming are the HUB75 driver's, so they apply to an effect too.
+# The brightness, Brightness number and night dimming are the HUB75 driver's,
+# so they apply to an effect too.
 
 external_components:
   - source: github://bharvey88/esphome-wled-fx@v0.6.0
@@ -89,8 +96,8 @@ wled_fx:
   # Internal RAM is what the HTTPS fetches run out of on this panel, so the
   # canvas and frame buffer stay in PSRAM.
   canvas_memory: psram
-  # Leave the main loop tick alone while effects are off; the switch below
-  # shortens it only while an effect runs.
+  # Leave the main loop tick alone while no effect runs; gd_fx_start below
+  # shortens it only while one does.
   loop_interval: never
 
 globals:
@@ -98,14 +105,12 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
-  # What the Effects switch publishes. The switch is not optimistic: a
-  # refused turn-on (night screen-off, a wled_fx that failed setup) reads
-  # off everywhere, and the switch's own setup can't take the screen.
+  # True while wled_fx has the display
   - id: gd_fx_on
     type: bool
     restore_value: no
     initial_value: 'false'
-  # Set by the turn-on action's checks for the lvgl.pause that follows them
+  # Set by gd_fx_start's checks for the lvgl.pause that follows them
   - id: gd_fx_arm
     type: bool
     restore_value: no
@@ -118,16 +123,25 @@ globals:
 esphome:
   on_boot:
     # wled_fx sets up at LATE (-100). Park its loop so an idle panel never
-    # renders a frame, then let the switch actions run.
+    # renders a frame, then let the page scripts run.
     - priority: -200.0
       then:
         - lambda: |-
             id(gd_fx).disable_loop();
             id(gd_fx_boot_done) = true;
+            // The page select publishes on every change, from the device
+            // page, Home Assistant, the Page Next button or a yield below.
+            // Anything but Effects ends the effect; the Effects page's own
+            // on_load starts it once the page is up.
+            id(page_manager).add_on_state_callback([](size_t index) {
+              if (strcmp(id(page_manager).option_at(index), "Effects") != 0)
+                id(gd_fx_stop).execute();
+            });
 
 script:
   # The screen goes back to the scoreboard: something the owner should see,
-  # or asked for, is about to show. A no-op while Effects is off.
+  # or asked for, is about to show. A no-op while no effect runs. Showing
+  # the page publishes Scoreboard, and the callback above stops the effect.
   - id: gd_fx_yield
     parameters:
       reason: string
@@ -136,8 +150,87 @@ script:
           condition:
             lambda: 'return id(gd_fx_on);'
           then:
-            - lambda: 'ESP_LOGI("effects", "Effects off: %s", reason.c_str());'
-            - switch.turn_off: gd_effects
+            - lambda: |-
+                ESP_LOGI("effects", "Effects off: %s", reason.c_str());
+                id(page_manager).show_page("gameday_live");
+
+  # The Effects page just loaded. A wled_fx that failed setup (no canvas)
+  # must not take the screen, and neither may an effect while the night
+  # schedule has the screen off: it would run unseen and come back at the
+  # end of the night. Either way the select goes back to Scoreboard on the
+  # next loop (this runs inside LVGL's screen-loaded event).
+  - id: gd_fx_start
+    then:
+      - lambda: |-
+          id(gd_fx_arm) = false;
+          if (!id(gd_fx_boot_done) || id(gd_fx_on))
+            return;
+          const char *why = nullptr;
+          if (id(gd_fx).is_failed())
+            why = "wled_fx did not set up";
+          else if (id(gameday_ctl).guard_brightness(255) == 0)
+            why = "the night schedule has the screen off";
+          if (why != nullptr) {
+            ESP_LOGI("effects", "Effects stays off: %s", why);
+            App.scheduler.set_timeout(id(gd_fx), "gd_fx_back", 0, []() { id(page_manager).show_page("gameday_live"); });
+            return;
+          }
+          id(gd_fx_arm) = true;
+      - if:
+          condition:
+            lambda: 'return id(gd_fx_arm);'
+          then:
+            - lvgl.pause:
+            - lambda: |-
+                id(gd_fx_arm) = false;
+                id(gd_fx_on) = true;
+                // Whoever asked for an effect wants to see it, as a team pick
+                // lights a dark panel (user_pick in gameday-common.yaml).
+                if (!id(power).state)
+                  id(power).turn_on();
+                // ESPHome's 16 ms tick rounds a 23 ms frame up to 32 ms. Ask
+                // for a shorter tick only while an effect runs.
+                id(gd_fx_saved_loop_ms) = App.get_loop_interval();
+                App.set_loop_interval(8);
+                id(gd_fx).reset_frame_clock();
+                // Start a fresh profiler window; wled_fx only restarts it on
+                // an effect change.
+                id(gd_fx).reset_profile(millis());
+                id(gd_fx).enable_loop();
+                ESP_LOGI("effects", "Effects on: %s", id(gd_fx).current_effect_name().c_str());
+
+  # The page select left Effects. LVGL's pending page change (it was paused)
+  # runs once it resumes; the repaint covers the board's own screen.
+  - id: gd_fx_stop
+    then:
+      - if:
+          condition:
+            lambda: 'return id(gd_fx_on);'
+          then:
+            - lambda: |-
+                id(gd_fx_on) = false;
+                id(gd_fx).disable_loop();
+                App.set_loop_interval(id(gd_fx_saved_loop_ms));
+            - lvgl.resume:
+            # LVGL marked nothing dirty while paused, so the whole scoreboard
+            # must be redrawn over the last effect frame.
+            - script.execute: gd_repaint
+
+# The Effects page: black, nothing on it; wled_fx draws over it.
+lvgl:
+  pages:
+    - id: gd_fx_page
+      bg_color: 0x000000
+      scrollbar_mode: "OFF"
+      on_load:
+        then:
+          - script.execute: gd_fx_start
+
+lvgl_page_manager:
+  pages:
+    - page: gd_fx_page
+      friendly_name: "Effects"
+      order: 10
 
 gameday:
   on_action:
@@ -198,74 +291,6 @@ gameday:
               id: gd_fx_yield
               reason: "the FCC information"
 
-switch:
-  - platform: template
-    name: "Effects"
-    id: gd_effects
-    icon: "mdi:auto-fix"
-    # Always back on the scoreboard after a reboot.
-    restore_mode: ALWAYS_OFF
-    lambda: 'return id(gd_fx_on);'
-    turn_on_action:
-      # The off action also fires during this switch's own setup, before LVGL
-      # and wled_fx exist; the on_boot step above lifts the guard. A repeated
-      # turn_on (a template switch runs its action on every call) must not
-      # save the 8 ms tick as the one to restore. A wled_fx that failed setup
-      # (no canvas) must not take the screen, and neither may an effect while
-      # the night schedule has the screen off: it would run unseen and come
-      # back at the end of the night.
-      - lambda: |-
-          id(gd_fx_arm) = false;
-          if (!id(gd_fx_boot_done) || id(gd_fx_on))
-            return;
-          if (id(gd_fx).is_failed()) {
-            ESP_LOGW("effects", "Effects stays off: wled_fx did not set up");
-            id(gd_effects).publish_state(false);
-            return;
-          }
-          if (id(gameday_ctl).guard_brightness(255) == 0) {
-            ESP_LOGI("effects", "Effects stays off: the night schedule has the screen off");
-            id(gd_effects).publish_state(false);
-            return;
-          }
-          id(gd_fx_arm) = true;
-      - if:
-          condition:
-            lambda: 'return id(gd_fx_arm);'
-          then:
-            - lvgl.pause:
-            - lambda: |-
-                id(gd_fx_arm) = false;
-                id(gd_fx_on) = true;
-                // Whoever asked for an effect wants to see it, as a team pick
-                // lights a dark panel (user_pick in gameday-common.yaml).
-                if (!id(power).state)
-                  id(power).turn_on();
-                // ESPHome's 16 ms tick rounds a 23 ms frame up to 32 ms. Ask
-                // for a shorter tick only while an effect runs.
-                id(gd_fx_saved_loop_ms) = App.get_loop_interval();
-                App.set_loop_interval(8);
-                id(gd_fx).reset_frame_clock();
-                // Start a fresh profiler window; wled_fx only restarts it on
-                // an effect change.
-                id(gd_fx).reset_profile(millis());
-                id(gd_fx).enable_loop();
-                id(gd_effects).publish_state(true);
-    turn_off_action:
-      - if:
-          condition:
-            lambda: 'return id(gd_fx_on);'
-          then:
-            - lambda: |-
-                id(gd_fx_on) = false;
-                id(gd_fx).disable_loop();
-                App.set_loop_interval(id(gd_fx_saved_loop_ms));
-            - lvgl.resume:
-            # LVGL marked nothing dirty while paused, so the whole scoreboard
-            # must be redrawn over the last effect frame.
-            - script.execute: gd_repaint
-      - lambda: 'id(gd_effects).publish_state(false);'
-
 select:
   - platform: wled_fx
     wled_fx_id: gd_fx
@@ -294,8 +319,8 @@ number:
     id: gd_fx_intensity
     icon: "mdi:tune"
 
-# Diagnostic sensors gated on the switch, so all three read NA while Effects
-# is off, and during wled_fx's one second warm-up after an effect change,
+# Diagnostic sensors gated on the effect, so all three read NA while none
+# runs, and during wled_fx's one second warm-up after an effect change,
 # when its averages are still zero.
 sensor:
   - platform: template

@@ -187,7 +187,7 @@ packages:
   boot: !include pages/boot.yaml
   scoreboard: !include pages/gameday-live.yaml
   wizmote: !include pages/wizmote.yaml
-  # WLED effects full screen in place of the board (the Effects switch)
+  # WLED effects full screen in place of the board (the Effects page)
   effects: !include pages/effects.yaml
   # Factory check (the flag factory_flash.py leaves, or POST /gameday/action?do=qc)
   qc: !include pages/qc.yaml
