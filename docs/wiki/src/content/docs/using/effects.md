@@ -36,7 +36,7 @@ When the panel has something to tell you, or you ask it for the screen, it switc
 - A **banner** you send from the device page, the app or Home Assistant. It shows over the board, not over the effect.
 - Holding the button on the controller for the panel's address, and **Show on panel** under **FCC information**.
 - A firmware install, so the panel sits on the board, not a pattern, until it restarts.
-- The night schedule's screen-off, and turning **Panel on** off. While the screen is off for the night, picking Effects goes straight back to the Scoreboard.
+- The night schedule's screen-off, and turning **Panel on** off. Picking Effects while the panel is dim or dark for the night turns night mode off for the rest of the night, the same as **Panel on** or a team pick.
 
 ## The effects
 

@@ -155,26 +155,24 @@ script:
                 id(page_manager).show_page("gameday_live");
 
   # The Effects page just loaded. A wled_fx that failed setup (no canvas)
-  # must not take the screen, and neither may an effect while the night
-  # schedule has the screen off: it would run unseen and come back at the
-  # end of the night. Either way the select goes back to Scoreboard on the
-  # next loop (this runs inside LVGL's screen-loaded event).
+  # must not take the screen: the select goes back to Scoreboard on the next
+  # loop (this runs inside LVGL's screen-loaded event). Picking Effects while
+  # the night schedule has the panel dim or dark skips the rest of the night,
+  # as Power on or a team pick does (night_skip, components/gameday), or the
+  # effect would run on a dark panel; a night that starts while an effect
+  # runs still wins (the guard hook above).
   - id: gd_fx_start
     then:
       - lambda: |-
           id(gd_fx_arm) = false;
           if (!id(gd_fx_boot_done) || id(gd_fx_on))
             return;
-          const char *why = nullptr;
-          if (id(gd_fx).is_failed())
-            why = "wled_fx did not set up";
-          else if (id(gameday_ctl).guard_brightness(255) == 0)
-            why = "the night schedule has the screen off";
-          if (why != nullptr) {
-            ESP_LOGI("effects", "Effects stays off: %s", why);
+          if (id(gd_fx).is_failed()) {
+            ESP_LOGI("effects", "Effects stays off: wled_fx did not set up");
             App.scheduler.set_timeout(id(gd_fx), "gd_fx_back", 0, []() { id(page_manager).show_page("gameday_live"); });
             return;
           }
+          id(gameday_ctl).night_skip("the Effects page");
           id(gd_fx_arm) = true;
       - if:
           condition:
