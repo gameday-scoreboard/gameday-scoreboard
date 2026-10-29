@@ -51,6 +51,7 @@
 #include "settings_doc.h"
 #include "startup.h"
 #include "update_nudge.h"
+#include "weather.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -138,6 +139,18 @@ struct UpdateFields {
   // custom countdown's day. 0 when the board shows something else.
   int64_t countdown_at{0};
   int64_t countdown_end{0};
+  // The weather card (weather.h) on the same screen: wx_card while it has
+  // the board. wx_text is what it says when it has no forecast to draw ("Set
+  // a town on the device page"); otherwise the temperature now, today's high
+  // and low, the words and icon for the sky, and the next two days.
+  bool wx_card{false};
+  std::string wx_text;
+  int wx_temp{0}, wx_hi{0}, wx_lo{0};
+  uint8_t wx_icon{0};  // ::espn::WxIcon
+  std::string wx_words;
+  std::string wx_d1, wx_d2;            // "Thu"
+  std::string wx_d1_hilo, wx_d2_hilo;  // "80/66"
+  uint8_t wx_d1_icon{0}, wx_d2_icon{0};
 };
 
 enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
@@ -323,8 +336,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_ticker_odds(bool on) { this->set_flag_(FLAG_ODDS, on); }
   void set_opponent_splashes(bool on) { this->set_flag_(FLAG_OPP, on); }
   // The between-games cards' switches (cards.h): the device page's list,
-  // cards= and the backup. The countdown and the news card keep the switches
-  // they had before the list.
+  // cards= and the backup. The countdown, the news card and the weather card
+  // keep the switches they had before the list.
   bool card_on(::espn::Card c) const;
   void set_card(::espn::Card c, bool on);
   // The next game's countdown card, on unless the owner turns it off.
@@ -350,6 +363,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The news card (news.h), off unless the owner turns it on.
   bool news_on() const { return this->countdown_.news == 1; }
   void set_news(bool on);
+  // The weather card (weather.h): off until a town is set, then on.
+  bool weather_on() const { return this->wx_.on != 0; }
+  void set_weather(bool on);
+  // The owner's town. A new one is looked up with Open-Meteo on the fetch
+  // task and turns the card on; "" clears the town and turns it off.
+  void set_town(const std::string &town);
+  // What the panel has downloaded from Open-Meteo since boot, and the reads.
+  uint64_t wx_bytes() const { return this->wx_bytes_.load(); }
+  uint32_t wx_requests() const { return this->wx_requests_.load(); }
+  // The board's last update, for gd_wx_card in firmware/pages/gameday-live.yaml.
+  const UpdateFields &last_update() const { return this->last_fields_; }
   // "Install updates automatically", off unless the owner turns it on.
 #ifdef GAMEDAY_BAR
   // The bar build (firmware/pages/bar.yaml) always installs from the beta
@@ -716,6 +740,37 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
   void save_countdown_();
+  // The weather card's settings (weather.h), in their own blob: the town as
+  // typed, the place the geocoder found and its coordinates, the switch. The
+  // forecast itself is read again at boot. Fixed size, like the night blob.
+  struct PrefsWx {
+    char town[::espn::kTownMax + 1];
+    char place[::espn::kPlaceMax + 1];
+    float lat, lon;
+    uint8_t on;
+    uint8_t spare[3];
+  } __attribute__((packed));
+  ESPPreferenceObject wx_pref_;
+  PrefsWx wx_{};
+  void load_wx_();
+  void save_wx_();
+  bool wx_place_known_() const { return this->wx_.place[0] != '\0'; }
+  ::espn::WxForecast wx_forecast_;  // main loop only
+  bool wx_lookup_due_{false};       // a town waits for its lookup
+  int wx_lookup_status_{-1};  // the last lookup's HTTP status, 0 no answer, -1 waiting or none yet
+  int wx_status_{-1};         // the last forecast read's status, 0 no answer, -1 none yet
+  uint32_t wx_read_ms_{0};    // millis() of the last good forecast read, 0 = none this boot
+  uint32_t wx_fail_ms_{0};    // millis() of the last failed read or lookup, 0 = none since
+  uint32_t wx_backoff_ms_{0}; // the wait that failure started (poll_timing.h, the weather's own run)
+  ::espn::Backoff wx_fail_;
+  bool wx_due_() const;      // a lookup or a forecast read is due now
+  bool wx_card_ready_() const;  // the card has a turn (weather.h)
+  void start_wx_job_();
+  void run_wx_job_();
+  void apply_wx_job_();
+  void wx_fields_(UpdateFields &f);
+  std::atomic<uint64_t> wx_bytes_{0};
+  std::atomic<uint32_t> wx_requests_{0};
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
   // size is fixed for the same reason as Prefs7's.
   struct Prefs9 {
@@ -844,6 +899,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     PsString news_list;
     int news_n{-1};  // headlines read, -1 for a failed read
     uint32_t news_bytes{0};
+    // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
+    // on this task so it never runs alongside an ESPN read.
+    uint8_t need_wx{0};
+    std::string wx_url;
+    std::string wx_town;  // the town the lookup is for
+    float wx_lat{0}, wx_lon{0};  // the place the forecast is for
+    ::espn::WxPlace wx_place;
+    ::espn::WxForecast wx_forecast;
+    bool wx_ok{false};
+    int wx_status{0};  // HTTP status, 0 for no answer
+    uint32_t wx_retry_after_ms{0};
   };
   void start_job_();
   void start_worker_();

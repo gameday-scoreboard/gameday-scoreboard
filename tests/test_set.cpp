@@ -63,6 +63,8 @@ struct Settings {
   int sport{0};  // the sport row playing, 1 + Sport; 0 = none
   uint16_t live_mask{0};
   std::string msg, msgurl, nick, hook;
+  std::string town;
+  bool wxon{false};
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -88,6 +90,7 @@ bool *own_switch(Settings &s, Card c) {
     case Card::TOP25: return &s.top25;
     case Card::NEWS: return &s.news;
     case Card::LEADERS: return &s.gameleaders;
+    case Card::WEATHER: return &s.wxon;
     default: return nullptr;
   }
 }
@@ -181,6 +184,9 @@ void load(Settings &s, JsonObjectConst o) {
   flag("top25", s.top25);
   flag("news", s.news);
   flag("gameleaders", s.gameleaders);
+  flag("wxon", s.wxon);
+  if (o["town"].is<const char *>())
+    s.town = o["town"].as<const char *>();
   // As the backup lists them: {"next": true, ...}.
   for (JsonPairConst p : o["cards"].as<JsonObjectConst>())
     if (const CardRow *r = card_row(p.key().c_str()))
@@ -311,6 +317,15 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::NICK: s.nick = op.text; break;
     case SetKind::HOOK: s.hook = op.text; break;
     case SetKind::PREGAME: s.pregame = op.value; break;
+    // set_town(): a new town turns the card on, "" turns it off, the same
+    // town again leaves the switch alone.
+    case SetKind::TOWN:
+      if (op.text != s.town) {
+        s.town = op.text;
+        s.wxon = !op.text.empty();
+      }
+      break;
+    case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -395,6 +410,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["nick"] = s.nick;
   doc["hook"] = s.hook;
   doc["pregame"] = s.pregame;
+  doc["town"] = s.town;
+  doc["wxon"] = s.wxon;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -460,7 +477,7 @@ void test_cards() {
     seen |= card_bit(r.card);
     // A card saved in cards_off keeps its bit through a load; the countdown and
     // news keep their own bytes.
-    bool own = r.card == Card::COUNTDOWN || r.card == Card::NEWS;
+    bool own = r.card == Card::COUNTDOWN || r.card == Card::NEWS || r.card == Card::WEATHER;
     SCHECK(((kCardsOffBits & card_bit(r.card)) != 0) == !own, "card %s: cards_off keeps its bit", r.id);
     // A saved 0 is the default for a card in cards_off, so every one is on by default.
     SCHECK(own || r.on, "card %s: on by default", r.id);
@@ -522,11 +539,11 @@ void test_parse_set() {
   SCHECK(parse_set("countdown", "0", op, kFavMax) && op.kind == SetKind::COUNTDOWN && !op.on, "countdown 0");
   SCHECK(parse_set("top25", "0", op, kFavMax) && op.kind == SetKind::TOP25 && !op.on, "top25 0");
   SCHECK(parse_set("gameleaders", "0", op, kFavMax) && op.kind == SetKind::GAMELEADERS && !op.on, "gameleaders 0");
-  SCHECK(parse_set("cards", "next:0,clock:1,weather:1", op, kFavMax) && op.kind == SetKind::CARDS &&
+  SCHECK(parse_set("cards", "next:0,clock:1,standings:1", op, kFavMax) && op.kind == SetKind::CARDS &&
              op.mask == (card_bit(Card::NEXT) | card_bit(Card::CLOCK)) && op.value == card_bit(Card::CLOCK) &&
-             op.refused.size() == 1 && op.refused[0] == "weather:1",
+             op.refused.size() == 1 && op.refused[0] == "standings:1",
          "cards: two known, one left out");
-  SCHECK(!parse_set("cards", "weather:1", op, kFavMax), "cards naming none it has");
+  SCHECK(!parse_set("cards", "standings:1", op, kFavMax), "cards naming none it has");
   SCHECK(!parse_set("cards", "", op, kFavMax), "cards empty");
   SCHECK(!parse_set("cards", "next", op, kFavMax), "cards with no value");
   SCHECK(parse_set("cdname", "  Christmas \n", op, kFavMax) && op.kind == SetKind::CD_NAME && op.text == "Christmas",

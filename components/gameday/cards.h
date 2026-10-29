@@ -17,9 +17,9 @@ namespace espn {
 
 // The bit each card has in the saved cards_off mask (set means off, so a
 // saved 0 is every card on). Append only: a saved bit keeps its meaning
-// across updates. The countdown and the news card keep the bytes they had
-// before the list, so a downgrade keeps those choices; their bits are never
-// set.
+// across updates. The countdown, the news card and the weather card keep the
+// switches they had before the list, so a downgrade keeps those choices;
+// their bits are never set.
 enum class Card : uint8_t {
   LEADERS = 0,
   NEXT = 1,
@@ -30,6 +30,7 @@ enum class Card : uint8_t {
   COUNTDOWN = 6,
   NEWS = 7,
   PICTURE = 8,
+  WEATHER = 9,
 };
 
 constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
@@ -58,6 +59,7 @@ constexpr CardRow kCards[] = {
     {Card::LEADERS,   "gameleaders", "Game leaders",               true,  ""},
     {Card::TOP25,     "top25",       "College Top 25",             true,  "Only while you follow a college football or basketball team"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},
+    {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
 };
 // clang-format on
 constexpr size_t kCardCount = sizeof(kCards) / sizeof(kCards[0]);

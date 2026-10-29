@@ -43,13 +43,16 @@
     "picture": true,
     "gameleaders": true,
     "top25": true,
-    "news": false
+    "news": false,
+    "weather": true
   },
   "countdown": true,
   "top25": true,
   "news": false,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
+  "town": "75019",
+  "wxon": true,
   "gameleaders": true,
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",

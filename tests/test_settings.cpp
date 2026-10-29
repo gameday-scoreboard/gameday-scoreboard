@@ -279,13 +279,13 @@ void test_left_out() {
 
   // The Between games list: a card from newer firmware is left out and
   // listed, the rest applied; a card the backup doesn't name stays as it is.
-  in = import(R"({"schema":1,"cards":{"next":false,"weather":true,"news":true}})");
+  in = import(R"({"schema":1,"cards":{"next":false,"standings":true,"news":true}})");
   const SetOp *cards = find(in, SetKind::CARDS);
-  SCHECK(in.error.empty() && skipped(in, "cards=weather") && cards != nullptr &&
+  SCHECK(in.error.empty() && skipped(in, "cards=standings") && cards != nullptr &&
              cards->mask == (card_bit(Card::NEXT) | card_bit(Card::NEWS)) && cards->value == card_bit(Card::NEWS),
          "the cards list didn't come back as next off, news on: '%s'", in.error.c_str());
-  in = import(R"({"schema":1,"cards":{"weather":true},"down":false})");
-  SCHECK(in.error.empty() && skipped(in, "cards=weather") && find(in, SetKind::CARDS) == nullptr &&
+  in = import(R"({"schema":1,"cards":{"standings":true},"down":false})");
+  SCHECK(in.error.empty() && skipped(in, "cards=standings") && find(in, SetKind::CARDS) == nullptr &&
              find(in, SetKind::DOWN) != nullptr,
          "a list naming only a card this firmware lacks wasn't left out alone");
   // A backup from before the list: the countdown's own key still restores it.
