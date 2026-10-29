@@ -61,6 +61,18 @@ A playlist is a group of your favorites with a name, like your football teams or
 - Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
 - **Playing**, under **Favorite teams** on the device page, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
 
+### A row for each sport
+
+:::note[Coming in the next release]
+When your favorites cover more than one sport, **Playing** has a row for each of them after **All favorites**, then your own playlists:
+
+- **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
+- Picking one plays every favorite in that sport, with the same rules as a playlist: **Only today's games**, **Take over** and the rest.
+- You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
+- They aren't playlists: they don't show in the **Playlists** card, and don't count toward the 16. You can put one on a remote button in the **Remote** card. A playlist of your own named Football sits beside **All football**.
+- The **One per sport** button is gone, since these rows do its job and never go out of date. Playlists it made before stay until you remove them.
+:::
+
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
 
 The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below.
@@ -74,7 +86,7 @@ Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorit
 Once you have a playlist, buttons 1 to 4 play your first four playlists instead. The panel switches to Favorite teams, plays that playlist, and shows its name for a moment. A button with no playlist does nothing. With no playlists, the buttons stay your first four favorites.
 
 :::note[Coming in the next release]
-Making a playlist no longer changes the remote. Buttons 1 to 4 stay on your first four favorites until you pick something else for them in the **Remote** card on the device page: any favorite, any playlist, all favorites or nothing. The order of your playlists no longer matters for the remote. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+Making a playlist no longer changes the remote. Buttons 1 to 4 stay on your first four favorites until you pick something else for them in the **Remote** card on the device page: any favorite, any playlist, a sport row like **All football**, all favorites or nothing. The order of your playlists no longer matters for the remote. See [The numbered buttons](/using/remote/#the-numbered-buttons).
 :::
 
 ## On the device page

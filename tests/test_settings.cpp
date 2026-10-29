@@ -236,10 +236,14 @@ void test_refused() {
            in.ops.size(), in.skipped.size());
   }
   SCHECK(skipped(import(R"({"schema":1,"mode":6})"), "mode=6"), "mode=6 isn't listed");
-  SettingsImport rb = import(R"({"schema":1,"remote1":"sport:football","remote2":"list:Sundays"})");
-  SCHECK(rb.error.empty() && skipped(rb, "remote1=sport:football") && rb.ops.size() == 1 &&
+  SettingsImport rb = import(R"({"schema":1,"remote1":"sport:racing","remote2":"list:Sundays"})");
+  SCHECK(rb.error.empty() && skipped(rb, "remote1=sport:racing") && rb.ops.size() == 1 &&
              rb.ops[0].kind == SetKind::REMOTE && rb.ops[0].slot == 2,
          "a button value from newer firmware is left out, the rest restore");
+  SettingsImport rs = import(R"({"schema":1,"remote3":"sport:football"})");
+  SCHECK(rs.error.empty() && rs.skipped.empty() && rs.ops.size() == 1 && rs.ops[0].kind == SetKind::REMOTE &&
+             rs.ops[0].value == (int) RemoteKind::SPORT && rs.ops[0].team.league == 1,
+         "a button on a sport row restores");
   SCHECK(!import(R"({"schema":1,"remote1":4})").error.empty(), "a button value that isn't text is refused");
   SCHECK(skipped(import(R"({"schema":1,"scroll":11})"), "scroll=11"), "scroll=11 isn't listed");
 
@@ -374,6 +378,19 @@ void test_playlists() {
   refused(R"({"schema":1,"lists":[{"n":"Pros"}]})", "a playlist with no teams list");
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":["cowboys"]}]})", "a playlist team that isn't a team");
   refused(R"({"schema":1,"lists":[{"n":"Pros","t":[6]}]})", "a playlist team as a number");
+
+  // The sport row playing, by its word; one this firmware has no row for is listed.
+  in = import(R"({"schema":1,"list":0,"sport":"basketball"})");
+  SCHECK(in.error.empty() && find(in, SetKind::SPORT) != nullptr && find(in, SetKind::SPORT)->value == 3,
+         "sport wasn't applied");
+  in = import(R"({"schema":1,"sport":"racing"})");
+  SCHECK(in.error.empty() && skipped(in, "sport=racing") && find(in, SetKind::SPORT) == nullptr,
+         "a sport this firmware doesn't know wasn't listed");
+  refused(R"({"schema":1,"sport":3})", "sport as a number");
+  JsonDocument st, out;
+  deserializeJson(st, R"({"sport":"hockey"})");
+  settings_from_state(st.as<JsonObjectConst>(), 0, -1, -1, out);
+  SCHECK(std::string(out["sport"] | "") == "hockey", "the export left the sport row out");
 }
 
 // The fullest export the panel can write comes back through its own import:

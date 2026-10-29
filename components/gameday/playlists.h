@@ -2,7 +2,9 @@
 // one of them, or every favorite when none is chosen, and a WizMote button
 // can be set to one (remote.h). A playlist is kept as a mask over the favorites
 // list, so it costs no team storage of its own and only the favorites are
-// ever read from ESPN.
+// ever read from ESPN. Beside them, a sport row per sport in the favorites
+// plays that sport's favorites; it is worked out from the favorites each
+// time, so nothing about it is saved but which one plays.
 // Pure, no ESPHome includes, so the host tests cover it.
 #pragma once
 
@@ -10,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "leagues.h"
 #include "message.h"
 #include "set_request.h"
 
@@ -96,6 +99,31 @@ inline uint16_t remap_mask(uint16_t mask, const std::vector<TeamRef> &before, co
 // teams left, so choosing it never leaves the panel blank.
 inline bool list_has(uint16_t mask, bool chosen, size_t i) {
   return !chosen || mask == 0 || (i < 16 && ((mask >> i) & 1u) != 0);
+}
+
+// ---- Sport rows ---------------------------------------------------------------
+
+// Playing's and Home Assistant's names for them, in Sport order (the keys
+// are leagues.h's kSportKeys). "All ..." beside All favorites, so an owner's
+// own playlist named Football never shares a name with one.
+constexpr const char *kSportRowNames[kSportCount] = {"All football", "All baseball", "All basketball", "All hockey",
+                                                     "All soccer"};
+
+// The bit of a favorite's sport (bit s = Sport s), 0 for a league byte this
+// firmware doesn't know.
+inline uint8_t sport_bit(uint8_t league) {
+  const LeagueInfo *l = league_info((League) league);
+  return l != nullptr ? (uint8_t) (1u << (uint8_t) l->sport) : 0;
+}
+
+// The sports with a row in Playing, from the bits of every favorite's sport:
+// all of them with two sports or more, none with one, since All favorites
+// already is that sport.
+inline uint8_t sport_rows(uint8_t sports) { return (sports & (sports - 1)) != 0 ? sports : 0; }
+
+// Is row (1 + Sport) one of these rows?
+inline bool sport_row_has(uint8_t rows, uint8_t row) {
+  return row >= 1 && row <= kSportCount && ((rows >> (row - 1)) & 1u) != 0;
 }
 
 }  // namespace espn

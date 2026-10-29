@@ -63,6 +63,10 @@ The ticker also says when something needs your attention:
 - **Favorites: add teams in the app or on the page**: the panel is in Favorite teams with no favorites.
 - **No live games, showing** and a team, like "No live NFL games, showing DAL": Live games found nothing on, so it shows your first favorite until a game starts. See [Show: Favorite teams, Live games](/using/modes/#when-nothing-is-live).
 
+:::note[Coming in the next release]
+- **Update ready: open the Game Day app**: a new firmware release is out. It shows for an hour a day, starting at 5 PM or the first time after that the panel isn't showing a live game, and never during one. It goes away once you install the update. A release that fixes something broken says **Important update ready** instead. A panel with **Install updates automatically** on doesn't show it, since it installs the update overnight. See [Firmware updates](/using/updates/#update-ready-on-the-ticker).
+:::
+
 For the messages that take over the whole board, see [Panel messages](/help/panel-messages/).
 
 A panel that is too warm or on a weak power supply says so on its bottom line every two minutes, for 15 seconds: "Too warm, dimming" in orange or "Check power supply" in red. See [Brightness, panel on and off, and the clock](/using/brightness-and-clock/#heat-and-power-protection).

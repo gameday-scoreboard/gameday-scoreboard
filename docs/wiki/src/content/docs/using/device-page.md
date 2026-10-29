@@ -66,7 +66,7 @@ Settings are grouped in cards. In the order the page shows them:
 | **Only today's games** | Between games, Favorite teams skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
 | **Discovery**, **Unpair remote** | Pairs and unpairs a WizMote remote. See [WizMote remote](/using/remote/). |
-| **Buttons 1 to 4** | Coming in the next release: what each numbered button on the remote plays, a favorite, a playlist, all favorites or nothing. See [The numbered buttons](/using/remote/#the-numbered-buttons). |
+| **Buttons 1 to 4** | Coming in the next release: what each numbered button on the remote plays, a favorite, a playlist, a sport row, all favorites or nothing. See [The numbered buttons](/using/remote/#the-numbered-buttons). |
 | Matrix | Click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/). |
 | Timezone | Used for kickoff times and the clock. The page sets it from your browser unless you choose one by hand. |
 | **Show how to connect when the panel starts** | After it joins Wi-Fi, the panel shows a QR code for the Game Day app, then its address, for about 20 seconds. Turn it off to go straight to the scoreboard. |
@@ -79,7 +79,7 @@ The Favorites card has two more switches: **Jump to the action** (off to start) 
 
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).
 
-A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. See [Playlists](/using/favorites/#playlists).
+A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. Coming in the next release: **Playing** also has a row for each sport in your favorites, and the **One per sport** button is gone. See [Playlists](/using/favorites/#playlists).
 
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).
 
@@ -92,6 +92,14 @@ Only the ticker switches for sports your panel follows are shown. Hockey and bas
 ### Between games
 
 The **Between games** card has **Countdown to the next game**, on unless you turn it off, and **Your own countdown**: a **Name** and a **Day** to count down to, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/).
+
+:::note[Coming in the next release]
+**Game leaders**, on unless you turn it off, shows each team's top players at halftime and the final: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball. The card takes a turn with the board and the line score, 10 seconds each: once at halftime, and at the final for as long as the final is up. The panel reads the box score once at halftime and once at the final, never during play. See the sport's page for what it shows.
+
+**College Top 25**, on unless you turn it off, shows the AP poll between games while you follow a college football or basketball team. See [College Top 25](/using/top-25/).
+
+**News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
+:::
 
 ### Celebrations
 

@@ -54,10 +54,11 @@ You pick what each numbered button plays, and making a playlist no longer change
 - **Favorite 1** (2, 3 or 4 for the other buttons): the team in that place in your favorites list. Every button starts here.
 - One of your favorites by name. The button stays on that team when you reorder your favorites.
 - One of your playlists. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. The button stays on the playlist when you rename it or move it.
+- A sport row, like **All football**, when your favorites cover more than one sport. A press plays every favorite in that sport, as picking the row under **Playing** does, and shows its name on the board for a moment.
 - **All favorites**: switches the panel to Favorite teams with every favorite.
 - **Nothing**: the button does nothing, and doesn't turn on a panel that is off.
 
-A button stays on what you pick: adding, moving or renaming a favorite or a playlist never changes it. If you take out the team a button plays, or remove its playlist, that button goes back to its own favorite, and the Remote card says so under it until you pick for that button again.
+A button stays on what you pick: adding, moving or renaming a favorite or a playlist never changes it. If you take out the team a button plays, remove its playlist, or its sport row goes (your favorites are down to one sport, or none in that sport), that button goes back to its own favorite, and the Remote card says so under it until you pick for that button again.
 
 The Favorites card marks the teams a button plays, and the Playlists card marks the playlists. Your picks are in a settings backup.
 :::

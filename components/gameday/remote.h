@@ -1,12 +1,13 @@
 // The WizMote's buttons 1 to 4: what each one plays. A button starts on its
 // own favorite (button 2 on favorite 2) and stays on what the owner sets:
 // a favorite, which it follows through a reorder; a playlist, which it
-// follows through a rename; every favorite; or nothing. Nothing else moves
-// a button. When the team leaves the favorites, or the playlist is removed,
-// the button goes back to its own favorite and keeps what it lost (gone) so
-// the page can say so, until the owner sets that button again.
+// follows through a rename; a sport row (playlists.h); every favorite; or
+// nothing. Nothing else moves a button. When the team leaves the favorites,
+// the playlist is removed or the sport row goes (one sport left), the button
+// goes back to its own favorite and keeps what it lost (gone) so the page
+// can say so, until the owner sets that button again.
 // In set requests, the state and the settings backup a button reads fav,
-// team:nfl:6, list:<name>, all or none.
+// team:nfl:6, list:<name>, sport:football, all or none.
 // Pure, no ESPHome includes, so the host tests cover it.
 #pragma once
 
@@ -26,8 +27,8 @@ constexpr int kRemoteButtons = 4;
 // is the button's own favorite with nothing lost.
 struct RemoteButton {
   uint8_t kind;  // RemoteKind
-  uint8_t gone;  // RemoteKind of what was lost (TEAM or LIST), FAV for nothing
-  uint8_t league;
+  uint8_t gone;  // RemoteKind of what was lost (TEAM, LIST or SPORT), FAV for nothing
+  uint8_t league;  // SPORT: the row, 1 + Sport
   uint32_t id;
   char name[kListNameMax];  // no terminator when full
 } __attribute__((packed));
@@ -45,6 +46,10 @@ inline std::string remote_text(RemoteKind kind, const RemoteButton &b) {
       return "team:" + std::string(league_key((League) b.league)) + ":" + std::to_string(b.id);
     case RemoteKind::LIST:
       return "list:" + remote_name(b);
+    case RemoteKind::SPORT:
+      if (b.league >= 1 && b.league <= kSportCount)
+        return "sport:" + std::string(kSportKeys[b.league - 1]);
+      break;
     case RemoteKind::ALL:
       return "all";
     case RemoteKind::NONE:
@@ -56,9 +61,10 @@ inline std::string remote_text(RemoteKind kind, const RemoteButton &b) {
 }
 
 // A remoteN op (set_request.h) onto its button. False, the button as it was,
-// for a team that isn't a favorite or a playlist name that isn't one of names.
+// for a team that isn't a favorite, a playlist name that isn't one of names
+// or a sport with no row in rows (sport_rows).
 inline bool remote_set(RemoteButton &b, const SetOp &op, const std::vector<TeamRef> &favs,
-                       const std::vector<std::string> &names) {
+                       const std::vector<std::string> &names, uint8_t rows) {
   RemoteKind kind = (RemoteKind) op.value;
   RemoteButton n{};
   n.kind = (uint8_t) kind;
@@ -77,14 +83,26 @@ inline bool remote_set(RemoteButton &b, const SetOp &op, const std::vector<TeamR
     if (!found)
       return false;
     remote_put_name(n, op.text);
+  } else if (kind == RemoteKind::SPORT) {
+    if (!sport_row_has(rows, (uint8_t) op.team.league))
+      return false;
+    n.league = op.team.league;
   }
   b = n;
   return true;
 }
 
-// After the favorites changed: a button on a team that left them goes back
-// to its own favorite. True when it did.
-inline bool remote_after_favs(RemoteButton &b, const std::vector<TeamRef> &favs) {
+// After the favorites changed: a button on a team that left them, or on a
+// sport row they no longer give (rows), goes back to its own favorite. True
+// when it did.
+inline bool remote_after_favs(RemoteButton &b, const std::vector<TeamRef> &favs, uint8_t rows) {
+  if (b.kind == (uint8_t) RemoteKind::SPORT) {
+    if (sport_row_has(rows, b.league))
+      return false;
+    b.kind = (uint8_t) RemoteKind::FAV;
+    b.gone = (uint8_t) RemoteKind::SPORT;
+    return true;
+  }
   if (b.kind != (uint8_t) RemoteKind::TEAM)
     return false;
   TeamRef t{b.league, b.id};

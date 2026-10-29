@@ -165,6 +165,9 @@
         <h2>Between games</h2>
         <p class="hint">What the panel shows while no game is on.</p>
         <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+        <div class="ctl" id="glRow"><label>Game leaders<small>At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.</small></label><button class="sw" data-set="gameleaders" aria-label="Game leaders"></button></div>
+        <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
+        <div class="ctl" id="newsRow"><label>News headlines<small>ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
         <div class="sub">Your own countdown</div>
         <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
@@ -230,9 +233,9 @@
       </div>
       <div class="card">
         <h2>Playlists</h2>
-        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams, or put one on a WizMote button under Remote. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <p class="hint">Your own groups of favorites. Pick one under Favorite teams, where favorites in more than one sport also get a row for each sport on its own, or put one on a WizMote button under Remote. A favorite outside the playlist still takes the panel near its kickoff.</p>
         <div id="listCtls"></div>
-        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button><button class="btn" id="listSport">One per sport</button></div>
+        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
       </div>
       <div class="card">
         <h2>Remote</h2>
@@ -401,7 +404,8 @@
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
-    countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
+    cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -411,6 +415,7 @@
       return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
     }),
     list: Number,
+    sport: (v) => (v === "none" ? "" : v),
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
@@ -788,7 +793,8 @@
         ? "No favorites set yet"
         : S.locked && shown
           ? "Locked on " + (shown.t.name || shown.t.abbr)
-          : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
+          : playingSport() ? "Cycling through your " + playingSport() + " favorites"
+            : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
     }
     renderListPick();
   };
@@ -872,6 +878,11 @@
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
   const playingList = () => (S && S.list ? lists()[S.list - 1] : null);
+  // Sport rows: one per sport among the favorites, worked out by the panel
+  // (state sports, in its order) and never edited here. sport is the one playing.
+  const sportRows = () => (S && S.sports) || [];
+  const playingSport = () => (S && S.sport && sportRows().includes(S.sport) ? S.sport : "");
+  const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
@@ -885,8 +896,6 @@
     }
     return out.trim();
   };
-  const SPORTS = [["Football", ["nfl", "ncaa"]], ["Baseball", ["mlb"]], ["Basketball", ["nba", "wnba", "mcbb"]],
-    ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
   const listMax = () => (S && S.listmax) || 16;
   let listSig = "";
   const renderLists = () => {
@@ -954,14 +963,14 @@
     $("#listActions").hidden = none;
     $("#listAdd").hidden = ls.length >= listMax();
   };
-  // One picker per button: its own favorite, any favorite, any playlist,
-  // all favorites or nothing.
+  // One picker per button: its own favorite, any favorite, any playlist, a
+  // sport row, all favorites or nothing.
   const teamName = (key) => { const t = teamByKey(key); return t ? t[3] : key; };
   let remoteSig = "";
   const renderRemote = () => {
     $("#remoteSet").hidden = !S.remote;
     if (!S.remote) return;
-    const sig = favKeys.join(",") + "|" + lists().map((l) => l.n).join(";") + "|" + JSON.stringify(S.remote);
+    const sig = favKeys.join(",") + "|" + lists().map((l) => l.n).join(";") + "|" + sportRows().join(",") + "|" + JSON.stringify(S.remote);
     if (sig === remoteSig || (document.activeElement && document.activeElement.classList.contains("rbtn"))) return;
     remoteSig = sig;
     const host = $("#remoteBtns");
@@ -989,16 +998,19 @@
       };
       group("Favorites", favKeys.map((k) => ["team:" + k, teamName(k)]));
       group("Playlists", lists().map((l) => ["list:" + l.n, l.n]));
+      group("Sports", sportRows().map((k) => ["sport:" + k, "All " + k]));
       add(sel, "all", "All favorites");
       add(sel, "none", "Nothing");
       // A choice this page doesn't know (newer firmware) shows as it is.
       if (!Array.from(sel.options).some((o) => o.value === b.v)) add(sel, b.v, b.v);
       sel.value = b.v;
-      sel.onchange = () => setGD({ ["remote" + n]: sel.value });
+      // Focus holds the redraw, so let go of it for the panel's answer to show.
+      sel.onchange = () => { setGD({ ["remote" + n]: sel.value }); sel.blur(); };
       row.appendChild(sel);
       host.appendChild(row);
       if (b.gone) {
         const what = b.gone.startsWith("list:") ? "The " + b.gone.slice(5) + " playlist was removed"
+          : b.gone.startsWith("sport:") ? "There's no All " + b.gone.slice(6) + " row now"
           : "The " + teamName(b.gone.slice(5)) + " left your favorites";
         const note = el("p", "hint", what + ", so button " + n + " is back on favorite " + n + ".");
         note.id = "remoteGone" + n;
@@ -1012,36 +1024,29 @@
     while (ls.some((l) => l.n === "Playlist " + n)) n++;
     postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
   };
-  $("#listSport").onclick = () => {
-    const ls = lists().slice();
-    let added = 0;
-    for (const [n, lgs] of SPORTS) {
-      const f = favKeys.map((k, i) => (lgs.includes(k.split(":")[0]) ? i : -1)).filter((i) => i >= 0);
-      if (!f.length || ls.some((l) => l.n === n) || ls.length >= listMax()) continue;
-      ls.push({ n, f });
-      added++;
-    }
-    if (!added) return toast("Every sport in your favorites has a playlist");
-    postLists(ls);
-    toast(added === 1 ? "Added a playlist" : "Added " + added + " playlists");
-  };
   const listPick = $("#favList");
+  // All favorites, the sport rows, then the owner's playlists, as the panel's
+  // Home Assistant select lists them. A sport row's value is "s:" + its sport.
   const renderListPick = () => {
     const ls = lists();
-    $("#favListRow").hidden = !ls.length;
+    const sp = sportRows();
+    $("#favListRow").hidden = !ls.length && !sp.length;
     if (document.activeElement === listPick) return;
-    const opts = ["All favorites"].concat(ls.map((l) => l.n));
-    if (opts.join("\n") !== Array.from(listPick.options).map((o) => o.text).join("\n")) {
+    const opts = [["0", "All favorites"]].concat(sp.map((k) => ["s:" + k, "All " + k]), ls.map((l, i) => [String(i + 1), l.n]));
+    if (opts.map((o) => o.join("=")).join("\n") !== Array.from(listPick.options).map((o) => o.value + "=" + o.text).join("\n")) {
       listPick.innerHTML = "";
-      opts.forEach((t, i) => {
+      opts.forEach(([v, t]) => {
         const o = el("option", null, t);
-        o.value = String(i);
+        o.value = v;
         listPick.appendChild(o);
       });
     }
-    listPick.value = String(S.list || 0);
+    listPick.value = playingSport() ? "s:" + playingSport() : String(S.list || 0);
   };
-  listPick.onchange = () => setGD({ mode: 4, list: listPick.value });
+  // Both keys each time, so the one not picked shows as off while the panel answers.
+  listPick.onchange = () => setGD(listPick.value.startsWith("s:")
+    ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
+    : { mode: 4, list: listPick.value, sport: "none" });
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
@@ -1075,6 +1080,9 @@
     });
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = S.countdown === undefined;
+    $("#glRow").hidden = S.gameleaders === undefined;  // firmware from before the card
+    $("#top25Row").hidden = S.top25 === undefined;
+    $("#newsRow").hidden = S.news === undefined;  // and before the news card
     if (document.activeElement !== cdName) cdName.value = S.cdname || "";
     if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
     $("#cdClear").hidden = !S.cdname && !S.cddate;
@@ -1747,7 +1755,9 @@
     for (const n of list) {
       // A favorite outside the playlist being played only shows near its kickoff.
       // slot is the favorite's place counted from 1; a playlist counts from 0.
-      const out = playingList() && playingList().f.length && !playingList().f.includes(n.slot - 1);
+      // A sport row plays its sport's favorites.
+      const out = playingSport() ? sportOf(n.t.l) !== playingSport()
+        : playingList() && playingList().f.length && !playingList().f.includes(n.slot - 1);
       const row = el("div", "un fav" + (n.slot === S.shown ? " shown" : "") + (out ? " out" : ""));
       const img = el("img");
       img.loading = "lazy";
