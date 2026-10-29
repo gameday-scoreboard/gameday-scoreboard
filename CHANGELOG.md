@@ -34,6 +34,7 @@ the site nor the docs' What's new page shows `## Unreleased`.
 
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
 - 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
+- 🎵 **Playing** has a row for each sport in your favorites, like **All football**, that keeps up with your list on its own; the **One per sport** button is gone
 
 ### 🐛 Fixes
 
