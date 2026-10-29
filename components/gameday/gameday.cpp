@@ -5212,6 +5212,9 @@ void GamedayComponent::picture_show_(int slot) {
     const bool was = this->pic_shown_;
     // A picture that won't decode waits for the next turn, which tries the next one.
     this->pic_shown_ = this->pictures_.show(slot);
+    if (this->pic_shown_)
+      ESP_LOGI(TAG, "Picture card: picture %d, %ux%u, up for %u s", slot + 1, this->pictures_.width(),
+               this->pictures_.height(), (unsigned) (this->pictures_.page_ms() / 1000));
     if (!this->pic_shown_ && !was)
       return;
   }

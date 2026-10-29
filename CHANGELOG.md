@@ -44,6 +44,7 @@ through `update_important` in the panel's state.
 - 📰 A news card between games: ESPN headlines for your teams or leagues, one every 3 minutes, off until you turn on **News headlines**
 - 🎵 **Playing** has a row for each sport in your favorites, like **All football**, that keeps up with your list on its own; the **One per sport** button is gone
 - 🏈 While you follow a college team, the AP Top 25 takes a turn between games every 10 minutes, for college football and basketball
+- 🖼️ Your own pictures between games: add up to 4 photos or GIFs under **Pictures** on the device page, and a GIF animates
 
 ### 🐛 Fixes
 
