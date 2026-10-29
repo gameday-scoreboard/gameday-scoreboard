@@ -123,6 +123,7 @@ button { font: inherit; color: inherit; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
 .card h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
 .card p.hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+#fxCtls p.hint { margin-top: 6px; }
 .ctl { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid #1a2029; }
 .ctl:first-of-type { border-top: 0; }
 .ctl label { flex: 1; }
