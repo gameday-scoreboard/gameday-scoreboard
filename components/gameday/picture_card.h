@@ -22,7 +22,6 @@ class PictureCard {
 
   // Any task. A copy of what each slot holds.
   void slots(::espn::PicInfo out[::espn::kPicSlots]) const;
-  int count() const;
   // Bytes the next upload can be, 0 when no slot is free or the flash is
   // too full for any picture.
   size_t room() const;
@@ -52,12 +51,10 @@ class PictureCard {
   uint32_t page_ms() const { return this->page_ms_; }
 
  protected:
-  bool decode_png_();
   size_t flash_free_() const;
 
   mutable std::mutex lock_;
   ::espn::PicInfo slots_[::espn::kPicSlots];
-  uint32_t ids_{0};  // a counter for upload ids
 
   int shown_slot_{-1};
   uint32_t shown_id_{0};

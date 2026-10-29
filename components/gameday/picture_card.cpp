@@ -25,6 +25,47 @@ namespace {
 void info_key(int slot, char key[4]) { snprintf(key, 4, "i%d", slot); }
 void file_key(int slot, char key[4]) { snprintf(key, 4, "p%d", slot); }
 
+struct PngTarget {
+  uint16_t *canvas;
+  uint32_t w, h;
+  uint32_t drawn;  // pixels drawn; an interlaced file draws some more than once
+};
+
+// Each pixel over black, by its alpha.
+void png_draw(pngle_t *pngle, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t rgba[4]) {
+  auto *t = static_cast<PngTarget *>(pngle_get_user_data(pngle));
+  const uint32_t a = rgba[3];
+  const uint32_t r = rgba[0] * a / 255, g = rgba[1] * a / 255, b = rgba[2] * a / 255;
+  const uint16_t c = (uint16_t) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+  for (uint32_t yy = y; yy < y + h && yy < t->h; yy++)
+    for (uint32_t xx = x; xx < x + w && xx < t->w; xx++) {
+      t->canvas[yy * t->w + xx] = c;
+      t->drawn++;
+    }
+}
+
+// A whole PNG of w x h onto canvas. False for a damaged file or another size.
+bool decode_png(const uint8_t *data, size_t size, uint16_t *canvas, uint32_t w, uint32_t h) {
+  RAMAllocator<pngle_t> allocator;
+  pngle_t *pngle = allocator.allocate(1, PNGLE_T_SIZE);
+  if (pngle == nullptr)
+    return false;
+  memset(pngle, 0, PNGLE_T_SIZE);
+  pngle_reset(pngle);
+  PngTarget target{canvas, w, h, 0};
+  pngle_set_user_data(pngle, &target);
+  pngle_set_draw_callback(pngle, png_draw);
+  // pngle_feed takes a non-const pointer but only reads it.
+  const int fed = pngle_feed(pngle, const_cast<uint8_t *>(data), size);
+  if (fed < 0)
+    ESP_LOGW(TAG, "PNG: %s", pngle_error(pngle));
+  // Every pixel drawn: a file cut short decodes its top rows and stops.
+  const bool ok = fed >= 0 && target.drawn >= w * h && pngle_get_width(pngle) == w && pngle_get_height(pngle) == h;
+  pngle_reset(pngle);
+  allocator.deallocate(pngle, PNGLE_T_SIZE);
+  return ok;
+}
+
 }  // namespace
 
 void PictureCard::setup() {
@@ -58,14 +99,6 @@ void PictureCard::slots(PicInfo out[kPicSlots]) const {
     out[s] = this->slots_[s];
 }
 
-int PictureCard::count() const {
-  std::lock_guard<std::mutex> guard(this->lock_);
-  int n = 0;
-  for (const auto &p : this->slots_)
-    n += p.kind != (uint8_t) PicKind::NONE;
-  return n;
-}
-
 size_t PictureCard::flash_free_() const {
   nvs_stats_t st;
   if (nvs_get_stats(nullptr, &st) != ESP_OK)
@@ -86,6 +119,13 @@ std::string PictureCard::add(const uint8_t *data, size_t size, int &slot) {
   ::espn::PicCheck c = ::espn::pic_check(data, size);
   if (!c.error.empty())
     return c.error;
+  if (c.info.kind == (uint8_t) PicKind::PNG) {
+    // pic_check() reads only a PNG's header; decode it once, as a GIF is
+    // played through, so a damaged one never reaches the board.
+    ::espn::PsVector<uint16_t> canvas((size_t) c.info.w * c.info.h);
+    if (!decode_png(data, size, canvas.data(), c.info.w, c.info.h))
+      return "That PNG file is damaged.";
+  }
   {
     std::lock_guard<std::mutex> guard(this->lock_);
     slot = ::espn::pic_free_slot(this->slots_);
@@ -198,7 +238,7 @@ bool PictureCard::show(int slot) {
     this->playing_ = ok && info.frames > 1;
     this->frame_due_ms_ = millis() + (uint32_t) ms;
   } else {
-    ok = this->decode_png_();
+    ok = decode_png(this->file_.data(), this->file_.size(), this->canvas_.data(), info.w, info.h);
   }
   if (!this->playing_) {
     // A still picture needs only its canvas.
@@ -238,45 +278,6 @@ bool PictureCard::tick(uint32_t now) {
   if ((int32_t) (now - this->frame_due_ms_) > 1000)
     this->frame_due_ms_ = now + (uint32_t) ms;
   return true;
-}
-
-namespace {
-
-struct PngTarget {
-  uint16_t *canvas;
-  uint32_t w, h;
-};
-
-// Each pixel over black, by its alpha.
-void png_draw(pngle_t *pngle, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t rgba[4]) {
-  auto *t = static_cast<PngTarget *>(pngle_get_user_data(pngle));
-  const uint32_t a = rgba[3];
-  const uint32_t r = rgba[0] * a / 255, g = rgba[1] * a / 255, b = rgba[2] * a / 255;
-  const uint16_t c = (uint16_t) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
-  for (uint32_t yy = y; yy < y + h && yy < t->h; yy++)
-    for (uint32_t xx = x; xx < x + w && xx < t->w; xx++)
-      t->canvas[yy * t->w + xx] = c;
-}
-
-}  // namespace
-
-bool PictureCard::decode_png_() {
-  RAMAllocator<pngle_t> allocator;
-  pngle_t *pngle = allocator.allocate(1, PNGLE_T_SIZE);
-  if (pngle == nullptr)
-    return false;
-  memset(pngle, 0, PNGLE_T_SIZE);
-  pngle_reset(pngle);
-  PngTarget target{this->canvas_.data(), this->w_, this->h_};
-  pngle_set_user_data(pngle, &target);
-  pngle_set_draw_callback(pngle, png_draw);
-  const int fed = pngle_feed(pngle, this->file_.data(), this->file_.size());
-  if (fed < 0)
-    ESP_LOGW(TAG, "PNG: %s", pngle_error(pngle));
-  const bool ok = fed > 0 && pngle_get_width(pngle) == this->w_ && pngle_get_height(pngle) == this->h_;
-  pngle_reset(pngle);
-  allocator.deallocate(pngle, PNGLE_T_SIZE);
-  return ok;
 }
 
 }  // namespace esphome::gameday

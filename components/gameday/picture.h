@@ -70,8 +70,9 @@ inline PicKind pic_sniff(const uint8_t *data, size_t size) {
 inline std::string pic_too_big_text() { return "Pictures can be up to 128 by 64 pixels."; }
 
 // Checks an upload before it is kept. A PNG's size comes from its header
-// (the panel decodes it when it shows); a GIF is played through once, every
-// frame decoded, so a broken one never reaches the board.
+// (PictureCard::add() then decodes it once with pngle, which the host
+// tests don't have); a GIF is played through once, every frame decoded, so
+// a broken one never reaches the board.
 inline PicCheck pic_check(const uint8_t *data, size_t size) {
   PicCheck out;
   if (size == 0) {
