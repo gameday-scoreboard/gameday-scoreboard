@@ -585,9 +585,10 @@ script:
       - lambda: |-
           // The kickoff forecast before the start of an outdoor game
           // (components/gameday/weather.h): its icon and temperature in the
-          // live clock's row on a wide board, between the two scores on a
-          // single panel, where a three-digit temperature leaves no room for
-          // the icon.
+          // live clock's row on a wide board ("57°F"), between the two scores
+          // on a single panel, where 22 px fit the icon and the number ("14")
+          // with a pixel to spare each side, else the number with its degree
+          // sign alone ("-12°").
           const gameday::UpdateFields &u = id(gameday_ctl).last_update();
           lv_obj_t *icon = id(gd_kick_icon), *lbl = id(gd_kick_lbl);
           if (game_state != "PRE" || u.kick_temp.empty()) {
@@ -601,18 +602,28 @@ script:
                                   id(gd_wx16_fog),   id(gd_wx16_rain), id(gd_wx16_snow), id(gd_wx16_storm)};
           image::Image *small[8] = {id(gd_wx8_cloud), id(gd_wx8_sun),  id(gd_wx8_moon), id(gd_wx8_part),
                                     id(gd_wx8_fog),   id(gd_wx8_rain), id(gd_wx8_snow), id(gd_wx8_storm)};
-          const std::string text = wide ? u.kick_temp + u.kick_unit : u.kick_temp;
           const lv_font_t *f = wide ? id(spleen_12)->get_lv_font() : id(spleen_8)->get_lv_font();
+          auto width = [f](const std::string &t) {
+            lv_point_t sz;
+            lv_text_get_size(&sz, t.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            return (int) sz.x;
+          };
+          const int isz = wide ? 16 : 8, gap = wide ? 2 : 1;
+          std::string text = u.kick_temp + u.kick_unit;
+          bool with_icon = u.kick_icon < 8;
+          if (!wide) {
+            const std::string deg = "\xC2\xB0";
+            std::string num = u.kick_temp;
+            if (num.size() >= deg.size() && num.compare(num.size() - deg.size(), deg.size(), deg) == 0)
+              num.resize(num.size() - deg.size());
+            with_icon = with_icon && width(num) + isz + gap <= 22;
+            text = with_icon ? num : u.kick_temp;
+          }
           lv_obj_set_style_text_font(lbl, f, 0);
           const char *cur = lv_label_get_text(lbl);
           if (cur == nullptr || text != cur)
             lv_label_set_text(lbl, text.c_str());
-          lv_point_t sz;
-          lv_text_get_size(&sz, text.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-          const int isz = wide ? 16 : 8, gap = wide ? 2 : 1;
-          // A single panel has 24 px between the two scores
-          const bool with_icon = u.kick_icon < 8 && (wide || sz.x + isz + gap <= 24);
-          const int w = sz.x + (with_icon ? isz + gap : 0);
+          const int w = width(text) + (with_icon ? isz + gap : 0);
           const int x = (W - w) / 2, y = wide ? 33 : 44;
           if (with_icon) {
             lv_image_set_src(icon, (wide ? big : small)[u.kick_icon]);

@@ -47,7 +47,7 @@ The setting covers the weather card, the kickoff forecast on the board, and the 
 The kickoff forecast on the board is new in the next release.
 :::
 
-Before a football, baseball or soccer game at an outdoor stadium, the next game's board shows a small icon for the sky and the temperature expected at kickoff. On a wide board it sits between the two logos, where the game clock goes once the game starts; on a single 64x64 panel it sits between the two scores. It goes away when the game starts, and it never shows for a dome or an arena (a venue ESPN lists as indoors).
+Before a football, baseball or soccer game at an outdoor stadium, the next game's board shows a small icon for the sky and the temperature expected at kickoff. On a wide board it sits between the two logos, where the game clock goes once the game starts; on a single 64x64 panel it sits between the two scores, as the icon and the number. It goes away when the game starts, and it never shows for a dome or an arena (a venue ESPN lists as indoors).
 
 The forecast is ESPN's when ESPN has one for the game, which it usually does for NFL, college football and baseball games a few days out. That's the same forecast the ticker already shows ("54F Clear at Ryan Field"). When ESPN has none, which is most soccer games and games further out, the panel asks Open-Meteo for the hour of kickoff at the stadium's city, as soon as the game is 15 days away or closer. Then the ticker shows that forecast too.
 
