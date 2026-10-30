@@ -473,36 +473,40 @@ class Celebration {
   float net_hit_y_() const { return h_ * 0.45f; }
   void render_net_(CelebFrame &f) const {
     // A net of 6 px squares across the whole board, rippling out from where
-    // the ball hit: each strand is pushed along the ring that passes it.
+    // the ball hit: each strand point is pushed along the ring that passes
+    // it. Integer distance and a sine table keep a frame near 2 ms on the
+    // panel (the float version cost 10 ms).
     const float fade = fade_();
     const uint32_t strand = rgb_scale(0x606060, (int) (256 * fade));
-    const float hx = net_hit_x_(), hy = net_hit_y_();
-    const float speed = w_ * 0.45f, wavelen = 16.0f;
-    const float amp = t_ < 3.5f ? 3.0f * (1.0f - t_ / 3.5f) : 0.0f;
-    const float ring = t_ * speed;
-    auto shift = [&](float x, float y, float &dx, float &dy) {
-      float ddx = x - hx, ddy = y - hy;
-      float d = sqrtf(ddx * ddx + ddy * ddy) + 0.01f;
-      float ph = (ring - d) / wavelen * 6.2832f;
-      float a = d < ring ? amp * sinf(ph) * expf(-(ring - d) / (w_ * 1.2f)) : 0;
-      dx = ddx / d * a;
-      dy = ddy / d * a;
+    const int hx = (int) net_hit_x_(), hy = (int) net_hit_y_();
+    const int ring = (int) (t_ * w_ * 0.45f);  // px from the hit
+    const int amp256 = t_ < 3.5f ? (int) (3.0f * 256 * (1.0f - t_ / 3.5f)) : 0;
+    const int reach = w_ * 12 / 10;  // the ripple dies out this far behind the ring
+    static const int8_t kSin[32] = {0,   25,  49,  71,  90,  106, 117, 125, 127, 125, 117, 106, 90,  71,  49, 25,
+                                    0,   -25, -49, -71, -90, -106, -117, -125, -127, -125, -117, -106, -90, -71, -49, -25};
+    auto shifted = [&](int x, int y) {
+      if (amp256 == 0)
+        return f.put(x, y, strand);
+      int ddx = x - hx, ddy = y - hy;
+      // Distance without a square root: the longer leg plus 3/8 of the shorter.
+      int ax = ddx < 0 ? -ddx : ddx, ay = ddy < 0 ? -ddy : ddy;
+      int d = ax > ay ? ax + (ay * 3 >> 3) : ay + (ax * 3 >> 3);
+      int behind = ring - d;
+      if (behind <= 0 || behind >= reach || d == 0)
+        return f.put(x, y, strand);
+      int s = kSin[(behind * 2) & 31];  // a 16 px wavelength
+      int a = amp256 * s / 127 * (reach - behind) / reach;  // *256
+      f.put(x + (ddx * a / d + 128) / 256, y + (ddy * a / d + 128) / 256, strand);
     };
     for (int x = 1; x < w_; x += 6)
-      for (int y = 0; y < h_ - 1; y++) {
-        float dx, dy;
-        shift((float) x, (float) y, dx, dy);
-        f.put(x + (int) lroundf(dx), y + (int) lroundf(dy), strand);
-      }
+      for (int y = 0; y < h_ - 1; y++)
+        shifted(x, y);
     for (int y = 1; y < h_; y += 6)
-      for (int x = 0; x < w_ - 1; x++) {
-        float dx, dy;
-        shift((float) x, (float) y, dx, dy);
-        f.put(x + (int) lroundf(dx), y + (int) lroundf(dy), strand);
-      }
+      for (int x = 0; x < w_ - 1; x++)
+        shifted(x, y);
     // The ball sits where it hit for the first moment, in the team's color.
     if (t_ < 0.4f)
-      f.disc((int) hx, (int) hy, 2, rgb_scale(plan_.color, (int) (256 * fade)));
+      f.disc(hx, hy, 2, rgb_scale(plan_.color, (int) (256 * fade)));
   }
 
   // ---- hockey ---------------------------------------------------------------
