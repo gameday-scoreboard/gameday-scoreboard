@@ -78,7 +78,8 @@ int main(int argc, char **argv) {
     }
     fclose(bin);
     CelebTextPlace t = celeb_text_place(s.kind, w, h);
-    const bool white = !celeb_animated(s.kind) || s.kind == CelebKind::WAVE || s.kind == CelebKind::GOAL_LAMP;
+    const bool white = !celeb_animated(s.kind) || s.kind == CelebKind::WAVE || s.kind == CelebKind::GOAL_LAMP ||
+                       s.kind == CelebKind::WIN;
     FILE *js = fopen((base + ".json").c_str(), "w");
     fprintf(js,
             "{\"w\": %d, \"h\": %d, \"fps\": %d, \"frames\": %d, \"text\": \"%s\", \"line2\": \"%s\", "

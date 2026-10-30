@@ -763,9 +763,10 @@ script:
                 lv_obj_set_style_text_line_space(lbl, 2, 0);
                 lv_obj_set_pos(lbl, 0, place.y);
                 if (::espn::celeb_animated(kind)) {
-                  // White words over the sweep and the red lamp; the team's
-                  // color on black for the rest.
-                  const bool white = kind == ::espn::CelebKind::WAVE || kind == ::espn::CelebKind::GOAL_LAMP;
+                  // White words over the sweep, the red lamp and the win's
+                  // confetti; the team's color on black for the rest.
+                  const bool white = kind == ::espn::CelebKind::WAVE || kind == ::espn::CelebKind::GOAL_LAMP ||
+                                     kind == ::espn::CelebKind::WIN;
                   lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex(0x000000), 0);
                   lv_obj_set_style_text_color(lbl, lv_color_hex(white ? 0xFFFFFF : (uint32_t) splash_color), 0);
                   ::espn::CelebPlan plan;
@@ -783,6 +784,9 @@ script:
                   lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex((uint32_t) splash_color), 0);
                   lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
                 }
+                // Over everything, including the no-game screen should the
+                // board change under a long celebration.
+                lv_obj_move_foreground(id(tt_splash));
                 lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
             - script.execute:
                 id: tt_hide_splash
