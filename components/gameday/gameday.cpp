@@ -4028,6 +4028,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     ESP_LOGI(TAG, "Splash: %s", f.splash_text.c_str());
     // The message card makes way at once, and stays away for a while after.
     this->splash_ms_ = millis() == 0 ? 1 : millis();
+    // A long celebration (the win) holds the cards off for its whole run.
+    this->splash_hold_ms_ = f.celeb_ms + 2000 > ::espn::kMsgSplashGapMs ? f.celeb_ms + 2000 : ::espn::kMsgSplashGapMs;
     if (this->msg_shown_)
       this->msg_show_("");
   }
@@ -5682,7 +5684,7 @@ bool GamedayComponent::card_between_(uint32_t now) const {
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   return !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
-         (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+         (this->splash_ms_ == 0 || now - this->splash_ms_ >= this->splash_hold_ms_);
 }
 
 void GamedayComponent::msg_tick_() {
@@ -5867,7 +5869,7 @@ void GamedayComponent::top25_tick_() {
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && !this->demo_playing_() &&
                        this->last_fields_.game_state != "IN" && !trouble && !this->msg_shown_ && !this->news_shown_ &&
-                       !this->pic_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+                       !this->pic_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= this->splash_hold_ms_);
   if (!between) {
     this->top25_hide_();
     return;
