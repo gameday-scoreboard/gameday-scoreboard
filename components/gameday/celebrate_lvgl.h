@@ -15,7 +15,7 @@
 #include "celebrate_fx.h"
 #include "psram.h"
 
-namespace gameday {
+namespace esphome::gameday {
 
 constexpr uint32_t kCelebFps = 30;
 
@@ -42,11 +42,11 @@ class CelebrationPlayer {
     this->frame_.w = w < bw ? w : bw;
     this->frame_.h = h < bh ? h : bh;
     // A different seed each time, so two touchdowns don't look the same.
-    this->show_->start(plan, this->frame_.w, this->frame_.h, esphome::millis() * 2654435761u + 1);
+    this->show_->start(plan, this->frame_.w, this->frame_.h, millis() * 2654435761u + 1);
     this->frames_ = 0;
     this->draw_us_ = 0;
     this->worst_us_ = 0;
-    this->last_ms_ = esphome::millis();
+    this->last_ms_ = millis();
     this->timer_ = lv_timer_create(CelebrationPlayer::tick_cb_, 1000 / kCelebFps, this);
     this->tick_();
     ESP_LOGI("gameday.celebrate", "%s for %u ms on %dx%d", plan.text.c_str(), (unsigned) plan.duration_ms,
@@ -72,14 +72,14 @@ class CelebrationPlayer {
   void tick_() {
     if (this->show_ == nullptr || this->canvas_ == nullptr)
       return;
-    uint32_t now = esphome::millis();
+    uint32_t now = millis();
     float dt = (now - this->last_ms_) / 1000.0f;
     this->last_ms_ = now;
-    uint32_t t0 = esphome::micros();
+    uint32_t t0 = micros();
     bool more = this->show_->step(dt);
     this->show_->render(this->frame_);
     lv_obj_invalidate(this->canvas_);
-    uint32_t us = esphome::micros() - t0;
+    uint32_t us = micros() - t0;
     this->frames_++;
     this->draw_us_ += us;
     if (us > this->worst_us_)
@@ -107,5 +107,5 @@ inline CelebrationPlayer &celebration_player() {
   return player;
 }
 
-}  // namespace gameday
+}  // namespace esphome::gameday
 #endif
