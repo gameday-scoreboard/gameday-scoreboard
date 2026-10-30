@@ -36,7 +36,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "cards",   "wake",    "wakelead",
-                                    "after",   "remote1", "remote2", "remote3", "remote4"};
+                                    "after",   "remote1", "remote2", "remote3", "remote4",
+                                    "field",   "winbar",  "spark"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -317,6 +318,9 @@ enum class SetKind : uint8_t {
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
+  FIELD,        // on, football's field strip on the board (game_viz.h)
+  WINBAR,       // on, the win chance bar on the board
+  SPARK,        // on, the score margin sparkline on the board
 };
 
 struct TeamRef {
@@ -546,6 +550,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TZ_AUTO);
   if (k == "down")
     return on(SetKind::DOWN);
+  if (k == "field")
+    return on(SetKind::FIELD);
+  if (k == "winbar")
+    return on(SetKind::WINBAR);
+  if (k == "spark")
+    return on(SetKind::SPARK);
   if (k == "count")
     return on(SetKind::COUNT);
   if (k == "match")

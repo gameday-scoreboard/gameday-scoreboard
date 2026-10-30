@@ -61,6 +61,9 @@ Settings are grouped in cards. In the order the page shows them:
 | Ticker: **Match stats** | Soccer: goals, cards, possession and shots. |
 | Ticker: **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
 | Ticker: **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
+| Live pictures: **Field strip** | Football, on a 128-wide board: the field across the row under the clock, with the ball, the line to gain, the direction of play and the timeouts left. Coming in the next release. |
+| Live pictures: **Win chance bar** | Football and basketball, on a 128-wide board: a thin bar split at ESPN's chance for each side to win. Coming in the next release. |
+| Live pictures: **Score margin** | Basketball and hockey, on a 128-wide board: the lead over the game as a small chart. Coming in the next release. |
 | **Opponent scores too** | Splashes for the other side's scores. Your team's always show. See [Celebrations](#celebrations). |
 | **Panel on** | Turns the panel's lights on or off. |
 | **Brightness** | Panel brightness, 1 to 255. |
