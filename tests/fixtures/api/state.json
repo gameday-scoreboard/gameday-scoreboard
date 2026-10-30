@@ -57,6 +57,24 @@
   ],
   "list": 2,
   "sched": 0,
+  "remote": [
+    {
+      "v": "fav",
+      "gone": false
+    },
+    {
+      "v": "team:ncaa:2294",
+      "gone": false
+    },
+    {
+      "v": "list:College",
+      "gone": false
+    },
+    {
+      "v": "sport:basketball",
+      "gone": false
+    }
+  ],
   "listmax": 16,
   "sports": [],
   "sport": "",

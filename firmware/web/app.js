@@ -258,7 +258,7 @@
       </div>
       <div class="card">
         <h2>Favorites</h2>
-        <p class="hint" id="favHint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
+        <p class="hint" id="favHint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. The Remote card says what buttons 1 to 4 on a WizMote do.</p>
         <div class="ctl"><label>Only today's games<small>Between games, the panel skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
         <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
         <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
@@ -267,7 +267,7 @@
       </div>
       <div class="card">
         <h2>Playlists</h2>
-        <p class="hint">Your own groups of favorites. Pick one under Favorite teams, where favorites in more than one sport also get a row for each sport on its own. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <p class="hint">Your own groups of favorites. Pick one under Favorite teams, where favorites in more than one sport also get a row for each sport on its own. A favorite outside the playlist still takes the panel near its kickoff, unless the playlist says otherwise below.</p>
         <div id="listCtls"></div>
         <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
       </div>
@@ -277,6 +277,8 @@
         <div class="ctl"><label>Status</label><span class="val" id="wizStatus" style="min-width:0;text-align:left"></span></div>
         <div id="remoteCtls"></div>
         <div class="actions" id="remoteActions" style="margin-top:8px"></div>
+        <p class="hint" id="remoteBtnHint">Buttons 1 to 4 start on your first four favorites and stay where you set them: a favorite, a playlist, a sport, all your favorites or nothing.</p>
+        <div id="remoteBtns"></div>
       </div>
       <div class="card">
         <h2>Setup</h2>
@@ -451,6 +453,7 @@
     }),
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
+    remote1: String, remote2: String, remote3: String, remote4: String,
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
@@ -945,9 +948,23 @@
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
+  let lastFavSig = null;
   const favMax = () => (S && S.favmax) || 4;
   // renderSettings() redraws the list from S, which already carries the post.
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
+  // The WizMote's buttons (state remote, set remote1 to remote4): what each is
+  // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
+  // sport:football, all or none. A held post stands in until the panel answers.
+  const remoteTargets = () => [1, 2, 3, 4].map((b) => {
+    const h = S && S["remote" + b];
+    const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
+    return h !== undefined ? { v: h, gone: false } : r;
+  });
+  // The buttons whose press lands on favorite i (key), as "1, 3": its own
+  // favorite by default, or the team it was set to. Buttons whose target is
+  // gone are on their own favorite for now.
+  const remoteButtonFor = (key, i) => remoteTargets()
+    .map((r, b) => ((r.v === "fav" || r.gone ? b === i : r.v === "team:" + key) ? b + 1 : 0)).filter(Boolean).join(", ");
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
@@ -960,7 +977,8 @@
       if (t) img.src = logoUrl(t[0], t[1], t[2]);
       row.appendChild(img);
       const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
-      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (i < 4 ? " · remote button " + (i + 1) : "")));
+      const btn = remoteButtonFor(key, i);
+      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -1057,7 +1075,8 @@
         postLists(next, S.list === i + 1 ? i + 1 : undefined);
       };
       row.appendChild(name);
-      if (i < 4) row.appendChild(el("small", "pbtn", "Button " + (i + 1)));
+      const btns = remoteTargets().map((r, b) => (r.v === "list:" + l.n ? b + 1 : 0)).filter(Boolean);
+      if (btns.length) row.appendChild(el("small", "pbtn", (btns.length > 1 ? "Buttons " : "Button ") + btns.join(", ")));
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
         const b = el("button", null, label);
@@ -1175,8 +1194,6 @@
     else if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
     $("#listActions").hidden = none;
     $("#listAdd").hidden = ls.length >= listMax();
-    $("#favHint").textContent = "Up to 16 teams from any league. In Favorite teams mode the order is the priority. "
-      + (ls.length ? "Your playlists have buttons 1 to 4 on a WizMote remote." : "Buttons 1 to 4 on a WizMote remote jump to the first four.");
   };
   $("#listAdd").onclick = () => {
     const ls = lists();
@@ -1207,11 +1224,64 @@
   listPick.onchange = () => setGD(listPick.value.startsWith("s:")
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
+  // The Remote card's four pickers, one per button, grouped: its own
+  // favorite, each favorite team, the sport rows, the playlists, all, nothing.
+  let remoteSig = "";
+  const renderRemote = () => {
+    const host = $("#remoteBtns");
+    const targets = remoteTargets();
+    const groups = [["", [["fav", "Its own favorite"]]],
+      ["Favorites", favKeys.map((k) => { const t = teamByKey(k); return ["team:" + k, t ? t[3] : k]; })],
+      ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
+      ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
+      ["", [["all", "All favorites"], ["none", "Nothing"]]]];
+    const sig = JSON.stringify([groups, targets, favKeys]);
+    if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
+    remoteSig = sig;
+    host.innerHTML = "";
+    targets.forEach((r, b) => {
+      const row = el("div", "ctl rbtn");
+      const label = el("label", null, "Button " + (b + 1));
+      const t = teamByKey(favKeys[b]);
+      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favKeys.length > b ? "" : " (empty)");
+      const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now" : "That team left your favorites")
+        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "." : "";
+      if (note) label.appendChild(el("small", null, note));
+      row.appendChild(label);
+      const sel = el("select");
+      sel.setAttribute("aria-label", "Remote button " + (b + 1));
+      let found = false;
+      for (const [g, opts] of groups) {
+        if (!opts.length) continue;
+        const into = g ? el("optgroup") : sel;
+        if (g) { into.label = g; sel.appendChild(into); }
+        for (const [v, text] of opts) {
+          const o = el("option", null, text);
+          o.value = v;
+          found = found || v === r.v;
+          into.appendChild(o);
+        }
+      }
+      if (!found) {
+        // Set to something that is gone: shown as it is, so it comes back when its target does.
+        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^sport:/, "") + " (gone)");
+        o.value = r.v;
+        sel.appendChild(o);
+      }
+      sel.value = r.v;
+      sel.onchange = () => setGD({ ["remote" + (b + 1)]: sel.value });
+      row.appendChild(sel);
+      host.appendChild(row);
+    });
+  };
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
     const keys = (S.favs || []).map(refKey).filter(Boolean);
-    if (keys.join(",") !== favKeys.join(",")) {
+    // Redrawn when the list changes, or the remote's marks on it do.
+    const favSig = keys.join(",") + "|" + JSON.stringify(remoteTargets());
+    if (favSig !== lastFavSig) {
+      lastFavSig = favSig;
       favKeys = keys;
       renderFavs();
       if ($("#modal").classList.contains("open")) markPicked();
@@ -1219,12 +1289,13 @@
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
     // Redrawn only when something changed, so a name being typed keeps its place.
-    const sig = favKeys.join(",") + "|" + JSON.stringify(lists());
+    const sig = favKeys.join(",") + "|" + JSON.stringify(lists()) + "|" + JSON.stringify(remoteTargets());
     if (sig !== listSig && !(document.activeElement && $("#listCtls").contains(document.activeElement) &&
         document.activeElement.matches("input, select"))) {
       listSig = sig;
       renderLists();
     }
+    renderRemote();
     // A situation switch for each sport the panel follows (favorites, Live
     // games leagues picked by hand), all of them before anything is
     // picked. The automatic Live list is no help here: it never comes back

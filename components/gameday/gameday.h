@@ -196,6 +196,8 @@ class GamedaySelect : public select::Select, public Component {
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
 //                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
+//                                    remote1..remote4=fav|team:nfl:6|list:Name|sport:football|all|none
+//                                    (what a WizMote button does, set_request.h RemoteTarget)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
@@ -277,8 +279,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &fav_banner_text() const { return this->fav_banner_text_; }
   uint32_t fav_banner_color() const { return this->fav_banner_color_; }
   void refresh_now();
-  // WizMote buttons 1-4. Favorites in release firmware; the demo build gives
-  // them to the demo (demo.cpp).
+  // WizMote buttons 1-4: each does what the owner set it to (set_request.h
+  // RemoteTarget), its own favorite until then. The demo build gives them to
+  // the demo (demo.cpp).
   void remote_number(uint8_t n);
   // Favorites with no favorite set: the panel follows live games and the
   // finals rotation, and the boot screen gives the app's QR code a turn
@@ -818,6 +821,21 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Every 10 s from loop(): a schedule that starts puts its playlist on, one
   // that ends puts back what played before (playlists.h schedule_step).
   void schedule_tick_();
+
+  // The four WizMote buttons' targets (set_request.h RemoteTarget), in
+  // their own fixed-size blob. A panel without it has each button on its
+  // own favorite, as before.
+  struct Prefs11 {
+    ::espn::RemoteTarget btn[4];
+    uint8_t spare[4];
+  } __attribute__((packed));
+  static_assert(sizeof(Prefs11) == 96, "Prefs11 is a fixed-size blob");
+  ESPPreferenceObject pref11_;
+  Prefs11 prefs11_{};
+  void set_remote_(uint8_t button, const ::espn::RemoteTarget &t);
+  // What button n does now (playlists.h remote_resolve).
+  ::espn::RemoteAction remote_action_(uint8_t button) const;
+  std::vector<std::string> list_names_() const;
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);

@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -69,6 +70,7 @@ struct Settings {
   std::vector<List> lists;
   int list{0};
   int sport{0};  // the sport row playing, 1 + Sport; 0 = none
+  RemoteTarget remote[4];  // the WizMote's buttons (Prefs11)
   uint16_t live_mask{0};
   std::string msg, msgurl, nick, hook;
   std::string town;
@@ -149,6 +151,12 @@ void load(Settings &s, JsonObjectConst o) {
     s.list = o["list"].as<int>();
   if (o["sport"].is<const char *>())
     s.sport = sport_row_from_key(o["sport"].as<const char *>());
+  if (o["remote"].is<JsonArrayConst>()) {
+    int b = 0;
+    for (JsonObjectConst r : o["remote"].as<JsonArrayConst>())
+      if (b < 4)
+        remote_parse(r["v"] | "fav", s.remote[b++]);
+  }
   if (o["live_auto"].is<bool>() || o["live"].is<JsonArrayConst>()) {
     std::string list;
     for (auto l : o["live"].as<JsonArrayConst>())
@@ -291,6 +299,20 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       }
       break;
     }
+    case SetKind::REMOTE: {
+      // set_remote_: a playlist's name as the playlists keep it.
+      RemoteTarget t;
+      remote_parse(op.text, t);
+      if (t.kind == (uint8_t) RemoteKind::LIST) {
+        std::string name = list_name_clean(remote_name(t));
+        memset(t.name, 0, sizeof(t.name));
+        memcpy(t.name, name.data(), name.size());
+        if (name.empty())
+          t = RemoteTarget{};
+      }
+      s.remote[op.slot - 1] = t;
+      break;
+    }
     case SetKind::LIST:
       // set_active_list_ switches to Favorite teams; a number past the last
       // playlist is refused. With lists= set_lists_ took it, and with a
@@ -401,6 +423,15 @@ void state_doc(const Settings &s, JsonDocument &doc) {
       o["today"] = (l.opt.flags & LISTOPT_TODAY) != 0;
   }
   doc["list"] = s.list;
+  std::vector<std::string> names;
+  for (const auto &l : s.lists)
+    names.push_back(l.first);
+  JsonArray remote = doc["remote"].to<JsonArray>();
+  for (int b = 1; b <= 4; b++) {
+    JsonObject o = remote.add<JsonObject>();
+    o["v"] = remote_text(s.remote[b - 1]);
+    o["gone"] = remote_resolve((uint8_t) b, s.remote[b - 1], fav_refs(s), names).gone;
+  }
   JsonArray sports = doc["sports"].to<JsonArray>();
   for (uint8_t row = 1; row <= kSportCount; row++)
     if (sport_row_has(rows(s), row))
@@ -631,7 +662,8 @@ void test_parse_set() {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
                  parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
                  parse_set(key, "none", op, kFavMax) || parse_set(key, "next:1", op, kFavMax) ||
-                 parse_set(key, "clock", op, kFavMax);
+                 parse_set(key, "clock", op, kFavMax) ||
+                 parse_set(key, "fav", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }
@@ -864,9 +896,72 @@ void test_list_options() {
   SCHECK(!st.restore, "over, but locked: wait");
 }
 
+// The WizMote's buttons (set_request.h RemoteTarget, playlists.h
+// remote_resolve): the text both ways and what a button does now.
+void test_remote() {
+  RemoteTarget t;
+  SCHECK(remote_parse("fav", t) && t.kind == (uint8_t) RemoteKind::FAVORITE && remote_text(t) == "fav", "fav");
+  SCHECK(remote_parse("team:nfl:6", t) && t.kind == (uint8_t) RemoteKind::TEAM && t.league == (uint8_t) League::NFL &&
+             t.id == 6 && remote_text(t) == "team:nfl:6",
+         "a team");
+  SCHECK(!remote_parse("team:nfl:99999", t) && !remote_parse("team:dallas", t) && !remote_parse("team:", t),
+         "a team the panel doesn't know is refused");
+  SCHECK(remote_parse("list:Sunday Football", t) && t.kind == (uint8_t) RemoteKind::LIST &&
+             remote_name(t) == "Sunday Football" && remote_text(t) == "list:Sunday Football",
+         "a playlist by name");
+  SCHECK(remote_parse("list:ABCDEFGHIJKLMNOPQRST", t) && remote_name(t) == "ABCDEFGHIJKLMNOP", "a name is cut to 16 bytes");
+  SCHECK(!remote_parse("list:", t), "a playlist with no name is refused");
+  SCHECK(remote_parse("sport:hockey", t) && t.kind == (uint8_t) RemoteKind::SPORT && t.sport == (uint8_t) Sport::HOCKEY &&
+             remote_text(t) == "sport:hockey",
+         "a sport row");
+  SCHECK(!remote_parse("sport:Hockey", t) && !remote_parse("sport:curling", t), "an unknown sport is refused");
+  SCHECK(remote_parse("all", t) && remote_text(t) == "all" && remote_parse("none", t) && remote_text(t) == "none", "all, none");
+  SCHECK(!remote_parse("", t) && !remote_parse("nfl:6", t) && !remote_parse("favorite", t), "anything else is refused");
+  SetOp op;
+  SCHECK(parse_set("remote2", "team:nfl:6", op, kFavMax) && op.kind == SetKind::REMOTE && op.slot == 2 &&
+             op.text == "team:nfl:6",
+         "remote2 set key");
+  SCHECK(!parse_set("remote5", "fav", op, kFavMax) && !parse_set("remote0", "fav", op, kFavMax) &&
+             !parse_set("remote1", "team:dallas", op, kFavMax),
+         "remote keys are 1 to 4, values checked");
+
+  const uint8_t NFL = (uint8_t) League::NFL, NBA = (uint8_t) League::NBA, NHL = (uint8_t) League::NHL;
+  std::vector<TeamRef> favs = {{NFL, 6}, {NBA, 6}, {}, {NHL, 25}};
+  std::vector<std::string> names = {"Sundays", "Hoops"};
+  RemoteAction a = remote_resolve(2, RemoteTarget{}, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 2 && !a.gone, "the default is favorite n");
+  remote_parse("team:nhl:25", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::TEAM && a.fav_slot == 4 && !a.gone, "a team is followed to its slot");
+  remote_parse("team:mlb:15", t);
+  a = remote_resolve(3, t, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 3 && a.gone, "a team that isn't a favorite: the default, gone");
+  remote_parse("list:Hoops", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::LIST && a.list == 2 && !a.gone, "a playlist by name");
+  remote_parse("list:Gone", t);
+  a = remote_resolve(4, t, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 4 && a.gone, "a playlist that is gone: the default");
+  remote_parse("sport:basketball", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::SPORT && a.sport_row == 1 + (uint8_t) Sport::BASKETBALL && !a.gone, "a sport row");
+  remote_parse("sport:baseball", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.gone, "a sport with no favorites: the default");
+  a = remote_resolve(1, t, {{NFL, 6}}, names);
+  SCHECK(a.gone, "no rows with one sport");
+  remote_parse("all", t);
+  a = remote_resolve(3, t, favs, names);
+  SCHECK(a.kind == RemoteKind::ALL && a.list == 0 && !a.gone, "all favorites");
+  remote_parse("none", t);
+  a = remote_resolve(3, t, favs, names);
+  SCHECK(a.kind == RemoteKind::NONE && !a.gone, "nothing");
+}
+
 }  // namespace
 
 int run_set_tests(int &total_checks) {
+  test_remote();
   test_list_options();
   test_playlists();
   test_parse_set();

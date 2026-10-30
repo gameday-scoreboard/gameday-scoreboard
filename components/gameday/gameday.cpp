@@ -365,6 +365,12 @@ void GamedayComponent::setup() {
       this->prefs10_.sched_applied < 0 || this->prefs10_.sched_before > this->prefs9_.count ||
       this->prefs10_.sched_before < 0 || this->prefs10_.sched_sport > ::espn::kSportCount)
     this->prefs10_ = Prefs10{};  // no options, no schedule under way
+  this->pref11_ = global_preferences->make_preference<Prefs11>(fnv1_hash("gameday_prefs11_v1"));
+  if (!this->pref11_.load(&this->prefs11_))
+    this->prefs11_ = Prefs11{};  // each button on its own favorite
+  for (auto &b : this->prefs11_.btn)
+    if (b.kind > (uint8_t) ::espn::RemoteKind::NONE)
+      b = ::espn::RemoteTarget{};
   this->load_msg_();
   this->load_nick_();
   this->load_hook_();
@@ -780,20 +786,63 @@ void GamedayComponent::publish_playlist_select_() {
   this->playlist_select_->publish_state(this->playlist_options_[current]);
 }
 
+std::vector<std::string> GamedayComponent::list_names_() const {
+  std::vector<std::string> names;
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++)
+    names.push_back(this->list_name_(n));
+  return names;
+}
+
+::espn::RemoteAction GamedayComponent::remote_action_(uint8_t button) const {
+  if (button < 1 || button > 4)
+    return ::espn::RemoteAction{};
+  return ::espn::remote_resolve(button, this->prefs11_.btn[button - 1], this->fav_refs_all_(), this->list_names_());
+}
+
+void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t) {
+  if (button < 1 || button > 4)
+    return;
+  ::espn::RemoteTarget c = t;
+  if (c.kind == (uint8_t) ::espn::RemoteKind::LIST) {
+    // A playlist's name as the playlists keep it.
+    std::string name = ::espn::list_name_clean(::espn::remote_name(c));
+    memset(c.name, 0, sizeof(c.name));
+    memcpy(c.name, name.data(), name.size());
+    if (name.empty())
+      c = ::espn::RemoteTarget{};
+  }
+  this->prefs11_.btn[button - 1] = c;
+  this->pref11_.save(&this->prefs11_);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) button, ::espn::remote_text(c).c_str());
+  this->rebuild_state_(&this->last_fields_);
+}
+
 #ifndef GAMEDAY_DEMO
-// With playlists, buttons 1-4 play the first four; without, they jump to the
-// first four favorites.
+// Each button does what the owner set it to; its own favorite until then,
+// and again while what it was set to is gone.
 void GamedayComponent::remote_number(uint8_t n) {
-  if (this->prefs9_.count == 0) {
-    this->press_favorite(n);
-    return;
+  ::espn::RemoteAction a = this->remote_action_(n);
+  if (a.gone)
+    ESP_LOGI(TAG, "Remote button %u: %s is gone, so favorite %u", (unsigned) n,
+             ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str(), (unsigned) n);
+  switch (a.kind) {
+    case ::espn::RemoteKind::NONE:
+      ESP_LOGI(TAG, "Remote button %u: nothing", (unsigned) n);
+      return;
+    case ::espn::RemoteKind::SPORT:
+      ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, ::espn::kSportRowNames[a.sport_row - 1]);
+      this->set_sport_row_(a.sport_row, true);
+      return;
+    case ::espn::RemoteKind::LIST:
+    case ::espn::RemoteKind::ALL:
+      ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, a.list == 0 ? "every favorite" : this->list_name_((uint8_t) a.list).c_str());
+      this->set_active_list_((uint8_t) a.list, true);
+      return;
+    default:
+      this->press_favorite((uint8_t) a.fav_slot);
+      return;
   }
-  if (n > this->prefs9_.count) {
-    ESP_LOGI(TAG, "Remote button %u: no playlist %u", (unsigned) n, (unsigned) n);
-    return;
-  }
-  ESP_LOGI(TAG, "Remote button %u: playlist %s", (unsigned) n, this->list_name_(n).c_str());
-  this->set_active_list_(n, true);
 }
 #endif
 
@@ -4771,6 +4820,14 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   }
   doc["list"] = this->prefs9_.active;
   doc["sched"] = this->prefs10_.sched_applied;  // the playlist a schedule put on, 0 = none
+  // The four WizMote buttons: what each is set to (remote_text) and whether
+  // that is gone, so the button does its default for now.
+  JsonArray remote = doc["remote"].to<JsonArray>();
+  for (uint8_t b = 1; b <= 4; b++) {
+    JsonObject o = remote.add<JsonObject>();
+    o["v"] = ::espn::remote_text(this->prefs11_.btn[b - 1]);
+    o["gone"] = this->remote_action_(b).gone;
+  }
   doc["listmax"] = ::espn::kListMax;
   // The sport rows Playing offers, worked out from the favorites, and the one
   // playing ("" for none; list is then 0).
@@ -6416,6 +6473,12 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       case ::espn::SetKind::LISTS:
         this->set_lists_(::espn::parse_lists(op.text, FAV_MAX), keep_list);
         break;
+      case ::espn::SetKind::REMOTE: {
+        ::espn::RemoteTarget t;
+        if (::espn::remote_parse(op.text, t))
+          this->set_remote_(op.slot, t);
+        break;
+      }
       case ::espn::SetKind::LIST:
         if (with_lists || sport_pick)
           break;  // set_lists_ or the sport row took it
