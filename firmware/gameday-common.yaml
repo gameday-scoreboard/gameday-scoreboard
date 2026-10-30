@@ -890,6 +890,8 @@ gameday:
         opponent_timeouts: !lambda 'return x.opponent_timeouts;'
         team_record: !lambda 'return gameday::panel_text(x.team_record);'
         opponent_record: !lambda 'return gameday::panel_text(x.opponent_record);'
+        team_rank: !lambda 'return x.team_rank;'
+        opponent_rank: !lambda 'return x.opponent_rank;'
         splash_text: !lambda 'return gameday::panel_text(x.splash_text);'
         splash_color: !lambda 'return (int) x.splash_color;'
         celeb_kind: !lambda 'return (int) x.celeb_kind;'
