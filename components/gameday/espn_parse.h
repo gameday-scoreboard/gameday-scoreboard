@@ -107,6 +107,7 @@ struct GameSnapshot {
   uint32_t team_id{0}, opp_id{0};
   int team_score{0}, opp_score{0};
   std::string team_record, opp_record;
+  uint8_t team_rank{99}, opp_rank{99};  // AP rank (college), 99 when unranked
   std::string team_color, opp_color;
   std::string team_logo, opp_logo;
   bool team_winner{false};
