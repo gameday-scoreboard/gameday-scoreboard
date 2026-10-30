@@ -161,7 +161,7 @@
           <div class="ctl"><label for="celebrate">Celebrations<small>Full: fireworks for a touchdown, the ball out of the park, the net or the goal lamp for a goal, a three through the hoop, and confetti with the final score when your team wins. Subtle: a quick flash in the team's color. Off: the board just updates.</small></label><select id="celebrate">
             <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
           </select></div>
-          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer, as a dim flash. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer, as a dim flash, and in Live games the second team's threes. Your team's threes and the win never need it.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
       <div class="card" id="cdCard" hidden>

@@ -33,7 +33,7 @@ On a single 64x64 panel the clock takes the abbreviations' place during play. Th
 Basketball only celebrates the win. A game has around a hundred scoring plays, so splashing each basket would keep the screen covered. When your team wins, a victory splash with fireworks says your abbreviation and "WINS". **Opponent scores too** makes no difference for basketball.
 
 :::note[Coming in the next release]
-With **Celebrations** on **Full**, a three gets 3 seconds: the ball arcs up and drops through the hoop, the net swings and sparks pop in your team's colors under "THREE!". Only a score of exactly three points between two reads counts, so a two and a free throw read together stay quiet, as do the other side's threes. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. **Subtle** keeps the win to a quick flash and leaves baskets alone; **Off** shows no splash at all.
+With **Celebrations** on **Full**, a three gets 3 seconds: the ball arcs up and drops through the hoop, the net swings and sparks pop in your team's colors under "THREE!". It takes a three-point shot in ESPN's play-by-play that is the only change between two reads, so an and-one, three free throws, or a three read together with another basket stay quiet. The other side's threes stay quiet too. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. **Subtle** keeps the win to a quick flash and leaves baskets alone; **Off** shows no splash at all.
 :::
 
 ## The final

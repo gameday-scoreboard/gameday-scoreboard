@@ -60,7 +60,7 @@ static GameSnapshot final_(Sport sport, int team, int opp) {
 static CelebPlan plan(const GameSnapshot &prev, const GameSnapshot &cur, CelebLevel level, bool neutral = false,
                       bool opp_splashes = true) {
   Splash s = decide_splash(prev, cur, opp_splashes, neutral);
-  return decide_celebration(prev, cur, s, level, neutral);
+  return decide_celebration(prev, cur, s, level, neutral, opp_splashes);
 }
 
 static void test_levels() {
@@ -147,8 +147,36 @@ static void test_win() {
   p = plan(b, final_(Sport::FOOTBALL, 10, 24), CelebLevel::FULL, true);
   CHECK(p.kind == CelebKind::WIN);
   CHECK_EQ(p.text, "BUF WINS!");
-  CHECK_EQ(p.line2, "10-24");
+  CHECK_EQ(p.line2, "24-10");  // the winner's points first
   CHECK_EQ(p.color, celeb_bright(0x00338D));
+  // A level soccer final decided by the shootout: our win is the full show
+  // with the shootout in the second line, not the other side's muted flash.
+  GameSnapshot sl = live(Sport::SOCCER, 1, 1);
+  GameSnapshot so = final_(Sport::SOCCER, 1, 1);
+  so.soc.team_shootout = 4;
+  so.soc.opp_shootout = 3;
+  Splash sos = decide_splash(sl, so, true, false);
+  CHECK_EQ(sos.text, "KC WINS!");
+  p = decide_celebration(sl, so, sos, CelebLevel::FULL, false);
+  CHECK(p.kind == CelebKind::WIN);
+  CHECK_EQ(p.line2, "1-1 (4-3)");
+  CHECK_EQ(p.color, celeb_bright(0xE31837));
+  // Their shootout win: nothing in Favorites (no splash), their show when neutral.
+  so.soc.team_shootout = 3;
+  so.soc.opp_shootout = 4;
+  CHECK(plan(sl, so, CelebLevel::FULL).kind == CelebKind::NONE);
+  p = plan(sl, so, CelebLevel::FULL, true);
+  CHECK(p.kind == CelebKind::WIN);
+  CHECK_EQ(p.text, "BUF WINS!");
+  CHECK_EQ(p.line2, "1-1 (4-3)");
+  CHECK_EQ(p.color, celeb_bright(0x00338D));
+  // UPSET ALERT is not a score: the plain flash, even with a touchdown in
+  // the same read for the silent side.
+  GameSnapshot u = live(Sport::FOOTBALL, 7, 3);
+  p = decide_celebration(u, live(Sport::FOOTBALL, 7, 10), Splash{"UPSET ALERT", 0xFFD000}, CelebLevel::FULL,
+                         true);
+  CHECK(p.kind == CelebKind::FLASH);
+  CHECK_EQ(p.text, "UPSET ALERT");
   // Subtle keeps the win to a flash.
   CHECK(plan(a, final_(Sport::FOOTBALL, 24, 10), CelebLevel::SUBTLE).kind == CelebKind::FLASH);
   // A suspended game (not completed) has no win.
@@ -200,29 +228,62 @@ static void test_hockey_soccer() {
   CHECK(plan(live(Sport::SOCCER, 1, 1), final_(Sport::SOCCER, 1, 1), CelebLevel::FULL).kind == CelebKind::NONE);
 }
 
+// A basketball read whose last play is ESPN's three-point text.
+static GameSnapshot three(int team, int opp, const char *play = "Stephen Curry makes 26-foot three point jumper") {
+  GameSnapshot s = live(Sport::BASKETBALL, team, opp);
+  s.last_play = play;
+  return s;
+}
+
 static void test_basketball() {
   GameSnapshot a = live(Sport::BASKETBALL, 50, 48);
-  // decide_splash says nothing for a basket; Full celebrates exactly three.
-  CHECK(decide_splash(a, live(Sport::BASKETBALL, 53, 48), true, false).text.empty());
-  CelebPlan p = plan(a, live(Sport::BASKETBALL, 53, 48), CelebLevel::FULL);
+  // decide_splash says nothing for a basket; Full celebrates a three-point
+  // shot read on its own.
+  CHECK(decide_splash(a, three(53, 48), true, false).text.empty());
+  CelebPlan p = plan(a, three(53, 48), CelebLevel::FULL);
   CHECK(p.kind == CelebKind::THREE);
   CHECK_EQ(p.text, "THREE!");
   CHECK_EQ(p.duration_ms, kCelebThreeMs);
   CHECK_EQ(p.color, celeb_bright(0xE31837));
-  // Two points, a free throw, two baskets read at once, or three with the
-  // other side moving too: no show.
-  CHECK(plan(a, live(Sport::BASKETBALL, 52, 48), CelebLevel::FULL).kind == CelebKind::NONE);
-  CHECK(plan(a, live(Sport::BASKETBALL, 51, 48), CelebLevel::FULL).kind == CelebKind::NONE);
-  CHECK(plan(a, live(Sport::BASKETBALL, 55, 48), CelebLevel::FULL).kind == CelebKind::NONE);
-  CHECK(plan(a, live(Sport::BASKETBALL, 53, 50), CelebLevel::FULL).kind == CelebKind::NONE);
-  // Their three: nothing in Favorites, their show when neutral.
-  CHECK(plan(a, live(Sport::BASKETBALL, 50, 51), CelebLevel::FULL).kind == CelebKind::NONE);
-  p = plan(a, live(Sport::BASKETBALL, 50, 51), CelebLevel::FULL, true);
+  CHECK(plan(a, three(53, 48, "KEVIN DURANT MAKES THREE-POINT JUMPER"), CelebLevel::FULL).kind == CelebKind::THREE);
+  GameSnapshot pt = live(Sport::BASKETBALL, 53, 48);
+  pt.play_type = "Three Point Jumper";
+  CHECK(plan(a, pt, CelebLevel::FULL).kind == CelebKind::THREE);
+  // Three points that were not a three: an and-one, three free throws, or a
+  // read with no play text at all. Two points, a free throw, two baskets
+  // read at once, or a three with the other side moving too: no show.
+  CHECK(plan(a, three(53, 48, "LeBron James makes free throw 1 of 1"), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "makes driving layup"), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, live(Sport::BASKETBALL, 53, 48), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(52, 48), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(51, 48), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(55, 48), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 50), CelebLevel::FULL).kind == CelebKind::NONE);
+  // Their three: nothing in Favorites, their show when neutral, and nothing
+  // when neutral with Opponent scores too off (as their other scores).
+  CHECK(plan(a, three(50, 51), CelebLevel::FULL).kind == CelebKind::NONE);
+  p = plan(a, three(50, 51), CelebLevel::FULL, true);
   CHECK(p.kind == CelebKind::THREE);
   CHECK_EQ(p.text, "BUF THREE!");
+  CHECK(plan(a, three(50, 51), CelebLevel::FULL, true, false).kind == CelebKind::NONE);
   // Subtle and Off leave baskets alone, as before.
-  CHECK(plan(a, live(Sport::BASKETBALL, 53, 48), CelebLevel::SUBTLE).kind == CelebKind::NONE);
-  CHECK(plan(a, live(Sport::BASKETBALL, 53, 48), CelebLevel::OFF).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48), CelebLevel::SUBTLE).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48), CelebLevel::OFF).kind == CelebKind::NONE);
+  // The latch: the component redraws the board between polls (a failed
+  // poll, a setting change, a card) and asks again with the same read; the
+  // three shows once. The next three is a new pair; a stale read that goes
+  // back to an old pair stays quiet.
+  CelebLatch latch;
+  GameSnapshot t1 = three(53, 48);
+  CHECK(plan(a, t1, CelebLevel::FULL).kind == CelebKind::THREE && latch.take(t1));
+  CHECK(plan(a, t1, CelebLevel::FULL).kind == CelebKind::THREE && !latch.take(t1));
+  CHECK(!latch.take(t1));
+  GameSnapshot t2 = three(56, 48);
+  CHECK(latch.take(t2));
+  CHECK(!latch.take(t2));
+  GameSnapshot other = three(53, 48);
+  other.event_id = "402";
+  CHECK(latch.take(other));
   // The win still shows.
   CHECK(plan(live(Sport::BASKETBALL, 99, 98), final_(Sport::BASKETBALL, 99, 98), CelebLevel::FULL).kind ==
         CelebKind::WIN);

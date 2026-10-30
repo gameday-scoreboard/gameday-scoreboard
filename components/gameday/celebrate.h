@@ -93,13 +93,51 @@ inline bool celeb_same_game(const GameSnapshot &prev, const GameSnapshot &cur) {
   return prev.valid && cur.valid && !cur.event_id.empty() && prev.event_id == cur.event_id;
 }
 
+// Whether a basketball read's last play was a three-point shot, in ESPN's
+// words ("makes 26-foot three point jumper", a "Three Point" play type).
+inline bool celeb_three_play(const GameSnapshot &cur) {
+  auto has = [](const std::string &s, const char *w) {
+    std::string low;
+    low.reserve(s.size());
+    for (char c : s)
+      low += (char) ((c >= 'A' && c <= 'Z') ? c + 32 : c);
+    return low.find(w) != std::string::npos;
+  };
+  return has(cur.last_play, "three point") || has(cur.last_play, "three-point") || has(cur.last_play, "3-pt") ||
+         has(cur.play_type, "three point") || has(cur.play_type, "three-point");
+}
+
+// Who won, the way each sport's splash decides it: more points, or in soccer
+// the shootout when the score is level.
+inline bool celeb_team_won(const GameSnapshot &cur) {
+  if (cur.team_score != cur.opp_score)
+    return cur.team_score > cur.opp_score;
+  return cur.sport == Sport::SOCCER && cur.soc.team_shootout > cur.soc.opp_shootout;
+}
+
+// The win's second line: the winner's points first, and a shootout in
+// brackets after a level score, "1-1 (4-3)".
+inline std::string celeb_final_line(const GameSnapshot &cur, bool team_won) {
+  int a = team_won ? cur.team_score : cur.opp_score, b = team_won ? cur.opp_score : cur.team_score;
+  std::string line = std::to_string(a) + "-" + std::to_string(b);
+  if (cur.sport == Sport::SOCCER && cur.team_score == cur.opp_score && cur.soc.team_shootout >= 0 &&
+      cur.soc.opp_shootout >= 0) {
+    int sa = team_won ? cur.soc.team_shootout : cur.soc.opp_shootout;
+    int sb = team_won ? cur.soc.opp_shootout : cur.soc.team_shootout;
+    line += " (" + std::to_string(sa) + "-" + std::to_string(sb) + ")";
+  }
+  return line;
+}
+
 // The celebration for this poll. splash is decide_splash's answer for it,
 // which already knows about Opponent scores too and the neutral modes; the
-// one score decide_splash stays quiet on, a basketball basket, is read here
-// from the score delta (a three in one read, the only basket worth a show).
-// Opponent scores (not neutral) are always MUTED when they show at all.
+// one score decide_splash stays quiet on, a basketball basket, is read here:
+// a three-point shot (the last play says so) that is the only change in the
+// read. Opponent scores (not neutral) are always MUTED when they show at all,
+// and opp_splashes is the Opponent scores too switch, which the other side's
+// three obeys as its other scores do.
 inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot &cur, const Splash &splash,
-                                    CelebLevel level, bool neutral) {
+                                    CelebLevel level, bool neutral, bool opp_splashes = true) {
   CelebPlan none;
   if (level == CelebLevel::OFF)
     return none;
@@ -110,11 +148,11 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
 
   if (splash.text.empty()) {
     // Basketball's three. decide_splash leaves baskets alone; Full celebrates
-    // exactly three points in one read for our side (either side when neutral).
-    if (level != CelebLevel::FULL || !live || cur.sport != Sport::BASKETBALL)
+    // a three-point shot read on its own for our side (either side when neutral).
+    if (level != CelebLevel::FULL || !live || cur.sport != Sport::BASKETBALL || !celeb_three_play(cur))
       return none;
     bool ours = delta == 3 && odelta == 0;
-    bool theirs = neutral && odelta == 3 && delta == 0;
+    bool theirs = neutral && opp_splashes && odelta == 3 && delta == 0;
     if (!ours && !theirs)
       return none;
     CelebPlan p;
@@ -127,17 +165,25 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   }
 
   const bool win = splash.text.find("WINS") != std::string::npos;
-  // Whose splash: a win is the side with more points; a score is the side
-  // whose points moved (both can move in one read; the splash picked ours).
+  // Whose splash: a win is the winner's (the shootout decides a level soccer
+  // final, as soccer_splash does); a score is the side whose points moved
+  // (both can move in one read; the splash picked ours).
   bool ours;
   if (win)
-    ours = cur.team_score > cur.opp_score;
+    ours = celeb_team_won(cur);
   else
     ours = delta > 0 || odelta <= 0;
   CelebPlan p;
   p.text = splash.text;
   p.color = celeb_bright(splash.color);
   p.alt = celeb_alt_for(p.color);
+  // A splash that is not a score (UPSET ALERT) gets the plain flash, never a
+  // score's show, whatever moved in the same read.
+  if (!win && splash.text.find("UPSET") != std::string::npos) {
+    p.kind = CelebKind::FLASH;
+    p.duration_ms = kCelebFlashMs;
+    return p;
+  }
 
   if (!ours && !neutral) {
     p.kind = CelebKind::MUTED;
@@ -152,8 +198,7 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   }
   if (win) {
     p.kind = CelebKind::WIN;
-    // The board's order, our side first; neutral boards read the same way.
-    p.line2 = std::to_string(cur.team_score) + "-" + std::to_string(cur.opp_score);
+    p.line2 = celeb_final_line(cur, ours);
     p.duration_ms = kCelebWinMs;
     return p;
   }
@@ -193,6 +238,26 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
       return p;
   }
 }
+
+// The three is read from the scores, not from a poll's arrival, and the
+// component redraws the board for many reasons between polls (a failed
+// poll's back-off, a setting change, a card coming or going). This remembers
+// the read a THREE was shown for, so the same (game, scores) never shows it
+// twice; a stale ESPN read that steps back and forward again is the same
+// pair and stays quiet too.
+struct CelebLatch {
+  std::string event;
+  int team{-1}, opp{-1};
+  // True the first time this read of this game asks; false after that.
+  bool take(const GameSnapshot &cur) {
+    if (cur.event_id == event && cur.team_score == team && cur.opp_score == opp)
+      return false;
+    event = cur.event_id;
+    team = cur.team_score;
+    opp = cur.opp_score;
+    return true;
+  }
+};
 
 // Where the words go, so the animation leaves them room. The page uses the
 // same answer for its label; the host renderer for its own text.

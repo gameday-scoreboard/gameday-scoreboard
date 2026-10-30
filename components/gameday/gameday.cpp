@@ -3881,7 +3881,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   if (this->demo_playing_())
     neutral = false;
 #endif
-  ::espn::CelebPlan celeb = ::espn::decide_celebration(this->prev_, g, splash, this->celebrations(), neutral);
+  ::espn::CelebPlan celeb = ::espn::decide_celebration(this->prev_, g, splash, this->celebrations(), neutral,
+                                                       this->opponent_splashes());
+  // Only a fresh read shows a three; this emit_ also runs for redraws.
+  if (celeb.kind == ::espn::CelebKind::THREE && !this->celeb_latch_.take(g))
+    celeb = ::espn::CelebPlan{};
   f.splash_text = celeb.kind == ::espn::CelebKind::NONE ? std::string() : celeb.text;
   f.splash_color = celeb.color;
   f.celeb_kind = (uint8_t) celeb.kind;

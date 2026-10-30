@@ -593,6 +593,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
+  ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];
@@ -749,6 +750,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t celeb;   // celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
     uint8_t spare[1];
   } __attribute__((packed));
+  static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
   // Season leaders before the start, on by default: set means off.

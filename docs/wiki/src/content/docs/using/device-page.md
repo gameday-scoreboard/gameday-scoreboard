@@ -140,7 +140,7 @@ A **Celebrations** choice sets how big the show is:
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 
-The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side", so both teams get the full show in their own colors.
+The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side": the first team's scores always get the full show in its colors, and with **Opponent scores too** on the second team's do too.
 :::
 
 ### Timezone
