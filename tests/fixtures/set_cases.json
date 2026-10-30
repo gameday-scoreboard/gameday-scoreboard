@@ -12,6 +12,7 @@
     "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    "wx": true, "wxloc": "", "wxunit": 0, "wxevery": 5,
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
   "cases": [
@@ -146,6 +147,15 @@
     {"name": "msgevery 0 holds the board between games", "set": [["msgevery", "0"]], "expect": {"msgevery": 0}},
     {"name": "msgevery past 30 is 30", "set": [["msgevery", "45"]], "expect": {"msgevery": 30}},
     {"name": "msgevery as text is refused", "start": {"msgevery": 5}, "set": [["msgevery", "soon"]], "expect": {"msgevery": 5}},
+    {"name": "wx 0 turns the weather card off", "set": [["wx", "0"]], "expect": {"wx": false}},
+    {"name": "wxloc is trimmed", "set": [["wxloc", "  Coppell,   TX "]], "expect": {"wxloc": "Coppell, TX"}},
+    {"name": "wxloc empty goes back to the time zone's city", "start": {"wxloc": "75019"}, "set": [["wxloc", ""]], "expect": {"wxloc": ""}},
+    {"name": "wxloc past 48 bytes is cut", "set": [["wxloc", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]], "expect": {"wxloc": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+    {"name": "wxunit 2 is Celsius", "set": [["wxunit", "2"]], "expect": {"wxunit": 2}},
+    {"name": "wxunit past 2 is refused", "start": {"wxunit": 1}, "set": [["wxunit", "3"]], "expect": {"wxunit": 1}},
+    {"name": "wxevery 0 is 1", "set": [["wxevery", "0"]], "expect": {"wxevery": 1}},
+    {"name": "wxevery past 30 is 30", "set": [["wxevery", "99"]], "expect": {"wxevery": 30}},
+    {"name": "wxevery as text is refused", "set": [["wxevery", "x"]], "expect": {"wxevery": 5}},
 
     {"name": "night schedule on with its hours", "set": [["night", "1"], ["nightstart", "22:30"], ["nightend", "6:15"]],
      "expect": {"night": true, "nightstart": "22:30", "nightend": "06:15"}},

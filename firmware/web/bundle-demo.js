@@ -193,6 +193,21 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </select></div>
         <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
       </div>
+      <div class="card" id="wxCard" hidden>
+        <h2>Weather</h2>
+        <div class="ctl"><label>Weather card<small>Between games, the weather takes a turn on the panel: now, then the next few days. Before an outdoor game, the forecast for the start shows on the board too.</small></label><button class="sw" data-set="wx" aria-label="Weather card"></button></div>
+        <label class="fl" for="wxLoc">City or ZIP<small>Like Coppell, TX or 75019. Leave it empty to use your time zone's city.</small></label>
+        <input type="text" id="wxLoc" class="field" maxlength="48" placeholder="Coppell, TX" autocomplete="off" enterkeyhint="done">
+        <p class="hint" id="wxNow"></p>
+        <div class="ctl"><label for="wxUnit">Units</label><select id="wxUnit">
+          <option value="0">Automatic</option><option value="1">Fahrenheit</option><option value="2">Celsius</option>
+        </select></div>
+        <div class="ctl"><label for="wxEvery">Show it</label><select id="wxEvery">
+          <option value="1">Every minute</option><option value="2">Every 2 minutes</option><option value="5">Every 5 minutes</option>
+          <option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option>
+        </select></div>
+        <div class="actions"><button class="btn primary" id="wxSave">Save</button><button class="btn" id="wxShow">Show it now</button></div>
+      </div>
       <div class="card">
         <h2>Panel</h2>
         <div id="nickRow" hidden>
@@ -398,6 +413,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }),
     list: Number,
     msg: String, msgurl: String, msgevery: Number, nick: String,
+    wx: (v) => v === "1", wxloc: String, wxunit: Number, wxevery: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
   };
   const sameForm = {
@@ -1018,6 +1034,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+    renderWx();
   };
 
   // ---- night schedule (components/gameday/night.h) ---------------------------
@@ -1125,6 +1142,45 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- weather: the card's place, units and turns ------------------------------
+  const wxSeen = { wxloc: null, wxunit: null, wxevery: null };
+  const fillWx = (input, key) => {
+    const v = String(S[key] === undefined ? "" : S[key]);
+    if (v === wxSeen[key] || document.activeElement === input) return;
+    wxSeen[key] = v;
+    input.value = v;
+  };
+  const renderWx = () => {
+    // Older firmware has no weather card.
+    $("#wxCard").hidden = S.wx === undefined;
+    if (S.wx === undefined) return;
+    fillWx($("#wxLoc"), "wxloc");
+    fillWx($("#wxUnit"), "wxunit");
+    fillWx($("#wxEvery"), "wxevery");
+    const w = S.weather;
+    let line;
+    if (S.wxmissing) line = "No place found for " + S.wxloc + ". Try the city and state, like Coppell, TX, or a ZIP.";
+    else if (!S.wxplace) line = S.wxloc ? "Looking up " + S.wxloc + "." : "Your time zone has no city: type a city or ZIP.";
+    else if (w) {
+      line = S.wxplace + ": " + w.temp + "\u00b0" + w.unit + ", " + String(w.words || "").toLowerCase();
+      if (w.days && w.days.length) line += ". Today " + w.days[0].hi + "\u00b0 / " + w.days[0].lo + "\u00b0";
+      line += ".";
+    } else if (S.wxread !== undefined && S.wxread !== 200) {
+      line = "The panel couldn't reach the weather service" + (S.wxread ? " (HTTP " + S.wxread + ")" : "") + ". It tries again in a few minutes.";
+    } else line = S.wxplace + ": the forecast comes within a minute or two.";
+    $("#wxNow").textContent = line;
+  };
+  $("#wxSave").onclick = () => {
+    wxSeen.wxloc = wxSeen.wxunit = wxSeen.wxevery = null;
+    setGD({ wxloc: $("#wxLoc").value.trim(), wxunit: $("#wxUnit").value, wxevery: $("#wxEvery").value });
+    toast("Weather saved");
+  };
+  $("#wxShow").onclick = () => {
+    if (!S.weather) return toast("No forecast yet");
+    doAction("weather");
+    toast("Weather card on the panel, between games");
   };
 
   // ---- nickname: the header, the tab title and the box ---------------------------

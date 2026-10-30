@@ -79,7 +79,8 @@ MESSAGE_H = (REPO / "components/gameday/message.h").read_text(encoding="utf-8")
 LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|size_t) (k\w+) = (\d+);",
                                              SET_H + MESSAGE_H +
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
-                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/weather.h").read_text(encoding="utf-8"))}
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -122,6 +123,12 @@ INITIAL = {
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    # weather.h: the card's settings, the place they found and the last forecast
+    "wx": True, "wxloc": "", "wxunit": 0, "wxevery": 5, "wxplace": "Chicago", "wxread": 200,
+    "weather": {"temp": 61, "unit": "F", "code": 2, "words": "Partly cloudy", "age_s": 420,
+                "days": [{"day": "Tue", "hi": 66, "lo": 50, "code": 2}, {"day": "Wed", "hi": 70, "lo": 55, "code": 61},
+                         {"day": "Thu", "hi": 58, "lo": 44, "code": 3}, {"day": "Fri", "hi": 55, "lo": 40, "code": 0},
+                         {"day": "Sat", "hi": 60, "lo": 47, "code": 95}]},
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
@@ -271,6 +278,21 @@ def no_team_default():
     return STATE["mode"] == 4 and not any(STATE["favs"])
 
 
+def wx_query_clean(v):
+    """wx_query_clean() in components/gameday/weather.h: control characters out,
+    runs of spaces as one, trimmed, cut to kWxQueryMax bytes on a whole character."""
+    out = ""
+    for c in v:
+        if ord(c) < 0x20 or ord(c) == 0x7F or (c == " " and (not out or out[-1] == " ")):
+            continue
+        out += c
+    out = out.rstrip(" ")
+    b = out.encode("utf-8")
+    if len(b) > LIMITS["kWxQueryMax"]:
+        out = b[:LIMITS["kWxQueryMax"]].decode("utf-8", "ignore")
+    return out
+
+
 def state_doc():
     """rebuild_state_() works the leagues out each time: every league with no
     favorite picked (no_team_leagues()), else the auto leagues from the favorites."""
@@ -410,6 +432,16 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif k == "wx":
+            STATE["wx"] = v == "1"
+        elif k == "wxloc":
+            STATE["wxloc"] = wx_query_clean(v)
+        elif k == "wxunit":
+            if whole_int(v) and 0 <= int(v) <= 2:
+                STATE["wxunit"] = int(v)
+        elif k == "wxevery":
+            if whole_int(v):
+                STATE["wxevery"] = min(LIMITS["kWxEveryMax"], max(1, int(v)))
         elif k in ("night", "nightscreen"):
             STATE[k] = v == "1"
         elif k in ("nightstart", "nightend"):
@@ -531,6 +563,7 @@ def import_settings(doc):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
+                      "wxunit": (0, 2), "wxevery": (1, LIMITS["kWxEveryMax"]),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
@@ -901,7 +934,7 @@ class Handler(BaseHTTPRequestHandler):
             LOG.append({"path": u.path, "q": q})
             if not q.get("do"):
                 return self._json(400, {"error": "do is required"})
-            if q["do"] not in ("refresh", "qc", "power_ok", "say", "regulatory"):
+            if q["do"] not in ("refresh", "qc", "power_ok", "say", "regulatory", "weather"):
                 return self._json(404, {"error": "unknown action"})
             if q["do"] == "power_ok" and STATE.get("health"):
                 STATE["health"]["power"] = "ok"

@@ -89,6 +89,24 @@
     "status": 200,
     "entries": 3
   },
+  "wx": true,
+  "wxloc": "Coppell, TX",
+  "wxunit": 0,
+  "wxevery": 5,
+  "wxplace": "Coppell",
+  "wxmissing": false,
+  "wxread": 200,
+  "weather": {
+    "temp": 74,
+    "unit": "F",
+    "code": 0,
+    "words": "Clear",
+    "age_s": 312,
+    "days": [
+      {"day": "Tue", "hi": 83, "lo": 63, "code": 3},
+      {"day": "Wed", "hi": 80, "lo": 62, "code": 3}
+    ]
+  },
   "misses": 0,
   "captive": false,
   "espn_kb": 3241,

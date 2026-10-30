@@ -31,6 +31,7 @@
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
+#include "wx_canvas.h"
 #include "health.h"
 #include "line_score.h"
 #include "message.h"
@@ -45,6 +46,7 @@
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
+#include "weather.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -371,6 +373,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
+  // The weather card (weather.h), page 0 while it is down; gd_wx_card in
+  // firmware/pages/gameday-live.yaml draws it on each "wx" action, and
+  // gd_wx_anim moves its icons.
+  const ::espn::WxCard &wx_card() const { return this->wx_card_; }
+  // The next game's forecast for the board (gd_wx_badge), empty text when
+  // there is none.
+  const ::espn::WxBadge &wx_badge() const { return this->wx_badge_; }
+  // POST /gameday/action?do=weather: the card now, between games.
+  void wx_show_now();
 
   void setup() override;
   void loop() override;
@@ -477,6 +488,66 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string nick_;
   void load_nick_();
   void set_nick_(const std::string &nick);
+  // Weather (weather.h): the card's settings and the owner's place in their
+  // own blob. A panel without it has the card on, units on auto and the
+  // time zone's city.
+  struct PrefsWx {
+    uint8_t off;    // 1 = no weather card
+    uint8_t unit;   // espn::kWxUnit*
+    uint8_t every;  // minutes between the card's turns, 0 = the default
+    uint8_t have;   // 1 = lat, lon, place and country are the query's, geocoded
+    float lat, lon;
+    char query[::espn::kWxQueryMax + 1];
+    char place[::espn::kWxPlaceMax + 1];
+    char country[3];
+    uint8_t spare[4];
+  } __attribute__((packed));
+  ESPPreferenceObject wx_pref_;
+  PrefsWx wx_{};
+  void load_wx_();
+  void save_wx_();
+  void set_wx_(int on, const std::string *query, int unit, int every);
+  bool wx_on_() const { return this->wx_.off == 0; }
+  int wx_every_() const { return this->wx_.every == 0 ? ::espn::kWxEveryDefault : this->wx_.every; }
+  bool wx_fahrenheit_() const;
+  // Where the card's weather is for: the owner's geocoded place, else the
+  // time zone's city. False with neither (UTC with no place set).
+  bool wx_where_(float &lat, float &lon, std::string &name) const;
+  void wx_tick_();         // main loop: the card's turns, the next game's forecast
+  uint8_t wx_job_due_();   // main loop: the job kind to start now, 0 none
+  void start_wx_job_(uint8_t kind);
+  void run_wx_job_();      // worker
+  void apply_wx_job_();
+  bool wx_get_(const std::string &url, PsString &body, int &status);  // worker
+  void wx_card_show_(uint8_t page);
+  void wx_badge_update_();
+  ::espn::WxNow wx_now_;
+  uint32_t wx_ok_ms_{0};    // millis() of the last good read, 0 = none
+  uint32_t wx_try_ms_{0};   // millis() the last read started, 0 = none
+  uint32_t wx_fails_{0};    // failed reads in a row
+  int wx_status_{-1};       // the last read's HTTP status, 0 no answer, -1 none yet
+  bool wx_geo_missing_{false};  // the geocoder found nothing for the owner's text
+  uint32_t wx_gen_{0};      // goes up when the place changes: an older read is dropped
+  bool wx_force_{false};    // do=weather: up at the next chance
+  ::espn::WxCard wx_card_;
+  uint32_t wx_since_ms_{0};  // when the card last went up, turned or went down
+  uint32_t wx_tick_ms_{0};
+  uint32_t wx_due_ms_{0};  // wx_job_due_ looks once a second
+  // The next game's forecast when ESPN's event has none: one event at a time.
+  std::string wx_kick_event_;
+  ::espn::WxHour wx_kick_;
+  uint32_t wx_kick_ms_{0};     // millis() of its last read, good or not, 0 = none
+  uint32_t wx_kick_ok_ms_{0};  // millis() of its last good read
+  uint32_t wx_kick_fails_{0};
+  ::espn::WxBadge wx_badge_;
+  // Venues found lately, so the next poll's forecast needs no geocoding.
+  struct WxGeo {
+    std::string q;
+    float lat{0}, lon{0};
+    bool ok{false};
+  };
+  WxGeo wx_geo_[4];
+  uint8_t wx_geo_next_{0};
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
   ESPPreferenceObject power_pref_;
@@ -686,6 +757,22 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool msg_eof{false};
     bool msg_ok{false};
     int msg_status{0};  // HTTP status, 0 for no answer
+    // Weather (weather.h), between ESPN reads like the message list: 1 the
+    // card's forecast (geocoding wx_query first when it is set), 2 the hour
+    // at wx_at for the venue wx_query (geocoded first unless wx_have).
+    uint8_t wx{0};
+    uint32_t wx_gen{0};
+    std::string wx_query;
+    bool wx_have{false};
+    float wx_lat{0}, wx_lon{0};
+    int64_t wx_at{0};
+    std::string wx_event;
+    ::espn::WxPlace wx_place;
+    bool wx_no_place{false};  // the geocoder answered with no match
+    ::espn::WxNow wx_now;
+    ::espn::WxHour wx_hour;
+    bool wx_ok{false};
+    int wx_status{0};
   };
   void start_job_();
   void start_worker_();

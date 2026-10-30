@@ -62,6 +62,9 @@ struct Settings {
   uint16_t live_mask{0};
   std::string msg, msgurl, nick;
   int msgevery{kMsgEveryDefault};
+  bool wx{true};
+  std::string wxloc;
+  int wxunit{kWxUnitAuto}, wxevery{kWxEveryDefault};
   NightPrefs night{night_defaults()};
 };
 constexpr int kFavMax = 16;
@@ -118,6 +121,10 @@ void load(Settings &s, JsonObjectConst o) {
   num("tz", s.tz);
   num("panels", s.panels);
   num("msgevery", s.msgevery);
+  num("wxunit", s.wxunit);
+  num("wxevery", s.wxevery);
+  if (o["wxloc"].is<const char *>())
+    s.wxloc = o["wxloc"].as<const char *>();
   if (o["msg"].is<const char *>())
     s.msg = o["msg"].as<const char *>();
   if (o["msgurl"].is<const char *>())
@@ -128,6 +135,7 @@ void load(Settings &s, JsonObjectConst o) {
   num("collide", collide);
   s.collide = collide != 0;
   flag("today", s.today);
+  flag("wx", s.wx);
   flag("tz_auto", s.tz_auto);
   flag("down", s.down);
   flag("count", s.count);
@@ -235,6 +243,10 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
     case SetKind::NICK: s.nick = op.text; break;
+    case SetKind::WX: s.wx = op.on; break;
+    case SetKind::WX_LOC: s.wxloc = op.text; break;
+    case SetKind::WX_UNIT: s.wxunit = op.value; break;
+    case SetKind::WX_EVERY: s.wxevery = op.value; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -305,6 +317,10 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["msgurl"] = s.msgurl;
   doc["msgevery"] = s.msgevery;
   doc["nick"] = s.nick;
+  doc["wx"] = s.wx;
+  doc["wxloc"] = s.wxloc;
+  doc["wxunit"] = s.wxunit;
+  doc["wxevery"] = s.wxevery;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);

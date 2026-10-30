@@ -41,5 +41,9 @@
   "favtake",
   "nick",
   "lists",
-  "list"
+  "list",
+  "wx",
+  "wxloc",
+  "wxunit",
+  "wxevery"
 ]

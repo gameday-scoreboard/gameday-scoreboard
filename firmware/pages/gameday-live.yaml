@@ -144,6 +144,7 @@ script:
             // Game clock takes the records row while the game is live
             lv_obj_set_style_text_font(id(tt_clock_lbl), id(spleen_12), 0);
             lv_obj_set_pos(id(tt_clock_lbl), 32, 35);
+            lv_obj_set_pos(id(gd_wx_badge_canvas), (W - 64) / 2, 34);
             lv_obj_set_width(id(tt_clock_lbl), W - 64);
             // Timeout pips centered under each logo
             const int acx = 18, hcx = W - 18;
@@ -670,6 +671,38 @@ script:
           lv_obj_move_foreground(id(tt_msg));
           lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
 
+  # The weather card (components/gameday/weather.h): page 1 now, page 2 the
+  # days, or down. The component turns the pages between games and sends
+  # "wx" for each change; the interval below moves the icons.
+  - id: gd_wx_card
+    then:
+      - lambda: |-
+          const ::espn::WxCard &card = id(gameday_ctl).wx_card();
+          if (card.page == 0) {
+            lv_obj_add_flag(id(gd_wx_canvas), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const gameday::WxFonts fonts{id(spleen_32)->get_lv_font(), id(spleen_16)->get_lv_font(),
+                                       id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font()};
+          gameday::wx_card_draw(id(gd_wx_canvas), card, id(gd_wx_frame), lv_disp_get_hor_res(lv_disp_get_default()), fonts);
+          lv_obj_move_foreground(id(gd_wx_canvas));
+          lv_obj_clear_flag(id(gd_wx_canvas), LV_OBJ_FLAG_HIDDEN);
+
+  # The next game's forecast on a wide board before the start: ESPN's, or
+  # the panel's own from Open-Meteo when ESPN has none. Sent as "wxb".
+  - id: gd_wx_badge
+    then:
+      - lambda: |-
+          const ::espn::WxBadge &b = id(gameday_ctl).wx_badge();
+          if (b.text.empty() || lv_disp_get_hor_res(lv_disp_get_default()) < 128) {
+            lv_obj_add_flag(id(gd_wx_badge_canvas), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const gameday::WxFonts fonts{id(spleen_32)->get_lv_font(), id(spleen_16)->get_lv_font(),
+                                       id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font()};
+          gameday::wx_badge_draw(id(gd_wx_badge_canvas), b, id(gd_wx_frame), fonts);
+          lv_obj_clear_flag(id(gd_wx_badge_canvas), LV_OBJ_FLAG_HIDDEN);
+
   # The off-season clock's time, and the date when that line has no next
   # game, in the panel's time zone; or the countdown card's digits. A label
   # is only rewritten when its text changes, so once a minute.
@@ -701,6 +734,24 @@ interval:
   - interval: 1s
     then:
       - script.execute: gd_clock_tick
+  # The weather icons move about ten frames a second, only while the card or
+  # the next game's badge is on the board.
+  - interval: 100ms
+    then:
+      - lambda: |-
+          const bool card = !lv_obj_has_flag(id(gd_wx_canvas), LV_OBJ_FLAG_HIDDEN);
+          const bool badge = !lv_obj_has_flag(id(gd_wx_badge_canvas), LV_OBJ_FLAG_HIDDEN) &&
+                             !lv_obj_has_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
+          if (!card && !badge)
+            return;
+          id(gd_wx_frame)++;
+          const gameday::WxFonts fonts{id(spleen_32)->get_lv_font(), id(spleen_16)->get_lv_font(),
+                                       id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font()};
+          if (card)
+            gameday::wx_card_draw(id(gd_wx_canvas), id(gameday_ctl).wx_card(), id(gd_wx_frame),
+                                  lv_disp_get_hor_res(lv_disp_get_default()), fonts);
+          if (badge)
+            gameday::wx_badge_draw(id(gd_wx_badge_canvas), id(gameday_ctl).wx_badge(), id(gd_wx_frame), fonts);
   # The line score's turn on the board (gd_update shows it); the board
   # always comes first.
   - interval: 10s
@@ -715,6 +766,11 @@ interval:
             lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
 
 globals:
+  # The weather icons' frame (gd_wx_card, gd_wx_badge)
+  - id: gd_wx_frame
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
   # The board has a line score (halftime or a final), and it is its turn.
   - id: gd_line_ready
     type: bool
@@ -857,6 +913,16 @@ lvgl:
                   hidden: true
                   text: ""
                   styles: ["tt_st_score_text"]
+
+              # The next game's forecast before the start (gd_wx_badge), in
+              # the live clock's row on a wide board
+              - canvas:
+                  id: gd_wx_badge_canvas
+                  x: 32
+                  y: 34
+                  width: 64
+                  height: 13
+                  hidden: true
 
               - label:
                   id: tt_down_lbl
@@ -1237,6 +1303,17 @@ lvgl:
                   long_mode: WRAP
                   text: ""
                   text_color: 0xFFFFFF
+
+        # The weather card, over the board between games (gd_wx_card), two
+        # panels wide at most (32 KB, in PSRAM like every LVGL buffer); a
+        # single panel uses the left part.
+        - canvas:
+            id: gd_wx_canvas
+            x: 0
+            y: 0
+            width: 256
+            height: 64
+            hidden: true
 
       on_load:
         then:

@@ -162,6 +162,18 @@
     "tz_name": "string",
     "update_failed": "string",
     "version": "string",
+    "weather": "object",
+    "weather.age_s": "int",
+    "weather.code": "int",
+    "weather.days": "array",
+    "weather.days[]": "object",
+    "weather.days[].code": "int",
+    "weather.days[].day": "string",
+    "weather.days[].hi": "int",
+    "weather.days[].lo": "int",
+    "weather.temp": "int",
+    "weather.unit": "string",
+    "weather.words": "string",
     "wifi": "object",
     "wifi.causes": "object",
     "wifi.causes.other": "int",
@@ -181,7 +193,14 @@
     "wifi.last_down": "int",
     "wifi.rssi": "int",
     "wifi.step": "int",
-    "wifi.weak": "bool"
+    "wifi.weak": "bool",
+    "wx": "bool",
+    "wxevery": "int",
+    "wxloc": "string",
+    "wxmissing": "bool",
+    "wxplace": "string",
+    "wxread": "int",
+    "wxunit": "int"
   },
   "wifi": {
     "max": "int",
@@ -240,7 +259,11 @@
     "today": "bool",
     "tz": "string",
     "tzauto": "bool",
-    "version": "string"
+    "version": "string",
+    "wx": "bool",
+    "wxevery": "int",
+    "wxloc": "string",
+    "wxunit": "int"
   },
   "crash": {
     "build_time": "int",

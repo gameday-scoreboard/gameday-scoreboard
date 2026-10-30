@@ -17,6 +17,7 @@
 #include "startup.h"
 #include "teams.h"
 #include "timezones.h"
+#include "weather.h"
 
 namespace espn {
 
@@ -28,7 +29,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list"};
+                                    "nick",   "lists",    "list",   "wx",     "wxloc",   "wxunit",
+                                    "wxevery"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -202,6 +204,10 @@ enum class SetKind : uint8_t {
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  WX,           // on, the weather card between games (weather.h)
+  WX_LOC,       // text, a city or ZIP for it (wx_query_clean); "" is the time zone's city
+  WX_UNIT,      // value, kWxUnitAuto, kWxUnitF or kWxUnitC
+  WX_EVERY,     // value, minutes between its turns, 1 to kWxEveryMax
 };
 
 struct TeamRef {
@@ -372,6 +378,24 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     long n = strtol(v.c_str(), nullptr, 10);
     op.value = n >= 0 && n <= 16 ? (int) n : -1;
     return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
+  if (k == "wx")
+    return on(SetKind::WX);
+  if (k == "wxloc") {
+    op.kind = SetKind::WX_LOC;
+    op.text = wx_query_clean(v);
+    return true;
+  }
+  if (k == "wxunit") {
+    op.kind = SetKind::WX_UNIT;
+    return parse_whole_int(v, op.value) && op.value >= kWxUnitAuto && op.value <= kWxUnitC;
+  }
+  if (k == "wxevery") {
+    op.kind = SetKind::WX_EVERY;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_wx_every(op.value);
+    return true;
   }
   if (k == "night")
     return on(SetKind::NIGHT);

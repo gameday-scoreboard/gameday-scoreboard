@@ -4,6 +4,7 @@
   "power_ok",
   "say",
   "regulatory",
+  "weather",
   "demo",
   "demo_stop"
 ]

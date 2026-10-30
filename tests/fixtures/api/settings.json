@@ -40,6 +40,10 @@
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,
+  "wx": true,
+  "wxloc": "Coppell, TX",
+  "wxunit": 0,
+  "wxevery": 5,
   "autoupd": false,
   "beta": false,
   "lists": [

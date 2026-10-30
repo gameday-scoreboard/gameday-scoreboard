@@ -10,12 +10,13 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_weather
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
 	./build/test_settings
 	./build/test_logo_cache
+	./build/test_weather
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
@@ -39,6 +40,12 @@ build/test_api: test_api.cpp ../components/gameday/set_request.h ../components/g
 build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_settings.cpp -o $@ $(LDFLAGS)
+
+# Open-Meteo's replies (fixtures/weather/), the weather card's turns and its
+# icons. `./build/test_weather --png <dir>` writes every icon's frames.
+build/test_weather: test_weather.cpp ../components/gameday/weather.h ../components/gameday/wx_icons.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_weather.cpp -o $@ $(LDFLAGS)
 
 # The logo cache's state machine, with FreeRTOS, http_request and RuntimeImage
 # replaced by the stand-ins in logo_stubs/.

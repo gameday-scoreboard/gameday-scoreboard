@@ -9,6 +9,7 @@
 
 #include "psram.h"
 #include "teams.h"
+#include "weather.h"
 
 namespace espn {
 
@@ -142,6 +143,14 @@ struct GameSnapshot {
   // when the event has none).
   uint8_t week{0};
   std::string weather;
+  // The same forecast for the board (weather.h): degrees F, kWxNoTemp
+  // without one, and its WxIcon. The venue's place for a forecast of our
+  // own when ESPN has none ("Evanston, IL", "London, England"), and whether
+  // it is indoors: 1, 0, or -1 when ESPN doesn't say.
+  int16_t weather_f{kWxNoTemp};
+  uint8_t weather_icon{0};
+  int8_t venue_indoor{-1};
+  std::string venue_place;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};

@@ -321,6 +321,7 @@ void GamedayComponent::setup() {
       this->prefs9_.active > this->prefs9_.count)
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
   this->load_msg_();
+  this->load_wx_();
   this->load_nick_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
@@ -1243,6 +1244,7 @@ void GamedayComponent::loop() {
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the card down.
   this->msg_tick_();
+  this->wx_tick_();
 #ifdef GAMEDAY_DEMO
   // While the scripted game plays, nothing new is fetched. A fetch already
   // running still finishes below, and is discarded as belonging to before.
@@ -1280,6 +1282,10 @@ void GamedayComponent::loop() {
         this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
           this->msg_fail_ms_ = this->gave_up_ms_;
+        if (this->job_.wx == 1)
+          this->wx_fails_++;
+        else if (this->job_.wx == 2)
+          this->wx_kick_fails_++;
         // need_scan, like need_msg, was set before the task started, so the
         // abandoned task can't have changed it.
         if (this->job_.need_scan)
@@ -1304,8 +1310,13 @@ void GamedayComponent::loop() {
     this->start_msg_job_();
     return;
   }
-  if ((int32_t) (millis() - this->next_fetch_ms_) < 0)
+  if ((int32_t) (millis() - this->next_fetch_ms_) < 0) {
+    // Weather, only while the next ESPN read is a while off (wx_job_due_).
+    uint8_t wx = this->wx_job_due_();
+    if (wx != 0)
+      this->start_wx_job_(wx);
     return;
+  }
   if (!network::is_connected() || !this->clock_set_()) {
     this->wait_for_clock_();
     const uint32_t now = millis();
@@ -2555,6 +2566,10 @@ void GamedayComponent::run_job_() {
     this->run_msg_job_();
     return;
   }
+  if (j.wx != 0) {
+    this->run_wx_job_();
+    return;
+  }
   if (j.need_clock) {
     // Any status will do, a 404 or a 503 carries the date just the same.
     std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
@@ -2670,6 +2685,10 @@ void GamedayComponent::apply_job_() {
   Job &j = this->job_;
   if (j.need_msg) {
     this->apply_msg_job_();  // whatever the board follows, the card is the same
+    return;
+  }
+  if (j.wx != 0) {
+    this->apply_wx_job_();  // the place or the event is checked there
     return;
   }
   if (j.need_clock) {
@@ -3132,7 +3151,15 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   };
   std::string kickoff = kickoff_of(g);
   f.kickoff = kickoff;
+  // The forecast part of the ticker ("54°F Clear at Ryan Field") in the
+  // owner's unit, and the panel's own forecast when ESPN's event has none
+  // (wx_badge_update_). The game keeps ESPN's text for next time.
+  this->wx_badge_update_();
+  std::string espn_weather = this->game_.weather;
+  if (g.valid && g.state == GameState::PRE && !this->wx_badge_.words.empty())
+    this->game_.weather = this->wx_badge_.words;
   f.status_text = ::espn::status_text(g, opts, kickoff);
+  this->game_.weather = espn_weather;
   // Halftime and the final: ESPN's headline (a final only) and the scores the
   // panel saw, behind the same switch as the last play.
   this->score_log_.update(g);
@@ -3847,6 +3874,42 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     if (this->msg_total_ > 0 || this->msg_eof_)
       mr["entries"] = this->msg_total_;
   }
+  // Weather (weather.h): the settings, then what the card shows. "weather"
+  // is left out until a read has succeeded; "wxread" is the last read's
+  // HTTP status (0 for no answer) once one has run, and "wxmissing" says the
+  // place the owner typed wasn't found.
+  doc["wx"] = this->wx_on_();
+  doc["wxloc"] = this->wx_.query;
+  doc["wxunit"] = this->wx_.unit;
+  doc["wxevery"] = this->wx_every_();
+  {
+    float lat, lon;
+    std::string name;
+    if (this->wx_where_(lat, lon, name))
+      doc["wxplace"] = name;
+  }
+  if (this->wx_geo_missing_)
+    doc["wxmissing"] = true;
+  if (this->wx_status_ >= 0)
+    doc["wxread"] = this->wx_status_;
+  if (this->wx_now_.ok && this->wx_ok_ms_ != 0) {
+    const bool fahr = this->wx_fahrenheit_();
+    ::espn::WxCard c = ::espn::wx_card(this->wx_now_, fahr, "");
+    JsonObject w = doc["weather"].to<JsonObject>();
+    w["temp"] = ::espn::wx_degrees(this->wx_now_.temp, fahr);
+    w["unit"] = fahr ? "F" : "C";
+    w["code"] = this->wx_now_.code;
+    w["words"] = c.words;
+    w["age_s"] = (millis() - this->wx_ok_ms_) / 1000;
+    JsonArray days = w["days"].to<JsonArray>();
+    for (uint8_t i = 0; i < this->wx_now_.ndays; i++) {
+      JsonObject d = days.add<JsonObject>();
+      d["day"] = ::espn::wx_day_name(this->wx_now_.days[i].wday);
+      d["hi"] = ::espn::wx_degrees(this->wx_now_.days[i].hi, fahr);
+      d["lo"] = ::espn::wx_degrees(this->wx_now_.days[i].lo, fahr);
+      d["code"] = this->wx_now_.days[i].code;
+    }
+  }
   doc["misses"] = this->misses_;
   // The Wi-Fi wants a sign-in (captive.h); the page and the app say how to
   // get the panel onto a network that works.
@@ -4227,8 +4290,10 @@ void GamedayComponent::msg_tick_() {
   // Not over a live game, the demo, a splash or the panel's trouble line.
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
+  // The weather card (wx_tick_) takes its turns with it, never at once.
   const bool between = !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
-                       (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+                       (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs) &&
+                       (this->msg_shown_ || this->wx_card_.page == 0);
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
   ::espn::MsgTurn turn =
       ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
@@ -4392,7 +4457,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"do is required\"}");
       return;
     }
-    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say" || name == "regulatory";
+    bool known = name == "refresh" || name == "qc" || name == "power_ok" || name == "say" || name == "regulatory" ||
+                 name == "weather";
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
@@ -4412,6 +4478,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
         this->refresh_now();
       else if (name == "power_ok")
         this->clear_power_cap();
+      else if (name == "weather")
+        this->wx_show_now();
 #ifdef GAMEDAY_DEMO
       else if (name == "demo")
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);
@@ -4529,6 +4597,10 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   std::string msg_text, msg_url;
   uint8_t msg_keys = 0;
   int msg_every = -1;
+  // And the weather card's.
+  int wx_on = -1, wx_unit = -1, wx_every = -1;
+  std::string wx_loc;
+  bool wx_loc_set = false;
   // So are the night schedule's.
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
@@ -4663,6 +4735,19 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       case ::espn::SetKind::NICK:
         this->set_nick_(op.text);
         break;
+      case ::espn::SetKind::WX:
+        wx_on = op.on ? 1 : 0;
+        break;
+      case ::espn::SetKind::WX_LOC:
+        wx_loc = op.text;
+        wx_loc_set = true;
+        break;
+      case ::espn::SetKind::WX_UNIT:
+        wx_unit = op.value;
+        break;
+      case ::espn::SetKind::WX_EVERY:
+        wx_every = op.value;
+        break;
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;
         break;
@@ -4686,6 +4771,8 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   this->set_night_(night);
   if (msg_keys != 0 || msg_every >= 0)
     this->set_msg_((msg_keys & 1) ? &msg_text : nullptr, (msg_keys & 2) ? &msg_url : nullptr, msg_every);
+  if (wx_on >= 0 || wx_loc_set || wx_unit >= 0 || wx_every >= 0)
+    this->set_wx_(wx_on, wx_loc_set ? &wx_loc : nullptr, wx_unit, wx_every);
   if (dirty)
     this->rebuild_state_(&this->last_fields_);
   this->end_sync_batch_();

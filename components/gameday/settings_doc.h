@@ -53,11 +53,13 @@ enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
 inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
-                                      "leaders", "night", "nightscreen", "favtake", "countdown"};
+                                      "leaders", "night", "nightscreen", "favtake", "countdown", "wx"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel", "list"};
+                                     "release", "collide", "msgevery", "nightlevel", "list",
+                                     "wxunit", "wxevery"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate"};
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate",
+                                      "wxloc"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -106,8 +108,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
-                                      "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
-                                      "lists",    "list"};
+                                      "cddate",   "msg",      "msgurl",   "msgevery",    "wx",         "wxloc",
+                                      "wxunit",   "wxevery",  "autoupd",  "beta",        "lists",      "list"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -260,7 +262,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
                                          : true;
         in_range = in_range && parse_set(k, std::to_string(n), op, target.fav_max);
         bool clamped = op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
-                       op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL;
+                       op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL ||
+                       op.kind == SetKind::WX_EVERY;
         if (!in_range || (clamped && op.value != n)) {
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;

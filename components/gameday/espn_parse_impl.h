@@ -90,6 +90,13 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   comp["venue"]["indoor"] = true;
 }
 
+// The venue's place, for a forecast of the panel's own (weather.h). Only the
+// sports played outside: an arena's would only cost memory.
+inline void fill_venue_place_filter(JsonObject ev) {
+  for (const char *k : {"city", "state", "country"})
+    ev["competitions"][0]["venue"]["address"][k] = true;
+}
+
 inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>(), false); }
 
 inline void fill_baseball_filter(JsonObject ev) {
@@ -232,6 +239,40 @@ inline std::string weather_text(JsonObjectConst w) {
   return out + " " + text;
 }
 
+// The forecast's icon (weather.h): from AccuWeather's icon number when one
+// of the two fields carries it, else from the words.
+inline uint8_t weather_icon(JsonObjectConst w) {
+  for (const char *k : {"conditionId", "displayValue"}) {
+    const char *v = w[k].as<const char *>();
+    if (v != nullptr && *v && !has_letter(v)) {
+      WxIcon icon = accu_icon(atoi(v));
+      if (icon != WxIcon::NONE)
+        return (uint8_t) icon;
+    }
+  }
+  for (const char *k : {"displayValue", "conditionId"}) {
+    const char *v = w[k].as<const char *>();
+    if (has_letter(v))
+      return (uint8_t) words_icon(v);
+  }
+  return (uint8_t) WxIcon::NONE;
+}
+
+// "Evanston, IL", "San Diego, California", "London, England": the venue's
+// city and its state, or its country without one. "" with no city.
+inline std::string venue_place(JsonObjectConst a) {
+  std::string city = str_or_empty(a["city"]);
+  if (city.empty())
+    return "";
+  std::string region = str_or_empty(a["state"]);
+  if (region.empty())
+    region = str_or_empty(a["country"]);
+  std::string out = region.empty() ? city : city + ", " + region;
+  if (out.size() > kWxQueryMax)
+    out.resize(city.size() <= kWxQueryMax ? city.size() : kWxQueryMax);
+  return out;
+}
+
 inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSnapshot &out) {
   GameSnapshot s;
   s.event_id = str_or_empty(ev["id"]);
@@ -337,8 +378,17 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     if ((ev["season"]["type"] | 0) == 2 && week >= 1 && week <= 30)
       s.week = (uint8_t) week;
     // A dome's forecast is the city's, not the game's.
-    if (!(comp["venue"]["indoor"] | false))
+    JsonVariantConst indoor = comp["venue"]["indoor"];
+    s.venue_indoor = indoor.is<bool>() ? (indoor.as<bool>() ? 1 : 0) : -1;
+    s.venue_place = venue_place(comp["venue"]["address"]);
+    if (s.venue_indoor != 1) {
       s.weather = weather_text(ev["weather"]);
+      if (!s.weather.empty()) {
+        float f = ev["weather"]["temperature"].as<float>();
+        s.weather_f = (int16_t) (f < 0 ? f - 0.5f : f + 0.5f);
+        s.weather_icon = weather_icon(ev["weather"]);
+      }
+    }
   }
   s.valid = true;
   out = s;
@@ -739,6 +789,8 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
     detail::fill_basketball_filter(filter.as<JsonObject>());
   if (sport == Sport::HOCKEY)
     detail::fill_hockey_filter(filter.as<JsonObject>());
+  if (sport == Sport::FOOTBALL || sport == Sport::BASEBALL || sport == Sport::SOCCER)
+    detail::fill_venue_place_filter(filter.as<JsonObject>());
   JsonDocument doc(detail::json_allocator());
   DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
                                               DeserializationOption::NestingLimit(40));

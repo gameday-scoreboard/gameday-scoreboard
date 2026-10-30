@@ -197,3 +197,16 @@ companion app's tests read them, so a firmware change to the API updates
 them in the same PR. `GET /gameday/heap` (a bench reading) and
 `/gameday/demo` (demo builds only) are not part of the API the apps use and
 have no fixture.
+
+Weather, from Open-Meteo (no key), recorded 2026-10-27 for `test_weather.cpp`:
+
+| File | Source |
+| --- | --- |
+| `weather/forecast_coppell.json` | `api.open-meteo.com/v1/forecast?latitude=32.955&longitude=-97.015&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`, the card's read (night, clear) |
+| `weather/forecast_svalbard.json` | the same read at 78.22, 15.65: below freezing, drizzle |
+| `weather/hour_evanston.json` | `...&hourly=temperature_2m,weather_code&timezone=GMT&start_hour=2026-11-01T18:00&end_hour=2026-11-01T18:00`, one kickoff hour |
+| `weather/hour_out_of_range.json` | the same for 2026-12-25, past the 16 days Open-Meteo forecasts: `{"error":true}` |
+| `weather/geocode_zip.json` | `geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=75019&countryCode=US` |
+| `weather/geocode_zip_no_country.json` | the same without `countryCode`: a Paris postcode |
+| `weather/geocode_london.json` | `...&name=London%2C%20England` |
+| `weather/geocode_none.json` | `...&name=Mars%20Base`: no match |

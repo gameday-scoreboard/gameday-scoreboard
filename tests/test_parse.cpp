@@ -2677,11 +2677,26 @@ static void test_pregame_extras() {
   CHECK(parse_event_str(slurp("fixtures/event_nfl_pre.json"), Sport::FOOTBALL, 1, atl));
   CHECK_EQ(atl.weather, std::string(""));
   CHECK_EQ((int) atl.week, 6);
+  // The board's forecast (weather.h): the temperature as a number, the icon
+  // from AccuWeather's number ("33" is clear at night), and the venue's place
+  // and indoor flag for a forecast of the panel's own when ESPN has none
+  CHECK_EQ((int) nu.weather_f, 54);
+  CHECK(nu.weather_icon == (uint8_t) espn::WxIcon::MOON);
+  CHECK_EQ(nu.venue_place, std::string("Evanston, IL"));
+  CHECK_EQ((int) nu.venue_indoor, 0);
+  CHECK_EQ((int) atl.venue_indoor, 1);
+  CHECK_EQ((int) atl.weather_f, (int) espn::kWxNoTemp);
+  CHECK_EQ(atl.venue_place, std::string("Atlanta, GA"));
+  GameSnapshot sd = mlb_event("fixtures/event_mlb_pre.json", kBrewers);
+  CHECK_EQ(sd.venue_place, std::string("San Diego, California"));
+  CHECK_EQ((int) sd.weather_f, 82);
+  CHECK(sd.weather_icon == (uint8_t) espn::WxIcon::MOON);  // "34", mostly clear at night
   // Once the game is on: no week, forecast or leaders
   GameSnapshot live;
   CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, live, "401871053"));
   CHECK_EQ((int) live.week, 0);
   CHECK_EQ(live.weather, std::string(""));
+  CHECK_EQ(live.venue_place, std::string(""));  // only before the start
   GameSnapshot top = mlb_event("fixtures/event_mlb_top.json", kBraves);
   CHECK_EQ(top.team_leader, std::string(""));
   CHECK_EQ(top.opp_leader, std::string(""));

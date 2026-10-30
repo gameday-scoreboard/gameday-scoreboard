@@ -108,6 +108,10 @@ Only the ticker switches for sports your panel follows are shown. Hockey and bas
 The **Between games** card has **Countdown to the next game**, on unless you turn it off, and **Your own countdown**: a **Name** and a **Day** to count down to, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/).
 :::
 
+:::note[Coming in the next release]
+A **Weather** card, after Message, has the **Weather card** switch, a **City or ZIP** box for where the weather is for, **Units** and **Show it**, with **Show it now** to put the card up between games. See [Weather](/using/weather/).
+:::
+
 ### Celebrations
 
 The panel fills the screen with a splash when someone scores, in the scoring team's color. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.

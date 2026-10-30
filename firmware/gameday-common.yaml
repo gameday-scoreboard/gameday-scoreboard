@@ -222,7 +222,7 @@ font:
   - file: "https://github.com/fcambus/spleen/raw/refs/tags/2.1.0/spleen-16x32.bdf"
     id: spleen_32
     size: 32
-    glyphs: ["0123456789 Tadhmoy"]
+    glyphs: ["0123456789 Tadhmoy°-"]
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -668,6 +668,17 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # The weather card and the next game's forecast (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "wx";'
+        then:
+          - script.execute: gd_wx_card
+    - if:
+        condition:
+          lambda: 'return x == "wxb";'
+        then:
+          - script.execute: gd_wx_badge
     # Another favorite scored (pages/gameday-live.yaml)
     - if:
         condition:
