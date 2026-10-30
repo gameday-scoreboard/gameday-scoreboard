@@ -1,5 +1,6 @@
 {
   "state": {
+    "after": "string",
     "autoupd": "bool",
     "banner": "bool",
     "bar": "object",
@@ -216,6 +217,9 @@
     "update_failed": "string",
     "update_important": "bool",
     "version": "string",
+    "wake": "bool",
+    "wake_now": "string",
+    "wakelead": "int",
     "wifi": "object",
     "wifi.causes": "object",
     "wifi.causes.other": "int",
@@ -245,6 +249,7 @@
     "networks[].ssid": "string"
   },
   "settings": {
+    "after": "string",
     "autoupd": "bool",
     "banner": "bool",
     "best": "bool",
@@ -313,7 +318,9 @@
     "top25": "bool",
     "tz": "string",
     "tzauto": "bool",
-    "version": "string"
+    "version": "string",
+    "wake": "bool",
+    "wakelead": "int"
   },
   "crash": {
     "build_time": "int",

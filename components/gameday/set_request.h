@@ -19,6 +19,7 @@
 #include "startup.h"
 #include "teams.h"
 #include "timezones.h"
+#include "wake.h"
 #include "weather.h"
 
 namespace espn {
@@ -33,7 +34,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "news",   "town",     "wxon",     "cards"};
+                                    "news",   "town",     "wxon",     "cards",   "wake",    "wakelead",
+                                    "after"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -212,6 +214,9 @@ enum class SetKind : uint8_t {
   SPORT,        // value, the sport row Favorite teams plays, 1 + Sport; 0 = none (every favorite)
   HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
   PREGAME,      // value, minutes before the start for the reminder event, 0 = none
+  WAKE,         // on, Game-day wake (wake.h)
+  WAKE_LEAD,    // value, minutes before the start, kWakeLeadMin to kWakeLeadMax
+  AFTER,        // value, After the game: an After
   NEWS,         // on, the news card between games (news.h)
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
@@ -406,6 +411,21 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.value = clamp_pregame_minutes(op.value);
     return true;
   }
+  if (k == "wakelead") {
+    op.kind = SetKind::WAKE_LEAD;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_wake_lead(op.value);
+    return true;
+  }
+  if (k == "after") {
+    // "off", "clock" or "scoreboard"; a choice this firmware doesn't have is refused.
+    op.kind = SetKind::AFTER;
+    op.value = after_parse(v);
+    return op.value >= 0;
+  }
+  if (k == "wake")
+    return on(SetKind::WAKE);
   if (k == "town") {
     op.kind = SetKind::TOWN;
     op.text = town_clean(v);

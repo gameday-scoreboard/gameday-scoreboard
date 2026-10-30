@@ -50,5 +50,8 @@
   "sport": {"form": "the sport row Favorite teams plays, one of the state's sports (football, baseball, basketball, hockey, soccer), or none to stop it and play every favorite; a sport with no row is refused; with a sport picked, list in the same request is ignored", "ok": ["football", "basketball", "none"], "bad": ["", "Football", "racing"]},
   "hook": {"form": "the game events' webhook, an http address on the home network, at most 160 bytes, or empty for none; https is refused", "ok": ["http://192.168.1.20:1880/gameday", ""], "bad": ["https://example.com/hook", "192.168.1.20/hook"]},
   "pregame": {"form": "minutes before the start for the reminder event, a whole number, clamped to 0 to 120; 0 sends none", "ok": ["0", "15", "120"], "bad": ["", "soon"]},
+  "wake": {"form": "1 turns Game-day wake on, anything else off", "ok": ["1", "0"]},
+  "wakelead": {"form": "minutes before the start the wake turns the panel on, a whole number, clamped to 5 to 120", "ok": ["5", "15", "120"], "bad": ["", "15m"]},
+  "after": {"form": "what the panel does once a final has lingered: scoreboard, off or clock; any other word is refused", "ok": ["scoreboard", "off", "clock"], "bad": ["effects", "", "Off"]},
   "cards": {"form": "the Between games list: id:1 turns a card on and id:0 off, comma separated, ids from the state's cards list; the cards it doesn't name stay as they are; an id the panel doesn't have is skipped; countdown, top25, news and gameleaders are the same switches as those keys, and weather is wxon", "ok": ["next:0", "clock:1,custom:0", "message:1,standings:0"], "bad": ["", "standings:1", "next", "next:yes"]}
 }

@@ -34,6 +34,9 @@
   "nightend": "07:00",
   "nightscreen": true,
   "nightlevel": 16,
+  "wake": true,
+  "wakelead": 15,
+  "after": "off",
   "cards": {
     "next": true,
     "clock": false,

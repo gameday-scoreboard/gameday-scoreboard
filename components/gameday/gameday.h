@@ -50,6 +50,7 @@
 #include "set_request.h"
 #include "settings_doc.h"
 #include "startup.h"
+#include "wake.h"
 #include "update_nudge.h"
 #include "weather.h"
 #include "wifi_history.h"
@@ -407,6 +408,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void night_resume();
   bool night_holding() const { return ::espn::night_holding(this->night_now_); }
   bool night_skipped() const { return this->night_now_ == ::espn::Night::SKIPPED; }
+  // Game-day wake and After the game (wake.h). The Power switch tells the
+  // component when it turns on or off; the component asks for a turn with
+  // the "wake_on" and "wake_off" actions. A panel After the game turned off
+  // stays off through a restart (the nightly update): on_boot asks
+  // asleep_at_boot() before the panel lights.
+  void set_power(bool on);
+  static bool asleep_at_boot();
   // "Follow beta": the update entity reads the beta manifest instead of the
   // release one. Off unless the owner turns it on; only in builds with
   // beta_channel (the release builds, gameday-common.yaml).
@@ -1175,6 +1183,28 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void load_night_();
   void set_night_(const ::espn::NightPrefs &p);
   void night_tick_();  // from loop(), every AUTO_UPDATE_TICK
+  // Game-day wake (wake.h), its own blob, and its state, kept in RTC memory
+  // through a restart. wake_clock_ is the clock between games, on the board
+  // now (clock_fields_).
+  ESPPreferenceObject wake_pref_;
+  ::espn::WakePrefs wake_{};
+  ::espn::WakeState wake_state_{};
+  bool wake_loaded_{false};
+  bool wake_clock_{false};
+  bool power_on_{true};
+  // Live games with Favorites take over: the next start of a favorite's
+  // game from the last scan, 0 for none.
+  int64_t take_kick_{0};
+  void load_wake_();
+  void set_wake_(const ::espn::WakePrefs &p);
+  // The league of the owner's game while it is live, for its final's linger.
+  League wake_league_{League::NFL};
+  ::espn::WakeInputs wake_inputs_();
+  void wake_tick_();  // from loop(), every AUTO_UPDATE_TICK
+  void save_wake_state_();
+  // The soonest start of a game of the owner's still ahead, 0 for none.
+  int64_t owner_next_kick_(int64_t now) const;
+  void wake_clock_fields_(UpdateFields &f);
   bool owner_team_(uint8_t league, uint32_t id) const;
   bool owner_game_live_() const;
   ESPPreferenceObject pref7_;

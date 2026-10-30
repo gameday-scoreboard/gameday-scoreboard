@@ -35,6 +35,7 @@
 #include "prefs_sync.h"
 #include "startup.h"
 #include "timezones.h"
+#include "wake.h"
 #include "update_nudge.h"
 #include "wifi_history.h"
 
@@ -5503,6 +5504,214 @@ static void test_night() {
   static_assert(sizeof(NightPrefs) == 10, "NightPrefs is saved in flash: its size can't change");
 }
 
+static void test_wake() {
+  CHECK_EQ(after_parse("scoreboard"), 0);
+  CHECK_EQ(after_parse("off"), 1);
+  CHECK_EQ(after_parse("clock"), 2);
+  CHECK_EQ(after_parse("effects"), -1);  // not in this firmware yet
+  CHECK_EQ(after_parse(""), -1);
+  CHECK_EQ(std::string(after_word(9)), std::string("scoreboard"));
+  CHECK_EQ(clamp_wake_lead(0), (int) kWakeLeadMin);
+  CHECK_EQ(clamp_wake_lead(30), 30);
+  CHECK_EQ(clamp_wake_lead(500), (int) kWakeLeadMax);
+  static_assert(sizeof(WakePrefs) == 8, "WakePrefs is saved in flash: its size can't change");
+
+  WakePrefs p = wake_defaults();
+  CHECK(!p.on);
+  CHECK_EQ((int) p.lead, 15);
+  CHECK_EQ((int) p.after, (int) After::SCOREBOARD);
+  {
+    WakePrefs bad{};
+    bad.on = 4;
+    bad.lead = 200;
+    bad.after = 7;
+    wake_sanitize(bad);
+    CHECK_EQ((int) bad.on, 1);
+    CHECK_EQ((int) bad.lead, 15);
+    CHECK_EQ((int) bad.after, 0);
+  }
+
+  const int64_t kick = 1792000000;
+  CHECK(!wake_window(kick, kick - 16 * 60, 15));
+  CHECK(wake_window(kick, kick - 15 * 60, 15));
+  CHECK(wake_window(kick, kick + 3600, 15));  // still "pre" an hour after the listed start
+  CHECK(!wake_window(kick, kick + kWakeLateS, 15));
+  CHECK(!wake_window(0, kick, 15));
+
+  WakeInputs in;
+  in.clock_valid = true;
+  in.has_team = true;
+  in.kick = kick;
+  in.linger_s = 30 * 60;
+  auto at = [&](int64_t t, bool live = false) {
+    in.now = t;
+    in.owner_live = live;
+  };
+
+  {
+    // Off out of the box: no wake, no sleep, no clock, through a whole game.
+    WakeState s;
+    at(kick - 15 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(kick + 60, true);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    in.kick = kick + 7 * 86400;
+    at(kick + 4 * 3600);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(kick + 5 * 3600);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    CHECK(!wake_clock(p, s, in));
+    CHECK(!s.asleep);
+    in.kick = kick;
+  }
+
+  p.on = 1;
+  p.after = (uint8_t) After::OFF;
+  {
+    // 15 minutes out it wakes, once; the game goes live; the final lingers
+    // 30 minutes and the panel goes off; the next game a week out wakes it.
+    WakeState s;
+    at(kick - 16 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(kick - 15 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::WAKE);
+    at(kick - 14 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);  // the owner turned it off again: left off
+    at(kick + 5 * 60, true);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    const int64_t final_at = kick + 3 * 3600;
+    in.kick = kick + 7 * 86400;  // the board moves on to next week's game
+    at(final_at);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(final_at + 29 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);  // the final is still up
+    at(final_at + 30 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::SLEEP);
+    CHECK(s.asleep);
+    at(final_at + 31 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);  // once per final
+    at(in.kick - 15 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::WAKE);
+    CHECK(!s.asleep);
+  }
+  {
+    // A doubleheader: game 2 is near when game 1's final has lingered, so
+    // the panel stays on for it.
+    WakeState s;
+    in.kick = kick;
+    in.linger_s = 10 * 60;
+    at(kick - 3600, true);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(kick - 20 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(kick - 15 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::WAKE);
+    at(kick - 10 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);  // linger over, next game near: no sleep
+    CHECK(!s.asleep);
+    in.linger_s = 30 * 60;
+  }
+  {
+    // A dropped read that shows the game not live for a moment doesn't end it.
+    WakeState s;
+    in.kick = kick + 86400;
+    at(kick, true);
+    wake_step(p, s, in);
+    at(kick + 60);
+    wake_step(p, s, in);
+    at(kick + 120, true);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    at(kick + 120 + 30 * 60, true);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    CHECK(!s.asleep);
+  }
+  {
+    // Asleep, and a game goes live with no start to wake for (a TBD start):
+    // it wakes. With wake off it stays off.
+    WakeState s;
+    s.asleep = true;
+    in.kick = 0;
+    at(kick, true);
+    CHECK(wake_step(p, s, in) == WakeStep::WAKE);
+    CHECK(!s.asleep);
+    WakePrefs off = p;
+    off.on = 0;
+    WakeState s2;
+    s2.asleep = true;
+    CHECK(wake_step(off, s2, in) == WakeStep::NONE);
+    CHECK(s2.asleep);
+    in.kick = kick;
+  }
+  {
+    // Wake off, After the game Off: the panel goes off after the final and
+    // stays off.
+    WakePrefs off = p;
+    off.on = 0;
+    WakeState s;
+    in.kick = kick + 86400;
+    at(kick, true);
+    wake_step(off, s, in);
+    at(kick + 3600);
+    wake_step(off, s, in);
+    at(kick + 3600 + 30 * 60);
+    CHECK(wake_step(off, s, in) == WakeStep::SLEEP);
+    at(in.kick - 15 * 60);
+    CHECK(wake_step(off, s, in) == WakeStep::NONE);
+    in.kick = kick;
+  }
+  {
+    // No clock or no team: nothing, and a game that was ending is dropped.
+    WakeState s;
+    at(kick, true);
+    wake_step(p, s, in);
+    in.has_team = false;
+    at(kick + 3600);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    CHECK_EQ(s.ended_at, (int64_t) 0);
+    in.has_team = true;
+    in.clock_valid = false;
+    at(kick - 15 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    in.clock_valid = true;
+  }
+
+  // Clock: between games only, never over a live game, a final still up or
+  // a game about to start.
+  p.after = (uint8_t) After::CLOCK;
+  {
+    WakeState s;
+    in.kick = kick;
+    at(kick - 3 * 3600);
+    wake_step(p, s, in);
+    CHECK(wake_clock(p, s, in));
+    at(kick - 15 * 60);
+    wake_step(p, s, in);
+    CHECK(!wake_clock(p, s, in));
+    at(kick + 60, true);
+    wake_step(p, s, in);
+    CHECK(!wake_clock(p, s, in));
+    in.kick = kick + 86400;
+    at(kick + 3 * 3600);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);
+    CHECK(!wake_clock(p, s, in));  // the final is up
+    at(kick + 3 * 3600 + 30 * 60);
+    CHECK(wake_step(p, s, in) == WakeStep::NONE);  // Clock never turns the panel off
+    CHECK(wake_clock(p, s, in));
+    CHECK(!s.asleep);
+    // No game ahead at all: the clock
+    in.kick = 0;
+    CHECK(wake_clock(p, s, in));
+    in.has_team = false;
+    CHECK(!wake_clock(p, s, in));
+    in.has_team = true;
+    p.after = (uint8_t) After::SCOREBOARD;
+    CHECK(!wake_clock(p, s, in));
+  }
+  CHECK_EQ(std::string(wake_word(true, false)), std::string("asleep"));
+  CHECK_EQ(std::string(wake_word(false, true)), std::string("clock"));
+  CHECK_EQ(std::string(wake_word(false, false)), std::string(""));
+}
+
 static void test_offseason() {
   const int64_t now = 1792080000;  // any fixed instant
   const int64_t day = 24 * 3600;
@@ -7269,6 +7478,7 @@ int main() {
   test_power_dip();
   test_guarded_brightness();
   test_night();
+  test_wake();
   test_offseason();
   test_countdown();
   test_rankings();

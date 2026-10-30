@@ -1976,6 +1976,50 @@ test("night schedule: off by default, its times, screen and brightness post, hid
   await expect(page.locator("#nightCtls")).toBeHidden();
 });
 
+test("game-day wake: off by default, its lead and after the game post, hidden on firmware without it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="wake"]');
+  await expect(page.locator("#wakeCtls")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#wakeLeadRow")).toBeHidden();
+  await expect(page.locator("#afterGame")).toHaveValue("scoreboard");
+  await expect(page.locator("#afterHint")).toHaveText("The final, then your next game, as before.");
+
+  await sw.click();
+  await expectSet(request, { wake: "1" });
+  await expect(page.locator("#wakeLeadRow")).toBeVisible();
+  await expect(page.locator("#wakeLead")).toHaveValue("15");
+  await page.locator("#wakeLead").selectOption("30");
+  await expectSet(request, { wakelead: "30" });
+
+  await page.locator("#afterGame").selectOption("off");
+  await expectSet(request, { after: "off" });
+  await expect(page.locator("#afterHint")).toHaveText(
+    "Once the final has been up a while, the panel turns off. Game-day wake turns it back on before the next game.");
+  await page.locator("#afterGame").selectOption("clock");
+  await expectSet(request, { after: "clock" });
+  await expect(page.locator("#afterHint")).toContainText("shows the time and your next game");
+
+  // Off with the wake off says how to bring it back, and asleep says so.
+  await reset(request, { after: "off", wake_now: "asleep" });
+  await page.reload();
+  await expect(page.locator("#afterHint")).toHaveText(
+    "Off since the last game. Turn on Game-day wake to bring it back before the next game.");
+  // With the wake off, the lead still shows while After the game uses it.
+  await expect(page.locator("#wakeLeadRow")).toBeVisible();
+
+  // A lead the list lacks, set from an app, still shows.
+  await reset(request, { wake: true, wakelead: 45 });
+  await page.reload();
+  await expect(page.locator("#wakeLead")).toHaveValue("45");
+
+  await reset(request, { wake: null, wakelead: null, after: null, wake_now: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#wakeCtls")).toBeHidden();
+});
+
 test("night mode says it is on, until when, and when a live game holds it off", async ({ page, request }) => {
   await reset(request, { night: true, nightscreen: false, night_now: "off" });
   await page.goto("/");

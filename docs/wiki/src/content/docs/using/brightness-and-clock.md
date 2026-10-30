@@ -1,6 +1,6 @@
 ---
 title: "Brightness, panel on and off, and the clock"
-description: "Set the panel's brightness, turn it off and on, dim it or turn it off at night on a schedule, and switch between the scoreboard and the clock."
+description: "Set the panel's brightness, turn it off and on, dim it or turn it off at night on a schedule, have it come on for your games and go off after them, and switch between the scoreboard and the clock."
 sidebar:
   order: 17
 ---
@@ -59,6 +59,28 @@ During the night schedule's hours, the remote, a team or mode picked in the app 
 :::
 
 The panel always comes back on after a restart or a power cut.
+
+:::note[Coming in the next release]
+One exception: a panel that **After the game** turned off stays off through a restart, like the nightly update, so it doesn't light up at 3 AM. A power cut still brings it back on.
+:::
+
+## Game-day wake and after the game
+
+:::note[Coming in the next release]
+The panel can turn itself on before your games and decide what it does once they're over, so it doesn't have to be lit all day. Both are in the Panel card on the device page, and both are off on a new panel.
+
+**Game-day wake** turns a panel you switched off back on before a game of your team or one of your favorites starts. Pick how long before under **Turns on**: 5 minutes to 2 hours, 15 minutes to start. It wakes the panel once per game, so if you turn it off again before the start, it stays off for that game. In Live games it wakes for your first favorite's games, and with **Favorites take over** on, for any favorite's. During the night schedule's hours it still turns the panel on, but the night setting holds until the game is live: dimmed, or dark with **Screen at night** off.
+
+**After the game** picks what the panel does once the final has been up a while (30 minutes, 10 for baseball, so the second game of a doubleheader isn't missed):
+
+- **Stay on the scoreboard**: the final, then your next game's card, as before.
+- **Turn off**: the panel turns off. With **Game-day wake** on, it comes back on before your next game. If your next game starts within the **Turns on** time, the panel stays on for it instead.
+- **Show the clock**: the time and your next game, in that team's colors, until the **Turns on** time before that game, then the scoreboard. The countdown to the next game waits while the clock is up; the other cards you turned on under **Between games**, like your own countdown, the weather, the message card and pictures, still get their turns.
+
+Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
+
+The app and the settings backup have the same settings.
+:::
 
 ## Showing: the scoreboard or the clock
 

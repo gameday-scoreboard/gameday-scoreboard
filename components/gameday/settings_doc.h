@@ -55,12 +55,13 @@ inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
                                       "leaders", "night", "nightscreen", "favtake", "countdown", "top25",
-                                      "news",    "gameleaders", "wxon"};
+                                      "news",    "gameleaders", "wxon", "wake"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
+                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame",
+                                     "wakelead"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
-                                      "sport", "town"};
+                                      "sport", "town", "after"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -110,7 +111,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
-                                      "nightstart", "nightend", "nightscreen", "nightlevel", "cards",    "countdown",
+                                      "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
+                                      "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame"};
@@ -280,7 +282,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         in_range = in_range && parse_set(k, std::to_string(n), op, target.fav_max);
         bool clamped = op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
                        op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL ||
-                       op.kind == SetKind::PREGAME;
+                       op.kind == SetKind::PREGAME || op.kind == SetKind::WAKE_LEAD;
         if (!in_range || (clamped && op.value != n)) {
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;
@@ -314,7 +316,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         // is left out and listed, like a team it doesn't know.
         if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
             (k == "hook" && !hook_url_ok(text)) ||
-            (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0)) {
+            (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0) ||
+            (k == "after" && after_parse(text) < 0)) {
           out.skipped.push_back(k + "=" + text);
           continue;
         }

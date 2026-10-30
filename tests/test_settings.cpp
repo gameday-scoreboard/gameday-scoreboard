@@ -237,6 +237,19 @@ void test_refused() {
   }
   SCHECK(skipped(import(R"({"schema":1,"mode":6})"), "mode=6"), "mode=6 isn't listed");
   SCHECK(skipped(import(R"({"schema":1,"scroll":11})"), "scroll=11"), "scroll=11 isn't listed");
+  {
+    // An After the game choice from newer firmware is left out, not a refusal;
+    // a lead out of range is left out rather than clamped.
+    SettingsImport in = import(R"({"schema":1,"after":"effects","wake":true,"wakelead":300})");
+    SCHECK(in.error.empty() && skipped(in, "after=effects") && skipped(in, "wakelead=300") && in.ops.size() == 1 &&
+               in.ops[0].kind == SetKind::WAKE && in.ops[0].on,
+           "after=effects: error '%s', %zu ops", in.error.c_str(), in.ops.size());
+    SettingsImport ok = import(R"({"schema":1,"after":"clock","wakelead":45})");
+    const SetOp *after = find(ok, SetKind::AFTER);
+    const SetOp *lead = find(ok, SetKind::WAKE_LEAD);
+    SCHECK(after != nullptr && after->value == (int) After::CLOCK && lead != nullptr && lead->value == 45,
+           "after=clock and wakelead=45 restore");
+  }
 
   refused(R"({"schema":1,"brightness":40,"scroll":"5"})", "a good brightness with a bad scroll");
 

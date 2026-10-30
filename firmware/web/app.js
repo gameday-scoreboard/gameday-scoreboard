@@ -245,6 +245,16 @@
             <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
           </div>
         </div>
+        <div id="wakeCtls" hidden>
+          <div class="ctl"><label>Game-day wake<small>A panel you turned off comes back on before a game of your team or a favorite starts. At night the night schedule still dims it or keeps the screen off until the game is live.</small></label><button class="sw" data-set="wake" aria-label="Game-day wake"></button></div>
+          <div class="ctl" id="wakeLeadRow" hidden><label for="wakeLead">Turns on</label><select id="wakeLead">
+            <option value="5">5 minutes before</option><option value="10">10 minutes before</option><option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
+          </select></div>
+          <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
+            <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+          </select></div>
+        </div>
       </div>
       <div class="card">
         <h2>Favorites</h2>
@@ -444,6 +454,7 @@
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
+    wake: (v) => v === "1", wakelead: Number, after: String,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -1281,6 +1292,47 @@
     toast("Message card off");
   };
 
+  // ---- game-day wake and after the game (components/gameday/wake.h) ----------
+  const wakeSeen = { lead: null, after: null };
+  const renderWake = () => {
+    if (!S) return;
+    // Older firmware has no wake.
+    $("#wakeCtls").hidden = S.wake === undefined;
+    if (S.wake === undefined) return;
+    // The lead also ends After the game's clock, and keeps Off from turning
+    // the panel off just before the next game, so it shows for those too.
+    $("#wakeLeadRow").hidden = !S.wake && S.after === "scoreboard";
+    const lead = $("#wakeLead");
+    const l = String(S.wakelead);
+    if (l !== wakeSeen.lead && document.activeElement !== lead) {
+      wakeSeen.lead = l;
+      // A lead the list lacks (set from an app or a backup) still shows.
+      if (![...lead.options].some((o) => o.value === l)) lead.add(new Option(l + " minutes before", l));
+      lead.value = l;
+    }
+    const after = $("#afterGame");
+    if (S.after !== wakeSeen.after && document.activeElement !== after) {
+      wakeSeen.after = S.after;
+      if (![...after.options].some((o) => o.value === S.after)) after.add(new Option(S.after, S.after));
+      after.value = S.after;
+    }
+    const back = S.wake ? " Game-day wake turns it back on before the next game."
+      : " Turn on Game-day wake to bring it back before the next game.";
+    $("#afterHint").textContent = S.after === "off"
+      ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
+      : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
+        : "The final, then your next game, as before.";
+  };
+  $("#wakeLead").onchange = () => {
+    wakeSeen.lead = null;
+    setGD({ wakelead: $("#wakeLead").value });
+    toast("Turns on " + $("#wakeLead").selectedOptions[0].textContent);
+  };
+  $("#afterGame").onchange = () => {
+    wakeSeen.after = null;
+    setGD({ after: $("#afterGame").value });
+  };
+
   // ---- pictures ----------------------------------------------------------------
   // The panel keeps up to four PNG or GIF files (GET /gameday/picture?slot=N
   // is one as uploaded). A still image is fitted to the panel here and sent
@@ -1974,6 +2026,7 @@
     renderMode();
     renderSettings();
     renderNight();
+    renderWake();
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";

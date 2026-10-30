@@ -93,7 +93,11 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/hook.h").read_text(encoding="utf-8") +
-                                             (REPO / "components/gameday/weather.h").read_text(encoding="utf-8"))}
+                                             (REPO / "components/gameday/weather.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"))}
+# After the game's choices (wake.h after_word), in no particular order.
+AFTER = tuple(re.findall(r'return "(\w+)";', re.search(r"after_word\(.*?\n}\n",
+                         (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"), re.S).group(0)))
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
@@ -156,6 +160,8 @@ INITIAL = {
     "town": "", "wxon": False,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
+    # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
+    "wake": False, "wakelead": 15, "after": "scoreboard", "wake_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
@@ -636,6 +642,14 @@ def apply_set(kv):
                 STATE[k] = night_time(v)
         elif k == "nightlevel":
             STATE["nightlevel"] = min(255, max(1, atoi(v)))
+        elif k == "wake":
+            STATE["wake"] = v == "1"
+        elif k == "wakelead":
+            if whole_int(v):
+                STATE["wakelead"] = clamp(int(v), "kWakeLeadMin", "kWakeLeadMax")
+        elif k == "after":
+            if v in AFTER:
+                STATE["after"] = v
     # The same start and end keeps the hours it had (night_keep_hours).
     if STATE["nightstart"] == STATE["nightend"]:
         STATE["nightstart"], STATE["nightend"] = hours
@@ -711,7 +725,8 @@ def import_settings(doc):
     # The nickname and layout come back only onto the panel the file is from.
     same_panel = isinstance(doc.get("name"), str) and doc["name"] == STATE.get("name")
     ranges = {"rotate": ("kRotateMinMinutes", "kRotateMaxMinutes"), "lockon": ("kLockonMinMinutes", "kLockonMaxMinutes"),
-              "release": ("kReleaseMinSeconds", "kReleaseMaxSeconds")}
+              "release": ("kReleaseMinSeconds", "kReleaseMaxSeconds"),
+              "wakelead": ("kWakeLeadMin", "kWakeLeadMax")}
     for k in SET_KEYS:
         if k not in doc or doc[k] is None:
             continue
@@ -792,7 +807,8 @@ def import_settings(doc):
                     continue
                 kv.append((k, v if r == 1 else "none"))
             elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
-                    k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS):
+                    k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS) or (
+                    k == "after" and v not in AFTER):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
