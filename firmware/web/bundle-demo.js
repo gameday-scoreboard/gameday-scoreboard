@@ -235,7 +235,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
           <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the iPhone app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
-        <div class="ctl" id="tilesRow"><label for="tiles">Games on the board<small>Two or four games at once as tiles, or Auto: as many live games as there are worth showing, and one big game when only one is on.</small></label><select id="tiles">
+        <div class="ctl" id="tilesRow"><label for="tilesSel">Games on the board<small>Two or four games at once as tiles, or Auto: as many live games as there are worth showing, and one big game when only one is on.</small></label><select id="tilesSel">
           <option value="1">One game</option><option value="2">Two</option><option value="4">Four</option><option value="auto">Auto</option>
         </select></div>
         <div id="panelCtls"></div>
@@ -740,7 +740,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
   const releaseSelect = $("#release");
   releaseSelect.onchange = () => setGD({ release: releaseSelect.value });
-  const tilesSelect = $("#tiles");
+  const tilesSelect = $("#tilesSel");
   tilesSelect.onchange = () => setGD({ tiles: tilesSelect.value });
   const collideSelect = $("#collide");
   const favRotate = $("#favrotate");
