@@ -1,6 +1,6 @@
 ---
 title: "WizMote remote"
-description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and your first four favorite teams or playlists."
+description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and four buttons you set to a favorite, a playlist or a sport."
 sidebar:
   order: 12
 ---
@@ -26,7 +26,7 @@ The panel pairs with one remote at a time. Pairing another one replaces the firs
 | Brighter | Raises the brightness by a tenth of full. On a panel that is off, it turns the panel on at the brightness it had. |
 | Dimmer | Lowers the brightness by a tenth of full, down to the lowest setting. On a panel that is off, it does nothing, so pressing it in the dark can't leave the panel too dim to see next time. |
 | **NIGHT** | Dims the panel right down to a night level, about 8% of full. On a panel that is off, it turns the panel on at that level. |
-| **1** to **4** | Your first four favorite teams. See below. |
+| **1** to **4** | Your first four favorite teams, until you set them to something else. See below. |
 
 The brightness buttons move the same **Brightness** setting as the device page and the app.
 
@@ -47,3 +47,15 @@ Buttons 1 to 4 are the first four teams in your favorites list, in order. The de
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
 
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
+
+:::note[Coming in the next release]
+**Set each button yourself.** The **Remote** card on the device page, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:
+
+- **Its own favorite**: favorite 1 to 4, whichever team is in that slot. The default.
+- A **favorite team**: that team, wherever it sits in your list.
+- A **playlist** or a **sport** (one of the sport rows under Playing): the panel switches to Favorite teams, plays it and shows its name on the board for a moment.
+- **All favorites**: back to every favorite.
+- **Nothing**.
+
+A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and the Remote card says so. Set it to something else, or bring the team or playlist back, and it works again. A settings backup carries the four buttons.
+:::

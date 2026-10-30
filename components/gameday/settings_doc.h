@@ -10,7 +10,8 @@
 // playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], each with
 // its options when set: "days" ("06", 0 Sunday to 6 Saturday), "start" and
 // "end" ("11:00"), "only" and "today" (playlists.h ListOpt); cards the
-// between-games cards by id, {"next": true, "clock": false} (cards.h). Brightness and
+// between-games cards by id, {"next": true, "clock": false} (cards.h); remote1 to
+// remote4 what the WizMote's buttons do (set_request.h RemoteTarget). Brightness and
 // scroll are the Home Assistant numbers of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
@@ -63,7 +64,7 @@ inline SettingType setting_type(const char *k) {
                                      "wakelead"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
-                                      "sport", "town", "after"};
+                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -117,7 +118,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
-                                      "lists",    "list",     "sport",    "hook",       "pregame"};
+                                      "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -172,6 +173,13 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
       for (JsonObjectConst c : s["cards"].as<JsonArrayConst>())
         if (c["id"].is<const char *>())
           cards[c["id"].as<const char *>()] = c["on"] | false;
+    } else if (strncmp(k, "remote", 6) == 0) {
+      // The state's remote list: each button's text (remote_text).
+      if (!s["remote"].is<JsonArrayConst>())
+        continue;
+      JsonVariantConst b = s["remote"][k[6] - '1'];
+      if (b["v"].is<const char *>())
+        out[k] = b["v"];
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
@@ -342,6 +350,11 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, text, op, target.fav_max);
           if (op.text != target.nick)
             out.kept.push_back(k);
+          continue;
+        }
+        if (strncmp(k.c_str(), "remote", 6) == 0 && !parse_set(k, text, op, target.fav_max)) {
+          // A team or sport this firmware doesn't know: left out and listed.
+          out.skipped.push_back(k + "=" + text);
           continue;
         }
         if (!parse_set(k, text, op, target.fav_max))

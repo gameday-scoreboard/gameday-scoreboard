@@ -144,7 +144,9 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "sched": 0, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "sched": 0,
+    # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
+    "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
@@ -420,6 +422,8 @@ def state_doc():
             STATE["cards"].append({"id": cid, "name": name, "on": on[cid], "ok": card_ok(cid), "hint": hint})
     STATE["lists"] = [norm_list(pl) for pl in STATE["lists"]]
     STATE.setdefault("sched", 0)
+    STATE["remote"] = [{"v": b.get("v", "fav"), "gone": remote_gone(i + 1, b.get("v", "fav"))}
+                       for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
     return STATE
 
 
@@ -475,6 +479,32 @@ def remap_lists(before):
     # A sport row the favorites have no row for now stops.
     if STATE.get("sport") and STATE["sport"] not in sport_rows():
         STATE["sport"] = ""
+
+
+def remote_parse(v):
+    """remote_parse(): the text of a button's target, canonical, or None when the panel refuses it."""
+    if v in ("fav", "all", "none"):
+        return v
+    if v.startswith("team:"):
+        ref = parse_team_ref(v[5:])
+        return f"team:{ref[0]}:{ref[1]}" if ref else None
+    if v.startswith("sport:"):
+        return v if v[6:] in SPORT_KEYS else None
+    if v.startswith("list:") and len(v) > 5:
+        return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
+    return None
+
+
+def remote_gone(button, v):
+    """remote_resolve().gone: the button's team, playlist or sport row is gone, so it does its default."""
+    if v.startswith("team:"):
+        ref = parse_team_ref(v[5:])
+        return ref not in fav_refs()
+    if v.startswith("list:"):
+        return v[5:] not in [pl["n"] for pl in STATE["lists"]]
+    if v.startswith("sport:"):
+        return v[6:] not in sport_rows()
+    return False
 
 
 def list_time(v):
@@ -680,6 +710,15 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif re.fullmatch(r"remote[1-4]", k):
+            # set_remote_(): a playlist's name as the playlists keep it.
+            v = remote_parse(v)
+            if v is None:
+                continue
+            if v.startswith("list:"):
+                name = message_clean(v[5:].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
+                v = "list:" + name if name else "fav"
+            STATE["remote"][int(k[6]) - 1] = {"v": v}
         elif k == "hook":
             if hook_url_ok(v):
                 STATE["hook"] = v
@@ -752,6 +791,8 @@ def settings_doc():
         elif k == "cards":
             if "cards" in s:
                 out["cards"] = {c["id"]: c["on"] for c in s["cards"]}
+        elif re.fullmatch(r"remote[1-4]", k):
+            out[k] = s["remote"][int(k[6]) - 1]["v"]
         elif k in s:
             out[k] = s[k]
     if s.get("panels"):
@@ -887,7 +928,8 @@ def import_settings(doc):
                 kv.append((k, v if r == 1 else "none"))
             elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
                     k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS) or (
-                    k == "after" and v not in AFTER):
+                    k == "after" and v not in AFTER) or (
+                    re.fullmatch(r"remote[1-4]", k) and remote_parse(v) is None):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):

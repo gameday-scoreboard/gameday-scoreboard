@@ -324,6 +324,7 @@ button { font: inherit; color: inherit; }
 .popts .ctl { padding: 6px 0; border-top: 0; }
 .popts .ctl label { font-size: 13px; }
 .popts input.num.time { width: auto; }
+.rbtn select { max-width: 60%; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }
 

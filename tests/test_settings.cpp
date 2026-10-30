@@ -439,6 +439,20 @@ void test_playlists() {
          "the export's options: %s", text.c_str());
 }
 
+// The WizMote's buttons (remote1 to remote4): text the panel takes, and a
+// team or sport it doesn't know left out and listed.
+void test_remote() {
+  SettingsImport in = import(R"({"schema":1,"remote1":"team:nfl:6","remote2":"list:Sundays","remote3":"sport:hockey","remote4":"none"})");
+  SCHECK(in.error.empty() && in.ops.size() == 4 && in.ops[1].kind == SetKind::REMOTE && in.ops[1].slot == 2 &&
+             in.ops[1].text == "list:Sundays",
+         "remote keys came back wrong: %s", in.error.c_str());
+  in = import(R"({"schema":1,"remote1":"team:xfl:5","remote2":"sport:curling","remote3":"fav"})");
+  SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:curling") &&
+             in.ops.size() == 1,
+         "an unknown team or sport isn't left out and listed");
+  refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
+}
+
 // The fullest export the panel can write comes back through its own import:
 // 16 favorites with the longest league and team id, all of them in 16
 // playlists, and every text at its cap in characters JSON escapes.
@@ -527,6 +541,7 @@ int main() {
   test_other_panel();
   test_night_hours();
   test_playlists();
+  test_remote();
   test_fullest_fits();
   test_reply();
   printf("%d checks, %d failures\n", checks, failures);

@@ -279,4 +279,61 @@ inline bool sport_row_has(uint8_t rows, uint8_t row) {
   return row >= 1 && row <= kSportCount && ((rows >> (row - 1)) & 1u) != 0;
 }
 
+// What a WizMote button does now (set_request.h RemoteTarget), against the
+// favorites, the playlists' names and the sport rows the favorites make. A
+// target that is gone (its team left the favorites, its playlist its name,
+// its sport its favorites) falls back to the button's default, favorite n.
+struct RemoteAction {
+  RemoteKind kind{RemoteKind::FAVORITE};
+  int fav_slot{0};        // FAVORITE, TEAM: the favorite to jump to, 1-based
+  int list{0};            // LIST: the playlist to play; ALL: 0
+  uint8_t sport_row{0};   // SPORT: the row to play, 1 + Sport
+  bool gone{false};       // the target is gone: this is the default instead
+};
+inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const std::vector<TeamRef> &favs,
+                                   const std::vector<std::string> &names) {
+  RemoteAction a;
+  a.fav_slot = button;
+  switch ((RemoteKind) t.kind) {
+    case RemoteKind::TEAM:
+      for (size_t i = 0; i < favs.size(); i++)
+        if (favs[i].id != 0 && favs[i].league == t.league && favs[i].id == t.id) {
+          a.kind = RemoteKind::TEAM;
+          a.fav_slot = (int) i + 1;
+          return a;
+        }
+      break;
+    case RemoteKind::LIST:
+      for (size_t n = 0; n < names.size(); n++)
+        if (names[n] == remote_name(t)) {
+          a.kind = RemoteKind::LIST;
+          a.list = (int) n + 1;
+          return a;
+        }
+      break;
+    case RemoteKind::SPORT: {
+      uint8_t sports = 0;
+      for (const auto &f : favs)
+        if (f.id != 0)
+          sports |= sport_bit(f.league);
+      if (sport_row_has(sport_rows(sports), (uint8_t) (t.sport + 1))) {
+        a.kind = RemoteKind::SPORT;
+        a.sport_row = (uint8_t) (t.sport + 1);
+        return a;
+      }
+      break;
+    }
+    case RemoteKind::ALL:
+      a.kind = RemoteKind::ALL;
+      return a;
+    case RemoteKind::NONE:
+      a.kind = RemoteKind::NONE;
+      return a;
+    default:
+      return a;
+  }
+  a.gone = true;
+  return a;
+}
+
 }  // namespace espn

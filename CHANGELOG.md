@@ -40,6 +40,7 @@ through `update_important` in the panel's state.
 
 - 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
 - 📅 Each playlist can have a schedule (days and hours), keep the panel on its own teams, and its own **Only today's games**
+- 🎛️ Set each WizMote button 1 to 4 yourself in the **Remote** card: a favorite, a playlist, a sport, all favorites or nothing; making a playlist no longer moves the buttons
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
 - ⏰ **Game-day wake** turns the panel on before your game, and **After the game** turns it off or shows the clock once the final has been up a while
 - 🔔 While a new release waits, the ticker says **Update ready: open the Game Day app** for an hour a day, never during a live game, and **Important update ready** for a release that fixes something broken
