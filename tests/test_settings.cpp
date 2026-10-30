@@ -147,7 +147,7 @@ void test_round_trip() {
   SCHECK(!in.restart, "the same panel count restarts the panel");
   SCHECK(!in.ops.empty() && in.ops[0].kind == SetKind::MODE && in.ops[0].value == 4, "the first op isn't the mode");
   const SetOp *favs = find(in, SetKind::FAVS);
-  SCHECK(favs != nullptr && favs->teams.size() == 3 && favs->teams[1].id == 251, "favs came back wrong");
+  SCHECK(favs != nullptr && favs->teams.size() == 4 && favs->teams[1].id == 251, "favs came back wrong");
   const SetOp *tz = find(in, SetKind::TZ);
   SCHECK(tz != nullptr && std::string(kTimezones[tz->value].name) == "US Central", "the time zone came back wrong");
   const SetOp *live = find(in, SetKind::LIVE);

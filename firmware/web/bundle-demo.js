@@ -233,9 +233,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       </div>
       <div class="card">
         <h2>Playlists</h2>
-        <p class="hint">Groups of your favorites, like your football teams or your basketball teams. Pick one under Favorite teams. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
+        <p class="hint">Your own groups of favorites, like a Sunday list. Pick one under Favorite teams, where favorites in more than one sport also get a row per sport on their own. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
         <div id="listCtls"></div>
-        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button><button class="btn" id="listSport">One per sport</button></div>
+        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
       </div>
       <div class="card">
         <h2>Remote</h2>
@@ -862,7 +862,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   // Playlists (components/gameday/playlists.h): named groups of favorites.
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
-  const playingList = () => (S && S.list ? lists()[S.list - 1] : null);
+  // The sport rows the favorites make (state sports): each has its list number
+  // v (below 0), its name n and its teams f as places in favs, like a playlist.
+  const sportRows = () => (S && S.sports) || [];
+  const playingList = () => {
+    if (!S || !S.list) return null;
+    return S.list < 0 ? sportRows().find((r) => r.v === S.list) || null : lists()[S.list - 1] || null;
+  };
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
@@ -876,8 +882,6 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     return out.trim();
   };
-  const SPORTS = [["Football", ["nfl", "ncaa"]], ["Baseball", ["mlb"]], ["Basketball", ["nba", "wnba", "mcbb"]],
-    ["Hockey", ["nhl"]], ["Soccer", ["mls", "epl"]]];
   const listMax = () => (S && S.listmax) || 16;
   let listSig = "";
   const renderLists = () => {
@@ -952,32 +956,30 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     while (ls.some((l) => l.n === "Playlist " + n)) n++;
     postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
   };
-  $("#listSport").onclick = () => {
-    const ls = lists().slice();
-    let added = 0;
-    for (const [n, lgs] of SPORTS) {
-      const f = favKeys.map((k, i) => (lgs.includes(k.split(":")[0]) ? i : -1)).filter((i) => i >= 0);
-      if (!f.length || ls.some((l) => l.n === n) || ls.length >= listMax()) continue;
-      ls.push({ n, f });
-      added++;
-    }
-    if (!added) return toast("Every sport in your favorites has a playlist");
-    postLists(ls);
-    toast(added === 1 ? "Added a playlist" : "Added " + added + " playlists");
-  };
+  // Playing: All favorites, then the sport rows, then the owner's playlists,
+  // each option's value the list number the panel takes.
   const listPick = $("#favList");
   const renderListPick = () => {
     const ls = lists();
-    $("#favListRow").hidden = !ls.length;
+    const rows = sportRows();
+    $("#favListRow").hidden = !ls.length && !rows.length;
     if (document.activeElement === listPick) return;
-    const opts = ["All favorites"].concat(ls.map((l) => l.n));
-    if (opts.join("\n") !== Array.from(listPick.options).map((o) => o.text).join("\n")) {
+    const groups = [["", [["0", "All favorites"]]], ["By sport", rows.map((r) => [String(r.v), r.n])],
+      ["Your playlists", ls.map((l, i) => [String(i + 1), l.n])]];
+    const sig = JSON.stringify(groups);
+    if (sig !== listPick.dataset.sig) {
+      listPick.dataset.sig = sig;
       listPick.innerHTML = "";
-      opts.forEach((t, i) => {
-        const o = el("option", null, t);
-        o.value = String(i);
-        listPick.appendChild(o);
-      });
+      for (const [label, opts] of groups) {
+        if (!opts.length) continue;
+        const into = label ? el("optgroup") : listPick;
+        if (label) { into.label = label; listPick.appendChild(into); }
+        for (const [v, t] of opts) {
+          const o = el("option", null, t);
+          o.value = v;
+          into.appendChild(o);
+        }
+      }
     }
     listPick.value = String(S.list || 0);
   };

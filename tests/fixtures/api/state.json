@@ -28,7 +28,12 @@
       "abbr": "IOWA",
       "name": "Iowa Hawkeyes"
     },
-    {}
+    {
+      "l": "nba",
+      "id": 6,
+      "abbr": "DAL",
+      "name": "Dallas Mavericks"
+    }
   ],
   "favmax": 16,
   "lists": [
@@ -48,6 +53,26 @@
   ],
   "list": 2,
   "listmax": 16,
+  "sports": [
+    {
+      "v": -1,
+      "s": "football",
+      "n": "Football",
+      "f": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "v": -3,
+      "s": "basketball",
+      "n": "Basketball",
+      "f": [
+        3
+      ]
+    }
+  ],
   "today": false,
   "jump": false,
   "banner": true,

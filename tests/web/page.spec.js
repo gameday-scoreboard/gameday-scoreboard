@@ -572,22 +572,55 @@ test("playlists post every playlist on new, teams, rename, move and remove", asy
   await expect(page.locator("#favHint")).toContainText("Your playlists have buttons 1 to 4");
 });
 
-test("One per sport makes a playlist for each sport in the favorites", async ({ page, request }) => {
+test("favorites in two sports get a row per sport under Playing, before the playlists", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
   await reset(request, {
-    favs: [
-      { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" },
-      { l: "nba", id: 6, abbr: "DAL", name: "Dallas Mavericks" },
-      { l: "ncaa", id: 251, abbr: "TEX", name: "Texas Longhorns" },
-      {},
+    mode: 4,
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("nba", 6, "DAL", "Dallas Mavericks"), t("ncaa", 251, "TEX", "Texas Longhorns"), {}],
+    lists: [{ n: "Sundays", f: [0] }],
+    next: [
+      { slot: 1, t: t("nfl", 6, "DAL", "Dallas Cowboys"), id: "1", s: "PRE", kick: 1792531500, oi: 21, oa: "PHI", ts: 0, os: 0, tv: "FOX", detail: "" },
+      { slot: 2, t: t("nba", 6, "DAL", "Dallas Mavericks"), id: "5", s: "PRE", kick: 1792620000, oi: 25, oa: "OKC", ts: 0, os: 0, tv: "", detail: "" },
+      { slot: 3, t: t("ncaa", 251, "TEX", "Texas Longhorns"), id: "7", s: "PRE", kick: 1792630000, oi: 2, oa: "AUB", ts: 0, os: 0, tv: "", detail: "" },
     ],
   });
   await page.goto("/");
-  await page.locator("#listSport").click();
-  await expectSet(request, { lists: "Football=nfl:6,ncaa:251;Basketball=nba:6" });
-  await expect(page.locator("#listCtls .pname").nth(0)).toHaveValue("Football");
-  await expect(page.locator("#listCtls .pname").nth(1)).toHaveValue("Basketball");
-  await page.locator("#listSport").click();
-  await expect(page.locator("#toast")).toHaveText("Every sport in your favorites has a playlist");
+  // The mock works the rows out from the favorites, as the panel does.
+  expect((await deviceState(request)).sports).toEqual([
+    { v: -1, s: "football", n: "Football", f: [0, 2] }, { v: -3, s: "basketball", n: "Basketball", f: [1] },
+  ]);
+  const pick = page.locator("#favList");
+  await expect(pick.locator("option")).toHaveText(["All favorites", "Football", "Basketball", "Sundays"]);
+  await expect(pick.locator("optgroup").nth(0)).toHaveAttribute("label", "By sport");
+  await expect(pick.locator("optgroup").nth(1)).toHaveAttribute("label", "Your playlists");
+  await expect(pick.locator("option").nth(1)).toHaveAttribute("value", "-1");
+  await expect(pick.locator("option").nth(3)).toHaveAttribute("value", "1");
+  // The rows aren't playlists: the Playlists card has only the owner's.
+  await expect(page.locator("#listCtls .plist")).toHaveCount(1);
+  await expect(page.locator("#listActions button")).toHaveText(["New playlist"]);
+  await pick.selectOption("-1");
+  await expectSet(request, { mode: "4", list: "-1" });
+  await expect(page.locator("#favName")).toHaveText("Cycling through Football");
+  await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs OKC"]);
+  await expect(pick).toHaveValue("-1");
+});
+
+test("the sport rows come and go with the favorites", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    mode: 4, list: -3,
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("nba", 6, "DAL", "Dallas Mavericks"), {}, {}],
+  });
+  await page.goto("/");
+  await expect(page.locator("#favList option")).toHaveText(["All favorites", "Football", "Basketball"]);
+  await expect(page.locator("#favList")).toHaveValue("-3");
+  // Taking out the only basketball favorite leaves one sport: no rows, and
+  // the panel goes back to every favorite.
+  await page.locator("#favCtls .ctl.fav").nth(1).getByRole("button", { name: "Remove" }).click();
+  await expectSet(request, { favs: "nfl:6" });
+  await expect(page.locator("#favListRow")).toBeHidden();
+  await expect.poll(async () => (await deviceState(request)).list).toBe(0);
+  await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
 });
 
 // All 16 playlists with every favorite are about 3 KB, far past the panel's

@@ -41,7 +41,7 @@
   "favtake": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "nick": {"form": "the panel's nickname, up to 32 bytes; emoji and bytes that aren't UTF-8 are dropped; empty clears it", "ok": ["Living room", ""]},
   "lists": {"form": "Name=league:id,league:id;Name=... up to 16 playlists of favorites, names up to 16 bytes without ; or =; empty clears them", "ok": ["Football=nfl:6,ncaa:251;Hoops=nba:6", ""]},
-  "list": {"form": "the playlist Favorite teams plays, 1 to 16 in the lists order, 0 for every favorite; past the last playlist is refused", "ok": ["0", "1", "16"], "bad": ["17", "", "x", "-1"]},
+  "list": {"form": "the playlist Favorite teams plays, 1 to 16 in the lists order, 0 for every favorite, or a sport row from the state's sports (-1 Football, -2 Baseball, -3 Basketball, -4 Hockey, -5 Soccer); past the last playlist, or a sport row the favorites don't make, is refused", "ok": ["0", "1", "16", "-1", "-5"], "bad": ["17", "", "x", "-6", "-"]},
   "hook": {"form": "the game events' webhook, an http address on the home network, at most 160 bytes, or empty for none; https is refused", "ok": ["http://192.168.1.20:1880/gameday", ""], "bad": ["https://example.com/hook", "192.168.1.20/hook"]},
   "pregame": {"form": "minutes before the start for the reminder event, a whole number, clamped to 0 to 120; 0 sends none", "ok": ["0", "15", "120"], "bad": ["", "soon"]}
 }

@@ -202,7 +202,7 @@ enum class SetKind : uint8_t {
   NIGHT_LEVEL,  // value, 1 to 255
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
-  LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  LIST,         // value, the playlist Favorite teams plays, 0 = every favorite, < 0 a sport row
   HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
   PREGAME,      // value, minutes before the start for the reminder event, 0 = none
 };
@@ -369,12 +369,16 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "list") {
     // 0 means something here, so text isn't read as 0 like the other numbers.
-    // A number past the last playlist is refused where the playlists are known.
-    // strtol, not atoi: a number too long for an int saturates, and is refused.
+    // A number past the last playlist is refused where the playlists are known,
+    // as is a sport row (-1 Football to -5 Soccer, playlists.h) the favorites
+    // don't make. strtol, not atoi: a number too long for an int saturates,
+    // and is refused.
     op.kind = SetKind::LIST;
+    bool neg = v.size() > 1 && v[0] == '-';
     long n = strtol(v.c_str(), nullptr, 10);
-    op.value = n >= 0 && n <= 16 ? (int) n : -1;
-    return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+    bool digits = v.size() > (neg ? 1u : 0u) && v[neg ? 1 : 0] >= '0' && v[neg ? 1 : 0] <= '9';
+    op.value = n >= -5 && n <= 16 ? (int) n : -99;
+    return digits && op.value != -99;
   }
   if (k == "hook") {
     op.kind = SetKind::HOOK;

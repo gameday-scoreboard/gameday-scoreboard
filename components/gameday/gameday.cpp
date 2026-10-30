@@ -335,8 +335,9 @@ void GamedayComponent::setup() {
   this->countdown_.name[::espn::kCountdownNameMax] = '\0';
   this->pref9_ = global_preferences->make_preference<Prefs9>(fnv1_hash("gameday_prefs9_v1"));
   if (!this->pref9_.load(&this->prefs9_) || this->prefs9_.count > ::espn::kListMax ||
-      this->prefs9_.active > this->prefs9_.count)
+      this->prefs9_.active > this->prefs9_.count || this->prefs9_.active < -::espn::kSportCount)
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
+  this->check_active_list_();  // a sport row the favorites no longer make
   this->load_msg_();
   this->load_nick_();
   this->load_hook_();
@@ -458,6 +459,8 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
 }
 
 void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<League> &live_before) {
+  this->check_active_list_();
+  this->publish_playlist_select_();  // the sport rows follow the favorites
   bool was_fav_mode = this->favorites_mode_();
   const ::espn::Team *fallback_before = this->fallback_team_();
   this->rebuild_favorites_(true);
@@ -511,22 +514,44 @@ void GamedayComponent::remap_lists_(const std::vector<::espn::TeamRef> &before) 
   this->sync_prefs_();
 }
 
-std::string GamedayComponent::list_name_(uint8_t n) const {
+std::string GamedayComponent::list_name_(int8_t n) const {
+  if (::espn::list_is_sport(n))
+    return ::espn::sport_name(::espn::list_sport(n));
   if (n < 1 || n > this->prefs9_.count)
     return "";
   const char *name = this->prefs9_.name[n - 1];
   return std::string(name, strnlen(name, ::espn::kListNameMax));
 }
 
+uint8_t GamedayComponent::sport_rows_() const { return ::espn::sport_rows(this->fav_refs_all_()); }
+
+uint16_t GamedayComponent::active_mask_() const {
+  int8_t a = this->prefs9_.active;
+  if (::espn::list_is_sport(a))
+    return ::espn::sport_mask(::espn::list_sport(a), this->fav_refs_all_());
+  return a > 0 ? this->prefs9_.mask[a - 1] : 0;
+}
+
 bool GamedayComponent::fav_in_list_(size_t i) const {
-  uint8_t a = this->prefs9_.active;
-  return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
+  return ::espn::list_has(this->active_mask_(), this->prefs9_.active != 0, i);
+}
+
+void GamedayComponent::check_active_list_() {
+  int8_t a = this->prefs9_.active;
+  if (!::espn::list_is_sport(a) || ::espn::sport_row_exists(a, this->fav_refs_all_()))
+    return;
+  ESP_LOGI(TAG, "Playlist: %s has no favorites now, playing every favorite", this->list_name_(a).c_str());
+  this->prefs9_.active = 0;
+  this->pref9_.save(&this->prefs9_);
+  this->sync_prefs_();
 }
 
 void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
-  std::string active_name = this->list_name_(this->prefs9_.active);
+  // A sport row playing stays as it is: the owner's playlists don't touch it.
+  int8_t sport_active = ::espn::list_is_sport(this->prefs9_.active) ? this->prefs9_.active : 0;
+  std::string active_name = sport_active == 0 ? this->list_name_(this->prefs9_.active) : "";
   bool was_active = this->prefs9_.active != 0;
-  uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
+  uint16_t active_mask = this->active_mask_();
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
@@ -538,10 +563,10 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   // it is every favorite. keep (list= in the same request, as a rename sends
   // it) names it instead.
   this->prefs9_ = p;
-  uint8_t active = 0;
-  if (keep >= 0 && keep <= p.count) {
-    active = (uint8_t) keep;
-  } else {
+  int8_t active = sport_active;
+  if ((keep >= 0 && keep <= p.count) || ::espn::sport_row_exists(keep, favs)) {
+    active = (int8_t) keep;
+  } else if (sport_active == 0) {
     for (uint8_t n = 1; n <= p.count && !active_name.empty(); n++)
       if (this->list_name_(n) == active_name)
         active = n;
@@ -551,7 +576,7 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
-  uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
+  uint16_t mask = this->active_mask_();
   // A rename alone plays the same teams, so the board stays as it is.
   if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask))
     this->set_active_list_(active, false);  // other teams play now: pick again
@@ -562,8 +587,8 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
 // From the page, Home Assistant or the remote (announce: the name goes up on
 // the board, so a press in the dark says what it picked). Favorite teams
 // starts playing it, from its first card.
-void GamedayComponent::set_active_list_(uint8_t n, bool announce) {
-  if (n > this->prefs9_.count)
+void GamedayComponent::set_active_list_(int8_t n, bool announce) {
+  if (n > this->prefs9_.count || (n < 0 && !::espn::sport_row_exists(n, this->fav_refs_all_())))
     n = 0;
   if (n != this->prefs9_.active) {
     this->prefs9_.active = n;
@@ -594,6 +619,14 @@ void GamedayComponent::select_playlist(const std::string &option) {
     this->set_active_list_(0, false);
     return;
   }
+  // A sport row first: an owner's playlist with a sport's name comes after it
+  // in the options, as on the page.
+  uint8_t rows = this->sport_rows_();
+  for (int s = 0; s < ::espn::kSportCount; s++)
+    if ((rows & (1u << s)) && option == ::espn::sport_name((::espn::Sport) s)) {
+      this->set_active_list_(::espn::sport_list((::espn::Sport) s), false);
+      return;
+    }
   for (uint8_t n = 1; n <= this->prefs9_.count; n++)
     if (this->list_name_(n) == option) {
       this->set_active_list_(n, false);
@@ -610,6 +643,10 @@ void GamedayComponent::publish_playlist_select_() {
     return;
   this->playlist_options_.clear();
   this->playlist_options_.push_back("All favorites");
+  uint8_t rows = this->sport_rows_();
+  for (int s = 0; s < ::espn::kSportCount; s++)
+    if (rows & (1u << s))
+      this->playlist_options_.push_back(::espn::sport_name((::espn::Sport) s));
   for (uint8_t n = 1; n <= this->prefs9_.count; n++)
     this->playlist_options_.push_back(this->list_name_(n));
   FixedVector<const char *> options;
@@ -617,7 +654,8 @@ void GamedayComponent::publish_playlist_select_() {
   for (const auto &o : this->playlist_options_)
     options.push_back(o.c_str());
   this->playlist_select_->traits.set_options(options);
-  this->playlist_select_->publish_state(this->playlist_options_[this->prefs9_.active]);
+  int8_t a = this->prefs9_.active;
+  this->playlist_select_->publish_state(a == 0 ? "All favorites" : this->list_name_(a));
 }
 
 #ifndef GAMEDAY_DEMO
@@ -3860,6 +3898,24 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   }
   doc["list"] = this->prefs9_.active;
   doc["listmax"] = ::espn::kListMax;
+  // The sport rows the favorites make (playlists.h): each one's number for
+  // list=, its word and name, and its teams as places in favs.
+  JsonArray sports = doc["sports"].to<JsonArray>();
+  uint8_t rows = this->sport_rows_();
+  std::vector<::espn::TeamRef> refs = this->fav_refs_all_();
+  for (int s = 0; s < ::espn::kSportCount; s++) {
+    if (!(rows & (1u << s)))
+      continue;
+    JsonObject o = sports.add<JsonObject>();
+    o["v"] = ::espn::sport_list((::espn::Sport) s);
+    o["s"] = ::espn::sport_key((::espn::Sport) s);
+    o["n"] = ::espn::sport_name((::espn::Sport) s);
+    JsonArray f = o["f"].to<JsonArray>();
+    uint16_t mask = ::espn::sport_mask((::espn::Sport) s, refs);
+    for (uint8_t i = 0; i < FAV_MAX; i++)
+      if ((mask >> i) & 1u)
+        f.add(i);
+  }
   doc["today"] = this->today_only();
   doc["jump"] = this->jump_to_action();
   doc["banner"] = this->score_banner();
@@ -4911,7 +4967,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
   // list= with lists= names the playlist playing after the change (a rename
   // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
   bool with_lists = false;
-  int keep_list = -1;
+  int keep_list = ::espn::kListKeepNone;
   for (const auto &op : ops) {
     with_lists = with_lists || op.kind == ::espn::SetKind::LISTS;
     if (op.kind == ::espn::SetKind::LIST)
@@ -4967,10 +5023,10 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       case ::espn::SetKind::LIST:
         if (with_lists)
           break;  // set_lists_ took it
-        if (op.value > this->prefs9_.count)
+        if (op.value > this->prefs9_.count || (op.value < 0 && !::espn::sport_row_exists(op.value, this->fav_refs_all_())))
           ESP_LOGW(TAG, "No playlist %d", op.value);
         else
-          this->set_active_list_((uint8_t) op.value, false);
+          this->set_active_list_((int8_t) op.value, false);
         break;
       case ::espn::SetKind::TZ:
         this->select_timezone(::espn::kTimezones[op.value].name);

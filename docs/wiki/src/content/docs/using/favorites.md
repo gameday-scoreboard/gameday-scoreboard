@@ -54,7 +54,7 @@ The checks behind Jump to the action and Score banner no longer affect the game 
 
 ## Playlists
 
-A playlist is a group of your favorites with a name, like your football teams or your basketball teams. Favorite teams can play one playlist instead of every favorite.
+A playlist is a group of your favorites with a name, like a Sunday list or your kids' teams. Favorite teams can play one playlist instead of every favorite.
 
 - The **Playlists** card on the device page makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
 - **One per sport** makes a playlist for each sport among your favorites, named Football, Baseball, Basketball, Hockey and Soccer. It skips a sport that already has a playlist by that name.
@@ -62,6 +62,12 @@ A playlist is a group of your favorites with a name, like your football teams or
 - **Playing**, under **Favorite teams** on the device page, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
 
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
+
+:::note[Coming in the next release]
+**A row per sport, on its own.** When your favorites are in more than one sport, **Playing** offers a row for each sport that has favorites, named Football, Baseball, Basketball, Hockey and Soccer, between **All favorites** and your own playlists. Pick **Basketball** and the panel cycles through your basketball teams, with the same rules as a playlist. The rows work themselves out from your favorites: add a hockey team and a Hockey row appears, take out your last one and it goes, and a new favorite is in its sport's row at once. They can't be edited or deleted, and they don't count toward the 16 playlists. Favorites in one sport only get no rows, since **All favorites** already is that sport.
+
+The **One per sport** button is gone with it, so the **Playlists** card is for your own lists only. Playlists it made before stay as ordinary playlists, so you can remove them if a sport row now covers them. The remote's buttons 1 to 4 are unchanged.
+:::
 
 The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below.
 

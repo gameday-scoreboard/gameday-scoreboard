@@ -172,6 +172,9 @@ std::vector<TeamRef> fav_refs(const Settings &s) { return std::vector<TeamRef>(s
 void remap(Settings &s, const std::vector<TeamRef> &before) {
   for (auto &l : s.lists)
     l.second = remap_mask(l.second, before, fav_refs(s));
+  // check_active_list_: a sport row the favorites no longer make
+  if (list_is_sport(s.list) && !sport_row_exists(s.list, fav_refs(s)))
+    s.list = 0;
 }
 
 void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
@@ -196,6 +199,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
     case SetKind::LISTS: {
       // set_lists_: the one being played stays chosen by its name, or by
       // list= in the same request.
+      int before_list = s.list;
       std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
       s.lists.clear();
       s.list = 0;
@@ -204,14 +208,18 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list) {
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
-      if (keep_list >= 0 && keep_list <= (int) s.lists.size())
+      // A sport row playing stays as it is.
+      if (list_is_sport(before_list))
+        s.list = before_list;
+      if ((keep_list >= 0 && keep_list <= (int) s.lists.size()) || sport_row_exists(keep_list, before))
         s.list = keep_list;
       break;
     }
     case SetKind::LIST:
       // set_active_list_ switches to Favorite teams; a number past the last
-      // playlist is refused. With lists= set_lists_ took it.
-      if (!with_lists && op.value <= (int) s.lists.size()) {
+      // playlist, or a sport row the favorites don't make, is refused. With
+      // lists= set_lists_ took it.
+      if (!with_lists && (op.value < 0 ? sport_row_exists(op.value, before) : op.value <= (int) s.lists.size())) {
         s.list = op.value;
         s.mode = (int) Mode::FAVORITES;
       }
@@ -277,6 +285,22 @@ void state_doc(const Settings &s, JsonDocument &doc) {
         f.add(i);
   }
   doc["list"] = s.list;
+  // The sport rows the favorites make (rebuild_state_'s sports).
+  JsonArray sports = doc["sports"].to<JsonArray>();
+  uint8_t rows = sport_rows(fav_refs(s));
+  for (int sp = 0; sp < kSportCount; sp++) {
+    if (!(rows & (1u << sp)))
+      continue;
+    JsonObject o = sports.add<JsonObject>();
+    o["v"] = sport_list((Sport) sp);
+    o["s"] = sport_key((Sport) sp);
+    o["n"] = sport_name((Sport) sp);
+    JsonArray f = o["f"].to<JsonArray>();
+    uint16_t mask = sport_mask((Sport) sp, fav_refs(s));
+    for (int i = 0; i < kFavMax; i++)
+      if ((mask >> i) & 1u)
+        f.add(i);
+  }
   doc["today"] = s.today;
   std::vector<uint8_t> fav_leagues;
   for (const auto &f : s.favs)
@@ -347,7 +371,7 @@ void test_fixture_cases() {
     }
     // apply_ops_: list= with lists= names the playlist playing after the change.
     bool with_lists = false;
-    int keep_list = -1;
+    int keep_list = kListKeepNone;
     for (const auto &op : ops) {
       with_lists = with_lists || op.kind == SetKind::LISTS;
       if (op.kind == SetKind::LIST)
@@ -540,10 +564,47 @@ void test_playlists() {
   SCHECK(list_has(0b10, true, 1) && !list_has(0b10, true, 0), "a playlist: its own favorites");
 }
 
+// Sport rows (playlists.h): worked out from the favorites, one per sport once
+// they span more than one, numbered below 0 so the owner's playlists keep
+// their numbers.
+void test_sport_rows() {
+  const uint8_t NFL = (uint8_t) League::NFL, NCAA = (uint8_t) League::NCAA, NBA = (uint8_t) League::NBA,
+                NHL = (uint8_t) League::NHL, MLB = (uint8_t) League::MLB;
+  std::vector<TeamRef> favs = {{NFL, 6}, {NBA, 6}, {NCAA, 251}, {}, {NHL, 25}};
+  uint8_t rows = sport_rows(favs);
+  SCHECK(rows == ((1u << (int) Sport::FOOTBALL) | (1u << (int) Sport::BASKETBALL) | (1u << (int) Sport::HOCKEY)),
+         "a row per sport with favorites: got %u", (unsigned) rows);
+  SCHECK(sport_rows({{NFL, 6}, {NCAA, 251}}) == 0, "one sport (two leagues) makes no rows");
+  SCHECK(sport_rows({{NFL, 6}}) == 0 && sport_rows({}) == 0 && sport_rows({{}, {}}) == 0, "one or no favorite: no rows");
+  SCHECK(sport_mask(Sport::FOOTBALL, favs) == 0b00101, "the football row is favorites 0 and 2");
+  SCHECK(sport_mask(Sport::HOCKEY, favs) == 0b10000, "the hockey row is favorite 4");
+  SCHECK(sport_mask(Sport::BASEBALL, favs) == 0, "no baseball favorite, no bit");
+  SCHECK(sport_list(Sport::FOOTBALL) == -1 && sport_list(Sport::SOCCER) == -5, "rows are -1 to -5");
+  SCHECK(list_is_sport(-1) && list_is_sport(-5) && !list_is_sport(0) && !list_is_sport(-6) && !list_is_sport(3),
+         "a sport row is -1 to -5");
+  SCHECK(list_sport(-3) == Sport::BASKETBALL && std::string(sport_name(list_sport(-3))) == "Basketball" &&
+             std::string(sport_key(list_sport(-3))) == "basketball",
+         "-3 is Basketball");
+  Sport sp;
+  SCHECK(sport_by_key("hockey", sp) && sp == Sport::HOCKEY, "hockey by its word");
+  SCHECK(!sport_by_key("Hockey", sp) && !sport_by_key("", sp), "the word is lower case");
+  SCHECK(sport_row_exists(-1, favs) && sport_row_exists(-4, favs) && !sport_row_exists(-2, favs),
+         "a row exists for a sport with favorites");
+  SCHECK(!sport_row_exists(-1, {{NFL, 6}, {NCAA, 251}}), "no rows with one sport, football included");
+  SCHECK(!sport_row_exists(0, favs) && !sport_row_exists(1, favs) && !sport_row_exists(kListKeepNone, favs),
+         "only a sport row's number can exist as one");
+  // Selection: a row plays its sport's favorites, every favorite otherwise.
+  uint16_t m = sport_mask(Sport::BASKETBALL, favs);
+  SCHECK(list_has(m, true, 1) && !list_has(m, true, 0) && !list_has(m, true, 4), "the basketball row plays favorite 1 only");
+  SCHECK(sport_rows({{NFL, 6}, {MLB, 15}}) == ((1u << (int) Sport::FOOTBALL) | (1u << (int) Sport::BASEBALL)),
+         "two sports, two rows");
+}
+
 }  // namespace
 
 int run_set_tests(int &total_checks) {
   test_playlists();
+  test_sport_rows();
   test_parse_set();
   test_live_leagues();
   test_scan_leagues();

@@ -171,7 +171,8 @@ class GamedaySelect : public select::Select, public Component {
 //                                    autoupd=0/1 (install updates on its own, auto_update.h)
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
-//                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
+//                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite,
+//                                    -1 to -5 a sport row, playlists.h)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
@@ -416,12 +417,22 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // fav_refs_all_() from before the change). No save.
   void remap_lists_(const std::vector<::espn::TeamRef> &before);
   // keep: the playlist playing after the change (list= sent with lists=), or
-  // -1 to keep the one playing by its name.
-  void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = -1);
-  // n: 1 to the playlist count, 0 = every favorite.
-  void set_active_list_(uint8_t n, bool announce);
-  std::string list_name_(uint8_t n) const;  // n = 1..count
-  bool fav_in_list_(size_t i) const;        // favorite i plays in the chosen playlist
+  // kListKeepNone to keep the one playing by its name.
+  void set_lists_(const std::vector<::espn::ListDef> &lists, int keep = ::espn::kListKeepNone);
+  // n: 1 to the playlist count, 0 = every favorite, a negative number a
+  // sport row (playlists.h sport_list). A row the favorites don't make, or a
+  // number past the last playlist, plays every favorite.
+  void set_active_list_(int8_t n, bool announce);
+  std::string list_name_(int8_t n) const;  // n = 1..count, or a sport row's name
+  bool fav_in_list_(size_t i) const;       // favorite i plays in the chosen playlist
+  // The chosen playlist's mask over the favorites (sport rows worked out from
+  // the favorites), 0 for every favorite.
+  uint16_t active_mask_() const;
+  // The sport rows the favorites make (playlists.h sport_rows). Favorites in
+  // one sport only have none.
+  uint8_t sport_rows_() const;
+  // After a favorites change: a sport row that is gone plays every favorite.
+  void check_active_list_();
   void publish_playlist_select_();
   uint8_t fav_league_(uint8_t i) const;  // i = 0..FAV_MAX-1
   uint32_t fav_id_(uint8_t i) const;     // 0 = empty
@@ -604,7 +615,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
   // size is fixed for the same reason as Prefs7's.
   struct Prefs9 {
-    uint8_t active;  // the playlist Favorite teams plays, 1..count; 0 = every favorite
+    int8_t active;  // the playlist Favorite teams plays, 1..count; 0 = every favorite; < 0 a sport row
     uint8_t count;
     uint16_t mask[::espn::kListMax];                       // bit i = favorite i
     char name[::espn::kListMax][::espn::kListNameMax];  // no terminator when full

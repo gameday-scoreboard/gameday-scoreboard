@@ -120,7 +120,7 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "cdname": "", "cddate": "",
@@ -295,6 +295,9 @@ def state_doc():
         STATE["live"] = live_auto_leagues()
     else:
         STATE["live"] = list(LIVE_LIST[0])
+    # The sport rows the favorites make, worked out each time like the panel does.
+    STATE["sports"] = [{"v": -(sp + 1), "s": SPORT_ROWS[sp][0], "n": SPORT_ROWS[sp][1], "f": f}
+                       for sp, f in sorted(sport_masks().items())]
     return STATE
 
 
@@ -308,6 +311,45 @@ def remap_lists(before):
     for pl in STATE["lists"]:
         teams = [before[i] for i in pl["f"] if i < len(before) and before[i]]
         pl["f"] = [i for i, r in enumerate(after) if r and r in teams]
+    check_active_list()
+
+
+# Sport rows (components/gameday/playlists.h): the sport word and name per
+# Sport, in Sport order; a row's number for list= is -(Sport + 1).
+SPORT_ROWS = [("football", "Football"), ("baseball", "Baseball"), ("basketball", "Basketball"),
+              ("hockey", "Hockey"), ("soccer", "Soccer")]
+SPORT_INDEX = {"FOOTBALL": 0, "BASEBALL": 1, "BASKETBALL": 2, "HOCKEY": 3, "SOCCER": 4}
+LEAGUE_SPORT = {row["key"]: SPORT_INDEX[row["sport"].split("::")[-1]] for row in leagues()}
+# set_lists_'s keep with no list= in the request (kListKeepNone in playlists.h).
+KEEP_NONE = -99
+
+
+def sport_masks():
+    """sport_rows() and sport_mask(): {sport index: [places in favs]} once the favorites span more than one sport."""
+    by_sport = {}
+    for i, t in enumerate(STATE["favs"]):
+        if t and t.get("id"):
+            by_sport.setdefault(LEAGUE_SPORT[t["l"]], []).append(i)
+    return by_sport if len(by_sport) > 1 else {}
+
+
+def sport_row_exists(n):
+    return n < 0 and -n - 1 in sport_masks()
+
+
+def list_number(v):
+    """parse_set's list=: 0 to kListMax, or -1 to -5 for a sport row; None for anything else."""
+    body = v[1:] if v[:1] == "-" else v
+    if not body[:1].isdigit():
+        return None
+    n = atoi(v)
+    return n if -len(SPORT_ROWS) <= n <= LIMITS["kListMax"] else None
+
+
+def check_active_list():
+    """check_active_list_(): a sport row the favorites no longer make plays every favorite."""
+    if STATE["list"] < 0 and not sport_row_exists(STATE["list"]):
+        STATE["list"] = 0
 
 
 def parse_lists(v):
@@ -342,7 +384,7 @@ def apply_set(kv):
     hours = (STATE["nightstart"], STATE["nightend"])
     # apply_ops_: list= with lists= names the playlist playing after the change.
     with_lists = any(k == "lists" for k, _ in kv)
-    keep_list = next((atoi(v) for k, v in kv if k == "list" and v[:1].isdigit() and atoi(v) <= LIMITS["kListMax"]), -1)
+    keep_list = next((atoi(v) for k, v in kv if k == "list" and list_number(v) is not None), KEEP_NONE)
     for k, v in kv:
         before = fav_refs()
         if k == "mode":
@@ -378,16 +420,19 @@ def apply_set(kv):
             STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
             remap_lists(before)
         elif k == "lists":
-            # set_lists_(): the playlist being played stays chosen by its name.
-            active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] else ""
+            # set_lists_(): the playlist being played stays chosen by its name;
+            # a sport row playing stays as it is.
+            active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] > 0 else ""
+            sport_active = STATE["list"] if STATE["list"] < 0 else 0
             STATE["lists"] = parse_lists(v)
-            STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
-            if 0 <= keep_list <= len(STATE["lists"]):
+            STATE["list"] = sport_active or next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
+            if 0 <= keep_list <= len(STATE["lists"]) or sport_row_exists(keep_list):
                 STATE["list"] = keep_list
         elif k == "list":
             # set_active_list_() plays it in Favorite teams; with lists= set_lists_() took it.
-            if not with_lists and v[:1].isdigit() and atoi(v) <= len(STATE["lists"]):
-                STATE["list"] = atoi(v)
+            n = list_number(v)
+            if not with_lists and n is not None and (sport_row_exists(n) if n < 0 else n <= len(STATE["lists"])):
+                STATE["list"] = n
                 STATE["mode"] = 4
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
@@ -553,7 +598,7 @@ def import_settings(doc):
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
                       "pregame": (0, LIMITS["kPregameMax"]),
-                      "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
+                      "list": (-len(SPORT_ROWS), LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
             # Out of range is left out and listed (newer firmware may take more).
