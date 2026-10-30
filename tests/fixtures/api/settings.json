@@ -37,9 +37,29 @@
   "nightend": "07:00",
   "nightscreen": true,
   "nightlevel": 16,
+  "wake": true,
+  "wakelead": 15,
+  "after": "off",
+  "cards": {
+    "next": true,
+    "clock": false,
+    "countdown": true,
+    "custom": true,
+    "message": true,
+    "picture": true,
+    "gameleaders": true,
+    "top25": true,
+    "news": false,
+    "weather": true
+  },
   "countdown": true,
+  "top25": true,
+  "news": false,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
+  "town": "75019",
+  "wxon": true,
+  "gameleaders": true,
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,
@@ -50,7 +70,12 @@
       "n": "Sundays",
       "t": [
         "nfl:6"
-      ]
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false
     },
     {
       "n": "College",
@@ -61,6 +86,13 @@
     }
   ],
   "list": 2,
+  "sport": "none",
+  "hook": "http://192.168.1.20:1880/gameday",
+  "pregame": 15,
+  "remote1": "fav",
+  "remote2": "team:ncaa:2294",
+  "remote3": "list:College",
+  "remote4": "sport:basketball",
   "panels": 2,
   "brightness": 128,
   "scroll": 5

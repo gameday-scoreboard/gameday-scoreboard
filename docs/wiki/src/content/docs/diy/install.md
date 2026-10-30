@@ -49,6 +49,6 @@ Each build has a variant name, and the variant names the folder the panel reads 
 
 The 128x64 build reads its updates from the `moonhub75` folder too. The panel saves its layout the first time it starts, so that update keeps it two panels wide.
 
-Each release on [GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/releases) also carries the MoonHub75 factory image, `gameday-scoreboard-<version>.factory.bin`, and a zip of each variant's folder.
+Each release on [GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/releases) carries the MoonHub75 factory image, `gameday-scoreboard-<version>-moonhub75.factory.bin`, for flashing over USB by hand, and a zip of each variant's folder, `firmware-<variant>.zip`, which the installer site is built from. Each zip also holds that board's factory image, `<variant>/gameday-esp32s3.factory.bin`.
 
 A **Follow beta** switch on the device page gets test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.

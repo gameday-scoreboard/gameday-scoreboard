@@ -2,9 +2,16 @@
 # (MIT, Stuart Parmenter): same ESP-NOW pairing and brightness handling, but the
 # four numbered buttons pick favorite teams instead of pages.
 #
-# Buttons: ON/OFF = panel power, 1-4 = favorite teams, brightness up/down,
-# NIGHT = dim to the night level. In the demo build 1-4 run the demo instead
-# (remote_number in components/gameday/demo.cpp).
+# Buttons: ON/OFF = panel power, 1-4 = what the owner set each to (a favorite,
+# a playlist, a sport row, all favorites or nothing; its own favorite until
+# then, set_request.h RemoteTarget), brightness up/down, NIGHT = dim to the
+# night level. In the demo build 1-4 run the demo instead (remote_number in
+# components/gameday/demo.cpp).
+#
+# While the night schedule has the panel dim or dark, ON, Brighter, NIGHT and
+# 1-4 turn it off for the rest of the night (night_skip in the gameday
+# component), and NIGHT turns it back on. Dimmer leaves the night alone:
+# the panel is already as dim as the owner set it.
 
 substitutions:
   WIZMOTE_MAC_ADDRESS: "00:00:00:00:00:00"
@@ -29,7 +36,8 @@ script:
           condition:
             lambda: 'return button >= 16 && button <= 19;'
           then:
-            # A favorite on a dark panel is somebody asking to see that team.
+            # A numbered button on a dark panel is somebody asking to see something.
+            - lambda: 'id(gameday_ctl).night_skip("the remote");'
             - if:
                 condition:
                   switch.is_off: power
@@ -40,6 +48,7 @@ script:
           condition:
             lambda: 'return button == 1;'
           then:
+            - lambda: 'id(gameday_ctl).night_skip("the remote");'
             - switch.turn_on: power
       - if:
           condition:
@@ -47,15 +56,15 @@ script:
           then:
             - switch.turn_off: power
       - if:
-          # Brighter on a panel that is off means turn it on. The first press
-          # brings back the brightness it was set to; stepping up as well
-          # would jump straight past it.
+          # Brighter on a panel that is off, or dim or dark for the night,
+          # means turn it on. The first press brings back the brightness it
+          # was set to; stepping up as well would jump straight past it.
           condition:
             lambda: 'return button == 9;'
           then:
             - if:
                 condition:
-                  switch.is_off: power
+                  lambda: 'return id(gameday_ctl).night_skip("the remote") || !id(power).state;'
                 then:
                   - switch.turn_on: power
                 else:
@@ -66,15 +75,15 @@ script:
                       call.set_value(std::min(255.0f, current + step));
                       call.perform();
       - if:
-          # Dimmer does nothing on a panel that is off. Otherwise mashing it in
-          # the dark walks the saved level down to 1, and the next power on
-          # comes back as good as invisible.
+          # Dimmer does nothing on a panel that is off, or dim or dark for the
+          # night. Otherwise mashing it in the dark walks the saved level down
+          # to 1, and the next power on comes back as good as invisible.
           condition:
             lambda: 'return button == 8;'
           then:
             - if:
                 condition:
-                  switch.is_on: power
+                  lambda: 'return id(power).state && !id(gameday_ctl).night_holding();'
                 then:
                   - lambda: |-
                       float current = id(brightness).state;
@@ -87,16 +96,26 @@ script:
             lambda: 'return button == 3;'
           then:
             # NIGHT on a dark panel turns it on at the night level: power
-            # first, then the number, which the switch then lets through.
+            # first, then the number, which the switch then lets through. On
+            # a night the remote or the page skipped, it goes back to the
+            # schedule instead; during the schedule's hours it skips the night
+            # too, or the night level would never show.
             - if:
                 condition:
-                  switch.is_off: power
+                  lambda: 'return id(gameday_ctl).night_skipped();'
                 then:
-                  - switch.turn_on: power
-            - lambda: |-
-                auto call = id(brightness).make_call();
-                call.set_value(${WIZMOTE_BRIGHTNESS_NIGHT});
-                call.perform();
+                  - lambda: 'id(gameday_ctl).night_resume();'
+                else:
+                  - lambda: 'id(gameday_ctl).night_skip("the remote");'
+                  - if:
+                      condition:
+                        switch.is_off: power
+                      then:
+                        - switch.turn_on: power
+                  - lambda: |-
+                      auto call = id(brightness).make_call();
+                      call.set_value(${WIZMOTE_BRIGHTNESS_NIGHT});
+                      call.perform();
 
 espnow:
   id: espnow_component

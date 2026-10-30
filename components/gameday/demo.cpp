@@ -180,6 +180,9 @@ void GamedayComponent::demo_show_step_(bool splash) {
     g.opp_color = color;
   }
   g.valid = true;
+  // Each run is a game of its own to the game events (ha_track_).
+  if (this->demo_step_ == 0)
+    this->demo_run_++;
   g.state = d.state;
   g.completed = d.state == GameState::POST;
   g.team_score = d.us;

@@ -5,7 +5,6 @@ sidebar:
   order: 4
 ---
 
-:::note[Coming in the next release]
 Between games the panel counts down to the next one in big digits, and it can count down to a day you pick.
 
 ## The countdown to the next game
@@ -33,9 +32,12 @@ Under **Between games** on the device page, give a countdown a **Name**, like "C
 
 It takes the last 10 seconds of every minute, whenever no game is on, in every mode: over the next game's board, the off-season clock, the Favorite teams playlist, and the Later today and final scores in Live games. A game in progress, or a favorite's game that has taken the panel, is never covered.
 
+:::note[Coming in the next release]
+**Your own countdown** gets a switch in the **Between games** list on the [device page](/using/device-page/#between-games), on to start. Off, the countdown keeps its name and day but stops taking turns.
+:::
+
 The name can be up to 20 characters long, fewer with accented letters. Emoji are left out, since the panel can't draw them. Without a name, the panel shows the day, like "Dec 25". It's in your team's colors, or your favorite's in Favorite teams. When Live games is showing other teams' games, or no team is picked, it's gray.
 
 ## On a 64x64 panel
 
 A single 64x64 panel shows the countdown in the same size as the off-season clock's time, with the matchup or the name under it.
-:::

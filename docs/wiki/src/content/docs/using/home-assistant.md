@@ -31,23 +31,35 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
 
-:::note[Coming in the next release]
-The **Team** entity is gone, along with My team. Until then, **Team** picks the team My team follows, and **Mode** also lists My team and the older Live NFL, Live college and Live anything.
-:::
+The **Team** entity is gone, along with My team.
 
 A few diagnostic sensors, the Wi-Fi signal and the free memory readings, are there but turned off until you turn them on in Home Assistant.
 
 Favorites, the timezone, the ticker switches, the celebrations, the Live games leagues and the panel layout have no entities. Set them on the device page or in the app.
 
-:::note[Coming in the next release]
 A **Playlist** select picks the playlist Favorite teams plays: **All favorites** or one of your playlists by name. Choosing one switches the panel to Favorite teams. Home Assistant reads the names when it connects to the panel, so a playlist you add or rename shows in the list after the panel restarts or Home Assistant reconnects. See [Playlists](/using/favorites/#playlists).
+
+:::note[Coming in the next release]
+With favorites in more than one sport, the select also lists **All football**, **All basketball** and so on, one for each sport, after **All favorites**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
 :::
 
 A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
 
+:::note[Coming in the next release]
+**Select Page** gets a third option, **Effects**, which fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255) to set it. The panel starts on the Scoreboard after every restart and puts the Scoreboard back itself when it has something to show you, so an automation that wants the pattern back after that selects Effects again. Three diagnostic sensors, **Effect FPS**, **Effect Render Time** and **Effect Output Time**, read the pattern's frame rate while one runs and are unknown otherwise. See [Effects](/using/effects/).
+:::
+
 **Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
+:::note[Coming in the next release]
+**Team** and **Opponent** name the two sides, **Team Color** and **Opponent Color** give each side's color as `0,42,92` for a light to follow, **Period** says where the game is (`3rd quarter`, `Halftime`) and **Game Clock** shows the clock. See [Game events](/using/game-events/#entities-for-the-game).
+:::
+
 ## Score events
+
+:::note[Coming in the next release]
+The panel also sends an event before the start, at the start, when the lead changes and at the end of each period, every event carries the league and both teams' colors, and there are ready-made blueprints for team-colored lights and a goal horn. The score and final events keep every field below. See [Game events](/using/game-events/).
+:::
 
 The panel sends Home Assistant an event every time either side scores in the game Game Status follows, and another when that game ends. They come whether or not the panel celebrates the score on screen, in every sport, basketball included. An event goes out once per score, so nothing repeats in your logbook. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
 

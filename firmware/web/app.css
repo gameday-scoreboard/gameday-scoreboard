@@ -123,10 +123,15 @@ button { font: inherit; color: inherit; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
 .card h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
 .card p.hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+#fxCtls p.hint { margin-top: 6px; }
 .ctl { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid #1a2029; }
 .ctl:first-of-type { border-top: 0; }
 .ctl label { flex: 1; }
 .ctl label small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
+/* A between-games card with nothing to show yet: greyed, with what it needs. */
+.ctl.waiting label { color: var(--muted); }
+.ctl.waiting .card-hint { color: var(--gold); }
+.ctl.pic img { width: auto; height: 32px; max-width: 64px; object-fit: contain; image-rendering: pixelated; background: #000; border-radius: 3px; }
 .card .sub { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
 .card .sub:first-of-type { margin-top: 4px; }
 .ctl .val { color: var(--muted); font-size: 12px; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -266,6 +271,8 @@ button { font: inherit; color: inherit; }
 
 /* Firmware update */
 .fw { margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+.fw.important { border-color: var(--gold); }
+.fw.important .fwline { color: var(--gold); }
 .fwline { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
 .fwsub { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .fwsub .notes { margin: 6px 0 4px; padding-left: 18px; color: #c3ccd6; }
@@ -310,6 +317,16 @@ button { font: inherit; color: inherit; }
 .plist .ctl { border-top: 0; padding-bottom: 0; }
 .plist .pname { flex: 1; min-width: 0; margin: 0; }
 .plist .pbtn { color: var(--muted); font-size: 12px; flex: none; }
+/* a playlist's options: the schedule, two switches */
+.popts { margin-top: 8px; }
+.popts .psched, .popts .phours { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; }
+.popts .plabel, .popts .phours small { color: var(--muted); font-size: 12px; }
+.popts .pdays { margin-top: 0; }
+.popts .pdays .chip { width: 30px; padding: 4px 0; text-align: center; }
+.popts .ctl { padding: 6px 0; border-top: 0; }
+.popts .ctl label { font-size: 13px; }
+.popts input.num.time { width: auto; }
+.rbtn select { max-width: 60%; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }
 

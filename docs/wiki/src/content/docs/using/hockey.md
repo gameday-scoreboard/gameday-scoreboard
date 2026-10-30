@@ -11,11 +11,9 @@ NHL games get their own board. This page describes a 128x64 display and notes wh
 
 The next-game card shows both logos, your team on the left, with the records under them. The ticker carries the puck drop day and time in the panel's timezone, the playoff series when there is one, the betting line, over/under and TV channel when ESPN has them and **Odds, TV and win chance** is on, and the arena.
 
-:::note[Coming in the next release]
 Before a playoff game the ticker starts with the round, like "East 1st Round - Game 2".
 
 After the odds the ticker shows each team's points leader for the season, like "McDavid 9 pts". **Pre-game season leaders** on the device page turns them off.
-:::
 
 NHL teams have no Up next list on the device page: their season schedules are too large for the panel to read.
 
@@ -51,6 +49,10 @@ In the playoffs the series, like "CAR leads series 2-0", is in the ticker before
 The ticker says "Final", or "Final/OT", "Final/SO" or "Final/2OT", with the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for half an hour, then the panel looks up the team's next game.
 
 At the final the board takes turns, 10 seconds each, with the line score: each team's goals by period and the total, with one OT column after overtime (SO after a shootout). On a 64x64 panel the teams sit side by side under their abbreviations, with the periods down the left.
+
+:::note[Coming in the next release]
+A **Game leaders** card joins the turns: each team's logo and abbreviation with its goal and assist leaders, like "Johnson 2 goals" and "Werenski 2 assists". It shows once at the second intermission and takes its turn at the final. On a 64x64 panel it's the goal leader only, under each abbreviation. Turn it off under **Between games** on the [device page](/using/device-page/).
+:::
 
 With **Last play** on, the final's ticker also runs the goals the panel saw, like "P2 12:04 Crosby goal, PIT 2-1", and ESPN's headline for the game when it has one.
 

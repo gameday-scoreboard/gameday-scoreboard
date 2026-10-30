@@ -77,6 +77,15 @@ void SavedNetworks::setup() {
   if (reset && (this->list_.count > 0 || !w->get_sta().get_ssid().empty())) {
     this->in_setup_ = true;
     w->set_sta(wifi::WiFiAP{});
+#ifdef USE_IMPROV_BLE
+    // A wrong name or password from the app keeps the panel in setup for
+    // another try, and the advert says it has networks, so the app lists it
+    // as a panel that lost its Wi-Fi rather than a new one.
+    if (improv_ble::global_improv_component != nullptr) {
+      improv_ble::global_improv_component->set_setup_mode(true);
+      improv_ble::global_improv_component->set_has_saved_network(true);
+    }
+#endif
     ESP_LOGI(TAG, "Wi-Fi was reset: in setup mode, %u saved network(s) kept for the next boot", this->list_.count);
     return;
   }
