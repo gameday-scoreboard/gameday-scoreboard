@@ -38,6 +38,7 @@ through `update_important` in the panel's state.
 
 ### ✨ New
 
+- 🔍 Searching **On now** in the team chooser finds a team that isn't playing today, under a **Teams** heading
 - 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
 - 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
 - ⏰ **Game-day wake** turns the panel on before your game, and **After the game** turns it off or shows the clock once the final has been up a while
