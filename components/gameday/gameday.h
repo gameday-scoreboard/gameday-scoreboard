@@ -21,6 +21,8 @@
 #include "esphome/core/component.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/preferences.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "auto_update.h"
 #include "badge.h"
@@ -181,7 +183,8 @@ class GamedaySelect : public select::Select, public Component {
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
 //   GET  /gameday/state              full snapshot + settings, and "wifi" (wifi_history.h)
-//   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB)
+//   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB);
+//                                    stack never touched since boot (bytes): loop, web server, fetch task
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
 //                                    down/count/match/play/odds/leaders/opp=0/1 panels=1/2
@@ -1455,6 +1458,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // ESPN answered 200 over HTTPS (open_), from any task: the network is open,
   // whatever the probe said.
   std::atomic<uint32_t> espn_ok_reads_{0};
+  // The loop task, for its stack reading in /gameday/heap (set in setup()).
+  TaskHandle_t loop_task_{nullptr};
+  // The least stack any fetch task left untouched, read as it ends; UINT32_MAX
+  // until one has run.
+  std::atomic<uint32_t> fetch_stack_low_{UINT32_MAX};
 };
 
 class UpdateTrigger : public Trigger<const UpdateFields &> {
