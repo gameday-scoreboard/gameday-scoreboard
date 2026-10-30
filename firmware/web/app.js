@@ -163,13 +163,37 @@
       </div>
       <div class="card" id="cdCard" hidden>
         <h2>Between games</h2>
-        <p class="hint">What the panel shows while no game is on.</p>
-        <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+        <p class="hint">What the panel shows while no game is on. Turn on the cards you want; they take turns.</p>
+        <div id="cardList"></div>
+        <div id="cardsOld">
+          <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+          <div class="ctl" id="glRow"><label>Game leaders<small>At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.</small></label><button class="sw" data-set="gameleaders" aria-label="Game leaders"></button></div>
+          <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
+          <div class="ctl" id="newsRow"><label>News headlines<small>ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
+        </div>
         <div class="sub">Your own countdown</div>
         <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
         <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
         <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
         <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+        <div id="wxBox" hidden>
+          <div class="sub">Weather</div>
+          <p class="hint">Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days, in °F. Read every 30 minutes, never during your game.</p>
+          <div class="ctl"><label for="town">Town or ZIP code</label><input type="text" id="town" maxlength="40" placeholder="Coppell, TX" autocomplete="off"></div>
+          <div class="actions"><button class="btn" id="townGo">Look up</button></div>
+          <p class="hint" id="wxPlace" hidden></p>
+          <div class="ctl" id="wxOnRow"><label>Weather card</label><button class="sw" data-set="wxon" aria-label="Weather card"></button></div>
+          <p class="hint" id="wxRead" hidden></p>
+          <p class="hint">Your town goes to Open-Meteo for the forecast.</p>
+        </div>
+      </div>
+      <div class="card" id="picCard" hidden>
+        <h2>Pictures</h2>
+        <p class="hint">Your own picture or animated GIF between games, up to 4, one every 3 minutes for about 10 seconds. A photo is fitted to the panel. A GIF goes as it is, up to 128 by 64 pixels.</p>
+        <div id="picList"></div>
+        <p class="hint" id="picNote" hidden></p>
+        <div class="actions"><button class="btn primary" id="picAdd">Add a picture</button></div>
+        <input type="file" id="picFile" accept="image/png,image/gif,image/jpeg,image/webp" hidden>
       </div>
       <div class="card" id="msgCard" hidden>
         <h2>Message</h2>
@@ -209,6 +233,9 @@
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
         <div id="panelCtls"></div>
+        <div id="fxCtls" hidden>
+          <p class="hint">The effect fills the panel until you pick another page under Showing. The board comes back on its own when the panel has something to tell you, like Wi-Fi lost or a message.</p>
+        </div>
         <div id="nightCtls" hidden>
           <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends. The remote, picking a team or Panel on turns it off for the rest of that night.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
           <div id="nightSet" hidden>
@@ -217,6 +244,16 @@
             <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
             <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
           </div>
+        </div>
+        <div id="wakeCtls" hidden>
+          <div class="ctl"><label>Game-day wake<small>A panel you turned off comes back on before a game of your team or a favorite starts. At night the night schedule still dims it or keeps the screen off until the game is live.</small></label><button class="sw" data-set="wake" aria-label="Game-day wake"></button></div>
+          <div class="ctl" id="wakeLeadRow" hidden><label for="wakeLead">Turns on</label><select id="wakeLead">
+            <option value="5">5 minutes before</option><option value="10">10 minutes before</option><option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
+          </select></div>
+          <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
+            <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+          </select></div>
         </div>
       </div>
       <div class="card">
@@ -397,7 +434,14 @@
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
-    countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
+    // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
+    cards: (v) => {
+      const pairs = new Map(v.split(",").map((p) => p.split(":")));
+      return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
+    },
+    cdname: String, cddate: (v) => (v === "none" ? "" : v),
+    town: String, wxon: (v) => v === "1",
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -411,6 +455,7 @@
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
+    wake: (v) => v === "1", wakelead: Number, after: String,
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -418,6 +463,7 @@
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
     lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
     list: (a, b) => (a || 0) === (b || 0),
+    cards: (a, b) => (a || []).map((c) => c.id + ":" + c.on).join() === (b || []).map((c) => c.id + ":" + c.on).join(),
   };
   const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
   const overlay = () => {
@@ -797,12 +843,100 @@
     setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
+  // The Between games list: a row per card in the state's cards, in its
+  // order, so a card newer firmware adds shows with no change here. A card
+  // with nothing to show yet is greyed with what it needs; its switch still
+  // works.
+  const cardAbout = {
+    next: "The next game's board: the teams, the day and the time.",
+    clock: "The time in your team's colors, when no game is coming up for weeks. With Next game off, the clock shows instead of the next game.",
+    countdown: "Big digits to the start, \"2d 14h\", taking turns with the next game every 10 seconds.",
+    custom: "A day you pick below, like Christmas, in the last 10 seconds of every minute until that day ends.",
+    message: "The Message card's text or list, taking turns with the scoreboard.",
+    picture: "Your pictures from the Pictures card, one at a time.",
+    gameleaders: "At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.",
+    top25: "The AP poll, a page at a time, every 10 minutes.",
+    news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
+    weather: "Your town's forecast for 10 seconds every minute. Set the town under Weather below.",
+  };
+  const cardRows = {};
+  const renderCards = () => {
+    const host = $("#cardList");
+    const cards = S.cards || [];
+    if (cards.map((c) => c.id).join() !== Object.keys(cardRows).join()) {
+      host.textContent = "";
+      for (const k of Object.keys(cardRows)) delete cardRows[k];
+      for (const c of cards) {
+        const row = el("div", "ctl card-row");
+        row.dataset.card = c.id;
+        const label = el("label", null, c.name);
+        const about = el("small", null, cardAbout[c.id] || "");
+        const hint = el("small", "card-hint");
+        label.append(about, hint);
+        const sw = el("button", "sw");
+        sw.setAttribute("role", "switch");
+        sw.setAttribute("aria-label", c.name);
+        sw.onclick = () => {
+          const now = (S.cards || []).find((x) => x.id === c.id);
+          setGD({ cards: c.id + ":" + (now && now.on ? 0 : 1) });
+        };
+        row.append(label, sw);
+        host.appendChild(row);
+        cardRows[c.id] = { row, hint, sw };
+      }
+    }
+    for (const c of cards) {
+      const r = cardRows[c.id];
+      setOn(r.sw, !!c.on, "aria-checked");
+      r.row.classList.toggle("waiting", !c.ok);
+      r.hint.hidden = c.ok || !c.hint;
+      r.hint.textContent = c.ok ? "" : c.hint || "";
+    }
+  };
   // The custom countdown: the name and the day post on their own, as they change.
   const cdName = $("#cdname");
   const cdDate = $("#cddate");
   cdName.onchange = () => setGD({ cdname: cdName.value.trim() });
   cdDate.onchange = () => setGD({ cddate: cdDate.value || "none" });
   $("#cdClear").onclick = () => setGD({ cdname: "", cddate: "none" });
+  // The weather card's town: Look up (or Enter) posts it; the same town again
+  // retries a lookup that found nothing.
+  const town = $("#town");
+  const postTown = () => setGD({ town: town.value.trim() });
+  $("#townGo").onclick = postTown;
+  town.onkeydown = (e) => { if (e.key === "Enter") postTown(); };
+  // The weather block: the place the lookup found and how the reads go.
+  const mins = (s) => Math.max(1, Math.round(s / 60));
+  const ago = (s) => (s < 60 ? "just now" : mins(s) === 1 ? "a minute ago" : `${mins(s)} minutes ago`);
+  const renderWeather = () => {
+    $("#wxBox").hidden = S.town === undefined;  // firmware from before the card
+    if (S.town === undefined) return;
+    if (document.activeElement !== town) town.value = S.town || "";
+    const w = S.wx;
+    const place = $("#wxPlace");
+    const read = $("#wxRead");
+    const retry = w && w.wait_s > 0 ? `, tries again in ${mins(w.wait_s)} minute${mins(w.wait_s) === 1 ? "" : "s"}` : "";
+    place.hidden = !w;
+    read.hidden = true;
+    if (!w) return;
+    if (w.place) place.textContent = `Found: ${w.place}`;
+    else if (w.lookup === -1) place.textContent = "Looking up...";
+    else if (w.lookup === 200) place.textContent = `No place found for "${S.town}". Try the town and state, or a ZIP code.`;
+    else place.textContent = `Couldn't reach Open-Meteo${retry}.`;
+    if (!w.place) return;
+    read.hidden = false;
+    if (w.read_s !== undefined) {
+      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°F, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
+      if (w.held) read.textContent += " The next read waits for the game to end.";
+      else if (w.read !== 200 && w.read !== -1) read.textContent += ` The last read failed${retry}.`;
+    } else if (w.held) {
+      read.textContent = "Not read yet: waiting for the game to end.";
+    } else if (w.read !== -1) {
+      read.textContent = `Couldn't reach Open-Meteo${retry}.`;
+    } else {
+      read.textContent = "Not read yet.";
+    }
+  };
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
@@ -1007,9 +1141,17 @@
     });
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = S.countdown === undefined;
+    // The Between games list; firmware from before it has a switch per card.
+    $("#cardsOld").hidden = !!S.cards;
+    $("#wxOnRow").hidden = !!S.cards;  // the list's Weather row is the same switch
+    renderCards();
+    $("#glRow").hidden = S.gameleaders === undefined;  // firmware from before the card
+    $("#top25Row").hidden = S.top25 === undefined;
+    $("#newsRow").hidden = S.news === undefined;  // and before the news card
     if (document.activeElement !== cdName) cdName.value = S.cdname || "";
     if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
     $("#cdClear").hidden = !S.cdname && !S.cddate;
+    renderWeather();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
@@ -1028,6 +1170,7 @@
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+    renderPics();
     renderEvents();
   };
 
@@ -1149,6 +1292,155 @@
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- game-day wake and after the game (components/gameday/wake.h) ----------
+  const wakeSeen = { lead: null, after: null };
+  const renderWake = () => {
+    if (!S) return;
+    // Older firmware has no wake.
+    $("#wakeCtls").hidden = S.wake === undefined;
+    if (S.wake === undefined) return;
+    // The lead also ends After the game's clock, and keeps Off from turning
+    // the panel off just before the next game, so it shows for those too.
+    $("#wakeLeadRow").hidden = !S.wake && S.after === "scoreboard";
+    const lead = $("#wakeLead");
+    const l = String(S.wakelead);
+    if (l !== wakeSeen.lead && document.activeElement !== lead) {
+      wakeSeen.lead = l;
+      // A lead the list lacks (set from an app or a backup) still shows.
+      if (![...lead.options].some((o) => o.value === l)) lead.add(new Option(l + " minutes before", l));
+      lead.value = l;
+    }
+    const after = $("#afterGame");
+    if (S.after !== wakeSeen.after && document.activeElement !== after) {
+      wakeSeen.after = S.after;
+      if (![...after.options].some((o) => o.value === S.after)) after.add(new Option(S.after, S.after));
+      after.value = S.after;
+    }
+    const back = S.wake ? " Game-day wake turns it back on before the next game."
+      : " Turn on Game-day wake to bring it back before the next game.";
+    $("#afterHint").textContent = S.after === "off"
+      ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
+      : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
+        : "The final, then your next game, as before.";
+  };
+  $("#wakeLead").onchange = () => {
+    wakeSeen.lead = null;
+    setGD({ wakelead: $("#wakeLead").value });
+    toast("Turns on " + $("#wakeLead").selectedOptions[0].textContent);
+  };
+  $("#afterGame").onchange = () => {
+    wakeSeen.after = null;
+    setGD({ after: $("#afterGame").value });
+  };
+
+  // ---- pictures ----------------------------------------------------------------
+  // The panel keeps up to four PNG or GIF files (GET /gameday/picture?slot=N
+  // is one as uploaded). A still image is fitted to the panel here and sent
+  // as a PNG; a GIF can't be redrawn in the browser, so it goes as it is.
+  const PIC_MAX = 64 * 1024;
+  const picNote = (t) => { const n = $("#picNote"); n.textContent = t; n.hidden = !t; };
+  let picShown = null;
+  const renderPics = () => {
+    // Older firmware has no picture card.
+    $("#picCard").hidden = S.pics === undefined;
+    if (S.pics === undefined) return;
+    const pics = S.pics || [];
+    $("#picAdd").disabled = !S.picroom;
+    $("#picAdd").textContent = pics.length >= 4 ? "4 pictures kept" : "Add a picture";
+    // The thumbnails load from the panel, so only when the list changes.
+    const key = JSON.stringify(pics);
+    if (key === picShown) return;
+    picShown = key;
+    const list = $("#picList");
+    list.textContent = "";
+    pics.forEach((p) => {
+      const row = el("div", "ctl pic");
+      const img = el("img");
+      img.src = "/gameday/picture?slot=" + p.s + "&id=" + p.id;
+      img.alt = "Picture " + p.s;
+      img.width = p.w;
+      img.height = p.h;
+      const kb = Math.max(1, Math.round(p.b / 1024));
+      const what = p.k === "gif" && p.f > 1 ? "GIF, " + p.f + " frames" : p.k.toUpperCase();
+      const label = el("label", "", what);
+      label.appendChild(el("small", "", p.w + " by " + p.h + ", " + kb + " KB"));
+      const del = el("button", "btn danger", "Delete");
+      del.onclick = async () => {
+        if (!confirm("Delete this picture from the panel?")) return;
+        try {
+          const r = await fetch("/gameday/picture?delete=" + p.s, { method: "POST" });
+          if (!r.ok) throw new Error();
+        } catch (_) {
+          toast("Device did not respond. Try again.");
+          return;
+        }
+        toast("Picture deleted");
+        scheduleState(APPLY_MS + 100);
+      };
+      row.append(img, label, del);
+      list.appendChild(row);
+    });
+  };
+  // A still image drawn into the panel's size, all of it showing, on black.
+  const fitPicture = (file, maxW, maxH) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const s = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+      const c = el("canvas");
+      c.width = Math.max(1, Math.round(img.naturalWidth * s));
+      c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      const g = c.getContext("2d");
+      g.imageSmoothingQuality = "high";
+      g.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob((b) => (b ? resolve(b) : reject(new Error())), "image/png");
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error()); };
+    img.src = url;
+  });
+  $("#picAdd").onclick = () => { $("#picFile").value = ""; $("#picFile").click(); };
+  $("#picFile").onchange = async () => {
+    const f = $("#picFile").files[0];
+    if (!f) return;
+    const maxW = Math.min(128, 64 * (S.panels || 1));
+    let body = f;
+    if (f.type === "image/gif") {
+      const head = new Uint8Array(await f.slice(0, 10).arrayBuffer());
+      const w = head[6] | (head[7] << 8), h = head[8] | (head[9] << 8);
+      if (w > 128 || h > 64) { picNote("That GIF is " + w + " by " + h + " pixels. A GIF can be up to 128 by 64; resize it first."); return; }
+    } else {
+      try {
+        // A PNG that already fits goes as it is, so pixel art stays exact.
+        const fits = f.type === "image/png" && f.size <= PIC_MAX && await new Promise((ok) => {
+          const u = URL.createObjectURL(f);
+          const i = new Image();
+          i.onload = () => { URL.revokeObjectURL(u); ok(i.naturalWidth <= maxW && i.naturalHeight <= 64); };
+          i.onerror = () => { URL.revokeObjectURL(u); ok(false); };
+          i.src = u;
+        });
+        if (!fits) body = await fitPicture(f, maxW, 64);
+      } catch (_) {
+        picNote("That file isn't a picture the browser can open.");
+        return;
+      }
+    }
+    if (body.size > PIC_MAX) { picNote("That file is " + Math.round(body.size / 1024) + " KB. A picture can be up to 64 KB."); return; }
+    picNote("Sending...");
+    let r, j;
+    try {
+      r = await fetch("/gameday/picture", { method: "POST", headers: { "Content-Type": body.type || "application/octet-stream" }, body });
+      j = await r.json().catch(() => ({}));
+    } catch (_) {
+      picNote("");
+      toast("Device did not respond. Try again.");
+      return;
+    }
+    if (!r.ok) { picNote("Not added: " + (j.error || "the panel answered " + r.status + ".")); return; }
+    picNote("Added. It's up next between games.");
+    scheduleState(APPLY_MS + 100);
   };
 
   // ---- game events: the heads-up and the webhook ---------------------------------
@@ -1323,7 +1615,14 @@
     { name: "Power", into: "#panelCtls", label: "Panel on" },
     { name: "Brightness", into: "#panelCtls", label: "Brightness" },
     { name: "Scroll Speed", into: "#panelCtls", label: "Ticker speed" },
-    { name: "Select Page", into: "#panelCtls", label: "Showing" },
+    // onValue: the effect controls show only while the panel is on its Effects
+    // page, whoever put it there (this page, Home Assistant, or the panel
+    // taking the screen back), so it follows the entity's value, not the tap.
+    { name: "Select Page", into: "#panelCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Effect", into: "#fxCtls", label: "Effect" },
+    { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
+    { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
+    { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
     { name: "WizMote Auto-Discovery", into: "#remoteCtls", label: "Discovery" },
     { name: "Clear WizMote Pairing", into: "#remoteActions", label: "Unpair remote", danger: true },
     { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
@@ -1729,6 +2028,7 @@
     renderMode();
     renderSettings();
     renderNight();
+    renderWake();
     renderPanels();
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
@@ -2155,6 +2455,7 @@
     if (def) {
       if (!built[e.id]) built[e.id] = buildControl(def, ents[e.id]);
       built[e.id].update(ents[e.id]);
+      if (def.onValue) def.onValue(ents[e.id].value);
     }
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is

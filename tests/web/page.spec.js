@@ -43,6 +43,9 @@ const sets = async (request) =>
     .filter(Boolean);
 const expectSet = (request, q) => expect.poll(() => sets(request)).toContainEqual(q);
 const deviceState = async (request) => (await request.get("/gameday/state")).json();
+// The entity control posts (/select/Effect/set?option=..., /number/Effect%20Speed/set?value=...)
+const entityPosts = async (request) =>
+  (await (await request.get("/_log")).json()).filter((p) => !p.path.startsWith("/gameday/")).map((p) => ({ path: p.path, q: p.q }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A busy panel answers late. Each /gameday/state read is taken when it
@@ -450,6 +453,51 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
   await expectSet(request, { banner: "0" });
   await expect(page.locator('.sw[data-set="down"]')).not.toHaveClass(/\bon\b/);
   await expect(page.locator('.sw[data-set="play"]')).toHaveClass(/\bon\b/);
+});
+
+test("Showing Effects reveals the effect controls, and they post", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const showing = page.getByRole("combobox", { name: "Showing" });
+  await expect(showing).toHaveValue("Scoreboard");
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects"]);
+  await expect(page.locator("#fxCtls")).toBeHidden();
+  // The Panel card's own controls are untouched by the hidden effect rows.
+  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
+
+  // Picking the Effects page: the mock applies it and pushes the new value on
+  // the event stream, which is what reveals the controls.
+  await showing.selectOption("Effects");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Select%20Page/set", q: { option: "Effects" } });
+  await expect(page.locator("#fxCtls")).toBeVisible();
+  await expect(page.locator("#fxCtls p.hint")).toContainText("fills the panel until you pick another page");
+  const effect = page.getByRole("combobox", { name: "Effect", exact: true });
+  const palette = page.getByRole("combobox", { name: "Palette" });
+  const speed = page.getByRole("slider", { name: "Speed", exact: true });
+  const intensity = page.getByRole("slider", { name: "Intensity", exact: true });
+  await expect(effect).toHaveValue("Matrix");
+  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]);
+  await expect(palette).toHaveValue("Default");
+  await expect(speed).toHaveValue("128");
+  await expect(speed).toHaveAttribute("max", "255");
+  await expect(intensity).toHaveValue("128");
+
+  await effect.selectOption("DNA");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Effect/set", q: { option: "DNA" } });
+  await palette.selectOption("Ocean");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Effect%20Palette/set", q: { option: "Ocean" } });
+  await speed.fill("200");
+  await speed.dispatchEvent("change");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/number/Effect%20Speed/set", q: { value: "200" } });
+  await expect(page.locator("#fxCtls .val").first()).toHaveText("200");
+  await intensity.fill("40");
+  await intensity.dispatchEvent("change");
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/number/Effect%20Intensity/set", q: { value: "40" } });
+
+  // Back to the scoreboard hides them again.
+  await showing.selectOption("Scoreboard");
+  await expect(page.locator("#fxCtls")).toBeHidden();
+  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
 });
 
 test("a screen reader gets each control's name, role and state", async ({ page, request }) => {
@@ -989,17 +1037,72 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
-test("between games: the countdown switch is on by default, and the custom countdown posts its name and day", async ({ page, request }) => {
+test("between games: a row per card in the panel's order, news and weather off to start, each posting cards=", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  const sw = page.locator('.sw[data-set="countdown"]');
   await expect(page.locator("#cdCard")).toBeVisible();
-  await expect(sw).toHaveClass(/\bon\b/);
-  await expect(page.locator("#cdClear")).toBeHidden();
-  await sw.click();
-  await expectSet(request, { countdown: "0" });
-  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#cardsOld")).toBeHidden();
+  const rows = page.locator("#cardList .ctl");
+  const want = (await deviceState(request)).cards;
+  await expect(rows).toHaveCount(want.length);
+  await expect(rows.locator("label")).toContainText(want.map((c) => c.name));
+  const sw = (id) => page.locator(`#cardList [data-card="${id}"] .sw`);
+  // Every card on to start but news and weather (on once a town is set).
+  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather"]);
+  for (const c of want) {
+    if (c.on) await expect(sw(c.id)).toHaveClass(/\bon\b/);
+    else await expect(sw(c.id)).not.toHaveClass(/\bon\b/);
+  }
 
+  await sw("clock").click();
+  await expectSet(request, { cards: "clock:0" });
+  await expect(sw("clock")).not.toHaveClass(/\bon\b/);
+  await expect.poll(async () => (await deviceState(request)).cards.find((c) => c.id === "clock").on).toBe(false);
+  await sw("news").click();
+  await expectSet(request, { cards: "news:1" });
+  await expect.poll(async () => (await deviceState(request)).news).toBe(true);
+  // The countdown's row is the countdown switch.
+  await sw("countdown").click();
+  await expectSet(request, { cards: "countdown:0" });
+  await expect.poll(async () => (await deviceState(request)).countdown).toBe(false);
+  await expect(sw("countdown")).not.toHaveClass(/\bon\b/);
+  await sw("clock").click();
+  await expectSet(request, { cards: "clock:1" });
+  await expect(sw("clock")).toHaveClass(/\bon\b/);
+});
+
+test("between games: a card with nothing to show is greyed with what it needs, and its switch still works", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const row = (id) => page.locator(`#cardList [data-card="${id}"]`);
+  // No day picked and no message yet.
+  await expect(row("custom")).toHaveClass(/\bwaiting\b/);
+  await expect(row("custom").locator(".card-hint")).toHaveText("Pick its day below first");
+  await expect(row("message")).toHaveClass(/\bwaiting\b/);
+  await expect(row("message").locator(".card-hint")).toBeVisible();
+  await expect(row("picture")).toHaveClass(/\bwaiting\b/);
+  await expect(row("next")).not.toHaveClass(/\bwaiting\b/);
+  await expect(row("next").locator(".card-hint")).toBeHidden();
+  await row("message").locator(".sw").click();
+  await expectSet(request, { cards: "message:0" });
+
+  await page.locator("#cddate").fill("2026-12-25");
+  await page.locator("#cddate").dispatchEvent("change");
+  await expectSet(request, { cddate: "2026-12-25" });
+  await expect(row("custom")).not.toHaveClass(/\bwaiting\b/);
+  await expect(row("custom").locator(".card-hint")).toBeHidden();
+
+  // Top 25 waits for a college team.
+  await reset(request, { favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}] });
+  await page.goto("/");
+  await expect(row("top25")).toHaveClass(/\bwaiting\b/);
+  await expect(row("top25").locator(".card-hint")).toContainText("college");
+});
+
+test("between games: the custom countdown posts its name and day", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#cdClear")).toBeHidden();
   await page.locator("#cdname").fill("Christmas");
   await page.locator("#cdname").press("Tab");
   await expectSet(request, { cdname: "Christmas" });
@@ -1013,12 +1116,136 @@ test("between games: the countdown switch is on by default, and the custom count
   await expect.poll(async () => (await deviceState(request)).cddate).toBe("");
   await expect(page.locator("#cdname")).toHaveValue("");
   await expect(page.locator("#cdClear")).toBeHidden();
+});
 
-  // Firmware from before the card has no such settings.
-  await reset(request, { countdown: null, cdname: null, cddate: null });
+test("between games: firmware from before the list has a switch per card, each posting its own key", async ({ page, request }) => {
+  await reset(request, { cards: null });
+  await page.goto("/");
+  await expect(page.locator("#cardsOld")).toBeVisible();
+  await expect(page.locator("#cardList .ctl")).toHaveCount(0);
+  await expect(page.locator("#wxOnRow")).toBeVisible();
+  for (const [key, on] of [["countdown", true], ["gameleaders", true], ["top25", true], ["news", false], ["wxon", false]]) {
+    const sw = page.locator(`.sw[data-set="${key}"]`);
+    if (on) await expect(sw).toHaveClass(/\bon\b/);
+    else await expect(sw).not.toHaveClass(/\bon\b/);
+    await sw.click();
+    await expectSet(request, { [key]: on ? "0" : "1" });
+    await expect.poll(async () => (await deviceState(request))[key]).toBe(!on);
+  }
+
+  // And firmware from before each card leaves its row out.
+  await reset(request, { cards: null, gameleaders: null, top25: null, news: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#glRow")).toBeHidden();
+  await expect(page.locator("#top25Row")).toBeHidden();
+  await expect(page.locator("#newsRow")).toBeHidden();
+  // Before the countdown card there was no Between games card at all.
+  await reset(request, { cards: null, countdown: null, cdname: null, cddate: null });
   await page.goto("/");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#cdCard")).toBeHidden();
+});
+
+test("between games: a town is looked up, turns the weather card on, and the page says what was read", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  // The switch is the list's Weather row; the block's own row is for firmware without the list.
+  const sw = page.locator('#cardList [data-card="weather"] .sw');
+  await expect(page.locator("#wxBox")).toBeVisible();
+  await expect(page.locator("#wxOnRow")).toBeHidden();
+  await expect(page.locator('#cardList [data-card="weather"]')).toHaveClass(/\bwaiting\b/);
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#wxPlace")).toBeHidden();
+  await page.locator("#town").fill("75019");
+  await page.locator("#townGo").click();
+  await expectSet(request, { town: "75019" });
+  await expect(page.locator("#wxPlace")).toHaveText("Found: Coppell, Texas");
+  await expect(page.locator("#wxRead")).toHaveText("Read a minute ago: 71°F, cloudy, high 81, low 61.");
+  await expect(sw).toHaveClass(/\bon\b/);
+  await expect(page.locator('#cardList [data-card="weather"]')).not.toHaveClass(/\bwaiting\b/);
+  await sw.click();
+  await expectSet(request, { cards: "weather:0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect.poll(async () => (await deviceState(request)).wxon).toBe(false);
+
+  // A town Open-Meteo doesn't know; Enter posts it too.
+  await page.locator("#town").fill("Nowhere");
+  await page.locator("#town").press("Enter");
+  await expectSet(request, { town: "Nowhere" });
+  await expect(page.locator("#wxPlace")).toContainText('No place found for "Nowhere"');
+  await expect(page.locator("#wxRead")).toBeHidden();
+
+  // A read that failed, waiting to try again, and one held for a live game.
+  await reset(request, { town: "75019", wxon: true, wx: { place: "Coppell, Texas", lat: 32.95, lon: -97.02, lookup: 200, read: 0, wait_s: 240 } });
+  await page.goto("/");
+  await expect(page.locator("#wxRead")).toHaveText("Couldn't reach Open-Meteo, tries again in 4 minutes.");
+  await reset(request, { town: "75019", wxon: true, wx: { place: "Coppell, Texas", lat: 32.95, lon: -97.02, lookup: 200, read: -1, held: true } });
+  await page.goto("/");
+  await expect(page.locator("#wxRead")).toHaveText("Not read yet: waiting for the game to end.");
+
+  // Firmware from before the weather card leaves the block out.
+  await reset(request, { town: null, wxon: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#cdCard")).toBeVisible();
+  await expect(page.locator("#wxBox")).toBeHidden();
+});
+
+test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wide GIF, deletes", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#picCard")).toBeVisible();
+  const pic = (name, mimeType) => ({ name, mimeType,
+    buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures", name)) });
+  const uploads = async () => (await (await request.get("/_log")).json())
+    .filter((p) => p.path === "/gameday/picture" && !p.q.delete);
+
+  // A PNG that fits the panel goes byte for byte.
+  await page.setInputFiles("#picFile", pic("blue.png", "image/png"));
+  await expect(page.locator("#picNote")).toHaveText("Added. It's up next between games.");
+  await expect(page.locator("#picList .pic")).toHaveCount(1);
+  await expect(page.locator("#picList .pic label").first()).toHaveText("PNG64 by 32, 1 KB");
+  await expect(page.locator("#picList img").first()).toHaveAttribute("src", /^\/gameday\/picture\?slot=1&id=/);
+  expect((await uploads())[0]).toMatchObject({ bytes: 121, type: "image/png" });
+
+  // So does a GIF.
+  await page.setInputFiles("#picFile", pic("box_d2.gif", "image/gif"));
+  await expect(page.locator("#picList .pic")).toHaveCount(2);
+  await expect(page.locator("#picList .pic label").nth(1)).toHaveText(/^GIF, 4 frames128 by 64/);
+
+  // A still too tall for the panel is redrawn to fit, as a PNG.
+  await page.setInputFiles("#picFile", pic("tall.png", "image/png"));
+  await expect(page.locator("#picList .pic")).toHaveCount(3);
+  const st = await deviceState(request);
+  expect(st.pics[2]).toMatchObject({ s: 3, k: "png", w: 63, h: 64 });
+
+  // A GIF too wide never leaves the browser.
+  await page.setInputFiles("#picFile", pic("wide.gif", "image/gif"));
+  await expect(page.locator("#picNote")).toHaveText("That GIF is 129 by 64 pixels. A GIF can be up to 128 by 64; resize it first.");
+  expect(await uploads()).toHaveLength(3);
+
+  // Delete the first.
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#picList .pic").first().locator("button").click();
+  await expect(page.locator("#picList .pic")).toHaveCount(2);
+  expect((await deviceState(request)).pics.map((p) => p.s)).toEqual([2, 3]);
+
+  // Firmware from before the picture card leaves the card out.
+  await reset(request, { pics: null, picroom: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#picCard")).toBeHidden();
+});
+
+test("pictures: the add button says when the panel keeps 4", async ({ page, request }) => {
+  const four = [1, 2, 3, 4].map((s) => ({ s, k: "png", w: 64, h: 64, f: 1, b: 900, id: s }));
+  await reset(request, { pics: four, picroom: 0 });
+  await page.goto("/");
+  await expect(page.locator("#picList .pic")).toHaveCount(4);
+  await expect(page.locator("#picAdd")).toBeDisabled();
+  await expect(page.locator("#picAdd")).toHaveText("4 pictures kept");
 });
 
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
@@ -1809,6 +2036,50 @@ test("night schedule: off by default, its times, screen and brightness post, hid
   await page.goto("/");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#nightCtls")).toBeHidden();
+});
+
+test("game-day wake: off by default, its lead and after the game post, hidden on firmware without it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const sw = page.locator('.sw[data-set="wake"]');
+  await expect(page.locator("#wakeCtls")).toBeVisible();
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#wakeLeadRow")).toBeHidden();
+  await expect(page.locator("#afterGame")).toHaveValue("scoreboard");
+  await expect(page.locator("#afterHint")).toHaveText("The final, then your next game, as before.");
+
+  await sw.click();
+  await expectSet(request, { wake: "1" });
+  await expect(page.locator("#wakeLeadRow")).toBeVisible();
+  await expect(page.locator("#wakeLead")).toHaveValue("15");
+  await page.locator("#wakeLead").selectOption("30");
+  await expectSet(request, { wakelead: "30" });
+
+  await page.locator("#afterGame").selectOption("off");
+  await expectSet(request, { after: "off" });
+  await expect(page.locator("#afterHint")).toHaveText(
+    "Once the final has been up a while, the panel turns off. Game-day wake turns it back on before the next game.");
+  await page.locator("#afterGame").selectOption("clock");
+  await expectSet(request, { after: "clock" });
+  await expect(page.locator("#afterHint")).toContainText("shows the time and your next game");
+
+  // Off with the wake off says how to bring it back, and asleep says so.
+  await reset(request, { after: "off", wake_now: "asleep" });
+  await page.reload();
+  await expect(page.locator("#afterHint")).toHaveText(
+    "Off since the last game. Turn on Game-day wake to bring it back before the next game.");
+  // With the wake off, the lead still shows while After the game uses it.
+  await expect(page.locator("#wakeLeadRow")).toBeVisible();
+
+  // A lead the list lacks, set from an app, still shows.
+  await reset(request, { wake: true, wakelead: 45 });
+  await page.reload();
+  await expect(page.locator("#wakeLead")).toHaveValue("45");
+
+  await reset(request, { wake: null, wakelead: null, after: null, wake_now: null });
+  await page.goto("/");
+  await expect(page.locator("#hostname")).not.toBeEmpty();
+  await expect(page.locator("#wakeCtls")).toBeHidden();
 });
 
 test("night mode says it is on, until when, and when a live game holds it off", async ({ page, request }) => {
