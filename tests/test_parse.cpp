@@ -4838,7 +4838,9 @@ static void test_update_nudge() {
   t.clock_valid = false;
   CHECK(!update_nudge_on(t, fresh));
   CHECK_EQ(fresh.day, 0);
+  CHECK_EQ(fresh.since, 0);  // /gameday/state leaves update_shown out until it shows
   CHECK(update_nudge_on(in, fresh));
+  CHECK_EQ(fresh.since, in.now);
 }
 
 static void test_update_mark() {

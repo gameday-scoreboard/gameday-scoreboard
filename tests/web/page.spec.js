@@ -1432,6 +1432,68 @@ test("an update that rolled back says so and still offers Install", async ({ pag
   await expect(page.locator("#fwSub")).toContainText("It installs on its own between 3 and 5 AM.");
 });
 
+test("an important release says so in the Firmware box", async ({ page, request }) => {
+  await reset(request, { update_important: true });
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", release_url: "",
+               summary: "Important: scores show again after an ESPN change." };
+  const entity = { ...fw, value: "2026.10.3", current_version: "2026.10.2" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await expect(page.locator("#fwText")).toHaveText("Important update: v2026.10.3");
+  await expect(page.locator("#fwSub")).toContainText("It fixes something broken, so install it when you can. You have v2026.10.2.");
+  await expect(page.locator("#fwSub")).not.toContainText("on its own");
+  await expect(page.locator("#fwSub .notes li").first()).toHaveText("Important: scores show again after an ESPN change.");
+  await expect(page.locator("#fw")).toHaveClass(/important/);
+  await expect(page.locator("#fwInstall")).toBeVisible();
+
+  // With the nightly install on, the box still says it installs on its own.
+  await reset(request, { update_important: true, autoupd: true });
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("Important update: v2026.10.3");
+  await expect(page.locator("#fwSub")).toContainText("It installs on its own between 3 and 5 AM.");
+
+  // A rollback of that very release explains itself first.
+  await reset(request, { update_important: true, update_failed: "2026.10.3" });
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("The update to v2026.10.3 didn't take and the panel went back to v2026.10.2");
+  await expect(page.locator("#fw")).not.toHaveClass(/important/);
+
+  // The flag arrives with a later state read: the box follows it.
+  await reset(request, {});
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.3");
+  await expect(page.locator("#fw")).not.toHaveClass(/important/);
+  await reset(request, { update_important: true });
+  await expect(page.locator("#fwText")).toHaveText("Important update: v2026.10.3", { timeout: 15000 });
+});
+
+test("Diagnostics says when the ticker last said an update is ready", async ({ page, request }) => {
+  // Nothing waiting and never shown: no row.
+  await reset(request);
+  await page.goto("/");
+  await expect(page.locator("#health")).toBeVisible();
+  await expect(page.locator("#hNudgeRow")).toBeHidden();
+
+  // A release waits and the line hasn't shown since the restart.
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  const entity = { ...fw, value: "2026.10.3", current_version: "2026.10.2" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.reload();
+  await expect(page.locator("#hNudgeRow")).toBeVisible();
+  await expect(page.locator("#hNudge")).toHaveText("Not yet since the panel started");
+
+  // Install updates automatically on: the ticker never says it.
+  await reset(request, { autoupd: true });
+  await page.reload();
+  await expect(page.locator("#hNudge")).toHaveText("Not shown: this panel installs updates on its own");
+
+  // The time it last started, in the browser's own time (the fixture's build time, for the same words as the Firmware row).
+  await reset(request, { update_shown: 1792285260 });
+  await page.reload();
+  await expect(page.locator("#hNudge")).toHaveText("Oct 17, 8:01 PM");
+  await expect(page.locator("#hFw")).toContainText("built Oct 17, 8:01 PM");
+});
+
 test("release notes link to the release's section of the site changelog, a beta to its commit", async ({ page, request }) => {
   await reset(request);
   const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "" };

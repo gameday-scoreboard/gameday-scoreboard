@@ -348,6 +348,7 @@
           <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
           <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
           <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+          <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
           <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
         </div>
         <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
@@ -1323,9 +1324,10 @@
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
-    // The rollback line in the firmware box reads this document, which can
-    // land after the update entity does.
-    if ((S.update_failed || "") !== fwFailed && ents[byName["Firmware"]]) renderUpdate(ents[byName["Firmware"]]);
+    // The rollback line and the important mark in the firmware box read this
+    // document, which can land after the update entity does.
+    if (((S.update_failed || "") !== fwFailed || !!S.update_important !== fwImportant) && ents[byName["Firmware"]])
+      renderUpdate(ents[byName["Firmware"]]);
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -2233,6 +2235,12 @@
     if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
     return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
   };
+  // Unix seconds as "Oct 17, 8:01 PM" in the browser's own time.
+  const dayTime = (t) => {
+    const d = new Date(t * 1000);
+    return d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
+      d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  };
   // 2nd, 3rd, 11th, 22nd.
   const ordinal = (n) => {
     const t = n % 100;
@@ -2251,10 +2259,14 @@
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
     const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
-    const b = h.built ? new Date(h.built * 1000) : null;
-    const builtText = b ? b.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
-      b.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
+    // When the ticker last started saying an update is ready (update_shown,
+    // Unix seconds, forgotten at a restart), while one waits.
+    const shownRow = $("#hNudgeRow");
+    shownRow.hidden = !S.update_shown && !fwWaiting;
+    $("#hNudge").textContent = S.update_shown ? dayTime(S.update_shown)
+      : S.autoupd ? "Not shown: this panel installs updates on its own" : "Not yet since the panel started";
     // Live here, so they no longer wait on the RSSI and heap sensors, which
     // are off until someone turns them on in Home Assistant. The Wi-Fi
     // object, when there is one, fills in the signal.
@@ -2490,9 +2502,13 @@
     /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://install.gameday-scoreboard.com/changelog/#v" + u.value : u.release_url;
   let installing = false;
   let fwFailed = "";     // S.update_failed as the firmware box last drew it
+  let fwImportant = false;  // S.update_important as it last drew it
+  let fwWaiting = false;    // the box offers Install: a newer release is out
   const renderUpdate = (u) => {
     const box = $("#fw");
     box.hidden = false;
+    box.classList.remove("important");
+    fwWaiting = false;
     const cur = u.current_version ? "v" + u.current_version : "";
     const latest = u.value ? "v" + u.value : "";
     const st = String(u.state || "").toUpperCase();
@@ -2500,6 +2516,7 @@
     const sub = $("#fwSub");
     btn.hidden = true;
     fwFailed = (S && S.update_failed) || "";
+    fwImportant = !!(S && S.update_important);
     if (st.includes("INSTALLING") || installing) {
       $("#fwText").textContent = "Installing " + (latest || "update");
       sub.textContent = "Keep the panel powered. It reboots when done and this page reconnects.";
@@ -2511,12 +2528,20 @@
       // The panel rolled back from this very version (a crash in its first
       // minute); it won't install it on its own again, but Install still tries.
       const failed = !!(S && S.update_failed && S.update_failed === u.value);
+      const nightly = S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "";
+      fwWaiting = true;
       if (failed) {
         $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
         sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+      } else if (fwImportant) {
+        // The release is marked important (its summary starts with
+        // "Important:"): it fixes something broken, so the box says so.
+        box.classList.add("important");
+        $("#fwText").textContent = "Important update: " + latest;
+        sub.textContent = "It fixes something broken, so install it when you can." + (cur ? " You have " + cur + "." : "") + nightly;
       } else {
         $("#fwText").textContent = "Update available: " + latest;
-        sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+        sub.textContent = (cur ? "You have " + cur + "." : "") + nightly;
       }
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;

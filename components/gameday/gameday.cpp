@@ -2546,9 +2546,12 @@ void GamedayComponent::update_nudge_tick_() {
   in.now = (int64_t) now.timestamp;
   in.live = this->followed_game_live_();
   in.dark = this->night_now_ == ::espn::Night::DARK;
+  int64_t shown = this->nudge_day_.since;
   bool on = ::espn::update_nudge_on(in, this->nudge_day_) && !this->demo_playing_();
   bool important = out && ::espn::update_important(u->update_info.summary);
-  if (on == this->nudge_on_ && important == this->update_important_)
+  // The day's start is update_shown in /gameday/state, so it goes out even
+  // when the demo keeps the line off the board.
+  if (on == this->nudge_on_ && important == this->update_important_ && shown == this->nudge_day_.since)
     return;
   if (on != this->nudge_on_)
     ESP_LOGI(TAG, "Update ready on the ticker: %s", on ? u->update_info.latest_version.c_str() : "off");
@@ -4932,6 +4935,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // otherwise, and with nothing waiting.
   if (this->update_important_)
     doc["update_important"] = true;
+  // When the ticker last started saying so, Unix seconds (the device page's
+  // Diagnostics); left out until it has since this start.
+  if (this->nudge_day_.since > 0)
+    doc["update_shown"] = this->nudge_day_.since;
 #endif
 #ifdef GAMEDAY_BAR
   // The device page shows the bar beta note and a "Something wrong?" link.

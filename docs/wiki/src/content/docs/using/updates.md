@@ -32,7 +32,9 @@ When a new release is out, the panel says so on its ticker: **Update ready: open
 - It goes away once the update is installed.
 - With **Install updates automatically** on, the panel doesn't show it, since it installs the update overnight by itself.
 
-A release that fixes something broken, like scores that stopped after an ESPN change, is marked important. The ticker then says **Important update ready: open the Game Day app**, and the release's summary on the device page starts with **Important:**. Install it when you can.
+A release that fixes something broken, like scores that stopped after an ESPN change, is marked important. The ticker then says **Important update ready: open the Game Day app**, and the Firmware box on the device page says **Important update** and the version, with **It fixes something broken, so install it when you can.** The Game Day app says the same on its update badge.
+
+**Diagnostics** on the device page has a row **Update ready on the ticker** while a release waits: when the ticker last started saying so, or that it hasn't yet since the panel restarted. A panel with **Install updates automatically** on says the ticker doesn't show it.
 :::
 
 ## Installing an update

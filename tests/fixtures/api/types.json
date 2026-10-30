@@ -226,6 +226,7 @@
     "tz_name": "string",
     "update_failed": "string",
     "update_important": "bool",
+    "update_shown": "int",
     "version": "string",
     "wake": "bool",
     "wake_now": "string",

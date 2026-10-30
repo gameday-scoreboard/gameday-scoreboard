@@ -158,4 +158,8 @@ A notice under the board says when the panel is holding its brightness down: **T
 The notice under the board reads **Running warm** or **Power dipped**, the same words as the panel's corner, with one sentence on what to do and no button. The panel no longer dims itself for either, so there is nothing to clear.
 :::
 
+:::note[Coming in the next release]
+While a new release waits, **Diagnostics** also shows **Update ready on the ticker**: when the ticker last started saying so. See [Update ready on the ticker](/using/updates/#update-ready-on-the-ticker).
+:::
+
 The Device card can also show a **Follow beta** switch. Beta versions are test builds for test panels and can have bugs. Leave it off.
