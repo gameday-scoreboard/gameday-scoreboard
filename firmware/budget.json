@@ -18,6 +18,10 @@
     "scoreboard75": {
       "flash": 2550000,
       "static_ram": 172568
+    },
+    "waveshare": {
+      "flash": 2634826,
+      "static_ram": 179476
     }
   },
   "host": {
