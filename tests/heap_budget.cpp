@@ -239,6 +239,13 @@ int main() {
     });
   }
   {
+    std::string json = slurp("fixtures/wx_hour_greenbay.json");
+    measure("weather_hour", [&] {
+      WxHour h;
+      return parse_hour(json, h);
+    });
+  }
+  {
     std::string json = slurp("fixtures/schedule_nfl_dal.json");
     measure("schedule_nfl", [&] {
       std::vector<Upcoming> up;

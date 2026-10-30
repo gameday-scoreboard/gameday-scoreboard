@@ -105,6 +105,10 @@
       "heap": 1024,
       "json": 5700
     },
+    "weather_hour": {
+      "heap": 1024,
+      "json": 5700
+    },
     "weather_lookup": {
       "heap": 1046,
       "json": 5700

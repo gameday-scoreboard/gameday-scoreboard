@@ -93,6 +93,8 @@ struct Hockey {
 };
 
 // One scoreboard event, resolved to "us" and "them".
+constexpr int16_t kNoWeatherF = INT16_MIN;
+
 struct GameSnapshot {
   bool valid{false};
   GameState state{GameState::NOT_FOUND};
@@ -143,6 +145,15 @@ struct GameSnapshot {
   // when the event has none).
   uint8_t week{0};
   std::string weather;
+  // The same forecast for the board (weather.h): its temperature in whole
+  // degrees F (kNoWeatherF without one) and AccuWeather's icon number (0
+  // for none). Before the start of a sport played outside, the venue's place
+  // for a forecast of the panel's own when ESPN has none ("Evanston, IL"),
+  // and whether it is indoors: 1, 0, or -1 when ESPN doesn't say.
+  int16_t weather_f{kNoWeatherF};
+  uint8_t weather_accu{0};
+  int8_t venue_indoor{-1};
+  std::string venue_place;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};
@@ -245,6 +256,10 @@ struct TickerOptions {
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
+  // The forecast as the panel says it before the start ("12C Clear" for an
+  // owner on Celsius, or the panel's own forecast when the event has none,
+  // weather.h). "" says the event's own.
+  std::string weather;
 };
 
 struct Splash {
@@ -447,7 +462,7 @@ std::string pregame_name(const GameSnapshot &s);
 // The pre-game ticker's last part: the forecast and the venue, "76F Cloudy at
 // Hard Rock Stadium". A venue that repeats the game's name ("Rose Bowl") is
 // left out.
-std::string venue_line(const GameSnapshot &s);
+std::string venue_line(const GameSnapshot &s, const TickerOptions &o = TickerOptions());
 // The pre-game betting parts when the ticker shows odds: the line, the
 // over/under and the TV listing. Soccer builds its own line.
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);

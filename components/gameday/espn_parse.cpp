@@ -266,6 +266,7 @@ int parse_news_str(const std::string &json, std::string &list) { return parse_ne
 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
+bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)
@@ -433,11 +434,12 @@ std::string pregame_name(const GameSnapshot &s) {
   return "Week " + std::to_string(s.week);
 }
 
-std::string venue_line(const GameSnapshot &s) {
+std::string venue_line(const GameSnapshot &s, const TickerOptions &o) {
   std::string venue = s.venue == s.game_name ? std::string() : s.venue;
-  if (s.weather.empty())
+  const std::string &weather = o.weather.empty() ? s.weather : o.weather;
+  if (weather.empty())
     return venue;
-  return venue.empty() ? s.weather : s.weather + " at " + venue;
+  return venue.empty() ? weather : weather + " at " + venue;
 }
 
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
@@ -509,7 +511,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
         add_part(out, pregame_records(s));
       add_odds(out, s, o);
       detail::add_leaders(out, s, o);
-      add_part(out, venue_line(s));
+      add_part(out, venue_line(s, o));
       return out;
     case GameState::POST:
       // A game that ended without being completed says why: Postponed,

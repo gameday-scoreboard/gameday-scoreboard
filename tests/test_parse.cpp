@@ -3126,6 +3126,44 @@ static void test_pregame_extras() {
   // A postseason game has no week
   CHECK_EQ((int) mlb_event("fixtures/event_mlb_pre.json", kBrewers).week, 0);
 
+  // The board's kickoff forecast (weather.h): ESPN's temperature as a number
+  // and AccuWeather's icon number from whichever field has no letters, and
+  // for a forecast of the panel's own, the venue's place and whether it is
+  // indoors.
+  CHECK_EQ((int) nu.weather_f, 54);
+  CHECK_EQ((int) nu.weather_accu, 33);  // in displayValue that day
+  CHECK_EQ(nu.venue_place, std::string("Evanston, IL"));
+  CHECK_EQ((int) nu.venue_indoor, 0);
+  CHECK_EQ((int) atl.venue_indoor, 1);
+  CHECK_EQ((int) atl.weather_f, (int) kNoWeatherF);
+  CHECK_EQ(atl.venue_place, std::string(""));  // a dome needs no forecast
+  GameSnapshot sd = mlb_event("fixtures/event_mlb_pre.json", kBrewers);
+  CHECK_EQ(sd.venue_place, std::string("San Diego, California"));
+  CHECK_EQ((int) sd.weather_f, 82);
+  CHECK_EQ((int) sd.weather_accu, 34);  // in conditionId
+  // Soccer: no forecast from ESPN and no indoor flag; MLS writes the state in
+  // the city.
+  GameSnapshot ars;
+  CHECK(parse_event_str(slurp("fixtures/event_epl_pre.json"), Sport::SOCCER, 359, ars));
+  CHECK_EQ(ars.venue_place, std::string("London, England"));
+  CHECK_EQ((int) ars.venue_indoor, -1);
+  CHECK_EQ((int) ars.weather_f, (int) kNoWeatherF);
+  CHECK_EQ(espn::detail::venue_place("Miami, Florida", "", "USA"), std::string("Miami, Florida"));
+  CHECK_EQ(espn::detail::venue_place("", "TX", "USA"), std::string(""));
+  CHECK_EQ(espn::detail::venue_place("Foxborough", "", ""), std::string("Foxborough"));
+  // An indoor sport reads no address
+  GameSnapshot nba;
+  CHECK(parse_event_str(slurp("fixtures/event_nba_pre.json"), Sport::BASKETBALL, 22, nba));
+  CHECK(nba.state == GameState::PRE);
+  CHECK_EQ(nba.venue_place, std::string(""));
+  CHECK_EQ(live.venue_place, std::string(""));  // only before the start
+  // The ticker's forecast follows the panel when it says one: Celsius, or its
+  // own forecast for a game ESPN has none for
+  o.weather = "12C Clear";
+  CHECK_EQ(espn::detail::venue_line(nu, o), std::string("12C Clear at Ryan Field"));
+  o.weather.clear();
+  CHECK_EQ(espn::detail::venue_line(nu, o), std::string("54F Clear at Ryan Field"));
+
   CHECK_EQ(espn::detail::stat_leader("G. Antetokounmpo", "35.0", "PPG"), std::string("Antetokounmpo 35.0 PPG"));
   CHECK_EQ(espn::detail::stat_leader("M. Penix Jr.", "3", "pts"), std::string("Penix Jr. 3 pts"));
   CHECK_EQ(espn::detail::stat_leader("C. McDavid", "0", "pts"), std::string(""));
@@ -5934,24 +5972,24 @@ static void test_weather() {
   std::string fc = slurp("fixtures/wx_forecast_coppell.json");
   StringSource fsrc(fc);
   WxForecast f0;
-  CHECK(parse_forecast_from(fsrc, f0) && f0.valid && f0.temp == 76);
+  CHECK(parse_forecast_from(fsrc, f0) && f0.valid && wx_deg(f0.t10, true) == 76);
 
-  // The recorded forecast, rounded to whole degrees, the days from its dates.
+  // The recorded forecast in tenths of a degree F, the days from its dates.
   WxForecast f;
   json = slurp("fixtures/wx_forecast_coppell.json");
   CHECK(parse_forecast(json, f));
   CHECK(f.valid);
-  CHECK_EQ(f.temp, 76);
+  CHECK_EQ(wx_deg(f.t10, true), 76);
   CHECK_EQ(f.code, 3);
   CHECK(!f.night);
-  CHECK_EQ(f.today.hi, 82);
-  CHECK_EQ(f.today.lo, 67);
+  CHECK_EQ(wx_deg(f.today.hi10, true), 82);
+  CHECK_EQ(wx_deg(f.today.lo10, true), 67);
   CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Thu"));
-  CHECK_EQ(f.next[0].hi, 73);
-  CHECK_EQ(f.next[0].lo, 66);
+  CHECK_EQ(wx_deg(f.next[0].hi10, true), 73);
+  CHECK_EQ(wx_deg(f.next[0].lo10, true), 66);
   CHECK_EQ(f.next[0].code, 51);
   CHECK_EQ(std::string(weekday_text(f.next[0].wday)), std::string("Fri"));
-  CHECK_EQ(f.next[1].hi, 68);
+  CHECK_EQ(wx_deg(f.next[1].hi10, true), 68);
   CHECK_EQ(f.next[1].code, 63);
   CHECK_EQ(std::string(weekday_text(f.next[1].wday)), std::string("Sat"));
   // Below zero rounds away from it; night comes from is_day.
@@ -5959,9 +5997,10 @@ static void test_weather() {
          "\"2027-01-04\",\"2027-01-05\"],\"weather_code\":[71,73,0],\"temperature_2m_max\":[1,2,3],"
          "\"temperature_2m_min\":[-10.4,-9,-8]}}";
   CHECK(parse_forecast(json, f));
-  CHECK_EQ(f.temp, -4);
+  CHECK_EQ(f.t10, -35);
+  CHECK_EQ(wx_deg(f.t10, true), -4);
   CHECK(f.night);
-  CHECK_EQ(f.today.lo, -10);
+  CHECK_EQ(wx_deg(f.today.lo10, true), -10);
   CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Sun"));
   // Short of three days, or no reading now: a failed read.
   json = "{\"current\":{\"temperature_2m\":70},\"daily\":{\"temperature_2m_max\":[1,2],\"temperature_2m_min\":[1,2]}}";
@@ -6011,6 +6050,108 @@ static void test_weather() {
   CHECK(countdown_turn(min0 + 50, false, false, true) == CountdownCard::NONE);
   CHECK(countdown_turn(min0 + 39, true, false, true) == CountdownCard::NEXT);
   CHECK(countdown_turn(min0 + 40, true, false, false) == CountdownCard::NONE);
+
+  // The lookup keeps the place's country, for the auto unit.
+  json = slurp("fixtures/wx_geocode_75019.json");
+  CHECK(parse_geocode(json, p) && p.country == "US");
+  json = slurp("fixtures/wx_geocode_london.json");
+  CHECK(parse_geocode(json, p) && p.country == "GB" && p.name == "London, United Kingdom");
+}
+
+// The kickoff forecast and the F/C setting (weather.h).
+static void test_kickoff_weather() {
+  // One hour, the kickoff's, in UTC: Sunday night in Green Bay is Monday
+  // 01:00 UTC.
+  CHECK_EQ(wx_utc_hour(1793581200), std::string("2026-11-02T01:00"));
+  CHECK_EQ(wx_utc_hour(0), std::string("1970-01-01T00:00"));
+  CHECK_EQ(wx_utc_hour(951782400), std::string("2000-02-29T00:00"));
+  CHECK_EQ(hour_url(44.51916f, -88.01983f, 1793581200),
+           std::string("https://api.open-meteo.com/v1/forecast?latitude=44.5192&longitude=-88.0198"
+                       "&hourly=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=GMT"
+                       "&start_hour=2026-11-02T01:00&end_hour=2026-11-02T01:00"));
+  // The recorded hour, and Open-Meteo's answer past 16 days.
+  WxHour h;
+  std::string json = slurp("fixtures/wx_hour_greenbay.json");
+  CHECK(parse_hour(json, h));
+  CHECK(h.valid && h.t10 == 555 && h.code == 3 && h.night);
+  json = slurp("fixtures/wx_hour_too_far.json");
+  CHECK(!parse_hour(json, h));
+  json = "{\"hourly\":{\"temperature_2m\":[null],\"weather_code\":[null]}}";
+  CHECK(!parse_hour(json, h));
+  json = "{\"hourly\":{\"temperature_2m\":[70.2],\"weather_code\":[0],\"is_day\":[1]}}";
+  CHECK(parse_hour(json, h) && h.t10 == 702 && !h.night);
+
+  // When the panel reads a forecast of its own: an outdoor sport before the
+  // start, not in a dome, ESPN with none, a city, 15 days out at most.
+  const int64_t now = 1793000000;
+  CHECK(wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + 3600, now));
+  CHECK(wx_kick_wanted(true, true, -1, false, "London, England", now + 3600, now));  // soccer says nothing
+  CHECK(!wx_kick_wanted(true, true, 1, false, "Atlanta, GA", now + 3600, now));      // a dome
+  CHECK(!wx_kick_wanted(true, false, 0, false, "Boston, MA", now + 3600, now));      // hockey
+  CHECK(!wx_kick_wanted(true, true, 0, true, "Evanston, IL", now + 3600, now));      // ESPN has one
+  CHECK(!wx_kick_wanted(false, true, 0, false, "Evanston, IL", now + 3600, now));    // under way
+  CHECK(!wx_kick_wanted(true, true, 0, false, "", now + 3600, now));
+  CHECK(wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + kWxKickAheadS, now));
+  CHECK(!wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + kWxKickAheadS + 1, now));
+  CHECK(wx_kick_wanted(true, true, 0, false, "Evanston, IL", now - 3599, now));  // a late start
+  CHECK(!wx_kick_wanted(true, true, 0, false, "Evanston, IL", now - 3600, now));
+  CHECK(!wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + 3600, 0));  // no clock
+
+  // F or C: the setting, else the town's country, else the time zone.
+  CHECK(wx_fahrenheit(kWxUnitAuto, "US", "Europe/London"));
+  CHECK(!wx_fahrenheit(kWxUnitAuto, "GB", "America/Chicago"));
+  CHECK(wx_fahrenheit(kWxUnitAuto, "", "America/Chicago"));
+  CHECK(wx_fahrenheit(kWxUnitAuto, "", "Pacific/Honolulu"));
+  CHECK(!wx_fahrenheit(kWxUnitAuto, "", "America/Halifax"));
+  CHECK(!wx_fahrenheit(kWxUnitAuto, "", "UTC"));
+  CHECK(wx_fahrenheit(kWxUnitAuto, "PR", "UTC"));
+  CHECK(!wx_fahrenheit(kWxUnitC, "US", "America/Chicago"));
+  CHECK(wx_fahrenheit(kWxUnitF, "DE", "Europe/Berlin"));
+  // Tenths of a degree F in whole degrees, half away from zero.
+  CHECK_EQ(wx_deg(540, true), 54);
+  CHECK_EQ(wx_deg(540, false), 12);   // 12.2
+  CHECK_EQ(wx_deg(320, false), 0);
+  CHECK_EQ(wx_deg(329, false), 1);    // 0.5
+  CHECK_EQ(wx_deg(328, false), 0);    // 0.44
+  CHECK_EQ(wx_deg(-35, true), -4);
+  CHECK_EQ(wx_deg(-35, false), -20);  // -19.7
+  CHECK_EQ(wx_deg(-400, false), -40);
+  CHECK_EQ(wx_deg(2120, false), 100);
+  CHECK_EQ(wx_ticker_text(540, false, "Clear"), std::string("12C Clear"));
+  CHECK_EQ(wx_ticker_text(555, true, ""), std::string("56F"));
+  CHECK_EQ(espn_wx_words("54F Clear"), std::string("Clear"));
+  CHECK_EQ(espn_wx_words("72F"), std::string(""));
+  CHECK_EQ(espn_wx_words("80F Mostly sunny"), std::string("Mostly sunny"));
+
+  // ESPN's icon: AccuWeather's number, else the words; then the sun or the
+  // moon for the kickoff's hour.
+  CHECK(accu_icon(1) == (uint8_t) WxIcon::SUN);
+  CHECK(accu_icon(33) == (uint8_t) WxIcon::MOON);
+  CHECK(accu_icon(35) == (uint8_t) WxIcon::PART);
+  CHECK(accu_icon(7) == (uint8_t) WxIcon::CLOUD);
+  CHECK(accu_icon(18) == (uint8_t) WxIcon::RAIN);
+  CHECK(accu_icon(15) == (uint8_t) WxIcon::STORM);
+  CHECK(accu_icon(22) == (uint8_t) WxIcon::SNOW);
+  CHECK(accu_icon(11) == (uint8_t) WxIcon::FOG);
+  CHECK(accu_icon(0) == kWxIconNone);
+  CHECK(accu_icon(9) == kWxIconNone);  // AccuWeather has no 9 or 10
+  CHECK(words_icon("Mostly Sunny") == (uint8_t) WxIcon::SUN);
+  CHECK(words_icon("Partly cloudy") == (uint8_t) WxIcon::PART);
+  CHECK(words_icon("Mostly cloudy w/ t-storms") == (uint8_t) WxIcon::STORM);
+  CHECK(words_icon("Rain and snow") == (uint8_t) WxIcon::SNOW);
+  CHECK(words_icon("Showers") == (uint8_t) WxIcon::RAIN);
+  CHECK(words_icon("Ice") == (uint8_t) WxIcon::SNOW);
+  CHECK(words_icon("Nice") == kWxIconNone);
+  CHECK(words_icon("Windy") == kWxIconNone);
+  CHECK(espn_wx_icon(0, "Clear") == (uint8_t) WxIcon::SUN);
+  CHECK(espn_wx_icon(34, "Mostly clear") == (uint8_t) WxIcon::MOON);
+  CHECK(espn_wx_icon(0, "") == kWxIconNone);
+  CHECK(wx_icon_at((uint8_t) WxIcon::MOON, false) == (uint8_t) WxIcon::SUN);  // NU's 11 AM kickoff, read at night
+  CHECK(wx_icon_at((uint8_t) WxIcon::SUN, true) == (uint8_t) WxIcon::MOON);
+  CHECK(wx_icon_at((uint8_t) WxIcon::RAIN, true) == (uint8_t) WxIcon::RAIN);
+  CHECK(wx_dark_at(10, 19) && !wx_dark_at(10, 18));
+  CHECK(!wx_dark_at(7, 19) && wx_dark_at(7, 20));
+  CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
 }
 
 // The FCC screen (regulatory.h): every page fits its board, and the words
@@ -7489,6 +7630,7 @@ int main() {
   test_message();
   test_news();
   test_weather();
+  test_kickoff_weather();
   test_regulatory();
   test_wifi_history();
   test_ha_events();

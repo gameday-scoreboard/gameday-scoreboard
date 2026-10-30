@@ -2,8 +2,11 @@
 // geocoding API (no key), and its forecast read every half hour from
 // Open-Meteo's forecast API, shown between games as a card of its own: the
 // temperature now, today's high and low, an icon for the sky, and the next
-// two days small underneath. Fahrenheit only. Pure, with no ESPHome includes,
-// so the host tests compile it directly.
+// two days small underneath. Also the kickoff forecast on the next game's
+// board: ESPN's own when the event has one, else Open-Meteo's for the hour
+// of the kickoff at the venue's city. Temperatures are read in Fahrenheit and
+// kept in tenths of a degree, so the owner's F/C setting needs no new read.
+// Pure, with no ESPHome includes, so the host tests compile it directly.
 #pragma once
 
 #include <ArduinoJson.h>
@@ -11,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "espn_parse.h"
@@ -41,20 +45,25 @@ struct WxPlace {
   bool valid{false};  // Open-Meteo answered; name is "" when it knows no such place
   std::string name;   // "Coppell, Texas"
   float lat{0}, lon{0};
+  std::string country;  // "US", the two letters (the auto unit)
 };
 
 enum class WxIcon : uint8_t { CLOUD = 0, SUN, MOON, PART, FOG, RAIN, SNOW, STORM };
 constexpr int kWxIconCount = 8;
+// No icon: a forecast with neither a number nor words the panel knows.
+constexpr uint8_t kWxIconNone = 255;
 
+// Temperatures in tenths of a degree F (wx_deg turns them into the unit
+// shown).
 struct WxDay {
-  int hi{0}, lo{0};
+  int hi10{0}, lo10{0};
   uint8_t code{0};
   uint8_t wday{0};  // 0 Sunday
 };
 
 struct WxForecast {
   bool valid{false};
-  int temp{0};  // now
+  int t10{0};  // now
   bool night{false};
   uint8_t code{0};  // WMO weather code now
   WxDay today;      // the high and low, today's code
@@ -136,13 +145,13 @@ inline void fill_forecast_filter(JsonDocument &f) {
   d["temperature_2m_min"] = true;
 }
 
-// A temperature that could be real, rounded to a whole degree. False for a
+// A temperature that could be real, in tenths of a degree. False for a
 // missing or absurd one.
 inline bool wx_degrees(JsonVariantConst v, int &out) {
   if (!v.is<float>())
     return false;
-  float f = v.as<float>();
-  if (!(f > -150.0f && f < 200.0f))  // NaN fails too
+  float f = v.as<float>() * 10.0f;
+  if (!(f > -1500.0f && f < 2000.0f))  // NaN fails too
     return false;
   out = (int) (f < 0 ? f - 0.5f : f + 0.5f);
   return true;
@@ -207,6 +216,9 @@ template<typename TInput> bool parse_geocode(TInput &input, WxPlace &out) {
                             detail::str_or_empty(r["country_code"]));
         p.lat = la;
         p.lon = lo;
+        std::string cc = detail::str_or_empty(r["country_code"]);
+        if (cc.size() == 2)
+          p.country = cc;
       }
     }
   }
@@ -225,7 +237,7 @@ template<typename TInput> bool parse_forecast(TInput &input, WxForecast &out) {
     return false;
   WxForecast f;
   JsonObjectConst cur = doc["current"];
-  if (!detail::wx_degrees(cur["temperature_2m"], f.temp))
+  if (!detail::wx_degrees(cur["temperature_2m"], f.t10))
     return false;
   f.code = detail::wx_code(cur["weather_code"]);
   f.night = cur["is_day"].is<int>() && cur["is_day"].as<int>() == 0;
@@ -236,7 +248,7 @@ template<typename TInput> bool parse_forecast(TInput &input, WxForecast &out) {
     return false;
   for (size_t i = 0; i < 3; i++) {
     WxDay &d = i == 0 ? f.today : f.next[i - 1];
-    if (!detail::wx_degrees(hi[i], d.hi) || !detail::wx_degrees(lo[i], d.lo))
+    if (!detail::wx_degrees(hi[i], d.hi10) || !detail::wx_degrees(lo[i], d.lo10))
       return false;
     d.code = detail::wx_code(code[i]);
     d.wday = weekday_of(time[i].as<const char *>());
@@ -260,6 +272,98 @@ class WxSource {
 };
 bool parse_geocode_from(WxSource &input, WxPlace &out);
 bool parse_forecast_from(WxSource &input, WxForecast &out);
+
+// ---- The kickoff forecast ------------------------------------------------------
+
+// Open-Meteo forecasts 16 days out and refuses an hour past that, so a game
+// further off gets its forecast once it comes this close.
+constexpr int64_t kWxKickAheadS = 15 * 86400;
+// One read per game every three hours; a forecast past twice that is no
+// longer shown.
+constexpr uint32_t kWxKickReadMs = 3 * 60 * 60 * 1000;
+constexpr uint32_t kWxKickStaleMs = 2 * kWxKickReadMs;
+// A weather read starts only when the next ESPN read is at least this far off:
+// the HTTP client's 20 s timeout and some room, so a read that hangs to its
+// end still finishes before ESPN's turn.
+constexpr uint32_t kWxEspnGapMs = 25 * 1000;
+// The venues looked up lately, so the next poll's forecast needs no lookup.
+constexpr size_t kWxVenueCache = 4;
+
+// The forecast for one hour at the venue.
+struct WxHour {
+  bool valid{false};
+  int t10{0};  // tenths of a degree F
+  uint8_t code{0};
+  bool night{false};
+};
+
+// One hour, the kickoff's in UTC, at lat/lon: "2026-11-01T18:00".
+inline std::string wx_utc_hour(int64_t epoch) {
+  // civil_from_days, so no gmtime_r is needed on any host
+  int64_t days = epoch >= 0 ? epoch / 86400 : (epoch - 86399) / 86400;
+  int hour = (int) ((epoch - days * 86400) / 3600);
+  days += 719468;
+  const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+  const unsigned doe = (unsigned) (days - era * 146097);
+  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const unsigned mp = (5 * doy + 2) / 153;
+  const unsigned d = doy - (153 * mp + 2) / 5 + 1;
+  const unsigned m = mp < 10 ? mp + 3 : mp - 9;
+  const long long y = (long long) yoe + era * 400 + (m <= 2);
+  char buf[48];
+  snprintf(buf, sizeof(buf), "%04lld-%02u-%02uT%02d:00", y, m, d, hour);
+  return buf;
+}
+
+inline std::string hour_url(float lat, float lon, int64_t epoch) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "latitude=%.4f&longitude=%.4f", (double) lat, (double) lon);
+  const std::string h = wx_utc_hour(epoch);
+  return std::string("https://api.open-meteo.com/v1/forecast?") + buf +
+         "&hourly=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=GMT&start_hour=" + h +
+         "&end_hour=" + h;
+}
+
+// Parses the hour's forecast. False with no reading for it (an hour past what
+// Open-Meteo forecasts answers {"error":true}).
+template<typename TInput> bool parse_hour(TInput &input, WxHour &out) {
+  JsonDocument filter(detail::json_allocator());
+  JsonObject h = filter["hourly"].to<JsonObject>();
+  h["temperature_2m"] = true;
+  h["weather_code"] = true;
+  h["is_day"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                             DeserializationOption::NestingLimit(10));
+  if (err || !doc.is<JsonObjectConst>())
+    return false;
+  WxHour w;
+  JsonObjectConst hourly = doc["hourly"];
+  if (!detail::wx_degrees(hourly["temperature_2m"][0], w.t10))
+    return false;
+  w.code = detail::wx_code(hourly["weather_code"][0]);
+  if (w.code == 255)
+    return false;
+  JsonVariantConst day = hourly["is_day"][0];
+  w.night = day.is<int>() && day.as<int>() == 0;
+  w.valid = true;
+  out = w;
+  return true;
+}
+bool parse_hour_from(WxSource &input, WxHour &out);
+
+// Whether the next game gets a forecast of the panel's own: before the start
+// with a real kickoff time, in a sport played outside (football, baseball,
+// soccer), not indoors (indoor 1; -1 is a venue that doesn't say), with no
+// forecast from ESPN, a city to look up, and a kickoff close enough for
+// Open-Meteo, or under an hour gone.
+inline bool wx_kick_wanted(bool pre, bool outdoor_sport, int8_t indoor, bool espn_has, const std::string &place,
+                           int64_t kickoff, int64_t now) {
+  if (!pre || !outdoor_sport || indoor == 1 || espn_has || place.empty() || kickoff <= 0 || now <= 0)
+    return false;
+  return kickoff > now - 3600 && kickoff - now <= kWxKickAheadS;
+}
 
 // The icon for a WMO weather code. Clear skies at night get the moon.
 inline WxIcon wx_icon(uint8_t code, bool night) {
@@ -362,6 +466,177 @@ inline bool wx_card_ready(bool on, const std::string &town, bool lookup_answered
   if (!wx_card_text(on, town, lookup_answered, found).empty())
     return true;
   return forecast && ever_read && read_ago_ms < kWxFreshMs;
+}
+
+// ---- Degrees F or C ---------------------------------------------------------
+
+// The wxunit setting: auto (the town's country, else the time zone), F or C.
+constexpr uint8_t kWxUnitAuto = 0, kWxUnitF = 1, kWxUnitC = 2;
+
+// Places that read Fahrenheit: the US and its territories, and a few others.
+inline bool wx_country_f(const std::string &cc) {
+  static const char *kF[] = {"US", "PR", "GU", "VI", "AS", "MP", "UM", "LR", "BS", "BZ", "KY", "PW", "FM", "MH"};
+  for (const char *c : kF)
+    if (cc == c)
+      return true;
+  return false;
+}
+
+// The panel's US time zones (timezones.h): Fahrenheit when no town says
+// otherwise.
+inline bool wx_tz_f(const char *iana) {
+  if (iana == nullptr)
+    return true;
+  static const char *kF[] = {"America/New_York", "America/Chicago",   "America/Denver",  "America/Phoenix",
+                             "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"};
+  for (const char *z : kF)
+    if (strcmp(iana, z) == 0)
+      return true;
+  return false;
+}
+
+// F or C, for the setting, the town's country ("" when the town isn't known
+// or was looked up before the panel kept it) and the panel's time zone.
+inline bool wx_fahrenheit(uint8_t unit, const std::string &country, const char *tz_iana) {
+  if (unit == kWxUnitF)
+    return true;
+  if (unit == kWxUnitC)
+    return false;
+  return country.empty() ? wx_tz_f(tz_iana) : wx_country_f(country);
+}
+
+// Tenths of a degree F as whole degrees in the unit shown, rounded half away
+// from zero.
+inline int wx_deg(int t10, bool fahrenheit) {
+  // C in tenths of tenths: (F - 32) * 5 / 9, times 100
+  long v = fahrenheit ? (long) t10 * 10 : ((long) t10 - 320) * 500 / 9 / 10;
+  return (int) (v < 0 ? (v - 50) / 100 : (v + 50) / 100);
+}
+
+// "54F", the ticker's way of writing it, as ESPN writes its forecast.
+inline std::string wx_ticker_temp(int t10, bool fahrenheit) {
+  return std::to_string(wx_deg(t10, fahrenheit)) + (fahrenheit ? "F" : "C");
+}
+
+// The ticker's forecast: "54F Clear", or the temperature alone with no words.
+inline std::string wx_ticker_text(int t10, bool fahrenheit, const std::string &words) {
+  std::string t = wx_ticker_temp(t10, fahrenheit);
+  return words.empty() ? t : t + " " + words;
+}
+
+// The words of ESPN's forecast text ("54F Clear" is "Clear"), "" without any.
+inline std::string espn_wx_words(const std::string &espn_text) {
+  size_t sp = espn_text.find(' ');
+  return sp == std::string::npos ? std::string() : espn_text.substr(sp + 1);
+}
+
+// ---- Icons for ESPN's forecast ------------------------------------------------
+
+// ESPN's event forecast comes from AccuWeather, whose icon number rides in
+// one of its two fields ("1" Sunny, "33" Clear at night). kWxIconNone for a
+// number it doesn't have.
+inline uint8_t accu_icon(int id) {
+  switch (id) {
+    case 1:
+    case 2:
+    case 5:
+    case 30:
+    case 31:
+      return (uint8_t) WxIcon::SUN;
+    case 3:
+    case 4:
+    case 35:
+    case 36:
+      return (uint8_t) WxIcon::PART;
+    case 6:
+    case 7:
+    case 8:
+    case 32:
+    case 38:
+      return (uint8_t) WxIcon::CLOUD;
+    case 11:
+      return (uint8_t) WxIcon::FOG;
+    case 12:
+    case 13:
+    case 14:
+    case 18:
+    case 26:
+    case 39:
+    case 40:
+      return (uint8_t) WxIcon::RAIN;
+    case 15:
+    case 16:
+    case 17:
+    case 41:
+    case 42:
+      return (uint8_t) WxIcon::STORM;
+    case 19:
+    case 20:
+    case 21:
+    case 22:
+    case 23:
+    case 24:
+    case 25:
+    case 29:
+    case 43:
+    case 44:
+      return (uint8_t) WxIcon::SNOW;
+    case 33:
+    case 34:
+    case 37:
+      return (uint8_t) WxIcon::MOON;
+    default:
+      return kWxIconNone;
+  }
+}
+
+// The icon for words like "Mostly sunny" or "Chance of a t-storm", for a
+// forecast that carries no number. kWxIconNone when nothing matches.
+inline uint8_t words_icon(const std::string &words) {
+  std::string w;
+  for (char c : words)
+    w += (char) (c >= 'A' && c <= 'Z' ? c + 32 : c);
+  auto has = [&](const char *k) { return w.find(k) != std::string::npos; };
+  if (has("storm") || has("thunder"))
+    return (uint8_t) WxIcon::STORM;
+  if (has("snow") || has("flurr") || has("sleet") || has(" ice") || w.rfind("ice", 0) == 0)
+    return (uint8_t) WxIcon::SNOW;
+  if (has("rain") || has("shower") || has("drizzle"))
+    return (uint8_t) WxIcon::RAIN;
+  if (has("fog") || has("mist"))
+    return (uint8_t) WxIcon::FOG;
+  if (has("partly") || has("intermittent"))
+    return (uint8_t) WxIcon::PART;
+  if (has("cloud") || has("overcast") || has("dreary"))
+    return (uint8_t) WxIcon::CLOUD;
+  if (has("sun") || has("clear") || has("fair") || has("haz") || has("hot"))
+    return (uint8_t) WxIcon::SUN;
+  return kWxIconNone;
+}
+
+// The icon of ESPN's forecast: from AccuWeather's number when the forecast
+// has one, else from the words.
+inline uint8_t espn_wx_icon(int accu, const std::string &words) {
+  uint8_t i = accu_icon(accu);
+  return i != kWxIconNone ? i : words_icon(words);
+}
+
+// A sun at a kickoff after dark is the moon, and the other way round: ESPN's
+// number is for the hour it was read, not always the kickoff's.
+inline uint8_t wx_icon_at(uint8_t icon, bool night) {
+  if (night && icon == (uint8_t) WxIcon::SUN)
+    return (uint8_t) WxIcon::MOON;
+  if (!night && icon == (uint8_t) WxIcon::MOON)
+    return (uint8_t) WxIcon::SUN;
+  return icon;
+}
+
+// Dark at this local hour, roughly: after 8 PM from May to August, after 7 PM
+// the rest of the year, and before 6 AM. month 1 to 12.
+inline bool wx_dark_at(int month, int hour) {
+  if (hour < 6)
+    return true;
+  return hour >= (month >= 5 && month <= 8 ? 20 : 19);
 }
 
 }  // namespace espn

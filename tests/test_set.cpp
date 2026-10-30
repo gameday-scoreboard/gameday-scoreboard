@@ -75,6 +75,7 @@ struct Settings {
   std::string msg, msgurl, nick, hook;
   std::string town;
   bool wxon{false};
+  int wxunit{0};
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -179,6 +180,7 @@ void load(Settings &s, JsonObjectConst o) {
   num("panels", s.panels);
   num("msgevery", s.msgevery);
   num("pregame", s.pregame);
+  num("wxunit", s.wxunit);
   if (o["hook"].is<const char *>())
     s.hook = o["hook"].as<const char *>();
   if (o["msg"].is<const char *>())
@@ -374,6 +376,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       }
       break;
     case SetKind::WXON: s.wxon = op.on; break;
+    case SetKind::WXUNIT: s.wxunit = op.value; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -482,6 +485,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["pregame"] = s.pregame;
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
+  doc["wxunit"] = s.wxunit;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);

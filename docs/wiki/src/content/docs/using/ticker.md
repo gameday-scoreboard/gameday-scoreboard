@@ -20,6 +20,10 @@ Before a playoff game in baseball, basketball and hockey, the ticker starts with
 
 Before a regular-season football game the ticker starts with the week, like "Week 8". Before any game at an open-air venue it ends with ESPN's forecast for it, like "76F Cloudy at Hard Rock Stadium". Indoor venues and games with no forecast keep just the venue.
 
+:::note[Coming in the next release]
+The forecast follows the **Degrees** setting ("24C Cloudy at Hard Rock Stadium"), and a football, baseball or soccer game ESPN has no forecast for gets one from Open-Meteo. See [The forecast for kickoff](/using/weather/#the-forecast-for-kickoff).
+:::
+
 Before a football game the ticker also shows each team's passing leader for the season, like "Prescott 1,381 yds 9 TD", after the odds.
 
 Baseball, basketball and hockey get season leaders too, after the odds: the home run leader in baseball, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI"; points per game in basketball, like "Allen 21.0 PPG"; and points in hockey, like "McDavid 9 pts".
