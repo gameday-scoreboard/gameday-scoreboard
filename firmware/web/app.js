@@ -1299,7 +1299,9 @@
     // Older firmware has no wake.
     $("#wakeCtls").hidden = S.wake === undefined;
     if (S.wake === undefined) return;
-    $("#wakeLeadRow").hidden = !S.wake;
+    // The lead also ends After the game's clock, and keeps Off from turning
+    // the panel off just before the next game, so it shows for those too.
+    $("#wakeLeadRow").hidden = !S.wake && S.after === "scoreboard";
     const lead = $("#wakeLead");
     const l = String(S.wakelead);
     if (l !== wakeSeen.lead && document.activeElement !== lead) {

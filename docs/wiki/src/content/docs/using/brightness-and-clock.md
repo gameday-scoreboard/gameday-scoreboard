@@ -77,7 +77,7 @@ The panel can turn itself on before your games and decide what it does once they
 - **Turn off**: the panel turns off. With **Game-day wake** on, it comes back on before your next game. If your next game starts within the **Turns on** time, the panel stays on for it instead.
 - **Show the clock**: the time and your next game, in that team's colors, until the **Turns on** time before that game, then the scoreboard. The countdown to the next game waits while the clock is up; the other cards you turned on under **Between games**, like your own countdown, the weather, the message card and pictures, still get their turns.
 
-Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. A panel that **Turn off** put to sleep comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
+Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
 
 The app and the settings backup have the same settings.
 :::

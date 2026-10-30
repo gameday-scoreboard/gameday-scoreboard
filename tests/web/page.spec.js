@@ -2006,6 +2006,8 @@ test("game-day wake: off by default, its lead and after the game post, hidden on
   await page.reload();
   await expect(page.locator("#afterHint")).toHaveText(
     "Off since the last game. Turn on Game-day wake to bring it back before the next game.");
+  // With the wake off, the lead still shows while After the game uses it.
+  await expect(page.locator("#wakeLeadRow")).toBeVisible();
 
   // A lead the list lacks, set from an app, still shows.
   await reset(request, { wake: true, wakelead: 45 });
