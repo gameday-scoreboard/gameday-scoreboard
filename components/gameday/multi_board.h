@@ -167,6 +167,16 @@ inline std::vector<int> plan_tiles(const TGames &cands, const std::vector<std::s
   return out;
 }
 
+// A record cut to wins and losses, "4-5-0" to "4-5": a tile's score slot
+// has room for five characters, and hockey's overtime losses make six.
+inline std::string tile_record(const std::string &record) {
+  size_t first = record.find('-');
+  if (first == std::string::npos)
+    return record;
+  size_t second = record.find('-', first + 1);
+  return second == std::string::npos ? record : record.substr(0, second);
+}
+
 // "7:30 PM"
 inline std::string tile_time_12h(const struct tm &t) {
   int h = t.tm_hour % 12;

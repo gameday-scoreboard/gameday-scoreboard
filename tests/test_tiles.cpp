@@ -218,6 +218,14 @@ void test_final_hold() {
   TCHECK(got[0] == "new" && got[1] == "old" && got[2] == "found" && got[3] == "");
 }
 
+void test_record() {
+  TCHECK_EQ(tile_record("4-5-0"), std::string("4-5"));
+  TCHECK_EQ(tile_record("10-4"), std::string("10-4"));
+  TCHECK_EQ(tile_record("3-2-1-0"), std::string("3-2"));
+  TCHECK_EQ(tile_record(""), std::string(""));
+  TCHECK_EQ(tile_record("7"), std::string("7"));
+}
+
 void test_status() {
   TileGame g = game("x", GameState::IN, 0, 0, 3, 252);
   g.detail = "4:12 - 3rd";
@@ -300,6 +308,7 @@ int run_tile_tests(int &checks) {
   test_stable_slots();
   test_live_bumps_filler();
   test_final_hold();
+  test_record();
   test_status();
   checks += checks_;
   return failures_;

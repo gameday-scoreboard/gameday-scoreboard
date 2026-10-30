@@ -283,8 +283,8 @@ void GamedayComponent::tiles_publish_() {
     // table (NFL and college; the other leagues' colors come with the read).
     t.away_color = g.away_color != 0 ? g.away_color : tile_team_rgb(g.league, g.away_id);
     t.home_color = g.home_color != 0 ? g.home_color : tile_team_rgb(g.league, g.home_id);
-    t.away_record = g.away_record;
-    t.home_record = g.home_record;
+    t.away_record = ::espn::tile_record(g.away_record);
+    t.home_record = ::espn::tile_record(g.home_record);
     t.away_score = g.away_score;
     t.home_score = g.home_score;
     t.possession = t.live ? g.possession : 0;
