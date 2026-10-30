@@ -3830,6 +3830,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.opponent_timeouts = g.opp_timeouts;
   f.team_record = g.team_record;
   f.opponent_record = g.opp_record;
+  f.team_rank = g.team_rank >= 1 && g.team_rank <= 25 ? g.team_rank : 0;
+  f.opponent_rank = g.opp_rank >= 1 && g.opp_rank <= 25 ? g.opp_rank : 0;
   f.last_play = g.last_play;
   if (g.valid && g.state == GameState::IN) {
     f.clock_text = ::espn::clock_text(g);
