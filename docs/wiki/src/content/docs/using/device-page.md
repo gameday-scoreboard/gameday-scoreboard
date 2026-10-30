@@ -63,6 +63,8 @@ Settings are grouped in cards. In the order the page shows them:
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. |
 | **Showing** | The Scoreboard page or the Clock page. |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. Coming in the next release: the remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
+| **Game-day wake** | Coming in the next release. Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
+| **After the game** | Coming in the next release. What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, or **Show the clock** until your next game is close. |
 | **Only today's games** | Between games, Favorite teams skips favorites that aren't playing today. |
 | Favorites list | Up to 16 teams in priority order. Move a team up or down, or remove it. The first four are buttons 1 to 4 on a WizMote. |
 | **Discovery**, **Unpair remote** | Pairs and unpairs a WizMote remote. See [WizMote remote](/using/remote/). |
@@ -78,7 +80,7 @@ The Favorites card has two more switches: **Jump to the action** (off to start) 
 
 Live games has a **Pick the best game** switch under **Switch every**, on unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games).
 
-A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. See [Playlists](/using/favorites/#playlists).
+A **Playlists** card, after Favorites, groups your favorites into named playlists, and **Playing** under **Favorite teams** picks the one the panel plays. Coming in the next release: **Playing** also has a row for each sport in your favorites, and the **One per sport** button is gone. See [Playlists](/using/favorites/#playlists).
 
 Live games also has a **Favorites take over** switch, off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over).
 
@@ -86,11 +88,42 @@ The Panel card starts with a **Nickname** box. Give each panel a name, like "Liv
 
 A **Message** card, after Celebrations, puts your own words on the panel: a **Banner** over the board for a few seconds, and a **Message card** of text or a list from a web address that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
 
+:::note[Coming in the next release]
+**Showing** gets a third page, **Effects**: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under it while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. See [Effects](/using/effects/).
+:::
+
 Only the ticker switches for sports your panel follows are shown. Hockey and basketball have no game situation line, so they have no switch of their own.
 
 ### Between games
 
 The **Between games** card has **Countdown to the next game**, on unless you turn it off, and **Your own countdown**: a **Name** and a **Day** to count down to, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/).
+
+:::note[Coming in the next release]
+**Game leaders**, on unless you turn it off, shows each team's top players at halftime and the final: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball. The card takes a turn with the board and the line score, 10 seconds each: once at halftime, and at the final for as long as the final is up. The panel reads the box score once at halftime and once at the final, never during play. See the sport's page for what it shows.
+
+**College Top 25**, on unless you turn it off, shows the AP poll between games while you follow a college football or basketball team. See [College Top 25](/using/top-25/).
+
+**News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
+
+**Weather** has a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Its switch is the **Weather** row in the list below, which setting a town turns on. See [Weather](/using/weather/).
+
+A **Pictures** card, after Between games, keeps up to 4 of your own pictures or GIFs for the panel to show between games: **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
+
+The Between games card becomes one list with a switch for each card the panel can show between games, in this order:
+
+| Card | What it is |
+| --- | --- |
+| **Next game** | The next game's board. Off, the panel shows the [clock](/using/brightness-and-clock/#the-off-season-clock) between games instead, with the next game under the time. |
+| **Clock** | The clock between seasons, when no game is coming up for weeks. Off, the next game's board stays up instead; in Live games with nothing in the last week and no favorite to show, the board says there are no live games. |
+| **Countdown to the next game** | The same switch as before. |
+| **Your own countdown** | Your countdown's turn at the end of every minute. Set its **Name** and **Day** under the list. |
+| **Message card** | The [message card](/using/messages/)'s turns. Its text or list, and **Show it**, stay in the Message card. |
+| **Pictures** | Your [pictures](/using/pictures/)' turns. They stay saved while it's off. |
+| **Game leaders**, **College Top 25**, **News headlines** | The same switches as before. |
+| **Weather** | The weather card's switch, which moves here from its block. Its town stays under the list. |
+
+Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet is grey, with what it needs under its name: a day for your own countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
+:::
 
 ### Celebrations
 

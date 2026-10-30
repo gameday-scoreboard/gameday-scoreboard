@@ -7,7 +7,8 @@
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
 // "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
-// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}]. Brightness and
+// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], cards the
+// between-games cards by id, {"next": true, "clock": false} (cards.h). Brightness and
 // scroll are the Home Assistant numbers of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
@@ -47,17 +48,20 @@ constexpr size_t kSettingsMaxBytes = 8192;
 constexpr int kScrollMin = 1;
 constexpr int kScrollMax = 10;
 
-enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS };
+enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS, CARDS };
 
 // The JSON type of each set key in a settings document.
 inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
-                                      "leaders", "night", "nightscreen", "favtake", "countdown"};
+                                      "leaders", "night", "nightscreen", "favtake", "countdown", "top25",
+                                      "news",    "gameleaders", "wxon", "wake"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
-                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame"};
+                                     "release", "collide", "msgevery", "nightlevel", "list", "pregame",
+                                     "wakelead"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook"};
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "sport", "town", "after"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -73,6 +77,8 @@ inline SettingType setting_type(const char *k) {
       return SettingType::LIST;
   if (strcmp(k, "lists") == 0)
     return SettingType::PLAYLISTS;
+  if (strcmp(k, "cards") == 0)
+    return SettingType::CARDS;
   return SettingType::NONE;
 }
 
@@ -105,9 +111,11 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
                                       "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
-                                      "nightstart", "nightend", "nightscreen", "nightlevel", "countdown", "cdname",
-                                      "cddate",   "msg",      "msgurl",   "msgevery",    "autoupd",    "beta",
-                                      "lists",    "list",     "hook",     "pregame"};
+                                      "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
+                                      "after",    "cards",    "countdown",
+                                      "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "gameleaders",
+                                      "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
+                                      "lists",    "list",     "sport",    "hook",       "pregame"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -138,6 +146,15 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
             t.add(ref);
         }
       }
+    } else if (strcmp(k, "cards") == 0) {
+      // The state's list, as {"next": true, ...}: an object, so a backup
+      // from older firmware leaves a newer card at its default.
+      if (!s["cards"].is<JsonArrayConst>())
+        continue;
+      JsonObject cards = out["cards"].to<JsonObject>();
+      for (JsonObjectConst c : s["cards"].as<JsonArrayConst>())
+        if (c["id"].is<const char *>())
+          cards[c["id"].as<const char *>()] = c["on"] | false;
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
@@ -149,6 +166,10 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     } else if (strcmp(k, "tzauto") == 0) {
       if (s["tz_auto"].is<bool>())
         out["tzauto"] = s["tz_auto"];
+    } else if (strcmp(k, "sport") == 0) {
+      // The sport row playing, or none: list then says what plays.
+      if (s["sport"].is<const char *>())
+        out["sport"] = *s["sport"].as<const char *>() != '\0' ? s["sport"].as<const char *>() : "none";
     } else if (!s[k].isNull()) {
       out[k] = s[k];
     }
@@ -261,7 +282,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         in_range = in_range && parse_set(k, std::to_string(n), op, target.fav_max);
         bool clamped = op.kind == SetKind::ROTATE || op.kind == SetKind::LOCKON || op.kind == SetKind::RELEASE ||
                        op.kind == SetKind::MSGEVERY || op.kind == SetKind::NIGHT_LEVEL ||
-                       op.kind == SetKind::PREGAME;
+                       op.kind == SetKind::PREGAME || op.kind == SetKind::WAKE_LEAD;
         if (!in_range || (clamped && op.value != n)) {
           out.skipped.push_back(k + "=" + std::to_string(n));
           continue;
@@ -291,8 +312,12 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           parse_set(k, r == 0 ? "none" : text, op, target.fav_max);
           break;
         }
+        // A sport this firmware has no row for (newer firmware may have more)
+        // is left out and listed, like a team it doesn't know.
         if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
-            (k == "hook" && !hook_url_ok(text))) {
+            (k == "hook" && !hook_url_ok(text)) ||
+            (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0) ||
+            (k == "after" && after_parse(text) < 0)) {
           out.skipped.push_back(k + "=" + text);
           continue;
         }
@@ -389,6 +414,27 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           text += (text.empty() ? "" : ";") + name + "=" + refs;
         }
         parse_set(k, text, op, target.fav_max);
+        break;
+      }
+      case SettingType::CARDS: {
+        // Into cards= text: "next:1,clock:0". A card this firmware doesn't
+        // have (from newer firmware) is left out and listed.
+        const char *bad = "cards should be cards like {\"next\": true}.";
+        if (!v.is<JsonObjectConst>())
+          return detail::settings_fail(out, bad);
+        std::string text;
+        for (JsonPairConst p : v.as<JsonObjectConst>()) {
+          if (!p.value().is<bool>())
+            return detail::settings_fail(out, bad);
+          std::string id = p.key().c_str();
+          if (card_row(id) == nullptr) {
+            out.skipped.push_back("cards=" + id);
+            continue;
+          }
+          text += (text.empty() ? "" : ",") + id + (p.value().as<bool>() ? ":1" : ":0");
+        }
+        if (!parse_set(k, text, op, target.fav_max))
+          continue;  // it names no card this firmware has
         break;
       }
       case SettingType::NONE:

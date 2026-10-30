@@ -24,8 +24,11 @@
   "match",
   "beta",
   "countdown",
+  "top25",
+  "news",
   "cdname",
   "cddate",
+  "gameleaders",
   "msg",
   "msgurl",
   "msgevery",
@@ -42,6 +45,13 @@
   "nick",
   "lists",
   "list",
+  "sport",
   "hook",
-  "pregame"
+  "pregame",
+  "town",
+  "wxon",
+  "cards",
+  "wake",
+  "wakelead",
+  "after"
 ]
