@@ -3099,6 +3099,9 @@ static void test_pregame_extras() {
   CHECK_EQ(nu.weather, std::string("54F Clear"));
   CHECK_EQ(nu.team_leader, std::string("Chiles 1,398 yds 9 TD"));
   CHECK_EQ(nu.opp_leader, std::string("Lonergan 1,066 yds 10 TD"));
+  // NU was #24 that week; RUTG unranked (ESPN sends 99)
+  CHECK_EQ((int) nu.team_rank, 24);
+  CHECK_EQ((int) nu.opp_rank, 99);
   TickerOptions o;
   o.odds = false;
   CHECK_EQ(status_text(nu, o, "Sat 2:30 PM"),

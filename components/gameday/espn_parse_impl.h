@@ -72,6 +72,7 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   c["score"] = true;
   c["winner"] = true;
   c["records"].add<JsonObject>()["summary"] = true;
+  c["curatedRank"]["current"] = true;
   c["team"]["abbreviation"] = true;
   c["team"]["color"] = true;
   c["team"]["logo"] = true;
@@ -283,6 +284,9 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     std::string abbr = str_or_empty(c["team"]["abbreviation"]);
     int score = atoi(str_or_empty(c["score"]).c_str());
     std::string record = str_or_empty(c["records"][0]["summary"]);
+    // ESPN's AP rank: 1 to 25, 99 (or nothing) when unranked
+    int rank_v = c["curatedRank"]["current"] | 99;
+    uint8_t rank = (uint8_t) (rank_v >= 1 && rank_v <= 25 ? rank_v : 99);
     std::string color = str_or_empty(c["team"]["color"]);
     std::string logo = dark_logo(str_or_empty(c["team"]["logo"]));
     bool winner = c["winner"] | false;
@@ -295,6 +299,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     (ours ? s.team_id : s.opp_id) = id;
     (ours ? s.team_score : s.opp_score) = score;
     (ours ? s.team_record : s.opp_record) = record;
+    (ours ? s.team_rank : s.opp_rank) = rank;
     (ours ? s.team_color : s.opp_color) = color;
     (ours ? s.team_logo : s.opp_logo) = logo;
     (ours ? s.team_timeouts : s.opp_timeouts) = timeouts;

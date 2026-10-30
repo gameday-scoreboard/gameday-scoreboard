@@ -90,6 +90,9 @@ struct UpdateFields {
   int opponent_timeouts{0};
   std::string team_record;
   std::string opponent_record;
+  // AP rank 1-25, drawn on the logo's outer top corner; 0 when unranked
+  int team_rank{0};
+  int opponent_rank{0};
   std::string splash_text;
   uint32_t splash_color{0};
   std::string last_play;

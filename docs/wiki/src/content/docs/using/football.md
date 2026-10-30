@@ -11,6 +11,10 @@ NFL and college football games share one board. What you see depends on your pan
 
 The next-game card shows both team logos, your team on the left, with each team's abbreviation in its own color and the season records under the logos.
 
+:::note[Coming in the next release]
+A college team in the AP Top 25 has its rank on the outer top corner of its logo, small white digits on a black patch, like **6** for the sixth-ranked team. It stays there during the game and at the final. An unranked team's logo is untouched. The rank comes from ESPN with the game, so it changes when the poll does. It is always drawn; the **College Top 25** switch on the device page is for the [Top 25 card](/using/top-25/) between games, not for this.
+:::
+
 The ticker along the bottom carries:
 
 - the game's name for bowl and playoff games, like "Rose Bowl" or "NFC Wild Card"
@@ -37,6 +41,7 @@ At kickoff the board switches to the live scoreboard:
 - **Down and distance** under the clock, like "3rd & 4". It turns red in the red zone.
 - **Possession**: a gold line under the abbreviation of the team with the ball. The abbreviations stay in team colors.
 - **Records** under each logo.
+- **A college team's AP rank** on the outer top corner of its logo, from the next release on.
 - **Timeout pips** under each logo: three bars per team, lit gold for each timeout left and dim for each one used.
 - **The ticker** with the down, distance and where the ball is, like "3rd & 4 at FIU 31", and the last play. Turn either off in the Ticker card on the device page. See [The ticker](/using/ticker/).
 
@@ -50,7 +55,7 @@ Both are on to start. **Field strip** and **Win chance bar** in the Pictures car
 
 After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Odds, TV and win chance**.
 
-On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker.
+On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker. A ranked college team's rank still sits on its logo's corner.
 
 ## Scoring splashes
 
