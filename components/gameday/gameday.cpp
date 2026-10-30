@@ -1542,7 +1542,10 @@ void GamedayComponent::loop() {
           this->top25_fail_ms_[this->job_.top25_slot] = this->gave_up_ms_;
         if (this->job_.need_news)
           this->news_fail_ms_ = this->gave_up_ms_;
-        if (this->job_.need_wx != 0) {
+        if (this->job_.need_wx >= 3) {
+          this->kick_fail_ms_ = this->gave_up_ms_;
+          this->kick_backoff_ms_ = this->kick_fail_.fail(false, 0, random_uint32());
+        } else if (this->job_.need_wx != 0) {
           this->wx_fail_ms_ = this->gave_up_ms_;
           this->wx_backoff_ms_ = this->wx_fail_.fail(false, 0, random_uint32());
           // start_wx_job_ took the lookup; it is due again after the wait,
@@ -1589,11 +1592,21 @@ void GamedayComponent::loop() {
     return;
   }
   // The weather's lookup and forecast reads, the same way: between ESPN
-  // reads, never alongside one, and not while a game the panel follows is live.
-  if (this->wx_due_() && network::is_connected() &&
+  // reads, never alongside one, and not while a game the panel follows is
+  // live. They also wait while the next ESPN read is near, so even a read
+  // that runs to its timeout is done before ESPN's turn (wx_gap_).
+  if (network::is_connected() && ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
-    this->start_wx_job_();
-    return;
+    if (this->wx_due_()) {
+      this->start_wx_job_();
+      return;
+    }
+    // The next game's kickoff forecast, when ESPN's event has none.
+    uint8_t kick = this->kick_due_();
+    if (kick != 0) {
+      this->start_kick_job_(kick);
+      return;
+    }
   }
   if ((int32_t) (millis() - this->next_fetch_ms_) < 0)
     return;
@@ -3888,6 +3901,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   };
   std::string kickoff = kickoff_of(g);
   f.kickoff = kickoff;
+  this->kick_fields_(f, opts);  // the board's forecast, and the ticker's in the owner's degrees
   f.status_text = ::espn::status_text(g, opts, kickoff);
   // Halftime and the final: ESPN's headline (a final only) and the scores the
   // panel saw, behind the same switch as the last play.
@@ -4270,6 +4284,11 @@ void GamedayComponent::load_wx_() {
       this->wx_.lon > 180.0f)
     this->wx_ = PrefsWx{};  // a later firmware's blob, or damage
   this->wx_.on = this->wx_.on ? 1 : 0;
+  if (this->wx_.unit > ::espn::kWxUnitC)
+    this->wx_.unit = ::espn::kWxUnitAuto;
+  for (char c : this->wx_.country)
+    if (c < 'A' || c > 'Z')
+      memset(this->wx_.country, 0, sizeof(this->wx_.country));
   // A town saved before its lookup answered (a power cut) is looked up now;
   // a saved place stands for a lookup that answered.
   if (this->wx_.town[0] != '\0' && !this->wx_place_known_())
@@ -4308,6 +4327,7 @@ void GamedayComponent::set_town(const std::string &town) {
   memset(this->wx_.town, 0, sizeof(this->wx_.town));
   memcpy(this->wx_.town, t.data(), t.size());
   memset(this->wx_.place, 0, sizeof(this->wx_.place));
+  memset(this->wx_.country, 0, sizeof(this->wx_.country));
   this->wx_.lat = this->wx_.lon = 0;
   this->wx_.on = t.empty() ? 0 : 1;
   this->wx_forecast_ = ::espn::WxForecast{};
@@ -4384,11 +4404,13 @@ void GamedayComponent::run_wx_job_() {
     size_t readBytes(char *dst, size_t n) override { return this->r.readBytes(dst, n); }
     ContainerReader &r;
   } source(reader);
-  bool ok = j.need_wx == 1 ? ::espn::parse_geocode_from(source, j.wx_place)
-                           : ::espn::parse_forecast_from(source, j.wx_forecast);
+  bool ok = j.need_wx == 1 || j.need_wx == 3 ? ::espn::parse_geocode_from(source, j.wx_place)
+             : j.need_wx == 4                ? ::espn::parse_hour_from(source, j.wx_hour)
+                                             : ::espn::parse_forecast_from(source, j.wx_forecast);
   container->end();
   if (!ok) {
-    ESP_LOGW(TAG, "Weather: %s didn't parse after %u bytes", j.need_wx == 1 ? "the lookup" : "the forecast",
+    static const char *const kWhat[] = {"", "the lookup", "the forecast", "the venue's lookup", "the kickoff hour"};
+    ESP_LOGW(TAG, "Weather: %s didn't parse after %u bytes", kWhat[j.need_wx < 5 ? j.need_wx : 0],
              (unsigned) reader.total());
     return;
   }
@@ -4397,6 +4419,10 @@ void GamedayComponent::run_wx_job_() {
 
 void GamedayComponent::apply_wx_job_() {
   Job &j = this->job_;
+  if (j.need_wx >= 3) {
+    this->apply_kick_job_();
+    return;
+  }
   const uint32_t now = millis();
   if (j.need_wx == 1 && j.wx_town != this->wx_.town)
     return;  // the town changed meanwhile; set_town started a new lookup
@@ -4423,6 +4449,9 @@ void GamedayComponent::apply_wx_job_() {
     this->wx_lookup_status_ = 200;
     memset(this->wx_.place, 0, sizeof(this->wx_.place));
     memcpy(this->wx_.place, j.wx_place.name.data(), j.wx_place.name.size());
+    memset(this->wx_.country, 0, sizeof(this->wx_.country));
+    if (j.wx_place.country.size() == 2)
+      memcpy(this->wx_.country, j.wx_place.country.data(), 2);
     this->wx_.lat = j.wx_place.lat;
     this->wx_.lon = j.wx_place.lon;
     ESP_LOGI(TAG, "Weather: %s is %s (%.4f, %.4f)", this->wx_.town,
@@ -4434,8 +4463,9 @@ void GamedayComponent::apply_wx_job_() {
   this->wx_status_ = 200;
   this->wx_forecast_ = j.wx_forecast;
   this->wx_read_ms_ = now == 0 ? 1 : now;
-  ESP_LOGI(TAG, "Weather: %d F now, %d/%d today, code %u", this->wx_forecast_.temp, this->wx_forecast_.today.hi,
-           this->wx_forecast_.today.lo, (unsigned) this->wx_forecast_.code);
+  ESP_LOGI(TAG, "Weather: %.1f F now, %.1f/%.1f today, code %u", this->wx_forecast_.t10 / 10.0,
+           this->wx_forecast_.today.hi10 / 10.0, this->wx_forecast_.today.lo10 / 10.0,
+           (unsigned) this->wx_forecast_.code);
   this->rebuild_state_(&this->last_fields_);
   if (this->countdown_shown_ == ::espn::CountdownCard::WEATHER)
     this->emit_({});  // the card is up: redraw it with the new numbers
@@ -4454,17 +4484,215 @@ void GamedayComponent::wx_fields_(UpdateFields &f) {
     return;
   const ::espn::WxForecast &w = this->wx_forecast_;
   const bool wide = this->panels_ == nullptr || this->panels_->cols() >= 2;
-  f.wx_temp = w.temp;
-  f.wx_hi = w.today.hi;
-  f.wx_lo = w.today.lo;
+  const bool fahr = this->wx_fahrenheit_();
+  auto deg = [fahr](int t10) { return ::espn::wx_deg(t10, fahr); };
+  f.wx_temp = deg(w.t10);
+  f.wx_hi = deg(w.today.hi10);
+  f.wx_lo = deg(w.today.lo10);
   f.wx_icon = (uint8_t) ::espn::wx_icon(w.code, w.night);
   f.wx_words = ::espn::wx_words(w.code, wide);
   f.wx_d1 = ::espn::weekday_text(w.next[0].wday);
-  f.wx_d1_hilo = ::espn::wx_hilo_text(w.next[0].hi, w.next[0].lo);
+  f.wx_d1_hilo = ::espn::wx_hilo_text(deg(w.next[0].hi10), deg(w.next[0].lo10));
   f.wx_d1_icon = (uint8_t) ::espn::wx_icon(w.next[0].code, false);
   f.wx_d2 = ::espn::weekday_text(w.next[1].wday);
-  f.wx_d2_hilo = ::espn::wx_hilo_text(w.next[1].hi, w.next[1].lo);
+  f.wx_d2_hilo = ::espn::wx_hilo_text(deg(w.next[1].hi10), deg(w.next[1].lo10));
   f.wx_d2_icon = (uint8_t) ::espn::wx_icon(w.next[1].code, false);
+}
+
+std::string GamedayComponent::wx_country_() const {
+  // Only once the lookup found the town; a town looked up before the panel
+  // kept the country has none, and the time zone decides.
+  if (!this->wx_place_known_() || this->wx_.country[0] == '\0')
+    return "";
+  return std::string(this->wx_.country, sizeof(this->wx_.country));
+}
+
+bool GamedayComponent::wx_fahrenheit_() const {
+  return ::espn::wx_fahrenheit(this->wx_.unit, this->wx_country_(), ::espn::kTimezones[this->prefs_.tz_index].iana);
+}
+
+void GamedayComponent::set_wx_unit(uint8_t unit) {
+  if (unit > ::espn::kWxUnitC || unit == this->wx_.unit)
+    return;
+  this->wx_.unit = unit;
+  ESP_LOGI(TAG, "Weather in %s", unit == ::espn::kWxUnitF   ? "Fahrenheit"
+                                 : unit == ::espn::kWxUnitC ? "Celsius"
+                                                            : "the town's or time zone's degrees");
+  this->save_wx_();
+  this->redraw_board_();  // the card, the next game's forecast and the ticker
+}
+
+uint32_t GamedayComponent::espn_quiet_ms_() const {
+  const uint32_t now = millis();
+  if (!this->favorites_mode_() || this->demo_playing_()) {
+    int32_t left = (int32_t) (this->next_fetch_ms_ - now);
+    return left > 0 ? (uint32_t) left : 0;
+  }
+  // Favorite teams re-runs its choice every FAV_TICK, so next_fetch_ms_ is
+  // never far off there: the reads it would start come from the favorites.
+  if (this->force_schedule_ || this->backing_off_())
+    return 0;
+  const int64_t tnow = (int64_t) this->time_->timestamp_now();
+  uint32_t quiet = UINT32_MAX;
+  for (const auto &e : this->fav_) {
+    quiet = std::min(quiet, ::espn::wx_fav_read_in_ms(!e.sched.valid || e.stale, e.fetched_ms, now, RETRY_INTERVAL,
+                                                      SCHEDULE_INTERVAL));
+    // A cup read waiting, or a favorite under way (or due to be): its polls
+    // come every few seconds, and the weather waits for them.
+    if (e.comp_next > 0 && e.comp_next < (int) e.comps.size())
+      return 0;
+    if (e.game.valid && (e.game.state == GameState::IN ||
+                         (e.game.state == GameState::PRE && !e.game.time_tbd && e.game.kickoff_epoch <= tnow)))
+      return 0;
+  }
+  if (this->fav_locked_ && this->fav_shown_ >= 0)
+    quiet = std::min(quiet, ::espn::wx_due_in_ms(this->fav_poll_ms_, this->interval_for_phase_(), now));
+  return quiet;
+}
+
+// ---- The kickoff forecast (weather.h) --------------------------------------------
+
+const GamedayComponent::KickVenue *GamedayComponent::kick_venue_(const std::string &place) const {
+  for (const auto &v : this->kick_venues_)
+    if (!v.place.empty() && v.place == place)
+      return &v;
+  return nullptr;
+}
+
+// Main loop: what the next game's forecast needs read now, if anything. A
+// game Open-Meteo can't forecast yet (more than 15 days off) waits until it
+// can; one ESPN sends a forecast for needs nothing.
+uint8_t GamedayComponent::kick_due_() {
+  if (this->busy_ || this->demo_playing_() || !this->clock_set_())
+    return 0;
+  const GameSnapshot &g = this->game_;
+  const bool outdoor = g.sport == ::espn::Sport::FOOTBALL || g.sport == ::espn::Sport::BASEBALL ||
+                       g.sport == ::espn::Sport::SOCCER;
+  if (!::espn::wx_kick_wanted(g.valid && g.state == GameState::PRE && !g.time_tbd, outdoor, g.venue_indoor,
+                              g.weather_f != ::espn::kNoWeatherF, g.venue_place, g.kickoff_epoch,
+                              (int64_t) this->time_->timestamp_now()))
+    return 0;
+  const KickVenue *v = this->kick_venue_(g.venue_place);
+  if (v != nullptr && !v->found)
+    return 0;  // Open-Meteo knows no such place
+  const uint32_t now = millis();
+  if (this->kick_fail_ms_ != 0 && now - this->kick_fail_ms_ < this->kick_backoff_ms_)
+    return 0;
+  const KickSlot *k = this->kick_slot_(g);
+  if (k != nullptr && now - k->read_ms < ::espn::kWxKickReadMs)
+    return 0;
+  return v == nullptr ? 3 : 4;
+}
+
+const GamedayComponent::KickSlot *GamedayComponent::kick_slot_(const GameSnapshot &g) const {
+  for (const auto &k : this->kick_slots_)
+    if (!k.event.empty() && k.event == g.event_id && k.kickoff == g.kickoff_epoch && k.place == g.venue_place)
+      return &k;
+  return nullptr;
+}
+
+void GamedayComponent::start_kick_job_(uint8_t kind) {
+  const GameSnapshot &g = this->game_;
+  this->job_ = Job{};
+  this->job_.generation = this->generation_;
+  this->job_.need_wx = kind;
+  this->job_.wx_event = g.event_id;
+  this->job_.wx_at = g.kickoff_epoch;
+  this->job_.wx_town = g.venue_place;
+  if (kind == 3) {
+    this->job_.wx_url = ::espn::geocode_url(g.venue_place);
+  } else {
+    const KickVenue *v = this->kick_venue_(g.venue_place);
+    this->job_.wx_lat = v->lat;
+    this->job_.wx_lon = v->lon;
+    this->job_.wx_url = ::espn::hour_url(v->lat, v->lon, g.kickoff_epoch);
+  }
+  this->start_worker_();
+}
+
+void GamedayComponent::apply_kick_job_() {
+  Job &j = this->job_;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  if (!j.wx_ok) {
+    this->kick_status_ = j.wx_status;
+    this->kick_fail_ms_ = now;
+    this->kick_backoff_ms_ =
+        this->kick_fail_.fail(::espn::is_throttle_status(j.wx_status), j.wx_retry_after_ms, random_uint32());
+    ESP_LOGW(TAG, "Kickoff forecast: %u failed read(s) in a row, next try in %us", (unsigned) this->kick_fail_.streak,
+             (unsigned) (this->kick_backoff_ms_ / 1000));
+    return;
+  }
+  this->kick_fail_ms_ = 0;
+  this->kick_fail_.clear();
+  this->kick_status_ = 200;
+  if (j.need_wx == 3) {
+    // Kept whatever the board shows now: the next poll's game is likely the same.
+    KickVenue &v = this->kick_venues_[this->kick_venue_next_];
+    this->kick_venue_next_ = (uint8_t) ((this->kick_venue_next_ + 1) % ::espn::kWxVenueCache);
+    v.place = j.wx_town;
+    v.found = !j.wx_place.name.empty();
+    v.lat = j.wx_place.lat;
+    v.lon = j.wx_place.lon;
+    if (v.found)
+      ESP_LOGI(TAG, "Kickoff forecast: %s is %s (%.4f, %.4f)", v.place.c_str(), j.wx_place.name.c_str(),
+               (double) v.lat, (double) v.lon);
+    else
+      ESP_LOGW(TAG, "Kickoff forecast: Open-Meteo knows no %s, so no forecast of the panel's own", v.place.c_str());
+    return;  // the hour is read next (kick_due_)
+  }
+  // Into the game's own slot, else the oldest one; kept even if the board has
+  // moved on, for the next time that game's card comes up.
+  KickSlot *slot = nullptr;
+  for (auto &k : this->kick_slots_)
+    if (k.event == j.wx_event && k.kickoff == j.wx_at && k.place == j.wx_town)
+      slot = &k;
+  if (slot == nullptr) {
+    slot = &this->kick_slots_[this->kick_slot_next_];
+    this->kick_slot_next_ = (uint8_t) ((this->kick_slot_next_ + 1) % ::espn::kWxKickCache);
+  }
+  slot->event = j.wx_event;
+  slot->kickoff = j.wx_at;
+  slot->place = j.wx_town;
+  slot->hour = j.wx_hour;
+  slot->read_ms = now;
+  ESP_LOGI(TAG, "Kickoff forecast for %s: %.1f F, code %u%s", j.wx_town.c_str(), j.wx_hour.t10 / 10.0,
+           (unsigned) j.wx_hour.code, j.wx_hour.night ? ", after dark" : "");
+  if (this->game_.valid && this->kick_slot_(this->game_) == slot)
+    this->redraw_board_();  // the board's forecast and the ticker now
+}
+
+// ESPN's forecast first: it is the stadium's, the one broadcasts quote. The
+// panel's own only fills in where ESPN's event has none.
+void GamedayComponent::kick_fields_(UpdateFields &f, ::espn::TickerOptions &o) const {
+  const GameSnapshot &g = this->game_;
+  if (!g.valid || g.state != GameState::PRE || this->demo_playing_())
+    return;
+  const bool fahr = this->wx_fahrenheit_();
+  int t10;
+  uint8_t icon;
+  if (g.weather_f != ::espn::kNoWeatherF) {
+    t10 = g.weather_f * 10;
+    // ESPN's icon number can be for the hour it read the forecast, not the
+    // kickoff's: the sun or the moon by the kickoff's hour at the venue, when
+    // its time zone is known (a US state), else ESPN's as it is.
+    const std::string words = ::espn::espn_wx_words(g.weather);
+    icon = ::espn::espn_wx_icon(g.weather_accu, words);
+    int dark = g.time_tbd ? -1 : ::espn::wx_venue_dark(g.kickoff_epoch, g.venue_place);
+    if (dark >= 0)
+      icon = ::espn::wx_icon_at(icon, dark == 1);
+    if (!fahr)
+      o.weather = ::espn::wx_ticker_text(t10, false, words);
+  } else if (const KickSlot *k = this->kick_slot_(g);
+             k != nullptr && k->hour.valid && millis() - k->read_ms < ::espn::kWxKickStaleMs) {
+    t10 = k->hour.t10;
+    icon = (uint8_t) ::espn::wx_icon(k->hour.code, k->hour.night);  // is_day at the venue
+    o.weather = ::espn::wx_ticker_text(t10, fahr, ::espn::wx_words(k->hour.code, true));
+  } else {
+    return;
+  }
+  f.kick_temp = ::espn::wx_temp_text(::espn::wx_deg(t10, fahr));
+  f.kick_unit = fahr ? "F" : "C";
+  f.kick_icon = icon;
 }
 
 // Once a second: put the card up, or take it down, when its turn changes.
@@ -4968,6 +5196,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // game the panel follows is live, so the read waits for it to end.
   doc["town"] = (const char *) this->wx_.town;
   doc["wxon"] = this->weather_on();
+  doc["wxunit"] = this->wx_.unit;
+  const bool wx_f = this->wx_fahrenheit_();
   if (this->wx_.town[0] != '\0') {
     JsonObject wx = doc["wx"].to<JsonObject>();
     wx["place"] = (const char *) this->wx_.place;
@@ -4984,9 +5214,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     if (this->wx_forecast_.valid) {
       const ::espn::WxForecast &f = this->wx_forecast_;
       wx["read_s"] = (millis() - this->wx_read_ms_) / 1000;
-      wx["temp"] = f.temp;
-      wx["hi"] = f.today.hi;
-      wx["lo"] = f.today.lo;
+      wx["unit"] = wx_f ? "F" : "C";
+      wx["temp"] = ::espn::wx_deg(f.t10, wx_f);
+      wx["hi"] = ::espn::wx_deg(f.today.hi10, wx_f);
+      wx["lo"] = ::espn::wx_deg(f.today.lo10, wx_f);
       wx["code"] = f.code;
       wx["cond"] = ::espn::wx_words(f.code, true);
       wx["night"] = f.night;
@@ -4994,9 +5225,34 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       for (const auto &n : f.next) {
         JsonObject d = days.add<JsonObject>();
         d["d"] = ::espn::weekday_text(n.wday);
-        d["hi"] = n.hi;
-        d["lo"] = n.lo;
+        d["hi"] = ::espn::wx_deg(n.hi10, wx_f);
+        d["lo"] = ::espn::wx_deg(n.lo10, wx_f);
         d["code"] = n.code;
+      }
+    }
+  }
+  // The next game's forecast on the board (weather.h), before the start:
+  // src "espn" for the event's own, or "open-meteo" for the panel's at the
+  // venue's place with read, the last read's HTTP status (0 no answer, -1
+  // none yet). temp and cond once there is one, in unit.
+  {
+    const GameSnapshot &g = this->game_;
+    const bool espn_has = g.weather_f != ::espn::kNoWeatherF;
+    const KickSlot *slot = g.valid ? this->kick_slot_(g) : nullptr;
+    if (g.valid && g.state == GameState::PRE && (espn_has || slot != nullptr)) {
+      JsonObject k = doc["kick"].to<JsonObject>();
+      k["src"] = espn_has ? "espn" : "open-meteo";
+      k["unit"] = wx_f ? "F" : "C";
+      if (espn_has) {
+        k["temp"] = ::espn::wx_deg(g.weather_f * 10, wx_f);
+        k["cond"] = ::espn::espn_wx_words(g.weather);
+      } else {
+        k["place"] = g.venue_place;
+        k["read"] = this->kick_status_;
+        if (slot->hour.valid && millis() - slot->read_ms < ::espn::kWxKickStaleMs) {
+          k["temp"] = ::espn::wx_deg(slot->hour.t10, wx_f);
+          k["cond"] = ::espn::wx_words(slot->hour.code, true);
+        }
       }
     }
   }
@@ -6597,6 +6853,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
       case ::espn::SetKind::WXON:
         wx_on = op.on ? 1 : 0;
+        break;
+      case ::espn::SetKind::WXUNIT:
+        this->set_wx_unit((uint8_t) op.value);
         break;
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;

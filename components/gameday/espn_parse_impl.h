@@ -94,6 +94,13 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   comp["venue"]["indoor"] = true;
 }
 
+// The venue's city, for a forecast of the panel's own (weather.h). Only in
+// the sports played outside: an arena's would only cost memory.
+inline void fill_venue_place_filter(JsonObject ev) {
+  for (const char *k : {"city", "state", "country"})
+    ev["competitions"][0]["venue"]["address"][k] = true;
+}
+
 inline void fill_scoreboard_filter(JsonDocument &f) { fill_event_filter(f["events"].add<JsonObject>(), false); }
 
 inline void fill_baseball_filter(JsonObject ev) {
@@ -236,6 +243,19 @@ inline std::string weather_text(JsonObjectConst w) {
   return out + " " + text;
 }
 
+// The venue as the weather lookup sends it (weather.h): "Evanston, IL", "San
+// Diego, California", "London, England", from ESPN's address (the city, then
+// the state, else the country). "" with no city.
+constexpr size_t kVenuePlaceMax = 48;
+inline std::string venue_place(const std::string &city, const std::string &state, const std::string &country) {
+  if (city.empty())
+    return "";
+  const std::string &region = state.empty() ? country : state;
+  // MLS writes "Miami, Florida" as the city, with its state in it
+  std::string out = region.empty() || city.find(',') != std::string::npos ? city : city + ", " + region;
+  return message_clean(utf8_only(out), kVenuePlaceMax, false);
+}
+
 inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSnapshot &out) {
   GameSnapshot s;
   s.event_id = str_or_empty(ev["id"]);
@@ -345,8 +365,27 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     if ((ev["season"]["type"] | 0) == 2 && week >= 1 && week <= 30)
       s.week = (uint8_t) week;
     // A dome's forecast is the city's, not the game's.
-    if (!(comp["venue"]["indoor"] | false))
+    JsonVariantConst indoor = comp["venue"]["indoor"];
+    s.venue_indoor = indoor.is<bool>() ? (indoor.as<bool>() ? 1 : 0) : -1;
+    if (s.venue_indoor != 1) {
       s.weather = weather_text(ev["weather"]);
+      if (!s.weather.empty()) {
+        // weather_text read a temperature that fits
+        float f = ev["weather"]["temperature"].as<float>();
+        s.weather_f = (int16_t) (f < 0 ? f - 0.5f : f + 0.5f);
+        // The icon number rides in whichever field has no letters
+        for (const char *k : {"conditionId", "displayValue"}) {
+          const char *v = ev["weather"][k].as<const char *>();
+          int n = v != nullptr && *v && !has_letter(v) ? atoi(v) : 0;
+          if (n > 0 && n < 100) {
+            s.weather_accu = (uint8_t) n;
+            break;
+          }
+        }
+      }
+      JsonObjectConst a = comp["venue"]["address"];
+      s.venue_place = venue_place(str_or_empty(a["city"]), str_or_empty(a["state"]), str_or_empty(a["country"]));
+    }
   }
   s.valid = true;
   out = s;
@@ -799,6 +838,8 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
     detail::fill_basketball_filter(filter.as<JsonObject>());
   if (sport == Sport::HOCKEY)
     detail::fill_hockey_filter(filter.as<JsonObject>());
+  if (sport == Sport::FOOTBALL || sport == Sport::BASEBALL || sport == Sport::SOCCER)
+    detail::fill_venue_place_filter(filter.as<JsonObject>());
   JsonDocument doc(detail::json_allocator());
   DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
                                               DeserializationOption::NestingLimit(40));

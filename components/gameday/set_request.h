@@ -35,7 +35,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "news",   "town",     "wxon",     "cards",   "wake",    "wakelead",
+                                    "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
@@ -316,6 +316,7 @@ enum class SetKind : uint8_t {
   NEWS,         // on, the news card between games (news.h)
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
+  WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
 };
 
@@ -538,6 +539,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "wxon")
     return on(SetKind::WXON);
+  if (k == "wxunit") {
+    // 0 auto (the town's country, else the time zone), 1 F, 2 C
+    op.kind = SetKind::WXUNIT;
+    op.value = v == "0" ? kWxUnitAuto : v == "1" ? kWxUnitF : v == "2" ? kWxUnitC : -1;
+    return op.value >= 0;
+  }
   if (k == "night")
     return on(SetKind::NIGHT);
   if (k == "nightscreen")

@@ -56,6 +56,7 @@
   "cddate": "2026-12-25",
   "town": "75019",
   "wxon": true,
+  "wxunit": 0,
   "gameleaders": true,
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",

@@ -157,6 +157,11 @@ struct UpdateFields {
   std::string wx_d1, wx_d2;            // "Thu"
   std::string wx_d1_hilo, wx_d2_hilo;  // "80/66"
   uint8_t wx_d1_icon{0}, wx_d2_icon{0};
+  // The kickoff forecast on the next game's board (weather.h): "54°" and
+  // "F", and its icon, with kick_temp "" when the board shows none (an
+  // indoor game, no forecast yet, or the game under way).
+  std::string kick_temp, kick_unit;
+  uint8_t kick_icon{::espn::kWxIconNone};
 };
 
 enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
@@ -380,6 +385,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The owner's town. A new one is looked up with Open-Meteo on the fetch
   // task and turns the card on; "" clears the town and turns it off.
   void set_town(const std::string &town);
+  // The weather's degrees: ::espn::kWxUnitAuto (the town's country, else the
+  // time zone), kWxUnitF or kWxUnitC. The card and the kickoff forecast.
+  void set_wx_unit(uint8_t unit);
   // What the panel has downloaded from Open-Meteo since boot, and the reads.
   uint64_t wx_bytes() const { return this->wx_bytes_.load(); }
   uint32_t wx_requests() const { return this->wx_requests_.load(); }
@@ -761,12 +769,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The weather card's settings (weather.h), in their own blob: the town as
   // typed, the place the geocoder found and its coordinates, the switch. The
   // forecast itself is read again at boot. Fixed size, like the night blob.
+  // unit and country took the blob's spare bytes, zero in a blob saved
+  // before them: auto, and no country (the time zone decides).
   struct PrefsWx {
     char town[::espn::kTownMax + 1];
     char place[::espn::kPlaceMax + 1];
     float lat, lon;
     uint8_t on;
-    uint8_t spare[3];
+    uint8_t unit;        // ::espn::kWxUnit*
+    char country[2];     // the place's, "US", from the lookup; zeros for none
   } __attribute__((packed));
   ESPPreferenceObject wx_pref_;
   PrefsWx wx_{};
@@ -787,6 +798,47 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_wx_job_();
   void apply_wx_job_();
   void wx_fields_(UpdateFields &f);
+  bool wx_fahrenheit_() const;
+  std::string wx_country_() const;
+  // The kickoff forecast (weather.h): the board's next game's, when ESPN's
+  // event has none, from Open-Meteo for the hour of the kickoff at the
+  // venue's city. The last few games' forecasts are kept, each for its
+  // event, kickoff and venue, so Favorite teams' cards don't each read again
+  // as they turn, and a game moved to another hour or place reads again. The
+  // venues looked up lately are kept so the next read needs no lookup. One
+  // backoff for all of them.
+  struct KickSlot {
+    std::string event;  // "" for an empty slot
+    int64_t kickoff{0};
+    std::string place;
+    ::espn::WxHour hour;
+    uint32_t read_ms{0};  // millis() of its last good read
+  };
+  KickSlot kick_slots_[::espn::kWxKickCache];
+  uint8_t kick_slot_next_{0};
+  const KickSlot *kick_slot_(const GameSnapshot &g) const;
+  uint32_t kick_fail_ms_{0};   // millis() of the last failure, 0 = none since
+  uint32_t kick_backoff_ms_{0};
+  ::espn::Backoff kick_fail_;
+  int kick_status_{-1};        // the last read's HTTP status, 0 no answer, -1 none yet
+  struct KickVenue {
+    std::string place;  // as ESPN wrote it, "Evanston, IL"; "" for an empty slot
+    bool found{false};  // false: Open-Meteo knows no such place
+    float lat{0}, lon{0};
+  };
+  KickVenue kick_venues_[::espn::kWxVenueCache];
+  uint8_t kick_venue_next_{0};
+  const KickVenue *kick_venue_(const std::string &place) const;
+  uint8_t kick_due_();  // 3 looks the venue up, 4 reads the hour, 0 nothing due
+  void start_kick_job_(uint8_t kind);
+  void apply_kick_job_();
+  // The board's forecast for the next game: f's kick_ fields and the
+  // ticker's words in o.
+  void kick_fields_(UpdateFields &f, ::espn::TickerOptions &o) const;
+  // The ms until the next ESPN read is due, as far as the panel can tell: 0
+  // when one is due now or could come at any moment (a live favorite, a
+  // refresh asked for). A weather read starts only with kWxEspnGapMs of it.
+  uint32_t espn_quiet_ms_() const;
   std::atomic<uint64_t> wx_bytes_{0};
   std::atomic<uint32_t> wx_requests_{0};
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
@@ -956,13 +1008,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int news_n{-1};  // headlines read, -1 for a failed read
     uint32_t news_bytes{0};
     // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
-    // on this task so it never runs alongside an ESPN read.
+    // 3 looks the next game's venue up, 4 reads its kickoff hour, on this
+    // task so it never runs alongside an ESPN read.
     uint8_t need_wx{0};
     std::string wx_url;
     std::string wx_town;  // the town the lookup is for
     float wx_lat{0}, wx_lon{0};  // the place the forecast is for
     ::espn::WxPlace wx_place;
     ::espn::WxForecast wx_forecast;
+    std::string wx_event;  // the game a kickoff read is for, and its kickoff
+    int64_t wx_at{0};
+    ::espn::WxHour wx_hour;
     bool wx_ok{false};
     int wx_status{0};  // HTTP status, 0 for no answer
     uint32_t wx_retry_after_ms{0};

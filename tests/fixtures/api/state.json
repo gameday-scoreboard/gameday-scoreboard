@@ -138,6 +138,7 @@
   ],
   "town": "75019",
   "wxon": true,
+  "wxunit": 0,
   "wx": {
     "place": "Coppell, Texas",
     "lat": 32.9546,
@@ -147,6 +148,7 @@
     "wait_s": 0,
     "held": true,
     "read_s": 412,
+    "unit": "F",
     "temp": 71,
     "hi": 81,
     "lo": 61,
@@ -157,6 +159,14 @@
       {"d": "Thu", "hi": 80, "lo": 66, "code": 61},
       {"d": "Fri", "hi": 75, "lo": 67, "code": 2}
     ]
+  },
+  "kick": {
+    "src": "open-meteo",
+    "unit": "F",
+    "place": "Evanston, IL",
+    "read": 200,
+    "temp": 56,
+    "cond": "Cloudy"
   },
   "night": true,
   "nightstart": "23:00",

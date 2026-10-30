@@ -178,11 +178,14 @@
         <button class="btn" id="cdClear" hidden>Clear the countdown</button>
         <div id="wxBox" hidden>
           <div class="sub">Weather</div>
-          <p class="hint">Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days, in °F. Read every 30 minutes, never during your game.</p>
+          <p class="hint">Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days. Read every 30 minutes, never during your game.</p>
           <div class="ctl"><label for="town">Town or ZIP code</label><input type="text" id="town" maxlength="40" placeholder="Coppell, TX" autocomplete="off"></div>
           <div class="actions"><button class="btn" id="townGo">Look up</button></div>
           <p class="hint" id="wxPlace" hidden></p>
           <div class="ctl" id="wxOnRow"><label>Weather card</label><button class="sw" data-set="wxon" aria-label="Weather card"></button></div>
+          <div class="ctl" id="wxUnitRow" hidden><label for="wxUnit">Degrees<small>For the weather card and the forecast on your next game's board.</small></label><select id="wxUnit">
+            <option value="0">Auto</option><option value="1">Fahrenheit (°F)</option><option value="2">Celsius (°C)</option>
+          </select></div>
           <p class="hint" id="wxRead" hidden></p>
           <p class="hint">Your town goes to Open-Meteo for the forecast.</p>
         </div>
@@ -443,7 +446,7 @@
       return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    town: String, wxon: (v) => v === "1",
+    town: String, wxon: (v) => v === "1", wxunit: Number,
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -914,6 +917,9 @@
   const postTown = () => setGD({ town: town.value.trim() });
   $("#townGo").onclick = postTown;
   town.onkeydown = (e) => { if (e.key === "Enter") postTown(); };
+  // Degrees: auto follows the town's country, else the time zone.
+  const wxUnit = $("#wxUnit");
+  wxUnit.onchange = () => setGD({ wxunit: wxUnit.value });
   // The weather block: the place the lookup found and how the reads go.
   const mins = (s) => Math.max(1, Math.round(s / 60));
   const ago = (s) => (s < 60 ? "just now" : mins(s) === 1 ? "a minute ago" : `${mins(s)} minutes ago`);
@@ -921,6 +927,13 @@
     $("#wxBox").hidden = S.town === undefined;  // firmware from before the card
     if (S.town === undefined) return;
     if (document.activeElement !== town) town.value = S.town || "";
+    // Older firmware has Fahrenheit only.
+    $("#wxUnitRow").hidden = S.wxunit === undefined;
+    if (S.wxunit !== undefined && document.activeElement !== wxUnit) {
+      wxUnit.value = String(S.wxunit);
+      const shown = (S.wx && S.wx.unit) || (S.kick && S.kick.unit);
+      wxUnit.options[0].textContent = shown ? `Auto (°${shown} now)` : "Auto";
+    }
     const w = S.wx;
     const place = $("#wxPlace");
     const read = $("#wxRead");
@@ -935,7 +948,7 @@
     if (!w.place) return;
     read.hidden = false;
     if (w.read_s !== undefined) {
-      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°F, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
+      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°${w.unit || "F"}, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
       if (w.held) read.textContent += " The next read waits for the game to end.";
       else if (w.read !== 200 && w.read !== -1) read.textContent += ` The last read failed${retry}.`;
     } else if (w.held) {
