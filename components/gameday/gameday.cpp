@@ -1011,7 +1011,9 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
 }
 
 int GamedayComponent::fav_side_due_(uint32_t now, int64_t now_epoch) const {
-  if ((!this->jump_to_action() && !this->score_banner()) || !this->fav_locked_ || this->fav_shown_ < 0)
+  // With the multi-game board on, every live favorite's tile needs the poll.
+  if ((!this->jump_to_action() && !this->score_banner() && !this->tiles_want_()) || !this->fav_locked_ ||
+      this->fav_shown_ < 0)
     return -1;
   int due = -1;
   uint32_t oldest = 0;
@@ -1186,6 +1188,8 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   }
   if (this->fav_shown_ >= 0 && this->game_.valid)
     this->mark_board_ready_();
+  if (this->tiles_want_())
+    this->tiles_from_favorites_();
   this->schedule_next_(0);
 }
 
@@ -1945,6 +1949,7 @@ void GamedayComponent::reset_game_() {
 
 void GamedayComponent::restart_board_() {
   this->reset_game_();
+  this->tiles_clear_();
   this->scan_live_sides_.clear();  // until the next scan
   this->generation_++;  // a scan in flight read what the board followed before
   this->emit_({});      // clear the board while the next fetch runs
@@ -2399,6 +2404,16 @@ void GamedayComponent::start_job_() {
     // Inside the fallback live_started_ms_ times the rescan instead of the
     // rotate: the board is on the owner's own team until a game kicks off.
     bool rescan_due = ::espn::live_rescan_due(now, this->live_started_ms_, this->live_rescan_ms_, take_due);
+    // The multi-game board: a scan of its own for the tiles, once the board
+    // has its game, between that game's polls (tiles.cpp).
+    if (!this->live_fallback_ && this->schedule_.valid && this->game_.valid && this->tiles_scan_due_(now)) {
+      j.need_scan = true;
+      j.tiles = true;
+      j.want_finals = true;
+      j.schedule = this->schedule_;
+      this->start_worker_();
+      return;
+    }
     if (!this->live_fallback_ || rescan_due) {
       if (this->live_fallback_) {
         j.need_scan = true;
@@ -2689,6 +2704,14 @@ void GamedayComponent::apply_job_() {
     this->apply_recap_job_();
     return;
   }
+  if (j.need_scan && j.tiles) {
+    if (j.scan_ok || !j.live.empty())
+      this->tiles_absorb_scan_(j);
+    else
+      this->tile_scan_ms_ = now == 0 ? 1 : now;  // try again after the wait, not at once
+    this->schedule_next_(0);
+    return;
+  }
   if (j.need_scan) {
     if (!j.scan_ok && j.live.empty()) {
       this->count_miss_();
@@ -2702,6 +2725,7 @@ void GamedayComponent::apply_job_() {
     if (j.want_finals)
       this->recap_absorb_(j, (int64_t) this->time_->timestamp_now());
     this->clear_backoff_();
+    this->tiles_absorb_scan_(j);  // the multi-game board reads every scan
     // Favorites take over: when to scan for the next favorite's kickoff. The
     // pick below says again whether a favorite has the board.
     if (this->take_over_()) {
@@ -3803,6 +3827,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["leaders"] = this->ticker_leaders();
   doc["opp"] = this->opponent_splashes();
   doc["best"] = this->best_game();
+  doc["tiles"] = ::espn::tiles_name(this->tiles_setting());
+  doc["tiles_now"] = this->tile_board_.count;
   doc["bootaddr"] = this->show_boot_address();
   doc["countdown"] = this->countdown_on();
   doc["cdname"] = (const char *) this->countdown_.name;
@@ -4626,6 +4652,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         break;
       case ::espn::SetKind::BEST:
         this->set_best_game(op.on);
+        break;
+      case ::espn::SetKind::TILES:
+        this->set_tiles((uint8_t) op.value);
         break;
       case ::espn::SetKind::BOOTADDR:
         this->set_show_boot_address(op.on);

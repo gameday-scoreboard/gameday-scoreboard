@@ -645,6 +645,13 @@ gameday:
           lambda: 'return x == "logo_ready";'
         then:
           - script.execute: gd_show_logos
+          - script.execute: gd_tiles
+    # The multi-game board changed (components/gameday/tiles.cpp)
+    - if:
+        condition:
+          lambda: 'return x == "tiles";'
+        then:
+          - script.execute: gd_tiles
     # The heat or power hold changed (pages/guard.yaml)
     - if:
         condition:

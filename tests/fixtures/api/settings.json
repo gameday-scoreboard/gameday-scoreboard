@@ -28,6 +28,7 @@
   "leaders": true,
   "opp": true,
   "best": true,
+  "tiles": "auto",
   "bootaddr": true,
   "night": true,
   "nightstart": "23:00",

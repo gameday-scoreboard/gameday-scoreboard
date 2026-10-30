@@ -16,6 +16,7 @@
 #include "night.h"
 #include "startup.h"
 #include "teams.h"
+#include "tiles.h"
 #include "timezones.h"
 
 namespace espn {
@@ -28,7 +29,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
-                                    "nick",   "lists",    "list"};
+                                    "nick",   "lists",    "list",     "tiles"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -202,6 +203,7 @@ enum class SetKind : uint8_t {
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  TILES,        // value, games on the board at once: espn::Tiles (multi_board.h)
 };
 
 struct TeamRef {
@@ -423,6 +425,15 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::FAVTAKE);
   if (k == "leaders")
     return on(SetKind::LEADERS);
+  if (k == "tiles") {
+    // 1, 2, 4 or auto (multi_board.h). Anything else is refused.
+    op.kind = SetKind::TILES;
+    uint8_t t = 0;
+    if (!parse_tiles(v, t))
+      return false;
+    op.value = t;
+    return true;
+  }
   return false;
 }
 

@@ -10,7 +10,7 @@
   "base": {
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
-    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "bootaddr": true,
+    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "opp": true, "best": true, "tiles": "1", "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16
   },
@@ -179,6 +179,10 @@
     {"name": "lists empty clears them", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0]}], "list": 1}, "set": [["lists", ""]], "expect": {"lists": [], "list": 0}},
     {"name": "reordered favorites keep their playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 2]}]}, "set": [["favs", "nhl:25,mlb:15,nfl:6"]], "expect": {"lists": [{"n": "A", "f": [0, 2]}]}},
     {"name": "a favorite taken out leaves its playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 1]}]}, "set": [["favs", "nba:6,nhl:25"]], "expect": {"lists": [{"n": "A", "f": [0]}]}},
-    {"name": "a fav slot replaced leaves its playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 1]}]}, "set": [["fav1", "nfl:21"]], "expect": {"lists": [{"n": "A", "f": [1]}]}}
+    {"name": "a fav slot replaced leaves its playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 1]}]}, "set": [["fav1", "nfl:21"]], "expect": {"lists": [{"n": "A", "f": [1]}]}},
+    {"name": "tiles 2 shows two games at once", "set": [["tiles", "2"]], "expect": {"tiles": "2"}},
+    {"name": "tiles auto follows the live games", "set": [["tiles", "auto"]], "expect": {"tiles": "auto"}},
+    {"name": "tiles 3 is refused", "set": [["tiles", "3"]], "expect": {"tiles": "1"}},
+    {"name": "tiles back to one game", "start": {"tiles": "4"}, "set": [["tiles", "1"]], "expect": {"tiles": "1"}}
   ]
 }

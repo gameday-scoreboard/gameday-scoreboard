@@ -55,6 +55,9 @@ class LogoCache {
   // The two URLs about to be shown. They and the two before them are never
   // dropped, so nothing LVGL may still point at is freed.
   void pin(const std::string &team, const std::string &opponent);
+  // The multi-game board's logos (up to eight), pinned the same way; an
+  // empty list takes them off.
+  void pin_tiles(const std::vector<std::string> &urls);
   // Decodes finished downloads, retries failed logos that are on screen and
   // starts the logo task again if it could not start.
   // True when at least one logo became ready.
@@ -104,6 +107,7 @@ class LogoCache {
   SemaphoreHandle_t lock_{nullptr};
   std::vector<std::unique_ptr<Entry>> entries_;
   std::string pinned_[4];  // current pair, then the pair before
+  std::vector<std::string> tile_pins_;  // the tiles' logos, while tiles are up
   uint32_t retry_check_ms_{0};
   StaticTask task_;
   uint16_t start_fails_{0};  // failed task starts in a row

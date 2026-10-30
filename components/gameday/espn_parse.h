@@ -177,6 +177,11 @@ struct LiveGame {
   uint8_t period{0};
   int32_t clock_s{-1};  // ESPN's status clock: left in the period, or soccer's elapsed
   uint8_t away_rank{99}, home_rank{99};  // AP rank, 99 when unranked
+  // For the multi-game board's tiles (multi_board.h): ESPN's short status
+  // ("4:12 - 3rd", "Halftime", "Top 5th") and the side with the ball,
+  // 0 none, 1 away, 2 home.
+  std::string detail;
+  uint8_t possession{0};
 };
 
 // A finished game from a day's scoreboard, for the finals rotation (recap.h).

@@ -15,6 +15,8 @@ esphome:
     - priority: -100.0
       then:
         - lambda: |-
+            // The multi-game board counts tiles by the display's width (tiles.cpp).
+            id(gameday_ctl).set_display_width(lv_disp_get_hor_res(lv_disp_get_default()));
             id(shared_scroll_speed).add_on_state_callback([](float sp) {
               const char *cur = lv_label_get_text(id(tt_game_status_lbl));
               size_t len = cur ? strlen(cur) : 0;
@@ -697,6 +699,201 @@ script:
           if (id(gd_clock_date))
             put(id(gd_clock_sub_lbl), ::espn::clock_date_text(t));
 
+  # The multi-game board (components/gameday/tiles.cpp, multi_board.h): the
+  # component's tiles() laid out for this display and filled in. Two games
+  # are 64x64 tiles (logos over scores, like the single-panel board, with a
+  # bar in each team's color); four on one panel are 64x32 tiles with an
+  # abbreviation badge per side. A tile whose side just scored flashes in
+  # that team's color (gd_tiles_unflash puts it back). Run by the tiles
+  # action and again when a logo arrives.
+  - id: gd_tiles
+    then:
+      - lambda: |-
+          const auto &b = id(gameday_ctl).tiles();
+          if (b.count <= 1) {
+            lv_obj_add_flag(id(tt_tiles), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          ::espn::TileGrid grid = ::espn::tile_grid(b.count, W);
+          const bool tall = grid.tile_h >= 64;
+          lv_obj_set_size(id(tt_tiles), W, 64);
+          struct Objs {
+            lv_obj_t *tile, *al, *hl, *ab, *abl, *hb, *hbl, *ac, *hc, *as, *hs, *st, *ap, *hp;
+          };
+          Objs o[4] = {
+              {id(gd_tile_0), id(gd_tile_0_al), id(gd_tile_0_hl), id(gd_tile_0_ab), id(gd_tile_0_abl), id(gd_tile_0_hb),
+               id(gd_tile_0_hbl), id(gd_tile_0_ac), id(gd_tile_0_hc), id(gd_tile_0_as), id(gd_tile_0_hs), id(gd_tile_0_st),
+               id(gd_tile_0_ap), id(gd_tile_0_hp)},
+              {id(gd_tile_1), id(gd_tile_1_al), id(gd_tile_1_hl), id(gd_tile_1_ab), id(gd_tile_1_abl), id(gd_tile_1_hb),
+               id(gd_tile_1_hbl), id(gd_tile_1_ac), id(gd_tile_1_hc), id(gd_tile_1_as), id(gd_tile_1_hs), id(gd_tile_1_st),
+               id(gd_tile_1_ap), id(gd_tile_1_hp)},
+              {id(gd_tile_2), id(gd_tile_2_al), id(gd_tile_2_hl), id(gd_tile_2_ab), id(gd_tile_2_abl), id(gd_tile_2_hb),
+               id(gd_tile_2_hbl), id(gd_tile_2_ac), id(gd_tile_2_hc), id(gd_tile_2_as), id(gd_tile_2_hs), id(gd_tile_2_st),
+               id(gd_tile_2_ap), id(gd_tile_2_hp)},
+              {id(gd_tile_3), id(gd_tile_3_al), id(gd_tile_3_hl), id(gd_tile_3_ab), id(gd_tile_3_abl), id(gd_tile_3_hb),
+               id(gd_tile_3_hbl), id(gd_tile_3_ac), id(gd_tile_3_hc), id(gd_tile_3_as), id(gd_tile_3_hs), id(gd_tile_3_st),
+               id(gd_tile_3_ap), id(gd_tile_3_hp)},
+          };
+          auto show = [](lv_obj_t *obj, bool on) {
+            if (on)
+              lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+            else
+              lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+          };
+          auto put = [](lv_obj_t *lbl, const std::string &text) {
+            const char *cur = lv_label_get_text(lbl);
+            if (cur == nullptr || text != cur)
+              lv_label_set_text(lbl, text.c_str());
+          };
+          // Dark team colors vanish on the panel: lift them to full brightness.
+          auto bright = [](uint32_t c) -> uint32_t {
+            uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, bl = c & 0xFF;
+            uint32_t m = std::max(r, std::max(g, bl));
+            if (m == 0)
+              return 0xFFFFFF;
+            if (m < 0xC0) {
+              r = r * 0xC0 / m;
+              g = g * 0xC0 / m;
+              bl = bl * 0xC0 / m;
+            }
+            return (r << 16) | (g << 8) | bl;
+          };
+          auto &logos = id(gameday_ctl).logos();
+          const lv_font_t *f8 = id(spleen_8)->get_lv_font();
+          const lv_font_t *f12 = id(spleen_12)->get_lv_font();
+          const lv_font_t *f16 = id(spleen_16)->get_lv_font();
+          bool flashed = false;
+          for (int i = 0; i < 4; i++) {
+            Objs &w = o[i];
+            if (i >= b.count) {
+              show(w.tile, false);
+              continue;
+            }
+            const int col = i % grid.cols, row = i / grid.cols;
+            lv_obj_set_pos(w.tile, col * grid.tile_w, row * grid.tile_h);
+            lv_obj_set_size(w.tile, grid.tile_w, grid.tile_h);
+            show(w.tile, true);
+            const auto &t = b.tiles[i];
+            lv_obj_t *all[] = {w.al, w.hl, w.ab, w.hb, w.ac, w.hc, w.as, w.hs, w.st, w.ap, w.hp};
+            if (!t.used) {
+              for (lv_obj_t *x : all)
+                show(x, false);
+              lv_obj_set_style_bg_color(w.tile, lv_color_hex(0x000000), 0);
+              continue;
+            }
+            // A badge in the team's color, with the abbreviation on it (badge.h).
+            auto badge = [&](lv_obj_t *box, lv_obj_t *lbl, const std::string &abbr, uint32_t color, int x, int y, int bw,
+                             int bh, int radius, const lv_font_t *font) {
+              ::espn::BadgeStyle st = ::espn::badge_style(color, color);
+              lv_obj_set_pos(box, x, y);
+              lv_obj_set_size(box, bw, bh);
+              lv_obj_set_style_radius(box, radius, 0);
+              lv_obj_set_style_bg_color(box, lv_color_hex(st.fill), 0);
+              lv_obj_set_style_border_width(box, st.has_ring ? 1 : 0, 0);
+              lv_obj_set_style_border_color(box, lv_color_hex(st.ring), 0);
+              lv_obj_set_style_text_font(lbl, font, 0);
+              lv_obj_set_style_text_color(lbl, lv_color_hex(st.dark_text ? 0x000000 : 0xFFFFFF), 0);
+              put(lbl, abbr);
+              show(box, true);
+            };
+            if (tall) {
+              const int cx = grid.tile_w / 2;
+              // Logos, or badges while a logo is missing.
+              auto slot = [&](lv_obj_t *img, lv_obj_t *box, lv_obj_t *lbl, const std::string &url,
+                              const std::string &abbr, uint32_t color, int x) {
+                image::Image *im = url.empty() ? nullptr : logos.get(url);
+                if (im != nullptr) {
+                  lv_obj_set_pos(img, x, 2);
+                  lv_image_set_src(img, im);
+                  show(img, true);
+                  show(box, false);
+                } else {
+                  show(img, false);
+                  badge(box, lbl, abbr, color, x, 2, 32, 32, 8, f12);
+                }
+              };
+              slot(w.al, w.ab, w.abl, t.away_logo, t.away_abbr, t.away_color, cx - 32);
+              slot(w.hl, w.hb, w.hbl, t.home_logo, t.home_abbr, t.home_color, cx);
+              // A bar in each team's color under its logo.
+              lv_obj_set_pos(w.ac, cx - 32, 35);
+              lv_obj_set_size(w.ac, 32, 2);
+              lv_obj_set_style_bg_color(w.ac, lv_color_hex(bright(t.away_color)), 0);
+              lv_obj_set_pos(w.hc, cx, 35);
+              lv_obj_set_size(w.hc, 32, 2);
+              lv_obj_set_style_bg_color(w.hc, lv_color_hex(bright(t.home_color)), 0);
+              show(w.ac, true);
+              show(w.hc, true);
+              // Scores, big, then the status line.
+              for (lv_obj_t *l : {w.as, w.hs}) {
+                lv_obj_set_style_text_font(l, f16, 0);
+                lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+                lv_obj_set_width(l, 32);
+              }
+              lv_obj_set_pos(w.as, cx - 32, 38);
+              lv_obj_set_pos(w.hs, cx, 38);
+              lv_obj_set_style_text_font(w.st, f8, 0);
+              lv_obj_set_pos(w.st, 0, 56);
+              lv_obj_set_width(w.st, grid.tile_w);
+              // Possession: a gold dot at the outer edge of the score row.
+              lv_obj_set_size(w.ap, 3, 3);
+              lv_obj_set_size(w.hp, 3, 3);
+              lv_obj_set_pos(w.ap, cx - 31, 45);
+              lv_obj_set_pos(w.hp, cx + 28, 45);
+            } else {
+              // 64x32: a pill badge per side with the score beside it, the
+              // status under both. No logos: 16 px of ESPN logo is mush.
+              show(w.al, false);
+              show(w.hl, false);
+              show(w.ac, false);
+              show(w.hc, false);
+              badge(w.ab, w.abl, t.away_abbr, t.away_color, 1, 1, 26, 10, 3, f8);
+              badge(w.hb, w.hbl, t.home_abbr, t.home_color, 1, 12, 26, 10, 3, f8);
+              for (lv_obj_t *l : {w.as, w.hs}) {
+                lv_obj_set_style_text_font(l, f12, 0);
+                lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_RIGHT, 0);
+                lv_obj_set_width(l, 25);
+              }
+              lv_obj_set_pos(w.as, 29, 0);
+              lv_obj_set_pos(w.hs, 29, 11);
+              lv_obj_set_style_text_font(w.st, f8, 0);
+              lv_obj_set_pos(w.st, 0, 23);
+              lv_obj_set_width(w.st, grid.tile_w);
+              lv_obj_set_size(w.ap, 3, 3);
+              lv_obj_set_size(w.hp, 3, 3);
+              lv_obj_set_pos(w.ap, 57, 4);
+              lv_obj_set_pos(w.hp, 57, 15);
+            }
+            // A game to come has no score yet: show the matchup's dash instead.
+            put(w.as, t.live || t.status == "F" || t.status.compare(0, 2, "F/") == 0 ? std::to_string(t.away_score) : "-");
+            put(w.hs, t.live || t.status == "F" || t.status.compare(0, 2, "F/") == 0 ? std::to_string(t.home_score) : "-");
+            show(w.as, true);
+            show(w.hs, true);
+            put(w.st, t.status);
+            lv_obj_set_style_text_color(w.st, lv_color_hex(t.live ? 0xE0E0E0 : 0x909090), 0);
+            lv_obj_set_style_text_align(w.st, LV_TEXT_ALIGN_CENTER, 0);
+            show(w.st, true);
+            show(w.ap, t.possession == 1);
+            show(w.hp, t.possession == 2);
+            if (t.flash != 0) {
+              lv_obj_set_style_bg_color(w.tile, lv_color_hex(bright(t.flash == 1 ? t.away_color : t.home_color)), 0);
+              flashed = true;
+            } else {
+              lv_obj_set_style_bg_color(w.tile, lv_color_hex(0x000000), 0);
+            }
+          }
+          lv_obj_clear_flag(id(tt_tiles), LV_OBJ_FLAG_HIDDEN);
+          if (flashed)
+            id(gd_tiles_unflash).execute();
+
+  - id: gd_tiles_unflash
+    mode: restart
+    then:
+      - delay: 1200ms
+      - lambda: |-
+          for (lv_obj_t *tile : {id(gd_tile_0), id(gd_tile_1), id(gd_tile_2), id(gd_tile_3)})
+            lv_obj_set_style_bg_color(tile, lv_color_hex(0x000000), 0);
+
 interval:
   - interval: 1s
     then:
@@ -1106,6 +1303,650 @@ lvgl:
                   text: ""
                   styles: ["tt_st_status_text"]
 
+        # Container for "no game" display
+        - obj:
+            id: tt_no_game_container
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            widgets:
+              - label:
+                  id: tt_no_game_msg_lbl
+                  x: 0
+                  y: 26
+                  width: 64
+                  text_align: CENTER
+                  long_mode: WRAP
+                  text: "No upcoming game"
+                  styles: ["tt_st_team_text"]
+              # The off-season clock, shown by gd_update in the message's place
+              - label:
+                  id: gd_clock_time_lbl
+                  x: 0
+                  y: 14
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_score_text"]
+              # The countdown card's digits, shown by gd_update in the same place
+              - label:
+                  id: gd_countdown_lbl
+                  x: 0
+                  y: 3
+                  width: 128
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text_font: spleen_32
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_score_text"]
+              - label:
+                  id: gd_clock_sub_lbl
+                  x: 0
+                  y: 34
+                  width: 64
+                  text_align: CENTER
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_status_text"]
+
+        # The multi-game board (components/gameday/tiles.cpp): up to four games
+        # at once over the one-game board, laid out and filled by gd_tiles.
+        # Each tile has two logos (or abbreviation badges while a logo is
+        # missing, and always on the small tiles), a color bar per side, the
+        # scores, a status line and a possession dot per side.
+        - obj:
+            id: tt_tiles
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            bg_opa: COVER
+            bg_color: 0x000000
+            hidden: true
+            widgets:
+              - obj:
+                  id: gd_tile_0
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 64
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - image:
+                        id: gd_tile_0_al
+                        src: gd_logo_blank
+                        x: 0
+                        y: 2
+                    - image:
+                        id: gd_tile_0_hl
+                        src: gd_logo_blank
+                        x: 32
+                        y: 2
+                    - obj:
+                        id: gd_tile_0_ab
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_0_abl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_0_hb
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_0_hbl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_0_ac
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - obj:
+                        id: gd_tile_0_hc
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - label:
+                        id: gd_tile_0_as
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_0_hs
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_0_st
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xC0C0C0
+                        text: ""
+                    - obj:
+                        id: gd_tile_0_ap
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+                    - obj:
+                        id: gd_tile_0_hp
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+              - obj:
+                  id: gd_tile_1
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 64
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - image:
+                        id: gd_tile_1_al
+                        src: gd_logo_blank
+                        x: 0
+                        y: 2
+                    - image:
+                        id: gd_tile_1_hl
+                        src: gd_logo_blank
+                        x: 32
+                        y: 2
+                    - obj:
+                        id: gd_tile_1_ab
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_1_abl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_1_hb
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_1_hbl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_1_ac
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - obj:
+                        id: gd_tile_1_hc
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - label:
+                        id: gd_tile_1_as
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_1_hs
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_1_st
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xC0C0C0
+                        text: ""
+                    - obj:
+                        id: gd_tile_1_ap
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+                    - obj:
+                        id: gd_tile_1_hp
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+              - obj:
+                  id: gd_tile_2
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 64
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - image:
+                        id: gd_tile_2_al
+                        src: gd_logo_blank
+                        x: 0
+                        y: 2
+                    - image:
+                        id: gd_tile_2_hl
+                        src: gd_logo_blank
+                        x: 32
+                        y: 2
+                    - obj:
+                        id: gd_tile_2_ab
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_2_abl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_2_hb
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_2_hbl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_2_ac
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - obj:
+                        id: gd_tile_2_hc
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - label:
+                        id: gd_tile_2_as
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_2_hs
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_2_st
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xC0C0C0
+                        text: ""
+                    - obj:
+                        id: gd_tile_2_ap
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+                    - obj:
+                        id: gd_tile_2_hp
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+              - obj:
+                  id: gd_tile_3
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 64
+                  height: 64
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - image:
+                        id: gd_tile_3_al
+                        src: gd_logo_blank
+                        x: 0
+                        y: 2
+                    - image:
+                        id: gd_tile_3_hl
+                        src: gd_logo_blank
+                        x: 32
+                        y: 2
+                    - obj:
+                        id: gd_tile_3_ab
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_3_abl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_3_hb
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 32
+                        height: 32
+                        radius: 8
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                        widgets:
+                          - label:
+                              id: gd_tile_3_hbl
+                              align: CENTER
+                              text_font: spleen_12
+                              text_color: 0xFFFFFF
+                              text: ""
+                    - obj:
+                        id: gd_tile_3_ac
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - obj:
+                        id: gd_tile_3_hc
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0x808080
+                        hidden: true
+                    - label:
+                        id: gd_tile_3_as
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_3_hs
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xFFFFFF
+                        text: ""
+                    - label:
+                        id: gd_tile_3_st
+                        x: 0
+                        y: 0
+                        width: 32
+                        text_align: CENTER
+                        long_mode: CLIP
+                        text_color: 0xC0C0C0
+                        text: ""
+                    - obj:
+                        id: gd_tile_3_ap
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+                    - obj:
+                        id: gd_tile_3_hp
+                        scrollbar_mode: "OFF"
+                        x: 0
+                        y: 0
+                        width: 2
+                        height: 2
+                        radius: 0
+                        pad_all: 0
+                        border_width: 0
+                        bg_opa: COVER
+                        bg_color: 0xFFD000
+                        hidden: true
+
         # Another favorite's score, shown by gd_fav_banner. Under the splash,
         # so this game's own score still takes the whole board.
         - obj:
@@ -1160,58 +2001,6 @@ lvgl:
                   long_mode: WRAP
                   text: ""
                   styles: ["tt_st_score_text"]
-
-        # Container for "no game" display
-        - obj:
-            id: tt_no_game_container
-            scrollbar_mode: "OFF"
-            x: 0
-            y: 0
-            width: 64
-            height: 64
-            hidden: true
-            widgets:
-              - label:
-                  id: tt_no_game_msg_lbl
-                  x: 0
-                  y: 26
-                  width: 64
-                  text_align: CENTER
-                  long_mode: WRAP
-                  text: "No upcoming game"
-                  styles: ["tt_st_team_text"]
-              # The off-season clock, shown by gd_update in the message's place
-              - label:
-                  id: gd_clock_time_lbl
-                  x: 0
-                  y: 14
-                  width: 64
-                  text_align: CENTER
-                  long_mode: CLIP
-                  hidden: true
-                  text: ""
-                  styles: ["tt_st_score_text"]
-              # The countdown card's digits, shown by gd_update in the same place
-              - label:
-                  id: gd_countdown_lbl
-                  x: 0
-                  y: 3
-                  width: 128
-                  text_align: CENTER
-                  long_mode: CLIP
-                  text_font: spleen_32
-                  hidden: true
-                  text: ""
-                  styles: ["tt_st_score_text"]
-              - label:
-                  id: gd_clock_sub_lbl
-                  x: 0
-                  y: 34
-                  width: 64
-                  text_align: CENTER
-                  hidden: true
-                  text: ""
-                  styles: ["tt_st_status_text"]
 
         # The owner's message card, over the board between games (gd_msg_card)
         - obj:

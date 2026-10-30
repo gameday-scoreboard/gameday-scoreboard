@@ -147,6 +147,9 @@ inline void fill_scan_filter(JsonDocument &f, bool finals = false, bool pending 
   ev["status"]["clock"] = true;
   c["score"] = true;
   c["curatedRank"]["current"] = true;
+  // The multi-game board's tiles: ESPN's words for the status and the ball.
+  ev["status"]["type"]["shortDetail"] = true;
+  comp["situation"]["possession"] = true;
   if (!finals && !pending)
     return;
   c["records"].add<JsonObject>()["summary"] = true;
@@ -658,6 +661,8 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
     g.period = (uint8_t) (period < 0 ? 0 : period > 255 ? 255 : period);
     float clock = ev["status"]["clock"] | -1.0f;
     g.clock_s = clock >= 0 && clock <= 100000 ? (int32_t) clock : -1;  // NaN fails both
+    g.detail = detail::str_or_empty(ev["status"]["type"]["shortDetail"]);
+    std::string ball = detail::str_or_empty(ev["competitions"][0]["situation"]["possession"]);
     for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
       bool home = detail::str_or_empty(c["homeAway"]) == "home";
       std::string abbr = detail::str_or_empty(c["team"]["abbreviation"]);
@@ -666,6 +671,8 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       int16_t pts = (int16_t) (score < 0 ? 0 : score > 999 ? 999 : score);
       int r = c["curatedRank"]["current"] | 99;
       uint8_t rank = (uint8_t) (r >= 1 && r <= 25 ? r : 99);
+      if (!ball.empty() && ball == detail::str_or_empty(c["id"]))
+        g.possession = home ? 2 : 1;
       if (home) {
         g.home_abbr = abbr;
         g.home_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());

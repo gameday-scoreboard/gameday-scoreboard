@@ -66,6 +66,8 @@
   "leaders": true,
   "opp": true,
   "best": true,
+  "tiles": "auto",
+  "tiles_now": 2,
   "bootaddr": true,
   "countdown": true,
   "cdname": "Christmas",

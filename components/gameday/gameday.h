@@ -34,6 +34,7 @@
 #include "health.h"
 #include "line_score.h"
 #include "message.h"
+#include "multi_board.h"
 #include "night.h"
 #include "playlists.h"
 #include "offseason.h"
@@ -371,6 +372,34 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
+  // The multi-game board (multi_board.h, tiles.cpp): the owner's Games on
+  // the board setting (espn::Tiles), and the tiles the page draws
+  // (gd_tiles in firmware/pages/gameday-live.yaml, run by the tiles action).
+  uint8_t tiles_setting() const { return this->prefs8_.spare[0]; }
+  void set_tiles(uint8_t v);
+  struct Tile {
+    bool used{false};
+    bool live{false};
+    std::string event_id;
+    std::string away_abbr, home_abbr;
+    std::string away_logo, home_logo;  // "" draws the abbreviation badge
+    uint32_t away_color{0xFFFFFF}, home_color{0xFFFFFF};
+    int away_score{0}, home_score{0};
+    std::string status;     // "Q3 4:12", "F", "7:30 PM" (multi_board.h, tile_status)
+    uint8_t possession{0};  // 0 none, 1 away, 2 home
+    uint8_t flash{0};       // a score since the last board: 1 away, 2 home
+  };
+  struct TileBoard {
+    int count{1};  // 1: the ordinary one-game board
+    Tile tiles[::espn::kTilesMax];
+  };
+  const TileBoard &tiles() const { return this->tile_board_; }
+  // The display's width in pixels, from the page at boot. A 64-wide panel
+  // never tiles; two panels get four across.
+  void set_display_width(int w) {
+    if (w > 0)
+      this->display_width_ = w;
+  }
 
   void setup() override;
   void loop() override;
@@ -621,6 +650,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // live-game modes: scan the day's games first, then follow one
     bool need_scan{false};
     bool rotate{false};  // the scan is the Switch every look, not a kickoff or a game that ended
+    bool tiles{false};   // a scan for the multi-game board's tiles only (tiles.cpp); the pick stays
     std::vector<League> scan_leagues;
     bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
     ::espn::LiveList live;
@@ -1073,6 +1103,21 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void handle_demo_(AsyncWebServerRequest *request);
   void apply_demo_(const std::vector<std::pair<std::string, std::string>> &kv);
 #endif
+  // The multi-game board (tiles.cpp). The candidates are every game the
+  // last scan or the favorites' cards know, in PSRAM; the slots are the
+  // event ids on the board now, so tiles keep their places between polls.
+  bool tiles_want_() const;
+  bool tiles_scan_due_(uint32_t now) const;
+  void tiles_absorb_scan_(const Job &j);
+  void tiles_from_favorites_();
+  void tiles_publish_();
+  void tiles_clear_();
+  ::espn::PsVector<::espn::TileGame> tile_cands_;
+  std::vector<std::string> tile_slots_;
+  TileBoard tile_board_;
+  int tile_live_n_{0};
+  uint32_t tile_scan_ms_{0};  // millis() of the last scan the tiles took, 0 = none
+  int display_width_{128};
   GameSnapshot game_;
   GameSnapshot prev_;
   uint32_t post_since_ms_{0};

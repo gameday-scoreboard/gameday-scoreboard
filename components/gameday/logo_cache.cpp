@@ -97,8 +97,19 @@ void LogoCache::pin(const std::string &team, const std::string &opponent) {
   this->pinned_[1] = opponent;
 }
 
+void LogoCache::pin_tiles(const std::vector<std::string> &urls) {
+  if (this->lock_ == nullptr)
+    return;
+  Locked guard(this->lock_);
+  this->tile_pins_ = urls;
+}
+
 bool LogoCache::pinned_url_(std::string_view url) const {
   for (const auto &p : this->pinned_) {
+    if (!p.empty() && p == url)
+      return true;
+  }
+  for (const auto &p : this->tile_pins_) {
     if (!p.empty() && p == url)
       return true;
   }

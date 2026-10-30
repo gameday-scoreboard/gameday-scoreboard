@@ -196,6 +196,9 @@
           <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the iPhone app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
           <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
         </div>
+        <div class="ctl" id="tilesRow"><label for="tiles">Games on the board<small>Two or four games at once as tiles, or Auto: as many live games as there are worth showing, and one big game when only one is on.</small></label><select id="tiles">
+          <option value="1">One game</option><option value="2">Two</option><option value="4">Four</option><option value="auto">Auto</option>
+        </select></div>
         <div id="panelCtls"></div>
         <div id="nightCtls" hidden>
           <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
@@ -383,6 +386,7 @@
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
     best: (v) => v === "1",
+    tiles: String,
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", cdname: String, cddate: (v) => (v === "none" ? "" : v),
     live: (v) => v.split(",").filter(Boolean),
@@ -663,6 +667,8 @@
   };
   const releaseSelect = $("#release");
   releaseSelect.onchange = () => setGD({ release: releaseSelect.value });
+  const tilesSelect = $("#tiles");
+  tilesSelect.onchange = () => setGD({ tiles: tilesSelect.value });
   const collideSelect = $("#collide");
   const favRotate = $("#favrotate");
   const showFavRotate = () => {
@@ -756,6 +762,7 @@
     if (document.activeElement !== favRotate) favRotate.value = S.rotate;
     if (document.activeElement !== lockonInput) lockonInput.value = S.lockon || 15;
     if (document.activeElement !== releaseSelect) releaseSelect.value = String(S.release || 30);
+    if (document.activeElement !== tilesSelect) tilesSelect.value = String(S.tiles || "1");
     if (document.activeElement !== collideSelect) {
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
