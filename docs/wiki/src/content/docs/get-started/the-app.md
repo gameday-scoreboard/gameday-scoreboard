@@ -40,6 +40,10 @@ On Android, when the panel shows its thermometer or plug in the corner, the Boar
 ### Teams
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
+
+:::note[Coming in the next release]
+In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
+:::
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
 - **Live games**: the leagues it follows and **Switch every**, and on iPhone **Pick the best game** and **Favorites take over**. Choosing leagues here doesn't change the panel's mode. See [Modes](/using/modes/).

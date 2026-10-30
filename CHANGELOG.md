@@ -38,6 +38,7 @@ through `update_important` in the panel's state.
 
 ### ✨ New
 
+- 🔍 Searching **On now** in the team chooser finds a team that isn't playing today, under a **Teams** heading
 - 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
 - 📅 Each playlist can have a schedule (days and hours), keep the panel on its own teams, and its own **Only today's games**
 - 🎛️ Set each WizMote button 1 to 4 yourself in the **Remote** card: a favorite, a playlist, a sport, all favorites or nothing; making a playlist no longer moves the buttons
