@@ -38,6 +38,10 @@ Tap **Add a favorite** in the Favorites card to open the team chooser. It has a 
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
+:::note[Coming in the next release]
+On **On now**, a search that matches none of today's games lists the teams it matches under a **Teams** heading instead, with their league, so a team that isn't playing today still turns up.
+:::
+
 The chooser is for favorites only.
 
 ## Settings

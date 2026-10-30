@@ -391,6 +391,44 @@ test("the picker opens on today's live games and adds a side", async ({ page, re
   await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,nfl:21" });
 });
 
+test("an On now search that matches no game finds the team instead", async ({ page, request }) => {
+  const side = (homeAway, id, abbr, name, score) => ({ homeAway, score, team: { id, abbreviation: abbr, shortDisplayName: name } });
+  await page.route("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard*", (route) =>
+    route.fulfill({
+      json: {
+        events: [{
+          id: "401772001",
+          date: "2026-10-11T20:25Z",
+          status: { type: { state: "in", shortDetail: "8:12 - 2nd" } },
+          competitions: [{ competitors: [side("home", "6", "DAL", "Cowboys", "14"), side("away", "21", "PHI", "Eagles", "10")] }],
+        }],
+      },
+    }),
+  );
+  await reset(request);
+  await page.goto("/");
+  await page.locator("#favAdd").click();
+  await expect(page.locator(".tabs button.on")).toHaveText("On now");
+  // The Stars aren't playing today: the teams that match, with their league, under a Teams heading.
+  await page.locator("#q").fill("dallas stars");
+  await expect(page.locator("#tiles .gh")).toHaveText(["Teams"]);
+  await expect(page.locator("#tiles .tile .n")).toHaveText(["Dallas Stars"]);
+  await expect(page.locator("#tiles .tile .a")).toHaveText("NHL · DAL");
+  await expect(page.locator("#tiles .none")).toHaveCount(0);
+  await page.locator("#tiles .tile", { hasText: "Dallas Stars" }).click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,nhl:9" });
+  await expect(page.locator("#tiles .tile.on .n")).toHaveText("Dallas Stars");
+  await expect(page.locator(".tabs button.on")).toHaveText("On now");
+  // A team that is playing shows its game, not a tile.
+  await page.locator("#q").fill("eagles");
+  await expect(page.locator("#tiles .gh")).toHaveText(["Live now"]);
+  await expect(page.locator("#tiles .side .n")).toHaveText(["Eagles", "Cowboys"]);
+  await expect(page.locator("#tiles .tile")).toHaveCount(0);
+  // Nothing matches at all: the old line.
+  await page.locator("#q").fill("zzzz");
+  await expect(page.locator("#tiles .none")).toHaveText("No game matches");
+});
+
 test("the On now tab asks ESPN for every college game, not the Top 25", async ({ page, request }) => {
   // Without groups= the college basketball scoreboard lists only ranked teams' games.
   const side = (homeAway, id, abbr, name) => ({ homeAway, score: "40", team: { id, abbreviation: abbr, shortDisplayName: name } });

@@ -1925,7 +1925,17 @@
     const q = $("#q").value.trim().toLowerCase();
     const shown = list.filter((g) => !q || (g.away.name + " " + g.home.name + " " + g.away.abbr + " " + g.home.abbr).toLowerCase().includes(q));
     if (!shown.length) {
-      tiles.appendChild(el("div", "none", list.length ? "No game matches" : "No games today"));
+      // The box says "Search teams", so a team that isn't playing today still
+      // turns up: the matching teams from every league, under their own heading.
+      const teams = q ? searchTeams(q) : [];
+      if (!teams.length) {
+        tiles.appendChild(el("div", "none", list.length ? "No game matches" : "No games today"));
+        return;
+      }
+      tiles.appendChild(el("div", "gh", "Teams"));
+      const grid = el("div", "tiles");
+      for (const t of teams) grid.appendChild(teamTile(t));
+      tiles.appendChild(grid);
       return;
     }
     let lastState = null;
@@ -1988,31 +1998,35 @@
     line.textContent = favKeys.length + " of " + favMax() + " favorites";
   };
   let league = "now";
+  // Name or abbreviation, in every league; q is already trimmed and lowercased.
+  const searchTeams = (q) => TEAMS.filter((t) => (t[3] + " " + t[2]).toLowerCase().includes(q));
+  // One team's tile: logo, name, league and abbreviation; a tap adds or takes it out.
+  const teamTile = (t) => {
+    const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
+    tile.dataset.key = keyOf(t);
+    tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+    const img = el("img");
+    img.loading = "lazy";
+    img.src = logoUrl(t[0], t[1], t[2]);
+    img.alt = "";
+    tile.appendChild(img);
+    tile.appendChild(el("div", "n", t[3]));
+    tile.appendChild(el("div", "a", lgInfo(t[0]).prefix + " · " + t[2]));
+    tile.onclick = () => toggleFav(t);
+    return tile;
+  };
   const renderTiles = () => {
     if (league === "now") return renderGames();
     $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
-    const list = TEAMS.filter((t) => (q ? (t[3] + " " + t[2]).toLowerCase().includes(q) : t[0] === league));
+    const list = q ? searchTeams(q) : TEAMS.filter((t) => t[0] === league);
     if (!list.length) {
       tiles.appendChild(el("div", "none", "No team matches"));
       return;
     }
-    for (const t of list) {
-      const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
-      tile.dataset.key = keyOf(t);
-      tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
-      const img = el("img");
-      img.loading = "lazy";
-      img.src = logoUrl(t[0], t[1], t[2]);
-      img.alt = "";
-      tile.appendChild(img);
-      tile.appendChild(el("div", "n", t[3]));
-      tile.appendChild(el("div", "a", lgInfo(t[0]).prefix + " · " + t[2]));
-      tile.onclick = () => toggleFav(t);
-      tiles.appendChild(tile);
-    }
+    for (const t of list) tiles.appendChild(teamTile(t));
   };
   $("#favAdd").onclick = () => openPicker();
   const openPicker = async () => {
