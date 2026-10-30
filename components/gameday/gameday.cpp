@@ -1773,8 +1773,8 @@ void GamedayComponent::set_best_game(bool on) {
 
 // The pictures' bits are "off" bits: a saved zero means on, so every panel
 // from before them comes up with all three.
-void GamedayComponent::set_viz8_(uint8_t f, bool on) {
-  uint8_t next = on ? (this->prefs8_.viz & ~f) : (this->prefs8_.viz | f);
+void GamedayComponent::set_viz8_(uint8_t f, bool set) {
+  uint8_t next = set ? (this->prefs8_.viz | f) : (this->prefs8_.viz & ~f);
   if (next == this->prefs8_.viz)
     return;
   this->prefs8_.viz = next;
