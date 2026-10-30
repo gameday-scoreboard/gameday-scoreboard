@@ -6699,25 +6699,39 @@ static void test_game_viz() {
   // The margin track: one sample per read, a redraw adds nothing, and a new
   // game starts over.
   MarginTrack t;
-  CHECK(t.read("1", 0, 50, "12:00", 1));
-  CHECK(!t.read("1", 0, 50, "12:00", 1));  // the same read drawn again
-  CHECK(t.read("1", 0, 51, "11:40", 1));   // the clock moved
-  CHECK(t.read("1", 3, 60, "11:40", 1));   // a basket
+  CHECK(t.read("1", 10, 0, "12:00", 1));
+  CHECK(!t.read("1", 10, 0, "12:00", 1));  // the same read drawn again
+  CHECK(t.read("1", 10, 0, "11:40", 1));   // the clock moved
+  CHECK(t.read("1", 10, 3, "11:40", 1));   // a basket
   CHECK_EQ((int) t.n, 3);
   CHECK_EQ((int) t.margin[2], 3);
-  CHECK_EQ((int) t.win[2], 60);
-  CHECK(t.read("2", -2, 0, "20:00", 1));
+  CHECK(t.read("2", 10, -2, "20:00", 1));
   CHECK_EQ((int) t.n, 1);
   CHECK_EQ(t.event_id, std::string("2"));
   CHECK_EQ((int) t.margin[0], -2);
-  CHECK_EQ((int) t.win[0], 0);
+  // The same game from the other side (two favorites playing each other):
+  // every sample flips with it, as the scoring log does.
+  MarginTrack side;
+  side.read("7", 10, 3, "9:00", 1);
+  side.read("7", 10, 5, "8:00", 1);
+  CHECK(side.read("7", 20, -5, "8:00", 1));
+  CHECK_EQ((int) side.n, 3);
+  CHECK_EQ((int) side.margin[0], -3);
+  CHECK_EQ((int) side.margin[1], -5);
+  CHECK_EQ((int) side.margin[2], -5);
+  CHECK_EQ(side.last_margin, -5);
+  CHECK_EQ((int) side.team_id, 20);
+  // A read with no team id (the demo's made-up teams) never flips.
+  side.read("7", 0, -7, "7:00", 1);
+  CHECK_EQ((int) side.margin[3], -7);
+  CHECK_EQ((int) side.team_id, 20);
   // Full: pairs merge and every second read makes a sample from then on.
   MarginTrack m;
   for (int i = 0; i < MarginTrack::kMax; i++)
-    m.add("g", i - 64, 50);
+    m.add("g", 1, i - 64);
   CHECK_EQ((int) m.n, (int) MarginTrack::kMax);
   CHECK_EQ((int) m.stride, 1);
-  m.add("g", 100, 50);  // the 129th read: the pairs merge and it is sample 65
+  m.add("g", 1, 100);  // the 129th read: the pairs merge and it is sample 65
   CHECK_EQ((int) m.n, 65);
   CHECK_EQ((int) m.stride, 2);
   CHECK_EQ((int) m.pending, 0);
@@ -6725,41 +6739,70 @@ static void test_game_viz() {
   CHECK_EQ((int) m.margin[63], 63);
   CHECK_EQ((int) m.margin[64], 100);
   CHECK_EQ(m.last_margin, 100);
-  m.add("g", 90, 50);  // every second read is a sample now
+  m.add("g", 1, 90);  // every second read is a sample now
   CHECK_EQ((int) m.n, 65);
   CHECK_EQ((int) m.pending, 1);
   CHECK_EQ(m.last_margin, 90);
   // Clamped to what fits the slot.
-  m.add("g", 300, 150);
+  m.add("g", 1, 300);
   CHECK_EQ((int) m.n, 66);
   CHECK_EQ((int) m.margin[65], 127);
-  CHECK_EQ((int) m.win[65], 99);
   // 4096 reads (a long game polled often) still fit.
   for (int i = 0; i < 4096; i++)
-    m.add("g", 5, 50);
+    m.add("g", 1, 5);
   CHECK(m.n <= MarginTrack::kMax);
   CHECK(m.stride >= 32);
+  // Two games' tracks: leaving a game and coming back keeps its samples; a
+  // third game takes the older slot.
+  MarginTracks tracks;
+  tracks.pick("a").read("a", 1, 4, "5:00", 1);
+  tracks.pick("a").read("a", 1, 6, "4:00", 1);
+  CHECK_EQ((int) tracks.current().n, 2);
+  tracks.pick("b").read("b", 2, -1, "19:00", 1);
+  CHECK_EQ(tracks.current().event_id, std::string("b"));
+  CHECK_EQ((int) tracks.current().n, 1);
+  tracks.pick("a").read("a", 1, 8, "3:00", 1);
+  CHECK_EQ(tracks.current().event_id, std::string("a"));
+  CHECK_EQ((int) tracks.current().n, 3);
+  CHECK_EQ((int) tracks.current().margin[0], 4);
+  tracks.pick("c").read("c", 3, 0, "20:00", 1);
+  CHECK_EQ(tracks.current().event_id, std::string("c"));
+  tracks.pick("b");
+  CHECK_EQ(tracks.current().event_id, std::string("b"));
+  CHECK_EQ((int) tracks.current().n, 0);  // b was the older slot, c took it
 
   // The sparkline's columns: stretched across the width, scaled to the peak.
   int8_t cols[128];
   MarginTrack e;
   CHECK_EQ(margin_columns(e, 128, 4, 3, cols), 0);
   MarginTrack one;
-  one.add("g", 2, 50);
+  one.add("g", 1, 2);
   CHECK_EQ(margin_columns(one, 128, 4, 3, cols), 1);
   CHECK_EQ((int) cols[0], 4);  // the only point is the peak
   CHECK_EQ((int) cols[127], 4);
+  // With a floor on the scale, a 1-0 hockey lead is a sliver.
+  MarginTrack goal;
+  goal.add("g", 1, 1);
+  CHECK_EQ(margin_columns(goal, 128, 4, 3, cols, margin_min_peak(Sport::HOCKEY)), 1);
+  CHECK_EQ((int) cols[0], 2);  // ceil(1 * 4 / 3)
+  MarginTrack basket;
+  basket.add("g", 1, 2);
+  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 1);
+  CHECK_EQ((int) cols[0], 1);  // ceil(2 * 4 / 10)
+  basket.add("g", 1, -20);
+  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 2);
+  CHECK_EQ((int) cols[127], -3);  // past the floor the peak rules again
   MarginTrack two;
-  two.add("g", 0, 50);
-  two.add("g", 8, 60);
+  two.add("g", 1, 0);
+  two.add("g", 1, 8);
   CHECK_EQ(margin_columns(two, 128, 4, 3, cols), 2);
   CHECK_EQ((int) cols[0], 0);
   CHECK_EQ((int) cols[127], 4);
   CHECK_EQ((int) cols[64], 2);  // halfway is 4 of 8, so 2 of 4 px
   MarginTrack swing;
-  swing.add("g", 10, 50);
-  swing.add("g", -10, 50);
-  swing.add("g", 10, 50);
+  swing.add("g", 1, 10);
+  swing.add("g", 1, -10);
+  swing.add("g", 1, 10);
   CHECK_EQ(margin_columns(swing, 128, 4, 3, cols), 3);
   CHECK_EQ((int) cols[0], 4);
   CHECK_EQ((int) cols[127], 4);
@@ -6770,15 +6813,15 @@ static void test_game_viz() {
   CHECK_EQ(low, -3);
   // A 1-point lead against a 20-point peak still shows a pixel.
   MarginTrack tiny;
-  tiny.add("g", 20, 50);
-  tiny.add("g", 1, 50);
+  tiny.add("g", 1, 20);
+  tiny.add("g", 1, 1);
   CHECK_EQ(margin_columns(tiny, 128, 4, 3, cols), 2);
   CHECK_EQ((int) cols[127], 1);
   // A pending read (after a merge) is the last point.
   MarginTrack pend;
-  pend.add("g", 0, 50);  // the sample
-  pend.stride = 2;       // as after a merge
-  pend.add("g", 6, 50);  // pending, not a sample yet
+  pend.add("g", 1, 0);  // the sample
+  pend.stride = 2;      // as after a merge
+  pend.add("g", 1, 6);  // pending, not a sample yet
   CHECK_EQ((int) pend.n, 1);
   CHECK_EQ((int) pend.pending, 1);
   CHECK_EQ(margin_columns(pend, 128, 4, 3, cols), 2);

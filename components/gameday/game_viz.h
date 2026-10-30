@@ -95,66 +95,98 @@ inline int win_bar_split(int pct, int width) {
   return std::max(1, std::min(width - 1, cols));
 }
 
-// The score margin over one game, one sample per read while the game is on.
-// When the 128 slots are full every pair merges into one and later reads
-// count double, so a whole game always fits in the same width.
+// The score margin over one game, one sample per read while the game is on,
+// from our side. When the 128 slots are full every pair merges into one and
+// later reads count double, so a whole game always fits in the same width.
+// The same game read from the other side (two favorites playing each other)
+// flips every sample's sign, the way the scoring log and the Home Assistant
+// tracker handle it.
 struct MarginTrack {
   static constexpr uint8_t kMax = 128;
   int8_t margin[kMax]{};  // our score minus theirs
-  uint8_t win[kMax]{};    // our win chance that read, 0 when ESPN gave none
   uint8_t n{0};
   uint16_t stride{1};     // reads per sample
   uint16_t pending{0};    // reads toward the next sample
   std::string event_id;
+  uint32_t team_id{0};    // the side the samples count for
   int last_margin{0};
-  int last_win{0};
   // The last read recorded, so a redraw of the same read adds nothing.
   std::string last_clock;
   int last_period{-1};
 
-  void reset(const std::string &event) {
+  void reset(const std::string &event, uint32_t team) {
     n = 0;
     stride = 1;
     pending = 0;
     event_id = event;
+    team_id = team;
     last_margin = 0;
-    last_win = 0;
     last_clock.clear();
     last_period = -1;
+  }
+
+  // The same game seen from the other side: every lead becomes a deficit.
+  void flip(uint32_t team) {
+    for (uint8_t i = 0; i < n; i++)
+      margin[i] = (int8_t) -margin[i];
+    last_margin = -last_margin;
+    team_id = team;
+  }
+
+  // One read of the game. A read of another game starts over; a read from
+  // the other side flips the samples first.
+  void add(const std::string &event, uint32_t team, int score_margin) {
+    if (event != event_id)
+      reset(event, team);
+    else if (team != team_id && team != 0)
+      flip(team);
+    last_margin = score_margin;
+    if (++pending < stride)
+      return;
+    pending = 0;
+    if (n == kMax) {
+      for (uint8_t i = 0; i < kMax / 2; i++)
+        margin[i] = margin[2 * i + 1];
+      n = kMax / 2;
+      stride = (uint16_t) std::min(stride * 2, 32768);
+    }
+    margin[n] = (int8_t) std::max(-127, std::min(127, score_margin));
+    n++;
   }
 
   // One emit of the board: records a read when something about the game
   // moved (the clock, the period or the score), and ignores a redraw of the
   // read already recorded. Returns true when it recorded one.
-  bool read(const std::string &event, int score_margin, int win_pct, const std::string &clock, int period) {
-    if (event == event_id && score_margin == last_margin && clock == last_clock && period == last_period && n > 0)
+  bool read(const std::string &event, uint32_t team, int score_margin, const std::string &clock, int period) {
+    if (event == event_id && (team == team_id || team == 0) && score_margin == last_margin && clock == last_clock &&
+        period == last_period && n > 0)
       return false;
-    add(event, score_margin, win_pct);
+    add(event, team, score_margin);
     last_clock = clock;
     last_period = period;
     return true;
   }
+};
 
-  // One read of the game. A read of another game starts over.
-  void add(const std::string &event, int score_margin, int win_pct) {
-    if (event != event_id)
-      reset(event);
-    last_margin = score_margin;
-    last_win = win_pct > 0 ? win_pct : 0;
-    if (++pending < stride)
-      return;
-    pending = 0;
-    if (n == kMax) {
-      for (uint8_t i = 0; i < kMax / 2; i++) {
-        margin[i] = margin[2 * i + 1];
-        win[i] = win[2 * i + 1];
-      }
-      n = kMax / 2;
-      stride = (uint16_t) std::min(stride * 2, 32768);
+// Two games' tracks, so a board that leaves a game (Live games switching,
+// Favorites alternating) and comes back keeps what it had. The game on the
+// board is `current()`; a third game takes the older slot.
+struct MarginTracks {
+  MarginTrack track[2];
+  uint8_t cur{0};
+
+  const MarginTrack &current() const { return track[cur]; }
+
+  // The track for `event`, made current: the one that already follows it,
+  // else the slot that is not the game the board just left.
+  MarginTrack &pick(const std::string &event) {
+    if (track[cur].event_id != event) {
+      uint8_t other = (uint8_t) (1 - cur);
+      if (track[other].event_id != event)
+        track[other].reset(event, 0);
+      cur = other;
     }
-    margin[n] = (int8_t) std::max(-127, std::min(127, score_margin));
-    win[n] = (uint8_t) std::max(0, std::min(99, win_pct));
-    n++;
+    return track[cur];
   }
 };
 
@@ -162,15 +194,16 @@ struct MarginTrack {
 // baseline for each of `width` columns, positive up to `up`, negative down to
 // `down`. The samples, with the latest read as the last point, are stretched
 // across the width and joined with straight lines, and the tallest lead or
-// deficit of the game sets the scale. Returns the number of points drawn (0
-// leaves out untouched and means nothing to draw).
-inline int margin_columns(const MarginTrack &t, int width, int up, int down, int8_t *out) {
+// deficit of the game sets the scale, but never under min_peak (a 1-0 hockey
+// lead is a sliver, not the whole row). Returns the number of points drawn
+// (0 leaves out untouched and means nothing to draw).
+inline int margin_columns(const MarginTrack &t, int width, int up, int down, int8_t *out, int min_peak = 1) {
   if (width <= 0 || t.n == 0)
     return 0;
   // Points: the samples, then the latest read when it is newer than the last sample.
   int pts = t.n + (t.pending > 0 ? 1 : 0);
   auto at = [&](int i) -> int { return i < t.n ? t.margin[i] : t.last_margin; };
-  int peak = 1;
+  int peak = std::max(1, min_peak);
   for (int i = 0; i < pts; i++)
     peak = std::max(peak, std::abs(at(i)));
   auto px = [&](int v) -> int8_t {
@@ -200,5 +233,9 @@ inline int margin_columns(const MarginTrack &t, int width, int up, int down, int
   }
   return pts;
 }
+
+// The sparkline's smallest full-scale margin per sport: a goal is a lot in
+// hockey, a basket is not in basketball.
+inline int margin_min_peak(Sport sport) { return sport == Sport::HOCKEY ? 3 : 10; }
 
 }  // namespace espn

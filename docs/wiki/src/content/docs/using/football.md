@@ -50,7 +50,7 @@ On a 128-wide board the down and distance row becomes a **field strip**: a pictu
 
 Just above the strip, a one-pixel **win chance bar** runs the width of the board: your color from the left for ESPN's chance of your team winning, the other team's color for the rest, with a white pixel at the split. It moves with every play.
 
-Both are on to start. **Field strip** and **Win chance bar** in the Pictures card on the device page turn them off; with the strip off, the row shows the down and distance and the timeout pips as before. A single 64x64 panel has no room for either.
+Both are on to start. **Field strip** and **Win chance bar** in the Live pictures card on the device page turn them off; with the strip off, the row shows the down and distance and the timeout pips as before. A single 64x64 panel has no room for either.
 :::
 
 After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Odds, TV and win chance**.

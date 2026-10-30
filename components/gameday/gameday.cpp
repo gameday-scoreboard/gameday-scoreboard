@@ -3875,19 +3875,25 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // The pictures on a wide board's situation row (game_viz.h). The margin
   // samples follow the board game read by read while it is on; a redraw of
   // the same read adds nothing. The bits say what the page draws now.
-  if (g.valid && g.state == GameState::IN && !g.event_id.empty())
-    this->margin_track_.read(g.event_id, g.team_score - g.opp_score, g.team_win_pct, g.display_clock, g.period);
-  if (g.valid && g.state == GameState::IN) {
+  // Nothing at halftime or after the final: the line score and leaders
+  // cards take the row's turns then.
+  const bool playing = g.valid && g.state == GameState::IN && !::espn::at_halftime(g);
+  const bool spark_sport = g.sport == ::espn::Sport::BASKETBALL || g.sport == ::espn::Sport::HOCKEY;
+  const bool odds_sport = g.sport == ::espn::Sport::FOOTBALL || g.sport == ::espn::Sport::BASKETBALL;
+  if (g.valid && g.state == GameState::IN && !g.event_id.empty() && spark_sport)
+    this->margin_tracks_.pick(g.event_id).read(g.event_id, g.team_id, g.team_score - g.opp_score, g.display_clock,
+                                               g.period);
+  if (playing) {
     f.win_pct = g.team_win_pct;
     if (this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
       f.viz |= ::espn::VIZ_FIELD;
-    if (this->win_bar_on() && g.team_win_pct >= 1)
+    // ESPN has a number for baseball too, but that row is the diamond's.
+    if (this->win_bar_on() && odds_sport && g.team_win_pct >= 1)
       f.viz |= ::espn::VIZ_WINBAR;
+    if (this->margin_spark_on() && spark_sport && this->margin_tracks_.current().event_id == g.event_id &&
+        this->margin_tracks_.current().n > 0)
+      f.viz |= ::espn::VIZ_SPARK;
   }
-  bool spark_sport = g.sport == ::espn::Sport::BASKETBALL || g.sport == ::espn::Sport::HOCKEY;
-  if (g.valid && spark_sport && this->margin_spark_on() && (g.state == GameState::IN || g.state == GameState::POST) &&
-      this->margin_track_.event_id == g.event_id && this->margin_track_.n > 0)
-    f.viz |= ::espn::VIZ_SPARK;
   f.team_color = ::espn::parse_color(g.team_color);
   f.opponent_color = ::espn::parse_color(g.opp_color);
 #ifdef GAMEDAY_DEMO

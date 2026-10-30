@@ -614,10 +614,11 @@ script:
             }
             return lv_color_make(r, g, b);
           };
-          // White dots on a dark end zone, black on a light one.
-          auto light = [](uint32_t c) {
-            uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
-            return r * 299 + g * 587 + b * 114 > 160000;
+          // White dots on a dark end zone, black on a light one, judged on the
+          // color as drawn: bright() lifts a dark team color, and turns ESPN's
+          // black (PIT, LV) white.
+          auto light = [](lv_color_t c) {
+            return (uint32_t) c.red * 299 + (uint32_t) c.green * 587 + (uint32_t) c.blue * 114 > 160000;
           };
           auto px = [&](int x, int y, lv_color_t c) {
             if (x >= 0 && x < W && x < 128 && y >= 0 && y < 8)
@@ -630,7 +631,9 @@ script:
           };
           const bool live = game_state == "IN";
           const bool field = wide && live && (viz & ::espn::VIZ_FIELD) != 0;
-          const bool winbar = wide && live && (viz & ::espn::VIZ_WINBAR) != 0 && win_pct >= 1 && win_pct <= 99;
+          // The bar is football's and basketball's: baseball's row is the diamond's.
+          const bool winbar = wide && live && (sport == 0 || sport == 2) && (viz & ::espn::VIZ_WINBAR) != 0 &&
+                              win_pct >= 1 && win_pct <= 99;
           const bool spark = wide && !field && (viz & ::espn::VIZ_SPARK) != 0;
           lv_obj_t *bars[3] = {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)};
           if (winbar) {
@@ -673,9 +676,9 @@ script:
                 }
               }
               // End zones in team colors, with the timeouts left as dots.
-              uint32_t tc = (uint32_t) team_color, oc = (uint32_t) opponent_color;
-              fill(0, 0, ez, 8, bright(tc));
-              fill(right, 0, ez, 8, bright(oc));
+              lv_color_t tc = bright((uint32_t) team_color), oc = bright((uint32_t) opponent_color);
+              fill(0, 0, ez, 8, tc);
+              fill(right, 0, ez, 8, oc);
               lv_color_t tdot = lv_color_hex(light(tc) ? 0x000000 : 0xFFFFFF);
               lv_color_t odot = lv_color_hex(light(oc) ? 0x000000 : 0xFFFFFF);
               for (int i = 0; i < 3; i++) {
@@ -712,7 +715,8 @@ script:
             // in theirs, from a dim baseline, the latest read in white.
             int8_t cols[128];
             const int cw = std::min(W, 128);
-            int pts = ::espn::margin_columns(id(gameday_ctl).margin_track(), cw, 4, 3, cols);
+            int pts = ::espn::margin_columns(id(gameday_ctl).margin_track(), cw, 4, 3, cols,
+                                             ::espn::margin_min_peak((::espn::Sport) sport));
             if (pts > 0) {
               fill(0, 0, W, 8, lv_color_hex(0x000000));
               lv_color_t up = bright((uint32_t) team_color), down = bright((uint32_t) opponent_color);

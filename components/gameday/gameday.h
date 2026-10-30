@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -472,7 +473,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // valid only while football is on, and the margin samples the panel has
   // seen of the board game. Read by gd_update in firmware/pages/gameday-live.yaml.
   ::espn::FieldStrip field_strip(int width_px) const { return ::espn::field_strip(this->game_, width_px); }
-  const ::espn::MarginTrack &margin_track() const { return this->margin_track_; }
+  const ::espn::MarginTrack &margin_track() const { return this->margin_tracks_.current(); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
@@ -753,10 +754,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
     uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
-    uint8_t viz;     // VIZ8_*, set bits turn a picture off: a saved spare byte is 0
-    uint8_t spare[1];
+    uint8_t spare;   // byte 2: taken by the celebrations setting (its own PR); not this one's
+    uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
   static_assert(sizeof(Prefs8) == 4, "Prefs8 keeps its size; a blob that changes size fails to load");
+  static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
   static constexpr uint8_t VIZ8_NOWINBAR = 2;  // the win chance bar off
   static constexpr uint8_t VIZ8_NOSPARK = 4;   // the score margin sparkline off
@@ -1185,7 +1187,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
-  ::espn::MarginTrack margin_track_;  // the board game's margin by read (game_viz.h)
+  ::espn::MarginTracks margin_tracks_;  // the board game's margin by read, and the last game's (game_viz.h)
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};

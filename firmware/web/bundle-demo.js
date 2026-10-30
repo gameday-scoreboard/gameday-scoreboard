@@ -158,7 +158,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
       </div>
       <div class="card">
-        <h2>Pictures</h2>
+        <h2>Live pictures</h2>
         <p class="hint">Drawn on the row under the clock during a game, on a 128-wide board. A single 64x64 panel has no room for them.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is, the line to gain, which way the offense is going and the timeouts left, in the teams' colors. The red zone glows red.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
