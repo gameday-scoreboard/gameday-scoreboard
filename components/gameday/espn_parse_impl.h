@@ -728,13 +728,16 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
       uint8_t rank = (uint8_t) (r >= 1 && r <= 25 ? r : 99);
       if (!ball.empty() && ball == detail::str_or_empty(c["id"]))
         g.possession = home ? 2 : 1;
+      std::string color = detail::str_or_empty(c["team"]["color"]);
       if (home) {
+        g.home_color = color;
         g.home_abbr = abbr;
         g.home_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
         g.group = (uint32_t) atol(detail::str_or_empty(c["team"]["conferenceId"]).c_str());
         g.home_score = pts;
         g.home_rank = rank;
       } else {
+        g.away_color = color;
         g.away_abbr = abbr;
         g.away_id = (uint32_t) atol(detail::str_or_empty(c["id"]).c_str());
         g.away_score = pts;

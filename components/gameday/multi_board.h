@@ -30,6 +30,8 @@ struct TileGame {
   std::string away_abbr, home_abbr;
   uint32_t away_id{0}, home_id{0};
   int away_score{0}, home_score{0};
+  uint32_t away_color{0}, home_color{0};  // ESPN's primary colors, 0 unknown
+  std::string away_record, home_record;   // "3-2", for a game to come; "" unknown
   uint8_t period{0};
   int32_t clock_s{-1};  // left in the period, or soccer's elapsed; -1 none
   std::string detail;   // ESPN's shortDetail: "4:12 - 3rd", "Halftime", "Top 5th", "Final/OT"

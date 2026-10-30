@@ -1141,9 +1141,15 @@ script:
               lv_obj_set_pos(w.ap, 57, 4);
               lv_obj_set_pos(w.hp, 57, 15);
             }
-            // A game to come has no score yet: show the matchup's dash instead.
-            put(w.as, t.live || t.status == "F" || t.status.compare(0, 2, "F/") == 0 ? std::to_string(t.away_score) : "-");
-            put(w.hs, t.live || t.status == "F" || t.status.compare(0, 2, "F/") == 0 ? std::to_string(t.home_score) : "-");
+            // A game to come has no score yet: each side's record, or a dash.
+            const bool scored = t.live || t.status == "F" || t.status.compare(0, 2, "F/") == 0;
+            put(w.as, scored ? std::to_string(t.away_score) : t.away_record.empty() ? "-" : t.away_record);
+            put(w.hs, scored ? std::to_string(t.home_score) : t.home_record.empty() ? "-" : t.home_record);
+            // Records are long for the big digits: spleen_12 fits "10-4" in 32 px.
+            if (tall && !scored) {
+              lv_obj_set_style_text_font(w.as, f12, 0);
+              lv_obj_set_style_text_font(w.hs, f12, 0);
+            }
             show(w.as, true);
             show(w.hs, true);
             put(w.st, t.status);

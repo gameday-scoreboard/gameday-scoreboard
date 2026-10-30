@@ -466,6 +466,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::string away_logo, home_logo;  // "" draws the abbreviation badge
     uint32_t away_color{0xFFFFFF}, home_color{0xFFFFFF};
     int away_score{0}, home_score{0};
+    std::string away_record, home_record;  // in the scores' place before the start
     std::string status;     // "Q3 4:12", "F", "7:30 PM" (multi_board.h, tile_status)
     uint8_t possession{0};  // 0 none, 1 away, 2 home
     uint8_t flash{0};       // a score since the last board: 1 away, 2 home

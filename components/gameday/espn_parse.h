@@ -183,6 +183,9 @@ struct LiveGame {
   // 0 none, 1 away, 2 home.
   std::string detail;
   uint8_t possession{0};
+  // ESPN's colors, only in a scan that also keeps finals or games to come
+  // (the lean scan leaves them out); "" otherwise.
+  std::string away_color, home_color;
 };
 
 // A finished game from a day's scoreboard, for the finals rotation (recap.h).

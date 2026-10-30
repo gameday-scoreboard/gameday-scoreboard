@@ -34,8 +34,12 @@ void GamedayComponent::set_tiles(uint8_t v) {
   this->sync_prefs_();
   ESP_LOGI(TAG, "Games on the board: %s", ::espn::tiles_name(v));
   this->tile_scan_ms_ = 0;  // Live games: the tiles' scan runs on the next cycle
-  if (this->live_mode_())
-    this->schedule_next_(0);  // and the next cycle is now, not after the followed game's wait
+  if (this->live_mode_()) {
+    // And the next cycle is now, with a scan, as Refresh Now does: with
+    // nothing live the rotation's next scan can be a kickoff hours away.
+    this->live_started_ms_ = 0;
+    this->schedule_next_(0);
+  }
   if (this->favorites_mode_())
     this->tiles_from_favorites_();
   else
@@ -85,6 +89,8 @@ void GamedayComponent::tiles_absorb_scan_(const Job &j) {
     t.clock_s = g.clock_s;
     t.detail = g.detail;
     t.possession = g.possession;
+    t.away_color = ::espn::parse_color(g.away_color);
+    t.home_color = ::espn::parse_color(g.home_color);
     t.fav_rank = ::espn::live_fav_rank(g, favs);
     next.push_back(std::move(t));
   }
@@ -134,6 +140,10 @@ void GamedayComponent::tiles_absorb_scan_(const Job &j) {
       t.away_score = f.away_score;
       t.home_score = f.home_score;
       t.detail = f.detail;
+      t.away_color = ::espn::parse_color(f.away_color);
+      t.home_color = ::espn::parse_color(f.home_color);
+      t.away_record = f.away_record;
+      t.home_record = f.home_record;
       for (const auto &old : this->tile_cands_)
         if (old.event_id == t.event_id)
           t.final_epoch = old.final_epoch;
@@ -151,6 +161,10 @@ void GamedayComponent::tiles_absorb_scan_(const Job &j) {
       t.home_abbr = p.home_abbr;
       t.away_id = p.away_id;
       t.home_id = p.home_id;
+      t.away_color = ::espn::parse_color(p.away_color);
+      t.home_color = ::espn::parse_color(p.home_color);
+      t.away_record = p.away_record;
+      t.home_record = p.home_record;
       next.push_back(std::move(t));
     }
   }
@@ -193,6 +207,10 @@ void GamedayComponent::tiles_from_favorites_() {
     t.home_id = team_away ? g.opp_id : g.team_id;
     t.away_score = team_away ? g.team_score : g.opp_score;
     t.home_score = team_away ? g.opp_score : g.team_score;
+    t.away_color = ::espn::parse_color(team_away ? g.team_color : g.opp_color);
+    t.home_color = ::espn::parse_color(team_away ? g.opp_color : g.team_color);
+    t.away_record = team_away ? g.team_record : g.opp_record;
+    t.home_record = team_away ? g.opp_record : g.team_record;
     t.period = (uint8_t) (g.period < 0 ? 0 : g.period > 255 ? 255 : g.period);
     t.clock_s = ::espn::clock_seconds(g.display_clock);
     t.detail = g.short_detail;
@@ -261,8 +279,12 @@ void GamedayComponent::tiles_publish_() {
     t.event_id = g.event_id;
     t.away_abbr = g.away_abbr;
     t.home_abbr = g.home_abbr;
-    t.away_color = tile_team_rgb(g.league, g.away_id);
-    t.home_color = tile_team_rgb(g.league, g.home_id);
+    // ESPN's color from the document when the read carried one, else the
+    // table (NFL and college; the other leagues' colors come with the read).
+    t.away_color = g.away_color != 0 ? g.away_color : tile_team_rgb(g.league, g.away_id);
+    t.home_color = g.home_color != 0 ? g.home_color : tile_team_rgb(g.league, g.home_id);
+    t.away_record = g.away_record;
+    t.home_record = g.home_record;
     t.away_score = g.away_score;
     t.home_score = g.home_score;
     t.possession = t.live ? g.possession : 0;
