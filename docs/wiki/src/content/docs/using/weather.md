@@ -51,7 +51,7 @@ Before a football, baseball or soccer game at an outdoor stadium, the next game'
 
 The forecast is ESPN's when ESPN has one for the game, which it usually does for NFL, college football and baseball games a few days out. That's the same forecast the ticker already shows ("54F Clear at Ryan Field"). When ESPN has none, which is most soccer games and games further out, the panel asks Open-Meteo for the hour of kickoff at the stadium's city, as soon as the game is 15 days away or closer. Then the ticker shows that forecast too.
 
-This works without a town set and whether the weather card is on or off. It reads at most once every three hours for a game, only while the next ESPN read is at least 25 seconds away, so it never holds up the scores.
+This works without a town set and whether the weather card is on or off. The panel keeps the forecasts of the last four games it read, so with Favorite teams turning its cards, each game's forecast is read at most once every three hours (a game moved to another time or stadium is read again). Like the weather card's, these reads only start while the next ESPN read is at least 25 seconds away, so they never hold up the scores.
 
 ## How often it reads
 

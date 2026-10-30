@@ -6152,6 +6152,43 @@ static void test_kickoff_weather() {
   CHECK(wx_dark_at(10, 19) && !wx_dark_at(10, 18));
   CHECK(!wx_dark_at(7, 19) && wx_dark_at(7, 20));
   CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
+
+  // The sun or the moon by the venue's own clock, not the panel's. NU's
+  // 11 AM kickoff (16:00 UTC, CDT) is daytime; Sunday night in Green Bay
+  // (01:20 UTC Monday, 7:20 PM CST after the change back) is dark, and so is
+  // a 7:30 PM Eastern November game a Pacific panel sees as 4:30 PM.
+  bool dst = false;
+  CHECK_EQ(wx_state_offset("Evanston, IL", dst), -6);
+  CHECK(dst);
+  CHECK_EQ(wx_state_offset("San Diego, California", dst), -8);
+  CHECK_EQ(wx_state_offset("Glendale, AZ", dst), -7);
+  CHECK(!dst);
+  CHECK_EQ(wx_state_offset("London, England", dst), 0);
+  CHECK_EQ(wx_state_offset("Foxborough", dst), 0);
+  CHECK_EQ(wx_venue_dark(1792857600, "Evanston, IL"), 0);         // 2026-10-24 16:00 UTC
+  CHECK_EQ(wx_venue_dark(1793582400, "Green Bay, WI"), 1);        // 2026-11-02 01:20 UTC
+  CHECK_EQ(wx_venue_dark(1794961800, "East Rutherford, NJ"), 1);  // 2026-11-18 00:30 UTC
+  CHECK_EQ(wx_venue_dark(1794961800, "Glendale, AZ"), 0);         // 5:30 PM there
+  CHECK_EQ(wx_venue_dark(1794961800, "London, England"), -1);     // abroad: ESPN's icon as it is
+  CHECK_EQ(wx_venue_dark(1783393200, "Chicago, IL"), 1);          // 2026-07-07 03:00 UTC, 10 PM CDT
+  CHECK_EQ(wx_venue_dark(1783447200, "Chicago, IL"), 0);          // 1 PM CDT
+  WxCivil c = wx_civil(1793582400);
+  CHECK(c.year == 2026 && c.month == 11 && c.day == 2 && c.hour == 1);
+
+  // When a weather read may start: with the next ESPN read 25 s or more
+  // away. Favorite teams re-runs its choice every second, so the gap comes
+  // from the favorites' own reads: schedules read a minute ago next come in
+  // six hours, which leaves room; one never read, or failed, is due.
+  const uint32_t t = 10000000, kRetry = 60000, kSched = 6 * 3600 * 1000;
+  CHECK(wx_gap_ok(wx_fav_read_in_ms(false, t - 60000, t, kRetry, kSched)));
+  CHECK_EQ(wx_fav_read_in_ms(false, t - 60000, t, kRetry, kSched), kSched - 60000);
+  CHECK_EQ(wx_fav_read_in_ms(true, 0, t, kRetry, kSched), 0u);
+  CHECK_EQ(wx_fav_read_in_ms(true, t - 50000, t, kRetry, kSched), 10000u);
+  CHECK(!wx_gap_ok(wx_fav_read_in_ms(true, t - 50000, t, kRetry, kSched)));
+  CHECK_EQ(wx_due_in_ms(t - 20000, 60000, t), 40000u);
+  CHECK_EQ(wx_due_in_ms(0, 60000, t), 0u);
+  CHECK_EQ(wx_due_in_ms(t - 70000, 60000, t), 0u);
+  CHECK(wx_gap_ok(kWxEspnGapMs) && !wx_gap_ok(kWxEspnGapMs - 1));
 }
 
 // The FCC screen (regulatory.h): every page fits its board, and the words

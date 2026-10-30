@@ -286,8 +286,11 @@ constexpr uint32_t kWxKickStaleMs = 2 * kWxKickReadMs;
 // the HTTP client's 20 s timeout and some room, so a read that hangs to its
 // end still finishes before ESPN's turn.
 constexpr uint32_t kWxEspnGapMs = 25 * 1000;
-// The venues looked up lately, so the next poll's forecast needs no lookup.
+// The venues looked up lately, so the next poll's forecast needs no lookup,
+// and the kickoff forecasts read lately, one per game: Favorite teams turns
+// its cards every few seconds.
 constexpr size_t kWxVenueCache = 4;
+constexpr size_t kWxKickCache = 4;
 
 // The forecast for one hour at the venue.
 struct WxHour {
@@ -297,22 +300,34 @@ struct WxHour {
   bool night{false};
 };
 
-// One hour, the kickoff's in UTC, at lat/lon: "2026-11-01T18:00".
-inline std::string wx_utc_hour(int64_t epoch) {
-  // civil_from_days, so no gmtime_r is needed on any host
+// A moment as a calendar date and hour, in UTC (civil_from_days, so no
+// gmtime_r is needed on any host).
+struct WxCivil {
+  long long year;
+  unsigned month, day;
+  int hour;
+};
+inline WxCivil wx_civil(int64_t epoch) {
   int64_t days = epoch >= 0 ? epoch / 86400 : (epoch - 86399) / 86400;
-  int hour = (int) ((epoch - days * 86400) / 3600);
+  WxCivil c{};
+  c.hour = (int) ((epoch - days * 86400) / 3600);
   days += 719468;
   const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
   const unsigned doe = (unsigned) (days - era * 146097);
   const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
   const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
   const unsigned mp = (5 * doy + 2) / 153;
-  const unsigned d = doy - (153 * mp + 2) / 5 + 1;
-  const unsigned m = mp < 10 ? mp + 3 : mp - 9;
-  const long long y = (long long) yoe + era * 400 + (m <= 2);
+  c.day = doy - (153 * mp + 2) / 5 + 1;
+  c.month = mp < 10 ? mp + 3 : mp - 9;
+  c.year = (long long) yoe + era * 400 + (c.month <= 2);
+  return c;
+}
+
+// One hour, the kickoff's, in UTC: "2026-11-02T01:00".
+inline std::string wx_utc_hour(int64_t epoch) {
+  const WxCivil c = wx_civil(epoch);
   char buf[48];
-  snprintf(buf, sizeof(buf), "%04lld-%02u-%02uT%02d:00", y, m, d, hour);
+  snprintf(buf, sizeof(buf), "%04lld-%02u-%02uT%02d:00", c.year, c.month, c.day, c.hour);
   return buf;
 }
 
@@ -638,5 +653,84 @@ inline bool wx_dark_at(int month, int hour) {
     return true;
   return hour >= (month >= 5 && month <= 8 ? 20 : 19);
 }
+
+// A US venue's standard UTC offset in hours, from the state in its place
+// ("Green Bay, WI", "San Diego, California"), and whether it keeps daylight
+// time. 0 for a place outside the US or one it can't tell: no swap then. A
+// state split between two zones gets the one most of its stadiums are in.
+inline int wx_state_offset(const std::string &place, bool &dst) {
+  struct St {
+    const char *ab, *name;
+    int8_t off;
+  };
+  static const St kStates[] = {
+      {"AL", "Alabama", -6},      {"AK", "Alaska", -9},         {"AZ", "Arizona", -7},
+      {"AR", "Arkansas", -6},     {"CA", "California", -8},     {"CO", "Colorado", -7},
+      {"CT", "Connecticut", -5},  {"DE", "Delaware", -5},       {"DC", "District of Columbia", -5},
+      {"FL", "Florida", -5},      {"GA", "Georgia", -5},        {"HI", "Hawaii", -10},
+      {"ID", "Idaho", -7},        {"IL", "Illinois", -6},       {"IN", "Indiana", -5},
+      {"IA", "Iowa", -6},         {"KS", "Kansas", -6},         {"KY", "Kentucky", -5},
+      {"LA", "Louisiana", -6},    {"ME", "Maine", -5},          {"MD", "Maryland", -5},
+      {"MA", "Massachusetts", -5}, {"MI", "Michigan", -5},      {"MN", "Minnesota", -6},
+      {"MS", "Mississippi", -6},  {"MO", "Missouri", -6},       {"MT", "Montana", -7},
+      {"NE", "Nebraska", -6},     {"NV", "Nevada", -8},         {"NH", "New Hampshire", -5},
+      {"NJ", "New Jersey", -5},   {"NM", "New Mexico", -7},     {"NY", "New York", -5},
+      {"NC", "North Carolina", -5}, {"ND", "North Dakota", -6}, {"OH", "Ohio", -5},
+      {"OK", "Oklahoma", -6},     {"OR", "Oregon", -8},         {"PA", "Pennsylvania", -5},
+      {"RI", "Rhode Island", -5}, {"SC", "South Carolina", -5}, {"SD", "South Dakota", -6},
+      {"TN", "Tennessee", -6},    {"TX", "Texas", -6},          {"UT", "Utah", -7},
+      {"VT", "Vermont", -5},      {"VA", "Virginia", -5},       {"WA", "Washington", -8},
+      {"WV", "West Virginia", -5}, {"WI", "Wisconsin", -6},     {"WY", "Wyoming", -7},
+  };
+  dst = true;
+  size_t comma = place.rfind(", ");
+  if (comma == std::string::npos)
+    return 0;
+  const std::string st = place.substr(comma + 2);
+  for (const auto &s : kStates) {
+    if (st == s.ab || st == s.name) {
+      dst = strcmp(s.ab, "AZ") != 0 && strcmp(s.ab, "HI") != 0;
+      return s.off;
+    }
+  }
+  return 0;
+}
+
+// Whether a kickoff is after dark at a US venue, by the venue's own clock:
+// 1 dark, 0 light, -1 when the venue's time zone isn't known. Daylight time
+// from the second Sunday in March to the first in November, to within a week.
+inline int wx_venue_dark(int64_t kickoff, const std::string &place) {
+  bool dst;
+  int off = wx_state_offset(place, dst);
+  if (off == 0 || kickoff <= 0)
+    return -1;
+  WxCivil c = wx_civil(kickoff + (int64_t) off * 3600);
+  if (dst && ((c.month > 3 && c.month < 11) || (c.month == 3 && c.day >= 8) || (c.month == 11 && c.day < 7)))
+    c = wx_civil(kickoff + (int64_t) (off + 1) * 3600);
+  return wx_dark_at((int) c.month, c.hour) ? 1 : 0;
+}
+
+// ---- When a weather read may start --------------------------------------------
+
+// The ms until a read last made at last_ms, every interval_ms, is due: 0 when
+// it is due now or was never made.
+inline uint32_t wx_due_in_ms(uint32_t last_ms, uint32_t interval_ms, uint32_t now) {
+  if (last_ms == 0)
+    return 0;
+  uint32_t age = now - last_ms;
+  return age >= interval_ms ? 0 : interval_ms - age;
+}
+
+// A favorite's next schedule read (Favorite teams mode re-reads one every
+// schedule_ms, or after retry_ms while it has none): the ms until it's due.
+inline uint32_t wx_fav_read_in_ms(bool missing, uint32_t fetched_ms, uint32_t now, uint32_t retry_ms,
+                                  uint32_t schedule_ms) {
+  if (missing && fetched_ms == 0)
+    return 0;
+  return wx_due_in_ms(fetched_ms, missing ? retry_ms : schedule_ms, now);
+}
+
+// A weather read starts only when the next ESPN read is this far off or more.
+inline bool wx_gap_ok(uint32_t espn_quiet_ms) { return espn_quiet_ms >= kWxEspnGapMs; }
 
 }  // namespace espn
