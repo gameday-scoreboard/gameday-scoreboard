@@ -67,7 +67,12 @@
       "n": "Sundays",
       "t": [
         "nfl:6"
-      ]
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false
     },
     {
       "n": "College",

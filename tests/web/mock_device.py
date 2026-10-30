@@ -144,7 +144,7 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "sched": 0, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
@@ -418,6 +418,8 @@ def state_doc():
         STATE["cards"] = []
         for cid, name, _default, hint in CARDS:
             STATE["cards"].append({"id": cid, "name": name, "on": on[cid], "ok": card_ok(cid), "hint": hint})
+    STATE["lists"] = [norm_list(pl) for pl in STATE["lists"]]
+    STATE.setdefault("sched", 0)
     return STATE
 
 
@@ -475,6 +477,52 @@ def remap_lists(before):
         STATE["sport"] = ""
 
 
+def list_time(v):
+    """list_parse_time(): "11:00" -> "HH:MM" as the state writes it, None for anything else."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        return None
+    return f"{int(m[1]):02d}:{m[2]}"
+
+
+def norm_list(pl):
+    """A playlist with every option the state document writes (a test's override may leave them out)."""
+    out = {"n": pl["n"], "f": pl["f"], "days": pl.get("days", ""), "start": pl.get("start", "00:00"),
+           "end": pl.get("end", "00:00"), "only": bool(pl.get("only"))}
+    if "today" in pl:
+        out["today"] = pl["today"]
+    return out
+
+
+def list_opt_token(tok, opt):
+    """list_opt_token(): one @ token of a playlist's teams into its options."""
+    if tok.startswith("@d:"):
+        opt["days"] = "".join(d for d in "0123456" if d in tok[3:])
+    elif tok.startswith("@t:"):
+        start, dash, end = tok[3:].partition("-")
+        if dash and list_time(start) and list_time(end):
+            opt["start"], opt["end"] = list_time(start), list_time(end)
+    elif tok == "@only":
+        opt["only"] = True
+    elif tok in ("@today:1", "@today:0"):
+        opt["today"] = tok == "@today:1"
+
+
+def list_opt_text(pl):
+    """list_opt_text(): a playlist's options back as their tokens."""
+    pl = norm_list(pl)
+    out = ""
+    if pl["days"]:
+        out += ",@d:" + pl["days"]
+        if pl["start"] != pl["end"]:
+            out += f",@t:{pl['start']}-{pl['end']}"
+    if pl["only"]:
+        out += ",@only"
+    if "today" in pl:
+        out += ",@today:1" if pl["today"] else ",@today:0"
+    return out
+
+
 def parse_lists(v):
     """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
     out = []
@@ -485,12 +533,15 @@ def parse_lists(v):
         name = message_clean(name.replace("=", ""), LIMITS["kListNameMax"], False)
         if not name:
             continue
-        teams = []
+        teams, opt = [], {}
         for r in refs.split(",") if refs else []:
+            if r.startswith("@"):
+                list_opt_token(r, opt)
+                continue
             ref = parse_team_ref(r)
             if ref and ref not in teams and len(teams) < FAV_MAX:
                 teams.append(ref)
-        out.append({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams]})
+        out.append(norm_list({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams], **opt}))
     return out
 
 
@@ -675,8 +726,19 @@ def settings_doc():
             out["favs"] = favs
         elif k == "lists":
             # The state's teams are places in favs; the backup names them.
-            out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
-                            for pl in s.get("lists", [])]
+            out["lists"] = []
+            for pl in s.get("lists", []):
+                e = {"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
+                # Its options, only what is set (settings_from_state).
+                if pl.get("days"):
+                    e["days"] = pl["days"]
+                    if pl["start"] != pl["end"]:
+                        e["start"], e["end"] = pl["start"], pl["end"]
+                if pl.get("only"):
+                    e["only"] = True
+                if "today" in pl:
+                    e["today"] = pl["today"]
+                out["lists"].append(e)
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
             out["live"] = list(LIVE_LIST[0])
@@ -753,10 +815,27 @@ def import_settings(doc):
                         skipped.append(f"lists={name}:{t}")
                         continue
                     refs.append(t)
+                opt = {}
+                if e.get("days") is not None:
+                    if not isinstance(e["days"], str):
+                        return fail('lists days should be digits like "06" (0 Sunday to 6 Saturday).')
+                    list_opt_token("@d:" + e["days"], opt)
+                if e.get("start") is not None or e.get("end") is not None:
+                    if not isinstance(e.get("start"), str) or not isinstance(e.get("end"), str):
+                        return fail('lists start and end should be times like "11:00".')
+                    list_opt_token("@t:" + e["start"] + "-" + e["end"], opt)
+                    if "start" not in opt and (e["start"], e["end"]) not in (("00:00", "00:00"), ("0:00", "0:00")):
+                        skipped.append(f"lists={name}:{e['start']}-{e['end']}")
+                for b in ("only", "today"):
+                    if e.get(b) is not None:
+                        if not isinstance(e[b], bool):
+                            return fail(f"lists {b} should be true or false.")
+                        if b == "only" and e[b] or b == "today":
+                            opt[b] = e[b]
                 if not name or len(parts) == LIMITS["kListMax"]:
                     skipped.append("lists=" + name)
                     continue
-                parts.append(name + "=" + ",".join(refs))
+                parts.append(name + "=" + ",".join(refs) + list_opt_text({"n": name, "f": [], **opt}))
             kv.append(("lists", ";".join(parts)))
             continue
         if k == "cards":

@@ -315,6 +315,15 @@ button { font: inherit; color: inherit; }
 .plist .ctl { border-top: 0; padding-bottom: 0; }
 .plist .pname { flex: 1; min-width: 0; margin: 0; }
 .plist .pbtn { color: var(--muted); font-size: 12px; flex: none; }
+/* a playlist's options: the schedule, two switches */
+.popts { margin-top: 8px; }
+.popts .psched, .popts .phours { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; }
+.popts .plabel, .popts .phours small { color: var(--muted); font-size: 12px; }
+.popts .pdays { margin-top: 0; }
+.popts .pdays .chip { width: 30px; padding: 4px 0; text-align: center; }
+.popts .ctl { padding: 6px 0; border-top: 0; }
+.popts .ctl label { font-size: 13px; }
+.popts input.num.time { width: auto; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }
 

@@ -4,6 +4,8 @@
 #include <ArduinoJson.h>
 
 #include <cstdio>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -57,8 +59,14 @@ struct Settings {
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
-  // Playlists as the firmware keeps them: a name and a mask over favs.
-  std::vector<std::pair<std::string, uint16_t>> lists;
+  // Playlists as the firmware keeps them: a name, a mask over favs and the
+  // options (Prefs9 and Prefs10).
+  struct List {
+    std::string first;
+    uint16_t second;
+    ListOpt opt;
+  };
+  std::vector<List> lists;
   int list{0};
   int sport{0};  // the sport row playing, 1 + Sport; 0 = none
   uint16_t live_mask{0};
@@ -125,7 +133,16 @@ void load(Settings &s, JsonObjectConst o) {
       uint16_t mask = 0;
       for (auto f : l["f"].as<JsonArrayConst>())
         mask |= (uint16_t) (1u << f.as<int>());
-      s.lists.emplace_back(l["n"].as<const char *>(), mask);
+      ListOpt opt;
+      if (l["days"].is<const char *>())
+        list_opt_token("@d:" + std::string(l["days"].as<const char *>()), opt);
+      if (l["start"].is<const char *>())
+        list_opt_token("@t:" + std::string(l["start"].as<const char *>()) + "-" + (l["end"] | "00:00"), opt);
+      if (l["only"] | false)
+        opt.flags |= LISTOPT_ONLY;
+      if (l["today"].is<bool>())
+        list_opt_token(l["today"].as<bool>() ? "@today:1" : "@today:0", opt);
+      s.lists.push_back({l["n"].as<const char *>(), mask, opt});
     }
   }
   if (o["list"].is<int>())
@@ -264,7 +281,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       s.lists.clear();
       s.list = 0;
       for (const auto &d : parse_lists(op.text, kFavMax)) {
-        s.lists.emplace_back(d.name, list_mask(d.teams, before));
+        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
@@ -372,6 +389,16 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     for (int i = 0; i < kFavMax; i++)
       if (s.favs[i].id != 0 && ((l.second >> i) & 1u))
         f.add(i);
+    std::string days;
+    for (int d = 0; d < 7; d++)
+      if ((l.opt.days >> d) & 1u)
+        days += (char) ('0' + d);
+    o["days"] = days;
+    o["start"] = list_time_text(l.opt.start);
+    o["end"] = list_time_text(l.opt.end);
+    o["only"] = (l.opt.flags & LISTOPT_ONLY) != 0;
+    if (l.opt.flags & LISTOPT_TODAY_SET)
+      o["today"] = (l.opt.flags & LISTOPT_TODAY) != 0;
   }
   doc["list"] = s.list;
   JsonArray sports = doc["sports"].to<JsonArray>();
@@ -727,9 +754,120 @@ void test_playlists() {
     SCHECK(std::string(kSportRowNames[s]).size() <= kListNameMax, "%s is longer than a playlist name", kSportRowNames[s]);
 }
 
+// Local day of the week (0 Sunday) and minute after midnight of an epoch in
+// a POSIX timezone, as the panel's clock gives them.
+std::pair<int, int> local_dm(int64_t epoch, const char *tz) {
+  setenv("TZ", tz, 1);
+  tzset();
+  time_t t = (time_t) epoch;
+  struct tm lt;
+  localtime_r(&t, &lt);
+  return {lt.tm_wday, lt.tm_hour * 60 + lt.tm_min};
+}
+
+// Playlist options (playlists.h): the tokens in the lists= text, the
+// schedule across midnight and through daylight saving, the tick's steps.
+void test_list_options() {
+  std::vector<ListDef> l = parse_lists("Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:1;Plain=nba:6", kFavMax);
+  SCHECK(l.size() == 2 && l[0].teams.size() == 1 && l[1].teams.size() == 1, "tokens aren't teams");
+  SCHECK(l[0].opt.days == 1 && l[0].opt.start == 11 * 60 && l[0].opt.end == 23 * 60, "days and hours read");
+  SCHECK(l[0].opt.flags == (LISTOPT_ONLY | LISTOPT_TODAY_SET | LISTOPT_TODAY), "only and today read");
+  SCHECK(l[1].opt == ListOpt{}, "no tokens, no options");
+  SCHECK(list_opt_text(l[0].opt) == ",@d:0,@t:11:00-23:00,@only,@today:1", "options back as tokens: %s",
+         list_opt_text(l[0].opt).c_str());
+  SCHECK(list_opt_text(ListOpt{}).empty(), "no options, no tokens");
+  l = parse_lists("A=@d:6530x,@t:7:05-6:30,@today:0", kFavMax);
+  SCHECK(l[0].opt.days == 0b1101001 && l[0].opt.start == 7 * 60 + 5 && l[0].opt.end == 6 * 60 + 30,
+         "days in any order, odd characters dropped, hours past midnight");
+  SCHECK(l[0].opt.flags == LISTOPT_TODAY_SET, "today:0 is set and off");
+  SCHECK(list_opt_text(l[0].opt) == ",@d:0356,@t:07:05-06:30,@today:0", "days sorted, hours zero padded: %s",
+         list_opt_text(l[0].opt).c_str());
+  l = parse_lists("A=@t:11:00-23:00;B=@d:1,@t:25:00-23:00;C=@d:1,@t:11:00;D=@t:9:00-9:00,@d:2", kFavMax);
+  SCHECK(l[0].opt.days == 0 && list_opt_text(l[0].opt).empty(), "hours with no days are no schedule");
+  SCHECK(l[1].opt.start == 0 && l[1].opt.end == 0 && l[2].opt.start == 0, "bad hours dropped");
+  SCHECK(l[3].opt.days == 4 && list_opt_text(l[3].opt) == ",@d:2", "the same start and end is all day");
+  SCHECK(list_parse_time("00:00") == 0 && list_parse_time("23:59") == 23 * 60 + 59 && list_parse_time("24:00") < 0 &&
+             list_parse_time("12:60") < 0 && list_parse_time("noon") < 0 && list_parse_time("1:5") < 0,
+         "time parsing");
+  SCHECK(list_today(ListOpt{}, true) && !list_today(ListOpt{}, false), "no setting follows the switch");
+  SCHECK(list_today(l[0].opt, true), "A: switch");
+  ListOpt off;
+  list_opt_token("@today:0", off);
+  SCHECK(!list_today(off, true), "today off beats the switch");
+
+  // Sundays 11:00 to 23:00
+  ListOpt sun;
+  list_opt_token("@d:0", sun);
+  list_opt_token("@t:11:00-23:00", sun);
+  SCHECK(list_scheduled(sun, 0, 11 * 60) && list_scheduled(sun, 0, 22 * 60 + 59), "inside the hours");
+  SCHECK(!list_scheduled(sun, 0, 10 * 60 + 59) && !list_scheduled(sun, 0, 23 * 60), "outside the hours");
+  SCHECK(!list_scheduled(sun, 1, 12 * 60) && !list_scheduled(sun, 6, 12 * 60), "other days");
+  // Saturdays 20:00 to 02:00: into Sunday morning, not from Friday night
+  ListOpt late;
+  list_opt_token("@d:6", late);
+  list_opt_token("@t:20:00-02:00", late);
+  SCHECK(list_scheduled(late, 6, 20 * 60) && list_scheduled(late, 6, 23 * 60 + 59), "Saturday evening");
+  SCHECK(list_scheduled(late, 0, 0) && list_scheduled(late, 0, 1 * 60 + 59), "Sunday small hours");
+  SCHECK(!list_scheduled(late, 0, 2 * 60) && !list_scheduled(late, 0, 20 * 60), "Sunday 2 AM is over; Sunday night isn't a Saturday");
+  SCHECK(!list_scheduled(late, 6, 1 * 60), "Saturday 1 AM is Friday's night, not scheduled");
+  // Every day all day
+  ListOpt all;
+  list_opt_token("@d:0123456", all);
+  SCHECK(list_scheduled(all, 3, 0) && list_scheduled(all, 3, 23 * 60 + 59), "all day");
+  SCHECK(!list_scheduled(ListOpt{}, 0, 12 * 60), "no schedule");
+  // Overlaps: the list higher in the order wins
+  ListOpt opts[3] = {ListOpt{}, sun, all};
+  SCHECK(scheduled_list(opts, 3, 0, 12 * 60) == 2, "Sunday noon: the Sundays list, above the every-day one");
+  SCHECK(scheduled_list(opts, 3, 2, 12 * 60) == 3, "Tuesday: the every-day list");
+  SCHECK(scheduled_list(opts, 2, 2, 12 * 60) == 0, "without it, nothing");
+  SCHECK(scheduled_list(opts, 0, 0, 12 * 60) == 0, "no lists");
+
+  // Through daylight saving in US Central: the hours follow the local
+  // clock. Fall back 2026-11-01: 1:30 AM CDT (06:30Z) and 1:30 AM CST
+  // (07:30Z) are both inside a Saturday-night window that ends at 2 AM, and
+  // 2:30 AM CST (08:30Z) is past it. Spring forward 2026-03-08: 1:59 AM CST
+  // (07:59Z) is inside, the next minute is 3:00 AM CDT and outside.
+  const char *central = "CST6CDT,M3.2.0,M11.1.0";
+  auto at = [&](int64_t epoch) { return local_dm(epoch, central); };
+  std::pair<int, int> dm = at(1793514600);  // 2026-11-01 06:30Z, 1:30 AM CDT Sunday
+  SCHECK(dm.first == 0 && dm.second == 90 && list_scheduled(late, dm.first, dm.second), "1:30 AM CDT inside");
+  dm = at(1793518200);  // 07:30Z, 1:30 AM CST (the hour again)
+  SCHECK(dm.first == 0 && dm.second == 90 && list_scheduled(late, dm.first, dm.second), "1:30 AM CST inside too");
+  dm = at(1793521800);  // 08:30Z, 2:30 AM CST
+  SCHECK(dm.first == 0 && dm.second == 150 && !list_scheduled(late, dm.first, dm.second), "2:30 AM CST over");
+  dm = at(1772956740);  // 2026-03-08 07:59Z, 1:59 AM CST Sunday
+  SCHECK(dm.first == 0 && dm.second == 119 && list_scheduled(late, dm.first, dm.second), "1:59 AM CST inside");
+  dm = at(1772956800);  // 08:00Z, 3:00 AM CDT
+  SCHECK(dm.first == 0 && dm.second == 180 && !list_scheduled(late, dm.first, dm.second), "3:00 AM CDT over");
+  // A Sunday 11 AM start lands an hour later in UTC after the fall back
+  dm = at(1793466000);  // 2026-10-31 17:00Z, Saturday noon CDT: not Sunday
+  SCHECK(dm.first == 6 && !list_scheduled(sun, dm.first, dm.second), "Saturday noon");
+  dm = at(1793552400);  // 2026-11-01 17:00Z, 11:00 AM CST Sunday
+  SCHECK(dm.first == 0 && dm.second == 11 * 60 && list_scheduled(sun, dm.first, dm.second), "11 AM CST Sunday starts it");
+  dm = at(1793548800);  // 16:00Z, 10:00 AM CST
+  SCHECK(dm.second == 10 * 60 && !list_scheduled(sun, dm.first, dm.second), "10 AM CST, not yet");
+
+  // The tick's steps (schedule_step)
+  SchedStep st = schedule_step(2, 0, 0, false);
+  SCHECK(st.start && st.list == 2 && !st.restore, "a schedule starts");
+  st = schedule_step(2, 2, 2, false);
+  SCHECK(!st.start && !st.restore, "under way: nothing");
+  st = schedule_step(2, 0, 0, true);
+  SCHECK(!st.start && !st.restore, "a locked game finishes first");
+  st = schedule_step(0, 2, 2, false);
+  SCHECK(st.restore && !st.start, "over: back to what played");
+  st = schedule_step(0, 2, 1, false);
+  SCHECK(!st.restore && !st.start, "over, but the owner picked another list: it stays");
+  st = schedule_step(3, 2, 2, false);
+  SCHECK(st.start && st.list == 3, "a higher list's schedule takes over");
+  st = schedule_step(0, 2, 2, true);
+  SCHECK(!st.restore, "over, but locked: wait");
+}
+
 }  // namespace
 
 int run_set_tests(int &total_checks) {
+  test_list_options();
   test_playlists();
   test_parse_set();
   test_cards();

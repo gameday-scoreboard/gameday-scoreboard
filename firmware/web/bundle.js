@@ -450,7 +450,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
       const [n, refs] = p.split("=");
       const keys = (refs || "").split(",");
-      return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
+      return Object.assign({ n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, listOpts(keys));
     }),
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
@@ -524,7 +524,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       schema: 1,
       lists: String(params.lists).split(";").filter(Boolean).map((p) => {
         const [n, refs] = p.split("=");
-        return { n, t: (refs || "").split(",").filter(Boolean) };
+        const toks = (refs || "").split(",").filter(Boolean);
+        const o = listOpts(toks);
+        const e = { n, t: toks.filter((t) => t[0] !== "@") };
+        if (o.days) { e.days = o.days; if (o.start !== o.end) { e.start = o.start; e.end = o.end; } }
+        if (o.only) e.only = true;
+        if ("today" in o) e.today = o.today;
+        return e;
       }),
     };
     if (params.list !== undefined) doc.list = Number(params.list);
@@ -834,7 +840,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         : S.locked && shown
           ? "Locked on " + (shown.t.name || shown.t.abbr)
           : playingSport() ? "Cycling through your " + playingSport() + " favorites"
-            : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
+            : playing ? "Cycling through " + playing.n + (S.sched && S.sched === S.list ? " · on its schedule" : "") : "Cycling through your favorites";
     }
     renderListPick();
   };
@@ -1004,7 +1010,23 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const sportRows = () => (S && S.sports) || [];
   const playingSport = () => (S && S.sport && sportRows().includes(S.sport) ? S.sport : "");
   const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
-  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
+  // A playlist's options (playlists.h ListOpt) ride in its lists= text as @
+  // tokens among its teams: @d:06 the schedule's days (0 Sunday), @t:11:00-23:00
+  // its hours, @only, @today:1 or @today:0. The state carries them as fields.
+  const listOpts = (toks) => {
+    const o = { days: "", start: "00:00", end: "00:00", only: false };
+    for (const t of toks) {
+      if (t.startsWith("@d:")) o.days = "0123456".split("").filter((d) => t.slice(3).includes(d)).join("");
+      else if (t.startsWith("@t:")) { const [a, b] = t.slice(3).split("-"); if (a && b) { o.start = a; o.end = b; } }
+      else if (t === "@only") o.only = true;
+      else if (t === "@today:1" || t === "@today:0") o.today = t === "@today:1";
+    }
+    if (!o.days) { o.start = "00:00"; o.end = "00:00"; }
+    return o;
+  };
+  const optTokens = (l) => (l.days ? ",@d:" + l.days + (l.start !== l.end ? ",@t:" + l.start + "-" + l.end : "") : "")
+    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "");
+  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
   // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
@@ -1034,7 +1056,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         const n = cleanName(name.value);
         if (!n || n === l.n) { name.value = l.n; return; }
         if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another playlist has that name"); }
-        const next = ls.map((o, k) => (k === i ? { n, f: o.f } : o));
+        const next = ls.map((o, k) => (k === i ? Object.assign({}, o, { n }) : o));
         postLists(next, S.list === i + 1 ? i + 1 : undefined);
       };
       row.appendChild(name);
@@ -1059,7 +1081,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       mk("\u2715", "Remove", () => postLists(ls.filter((_, k) => k !== i)));
       row.appendChild(ctl);
       box.appendChild(row);
-      const chips = el("div", "chips");
+      const chips = el("div", "chips pteams");
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favKeys.forEach((key, fi) => {
@@ -1070,11 +1092,85 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         setOn(c, on, "aria-pressed");
         c.onclick = () => {
           const f = on ? l.f.filter((x) => x !== fi) : l.f.concat([fi]).sort((a, b) => a - b);
-          postLists(ls.map((o, k) => (k === i ? { n: o.n, f } : o)));
+          postLists(ls.map((o, k) => (k === i ? Object.assign({}, o, { f }) : o)));
         };
         chips.appendChild(c);
       });
       box.appendChild(chips);
+      // Its options: the schedule's days and hours, Only this list's games,
+      // its own Only today's games. Every change posts the playlists whole,
+      // from the playlists as they are now: the card isn't redrawn while a
+      // field in it has focus, so this row can be behind the last post.
+      const cur = () => lists()[i] || l;
+      const put = (patch) => postLists(lists().map((o, k) => (k === i ? Object.assign({}, o, patch) : o)));
+      const opts = el("div", "popts");
+      const sched = el("div", "psched");
+      sched.appendChild(el("span", "plabel", "Plays on"));
+      const days = el("span", "chips pdays");
+      days.setAttribute("role", "group");
+      days.setAttribute("aria-label", "Days " + l.n + " plays");
+      ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].forEach((day, d) => {
+        const c = el("button", "chip", day[0]);
+        c.title = day;
+        c.setAttribute("aria-label", day);
+        const on = (l.days || "").includes(String(d));
+        setOn(c, on, "aria-pressed");
+        c.onclick = () => {
+          const was = cur().days || "";
+          const next = "0123456".split("").filter((x) => (x === String(d) ? !was.includes(x) : was.includes(x))).join("");
+          put(next ? { days: next } : { days: "", start: "00:00", end: "00:00" });
+        };
+        days.appendChild(c);
+      });
+      sched.appendChild(days);
+      opts.appendChild(sched);
+      if (l.days) {
+        const hours = el("div", "phours");
+        const hint = el("small");
+        const hintFor = (o) => (o.start === o.end ? "all day" : o.end < o.start ? "into the next morning" : "");
+        const mk = (label, key) => {
+          const t = el("input", "num time");
+          t.type = "time";
+          t.value = l[key] || "00:00";
+          t.setAttribute("aria-label", label + " " + l.n);
+          t.onchange = () => {
+            if (!t.value) return;
+            put({ [key]: t.value });
+            hint.textContent = hintFor(Object.assign({}, cur(), { [key]: t.value }));
+          };
+          hours.appendChild(el("span", "plabel", label));
+          hours.appendChild(t);
+        };
+        mk("from", "start");
+        mk("to", "end");
+        hint.textContent = hintFor(l);
+        hours.appendChild(hint);
+        opts.appendChild(hours);
+      }
+      const only = el("div", "ctl");
+      only.appendChild(el("label", null, "Only this list's games"));
+      const sw = el("button", "sw");
+      sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-label", "Only this list's games " + l.n);
+      setOn(sw, !!l.only, "aria-checked");
+      sw.onclick = () => put({ only: !cur().only });
+      only.appendChild(sw);
+      opts.appendChild(only);
+      const today = el("div", "ctl");
+      const tl = el("label", null, "Only today's games");
+      const ts = el("select");
+      ts.setAttribute("aria-label", "Only today's games " + l.n);
+      [["", "Same as Favorites"], ["1", "On"], ["0", "Off"]].forEach(([v, t]) => { const o = el("option", null, t); o.value = v; ts.appendChild(o); });
+      ts.value = "today" in l ? (l.today ? "1" : "0") : "";
+      ts.onchange = () => {
+        const next = Object.assign({}, cur());
+        if (ts.value === "") delete next.today; else next.today = ts.value === "1";
+        postLists(lists().map((o, k) => (k === i ? next : o)));
+      };
+      today.appendChild(tl);
+      today.appendChild(ts);
+      opts.appendChild(today);
+      box.appendChild(opts);
       host.appendChild(box);
     });
     const none = !favKeys.length;
@@ -1127,7 +1223,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     }
     // Redrawn only when something changed, so a name being typed keeps its place.
     const sig = favKeys.join(",") + "|" + JSON.stringify(lists());
-    if (sig !== listSig && !(document.activeElement && document.activeElement.classList.contains("pname"))) {
+    if (sig !== listSig && !(document.activeElement && $("#listCtls").contains(document.activeElement) &&
+        document.activeElement.matches("input, select"))) {
       listSig = sig;
       renderLists();
     }
