@@ -44,7 +44,7 @@ def summary(body: str, limit: int = 240) -> str:
     (the page splits on it), trimmed to fit an ESPHome text field."""
     lead = []
     for ln in body.splitlines():
-        if ln.startswith("- "):
+        if ln.startswith("- ") or ln.startswith("#"):
             break
         if ln.strip():
             lead.append(ln.strip())
@@ -70,7 +70,7 @@ def headline(body: str) -> str:
     """The section's one-line summary: a plain line above the bullets if it has one, else the first bullet's first sentence."""
     lead = []
     for ln in body.splitlines():
-        if ln.startswith("- "):
+        if ln.startswith("- ") or ln.startswith("#"):
             break
         if ln.strip():
             lead.append(ln.strip())

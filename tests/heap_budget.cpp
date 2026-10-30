@@ -20,6 +20,8 @@
 
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
+#include "game_leaders.h"
+#include "weather.h"
 
 using namespace espn;
 
@@ -150,6 +152,22 @@ static void event(const char *name, const std::string &file, Sport sport) {
   });
 }
 
+// The game summary read at halftime and the final. The tracked team is the
+// header's first competitor.
+static void summary(const char *name, const std::string &file, Sport sport) {
+  std::string json = slurp("fixtures/" + file);
+  JsonDocument doc;
+  deserializeJson(doc, json, DeserializationOption::NestingLimit(40));  // the header nests past the default
+  std::string event_id = doc["header"]["id"] | "";
+  uint32_t team = (uint32_t) atol(doc["header"]["competitions"][0]["competitors"][0]["id"] | "0");
+  doc.clear();
+  doc.shrinkToFit();
+  measure(name, [&] {
+    GameLeaders l;
+    return parse_summary(json, sport, team, event_id, LeadersStage::FINAL, l) && l.any();
+  });
+}
+
 int main() {
   JsonCounter json_alloc;
   set_json_allocator(&json_alloc);
@@ -176,6 +194,13 @@ int main() {
   event("poll_nhl_event", "event_nhl_live.json", Sport::HOCKEY);
   event("poll_soccer_event", "event_soccer_second_half.json", Sport::SOCCER);
 
+  // The game summary at halftime and the final (game_leaders.h), 400 KB to
+  // 1.2 MB on the wire; the fixtures keep its header, leaders and box score.
+  summary("summary_nfl", "summary_nfl_final.json", Sport::FOOTBALL);
+  summary("summary_nba", "summary_nba_final.json", Sport::BASKETBALL);
+  summary("summary_nhl", "summary_nhl_final.json", Sport::HOCKEY);
+  summary("summary_mlb", "summary_mlb_final.json", Sport::BASEBALL);
+
   {
     std::string json = slurp("fixtures/team_nfl_dal.json");
     measure("team_nfl", [&] {
@@ -188,6 +213,29 @@ int main() {
     measure("team_day_ncaa", [&] {
       Schedule s;
       return parse_team_game(json, 251, std::string(), s) == 1;
+    });
+  }
+  {
+    std::string json = slurp("fixtures/rankings_cfb_20261025.json");
+    measure("rankings_ncaa", [&] {
+      Poll p;
+      return parse_rankings(json, p);
+    });
+  }
+  // The weather card's reads from Open-Meteo (weather.h): the town's lookup,
+  // once per town, and the forecast every half hour.
+  {
+    std::string json = slurp("fixtures/wx_geocode_paris.json");
+    measure("weather_lookup", [&] {
+      WxPlace p;
+      return parse_geocode(json, p) && !p.name.empty();
+    });
+  }
+  {
+    std::string json = slurp("fixtures/wx_forecast_coppell.json");
+    measure("weather_forecast", [&] {
+      WxForecast f;
+      return parse_forecast(json, f);
     });
   }
   {

@@ -34,14 +34,12 @@ Note: This equipment complies with the limits for a Class B digital device, purs
 
 ## On the panel's screen
 
-:::note[Coming in the next release]
 The scoreboard has no label with this information on it. The panel shows it on its own screen instead:
 
 1. Open the panel's [device page](/using/device-page/).
 2. In the **Device** card, next to **FCC information**, tap **Show on panel**.
 
 The panel shows the name, model GDS-1, "Contains FCC ID: 2AC7Z-ESPS3WROOM1" and the compliance statement above, a page at a time, 8 seconds a page, twice through. Then it goes back to the board. A panel that was switched off turns on for it.
-:::
 
 ## Responsible party
 

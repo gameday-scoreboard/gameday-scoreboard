@@ -5,7 +5,7 @@ substitutions:
   # The MAC suffix keeps two panels on one network apart: gameday-2f6a70.local
   name: "gameday"
   friendly_name: "Game Day Scoreboard"
-  version: "2026.10.1"
+  version: "2026.10.3"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
   # Where the panel looks for new releases. A bench build can point it at a
@@ -43,9 +43,20 @@ substitutions:
 # Favorites switch puts the new game on the board from deep in the loop
 # (fav_choose_ -> emit_ -> the display callbacks). On ESPHome 2026.10, during
 # QC with the device page's log stream open, that took the loop to about 9 KB
-# and overflowed it (backlog #84); the multi-sport build overflows the same
+# and overflowed it; the multi-sport build overflows the same
 # way on 2026.8.2. With 16 KB, internal RAM still never dropped below 32 KB
 # free on the bench.
+#
+# What takes it that deep: a text sensor published from inside emit_ sends
+# a state event to every open device page, and ESPHome 2026.10 builds that
+# event on the caller's stack (about 3.5 KB: a 2 KB JSON arena and a 1 KB
+# buffer). Under it sit our own frames on the way to emit_ (a Favorites
+# switch, a favorite change, a live poll). Those used to clear a GameSnapshot
+# (1,264 B) or a Job (about 1.6 KB) with `x = T{}`, which builds the new one
+# on the stack first; they clear in place now (in_place.h). The most measured
+# (scoreboard75 and MoonHub75, Oct 2026, page open) was 10.7 KB on a favorite
+# change before that and about 6.1 KB after, so 16 KB leaves room for
+# ESPHome's next change to the event push. /gameday/heap reports what's left.
 #
 # The TLS record buffers are fixed size (16 KB in, 4 KB out per open
 # connection, in PSRAM), not ESP-IDF's dynamic buffers. On IDF 5.5 a failed
@@ -68,6 +79,11 @@ esp32:
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
+      # NVS keeps an index of every item on each page it uses, in internal RAM
+      # by default. The owner's pictures (picture.h) fill dozens of pages of
+      # the settings partition, which cost about 2.6 KB of internal RAM with
+      # four kept; in PSRAM the settings' own index moves out too.
+      CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM: y
 
 esphome:
   name: "${name}"
@@ -90,6 +106,13 @@ esphome:
     # so on this path there should be nothing dropped to redraw.
     - priority: 300.0
       then:
+        # After the game turned the panel off and it restarted (the nightly
+        # update): it stays off until the wake, or the owner, turns it on.
+        - if:
+            condition:
+              lambda: 'return gameday::GamedayComponent::asleep_at_boot();'
+            then:
+              - switch.turn_off: power
         - hub75.set_brightness:
             id: matrix
             brightness: !lambda 'return id(power).state ? id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state) : 0;'
@@ -187,6 +210,8 @@ packages:
   boot: !include pages/boot.yaml
   scoreboard: !include pages/gameday-live.yaml
   wizmote: !include pages/wizmote.yaml
+  # WLED effects full screen in place of the board (the Effects page)
+  effects: !include pages/effects.yaml
   # Factory check (the flag factory_flash.py leaves, or POST /gameday/action?do=qc)
   qc: !include pages/qc.yaml
   # Dims a hot panel and caps one on a weak power brick, and says why
@@ -218,11 +243,12 @@ font:
   - id: !extend spleen_16
     glyphs: *panel_glyphs
   # The countdown card's big digits on a wide board (gameday-live.yaml), cut
-  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today".
+  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today"; and the
+  # weather card's temperature ("71°", "-4°", weather.h).
   - file: "https://github.com/fcambus/spleen/raw/refs/tags/2.1.0/spleen-16x32.bdf"
     id: spleen_32
     size: 32
-    glyphs: ["0123456789 Tadhmoy"]
+    glyphs: ["0123456789 Tadhmoy-°"]
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -237,6 +263,11 @@ logger:
 # No Home Assistant required: never reboot for lack of an API client.
 api:
   reboot_timeout: 0s
+  # The game events (esphome.gameday_*, components/gameday/ha_events.h) are
+  # sent by the gameday component itself, with one field list shared with
+  # the webhook. Home Assistant takes events from any ESPHome device; only
+  # actions need "Allow the device to perform Home Assistant actions".
+  homeassistant_services: true
   # The banner (pages/message.yaml) with its seconds, 10 when 0. Home
   # Assistant lists it as esphome.<device name>_show_message.
   actions:
@@ -248,9 +279,19 @@ api:
         - lambda: 'id(gameday_ctl).say(message, seconds);'
 
 ota:
+  # The panel sits on its last frame through an install; make that the
+  # scoreboard, not an effect (pages/effects.yaml).
   - platform: esphome
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
   - platform: http_request
     id: gd_ota_http
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
 
 # The panel remembers up to five networks (home, a phone hotspot, a friend's
 # house) and tries the last one that worked first. Setup from the app or the
@@ -294,6 +335,9 @@ wifi:
         id(gd_ever_connected) = true;
         id(gd_offline_seconds) = 0;
         if (improv_ble::global_improv_component != nullptr) {
+          // Setup is over once the panel is on a network: a failed handover
+          // later this boot goes back to that one.
+          improv_ble::global_improv_component->set_setup_mode(false);
           improv_ble::global_improv_component->remember_sta(wifi::global_wifi_component->get_sta());
           improv_ble::global_improv_component->set_has_saved_network(true);
         }
@@ -365,6 +409,9 @@ script:
           image::Image *opp = logos.get(id(gd_opp_logo_url));
           lv_image_set_src(id(gd_team_logo_img), team != nullptr ? team : id(gd_logo_blank));
           lv_image_set_src(id(gd_opp_logo_img), opp != nullptr ? opp : id(gd_logo_blank));
+          // The game leaders card (pages/gameday-live.yaml) shows the same two at half size.
+          lv_image_set_src(id(tt_ldr_team_img), team != nullptr ? team : id(gd_logo_blank));
+          lv_image_set_src(id(tt_ldr_opp_img), opp != nullptr ? opp : id(gd_logo_blank));
 
   # Bluetooth back on, but not for every two second blip. Bringing Bluedroid
   # up and down is a large internal-RAM alloc and free each time, and that
@@ -491,26 +538,34 @@ script:
   # back on the saved networks, the same as unplugging it, which the setup
   # screen offers. on_connect stops this, so finishing setup on a network ends
   # it. Someone still at it over Bluetooth or on the hotspot at 15 minutes
-  # gets up to 10 more.
+  # gets up to 10 more. A wrong name or password from the app keeps the panel
+  # in setup for another try (components/improv_ble); a minute after the
+  # owner leaves the app and the hotspot, it goes back to the saved networks
+  # (components/saved_networks/setup_window.h).
   - id: gd_setup_window
     then:
-      - delay: 15min
       - while:
           condition:
-            lambda: |-
-              const bool app =
-                  (esp32_ble_server::global_ble_server != nullptr &&
-                   esp32_ble_server::global_ble_server->get_connected_client_count() > 0) ||
-                  (improv_ble::global_improv_component != nullptr &&
-                   improv_ble::global_improv_component->get_improv_state() == improv::STATE_PROVISIONING);
-              wifi_sta_list_t hotspot{};
-              const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
-              return (app || on_hotspot) && millis() < 25 * 60 * 1000;
+            lambda: return true;
           then:
             - delay: 10s
-      - lambda: |-
-          ESP_LOGW("wifi", "Setup not finished in 15 minutes, restarting onto the saved networks");
-          App.safe_reboot();
+            - lambda: |-
+                static saved_networks::SetupWindow window;
+                auto *imp = improv_ble::global_improv_component;
+                const bool app =
+                    (esp32_ble_server::global_ble_server != nullptr &&
+                     esp32_ble_server::global_ble_server->get_connected_client_count() > 0) ||
+                    (imp != nullptr && imp->get_improv_state() == improv::STATE_PROVISIONING);
+                wifi_sta_list_t hotspot{};
+                const bool on_hotspot = esp_wifi_ap_get_sta_list(&hotspot) == ESP_OK && hotspot.num > 0;
+                const bool failed = imp != nullptr && imp->handover_failed();
+                if (!window.restart_due(millis() / 1000, app || on_hotspot, failed))
+                  return;
+                if (failed && millis() < saved_networks::SetupWindow::WINDOW_S * 1000)
+                  ESP_LOGW("wifi", "Setup from the app failed and nobody is trying again, restarting onto the saved networks");
+                else
+                  ESP_LOGW("wifi", "Setup not finished in 15 minutes, restarting onto the saved networks");
+                App.safe_reboot();
 
 captive_portal:
 
@@ -652,6 +707,20 @@ gameday:
           lambda: 'return x == "tiles";'
         then:
           - script.execute: gd_tiles
+    # Game-day wake: a game is near (the component only asks while Power is
+    # off), and After the game's Off once the final has lingered.
+    - if:
+        condition:
+          and:
+            - lambda: 'return x == "wake_on";'
+            - switch.is_off: power
+        then:
+          - switch.turn_on: power
+    - if:
+        condition:
+          lambda: 'return x == "wake_off";'
+        then:
+          - switch.turn_off: power
     # The heat or power hold changed (pages/guard.yaml)
     - if:
         condition:
@@ -675,6 +744,32 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # The college Top 25 card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "top25";'
+        then:
+          - script.execute: gd_top25_card
+    # The news card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "news";'
+        then:
+          - script.execute: gd_news_card
+    # The picture card, and a GIF's next frame on its canvas (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "picture";'
+        then:
+          - script.execute: gd_picture_card
+    - if:
+        condition:
+          lambda: 'return x == "picture_frame";'
+        then:
+          # The build keeps no image cache, so a redraw reads the canvas as it is now.
+          - lambda: |-
+              if (id(gameday_ctl).picture_shown())
+                lv_obj_invalidate(id(tt_picture_img));
     # Another favorite scored (pages/gameday-live.yaml)
     - if:
         condition:
@@ -745,35 +840,6 @@ gameday:
             - switch.is_off: power
         then:
           - switch.turn_on: power
-  # Home Assistant events for automations: every score and the final of the
-  # game Game Status follows (components/gameday/ha_events.h), for both sides
-  # whatever the splash settings. Home Assistant takes events from any
-  # ESPHome device; only actions need "Allow the device to perform Home
-  # Assistant actions".
-  on_score:
-    - homeassistant.event:
-        event: esphome.gameday_score
-        data:
-          team: !lambda 'return x.team;'
-          opponent: !lambda 'return x.opponent;'
-          play: !lambda 'return x.play;'
-          points: !lambda 'return to_string(x.points);'
-          team_score: !lambda 'return to_string(x.team_score);'
-          opponent_score: !lambda 'return to_string(x.opponent_score);'
-          sport: !lambda 'return x.sport;'
-          my_team: !lambda 'return x.my_team ? "true" : "false";'
-  on_final:
-    - homeassistant.event:
-        event: esphome.gameday_final
-        data:
-          team: !lambda 'return x.team;'
-          opponent: !lambda 'return x.opponent;'
-          team_score: !lambda 'return to_string(x.team_score);'
-          opponent_score: !lambda 'return to_string(x.opponent_score);'
-          result: !lambda 'return x.result;'
-          winner: !lambda 'return x.winner;'
-          sport: !lambda 'return x.sport;'
-          my_team: !lambda 'return x.my_team ? "true" : "false";'
   on_update:
     # Published on every update, though the value often repeats: Home
     # Assistant only logs a change, and the device page takes each Game
@@ -796,6 +862,17 @@ gameday:
         };
         put(id(gd_team_score), x.ha_team_score);
         put(id(gd_opp_score), x.ha_opp_score);
+        // The sides, colors, period and clock, also only on a change.
+        auto say = [](text_sensor::TextSensor *t, const std::string &v) {
+          if (!t->has_state() || t->state != v)
+            t->publish_state(v);
+        };
+        say(id(gd_ha_team), x.ha_team);
+        say(id(gd_ha_opponent), x.ha_opponent);
+        say(id(gd_ha_team_rgb), x.ha_team_rgb);
+        say(id(gd_ha_opp_rgb), x.ha_opp_rgb);
+        say(id(gd_ha_period), x.ha_period);
+        say(id(gd_ha_clock), x.ha_clock);
     - lambda: |-
         id(gd_countdown_at) = x.countdown_at;
         id(gd_countdown_end) = x.countdown_end;
@@ -835,6 +912,7 @@ gameday:
         message: !lambda 'return gameday::panel_text(x.message);'
         clock_card: !lambda 'return x.clock;'
         countdown_card: !lambda 'return x.countdown_at != 0;'
+        weather_card: !lambda 'return x.wx_card;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'
@@ -875,15 +953,23 @@ switch:
     icon: "mdi:power"
     restore_mode: ALWAYS_ON
     optimistic: true
+    # set_power: Game-day wake follows every turn, wherever it came from.
     turn_on_action:
+      - lambda: 'id(gameday_ctl).set_power(true);'
       - hub75.set_brightness:
           id: matrix
           brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
       - script.execute: gd_repaint
     turn_off_action:
+      - lambda: 'id(gameday_ctl).set_power(false);'
       - hub75.set_brightness:
           id: matrix
           brightness: 0
+      # An effect would keep rendering to a dark panel, and the scoreboard
+      # is what Power on should bring back (pages/effects.yaml).
+      - script.execute:
+          id: gd_fx_yield
+          reason: "Power off"
   # Off unless the owner turns it on. The setting itself lives in the gameday
   # component (auto_update.h) with the rest of the device page's settings;
   # this switch is how Home Assistant sees and changes it.
@@ -982,6 +1068,33 @@ text_sensor:
     name: "Last Play"
     id: gd_last_play_sensor
     icon: "mdi:message-text-outline"
+  # The game Game Status follows: the two sides, ESPN's colors for each as
+  # "r,g,b" for a light's rgb_color, where the game is ("3rd quarter",
+  # "Halftime") and its clock. Empty with no game.
+  - platform: template
+    name: "Team"
+    id: gd_ha_team
+    icon: "mdi:shield-outline"
+  - platform: template
+    name: "Opponent"
+    id: gd_ha_opponent
+    icon: "mdi:shield-outline"
+  - platform: template
+    name: "Team Color"
+    id: gd_ha_team_rgb
+    icon: "mdi:palette"
+  - platform: template
+    name: "Opponent Color"
+    id: gd_ha_opp_rgb
+    icon: "mdi:palette-outline"
+  - platform: template
+    name: "Period"
+    id: gd_ha_period
+    icon: "mdi:timeline-clock-outline"
+  - platform: template
+    name: "Game Clock"
+    id: gd_ha_clock
+    icon: "mdi:timer-outline"
   - platform: wifi_info
     ip_address:
       name: "IP"

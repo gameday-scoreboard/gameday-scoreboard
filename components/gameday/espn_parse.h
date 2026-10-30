@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "psram.h"
+#include "rankings.h"
 #include "teams.h"
 
 namespace espn {
@@ -285,6 +286,9 @@ std::string event_url(League league, const std::string &event_id, const char *co
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const char *comp_slug);
 std::string dark_logo(const std::string &url);
 std::string team_logo_url(League league, uint32_t espn_id, const char *abbr);  // for a team with no game loaded yet
+// The news feed's latest headlines (news.h): the team's with an id, else the
+// league's. 15 to 170 KB.
+std::string news_url(League league, uint32_t team_id);
 
 bool parse_team_str(const std::string &json, Schedule &out);
 // Up to `max` games not yet started, in date order, from the schedule endpoint.
@@ -299,6 +303,8 @@ bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule
 // some other game reads as a failure.
 bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out,
                      const std::string &event_id = "");
+// parse_news into a std::string, for the host tests.
+int parse_news_str(const std::string &json, std::string &list);
 
 // neutral = nobody is "our" team (live-game modes): both sides splash with their abbreviation.
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
@@ -335,6 +341,10 @@ std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed,
 // touching the network. Pass a string literal: only the pointer is kept,
 // and the worker task reads it while the main loop may set it.
 void set_site_root(const char *root);
+// The same for the core API, which only the Top 25 card reads (rankings.h).
+void set_core_root(const char *root);
+// The league's AP poll, this week's.
+std::string rankings_url(League league);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.
@@ -345,9 +355,15 @@ std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_loc
 // kickoff window, not a name.
 std::string short_game_name(const std::string &headline);
 // The local calendar day of a broken-down time, as a number that changes at
-// local midnight. kickoff_label counts "Today" and "Tomorrow" in these, so a
-// board drawn on an earlier one has a stale label.
-inline int64_t local_day(const struct tm &t) { return (int64_t) t.tm_year * 366 + t.tm_yday; }
+// local midnight and goes up by one a day across New Year too. kickoff_label
+// counts "Today" and "Tomorrow" in these, so a board drawn on an earlier one
+// has a stale label. tm_year * 366 + tm_yday was off by one or two from
+// Dec 31 to Jan 1, so a New Year's Day game seen on Dec 31 read "Fri" rather
+// than "Tomorrow".
+inline int64_t local_day(const struct tm &t) {
+  const int64_t y = (int64_t) t.tm_year + 1899;  // the full year before this one
+  return (int64_t) t.tm_year * 365 + y / 4 - y / 100 + y / 400 + t.tm_yday;
+}
 // "Sat 3:30 PM", or "Sat TBD" with time_tbd, when ESPN has no kickoff time
 // yet (then kick_local is from tbd_day_epoch).
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd = false);

@@ -18,15 +18,11 @@ The ticker along the bottom carries:
 - the betting line, the over/under ("O/U") and the TV network, when ESPN has them and **Odds, TV and win chance** is on
 - the venue
 
-:::note[Coming in the next release]
 In the regular season the ticker starts with the week, like "Week 8", where a bowl or playoff game has its name. At an open-air stadium the venue comes with ESPN's forecast for the game, like "76F Cloudy at Hard Rock Stadium". A dome, or a game with no forecast yet, shows just the venue.
-:::
 
 A game whose kickoff time isn't set yet, like a college game a couple of weeks out, shows the day and "TBD", like "Sat TBD".
 
-:::note[Coming in the next release]
 The day changes at midnight in the panel's timezone, so a game that read "Tomorrow 1:30 PM" in the evening reads "Today 1:30 PM" from 12:00 AM.
-:::
 
 After the odds, the ticker also shows each team's passing leader for the season with yards and touchdowns, like "Prescott 1,381 yds 9 TD", when ESPN has one. Early in the season, before a team has a passing line, it shows the rushing or receiving leader instead. **Pre-game season leaders** on the device page turns them off.
 
@@ -77,5 +73,9 @@ At the final the ticker says "Final" with the records. The final stays up for ha
 A postponed, canceled or suspended game shows ESPN's word for it instead of "Final", and gets no victory splash.
 
 At halftime and the final the board takes turns, 10 seconds each, with the line score: each team's points by quarter and the total, with one OT column after overtime. On a 64x64 panel it's by half, the teams side by side under their abbreviations.
+
+:::note[Coming in the next release]
+A **Game leaders** card joins the turns: each team's logo and abbreviation with its passing, rushing and receiving leaders, like "Prescott 212 yds 3 TD". It shows once at halftime and takes its turn at the final. On a 64x64 panel it's the passing leader only, under each abbreviation, shortened to fit, like "Pres 212 yds". Turn it off under **Between games** on the [device page](/using/device-page/).
+:::
 
 With **Last play** on, the ticker at halftime and the final also runs the scoring plays the panel saw, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. A score the panel didn't see as it happened, because it started or switched to the game later, isn't in the list; the line score still counts it.

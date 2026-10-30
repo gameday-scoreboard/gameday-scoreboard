@@ -27,9 +27,7 @@ When none of your favorites has a game on, the panel shows each favorite's card 
 - Outside football, a team whose next game is more than 10 days away, or whose last game was more than 10 days ago, drops out as out of season. Football teams never drop out, so a bye week doesn't hide one.
 - If those rules would leave nothing to show, the panel loosens them one at a time, first today only and then the season rule, so it never sits on a blank board while it has cards.
 
-:::note[Coming in the next release]
 A favorite whose next game is still to come gets a second 10 seconds for its countdown, like "2d 14h", before the playlist moves on. See [Countdowns](/using/countdowns/).
-:::
 
 The bar under the mode buttons on the device page says **Cycling through your favorites**.
 
@@ -52,13 +50,10 @@ Panels set up before Favorite teams could alternate keep **Stick with the higher
 - **Jump to the action** moves the panel to another favorite's game at its big moment, then back to the game it left once that moment has passed for a minute. A big moment is football in the red zone, the bases loaded, or a game within one score in its last two minutes or overtime (from the 88th minute in soccer). It's off on every panel until you turn it on. A game you picked with a remote button stays up.
 - **Score banner** shows another favorite's score along the bottom of the board for five seconds, like **KC TD, 21-17**, the favorite's score first. It covers touchdowns, field goals, runs, home runs and goals, not basketball, where teams score on most trips down the floor. A banner comes within about 30 seconds of the score. It's on until you turn it off.
 
-:::note[Coming in the next release]
 The checks behind Jump to the action and Score banner no longer affect the game on the board. If one of your other favorites' games can't be read, the panel checks it again after a few minutes, then less often, up to once an hour, instead of every 30 seconds. The board's game keeps updating on time, and a board whose own score stops updating says **Can't reach ESPN** as it should. The same goes for the panel's look every few hours at each favorite's next game: one that fails no longer delays the board's next update.
-:::
 
 ## Playlists
 
-:::note[Coming in the next release]
 A playlist is a group of your favorites with a name, like your football teams or your basketball teams. Favorite teams can play one playlist instead of every favorite.
 
 - The **Playlists** card on the device page makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
@@ -66,19 +61,42 @@ A playlist is a group of your favorites with a name, like your football teams or
 - Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
 - **Playing**, under **Favorite teams** on the device page, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
 
+### A row for each sport
+
+:::note[Coming in the next release]
+When your favorites cover more than one sport, **Playing** has a row for each of them after **All favorites**, then your own playlists:
+
+- **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
+- Picking one plays every favorite in that sport, with the same rules as a playlist: **Only today's games**, **Take over** and the rest.
+- You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
+- They aren't playlists: they don't show in the **Playlists** card, don't count toward the 16, and a remote button plays one only when you set it to (see [The numbered buttons](/using/remote/#the-numbered-buttons)). A playlist of your own named Football sits beside **All football**.
+- The **One per sport** button is gone, since these rows do its job and never go out of date. Playlists it made before stay until you remove them.
+:::
+
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
 
-The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below.
+:::note[Coming in the next release]
+**Playlist options.** Under each playlist's teams on the device page, three settings shape how it plays:
+
+- **Plays on** is a schedule. Tap the days (S M T W T F S) the playlist should play, and set the hours with **from** and **to**, in the panel's time zone; with no hours set it plays all day on those days. Hours that end before they start run into the next morning, so Saturdays from 8:00 PM to 2:00 AM covers Sunday 1 AM. When a schedule starts, the panel switches to Favorite teams playing that playlist, and the bar says **on its schedule**; when it ends, the panel goes back to what it was playing before, and to the mode it was in. If a game it's locked on is still going, the switch waits for the final. Two schedules at once: the playlist higher in the card wins. Picking another playlist yourself during the hours stays until you change it again.
+- **Only this list's games** keeps the panel on this playlist's teams even near another favorite's kickoff. Off, as every playlist starts, a favorite outside the playlist still takes the panel for its game.
+- **Only today's games** can differ from the Favorites card's switch for this playlist: **Same as Favorites**, **On** or **Off**.
+
+A settings backup carries all three. The Game Day app shows the same options under each playlist.
+:::
+
+The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below. (Coming in the next release, the buttons no longer follow the playlists' order; set a button to a playlist in the Remote card.)
 
 A favorite you take out of your list leaves every playlist it was in. Adding it back doesn't put it back in them.
-:::
 
 ## Using the remote
 
 Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorite teams, the panel shows that favorite's card at once. If its game is locked on, the panel stays on it; otherwise the card stays up for its 10 seconds and the cards carry on from there. A button for an empty slot does nothing. See [WizMote remote](/using/remote/).
 
-:::note[Coming in the next release]
 Once you have a playlist, buttons 1 to 4 play your first four playlists instead. The panel switches to Favorite teams, plays that playlist, and shows its name for a moment. A button with no playlist does nothing. With no playlists, the buttons stay your first four favorites.
+
+:::note[Coming in the next release]
+Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself in the **Remote** card: to a favorite team, a playlist, a sport row, all your favorites or nothing. The Favorites card marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
 :::
 
 ## On the device page

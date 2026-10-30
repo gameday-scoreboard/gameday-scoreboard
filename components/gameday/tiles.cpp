@@ -170,7 +170,9 @@ void GamedayComponent::tiles_from_favorites_() {
   for (size_t i = 0; i < this->fav_.size(); i++) {
     const FavEntry &e = this->fav_[i];
     const GameSnapshot &g = e.game;
-    if (!g.valid || g.event_id.empty())
+    // Only the favorites Playing names (a playlist or a sport row); every
+    // favorite when none is picked.
+    if (!g.valid || g.event_id.empty() || !this->fav_in_list_(e.slot - 1))
       continue;
     bool dup = false;
     for (const auto &t : next)
