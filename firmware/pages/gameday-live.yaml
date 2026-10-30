@@ -252,6 +252,8 @@ script:
       opponent_timeouts: int
       team_record: string
       opponent_record: string
+      team_rank: int
+      opponent_rank: int
       splash_text: string
       splash_color: int
       sport: int
@@ -313,6 +315,33 @@ script:
       - lvgl.label.update:
           id: tt_home_rec_lbl
           text: !lambda 'return opponent_record;'
+      - lambda: |-
+          // A ranked college side's AP rank: small digits on a black patch over
+          // the logo's outer top corner (the top left of ours, the top right of
+          // the other side's), the same on either panel size, before and during
+          // the game. Unranked sides draw nothing.
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const bool wide = W >= 128;
+          lv_obj_t *boxes[2] = {id(gd_team_rank_box), id(gd_opp_rank_box)};
+          lv_obj_t *lbls[2] = {id(gd_team_rank_lbl), id(gd_opp_rank_lbl)};
+          const int ranks[2] = {team_rank, opponent_rank};
+          const lv_font_t *f8 = id(spleen_8)->get_lv_font();
+          for (int i = 0; i < 2; i++) {
+            if (ranks[i] < 1 || ranks[i] > 25) {
+              lv_obj_add_flag(boxes[i], LV_OBJ_FLAG_HIDDEN);
+              continue;
+            }
+            const std::string rk = std::to_string(ranks[i]);
+            lv_point_t size;
+            lv_text_get_size(&size, rk.c_str(), f8, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            const int tw = size.x - 1;  // Spleen 5x8 leaves its last column blank
+            const int lx = i == 0 ? (wide ? 2 : 0) : (wide ? W - 34 : W - 32);  // the logo's place
+            const int ly = wide ? 4 : 0;
+            lv_obj_set_pos(boxes[i], i == 0 ? lx : lx + 32 - tw - 2, ly);
+            lv_obj_set_size(boxes[i], tw + 2, 9);
+            lv_label_set_text(lbls[i], rk.c_str());
+            lv_obj_clear_flag(boxes[i], LV_OBJ_FLAG_HIDDEN);
+          }
       - lambda: |-
           // Update the ticker only when its text changed: rewriting the label
           // restarts the scroll animation, and pushes arrive every few seconds.
@@ -1327,6 +1356,51 @@ lvgl:
                   text_align: CENTER
                   text: ""
                   styles: ["tt_st_status_text"]
+
+              # A ranked college side's AP rank: digits on a black patch over
+              # the logo's outer top corner. gd_update places and shows them.
+              - obj:
+                  id: gd_team_rank_box
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 0
+                  width: 11
+                  height: 9
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_team_rank_lbl
+                        x: 1
+                        y: 1
+                        text_font: spleen_8
+                        text_color: 0xFFFFFF
+                        text: ""
+              - obj:
+                  id: gd_opp_rank_box
+                  scrollbar_mode: "OFF"
+                  x: 53
+                  y: 0
+                  width: 11
+                  height: 9
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_opp_rank_lbl
+                        x: 1
+                        y: 1
+                        text_font: spleen_8
+                        text_color: 0xFFFFFF
+                        text: ""
 
               # Possession: a gold underline under the side that has the ball
               - obj:
