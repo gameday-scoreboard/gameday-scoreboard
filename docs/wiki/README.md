@@ -48,4 +48,4 @@ Images go in `src/assets/` and are pulled in with a relative Markdown image link
 
 The site is published to docs.gameday-scoreboard.com by GitHub Pages in the [gameday-scoreboard/docs](https://github.com/gameday-scoreboard/docs) repo. Its Publish workflow builds this repo's `main` every 15 minutes and deploys it when `main` has moved, so what is live is always what customers run. Nothing is edited over there. Here, a pull request that touches `docs/wiki/` or `CHANGELOG.md` builds the site through the Docs workflow (`.github/workflows/docs.yml`) to catch broken pages.
 
-A pull request into `dev` that changes `firmware/` or `components/` must also change a page under `src/content/docs/`, or carry the label `docs: not needed`. The Docs updated workflow (`.github/workflows/docs-check.yml`) enforces that.
+A pull request into `dev` that changes `firmware/` or `components/` must also change a page under `src/content/docs/`, or say why not on a line of the PR description: `No owner-visible change, no docs: <why>`. The reviewer checks that claim. The Docs updated workflow (`.github/workflows/docs-check.yml`) enforces that.

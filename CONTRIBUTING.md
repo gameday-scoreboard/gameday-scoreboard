@@ -53,7 +53,8 @@ email, which answers faster than an issue.
 
 ## Changing the code
 
-1. Fork the repo and branch from `dev`.
+1. Fork the repo and branch from `dev`. Name the branch after the change,
+   like `espn-gzip`.
 2. Make the change and test it (below).
 3. Open a pull request against `dev`. `beta` and `main` only take
    promotion PRs from the maintainers, and CI fails anything else.
@@ -133,9 +134,11 @@ the panel shows, a setting, a button hold or anything else an owner or
 DIY builder would notice, update or add the page for it under
 `docs/wiki/src/content/docs/` in the same pull request. CI fails a PR
 into `dev` that changes `firmware/` or `components/` without a docs
-change; a maintainer adds the label `docs: not needed` when nothing
-visible changed. `docs/wiki/README.md` has the page conventions, and
-`npm install` then `npm run dev` in `docs/wiki` previews the site.
+change. When nothing visible changed, add a line to the PR
+description saying why: `No owner-visible change, no docs: <why>`.
+A maintainer checks that claim in review. `docs/wiki/README.md` has the
+page conventions, and `npm install` then `npm run dev` in `docs/wiki`
+previews the site.
 
 ### Style
 
@@ -144,8 +147,11 @@ visible changed. `docs/wiki/README.md` has the page conventions, and
   person watching the panel, like "Name each panel's hotspot after its
   suffix".
 - If owners will notice your change, add one bullet for it under
-  `## Unreleased` at the top of CHANGELOG.md, written for the person who
-  owns the panel. Leave the released sections and the version number
+  `## Unreleased` at the top of CHANGELOG.md, in the group it belongs to
+  (`### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`): one short line
+  for the person who owns the panel, starting with an emoji, like
+  "- 🎵 Playlists: group your favorites and play just that group". The
+  detail belongs on the docs page. Leave the released sections and the version number
   alone; the maintainers turn `## Unreleased` into the release when it
   goes out.
 

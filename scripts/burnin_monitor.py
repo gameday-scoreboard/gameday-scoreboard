@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 
 FIELDS = ["time", "host", "ok", "uptime_s", "rebooted", "heap_internal_kib", "heap_psram_kib",
-          "rssi_dbm", "version", "misses", "stale_s", "error"]
+          "loop_stack_b", "web_stack_b", "fetch_stack_b", "rssi_dbm", "version", "misses", "stale_s", "error"]
 SENSORS = {
     "sensor/Free Heap (internal)": "heap_internal_kib",
     "sensor/Free Heap (PSRAM)": "heap_psram_kib",
@@ -105,12 +105,17 @@ def get_json(host, path, timeout):
 
 
 def parse_heap(doc):
-    """/gameday/heap's KiB figures under this script's column names."""
+    """/gameday/heap's figures under this script's column names: free heap in
+    KiB, and the stack each task never touched since boot in bytes (-1, no
+    reading yet, and older firmware without them are left out)."""
     out = {}
     if isinstance(doc.get("internal"), (int, float)):
         out["heap_internal_kib"] = doc["internal"]
     if isinstance(doc.get("psram"), (int, float)):
         out["heap_psram_kib"] = doc["psram"]
+    for key in ("loop_stack", "web_stack", "fetch_stack"):
+        if isinstance(doc.get(key), int) and doc[key] >= 0:
+            out[key + "_b"] = doc[key]
     return out
 
 
@@ -159,6 +164,8 @@ def summarize(rows, min_heap):
         heaps = [r["heap_internal_kib"] for r in good if r.get("heap_internal_kib") is not None]
         rssi = [r["rssi_dbm"] for r in good if r.get("rssi_dbm") is not None]
         stale = [r["stale_s"] for r in good if r.get("stale_s") is not None]
+        stacks = {k: [r[k + "_b"] for r in good if r.get(k + "_b") is not None]
+                  for k in ("loop_stack", "web_stack", "fetch_stack")}
         reasons = []
         if reboots:
             reasons.append(f"restarted {reboots}x")
@@ -175,6 +182,9 @@ def summarize(rows, min_heap):
             facts += f", RSSI {min(rssi):.0f} to {max(rssi):.0f} dBm"
         if stale:
             facts += f", score age max {max(stale):.0f} s"
+        lows = [f"{k.split('_')[0]} {min(v)}" for k, v in stacks.items() if v]
+        if lows:
+            facts += ", stack left (B) " + ", ".join(lows)
         out.append((host, not reasons, reasons, facts))
     return out
 
@@ -199,6 +209,9 @@ def selftest():
     assert parse_heap({"internal": 81.2, "block": 30.0, "psram": 6100.5}) == {
         "heap_internal_kib": 81.2, "heap_psram_kib": 6100.5}
     assert parse_heap({"error": "x"}) == {}
+    assert parse_heap({"internal": 81.2, "block": 30.0, "psram": 6100.5, "loop_stack": 5648,
+                       "web_stack": 428, "fetch_stack": -1}) == {
+        "heap_internal_kib": 81.2, "heap_psram_kib": 6100.5, "loop_stack_b": 5648, "web_stack_b": 428}
 
     assert not restarted(None, 5, 100.0)
     assert not restarted((0.0, 1000), 1060, 60.0)

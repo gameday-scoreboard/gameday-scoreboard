@@ -9,7 +9,7 @@ Find what you're seeing, then try the fix. Each entry ends with why it happens, 
 
 ## The app can't find my panel
 
-Check that your phone is on the same Wi-Fi network as the panel. Then add the panel by address: tap the add button in the app and enter the panel's name, like `gameday-2f6a70.local`, or its IP address. If you don't have either, hold the button on the controller for about 1.5 seconds and the panel shows both for 20 seconds.
+Check that your phone is on the same Wi-Fi network as the panel. Then add the panel by address: tap **+** on the app's panel list (on iPhone, **Settings > Panels**) and enter the panel's name, like `gameday-2f6a70.local`, or its IP address. If you don't have either, hold the button on the controller for about 1.5 seconds and the panel shows both for 20 seconds.
 
 A panel that isn't set up yet shows **SETUP**. The app finds that one over Bluetooth, so keep Bluetooth on and the phone near the panel.
 
@@ -22,6 +22,8 @@ A panel that isn't set up yet shows **SETUP**. The app finds that one over Bluet
 - Use your main network, not a guest network.
 
 While it joins, the panel shows **JOINING** and the name of the network it was given, so a wrong pick shows up there.
+
+If the panel can't join, it says **Can't join**, the network's name and **Check name and password** for 30 seconds, and the app asks for them again.
 
 **Why:** the panel's Wi-Fi only works on 2.4 GHz. A guest network can let the panel join but keep your phone from reaching it afterwards.
 
@@ -43,9 +45,7 @@ Check that other devices on the same network can get online. The panel keeps try
 
 **Why:** the panel is on your Wi-Fi but can't get an answer from ESPN, where the scores come from. That's usually the internet connection, and sometimes ESPN itself.
 
-:::note[Coming in the next release]
 When ESPN answers but no longer has your team's next game under the number it had, as can happen when a game is rescheduled, the panel looks up your team again right away instead of waiting and trying the same game for hours.
-:::
 
 ## The panel says Getting ready for a long time
 
@@ -55,17 +55,13 @@ Try another network, like your home Wi-Fi or a phone hotspot.
 
 On a network that blocks time servers, the panel sets its clock from ESPN a few seconds after joining and shows today's games instead of **Getting ready**.
 
-:::note[Coming in the next release]
 **Getting ready** shows only for the first 30 seconds after the panel joins Wi-Fi. If it still has no clock by then, it says why: **Wi-Fi needs a sign-in** on a network that wants you to sign in on a web page, otherwise **No internet**. See the next section.
-:::
 
 ## The panel says No internet
 
-:::note[Coming in the next release]
 Check that other devices on the same network can get online, then restart the router if they can't. The panel keeps trying by itself and shows today's games as soon as the internet is back. If other devices are fine, try another network, like a phone hotspot.
 
 **Why:** the panel joined your Wi-Fi, but 30 seconds later neither a time server nor ESPN had answered, so the network isn't reaching the internet. The panel needs the time from the internet before it can read any scores.
-:::
 
 ## Half the board is blank, or the picture shows twice
 
@@ -136,6 +132,10 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 Check **Night schedule** in the Panel card on the device page. While it's on, the device page says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
 
+:::note[Coming in the next release]
+To light the panel for the rest of one night, press **Turn on for tonight** next to **Night mode until**, or **ON** on the remote.
+:::
+
 **Why:** the night schedule dims the panel, or turns its screen off, between the times you set. A live game for your team or a favorite brings it back to normal brightness until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
 ## The panel is dim, or shows a thermometer or plug in the corner
@@ -147,6 +147,16 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 **A plug, and Check power supply:** the panel restarted twice in a row because its power dipped, so it keeps its brightness low to stay on. Use the power supply that came with it, not a phone charger or a USB port. Then press **Clear** on the device page. The icon stays until you do.
 
 **Why:** above a 75 C reading from the controller's chip, the panel steps its brightness down, a step every two minutes while it stays hot, as far as a quarter of your setting. Once the chip reads under 70 C, it comes back a step at a time. A power supply too weak for the panel makes it restart when it lights up, and a lower brightness draws less power. The device page shows the same message, and the chip temperature under Diagnostics.
+
+:::note[Coming in the next release]
+The panel stays at your brightness and there is no Clear button. The icon in the corner only says what happened:
+
+**A thermometer, and Running warm:** the controller's chip reads 75 C or more. Keep the panel out of direct sun and give it some air behind it. The icon goes once the chip reads under 70 C.
+
+**A plug, and Power dipped:** the panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. Use the power supply that came with it, not a phone charger or a USB port. The icon goes once the panel has run 10 minutes without another dip.
+
+The device page shows the same words under the board. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
+:::
 
 ## The device page says an update didn't take
 

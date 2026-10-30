@@ -10,12 +10,13 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_celebrate
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_picture build/test_celebrate
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
 	./build/test_settings
 	./build/test_logo_cache
+	./build/test_picture
 	./build/test_celebrate
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -40,7 +41,7 @@ build/render_celebrations: render_celebrations.cpp ../components/gameday/celebra
 celebrate-gifs: build/render_celebrations
 	python3 render_celebrations.py build/render_celebrations build/celebrations
 
-build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
+build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h ../components/saved_networks/setup_window.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
 
@@ -62,6 +63,11 @@ build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
 build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
+
+# The picture card's GIF player and upload checks, against fixtures/pictures/.
+build/test_picture: test_picture.cpp ../components/gameday/picture.h ../components/gameday/gif.h ../components/gameday/psram.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_picture.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the
@@ -123,6 +129,10 @@ build/fuzz_settings: fuzz_settings.cpp $(FUZZ_DEPS) $(wildcard ../components/gam
 	@mkdir -p build
 	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_settings.cpp -o $@
 
+build/fuzz_picture: fuzz_picture.cpp $(FUZZ_DEPS) ../components/gameday/picture.h ../components/gameday/gif.h ../components/gameday/psram.h
+	@mkdir -p build
+	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_picture.cpp -o $@
+
 build/fuzz_seeds: fuzz_seeds.cpp $(PARSER_SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) fuzz_seeds.cpp $(PARSER_SRCS) -o $@ $(LDFLAGS)
@@ -132,7 +142,7 @@ build/seeds/.done: build/fuzz_seeds $(wildcard fixtures/*.json)
 	./build/fuzz_seeds fixtures build/seeds/espn build/seeds/set
 	@touch $@
 
-fuzz: build/fuzz_espn build/fuzz_set build/fuzz_settings build/seeds/.done
+fuzz: build/fuzz_espn build/fuzz_set build/fuzz_settings build/fuzz_picture build/seeds/.done
 	@echo "Fuzzing with $(if $(LIBFUZZER),libFuzzer,fuzz_main.cpp) ($(FUZZ_CXX))"
 	@mkdir -p build/corpus/espn build/corpus/set
 	./build/fuzz_espn $(FUZZ_RUN) -dict=fuzz_espn.dict build/corpus/espn build/seeds/espn
@@ -140,6 +150,8 @@ fuzz: build/fuzz_espn build/fuzz_set build/fuzz_settings build/seeds/.done
 	@mkdir -p build/corpus/settings build/seeds/settings
 	cp fixtures/api/settings.json build/seeds/settings/
 	./build/fuzz_settings $(FUZZ_RUN) -dict=fuzz_settings.dict build/corpus/settings build/seeds/settings
+	@mkdir -p build/corpus/picture
+	./build/fuzz_picture $(FUZZ_RUN) build/corpus/picture fixtures/pictures
 
 fuzz-long:
 	$(MAKE) fuzz FUZZ_TIME=$(FUZZ_LONG_TIME)

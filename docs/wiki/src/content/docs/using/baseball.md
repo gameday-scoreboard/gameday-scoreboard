@@ -17,11 +17,9 @@ The next-game card shows both logos, your team on the left, with the records und
 - the betting line, over/under and TV channel, when ESPN has them and **Odds, TV and win chance** is on
 - the ballpark
 
-:::note[Coming in the next release]
 Before a playoff game the ticker starts with the round, like "NLCS - Game 2" or "World Series - Game 1".
 
 After the odds the ticker shows each team's home run leader for the season, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI". **Pre-game season leaders** on the device page turns them off. At an open-air ballpark the ballpark comes with ESPN's forecast for the game, like "82F Mostly clear at Petco Park"; a ballpark with a roof shows just its name.
-:::
 
 MLB has no Up next list on the device page: a team's season schedule is too large for the panel to read.
 
@@ -59,6 +57,10 @@ With **Celebrations** on **Full**, a home run shows the ball arcing up and out o
 The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for ten minutes, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game.
 
 At the final the board takes turns, 10 seconds each, with the line score: runs by inning in groups of three, then runs, hits and errors, like a box score. An inning the home team didn't need to bat in shows an x. A long extra-inning game drops the groups, and a very long one shows runs, hits and errors alone. On a 64x64 panel it's runs, hits and errors, the teams side by side under their abbreviations.
+
+:::note[Coming in the next release]
+A **Game leaders** card joins the turns: each team's logo and abbreviation with its starting pitcher's line and its top hitter, like "Jax 4.0 IP 2 ER 6 K" and "Diaz 2-4 1 HR". It shows once after the 5th inning and takes its turn at the final. On a 64x64 panel it's the pitcher only, under each abbreviation, shortened to fit, like "Jax 4.0 IP". Turn it off under **Between games** on the [device page](/using/device-page/).
+:::
 
 With **Last play** on, the final's ticker also runs the scoring plays the panel saw, like "T6 Riley homered to left, Acuna scored, ATL 2-0", and ESPN's headline for the game when it has one.
 

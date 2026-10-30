@@ -1,6 +1,6 @@
 ---
 title: "Brightness, panel on and off, and the clock"
-description: "Set the panel's brightness, turn it off and on, dim it or turn it off at night on a schedule, and switch between the scoreboard and the clock."
+description: "Set the panel's brightness, turn it off and on, dim it or turn it off at night on a schedule, have it come on for your games and go off after them, and switch between the scoreboard and the clock."
 sidebar:
   order: 17
 ---
@@ -25,7 +25,22 @@ A live game for your team or one of your favorites keeps the panel at its normal
 
 While night mode is on, the device page says so under the board, like **Night mode until 7:00 AM**, so a dark panel doesn't look broken. The panel keeps following your games all night, and the board is up to date the moment it lights up again.
 
+:::note[Coming in the next release]
+You can always get past the schedule. During its hours, any of these turns night mode off for the rest of that night and brings the panel back to its normal brightness:
+
+- **ON**, the brighter button, **NIGHT** (at the night level instead) or a numbered button on the [WizMote](/using/remote/)
+- picking a team or a mode, or changing your favorites, in the app or on the device page
+- **Panel on** on the device page
+- **Turn on for tonight** next to **Night mode until** on the device page
+
+The device page then says **Night mode off until 11:00 PM**, the next start time. To go back to the schedule before then, press **Back to night mode** there, or **NIGHT** on the remote. The next night the schedule runs as usual. Home Assistant automations don't turn night mode off, so one that runs at night can't wake the panel by mistake.
+:::
+
 The schedule runs on the panel's own clock, set from the internet, in the timezone under Setup. Until the panel has the time after it starts, it stays at its normal brightness. The heat and power protection below still hold the night brightness down when they need to.
+
+:::note[Coming in the next release]
+A running [effect](/using/effects/) dims with the night brightness like the board. Screen-off puts **Showing** back to the Scoreboard; picking Effects while the panel is dim or dark for the night turns night mode off for the rest of the night, like **Panel on**.
+:::
 
 ## Turning the panel off and on
 
@@ -39,7 +54,33 @@ You can also turn it off and on with:
 
 A few things turn a dark panel back on by themselves, since they mean someone wants to look at it: picking a team or a mode in the app, on the device page or in Home Assistant, a numbered button or **NIGHT** on the remote, and the brighter button on the remote, which brings back the brightness the panel had. During the night schedule's hours the panel comes back at its night setting instead: at the night brightness, or with **Screen at night** off, still dark until the hours end or a game of yours goes live.
 
+:::note[Coming in the next release]
+During the night schedule's hours, the remote, a team or mode picked in the app or on the device page, and **Panel on** on the device page turn night mode off for the rest of the night, so the panel comes back at its normal brightness. Home Assistant still brings it back at its night setting. See [Night schedule](#night-schedule).
+:::
+
 The panel always comes back on after a restart or a power cut.
+
+:::note[Coming in the next release]
+One exception: a panel that **After the game** turned off stays off through a restart, like the nightly update, so it doesn't light up at 3 AM. A power cut still brings it back on.
+:::
+
+## Game-day wake and after the game
+
+:::note[Coming in the next release]
+The panel can turn itself on before your games and decide what it does once they're over, so it doesn't have to be lit all day. Both are in the Panel card on the device page, and both are off on a new panel.
+
+**Game-day wake** turns a panel you switched off back on before a game of your team or one of your favorites starts. Pick how long before under **Turns on**: 5 minutes to 2 hours, 15 minutes to start. It wakes the panel once per game, so if you turn it off again before the start, it stays off for that game. In Live games it wakes for your first favorite's games, and with **Favorites take over** on, for any favorite's. During the night schedule's hours it still turns the panel on, but the night setting holds until the game is live: dimmed, or dark with **Screen at night** off.
+
+**After the game** picks what the panel does once the final has been up a while (30 minutes, 10 for baseball, so the second game of a doubleheader isn't missed):
+
+- **Stay on the scoreboard**: the final, then your next game's card, as before.
+- **Turn off**: the panel turns off. With **Game-day wake** on, it comes back on before your next game. If your next game starts within the **Turns on** time, the panel stays on for it instead.
+- **Show the clock**: the time and your next game, in that team's colors, until the **Turns on** time before that game, then the scoreboard. The countdown to the next game waits while the clock is up; the other cards you turned on under **Between games**, like your own countdown, the weather, the message card and pictures, still get their turns.
+
+Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
+
+The app and the settings backup have the same settings.
+:::
 
 ## Showing: the scoreboard or the clock
 
@@ -53,11 +94,13 @@ Separate from the Clock page, the scoreboard shows a clock of its own when there
 - **In Live games** with nothing live, while the board shows your first favorite, between seasons the clock is in that team's colors. Under the time is its next game once it's on the schedule, like "Next: at PHI Mar 26 7:05 PM", or the date until then. Football teams get it only when ESPN lists no game at all, so a bye week never shows it; other leagues get it once the next game is more than 10 days away.
 - **In Live games** with no favorites, when there has been no game in the last week and none is coming, the clock is gray.
 
-:::note[Coming in the next release]
 Favorite teams follows the same rule as Live games' first favorite: the clock comes up once every favorite (in the playlist, when one is playing) is between seasons, with no game listed or the next one more than 10 days away (football only with no game listed). A favorite whose game is about to start still takes the panel. It's in the colors of the favorite whose game comes first, with that game under the time, like "Next: at PHI Mar 26 7:05 PM". While the clock is up, the panel checks for a new date every 6 hours instead of every 15 minutes, so it uses less data.
-:::
 
 On a single 64x64 panel the date goes under the time, and the next game goes in the ticker. See [Show: Favorite teams, Live games](/using/modes/).
+
+:::note[Coming in the next release]
+Two switches under **Between games** on the [device page](/using/device-page/#between-games) change when this clock shows. With **Clock** off, the next game's board stays up between seasons instead, and in Live games with nothing in the last week and no favorite to show, the board says there are no live games. With **Next game** off, the clock shows whenever the panel is waiting for a game, in season too, with the next game under the time. A game in progress or just over still takes the panel, and in Favorite teams so does one about to start. In Live games, Next game matters only while nothing is live and the board shows your first favorite; the other teams' games and the final scores aren't affected.
+:::
 
 ## Heat and power protection
 
@@ -66,3 +109,12 @@ On a single 64x64 panel the date goes under the time, and the next game goes in 
 **Weak power supply.** If the panel restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, it holds its brightness at about a quarter of full so it stays on. A small plug pulses slowly in the top right corner, and every two minutes the bottom line says **Check power supply** in red. Use the power supply that came with the panel, not a phone charger or a USB port, then press **Clear** in the notice on the device page.
 
 The device page shows both notices under the board, and the chip temperature under Diagnostics.
+
+:::note[Coming in the next release]
+The panel no longer dims itself, and there is nothing to clear. It stays at your brightness and only tells you what happened:
+
+- **Running warm.** When the controller's chip reads 75 C or more, a small thermometer pulses slowly in the top right corner, and every two minutes the bottom line says **Running warm** in orange for 15 seconds. Both go away once the chip reads under 70 C. Keep the panel out of direct sun and give it some air behind it.
+- **Power dipped.** When the panel restarts because its power dipped, as on a phone charger or a supply too weak for it, it lights up at half your brightness for 3 seconds, then goes to your brightness and stays there. A small plug pulses in the top right corner, and every two minutes the bottom line says **Power dipped** in red. Both go away once the panel has run 10 minutes without another dip. Use the power supply that came with the panel, not a phone charger or a USB port.
+
+The device page shows the same words under the board, with a sentence on what to do and no button.
+:::

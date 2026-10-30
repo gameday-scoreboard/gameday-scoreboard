@@ -43,13 +43,15 @@ In the **Message card** part of the same card, type your message and press **Sav
 
 Each turn shows up to four entries. With more than that, the next turn picks up where the last one stopped, and after the last entry it starts again at the top.
 
-The card never covers a live game or a score celebration. It does cover the panel's own trouble line between games, like "Can't reach ESPN" or "Wi-Fi needs sign-in", so on **Whenever no game is on** a panel with trouble keeps showing your message; the device page still says what's wrong. In Favorite teams and Live games it takes turns with whatever the board shows between games, the finals and next games included.
+The card never covers a live game or a score celebration.
 
-:::note[Coming in the next release]
 The card makes way for the panel's own trouble line. When three reads from ESPN in a row fail, when the Wi-Fi wants a sign-in, or when the panel has no internet, the board says so in place of your message, on **Whenever no game is on** too. Your message comes back by itself once the trouble clears: right away on **Whenever no game is on**, at its next turn otherwise. See [Panel messages](/help/panel-messages/) for what each line means.
-:::
 
 **Clear** empties the text and the address, and the card stops.
+
+:::note[Coming in the next release]
+**Message card** in the **Between games** list on the [device page](/using/device-page/#between-games) turns the card's turns off and on without clearing it, so your text or list is there when you turn it back on.
+:::
 
 ### A list from a web address
 

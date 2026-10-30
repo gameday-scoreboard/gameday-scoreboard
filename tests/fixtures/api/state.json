@@ -36,18 +36,48 @@
       "n": "Sundays",
       "f": [
         0
-      ]
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false
     },
     {
       "n": "College",
       "f": [
         1,
         2
-      ]
+      ],
+      "days": "",
+      "start": "00:00",
+      "end": "00:00",
+      "only": false
     }
   ],
   "list": 2,
+  "sched": 0,
+  "remote": [
+    {
+      "v": "fav",
+      "gone": false
+    },
+    {
+      "v": "team:ncaa:2294",
+      "gone": false
+    },
+    {
+      "v": "list:College",
+      "gone": false
+    },
+    {
+      "v": "sport:basketball",
+      "gone": false
+    }
+  ],
   "listmax": 16,
+  "sports": [],
+  "sport": "",
   "today": false,
   "jump": false,
   "banner": true,
@@ -69,17 +99,81 @@
   "best": true,
   "bootaddr": true,
   "countdown": true,
+  "top25": true,
+  "news": false,
+  "pics": [
+    {
+      "s": 1,
+      "k": "gif",
+      "w": 128,
+      "h": 64,
+      "f": 12,
+      "b": 23514,
+      "id": 2849137201
+    },
+    {
+      "s": 3,
+      "k": "png",
+      "w": 64,
+      "h": 64,
+      "f": 1,
+      "b": 4180,
+      "id": 117440513
+    }
+  ],
+  "picroom": 65536,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
+  "gameleaders": true,
+  "cards": [
+    {"id": "next", "name": "Next game", "on": true, "ok": true, "hint": ""},
+    {"id": "clock", "name": "Clock", "on": false, "ok": true, "hint": ""},
+    {"id": "countdown", "name": "Countdown to the next game", "on": true, "ok": true, "hint": ""},
+    {"id": "custom", "name": "Your own countdown", "on": true, "ok": true, "hint": "Pick its day below first"},
+    {"id": "message", "name": "Message card", "on": true, "ok": true, "hint": "Add text or a list in the Message card first"},
+    {"id": "picture", "name": "Pictures", "on": true, "ok": true, "hint": "Add a picture in the Pictures card first"},
+    {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
+    {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
+    {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
+    {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"}
+  ],
+  "town": "75019",
+  "wxon": true,
+  "wx": {
+    "place": "Coppell, Texas",
+    "lat": 32.9546,
+    "lon": -97.015,
+    "lookup": 200,
+    "read": 200,
+    "wait_s": 0,
+    "held": true,
+    "read_s": 412,
+    "temp": 71,
+    "hi": 81,
+    "lo": 61,
+    "code": 3,
+    "cond": "Cloudy",
+    "night": false,
+    "days": [
+      {"d": "Thu", "hi": 80, "lo": 66, "code": 61},
+      {"d": "Fri", "hi": 75, "lo": 67, "code": 2}
+    ]
+  },
   "night": true,
   "nightstart": "23:00",
   "nightend": "07:00",
   "nightscreen": true,
   "nightlevel": 16,
   "night_now": "",
+  "wake": true,
+  "wakelead": 15,
+  "after": "off",
+  "wake_now": "",
   "autoupd": false,
   "beta": false,
   "update_failed": "2026.10.2",
+  "update_important": true,
+  "update_shown": 1793142120,
   "bar": {
     "report": "support@gameday-scoreboard.com"
   },
@@ -89,6 +183,13 @@
   "msgread": {
     "status": 200,
     "entries": 3
+  },
+  "hook": "http://192.168.1.20:1880/gameday",
+  "pregame": 15,
+  "hookpost": {
+    "status": 200,
+    "sent": 4,
+    "dropped": 0
   },
   "misses": 0,
   "captive": false,
@@ -137,6 +238,7 @@
     "tc": "003594",
     "oc": "004C54",
     "id": "401772845",
+    "leaders": false,
     "sport": 0,
     "sit": "",
     "outs": -1,
