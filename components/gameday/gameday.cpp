@@ -360,6 +360,11 @@ void GamedayComponent::setup() {
     this->prefs9_ = Prefs9{};  // no playlists: Favorite teams plays every favorite
   if (this->prefs9_.sport > ::espn::kSportCount || this->prefs9_.active != 0)
     this->prefs9_.sport = 0;
+  this->pref10_ = global_preferences->make_preference<Prefs10>(fnv1_hash("gameday_prefs10_v1"));
+  if (!this->pref10_.load(&this->prefs10_) || this->prefs10_.sched_applied > this->prefs9_.count ||
+      this->prefs10_.sched_applied < 0 || this->prefs10_.sched_before > this->prefs9_.count ||
+      this->prefs10_.sched_before < 0 || this->prefs10_.sched_sport > ::espn::kSportCount)
+    this->prefs10_ = Prefs10{};  // no options, no schedule under way
   this->load_msg_();
   this->load_nick_();
   this->load_hook_();
@@ -579,13 +584,67 @@ bool GamedayComponent::fav_in_list_(size_t i) const {
   return ::espn::list_has(a != 0 ? this->prefs9_.mask[a - 1] : 0, a != 0, i);
 }
 
+::espn::ListOpt GamedayComponent::list_opt_(uint8_t n) const {
+  return n >= 1 && n <= this->prefs9_.count ? this->prefs10_.opt[n - 1] : ::espn::ListOpt{};
+}
+
+void GamedayComponent::schedule_tick_() {
+  if (this->time_ == nullptr || this->demo_playing_())
+    return;
+  ESPTime now = this->time_->now();
+  if (!now.is_valid())
+    return;
+  int want = ::espn::scheduled_list(this->prefs10_.opt, this->prefs9_.count, now.day_of_week - 1,
+                                    now.hour * 60 + now.minute);
+  bool locked = this->favorites_mode_() && this->fav_locked_;
+  Prefs10 &p = this->prefs10_;
+  ::espn::SchedStep st = ::espn::schedule_step(want, p.sched_applied, this->prefs9_.active, locked);
+  if (st.start) {
+    if (p.sched_applied == 0) {
+      p.sched_before = this->prefs9_.active;
+      p.sched_sport = this->sport_playing_();
+      p.sched_mode = this->prefs2_.mode;
+    }
+    p.sched_applied = (int8_t) want;
+    this->pref10_.save(&p);
+    this->sync_prefs_();
+    ESP_LOGI(TAG, "Schedule: playing %s", this->list_name_((uint8_t) want).c_str());
+    this->set_active_list_((uint8_t) want, false);
+    return;
+  }
+  if (want == 0 && p.sched_applied != 0 && !locked) {
+    uint8_t before = (uint8_t) p.sched_before, sport = p.sched_sport, mode = p.sched_mode;
+    p.sched_applied = 0;
+    p.sched_before = 0;
+    p.sched_sport = 0;
+    this->pref10_.save(&p);
+    this->sync_prefs_();
+    if (!st.restore) {
+      this->rebuild_state_(&this->last_fields_);  // the owner picked another list meanwhile: it stays
+      return;
+    }
+    ESP_LOGI(TAG, "Schedule: over, back to %s",
+             sport != 0 ? ::espn::kSportRowNames[sport - 1] : before == 0 ? "every favorite" : this->list_name_(before).c_str());
+    // play_list_ drops a sport row the favorites no longer make.
+    this->play_list_(sport != 0 ? 0 : before, sport != 0 && ::espn::sport_row_has(this->sport_rows_(), sport) ? sport : 0,
+                     false);
+    if (mode != (uint8_t) Mode::FAVORITES && this->prefs2_.mode == (uint8_t) Mode::FAVORITES &&
+        ::espn::read_mode(mode) >= 0)
+      this->set_mode_(mode);
+  }
+}
+
 void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
   std::string active_name = this->list_name_(this->prefs9_.active);
   bool was_active = this->prefs9_.active != 0;
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
+  std::string applied_name = this->list_name_((uint8_t) this->prefs10_.sched_applied);
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
+  Prefs10 p10 = this->prefs10_;
+  for (uint8_t n = 0; n < ::espn::kListMax; n++)
+    p10.opt[n] = n < p.count ? lists[n].opt : ::espn::ListOpt{};
   for (uint8_t n = 0; n < p.count; n++) {
     strncpy(p.name[n], lists[n].name.c_str(), ::espn::kListNameMax);
     p.mask[n] = ::espn::list_mask(lists[n].teams, favs);
@@ -607,6 +666,16 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   }
   this->prefs9_.active = active;
   this->pref9_.save(&this->prefs9_);
+  // The playlist a schedule put on follows its name too; gone, the schedule
+  // lets go and what plays stays.
+  p10.sched_applied = 0;
+  for (uint8_t n = 1; n <= p.count && !applied_name.empty(); n++)
+    if (this->list_name_(n) == applied_name)
+      p10.sched_applied = (int8_t) n;
+  if (p10.sched_applied == 0)
+    p10.sched_before = p10.sched_sport = 0;
+  this->prefs10_ = p10;
+  this->pref10_.save(&this->prefs10_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
@@ -945,7 +1014,9 @@ void GamedayComponent::rebuild_favorites_(bool keep_cards) {
   r.rotate_s = (int64_t) this->prefs2_.rotate_minutes * 60;
   r.dwell_s = ::espn::kCountdownTurnS;
   r.countdown_s = ::espn::kCountdownTurnS;
-  r.today_only = this->today_only();
+  ::espn::ListOpt opt = this->list_opt_(this->prefs9_.active);
+  r.today_only = ::espn::list_today(opt, this->today_only());
+  r.only_list = (opt.flags & ::espn::LISTOPT_ONLY) != 0;
   if (this->time_ != nullptr) {
     ESPTime t = this->time_->now();
     if (t.is_valid()) {
@@ -1352,6 +1423,7 @@ void GamedayComponent::loop() {
     this->night_tick_();
     this->wake_tick_();
     this->update_nudge_tick_();
+    this->schedule_tick_();
     if (!this->power_settled_ && millis() >= ::espn::kPowerSettledMs) {
       // A settled run: the plug from this start's brownout comes down
       this->power_settled_ = true;
@@ -4682,8 +4754,23 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     for (uint8_t i = 0; i < FAV_MAX; i++)
       if (this->fav_id_(i) != 0 && ((this->prefs9_.mask[n - 1] >> i) & 1u))
         f.add(i);
+    // Its options (playlists.h ListOpt): the schedule's days as digits (0
+    // Sunday), its hours, Only this list's games, and its own Only today's
+    // games only when set.
+    const ::espn::ListOpt &opt = this->prefs10_.opt[n - 1];
+    std::string days;
+    for (int d = 0; d < 7; d++)
+      if ((opt.days >> d) & 1u)
+        days += (char) ('0' + d);
+    o["days"] = days;
+    o["start"] = ::espn::list_time_text(opt.start);
+    o["end"] = ::espn::list_time_text(opt.end);
+    o["only"] = (opt.flags & ::espn::LISTOPT_ONLY) != 0;
+    if (opt.flags & ::espn::LISTOPT_TODAY_SET)
+      o["today"] = (opt.flags & ::espn::LISTOPT_TODAY) != 0;
   }
   doc["list"] = this->prefs9_.active;
+  doc["sched"] = this->prefs10_.sched_applied;  // the playlist a schedule put on, 0 = none
   doc["listmax"] = ::espn::kListMax;
   // The sport rows Playing offers, worked out from the favorites, and the one
   // playing ("" for none; list is then 0).

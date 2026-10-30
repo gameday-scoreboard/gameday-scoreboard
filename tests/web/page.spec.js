@@ -33,7 +33,10 @@ const playlistsPost = (p) => {
   let d;
   try { d = JSON.parse(p.body); } catch (_) { return null; }
   if (!d || !Array.isArray(d.lists) || Object.keys(d).some((k) => !["schema", "lists", "list"].includes(k))) return null;
-  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",")).join(";") };
+  // A playlist's options come back as its @ tokens, in the firmware's order.
+  const opts = (l) => (l.days ? ",@d:" + l.days + (l.start !== undefined ? ",@t:" + l.start + "-" + l.end : "") : "")
+    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "");
+  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",") + opts(l)).join(";") };
   if (d.list !== undefined) q.list = String(d.list);
   return q;
 };
@@ -602,10 +605,10 @@ test("playlists post every playlist on new, teams, rename, move and remove", asy
   const box = page.locator("#listCtls .plist");
   await expect(box).toHaveCount(1);
   await expect(box.nth(0).locator(".pbtn")).toHaveText("Button 1");
-  await expect(box.nth(0).locator(".chip")).toHaveText(["DAL", "HOU", "MISS"]);
-  await box.nth(0).locator(".chip", { hasText: "HOU" }).click();
+  await expect(box.nth(0).locator(".pteams .chip")).toHaveText(["DAL", "HOU", "MISS"]);
+  await box.nth(0).locator(".pteams .chip", { hasText: "HOU" }).click();
   await expectSet(request, { lists: "Playlist 1=nfl:34" });
-  await expect(box.nth(0).locator(".chip.on")).toHaveText(["HOU"]);
+  await expect(box.nth(0).locator(".pteams .chip.on")).toHaveText(["HOU"]);
   await box.nth(0).locator(".pname").fill("Texans; and=more");
   await box.nth(0).locator(".pname").press("Enter");
   await expectSet(request, { lists: "Texans andmore=nfl:34" });
@@ -635,6 +638,61 @@ test("the playlists card has no One per sport button", async ({ page, request })
   await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
 });
 
+test("a playlist's options post as tokens: days, hours, only this list, only today", async ({ page, request }) => {
+  await reset(request, { lists: [{ n: "Sundays", f: [0] }] });
+  await page.goto("/");
+  const box = page.locator("#listCtls .plist").nth(0);
+  const days = box.locator(".pdays .chip");
+  await expect(days).toHaveText(["S", "M", "T", "W", "T", "F", "S"]);
+  await expect(box.locator(".phours")).toHaveCount(0);
+  await days.nth(0).click();
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:0" });
+  await expect(box.locator(".phours small")).toHaveText("all day");
+  await days.nth(6).click();
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06" });
+  await box.getByLabel("from Sundays").fill("11:00");
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06,@t:11:00-00:00" });
+  await box.getByLabel("to Sundays").fill("23:00");
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06,@t:11:00-23:00" });
+  await expect(box.locator(".phours small")).toHaveText("");
+  await box.getByLabel("to Sundays").fill("02:00");
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06,@t:11:00-02:00" });
+  await expect(box.locator(".phours small")).toHaveText("into the next morning");
+  await box.getByRole("switch", { name: "Only this list's games Sundays" }).click();
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06,@t:11:00-02:00,@only" });
+  await box.getByLabel("Only today's games Sundays").selectOption("1");
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06,@t:11:00-02:00,@only,@today:1" });
+  await box.getByLabel("Only today's games Sundays").selectOption("");
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:06,@t:11:00-02:00,@only" });
+  // Clearing the last day drops the hours with it.
+  await days.nth(0).click();
+  await days.nth(6).click();
+  await expectSet(request, { lists: "Sundays=nfl:6,@only" });
+  await expect(box.locator(".phours")).toHaveCount(0);
+  // The state reads back what the mock kept.
+  const st = await deviceState(request);
+  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true });
+});
+
+test("a playlist's options survive a rename and a reorder, and the bar says when a schedule has it on", async ({ page, request }) => {
+  await reset(request, {
+    mode: 4, list: 2, sched: 2,
+    lists: [{ n: "A", f: [0] }, { n: "Sundays", f: [1], days: "0", start: "11:00", end: "23:00", only: true, today: false }],
+  });
+  await page.goto("/");
+  await expect(page.locator("#favName")).toHaveText("Cycling through Sundays · on its schedule");
+  const box = page.locator("#listCtls .plist");
+  await expect(box.nth(1).locator(".pdays .chip.on")).toHaveText(["S"]);
+  await expect(box.nth(1).getByLabel("Only today's games Sundays")).toHaveValue("0");
+  await box.nth(1).getByRole("button", { name: "Move up Sundays" }).click();
+  await expectSet(request, { lists: "Sundays=nfl:34,@d:0,@t:11:00-23:00,@only,@today:0;A=nfl:6" });
+  // The mock keeps the playing playlist by name, so it is number 1 now.
+  await expect(page.locator("#favList")).toHaveValue("1");
+  await box.nth(0).locator(".pname").fill("Sunday ball");
+  await box.nth(0).locator(".pname").press("Enter");
+  await expectSet(request, { lists: "Sunday ball=nfl:34,@d:0,@t:11:00-23:00,@only,@today:0;A=nfl:6", list: "1" });
+});
+
 // All 16 playlists with every favorite are about 3 KB, far past the panel's
 // 512-byte URL and its 1 KB form body; the mock refuses both as the panel does.
 test("all 16 playlists with every favorite save", async ({ page, request }) => {
@@ -647,7 +705,7 @@ test("all 16 playlists with every favorite save", async ({ page, request }) => {
   await page.locator("#listAdd").click();
   const want = Array.from({ length: 15 }, (_, i) => "Playlist " + (i + 1) + "=" + keys).join(";") + ";Playlist 16=";
   await expectSet(request, { lists: want });
-  await page.locator("#listCtls .plist").nth(15).locator(".chip").first().click();
+  await page.locator("#listCtls .plist").nth(15).locator(".pteams .chip").first().click();
   await expectSet(request, { lists: want + "nfl:1" });
   await expect(page.locator("#toast")).not.toContainText("did not respond");
 });

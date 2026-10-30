@@ -195,6 +195,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
 //                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
+//                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
 //   POST /gameday/action?do=say&text=...&secs=N   the banner (message.h) for N s, 10 when left out;
 //                                    no text takes it down
@@ -794,6 +795,29 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t sport;
     uint8_t spare[1];
   } __attribute__((packed));
+
+  // Each playlist's options (playlists.h ListOpt) and the schedule's state,
+  // in their own fixed-size blob: opt[n] belongs to playlist n + 1 and is
+  // rewritten with the playlists. sched_applied is the playlist a schedule
+  // put on (0 none), sched_before and sched_sport what played before it
+  // (a playlist, a sport row or neither) and sched_mode the mode then, kept
+  // in flash so a restart inside the hours knows to put them back.
+  struct Prefs10 {
+    ::espn::ListOpt opt[::espn::kListMax];
+    int8_t sched_applied;
+    int8_t sched_before;
+    uint8_t sched_mode;
+    uint8_t sched_sport;  // the sport row playing before, 1 + Sport; 0 = none
+    uint8_t spare[4];
+  } __attribute__((packed));
+  static_assert(sizeof(Prefs10) == 104, "Prefs10 is a fixed-size blob");
+  ESPPreferenceObject pref10_;
+  Prefs10 prefs10_{};
+  // The options of playlist n (1..count); every other list has none.
+  ::espn::ListOpt list_opt_(uint8_t n) const;
+  // Every 10 s from loop(): a schedule that starts puts its playlist on, one
+  // that ends puts back what played before (playlists.h schedule_step).
+  void schedule_tick_();
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);

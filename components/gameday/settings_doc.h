@@ -7,7 +7,9 @@
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
 // "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
-// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], cards the
+// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], each with
+// its options when set: "days" ("06", 0 Sunday to 6 Saturday), "start" and
+// "end" ("11:00"), "only" and "today" (playlists.h ListOpt); cards the
 // between-games cards by id, {"next": true, "clock": false} (cards.h). Brightness and
 // scroll are the Home Assistant numbers of the same names.
 //
@@ -145,6 +147,21 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
           if (!ref.empty())
             t.add(ref);
         }
+        // Its options (playlists.h ListOpt), only what is set, so a backup
+        // from firmware without them reads the same.
+        const char *days = l["days"] | "";
+        if (*days != '\0') {
+          o["days"] = days;
+          const char *start = l["start"] | "00:00", *end = l["end"] | "00:00";
+          if (strcmp(start, end) != 0) {
+            o["start"] = start;
+            o["end"] = end;
+          }
+        }
+        if (l["only"] | false)
+          o["only"] = true;
+        if (l["today"].is<bool>())
+          o["today"] = l["today"].as<bool>();
       }
     } else if (strcmp(k, "cards") == 0) {
       // The state's list, as {"next": true, ...}: an object, so a backup
@@ -406,12 +423,40 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             }
             refs += (refs.empty() ? "" : ",") + r;
           }
+          // Its options as their tokens (playlists.h): days as digits, hours
+          // as HH:MM, two switches. A wrong type refuses the document; hours
+          // the panel can't read are left out and listed.
+          ListOpt opt;
+          if (!e["days"].isNull()) {
+            if (!e["days"].is<const char *>())
+              return detail::settings_fail(out, "lists days should be digits like \"06\" (0 Sunday to 6 Saturday).");
+            list_opt_token("@d:" + std::string(e["days"].as<const char *>()), opt);
+          }
+          if (!e["start"].isNull() || !e["end"].isNull()) {
+            if (!e["start"].is<const char *>() || !e["end"].is<const char *>())
+              return detail::settings_fail(out, "lists start and end should be times like \"11:00\".");
+            std::string hours = std::string(e["start"].as<const char *>()) + "-" + e["end"].as<const char *>();
+            list_opt_token("@t:" + hours, opt);
+            if (opt.start == 0 && opt.end == 0 && hours != "00:00-00:00" && hours != "0:00-0:00")
+              out.skipped.push_back("lists=" + name + ":" + hours);
+          }
+          if (!e["only"].isNull()) {
+            if (!e["only"].is<bool>())
+              return detail::settings_fail(out, "lists only should be true or false.");
+            if (e["only"].as<bool>())
+              opt.flags |= LISTOPT_ONLY;
+          }
+          if (!e["today"].isNull()) {
+            if (!e["today"].is<bool>())
+              return detail::settings_fail(out, "lists today should be true or false.");
+            list_opt_token(e["today"].as<bool>() ? "@today:1" : "@today:0", opt);
+          }
           if (name.empty() || kept == (size_t) kListMax) {
             out.skipped.push_back("lists=" + name);
             continue;
           }
           kept++;
-          text += (text.empty() ? "" : ";") + name + "=" + refs;
+          text += (text.empty() ? "" : ";") + name + "=" + refs + list_opt_text(opt);
         }
         parse_set(k, text, op, target.fav_max);
         break;

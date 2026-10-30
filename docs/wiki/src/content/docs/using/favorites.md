@@ -75,6 +75,16 @@ When your favorites cover more than one sport, **Playing** has a row for each of
 
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
 
+:::note[Coming in the next release]
+**Playlist options.** Under each playlist's teams on the device page, three settings shape how it plays:
+
+- **Plays on** is a schedule. Tap the days (S M T W T F S) the playlist should play, and set the hours with **from** and **to**, in the panel's time zone; with no hours set it plays all day on those days. Hours that end before they start run into the next morning, so Saturdays from 8:00 PM to 2:00 AM covers Sunday 1 AM. When a schedule starts, the panel switches to Favorite teams playing that playlist, and the bar says **on its schedule**; when it ends, the panel goes back to what it was playing before, and to the mode it was in. If a game it's locked on is still going, the switch waits for the final. Two schedules at once: the playlist higher in the card wins. Picking another playlist yourself during the hours stays until you change it again.
+- **Only this list's games** keeps the panel on this playlist's teams even near another favorite's kickoff. Off, as every playlist starts, a favorite outside the playlist still takes the panel for its game.
+- **Only today's games** can differ from the Favorites card's switch for this playlist: **Same as Favorites**, **On** or **Off**.
+
+A settings backup carries all three. The Game Day app shows the same options under each playlist.
+:::
+
 The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below.
 
 A favorite you take out of your list leaves every playlist it was in. Adding it back doesn't put it back in them.

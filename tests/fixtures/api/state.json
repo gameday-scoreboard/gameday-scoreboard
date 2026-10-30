@@ -36,17 +36,27 @@
       "n": "Sundays",
       "f": [
         0
-      ]
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false
     },
     {
       "n": "College",
       "f": [
         1,
         2
-      ]
+      ],
+      "days": "",
+      "start": "00:00",
+      "end": "00:00",
+      "only": false
     }
   ],
   "list": 2,
+  "sched": 0,
   "listmax": 16,
   "sports": [],
   "sport": "",
