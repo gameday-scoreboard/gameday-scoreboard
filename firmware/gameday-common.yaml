@@ -68,6 +68,11 @@ esp32:
       # The first time request waits a random 0 to 5 s by default, all of it
       # boot screen. One panel at a time doesn't need that much spread.
       CONFIG_LWIP_SNTP_MAXIMUM_STARTUP_DELAY: "1000"
+      # NVS keeps an index of every item on each page it uses, in internal RAM
+      # by default. The owner's pictures (picture.h) fill dozens of pages of
+      # the settings partition, which cost about 2.6 KB of internal RAM with
+      # four kept; in PSRAM the settings' own index moves out too.
+      CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM: y
 
 esphome:
   name: "${name}"
@@ -194,6 +199,8 @@ packages:
   boot: !include pages/boot.yaml
   scoreboard: !include pages/gameday-live.yaml
   wizmote: !include pages/wizmote.yaml
+  # WLED effects full screen in place of the board (the Effects page)
+  effects: !include pages/effects.yaml
   # Factory check (the flag factory_flash.py leaves, or POST /gameday/action?do=qc)
   qc: !include pages/qc.yaml
   # Dims a hot panel and caps one on a weak power brick, and says why
@@ -225,11 +232,12 @@ font:
   - id: !extend spleen_16
     glyphs: *panel_glyphs
   # The countdown card's big digits on a wide board (gameday-live.yaml), cut
-  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today".
+  # to what countdown.h writes: "2d 14h", "14h 05m", "45m", "Today"; and the
+  # weather card's temperature ("71°", "-4°", weather.h).
   - file: "https://github.com/fcambus/spleen/raw/refs/tags/2.1.0/spleen-16x32.bdf"
     id: spleen_32
     size: 32
-    glyphs: ["0123456789 Tadhmoy"]
+    glyphs: ["0123456789 Tadhmoy-°"]
 
 # Panel count from the saved preference, applied before the display starts.
 panel_layout:
@@ -260,9 +268,19 @@ api:
         - lambda: 'id(gameday_ctl).say(message, seconds);'
 
 ota:
+  # The panel sits on its last frame through an install; make that the
+  # scoreboard, not an effect (pages/effects.yaml).
   - platform: esphome
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
   - platform: http_request
     id: gd_ota_http
+    on_begin:
+      - script.execute:
+          id: gd_fx_yield
+          reason: "a firmware install"
 
 # The panel remembers up to five networks (home, a phone hotspot, a friend's
 # house) and tries the last one that worked first. Setup from the app or the
@@ -380,6 +398,9 @@ script:
           image::Image *opp = logos.get(id(gd_opp_logo_url));
           lv_image_set_src(id(gd_team_logo_img), team != nullptr ? team : id(gd_logo_blank));
           lv_image_set_src(id(gd_opp_logo_img), opp != nullptr ? opp : id(gd_logo_blank));
+          // The game leaders card (pages/gameday-live.yaml) shows the same two at half size.
+          lv_image_set_src(id(tt_ldr_team_img), team != nullptr ? team : id(gd_logo_blank));
+          lv_image_set_src(id(tt_ldr_opp_img), opp != nullptr ? opp : id(gd_logo_blank));
 
   # Bluetooth back on, but not for every two second blip. Bringing Bluedroid
   # up and down is a large internal-RAM alloc and free each time, and that
@@ -705,6 +726,32 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # The college Top 25 card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "top25";'
+        then:
+          - script.execute: gd_top25_card
+    # The news card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "news";'
+        then:
+          - script.execute: gd_news_card
+    # The picture card, and a GIF's next frame on its canvas (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "picture";'
+        then:
+          - script.execute: gd_picture_card
+    - if:
+        condition:
+          lambda: 'return x == "picture_frame";'
+        then:
+          # The build keeps no image cache, so a redraw reads the canvas as it is now.
+          - lambda: |-
+              if (id(gameday_ctl).picture_shown())
+                lv_obj_invalidate(id(tt_picture_img));
     # Another favorite scored (pages/gameday-live.yaml)
     - if:
         condition:
@@ -847,6 +894,7 @@ gameday:
         message: !lambda 'return gameday::panel_text(x.message);'
         clock_card: !lambda 'return x.clock;'
         countdown_card: !lambda 'return x.countdown_at != 0;'
+        weather_card: !lambda 'return x.wx_card;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'
@@ -899,6 +947,11 @@ switch:
       - hub75.set_brightness:
           id: matrix
           brightness: 0
+      # An effect would keep rendering to a dark panel, and the scoreboard
+      # is what Power on should bring back (pages/effects.yaml).
+      - script.execute:
+          id: gd_fx_yield
+          reason: "Power off"
   # Off unless the owner turns it on. The setting itself lives in the gameday
   # component (auto_update.h) with the rest of the device page's settings;
   # this switch is how Home Assistant sees and changes it.

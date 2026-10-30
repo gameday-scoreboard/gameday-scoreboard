@@ -13,6 +13,10 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Show: Favorite teams, Live games](/using/modes/): what the panel follows and what it shows when nothing is on.
 - [Favorite teams](/using/favorites/): up to 16 teams in priority order.
 - [Countdowns](/using/countdowns/): to the next game, and to a day you pick.
+- [College Top 25](/using/top-25/): the AP poll between games, while you follow a college team.
+- [News headlines](/using/news/): ESPN headlines for your teams between games (coming in the next release).
+- [Weather](/using/weather/): your town's forecast between games (coming in the next release).
+- [Pictures](/using/pictures/): your own picture or animated GIF between games (coming in the next release).
 - [Football: NFL and college](/using/football/)
 - [Baseball: MLB](/using/baseball/)
 - [Basketball: NBA, WNBA and college](/using/basketball/)
@@ -22,6 +26,7 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Panel sizes and layouts](/using/panel-sizes/): one 64x64 panel, or a 128x64 display.
 - [WizMote remote](/using/remote/): pairing and what each button does.
 - [Your own messages](/using/messages/): a banner over the board, or a message card between games.
+- [Effects](/using/effects/): a moving pattern in place of the scoreboard.
 - [Firmware updates](/using/updates/): checking, installing and automatic updates.
 - [The boot button and resets](/using/buttons-and-resets/): every hold and what it does.
 - [Wi-Fi](/using/wifi/): saved networks, the hotspot and `.local` names.

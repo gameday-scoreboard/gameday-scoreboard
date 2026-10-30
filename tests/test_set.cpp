@@ -52,7 +52,8 @@ struct Settings {
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
-  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true};
+  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, top25{true}, news{false}, gameleaders{true};
+  uint16_t cards_off{0};  // the Between games list's other cards (cards.h)
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
@@ -62,6 +63,8 @@ struct Settings {
   int sport{0};  // the sport row playing, 1 + Sport; 0 = none
   uint16_t live_mask{0};
   std::string msg, msgurl, nick, hook;
+  std::string town;
+  bool wxon{false};
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -78,6 +81,33 @@ TeamRef team_ref(const char *s) {
 
 std::string team_str(const TeamRef &t) {
   return t.id == 0 ? "" : std::string(league_key((League) t.league)) + ":" + std::to_string(t.id);
+}
+
+// GamedayComponent::card_on and set_card: a card that kept its own switch
+// reads and writes that one.
+bool *own_switch(Settings &s, Card c) {
+  switch (c) {
+    case Card::COUNTDOWN: return &s.countdown;
+    case Card::TOP25: return &s.top25;
+    case Card::NEWS: return &s.news;
+    case Card::LEADERS: return &s.gameleaders;
+    case Card::WEATHER: return &s.wxon;
+    default: return nullptr;
+  }
+}
+
+bool card_on(const Settings &s, Card c) {
+  const bool *own = own_switch(const_cast<Settings &>(s), c);
+  return own != nullptr ? *own : (s.cards_off & card_bit(c)) == 0;
+}
+
+void set_card(Settings &s, Card c, bool on) {
+  if (bool *own = own_switch(s, c))
+    *own = on;
+  else if (on)
+    s.cards_off &= (uint16_t) ~card_bit(c);
+  else
+    s.cards_off |= card_bit(c);
 }
 
 void load(Settings &s, JsonObjectConst o) {
@@ -152,6 +182,16 @@ void load(Settings &s, JsonObjectConst o) {
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
   flag("countdown", s.countdown);
+  flag("top25", s.top25);
+  flag("news", s.news);
+  flag("gameleaders", s.gameleaders);
+  flag("wxon", s.wxon);
+  if (o["town"].is<const char *>())
+    s.town = o["town"].as<const char *>();
+  // As the backup lists them: {"next": true, ...}.
+  for (JsonPairConst p : o["cards"].as<JsonObjectConst>())
+    if (const CardRow *r = card_row(p.key().c_str()))
+      set_card(s, r->card, p.value().as<bool>());
   if (o["cdname"].is<const char *>())
     s.cdname = o["cdname"].as<const char *>();
   if (o["cddate"].is<const char *>())
@@ -270,6 +310,14 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
     case SetKind::COUNTDOWN: s.countdown = op.on; break;
+    case SetKind::TOP25: s.top25 = op.on; break;
+    case SetKind::NEWS: s.news = op.on; break;
+    case SetKind::GAMELEADERS: s.gameleaders = op.on; break;
+    case SetKind::CARDS:
+      for (const auto &r : kCards)
+        if (op.mask & card_bit(r.card))
+          set_card(s, r.card, (op.value & card_bit(r.card)) != 0);
+      break;
     case SetKind::CD_NAME: s.cdname = op.text; break;
     case SetKind::CD_DATE: s.cdymd = op.ymd; break;
     case SetKind::MSG: s.msg = op.text; break;
@@ -278,6 +326,15 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::NICK: s.nick = op.text; break;
     case SetKind::HOOK: s.hook = op.text; break;
     case SetKind::PREGAME: s.pregame = op.value; break;
+    // set_town(): a new town turns the card on, "" turns it off, the same
+    // town again leaves the switch alone.
+    case SetKind::TOWN:
+      if (op.text != s.town) {
+        s.town = op.text;
+        s.wxon = !op.text.empty();
+      }
+      break;
+    case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -349,6 +406,13 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
   doc["countdown"] = s.countdown;
+  doc["top25"] = s.top25;
+  doc["news"] = s.news;
+  doc["gameleaders"] = s.gameleaders;
+  // The state's list has names and more; the cases compare the switches.
+  JsonObject cards = doc["cards"].to<JsonObject>();
+  for (const auto &r : kCards)
+    cards[r.id] = card_on(s, r.card);
   doc["cdname"] = s.cdname;
   doc["cddate"] = countdown_date_text(s.cdymd);
   doc["panels"] = s.panels;
@@ -358,6 +422,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["nick"] = s.nick;
   doc["hook"] = s.hook;
   doc["pregame"] = s.pregame;
+  doc["town"] = s.town;
+  doc["wxon"] = s.wxon;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -417,6 +483,35 @@ void test_fixture_cases() {
   SCHECK(n >= 50, "only %d cases read from fixtures/set_cases.json", n);
 }
 
+void test_cards() {
+  // Every card has its own id and bit, and the bits fit the saved mask.
+  uint16_t seen = 0;
+  for (const auto &r : kCards) {
+    SCHECK(card_row(r.id) == &r, "card %s: its id is its own", r.id);
+    SCHECK((seen & card_bit(r.card)) == 0, "card %s: its bit is its own", r.id);
+    seen |= card_bit(r.card);
+    // A card saved in cards_off keeps its bit through a load; the countdown and
+    // news keep their own bytes.
+    bool own = r.card == Card::COUNTDOWN || r.card == Card::NEWS || r.card == Card::WEATHER;
+    SCHECK(((kCardsOffBits & card_bit(r.card)) != 0) == !own, "card %s: cards_off keeps its bit", r.id);
+    // A saved 0 is the default for a card in cards_off, so every one is on by default.
+    SCHECK(own || r.on, "card %s: on by default", r.id);
+  }
+  // Bits the cards had before the list (game leaders 0, Top 25 5) keep their meaning.
+  SCHECK(card_bit(Card::LEADERS) == 1u << 0 && card_bit(Card::TOP25) == 1u << 5, "saved bits kept");
+  SCHECK(card_row("news") != nullptr && !card_row("news")->on, "news is off by default");
+
+  // The board's base card. Next game on: the clock only between seasons, with Clock on.
+  SCHECK(!clock_instead(true, true, true, false), "next game on, in season: the next game");
+  SCHECK(clock_instead(true, true, true, true), "next game on, between seasons: the clock");
+  SCHECK(!clock_instead(true, false, true, true), "clock off, between seasons: the next game stays");
+  // Next game off: the clock between games whatever Clock says, never over a game or a final.
+  SCHECK(clock_instead(false, true, true, false), "next game off: the clock");
+  SCHECK(clock_instead(false, false, true, false), "next game and clock off: still the clock");
+  SCHECK(!clock_instead(false, true, false, false), "next game off, a game on the board: the game");
+  SCHECK(!clock_instead(false, false, false, false), "next game and clock off, a game on the board: the game");
+}
+
 void test_parse_set() {
   SetOp op;
   SCHECK(!parse_set("bogus", "1", op, kFavMax), "unknown key");
@@ -457,6 +552,15 @@ void test_parse_set() {
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
   SCHECK(parse_set("down", "on", op, kFavMax) && !op.on, "down on is off");
   SCHECK(parse_set("countdown", "0", op, kFavMax) && op.kind == SetKind::COUNTDOWN && !op.on, "countdown 0");
+  SCHECK(parse_set("top25", "0", op, kFavMax) && op.kind == SetKind::TOP25 && !op.on, "top25 0");
+  SCHECK(parse_set("gameleaders", "0", op, kFavMax) && op.kind == SetKind::GAMELEADERS && !op.on, "gameleaders 0");
+  SCHECK(parse_set("cards", "next:0,clock:1,standings:1", op, kFavMax) && op.kind == SetKind::CARDS &&
+             op.mask == (card_bit(Card::NEXT) | card_bit(Card::CLOCK)) && op.value == card_bit(Card::CLOCK) &&
+             op.refused.size() == 1 && op.refused[0] == "standings:1",
+         "cards: two known, one left out");
+  SCHECK(!parse_set("cards", "standings:1", op, kFavMax), "cards naming none it has");
+  SCHECK(!parse_set("cards", "", op, kFavMax), "cards empty");
+  SCHECK(!parse_set("cards", "next", op, kFavMax), "cards with no value");
   SCHECK(parse_set("cdname", "  Christmas \n", op, kFavMax) && op.kind == SetKind::CD_NAME && op.text == "Christmas",
          "cdname trims");
   SCHECK(parse_set("cddate", "2026-12-25", op, kFavMax) && op.kind == SetKind::CD_DATE && op.ymd == 20261225,
@@ -499,7 +603,8 @@ void test_parse_set() {
   for (const char *key : kSetKeys) {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
                  parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
-                 parse_set(key, "none", op, kFavMax) || parse_set(key, "clock", op, kFavMax);
+                 parse_set(key, "none", op, kFavMax) || parse_set(key, "next:1", op, kFavMax) ||
+                 parse_set(key, "clock", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }
@@ -627,6 +732,7 @@ void test_playlists() {
 int run_set_tests(int &total_checks) {
   test_playlists();
   test_parse_set();
+  test_cards();
   test_live_leagues();
   test_scan_leagues();
   test_no_team();

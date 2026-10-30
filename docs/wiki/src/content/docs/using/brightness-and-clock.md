@@ -38,6 +38,10 @@ The device page then says **Night mode off until 11:00 PM**, the next start time
 
 The schedule runs on the panel's own clock, set from the internet, in the timezone under Setup. Until the panel has the time after it starts, it stays at its normal brightness. The heat and power protection below still hold the night brightness down when they need to.
 
+:::note[Coming in the next release]
+A running [effect](/using/effects/) dims with the night brightness like the board. Screen-off puts **Showing** back to the Scoreboard; picking Effects while the panel is dim or dark for the night turns night mode off for the rest of the night, like **Panel on**.
+:::
+
 ## Turning the panel off and on
 
 **Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game, so the board is up to date the moment it comes back on.
@@ -93,6 +97,10 @@ Separate from the Clock page, the scoreboard shows a clock of its own when there
 Favorite teams follows the same rule as Live games' first favorite: the clock comes up once every favorite (in the playlist, when one is playing) is between seasons, with no game listed or the next one more than 10 days away (football only with no game listed). A favorite whose game is about to start still takes the panel. It's in the colors of the favorite whose game comes first, with that game under the time, like "Next: at PHI Mar 26 7:05 PM". While the clock is up, the panel checks for a new date every 6 hours instead of every 15 minutes, so it uses less data.
 
 On a single 64x64 panel the date goes under the time, and the next game goes in the ticker. See [Show: Favorite teams, Live games](/using/modes/).
+
+:::note[Coming in the next release]
+Two switches under **Between games** on the [device page](/using/device-page/#between-games) change when this clock shows. With **Clock** off, the next game's board stays up between seasons instead, and in Live games with nothing in the last week and no favorite to show, the board says there are no live games. With **Next game** off, the clock shows whenever the panel is waiting for a game, in season too, with the next game under the time. A game in progress or just over still takes the panel, and in Favorite teams so does one about to start. In Live games, Next game matters only while nothing is live and the board shows your first favorite; the other teams' games and the final scores aren't affected.
+:::
 
 ## Heat and power protection
 

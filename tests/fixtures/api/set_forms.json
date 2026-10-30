@@ -24,6 +24,11 @@
   "match": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "beta": {"form": "1 on, anything else off", "ok": ["1", "0"]},
   "countdown": {"form": "1 shows the countdown to the next game between games, anything else off", "ok": ["1", "0"]},
+  "top25": {"form": "1 shows the college Top 25 card between games while the panel follows a college team, anything else off", "ok": ["1", "0"]},
+  "news": {"form": "1 shows the news card (ESPN headlines) between games, anything else off", "ok": ["1", "0"]},
+  "gameleaders": {"form": "1 shows the Game leaders card at halftime and the final, anything else off", "ok": ["1", "0"]},
+  "town": {"form": "the weather card's town or US ZIP code, trimmed, up to 40 bytes cut on a whole character; control characters, emoji and bytes that aren't UTF-8 are dropped; a new town is looked up with Open-Meteo and turns the card on, the same town again only retries a lookup that found nothing; empty clears the town and turns the card off", "ok": ["Coppell", "75019", "Paris, France", ""]},
+  "wxon": {"form": "1 shows the weather card between games, anything else off; applied after town in the same request", "ok": ["1", "0"]},
   "cdname": {"form": "the custom countdown's name, trimmed, up to 20 bytes cut on a whole character; control characters and bytes that aren't UTF-8 are dropped; empty clears it", "ok": ["Christmas", ""]},
   "cddate": {"form": "the custom countdown's day, YYYY-MM-DD, 2020 to 2099; none or empty clears it", "ok": ["2026-12-25", "none", ""], "bad": ["2026-02-30", "12/25/2026", "2026-1-5"]},
   "msg": {"form": "the message card's own text; cleaned to what the panel can draw", "ok": ["Go team", ""]},
@@ -47,5 +52,6 @@
   "pregame": {"form": "minutes before the start for the reminder event, a whole number, clamped to 0 to 120; 0 sends none", "ok": ["0", "15", "120"], "bad": ["", "soon"]},
   "wake": {"form": "1 turns Game-day wake on, anything else off", "ok": ["1", "0"]},
   "wakelead": {"form": "minutes before the start the wake turns the panel on, a whole number, clamped to 5 to 120", "ok": ["5", "15", "120"], "bad": ["", "15m"]},
-  "after": {"form": "what the panel does once a final has lingered: scoreboard, off or clock; any other word is refused", "ok": ["scoreboard", "off", "clock"], "bad": ["effects", "", "Off"]}
+  "after": {"form": "what the panel does once a final has lingered: scoreboard, off or clock; any other word is refused", "ok": ["scoreboard", "off", "clock"], "bad": ["effects", "", "Off"]},
+  "cards": {"form": "the Between games list: id:1 turns a card on and id:0 off, comma separated, ids from the state's cards list; the cards it doesn't name stay as they are; an id the panel doesn't have is skipped; countdown, top25, news and gameleaders are the same switches as those keys, and weather is wxon", "ok": ["next:0", "clock:1,custom:0", "message:1,standings:0"], "bad": ["", "standings:1", "next", "next:yes"]}
 }

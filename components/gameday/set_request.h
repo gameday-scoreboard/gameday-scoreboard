@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "cards.h"
 #include "countdown.h"
 #include "hook.h"
 #include "leagues.h"
@@ -19,6 +20,7 @@
 #include "teams.h"
 #include "timezones.h"
 #include "wake.h"
+#include "weather.h"
 
 namespace espn {
 
@@ -27,11 +29,13 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta",   "countdown", "cdname", "cddate", "msg",   "msgurl",
+                                    "beta",   "countdown", "top25", "cdname", "cddate", "gameleaders", "msg",
+                                    "msgurl",
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "wake",   "wakelead", "after"};
+                                    "news",   "town",     "wxon",     "cards",   "wake",    "wakelead",
+                                    "after"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -187,8 +191,10 @@ enum class SetKind : uint8_t {
   MATCH,     // on, soccer
   BETA,      // on, release builds only
   COUNTDOWN,  // on, the next game's countdown card
+  TOP25,      // on, the college Top 25 card (rankings.h)
   CD_NAME,    // text, the custom countdown's name
   CD_DATE,    // ymd, the custom countdown's day (0 clears it)
+  GAMELEADERS,  // on, this game's leaders card at halftime and the final (game_leaders.h)
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
@@ -211,6 +217,10 @@ enum class SetKind : uint8_t {
   WAKE,         // on, Game-day wake (wake.h)
   WAKE_LEAD,    // value, minutes before the start, kWakeLeadMin to kWakeLeadMax
   AFTER,        // value, After the game: an After
+  NEWS,         // on, the news card between games (news.h)
+  TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
+  WXON,         // on, the weather card between games
+  CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
 };
 
 struct TeamRef {
@@ -416,6 +426,13 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "wake")
     return on(SetKind::WAKE);
+  if (k == "town") {
+    op.kind = SetKind::TOWN;
+    op.text = town_clean(v);
+    return true;
+  }
+  if (k == "wxon")
+    return on(SetKind::WXON);
   if (k == "night")
     return on(SetKind::NIGHT);
   if (k == "nightscreen")
@@ -446,6 +463,19 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::BETA);
   if (k == "countdown")
     return on(SetKind::COUNTDOWN);
+  if (k == "top25")
+    return on(SetKind::TOP25);
+  if (k == "news")
+    return on(SetKind::NEWS);
+  if (k == "cards") {
+    op.kind = SetKind::CARDS;
+    uint16_t named = 0, cards_on = 0;
+    if (!parse_cards(v, named, cards_on, op.refused))
+      return false;
+    op.mask = named;
+    op.value = cards_on;
+    return true;
+  }
   if (k == "cdname") {
     op.kind = SetKind::CD_NAME;
     op.text = countdown_name(v);
@@ -456,6 +486,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.kind = SetKind::CD_DATE;
     return parse_countdown_date(v, op.ymd);
   }
+  if (k == "gameleaders")
+    return on(SetKind::GAMELEADERS);
   if (k == "best")
     return on(SetKind::BEST);
   if (k == "jump")
