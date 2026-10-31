@@ -34,4 +34,4 @@ The panel reads each team's season schedule from ESPN, about 200 to 400 KB a tea
 
 ## When they step aside
 
-Like the [news card](/using/news/), they never cover a live game, a celebration, or the panel's own trouble messages, and they take turns with the message card, the news card, the College Top 25 and your pictures: none of them comes up over another.
+Like the [news card](/using/news/), they never cover a live game, a celebration, or the panel's own trouble messages, and they take turns with the message card, the news card, the College Top 25 and your pictures: none of them comes up over another. The countdowns and the weather card are the board's own turns, so a schedule or recap card can come up over them, the same as a headline.

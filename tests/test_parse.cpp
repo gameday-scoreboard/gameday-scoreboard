@@ -5927,6 +5927,20 @@ static void test_season() {
   CHECK_EQ(season_time(kick, false), std::string("12A"));
   for (const char *line : {"Sun 11/1", "@UCLA 12:30P"})
     CHECK(std::string(line).size() <= 12);
+  // The longest real wide line, a four-letter opponent at 12:30 on a
+  // two-digit date, still fits 25 characters; the network is left off.
+  struct tm late {};
+  late.tm_wday = 3;
+  late.tm_mon = 11;
+  late.tm_mday = 30;
+  late.tm_hour = 12;
+  late.tm_min = 30;
+  SeasonGame lg;
+  lg.home = true;
+  lg.opp = "UCLA";
+  lg.tv = "ESPN";
+  CHECK_EQ(schedule_line(late, lg, true), std::string("Wed 12/30 vs UCLA 12:30P"));
+  CHECK(schedule_line(late, lg, true).size() <= 25);
   CHECK_EQ(schedule_header("DAL"), std::string("DAL SCHEDULE"));
 
   // Which card a team's turn shows.
