@@ -89,6 +89,7 @@ script:
           lv_obj_set_size(id(tt_game_container), W, 64);
           lv_obj_set_size(id(tt_no_game_container), W, 64);
           lv_obj_set_size(id(tt_splash), W, 64);
+          lv_obj_set_width(id(tt_splash_band), W);
           lv_obj_set_width(id(tt_splash_lbl), W);
           lv_obj_set_width(id(tt_no_game_msg_lbl), W);
           // Centered both ways, so a message that wraps to three lines on a
@@ -777,7 +778,7 @@ script:
             - lambda: |-
                 lv_label_set_text(id(tt_splash_lbl), splash_text.c_str());
                 // Touchdowns and the win get fireworks on black with the text in
-                // the team color; smaller scores keep the solid color flash.
+                // the team color; smaller scores get a band of the team color.
                 const bool big = splash_text.find("TOUCHDOWN") != std::string::npos ||
                                  splash_text.find("WINS") != std::string::npos ||
                                  splash_text.find("HOME RUN") != std::string::npos ||
@@ -789,13 +790,20 @@ script:
                   if (m > 0 && m < 0xE0) { r = r * 0xE0 / m; g = g * 0xE0 / m; b = b * 0xE0 / m; }
                   lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex(0x000000), 0);
                   lv_obj_set_style_text_color(id(tt_splash_lbl), m == 0 ? lv_color_hex(0xFFFFFF) : lv_color_make(r, g, b), 0);
+                  lv_obj_add_flag(id(tt_splash_band), LV_OBJ_FLAG_HIDDEN);
                   lv_obj_clear_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
                   id(tt_fx).resume();
                 } else {
                   id(tt_fx).pause();
                   lv_obj_add_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
-                  lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex((uint32_t) splash_color), 0);
-                  lv_obj_set_style_text_color(id(tt_splash_lbl), lv_color_hex(0xFFFFFF), 0);
+                  // White on the team color, unless the color is too light for it.
+                  uint32_t c = (uint32_t) splash_color;
+                  uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+                  bool light = r * 299 + g * 587 + b * 114 > 160000;
+                  lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex(0x000000), 0);
+                  lv_obj_set_style_bg_color(id(tt_splash_band), lv_color_hex(c), 0);
+                  lv_obj_clear_flag(id(tt_splash_band), LV_OBJ_FLAG_HIDDEN);
+                  lv_obj_set_style_text_color(id(tt_splash_lbl), lv_color_hex(light ? 0x000000 : 0xFFFFFF), 0);
                 }
                 lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
             - script.execute: tt_hide_splash
@@ -1648,6 +1656,21 @@ lvgl:
             bg_opa: COVER
             bg_color: 0x000000
             widgets:
+              # The color splash's band: 40 of the 64 rows, so a white team's
+              # flash stays inside what a 5 V 3 A supply gives.
+              - obj:
+                  id: tt_splash_band
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 12
+                  width: 64
+                  height: 40
+                  hidden: true
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
               - canvas:
                   id: tt_fx_canvas
                   x: 0

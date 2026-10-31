@@ -57,6 +57,7 @@ through `update_important` in the panel's state.
 
 ### 🐛 Fixes
 
+- 🎨 The color flash after a score is a band across the middle instead of the whole screen, and a white or pale team's flash has dark text so you can read it
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
 - 📅 A New Year's Day game seen on Dec 31 says **Tomorrow**, not a weekday
 
