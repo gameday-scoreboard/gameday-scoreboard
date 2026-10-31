@@ -41,6 +41,7 @@
 #include "line_score.h"
 #include "message.h"
 #include "news.h"
+#include "season.h"
 #include "night.h"
 #include "playlists.h"
 #include "offseason.h"
@@ -467,6 +468,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &news_card() const { return this->news_card_; }
   const std::string &news_head() const { return this->news_head_; }
   void set_news_roll_ms(uint32_t ms) { this->news_roll_ms_ = ms; }
+  // The schedule or season recap card up now (season.h): its top line ("DAL
+  // SCHEDULE", "DAL 2025"), "" while it is down, and the lines under it;
+  // gd_season_card draws them and says how long they take to roll.
+  const std::string &season_head() const { return this->season_head_; }
+  const std::string &season_body() const { return this->season_body_; }
+  void set_season_roll_ms(uint32_t ms) { this->season_roll_ms_ = ms; }
   // The picture card (picture.h): gd_picture_card draws the picture up now
   // (RGB565, picture_width() x picture_height()) or hides the card when none
   // is; "picture_frame" says a GIF's next frame is on the canvas.
@@ -623,6 +630,38 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void news_tick_();
   void news_show_(const std::string &headline);
   void news_reset_();
+  // The schedule and season recap cards (season.h): each team's last season
+  // read (PSRAM), and the cards' one turn, which walks the teams.
+  struct SeasonEntry {
+    League league{League::NFL};
+    uint32_t id{0};
+    bool results{false};  // a soccer team's results, read between seasons, not its fixtures
+    uint32_t read_ms{0};  // millis() of the last good read, 0 = none
+    uint32_t fail_ms{0};  // millis() of the last failed read, 0 = none since
+    ::espn::SeasonRead read;
+  };
+  std::vector<SeasonEntry, PsramAllocator<SeasonEntry>> season_;
+  // A team the cards follow now: Favorite teams' football and soccer teams
+  // in the playlist playing, and whether each is between seasons.
+  struct SeasonTeam {
+    const ::espn::Team *team;
+    bool off_season;
+    std::string record;  // the team read's, for a schedule of the playoffs alone
+  };
+  std::vector<SeasonTeam> season_teams_() const;
+  SeasonEntry *season_entry_(League league, uint32_t id, bool add = false);
+  uint32_t season_pos_{0};  // the team the next turn starts from
+  bool season_read_due_{false};
+  League season_read_league_{League::NFL};
+  uint32_t season_read_id_{0};
+  bool season_read_results_{false};
+  std::string season_head_, season_body_;
+  bool season_shown_{false};
+  uint32_t season_since_ms_{0};  // when the card last went up or down
+  uint32_t season_tick_ms_{0};
+  uint32_t season_roll_ms_{0};
+  void season_tick_();
+  void season_show_(const std::string &head, const std::string &body);
   // The picture card (picture.h, picture_card.h): the owner's pictures,
   // shown in turn between games like the news card.
   PictureCard pictures_;
@@ -955,6 +994,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     PsString news_list;
     int news_n{-1};  // headlines read, -1 for a failed read
     uint32_t news_bytes{0};
+    // A team's season schedule for the schedule and recap cards (season.h).
+    bool need_season{false};
+    League season_league{League::NFL};
+    uint32_t season_id{0};
+    bool season_results{false};
+    ::espn::SeasonRead season_read;
+    bool season_ok{false};
+    uint32_t season_bytes{0};
     // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
     // on this task so it never runs alongside an ESPN read.
     uint8_t need_wx{0};
@@ -983,6 +1030,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_news_job_();
   void run_news_job_();
   void apply_news_job_();
+  void start_season_job_();
+  void run_season_job_();
+  void apply_season_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);

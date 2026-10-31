@@ -25,6 +25,7 @@
 #include "logo_lru.h"
 #include "message.h"
 #include "news.h"
+#include "season.h"
 #include "weather.h"
 #include "offseason.h"
 #include "panel_text.h"
@@ -5804,6 +5805,176 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
   return r;
 }
 
+// The schedule and season recap cards (season.h): one read of the season
+// schedule, its next games, the regular season's record and how the
+// playoffs ended.
+static void test_season() {
+  // In season (Dallas, week 9): ten games ahead, soonest first, and the
+  // record so far counted from the finals.
+  SeasonRead r;
+  CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 6, r));
+  CHECK_EQ(r.year, 2026);
+  CHECK_EQ(season_record(r, false, ""), std::string("3-4"));
+  CHECK(!r.post);
+  CHECK_EQ(r.next.size(), kSeasonGames);
+  CHECK_EQ(r.next[0].opp, std::string("ARI"));
+  CHECK(r.next[0].home);
+  CHECK_EQ(r.next[0].tv, std::string("Fox"));
+  CHECK_EQ(r.next[0].kickoff_epoch, parse_iso8601_z("2026-11-01T18:00Z"));
+  CHECK_EQ(r.next[1].opp, std::string("IND"));
+  CHECK(!r.next[1].home);
+  // Three to show; one played drops off and the spare comes in.
+  CHECK_EQ(season_upcoming(r, r.next[0].kickoff_epoch - 1).size(), kSeasonShown);
+  std::vector<SeasonGame> up = season_upcoming(r, r.next[0].kickoff_epoch);
+  CHECK_EQ(up.size(), kSeasonShown);
+  CHECK_EQ(up[0].opp, std::string("IND"));
+  CHECK(season_upcoming(r, r.next[3].kickoff_epoch).empty());
+
+  // Off season, playoffs lost (Dallas Wings): the 44-game regular season
+  // and the first round's last game.
+  CHECK(parse_season_str(slurp("fixtures/schedule_wnba_dal_offseason.json"), 3, r));
+  CHECK_EQ(r.year, 2026);
+  CHECK_EQ(season_record(r, false, "1-2"), std::string("27-17"));
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("First Round"));
+  CHECK(r.next.empty());
+  CHECK(season_recap_ready(r, ""));
+  CHECK_EQ(recap_header("DAL", r.year), std::string("DAL 2026"));
+  CHECK_EQ(recap_body(r, false, ""), std::string("27-17\nlost First Round"));
+
+  // A schedule of the playoffs alone (Yankees, October): the record is the
+  // team read's.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mlb_nyy_offseason.json"), 10, r));
+  CHECK_EQ(r.finals(), 0);
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("ALDS"));
+  CHECK_EQ(recap_body(r, false, "93-68"), std::string("93-68\nlost ALDS"));
+  CHECK(season_recap_ready(r, "93-68"));
+  CHECK(!season_recap_ready(r, ""));
+  // A team that missed the playoffs, read while the list holds only the
+  // playoffs: no finals of its own and no playoff game, the record alone.
+  SeasonRead missed;
+  missed.year = 2025;
+  CHECK(season_recap_ready(missed, "7-10"));
+  CHECK_EQ(recap_body(missed, false, "7-10"), std::string("7-10"));
+  CHECK(!season_recap_ready(missed, ""));
+  CHECK_EQ(recap_body(r, false, ""), std::string("lost ALDS"));
+
+  // Soccer: results newest first, a draw neither side won, written W-D-L;
+  // the playoff round from the season type's name.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mls_cin_2025.json"), 18267, r));
+  CHECK_EQ(r.year, 2025);
+  CHECK_EQ(season_record(r, true, ""), std::string("20-5-9"));
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
+  CHECK_EQ(recap_body(r, true, ""), std::string("20-5-9\nlost East Semifinals"));
+
+  // College: the playoff's sponsor and bowl left off.
+  CHECK(parse_season_str(slurp("fixtures/schedule_ncaa_ala_2025_post.json"), 333, r));
+  CHECK_EQ(r.year, 2025);
+  CHECK_EQ(std::string(r.round), std::string("CFP Quarterfinal"));
+  CHECK(!r.post_won);
+  // NBA: the series, not the game.
+  CHECK(parse_season_str(slurp("fixtures/schedule_nba_phi_2026_post.json"), 20, r));
+  CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
+
+  CHECK_EQ(season_url(League::NFL, 6, true), schedule_url(League::NFL, 6));
+  CHECK_EQ(season_url(League::MLS, 18267, false), schedule_url(League::MLS, 18267));
+  CHECK_EQ(season_url(League::MLS, 18267, true),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/18267/schedule"));
+
+  // Not JSON, or a team not in it.
+  CHECK(!parse_season_str("<html>", 6, r));
+  CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 99999, r));
+  CHECK(r.next.empty() && r.finals() == 0);
+  CHECK(!season_recap_ready(r, ""));
+  // A team that missed the playoffs, read while they're on (Rockies, 10/31):
+  // the season's year and an empty list; the record is the team read's.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mlb_col_missed.json"), 27, r));
+  CHECK(r.year == 2026 && r.finals() == 0 && !r.post && r.next.empty());
+  CHECK(season_recap_ready(r, "58-104"));
+  CHECK_EQ(recap_body(r, false, "58-104"), std::string("58-104"));
+
+  CHECK_EQ(season_round("NFC Wild Card Playoffs", "Postseason"), std::string("NFC Wild Card"));
+  CHECK_EQ(season_round("Super Bowl LX", "Postseason"), std::string("Super Bowl LX"));
+  CHECK_EQ(season_round("World Series - Game 7", "Postseason"), std::string("World Series"));
+  CHECK_EQ(season_round("", "Postseason"), std::string(""));
+  CHECK_EQ(season_round("", "Western Conference Playoffs - Round One"), std::string("West Round One"));
+  CHECK_EQ(season_round("Duke's Mayo Bowl Presented by Duke's", "Postseason"), std::string("Duke's Mayo Bowl"));
+  CHECK(season_round(std::string(60, 'x') + " y", "").size() <= kSeasonRoundMax);
+  SeasonRead w;
+  w.year = 2025;
+  w.wins = 15;
+  w.losses = 2;
+  w.post = w.post_won = true;
+  w.set_round("Super Bowl LX");
+  CHECK_EQ(recap_body(w, false, ""), std::string("15-2\nwon Super Bowl LX"));
+  w.ties = 1;
+  w.set_round("");
+  CHECK_EQ(recap_body(w, false, ""), std::string("15-2-1\nwon in the playoffs"));
+
+  // The card's lines: wide on two panels, two lines a game on one.
+  struct tm kick {};
+  kick.tm_wday = 0;
+  kick.tm_mon = 10;
+  kick.tm_mday = 1;
+  kick.tm_hour = 12;
+  SeasonGame g;
+  g.home = true;
+  g.opp = "ARI";
+  g.tv = "Fox";
+  CHECK_EQ(schedule_line(kick, g, true), std::string("Sun 11/1 vs ARI 12P Fox"));
+  CHECK_EQ(schedule_line(kick, g, false), std::string("Sun 11/1\nARI 12P"));
+  g.home = false;
+  g.opp = "UCLA";
+  kick.tm_hour = 19;
+  kick.tm_min = 30;
+  CHECK_EQ(schedule_line(kick, g, false), std::string("Sun 11/1\n@UCLA 7:30P"));
+  g.tv = "ESPN Unlimited";
+  CHECK_EQ(schedule_line(kick, g, true), std::string("Sun 11/1 @ UCLA 7:30P"));
+  g.time_tbd = true;
+  kick.tm_hour = 0;
+  CHECK_EQ(schedule_line(kick, g, false), std::string("Sun 11/1\n@UCLA TBD"));
+  CHECK_EQ(season_time(kick, false), std::string("12:30A"));
+  kick.tm_min = 0;
+  CHECK_EQ(season_time(kick, false), std::string("12A"));
+  for (const char *line : {"Sun 11/1", "@UCLA 12:30P"})
+    CHECK(std::string(line).size() <= 12);
+  // The longest real wide line, a four-letter opponent at 12:30 on a
+  // two-digit date, still fits 25 characters; the network is left off.
+  struct tm late {};
+  late.tm_wday = 3;
+  late.tm_mon = 11;
+  late.tm_mday = 30;
+  late.tm_hour = 12;
+  late.tm_min = 30;
+  SeasonGame lg;
+  lg.home = true;
+  lg.opp = "UCLA";
+  lg.tv = "ESPN";
+  CHECK_EQ(schedule_line(late, lg, true), std::string("Wed 12/30 vs UCLA 12:30P"));
+  CHECK(schedule_line(late, lg, true).size() <= 25);
+  CHECK_EQ(schedule_header("DAL"), std::string("DAL SCHEDULE"));
+
+  // Which card a team's turn shows.
+  CHECK(season_card(false, true, true, true, true) == SeasonCard::SCHEDULE);
+  CHECK(season_card(false, false, true, true, true) == SeasonCard::NONE);
+  CHECK(season_card(false, true, true, false, true) == SeasonCard::NONE);
+  CHECK(season_card(true, true, true, true, true) == SeasonCard::RECAP);
+  CHECK(season_card(true, true, false, true, true) == SeasonCard::NONE);
+  CHECK(season_card(true, true, true, true, false) == SeasonCard::NONE);
+
+  // Read every six hours, at once for the other half of a soccer season,
+  // not again for kSeasonRetryMs after a failure.
+  const uint32_t t = 50000000;
+  CHECK(season_read_due(t, 0, 0, true));
+  CHECK(!season_read_due(t, t - 1000, 0, true));
+  CHECK(season_read_due(t, t - kSeasonReadMs, 0, true));
+  CHECK(season_read_due(t, t - 1000, 0, false));
+  CHECK(!season_read_due(t, 0, t - 1000, true));
+  CHECK(season_read_due(t, 0, t - kSeasonRetryMs, true));
+}
+
 // The news card (news.h): the feed, its headlines, the source in turn and the
 // hourly read.
 static void test_news() {
@@ -7491,6 +7662,7 @@ int main() {
   test_prefs_sync();
   test_message();
   test_news();
+  test_season();
   test_weather();
   test_regulatory();
   test_wifi_history();

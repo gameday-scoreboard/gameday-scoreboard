@@ -865,6 +865,28 @@ script:
           lv_obj_move_foreground(id(tt_news));
           lv_obj_clear_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
 
+  # The schedule and season recap cards (components/gameday/season.h): the
+  # top line ("DAL SCHEDULE", "DAL 2025") and the lines under it, or
+  # nothing. Sent as "season", like "news".
+  - id: gd_season_card
+    then:
+      - lambda: |-
+          const std::string &head = id(gameday_ctl).season_head();
+          if (head.empty()) {
+            lv_obj_add_flag(id(tt_season), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          lv_obj_set_size(id(tt_season), W, 64);
+          lv_obj_set_width(id(tt_season_head_lbl), W);
+          lv_label_set_text(id(tt_season_head_lbl), head.c_str());
+          const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                       id(spleen_8)->get_lv_font()};
+          id(gameday_ctl).set_season_roll_ms(gameday::board_text(id(tt_season_body), id(tt_season_lbl),
+                                                                 id(gameday_ctl).season_body().c_str(), fonts, 3, 54));
+          lv_obj_move_foreground(id(tt_season));
+          lv_obj_clear_flag(id(tt_season), LV_OBJ_FLAG_HIDDEN);
+
   # The weather card (components/gameday/weather.h), from the board's last
   # update: the icon and the temperature now, today's high and low, the
   # words for the sky, and the next two days small underneath. The ticker
@@ -1924,6 +1946,55 @@ lvgl:
                   widgets:
                     - label:
                         id: tt_news_lbl
+                        x: 1
+                        y: 0
+                        width: 62
+                        text_align: CENTER
+                        long_mode: WRAP
+                        text: ""
+                        text_color: 0xFFFFFF
+
+        # The schedule and season recap cards, over the board between games
+        # (gd_season_card): the top line, and the games or the record in the
+        # box under it, rolling when too tall.
+        - obj:
+            id: tt_season
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_season_head_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFB000
+              - obj:
+                  id: tt_season_body
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 10
+                  width: 64
+                  height: 54
+                  bg_opa: TRANSP
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: tt_season_lbl
                         x: 1
                         y: 0
                         width: 62

@@ -9,6 +9,7 @@
 
 #include "psram.h"
 #include "rankings.h"
+#include "season.h"
 #include "teams.h"
 
 namespace espn {
@@ -257,6 +258,9 @@ const char *league_path(League league);  // the last part of the ESPN path: "nfl
 std::string team_option(const Team &t);  // "NFL: Dallas Cowboys", the Home Assistant option
 std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
+// The season read's (season.h): schedule_url, but a soccer team's results
+// rather than its fixtures with results, for the recap between seasons.
+std::string season_url(League league, uint32_t espn_id, bool results);
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
 // Every game of the day for one league. top25: men's college basketball
@@ -289,6 +293,17 @@ std::string news_url(League league, uint32_t team_id);
 bool parse_team_str(const std::string &json, Schedule &out);
 // Up to `max` games not yet started, in date order, from the schedule endpoint.
 bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out);
+// A byte stream for a parse compiled in espn_parse.cpp: a big parse
+// template instantiated in gameday.cpp can overflow that file's literal pool
+// and fail the link ("l32r: literal target out of range").
+struct ByteSource {
+  virtual ~ByteSource() = default;
+  virtual int read() = 0;
+  virtual size_t readBytes(char *dst, size_t n) = 0;
+};
+// parse_season (season.h) from a stream, and from a string for the host tests.
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out);
+bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out);
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);
 // The team's next game that is not over yet in a day's scoreboard
