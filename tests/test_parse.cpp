@@ -5888,10 +5888,12 @@ static void test_season() {
   CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 99999, r));
   CHECK(r.next.empty() && r.finals() == 0);
   CHECK(!season_recap_ready(r, ""));
-  // An empty list, as ESPN answers for a team with no games of that kind.
-  CHECK(parse_season_str("{\"requestedSeason\":{\"year\":2025},\"events\":[]}", 6, r));
-  CHECK(r.year == 2025 && r.finals() == 0 && !r.post);
-  CHECK(season_recap_ready(r, "7-10"));
+  // A team that missed the playoffs, read while they're on (Rockies, 10/31):
+  // the season's year and an empty list; the record is the team read's.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mlb_col_missed.json"), 27, r));
+  CHECK(r.year == 2026 && r.finals() == 0 && !r.post && r.next.empty());
+  CHECK(season_recap_ready(r, "58-104"));
+  CHECK_EQ(recap_body(r, false, "58-104"), std::string("58-104"));
 
   CHECK_EQ(season_round("NFC Wild Card Playoffs", "Postseason"), std::string("NFC Wild Card"));
   CHECK_EQ(season_round("Super Bowl LX", "Postseason"), std::string("Super Bowl LX"));
