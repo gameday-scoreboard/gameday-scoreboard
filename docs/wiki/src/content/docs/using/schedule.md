@@ -30,7 +30,7 @@ Each card stays up for 10 seconds, longer if its lines roll, then the board come
 
 ## Where it comes from
 
-The panel reads each team's season schedule from ESPN: about 300 KB for an NFL team, 100 KB for a college team, 450 KB for an MLS team and 75 KB for a Premier League team. It reads each favorite at most once every 6 hours, and only while one of the two cards is on and it's that team's turn. If a read fails, the panel tries that team again in 15 minutes and goes on to the next one meanwhile.
+The panel reads each team's season schedule from ESPN, about 200 to 400 KB a team. It reads each favorite at most once every 6 hours, and only while one of the two cards is on and it's that team's turn. If a read fails, the panel tries that team again in 15 minutes and goes on to the next one meanwhile.
 
 ## When they step aside
 

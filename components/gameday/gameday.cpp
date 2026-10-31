@@ -6235,8 +6235,9 @@ void GamedayComponent::start_season_job_() {
   this->start_worker_();
 }
 
-// Worker task. NFL ~290 KB, college ~100 KB, MLS ~450 KB, Premier League
-// ~75 KB, streamed through the parse's filter.
+// Worker task. About 200 to 400 KB (on 10/31: NFL 292 KB, college 389 KB,
+// Premier League 255 KB, MLS fixtures 186 KB), streamed through the parse's
+// filter.
 void GamedayComponent::run_season_job_() {
   Job &j = this->job_;
   auto container = this->open_(::espn::season_url(j.season_league, j.season_id, j.season_results));
