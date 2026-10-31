@@ -8,6 +8,7 @@
 
 #include "message.h"
 #include "news.h"
+#include "season.h"
 
 namespace espn {
 namespace detail {
@@ -600,6 +601,96 @@ bool parse_upcoming(TInput &input, uint32_t our_team_id, size_t max, std::vector
     if (!u.event_id.empty() && u.opp_id != 0)
       out.push_back(u);
   }
+  return true;
+}
+
+// The season read (season.h): parse_upcoming's fields, and what a final
+// needs for the recap.
+namespace detail {
+inline void fill_season_filter(JsonDocument &f) {
+  f["requestedSeason"]["year"] = true;
+  f["season"]["year"] = true;
+  JsonObject ev = f["events"].add<JsonObject>();
+  ev["date"] = true;
+  ev["seasonType"]["type"] = true;
+  ev["seasonType"]["name"] = true;
+  JsonObject comp = ev["competitions"].add<JsonObject>();
+  comp["timeValid"] = true;
+  comp["status"]["type"]["state"] = true;
+  comp["status"]["type"]["completed"] = true;
+  comp["notes"].add<JsonObject>()["headline"] = true;
+  JsonObject c = comp["competitors"].add<JsonObject>();
+  c["homeAway"] = true;
+  c["winner"] = true;
+  c["team"]["id"] = true;
+  c["team"]["abbreviation"] = true;
+  comp["broadcasts"].add<JsonObject>()["media"]["shortName"] = true;
+}
+}  // namespace detail
+
+// A team's season schedule into out: the games not started (soonest first,
+// up to kSeasonGames), the regular season's finals counted, and the last
+// playoff game's round and result. A playoff game is season type 3, or a
+// soccer type named for the playoffs; preseason (type 1) doesn't count.
+// False when the document doesn't parse.
+template<typename TInput> bool parse_season(TInput &input, uint32_t our_team_id, SeasonRead &out) {
+  JsonDocument filter(detail::json_allocator());
+  detail::fill_season_filter(filter);
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                              DeserializationOption::NestingLimit(40));
+  if (err || !doc["events"].is<JsonArrayConst>())
+    return false;
+  out = SeasonRead{};
+  out.year = (uint16_t) (doc["requestedSeason"]["year"] | (doc["season"]["year"] | 0));
+  int64_t last_post = 0;
+  for (JsonObjectConst ev : doc["events"].as<JsonArrayConst>()) {
+    JsonObjectConst comp = ev["competitions"][0];
+    const std::string state = detail::str_or_empty(comp["status"]["type"]["state"]);
+    const int64_t at = parse_iso8601_z(detail::str_or_empty(ev["date"]));
+    JsonObjectConst us, them;
+    for (JsonObjectConst c : comp["competitors"].as<JsonArrayConst>()) {
+      if ((uint32_t) atol(detail::str_or_empty(c["team"]["id"]).c_str()) == our_team_id)
+        us = c;
+      else
+        them = c;
+    }
+    if (us.isNull() || them.isNull())
+      continue;
+    if (state == "pre") {
+      SeasonGame g;
+      g.kickoff_epoch = at;
+      g.time_tbd = detail::time_tbd(comp);
+      g.home = detail::str_or_empty(us["homeAway"]) == "home";
+      g.opp = detail::str_or_empty(them["team"]["abbreviation"]);
+      g.tv = detail::str_or_empty(comp["broadcasts"][0]["media"]["shortName"]);
+      if (at > 0 && !g.opp.empty())
+        out.next.push_back(std::move(g));
+      continue;
+    }
+    if (state != "post" || !(comp["status"]["type"]["completed"] | false))
+      continue;  // postponed or canceled
+    const int type = ev["seasonType"]["type"] | 0;
+    const std::string type_name = detail::str_or_empty(ev["seasonType"]["name"]);
+    const bool won = us["winner"] | false, lost = them["winner"] | false;
+    if (type == 3 || type_name.find("Playoff") != std::string::npos) {
+      // Soccer lists its results newest first: the latest by date.
+      if (at >= last_post) {
+        last_post = at;
+        out.post = true;
+        out.post_won = won;
+        out.round = season_round(detail::str_or_empty(comp["notes"][0]["headline"]), type_name);
+      }
+    } else if (type != 1) {
+      uint8_t &n = won ? out.wins : lost ? out.losses : out.ties;
+      if (n < 255)
+        n++;
+    }
+  }
+  std::stable_sort(out.next.begin(), out.next.end(),
+                   [](const SeasonGame &a, const SeasonGame &b) { return a.kickoff_epoch < b.kickoff_epoch; });
+  if (out.next.size() > kSeasonGames)
+    out.next.resize(kSeasonGames);
   return true;
 }
 

@@ -263,6 +263,9 @@ bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_i
   return parse_summary(json, sport, our_team_id, event_id, stage, out);
 }
 int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
+bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out) {
+  return parse_season(json, our_team_id, out);
+}
 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }

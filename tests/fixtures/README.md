@@ -24,6 +24,16 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
 | `rankings_mcbb_20261019.json` | `sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1`, the preseason AP poll, every record 0-0 (recorded 2026-10-29) |
 | `news_nfl.json` | `.../football/nfl/news?limit=6`, the league's six latest headlines (recorded 2026-10-29) |
+| `schedule_nfl_dal_inseason.json` | `.../football/nfl/teams/6/schedule`, week 9: seven finals (3-4) and ten games ahead (recorded 2026-10-31) |
+| `schedule_wnba_dal_offseason.json` | `.../basketball/wnba/teams/3/schedule` after the season: 44 regular-season finals (27-17) and a first-round loss (recorded 2026-10-31) |
+| `schedule_mlb_nyy_offseason.json` | `.../baseball/mlb/teams/10/schedule` after the ALDS: the five playoff games only, so the record is the team read's (recorded 2026-10-31) |
+| `schedule_mls_cin_2025.json` | `.../soccer/usa.1/teams/18267/schedule?season=2025`: results newest first, draws, and the playoffs named by season type (recorded 2026-10-31) |
+| `schedule_ncaa_ala_2025_post.json` | `.../college-football/teams/333/schedule?season=2025&seasontype=3`: two playoff games, the second "at the Rose Bowl Presented by Prudential" (recorded 2026-10-31) |
+| `schedule_nba_phi_2026_post.json` | `.../basketball/nba/teams/20/schedule?season=2026&seasontype=3`: two playoff series, "East Semifinals - Game 4" last (recorded 2026-10-31) |
+
+The six recorded on 2026-10-31 keep only the fields a schedule parse reads
+(every event, each cut to its date, season type, week, status, notes,
+broadcast and both sides' id, abbreviation, side, winner and score).
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
 
