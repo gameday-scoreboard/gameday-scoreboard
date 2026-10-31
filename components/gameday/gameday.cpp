@@ -6175,7 +6175,7 @@ void GamedayComponent::season_tick_() {
   if (this->season_read_due_ || (this->busy_ && this->job_.need_season))
     return;
   const std::vector<SeasonTeam> teams = this->season_teams_();
-  const int64_t epoch = (int64_t) this->time_->timestamp_now();
+  const int64_t epoch = (int64_t) this->time_->timestamp_now();  // time_ is set: between needs clock_set_()
   for (size_t k = 0; k < teams.size(); k++) {
     const size_t i = (this->season_pos_ + k) % teams.size();
     const SeasonTeam &t = teams[i];

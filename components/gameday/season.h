@@ -171,9 +171,9 @@ inline std::string season_time(const struct tm &kick, bool tbd) {
 
 // One game on the schedule card. kick is local (from tbd_day_epoch with no
 // time yet). Wide (two panels, 25 characters of spleen_8 a line): "Sun 11/1
-// vs ARI 12:00P Fox", "Sun 11/8 @ IND 12:00P Fox", the network left off
-// when it doesn't fit. Narrow (12 a line): "Sun 11/1" over "ARI 12:00P" at
-// home, "@IND 12:00P" away.
+// vs ARI 12P Fox", "Sun 11/8 @ IND 7:15P CBS", the network left off when it
+// doesn't fit. Narrow (12 a line): "Sun 11/1" over "ARI 12P" at home,
+// "@IND 7:15P" away.
 inline std::string schedule_line(const struct tm &kick, const SeasonGame &g, bool wide) {
   static const char *kDays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   char day[16];
