@@ -1,5 +1,5 @@
 {
-  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there. 2026-10-28: flash caps and max_growth.flash raised for the 52 WLED effects (about 81 KB of flash in one change; see the effects PR).",
+  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there. 2026-10-28: flash caps and max_growth.flash raised for the 52 WLED effects (about 81 KB of flash in one change; see the effects PR). 2026-10-31: flash caps raised 8,000 B for the schedule and season recap cards (about 19.8 KB of flash: the season schedule parse and its two cards).",
   "max_growth": {
     "flash": 98304,
     "static_ram": 4096,
@@ -8,15 +8,15 @@
   },
   "firmware": {
     "moonhub75": {
-      "flash": 2574000,
+      "flash": 2582000,
       "static_ram": 173431
     },
     "moonhub75-2panel": {
-      "flash": 2574000,
+      "flash": 2582000,
       "static_ram": 173431
     },
     "scoreboard75": {
-      "flash": 2550000,
+      "flash": 2558000,
       "static_ram": 172568
     }
   },
