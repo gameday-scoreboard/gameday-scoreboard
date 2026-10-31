@@ -27,6 +27,7 @@
   "odds": true,
   "leaders": true,
   "opp": true,
+  "celebrate": 2,
   "best": true,
   "bootaddr": true,
   "night": true,

@@ -148,7 +148,7 @@ INITIAL = {
     # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
     "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "celebrate": 2, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.
@@ -740,6 +740,9 @@ def apply_set(kv):
         elif k == "after":
             if v in AFTER:
                 STATE["after"] = v
+        elif k == "celebrate":
+            if v in ("0", "1", "2"):
+                STATE["celebrate"] = int(v)
     # The same start and end keeps the hours it had (night_keep_hours).
     if STATE["nightstart"] == STATE["nightend"]:
         STATE["nightstart"], STATE["nightend"] = hours
@@ -901,7 +904,7 @@ def import_settings(doc):
             if not is_int(v):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
-                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
+                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255), "celebrate": (0, 2),
                       "pregame": (0, LIMITS["kPregameMax"]),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:

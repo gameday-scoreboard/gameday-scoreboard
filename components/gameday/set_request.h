@@ -36,7 +36,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "cards",   "wake",    "wakelead",
-                                    "after",   "remote1", "remote2", "remote3", "remote4"};
+                                    "after",   "remote1", "remote2", "remote3", "remote4", "celebrate"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -317,6 +317,7 @@ enum class SetKind : uint8_t {
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
+  CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
 };
 
 struct TeamRef {
@@ -465,6 +466,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.kind = k == "nightstart" ? SetKind::NIGHT_START : SetKind::NIGHT_END;
     op.value = night_parse_time(v);
     return op.value >= 0;
+  }
+  if (k == "celebrate") {
+    // 0 off, 1 subtle, 2 full; anything else is refused.
+    op.kind = SetKind::CELEBRATE;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
   }
   if (k == "nightlevel") {
     op.kind = SetKind::NIGHT_LEVEL;

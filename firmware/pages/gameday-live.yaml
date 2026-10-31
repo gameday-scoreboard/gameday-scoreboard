@@ -26,23 +26,19 @@ esphome:
               lv_label_set_long_mode(id(tt_game_status_lbl), LV_LABEL_LONG_SCROLL_CIRCULAR);
             });
 
-# Fireworks (lvgl-canvas-fx) on a canvas behind the splash text. The canvas
-# is allocated at the widest layout and simply clips on a single panel.
-lvgl_canvas_fx:
-  - id: tt_fx
-    effect: fireworks
-    canvas: tt_fx_canvas
-    fps: 30
-    start_paused: true
-
+# The celebrations (components/gameday/celebrate_fx.h) draw on tt_fx_canvas
+# behind the splash words. The canvas is allocated at the widest layout and
+# simply clips on a single panel.
 script:
   - id: tt_hide_splash
     mode: restart
+    parameters:
+      ms: int
     then:
-      - delay: 4s
+      - delay: !lambda 'return (uint32_t) (ms > 0 ? ms : 4000);'
       - lambda: |-
           lv_obj_add_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
-          id(tt_fx).pause();
+          gameday::celebration_player().stop();
 
   # Favorites: another favorite scored while this game is on ("KC TD,
   # 21-17"). A band over the situation row and the ticker (the ticker alone
@@ -256,6 +252,10 @@ script:
       opponent_rank: int
       splash_text: string
       splash_color: int
+      celeb_kind: int
+      celeb_alt: int
+      celeb_line2: string
+      celeb_ms: int
       sport: int
       situation: string
       outs: int
@@ -775,30 +775,51 @@ script:
             lambda: 'return !splash_text.empty();'
           then:
             - lambda: |-
-                lv_label_set_text(id(tt_splash_lbl), splash_text.c_str());
-                // Touchdowns and the win get fireworks on black with the text in
-                // the team color; smaller scores keep the solid color flash.
-                const bool big = splash_text.find("TOUCHDOWN") != std::string::npos ||
-                                 splash_text.find("WINS") != std::string::npos ||
-                                 splash_text.find("HOME RUN") != std::string::npos ||
-                                 ((sport == 3 || sport == 4) && splash_text.find("GOAL") != std::string::npos);
-                if (big) {
-                  uint32_t c = (uint32_t) splash_color;
-                  uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
-                  uint32_t m = std::max(r, std::max(g, b));
-                  if (m > 0 && m < 0xE0) { r = r * 0xE0 / m; g = g * 0xE0 / m; b = b * 0xE0 / m; }
+                // The celebration the component picked (celebrate.h): the words
+                // where celeb_text_place puts them, the animation on the canvas
+                // behind them for the animated kinds, a solid flash otherwise.
+                const int W = lv_disp_get_hor_res(lv_disp_get_default());
+                const auto kind = (::espn::CelebKind) celeb_kind;
+                const ::espn::CelebTextPlace place = ::espn::celeb_text_place(kind, W, 64);
+                lv_obj_t *lbl = id(tt_splash_lbl);
+                std::string words = splash_text;
+                if (!celeb_line2.empty())
+                  words += "\n" + celeb_line2;
+                lv_label_set_text(lbl, words.c_str());
+                const lv_font_t *font = place.font == 16 ? id(spleen_16)->get_lv_font()
+                                        : place.font == 12 ? id(spleen_12)->get_lv_font() : id(spleen_8)->get_lv_font();
+                lv_obj_set_style_text_font(lbl, font, 0);
+                lv_obj_set_style_text_line_space(lbl, 2, 0);
+                lv_obj_set_pos(lbl, 0, place.y);
+                if (::espn::celeb_animated(kind)) {
+                  // White words over the sweep, the red lamp and the win's
+                  // confetti; the team's color on black for the rest.
+                  const bool white = kind == ::espn::CelebKind::WAVE || kind == ::espn::CelebKind::GOAL_LAMP ||
+                                     kind == ::espn::CelebKind::WIN;
                   lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex(0x000000), 0);
-                  lv_obj_set_style_text_color(id(tt_splash_lbl), m == 0 ? lv_color_hex(0xFFFFFF) : lv_color_make(r, g, b), 0);
+                  lv_obj_set_style_text_color(lbl, lv_color_hex(white ? 0xFFFFFF : (uint32_t) splash_color), 0);
+                  ::espn::CelebPlan plan;
+                  plan.kind = kind;
+                  plan.color = (uint32_t) splash_color;
+                  plan.alt = (uint32_t) celeb_alt;
+                  plan.text = splash_text;
+                  plan.line2 = celeb_line2;
+                  plan.duration_ms = (uint32_t) celeb_ms;
                   lv_obj_clear_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
-                  id(tt_fx).resume();
+                  gameday::celebration_player().start(id(tt_fx_canvas), plan);
                 } else {
-                  id(tt_fx).pause();
+                  gameday::celebration_player().stop();
                   lv_obj_add_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
                   lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex((uint32_t) splash_color), 0);
-                  lv_obj_set_style_text_color(id(tt_splash_lbl), lv_color_hex(0xFFFFFF), 0);
+                  lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
                 }
+                // Over everything, including the no-game screen should the
+                // board change under a long celebration.
+                lv_obj_move_foreground(id(tt_splash));
                 lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
-            - script.execute: tt_hide_splash
+            - script.execute:
+                id: tt_hide_splash
+                ms: !lambda 'return celeb_ms;'
 
   # The message card (components/gameday/message.h): a page of the owner's
   # entries, or nothing. The component decides when, between games, and

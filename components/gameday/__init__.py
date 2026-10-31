@@ -172,6 +172,12 @@ async def to_code(config):
         )
     # web_stack.cpp raises the web server task's stack above ESPHome's fixed size.
     cg.add_build_flag("-Wl,--wrap=httpd_start")
+    # Every release since the first fireworks has been built with NDEBUG: the
+    # fireworks component set it for its physics library, and it reaches all
+    # of ESP-IDF, so assert() in FreeRTOS, the ring buffers and the queues
+    # compiled out. The celebrations replaced that component; this keeps the
+    # build as it was (about 2.4 KB of IRAM and 1.5 KB of DRAM otherwise).
+    cg.add_build_flag("-DNDEBUG=1")
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))
