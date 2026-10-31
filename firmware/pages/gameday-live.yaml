@@ -43,6 +43,15 @@ script:
       - lambda: |-
           lv_obj_add_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
           id(tt_fx).pause();
+      # Back to the owner's brightness after a dimmed color splash.
+      - if:
+          condition:
+            lambda: 'return id(tt_splash_dim) && id(power).state;'
+          then:
+            - hub75.set_brightness:
+                id: matrix
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
+      - lambda: 'id(tt_splash_dim) = false;'
 
   # Favorites: another favorite scored while this game is on ("KC TD,
   # 21-17"). A band over the situation row and the ticker (the ticker alone
@@ -797,7 +806,21 @@ script:
                   lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex((uint32_t) splash_color), 0);
                   lv_obj_set_style_text_color(id(tt_splash_lbl), lv_color_hex(0xFFFFFF), 0);
                 }
+                id(tt_splash_dim) = !big;
                 lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
+            # A full-screen color flash in white or a pale team color draws
+            # more than a 3 A USB-C charger gives, so it runs at 70% of the
+            # owner's brightness until tt_hide_splash puts it back.
+            - if:
+                condition:
+                  lambda: 'return id(tt_splash_dim) && id(power).state;'
+                then:
+                  - hub75.set_brightness:
+                      id: matrix
+                      # Never 0 from a lit panel: the driver turns off at 0.
+                      brightness: !lambda |-
+                        const uint8_t b = id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);
+                        return b == 0 ? 0 : std::max<uint8_t>(1, b * 7 / 10);
             - script.execute: tt_hide_splash
 
   # The message card (components/gameday/message.h): a page of the owner's
@@ -1038,6 +1061,11 @@ interval:
           }
 
 globals:
+  # A color splash is on screen at reduced brightness (tt_hide_splash).
+  - id: tt_splash_dim
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   # The board has a line score (halftime or a final), the game leaders card
   # (game_leaders.h), and whose turn it is: 0 the board, 1 the line score,
   # 2 the leaders.

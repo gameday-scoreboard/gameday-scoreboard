@@ -57,6 +57,7 @@ through `update_important` in the panel's state.
 
 ### 🐛 Fixes
 
+- 🔌 The full-screen color flash after a score runs at 70% brightness, so a white or pale team's flash doesn't overload the power supply
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
 - 📅 A New Year's Day game seen on Dec 31 says **Tomorrow**, not a weekday
 
