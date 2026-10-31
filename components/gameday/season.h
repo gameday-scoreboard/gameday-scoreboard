@@ -97,8 +97,9 @@ inline std::string season_round(const std::string &headline, const std::string &
 
 // "11-6", "10-6-1" with a tie, a soccer record "20-5-9" (wins, draws,
 // losses, the way soccer writes it). record is the team read's own, for a
-// schedule that holds only the playoffs (an MLB team's in the fall): used
-// when the read counted no regular-season finals.
+// schedule that holds only the playoffs (an MLB team's in the fall, or any
+// team's while the playoffs are on): used when the read counted no
+// regular-season finals.
 inline std::string season_record(const SeasonRead &r, bool soccer, const std::string &record) {
   if (r.finals() == 0)
     return record;
@@ -121,9 +122,11 @@ inline std::string season_post_line(const SeasonRead &r) {
   return out + (r.round[0] == '\0' ? std::string(" in the playoffs") : " " + std::string(r.round));
 }
 
-// Whether the recap card has something: a record either way.
+// Whether the recap card has something: a record either way. A schedule
+// with neither finals nor a playoff game (a team that missed the playoffs,
+// read while ESPN's list holds only the playoffs) still has the team read's.
 inline bool season_recap_ready(const SeasonRead &r, const std::string &record) {
-  return r.year != 0 && (r.finals() != 0 || (r.post && !record.empty()));
+  return r.year != 0 && (r.finals() != 0 || !record.empty());
 }
 
 // The recap card's top line and body: "DAL 2025" and "11-6\nlost NFC Wild Card".

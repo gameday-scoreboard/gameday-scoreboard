@@ -5851,6 +5851,13 @@ static void test_season() {
   CHECK_EQ(recap_body(r, false, "93-68"), std::string("93-68\nlost ALDS"));
   CHECK(season_recap_ready(r, "93-68"));
   CHECK(!season_recap_ready(r, ""));
+  // A team that missed the playoffs, read while the list holds only the
+  // playoffs: no finals of its own and no playoff game, the record alone.
+  SeasonRead missed;
+  missed.year = 2025;
+  CHECK(season_recap_ready(missed, "7-10"));
+  CHECK_EQ(recap_body(missed, false, "7-10"), std::string("7-10"));
+  CHECK(!season_recap_ready(missed, ""));
   CHECK_EQ(recap_body(r, false, ""), std::string("lost ALDS"));
 
   // Soccer: results newest first, a draw neither side won, written W-D-L;
@@ -5881,6 +5888,10 @@ static void test_season() {
   CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 99999, r));
   CHECK(r.next.empty() && r.finals() == 0);
   CHECK(!season_recap_ready(r, ""));
+  // An empty list, as ESPN answers for a team with no games of that kind.
+  CHECK(parse_season_str("{\"requestedSeason\":{\"year\":2025},\"events\":[]}", 6, r));
+  CHECK(r.year == 2025 && r.finals() == 0 && !r.post);
+  CHECK(season_recap_ready(r, "7-10"));
 
   CHECK_EQ(season_round("NFC Wild Card Playoffs", "Postseason"), std::string("NFC Wild Card"));
   CHECK_EQ(season_round("Super Bowl LX", "Postseason"), std::string("Super Bowl LX"));
