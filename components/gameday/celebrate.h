@@ -93,9 +93,18 @@ inline bool celeb_same_game(const GameSnapshot &prev, const GameSnapshot &cur) {
   return prev.valid && cur.valid && !cur.event_id.empty() && prev.event_id == cur.event_id;
 }
 
-// Whether a basketball read's last play was a three-point shot, in ESPN's
-// words ("makes 26-foot three point jumper", a "Three Point" play type).
-inline bool celeb_three_play(const GameSnapshot &cur) {
+// Whether a basketball read's last play was a made three by this side.
+// ESPN's scoreValue is 3 only for a made three (a miss is 0), and its team
+// says whose play it was; score_log.h reads the same pair. Only a document
+// with no scoreValue falls back to the words, and then a make only: ESPN
+// writes "misses 26-foot three point jumper" and "missed Three Point Jumper"
+// with the same words as a make.
+inline bool celeb_three_play(const GameSnapshot &cur, bool ours) {
+  const uint32_t side = ours ? cur.team_id : cur.opp_id;
+  if (cur.play_team != 0 && cur.play_team != side)
+    return false;
+  if (cur.play_value > 0)
+    return cur.play_value == 3;
   auto has = [](const std::string &s, const char *w) {
     std::string low;
     low.reserve(s.size());
@@ -103,8 +112,11 @@ inline bool celeb_three_play(const GameSnapshot &cur) {
       low += (char) ((c >= 'A' && c <= 'Z') ? c + 32 : c);
     return low.find(w) != std::string::npos;
   };
-  return has(cur.last_play, "three point") || has(cur.last_play, "three-point") || has(cur.last_play, "3-pt") ||
-         has(cur.play_type, "three point") || has(cur.play_type, "three-point");
+  const bool three = has(cur.last_play, "three point") || has(cur.last_play, "three-point") ||
+                     has(cur.last_play, "3-pt") || has(cur.play_type, "three point") ||
+                     has(cur.play_type, "three-point");
+  const bool made = (has(cur.last_play, "make") || has(cur.last_play, "made")) && !has(cur.last_play, "miss");
+  return three && made;
 }
 
 // Who won, the way each sport's splash decides it: more points, or in soccer
@@ -149,11 +161,15 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   if (splash.text.empty()) {
     // Basketball's three. decide_splash leaves baskets alone; Full celebrates
     // a three-point shot read on its own for our side (either side when neutral).
-    if (level != CelebLevel::FULL || !live || cur.sport != Sport::BASKETBALL || !celeb_three_play(cur))
+    if (level != CelebLevel::FULL || !live || cur.sport != Sport::BASKETBALL)
       return none;
     bool ours = delta == 3 && odelta == 0;
     bool theirs = neutral && opp_splashes && odelta == 3 && delta == 0;
     if (!ours && !theirs)
+      return none;
+    // The three points have to be the last play, a made three by that side:
+    // an and-one or a two plus a free throw ending on a missed three is not.
+    if (!celeb_three_play(cur, ours))
       return none;
     CelebPlan p;
     p.kind = CelebKind::THREE;

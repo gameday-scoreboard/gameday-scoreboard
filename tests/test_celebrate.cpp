@@ -42,6 +42,8 @@ static GameSnapshot live(Sport sport, int team, int opp) {
   s.sport = sport;
   s.team_abbr = "KC";
   s.opp_abbr = "BUF";
+  s.team_id = 12;
+  s.opp_id = 2;
   s.team_color = "E31837";
   s.opp_color = "00338D";
   s.team_score = team;
@@ -228,10 +230,15 @@ static void test_hockey_soccer() {
   CHECK(plan(live(Sport::SOCCER, 1, 1), final_(Sport::SOCCER, 1, 1), CelebLevel::FULL).kind == CelebKind::NONE);
 }
 
-// A basketball read whose last play is ESPN's three-point text.
-static GameSnapshot three(int team, int opp, const char *play = "Stephen Curry makes 26-foot three point jumper") {
+// A basketball read whose last play is ESPN's three-point text, with the
+// scoreValue and team ESPN gives a made three (value 0 is a document
+// without a scoreValue, so the words decide).
+static GameSnapshot three(int team, int opp, const char *play = "Stephen Curry makes 26-foot three point jumper",
+                          int value = 3, uint32_t by = 12) {
   GameSnapshot s = live(Sport::BASKETBALL, team, opp);
   s.last_play = play;
+  s.play_value = (int8_t) value;
+  s.play_team = by;
   return s;
 }
 
@@ -246,14 +253,33 @@ static void test_basketball() {
   CHECK_EQ(p.duration_ms, kCelebThreeMs);
   CHECK_EQ(p.color, celeb_bright(0xE31837));
   CHECK(plan(a, three(53, 48, "KEVIN DURANT MAKES THREE-POINT JUMPER"), CelebLevel::FULL).kind == CelebKind::THREE);
+  // No scoreValue in the document: the words decide, a make only.
+  CHECK(plan(a, three(53, 48, "made Three Point Jumper", 0, 0), CelebLevel::FULL).kind == CelebKind::THREE);
   GameSnapshot pt = live(Sport::BASKETBALL, 53, 48);
   pt.play_type = "Three Point Jumper";
+  pt.last_play = "Caitlin Clark makes 25-foot three point jumper";
   CHECK(plan(a, pt, CelebLevel::FULL).kind == CelebKind::THREE);
+  // A read that ends on a missed three (ESPN uses the same words) after
+  // three points came another way, by either team: no show. Nor a made
+  // three by the other team with our points moving, nor a free throw
+  // (scoreValue 1) as the last of an and-one.
+  CHECK(plan(a, three(53, 48, "Jayson Tatum misses 26-foot three point jumper", 0, 12), CelebLevel::FULL).kind ==
+        CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "missed Three Point Jumper", 0, 2), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "misses three point jumper", 0, 0), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "makes 26-foot three point jumper", 3, 2), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "makes free throw 1 of 1", 1, 12), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "makes 26-foot three point jumper", 2, 12), CelebLevel::FULL).kind == CelebKind::NONE);
+  // Their made three in Live games is theirs by team id.
+  CHECK(plan(a, three(50, 51, "makes 26-foot three point jumper", 3, 2), CelebLevel::FULL, true).kind ==
+        CelebKind::THREE);
+  CHECK(plan(a, three(50, 51, "makes 26-foot three point jumper", 3, 12), CelebLevel::FULL, true).kind ==
+        CelebKind::NONE);
   // Three points that were not a three: an and-one, three free throws, or a
   // read with no play text at all. Two points, a free throw, two baskets
   // read at once, or a three with the other side moving too: no show.
-  CHECK(plan(a, three(53, 48, "LeBron James makes free throw 1 of 1"), CelebLevel::FULL).kind == CelebKind::NONE);
-  CHECK(plan(a, three(53, 48, "makes driving layup"), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "LeBron James makes free throw 1 of 1", 1), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, three(53, 48, "makes driving layup", 2), CelebLevel::FULL).kind == CelebKind::NONE);
   CHECK(plan(a, live(Sport::BASKETBALL, 53, 48), CelebLevel::FULL).kind == CelebKind::NONE);
   CHECK(plan(a, three(52, 48), CelebLevel::FULL).kind == CelebKind::NONE);
   CHECK(plan(a, three(51, 48), CelebLevel::FULL).kind == CelebKind::NONE);
@@ -262,10 +288,11 @@ static void test_basketball() {
   // Their three: nothing in Favorites, their show when neutral, and nothing
   // when neutral with Opponent scores too off (as their other scores).
   CHECK(plan(a, three(50, 51), CelebLevel::FULL).kind == CelebKind::NONE);
-  p = plan(a, three(50, 51), CelebLevel::FULL, true);
+  p = plan(a, three(50, 51, "makes 26-foot three point jumper", 3, 2), CelebLevel::FULL, true);
   CHECK(p.kind == CelebKind::THREE);
   CHECK_EQ(p.text, "BUF THREE!");
-  CHECK(plan(a, three(50, 51), CelebLevel::FULL, true, false).kind == CelebKind::NONE);
+  CHECK(plan(a, three(50, 51, "makes 26-foot three point jumper", 3, 2), CelebLevel::FULL, true, false).kind ==
+        CelebKind::NONE);
   // Subtle and Off leave baskets alone, as before.
   CHECK(plan(a, three(53, 48), CelebLevel::SUBTLE).kind == CelebKind::NONE);
   CHECK(plan(a, three(53, 48), CelebLevel::OFF).kind == CelebKind::NONE);
