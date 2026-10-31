@@ -32,7 +32,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nba_phi_2026_post.json` | `.../basketball/nba/teams/20/schedule?season=2026&seasontype=3`: two playoff series, "East Semifinals - Game 4" last (recorded 2026-10-31) |
 | `schedule_mlb_col_missed.json` | `.../baseball/mlb/teams/27/schedule` during the playoffs, for a team that missed them: the season's year and an empty `events` list, as ESPN sent it (recorded 2026-10-31) |
 
-The six above it recorded on 2026-10-31 keep only the fields a schedule parse reads
+The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`) keep only the fields a schedule parse reads
 (every event, each cut to its date, season type, week, status, notes,
 broadcast and both sides' id, abbreviation, side, winner and score).
 
