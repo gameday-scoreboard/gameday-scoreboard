@@ -124,9 +124,11 @@ The Between games card becomes one list with a switch for each card the panel ca
 | **Message card** | The [message card](/using/messages/)'s turns. Its text or list, and **Show it**, stay in the Message card. |
 | **Pictures** | Your [pictures](/using/pictures/)' turns. They stay saved while it's off. |
 | **Game leaders**, **College Top 25**, **News headlines** | The same switches as before. |
+| **Schedule** | A favorite's next three games, for football and soccer teams. See [Schedule and season recap](/using/schedule/). |
+| **Season recap** | A favorite's record and playoff result between seasons, for football and soccer teams. |
 | **Weather** | The weather card's switch, which moves here from its block. Its town stays under the list. |
 
-Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet is grey, with what it needs under its name: a day for your own countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
+Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet is grey, with what it needs under its name: a day for your own countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a football or soccer team in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 :::
 
 ### Celebrations

@@ -61,7 +61,7 @@ constexpr CardRow kCards[] = {
     {Card::LEADERS,   "gameleaders", "Game leaders",               true,  ""},
     {Card::TOP25,     "top25",       "College Top 25",             true,  "Only while you follow a college football or basketball team"},
     {Card::SCHEDULE,  "schedule",    "Schedule",                   true,  "Only for football and soccer teams in Favorite teams"},
-    {Card::RECAP,     "recap",       "Season recap",               true,  "Only for football and soccer teams in Favorite teams"},
+    {Card::RECAP,     "seasonrecap", "Season recap",               true,  "Only for football and soccer teams in Favorite teams"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},
     {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
 };

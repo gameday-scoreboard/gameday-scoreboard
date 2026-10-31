@@ -664,6 +664,12 @@ template<typename TInput> bool parse_season(TInput &input, uint32_t our_team_id,
       g.home = detail::str_or_empty(us["homeAway"]) == "home";
       g.opp = detail::str_or_empty(them["team"]["abbreviation"]);
       g.tv = detail::str_or_empty(comp["broadcasts"][0]["media"]["shortName"]);
+      // Short strings stay inline in the PSRAM entry; a network this long
+      // never fits on the card's line anyway.
+      if (g.tv.size() > 15)
+        g.tv.clear();
+      if (g.opp.size() > 15)
+        g.opp.resize(15);
       if (at > 0 && !g.opp.empty())
         out.next.push_back(std::move(g));
       continue;
@@ -679,7 +685,7 @@ template<typename TInput> bool parse_season(TInput &input, uint32_t our_team_id,
         last_post = at;
         out.post = true;
         out.post_won = won;
-        out.round = season_round(detail::str_or_empty(comp["notes"][0]["headline"]), type_name);
+        out.set_round(season_round(detail::str_or_empty(comp["notes"][0]["headline"]), type_name));
       }
     } else if (type != 1) {
       uint8_t &n = won ? out.wins : lost ? out.losses : out.ties;
@@ -687,8 +693,10 @@ template<typename TInput> bool parse_season(TInput &input, uint32_t our_team_id,
         n++;
     }
   }
-  std::stable_sort(out.next.begin(), out.next.end(),
-                   [](const SeasonGame &a, const SeasonGame &b) { return a.kickoff_epoch < b.kickoff_epoch; });
+  // Soonest first, in place: an insertion sort is plenty for a season.
+  for (size_t i = 1; i < out.next.size(); i++)
+    for (size_t k = i; k > 0 && out.next[k].kickoff_epoch < out.next[k - 1].kickoff_epoch; k--)
+      std::swap(out.next[k], out.next[k - 1]);
   if (out.next.size() > kSeasonGames)
     out.next.resize(kSeasonGames);
   return true;

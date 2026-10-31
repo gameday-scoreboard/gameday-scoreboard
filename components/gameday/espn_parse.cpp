@@ -269,8 +269,23 @@ bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_i
   return parse_summary(json, sport, our_team_id, event_id, stage, out);
 }
 int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out) {
+  return parse_season(in, our_team_id, out);
+}
 bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out) {
-  return parse_season(json, our_team_id, out);
+  struct StringSource : ByteSource {
+    const std::string &s;
+    size_t at{0};
+    explicit StringSource(const std::string &str) : s(str) {}
+    int read() override { return at < s.size() ? (unsigned char) s[at++] : -1; }
+    size_t readBytes(char *dst, size_t n) override {
+      size_t k = std::min(n, s.size() - at);
+      memcpy(dst, s.data() + at, k);
+      at += k;
+      return k;
+    }
+  } src(json);
+  return parse_season_from(src, our_team_id, out);
 }
 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }

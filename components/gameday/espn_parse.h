@@ -293,7 +293,16 @@ std::string news_url(League league, uint32_t team_id);
 bool parse_team_str(const std::string &json, Schedule &out);
 // Up to `max` games not yet started, in date order, from the schedule endpoint.
 bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out);
-// parse_season (season.h) from a string, for the host tests.
+// A byte stream for a parse compiled in espn_parse.cpp: a big parse
+// template instantiated in gameday.cpp can overflow that file's literal pool
+// and fail the link ("l32r: literal target out of range").
+struct ByteSource {
+  virtual ~ByteSource() = default;
+  virtual int read() = 0;
+  virtual size_t readBytes(char *dst, size_t n) = 0;
+};
+// parse_season (season.h) from a stream, and from a string for the host tests.
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out);
 bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out);
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);

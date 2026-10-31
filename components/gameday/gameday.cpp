@@ -6243,7 +6243,14 @@ void GamedayComponent::run_season_job_() {
   if (container == nullptr)
     return;
   ContainerReader reader(container, this->espn_bytes_);
-  j.season_ok = ::espn::parse_season(reader, j.season_id, j.season_read);
+  // Through espn_parse.cpp (ByteSource), away from this file's literal pool.
+  struct Source : ::espn::ByteSource {
+    ContainerReader &r;
+    explicit Source(ContainerReader &reader) : r(reader) {}
+    int read() override { return r.read(); }
+    size_t readBytes(char *dst, size_t n) override { return r.readBytes(dst, n); }
+  } src(reader);
+  j.season_ok = ::espn::parse_season_from(src, j.season_id, j.season_read);
   container->end();
   j.season_bytes = (uint32_t) reader.total();
   if (!j.season_ok)

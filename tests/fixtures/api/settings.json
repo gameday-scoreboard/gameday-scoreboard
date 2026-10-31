@@ -47,7 +47,7 @@
     "gameleaders": true,
     "top25": true,
     "schedule": true,
-    "recap": true,
+    "seasonrecap": true,
     "news": false,
     "weather": true
   },

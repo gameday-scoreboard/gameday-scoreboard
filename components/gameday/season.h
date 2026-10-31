@@ -14,9 +14,11 @@
 #include <cstdio>
 #include <ctime>
 #include <string>
+#include <cstring>
 #include <vector>
 
 #include "leagues.h"
+#include "psram.h"
 
 namespace espn {
 
@@ -36,15 +38,21 @@ struct SeasonGame {
   std::string tv;
 };
 
-// What one read of a team's season schedule leaves.
+// What one read of a team's season schedule leaves, kept per team in PSRAM
+// (internal heap is the panel's scarcest): the round inline, the games in
+// a PSRAM vector, their short strings inline too.
 struct SeasonRead {
   uint16_t year{0};           // the season's, from requestedSeason
   uint8_t wins{0}, losses{0}, ties{0};  // regular-season finals; ties are a soccer draw
   bool post{false};           // a playoff game was played to the end
   bool post_won{false};       // and the team won the last one
-  std::string round;          // that game's round, "NFC Wild Card", or ""
-  std::vector<SeasonGame> next;  // up to kSeasonGames not started, soonest first
+  char round[kSeasonRoundMax + 1]{};  // that game's round, "NFC Wild Card", or ""
+  std::vector<SeasonGame, PsramAllocator<SeasonGame>> next;  // up to kSeasonGames not started, soonest first
   uint8_t finals() const { return (uint8_t) (wins + losses + ties); }
+  void set_round(const std::string &r) {
+    strncpy(round, r.c_str(), kSeasonRoundMax);
+    round[kSeasonRoundMax] = '\0';
+  }
 };
 
 // A playoff round from what ESPN says about a game: the note's headline,
@@ -110,7 +118,7 @@ inline std::string season_post_line(const SeasonRead &r) {
   if (!r.post)
     return "";
   std::string out = r.post_won ? "won" : "lost";
-  return out + (r.round.empty() ? std::string(" in the playoffs") : " " + r.round);
+  return out + (r.round[0] == '\0' ? std::string(" in the playoffs") : " " + std::string(r.round));
 }
 
 // Whether the recap card has something: a record either way.

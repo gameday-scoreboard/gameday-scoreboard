@@ -278,7 +278,7 @@
     "cards.next": "bool",
     "cards.top25": "bool",
     "cards.schedule": "bool",
-    "cards.recap": "bool",
+    "cards.seasonrecap": "bool",
     "cards.weather": "bool",
     "cddate": "string",
     "gameleaders": "bool",

@@ -5836,7 +5836,7 @@ static void test_season() {
   CHECK_EQ(r.year, 2026);
   CHECK_EQ(season_record(r, false, "1-2"), std::string("27-17"));
   CHECK(r.post && !r.post_won);
-  CHECK_EQ(r.round, std::string("First Round"));
+  CHECK_EQ(std::string(r.round), std::string("First Round"));
   CHECK(r.next.empty());
   CHECK(season_recap_ready(r, ""));
   CHECK_EQ(recap_header("DAL", r.year), std::string("DAL 2026"));
@@ -5847,7 +5847,7 @@ static void test_season() {
   CHECK(parse_season_str(slurp("fixtures/schedule_mlb_nyy_offseason.json"), 10, r));
   CHECK_EQ(r.finals(), 0);
   CHECK(r.post && !r.post_won);
-  CHECK_EQ(r.round, std::string("ALDS"));
+  CHECK_EQ(std::string(r.round), std::string("ALDS"));
   CHECK_EQ(recap_body(r, false, "93-68"), std::string("93-68\nlost ALDS"));
   CHECK(season_recap_ready(r, "93-68"));
   CHECK(!season_recap_ready(r, ""));
@@ -5859,17 +5859,17 @@ static void test_season() {
   CHECK_EQ(r.year, 2025);
   CHECK_EQ(season_record(r, true, ""), std::string("20-5-9"));
   CHECK(r.post && !r.post_won);
-  CHECK_EQ(r.round, std::string("East Semifinals"));
+  CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
   CHECK_EQ(recap_body(r, true, ""), std::string("20-5-9\nlost East Semifinals"));
 
   // College: the playoff's sponsor and bowl left off.
   CHECK(parse_season_str(slurp("fixtures/schedule_ncaa_ala_2025_post.json"), 333, r));
   CHECK_EQ(r.year, 2025);
-  CHECK_EQ(r.round, std::string("CFP Quarterfinal"));
+  CHECK_EQ(std::string(r.round), std::string("CFP Quarterfinal"));
   CHECK(!r.post_won);
   // NBA: the series, not the game.
   CHECK(parse_season_str(slurp("fixtures/schedule_nba_phi_2026_post.json"), 20, r));
-  CHECK_EQ(r.round, std::string("East Semifinals"));
+  CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
 
   CHECK_EQ(season_url(League::NFL, 6, true), schedule_url(League::NFL, 6));
   CHECK_EQ(season_url(League::MLS, 18267, false), schedule_url(League::MLS, 18267));
@@ -5894,10 +5894,10 @@ static void test_season() {
   w.wins = 15;
   w.losses = 2;
   w.post = w.post_won = true;
-  w.round = "Super Bowl LX";
+  w.set_round("Super Bowl LX");
   CHECK_EQ(recap_body(w, false, ""), std::string("15-2\nwon Super Bowl LX"));
   w.ties = 1;
-  w.round.clear();
+  w.set_round("");
   CHECK_EQ(recap_body(w, false, ""), std::string("15-2-1\nwon in the playoffs"));
 
   // The card's lines: wide on two panels, two lines a game on one.
