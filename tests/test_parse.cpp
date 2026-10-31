@@ -5871,6 +5871,11 @@ static void test_season() {
   CHECK(parse_season_str(slurp("fixtures/schedule_nba_phi_2026_post.json"), 20, r));
   CHECK_EQ(r.round, std::string("East Semifinals"));
 
+  CHECK_EQ(season_url(League::NFL, 6, true), schedule_url(League::NFL, 6));
+  CHECK_EQ(season_url(League::MLS, 18267, false), schedule_url(League::MLS, 18267));
+  CHECK_EQ(season_url(League::MLS, 18267, true),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/18267/schedule"));
+
   // Not JSON, or a team not in it.
   CHECK(!parse_season_str("<html>", 6, r));
   CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 99999, r));

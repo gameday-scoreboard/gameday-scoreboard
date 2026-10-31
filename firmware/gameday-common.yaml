@@ -749,6 +749,12 @@ gameday:
           lambda: 'return x == "news";'
         then:
           - script.execute: gd_news_card
+    # The schedule and season recap cards (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "season";'
+        then:
+          - script.execute: gd_season_card
     # The picture card, and a GIF's next frame on its canvas (pages/gameday-live.yaml)
     - if:
         condition:

@@ -133,6 +133,8 @@
     {"id": "picture", "name": "Pictures", "on": true, "ok": true, "hint": "Add a picture in the Pictures card first"},
     {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
     {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
+    {"id": "schedule", "name": "Schedule", "on": true, "ok": true, "hint": "Only for football and soccer teams in Favorite teams"},
+    {"id": "recap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for football and soccer teams in Favorite teams"},
     {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
     {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"}
   ],

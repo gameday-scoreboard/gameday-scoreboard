@@ -258,6 +258,9 @@ const char *league_path(League league);  // the last part of the ESPN path: "nfl
 std::string team_option(const Team &t);  // "NFL: Dallas Cowboys", the Home Assistant option
 std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
+// The season read's (season.h): schedule_url, but a soccer team's results
+// rather than its fixtures with results, for the recap between seasons.
+std::string season_url(League league, uint32_t espn_id, bool results);
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
 // Every game of the day for one league. top25: men's college basketball

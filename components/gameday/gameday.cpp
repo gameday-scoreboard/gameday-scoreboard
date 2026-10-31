@@ -1493,6 +1493,7 @@ void GamedayComponent::loop() {
   this->msg_tick_();
   this->top25_tick_();
   this->news_tick_();
+  this->season_tick_();
   this->picture_tick_();
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
@@ -1542,6 +1543,8 @@ void GamedayComponent::loop() {
           this->top25_fail_ms_[this->job_.top25_slot] = this->gave_up_ms_;
         if (this->job_.need_news)
           this->news_fail_ms_ = this->gave_up_ms_;
+        if (this->job_.need_season)
+          this->season_entry_(this->job_.season_league, this->job_.season_id, true)->fail_ms = this->gave_up_ms_;
         if (this->job_.need_wx != 0) {
           this->wx_fail_ms_ = this->gave_up_ms_;
           this->wx_backoff_ms_ = this->wx_fail_.fail(false, 0, random_uint32());
@@ -1586,6 +1589,12 @@ void GamedayComponent::loop() {
   if (this->news_read_due_ && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_news_job_();
+    return;
+  }
+  // A team's season schedule for the schedule and recap cards, the same way.
+  if (this->season_read_due_ && network::is_connected() &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
+    this->start_season_job_();
     return;
   }
   // The weather's lookup and forecast reads, the same way: between ESPN
@@ -1855,6 +1864,9 @@ bool GamedayComponent::card_ok_(::espn::Card c) const {
     }
     case ::espn::Card::WEATHER:
       return this->wx_place_known_();  // the town was found
+    case ::espn::Card::SCHEDULE:
+    case ::espn::Card::RECAP:
+      return !this->season_teams_().empty();
     default:
       return true;
   }
@@ -3271,6 +3283,10 @@ void GamedayComponent::run_job_() {
     this->run_news_job_();
     return;
   }
+  if (j.need_season) {
+    this->run_season_job_();
+    return;
+  }
   if (j.need_wx != 0) {
     this->run_wx_job_();
     return;
@@ -3402,6 +3418,10 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_news) {
     this->apply_news_job_();  // checks its source against the panel's own
+    return;
+  }
+  if (j.need_season) {
+    this->apply_season_job_();  // kept per team, whatever the board follows
     return;
   }
   if (j.need_wx != 0) {
@@ -5670,10 +5690,10 @@ void GamedayComponent::msg_tick_() {
     return;
   this->msg_tick_ms_ = now;
   const bool on = this->card_on(::espn::Card::MESSAGE) && this->card_ok_(::espn::Card::MESSAGE);
-  // Nor over the news, Top 25 or picture card: the message waits for them to come down.
+  // Nor over the news, Top 25, picture or season card: the message waits for them to come down.
   const bool between = this->card_between_(now) && !this->news_shown_ &&
                        now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
-                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs;
+                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
   ::espn::MsgTurn turn =
       ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
@@ -5841,12 +5861,12 @@ void GamedayComponent::top25_tick_() {
   this->top25_tick_ms_ = now;
   const uint8_t slots = this->top25_on() ? this->top25_slots_() : 0;
   // Between games only, as the message card (msg_tick_), and not over it,
-  // the news card or the picture card.
+  // the news card, the picture card or the season card.
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && !this->demo_playing_() &&
                        this->last_fields_.game_state != "IN" && !trouble && !this->msg_shown_ && !this->news_shown_ &&
-                       !this->pic_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+                       !this->pic_shown_ && !this->season_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
   if (!between) {
     this->top25_hide_();
     return;
@@ -5989,11 +6009,11 @@ void GamedayComponent::news_tick_() {
   if (now - this->news_tick_ms_ < 250)
     return;
   this->news_tick_ms_ = now;
-  // Nor over the message card (and 10 s after it), the Top 25 card or the
-  // picture card (and 10 s after it).
+  // Nor over the message card (and 10 s after it), the Top 25 card, the
+  // picture card (and 10 s after it) or the season card.
   const bool between = this->card_between_(now) && !this->msg_shown_ &&
                        now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
-                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs;
+                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->news_roll_ms_);
   ::espn::MsgTurn turn = ::espn::msg_turn(this->news_on(), between, this->news_shown_, now - this->news_since_ms_,
                                           ::espn::kNewsEveryMin, page_ms);
@@ -6076,6 +6096,178 @@ void GamedayComponent::apply_news_job_() {
            (unsigned) j.news_bytes);
 }
 
+// ---- The schedule and season recap cards (season.h) -------------------------
+
+std::vector<GamedayComponent::SeasonTeam> GamedayComponent::season_teams_() const {
+  std::vector<SeasonTeam> out;
+  if (!this->favorites_mode_())
+    return out;
+  const int64_t tnow = this->clock_set_() ? (int64_t) this->time_->timestamp_now() : 0;
+  for (const auto &e : this->fav_) {
+    if (e.team == nullptr || !this->fav_in_list_(e.slot - 1))
+      continue;
+    const ::espn::LeagueInfo *info = ::espn::league_info(e.team->league);
+    if (info == nullptr || !info->season_list)
+      continue;  // a season schedule of a megabyte or more (leagues.h)
+    // Between seasons by the Favorites clock's rule (offseason.h).
+    bool polled = e.game.valid && e.game.event_id == e.sched.event_id;
+    int64_t kick = polled ? e.game.kickoff_epoch : e.sched.kickoff_epoch;
+    bool off = ::espn::fav_off_season(e.sched.valid, !e.sched.event_id.empty(), polled, e.game.state, kick, tnow,
+                                      ::espn::season_horizon(info->sport)) == 1;
+    out.push_back({e.team, off, e.sched.team_record});
+  }
+  return out;
+}
+
+// With add, a team not read yet gets an entry; one per team followed, and a
+// team no longer followed makes room.
+GamedayComponent::SeasonEntry *GamedayComponent::season_entry_(League league, uint32_t id, bool add) {
+  for (auto &e : this->season_)
+    if (e.league == league && e.id == id)
+      return &e;
+  if (!add)
+    return nullptr;
+  if (this->season_.size() >= FAV_MAX)
+    this->season_.erase(this->season_.begin());
+  this->season_.emplace_back();
+  this->season_.back().league = league;
+  this->season_.back().id = id;
+  return &this->season_.back();
+}
+
+void GamedayComponent::season_show_(const std::string &head, const std::string &body) {
+  this->season_since_ms_ = millis();
+  if (head == this->season_head_ && body == this->season_body_)
+    return;
+  this->season_head_ = head;
+  this->season_body_ = head.empty() ? std::string() : body;
+  this->season_shown_ = !head.empty();
+  if (this->season_shown_) {
+    this->season_roll_ms_ = 0;  // the page says how long it rolls when it goes up
+    ESP_LOGI(TAG, "Season card: %s", head.c_str());
+  }
+  this->fire_action_("season");  // gd_season_card in firmware/pages/gameday-live.yaml
+}
+
+void GamedayComponent::season_tick_() {
+  const uint32_t now = millis();
+  if (now - this->season_tick_ms_ < 250)
+    return;
+  this->season_tick_ms_ = now;
+  const bool sched_on = this->card_on(::espn::Card::SCHEDULE), recap_on = this->card_on(::espn::Card::RECAP);
+  // Nor over the message, news or picture card (or 10 s after any), or the
+  // Top 25 card.
+  const bool between = this->clock_set_() && this->card_between_(now) && !this->msg_shown_ &&
+                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs;
+  const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->season_roll_ms_);
+  ::espn::MsgTurn turn = ::espn::msg_turn(sched_on || recap_on, between, this->season_shown_,
+                                          now - this->season_since_ms_, ::espn::kSeasonEveryMin, page_ms);
+  if (turn == ::espn::MsgTurn::NONE)
+    return;
+  if (turn != ::espn::MsgTurn::SHOW) {
+    this->season_show_("", "");
+    return;
+  }
+  // The cards' turn: the next team with something to show. It waits for a
+  // read on its way.
+  if (this->season_read_due_ || (this->busy_ && this->job_.need_season))
+    return;
+  const std::vector<SeasonTeam> teams = this->season_teams_();
+  const int64_t epoch = (int64_t) this->time_->timestamp_now();
+  for (size_t k = 0; k < teams.size(); k++) {
+    const size_t i = (this->season_pos_ + k) % teams.size();
+    const SeasonTeam &t = teams[i];
+    if (t.off_season ? !recap_on : !sched_on)
+      continue;
+    const bool soccer = ::espn::league_sport(t.team->league) == ::espn::Sport::SOCCER;
+    const bool results = soccer && t.off_season;
+    SeasonEntry *e = this->season_entry_(t.team->league, t.team->espn_id);
+    if (::espn::season_read_due(now, e != nullptr ? e->read_ms : 0, e != nullptr ? e->fail_ms : 0,
+                                e == nullptr || e->read_ms == 0 || e->results == results)) {
+      this->season_read_due_ = true;
+      this->season_read_league_ = t.team->league;
+      this->season_read_id_ = t.team->espn_id;
+      this->season_read_results_ = results;
+      this->season_pos_ = (uint32_t) i;
+      return;
+    }
+    if (e == nullptr || e->read_ms == 0 || e->results != results)
+      continue;  // the read failed: the next team, and this one again after the retry
+    const std::vector<::espn::SeasonGame> up = ::espn::season_upcoming(e->read, epoch);
+    ::espn::SeasonCard c = ::espn::season_card(t.off_season, sched_on, recap_on, !up.empty(),
+                                               ::espn::season_recap_ready(e->read, t.record));
+    if (c == ::espn::SeasonCard::NONE)
+      continue;
+    this->season_pos_ = (uint32_t) ((i + 1) % teams.size());
+    const std::string abbr = panel_text(t.team->abbr);
+    if (c == ::espn::SeasonCard::RECAP) {
+      this->season_show_(::espn::recap_header(abbr, e->read.year),
+                         panel_text(::espn::recap_body(e->read, soccer, t.record)));
+      return;
+    }
+    const bool wide = this->top25_cols_ == 2;  // the page's layout (tt_apply_layout)
+    std::string body;
+    for (const auto &g : up) {
+      int64_t at = g.time_tbd ? ::espn::tbd_day_epoch(g.kickoff_epoch) : g.kickoff_epoch;
+      struct tm kick = ESPTime::from_epoch_local((time_t) at).to_c_tm();
+      ::espn::SeasonGame shown = g;
+      shown.opp = panel_text(g.opp);
+      shown.tv = panel_text(g.tv);
+      body += (body.empty() ? "" : "\n") + ::espn::schedule_line(kick, shown, wide);
+    }
+    this->season_show_(::espn::schedule_header(abbr), body);
+    return;
+  }
+  // Nothing to show: look again in half a minute rather than every tick.
+  this->season_since_ms_ = now - ((uint32_t) ::espn::kSeasonEveryMin * 60u * 1000u - 30u * 1000u);
+}
+
+void GamedayComponent::start_season_job_() {
+  this->season_read_due_ = false;
+  ::espn::reset_in_place(this->job_);
+  this->job_.generation = this->generation_;
+  this->job_.need_season = true;
+  this->job_.season_league = this->season_read_league_;
+  this->job_.season_id = this->season_read_id_;
+  this->job_.season_results = this->season_read_results_;
+  this->start_worker_();
+}
+
+// Worker task. NFL ~290 KB, college ~100 KB, MLS ~450 KB, Premier League
+// ~75 KB, streamed through the parse's filter.
+void GamedayComponent::run_season_job_() {
+  Job &j = this->job_;
+  auto container = this->open_(::espn::season_url(j.season_league, j.season_id, j.season_results));
+  if (container == nullptr)
+    return;
+  ContainerReader reader(container, this->espn_bytes_);
+  j.season_ok = ::espn::parse_season(reader, j.season_id, j.season_read);
+  container->end();
+  j.season_bytes = (uint32_t) reader.total();
+  if (!j.season_ok)
+    ESP_LOGW(TAG, "Season: parse failed after %u bytes", (unsigned) j.season_bytes);
+}
+
+void GamedayComponent::apply_season_job_() {
+  Job &j = this->job_;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  SeasonEntry *e = this->season_entry_(j.season_league, j.season_id, true);
+  if (!j.season_ok) {
+    e->fail_ms = now;
+    return;
+  }
+  e->fail_ms = 0;
+  e->read_ms = now;
+  e->results = j.season_results;
+  e->read = std::move(j.season_read);
+  ESP_LOGI(TAG, "Season: team %u, %u: %u-%u-%u, %u games ahead, playoffs: %s (%u bytes)", (unsigned) e->id,
+           (unsigned) e->read.year, (unsigned) e->read.wins, (unsigned) e->read.losses, (unsigned) e->read.ties,
+           (unsigned) e->read.next.size(), e->read.post ? ::espn::season_post_line(e->read).c_str() : "none",
+           (unsigned) j.season_bytes);
+}
+
 // ---- The picture card (picture.h, picture_card.h) ---------------------------
 
 // slot -1 takes the card down.
@@ -6115,10 +6307,12 @@ void GamedayComponent::picture_tick_() {
     this->picture_show_(-1);
     return;
   }
-  // Nor over the message or news card (or 10 s after either), or the Top 25 card.
+  // Nor over the message or news card (or 10 s after either), the Top 25
+  // card or the season card.
   const bool between = this->card_between_(now) && !this->msg_shown_ &&
                        now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_;
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       !this->season_shown_;
   const int next = ::espn::pic_next_slot(slots, this->pic_last_);
   const bool on = next >= 0 && this->card_on(::espn::Card::PICTURE);
   ::espn::MsgTurn turn = ::espn::msg_turn(on, between, this->pic_shown_, now - this->pic_since_ms_,

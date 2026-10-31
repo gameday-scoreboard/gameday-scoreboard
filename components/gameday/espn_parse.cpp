@@ -61,6 +61,12 @@ std::string schedule_url(League league, uint32_t espn_id) {
   return team_url(league, espn_id) + "/schedule";
 }
 
+std::string season_url(League league, uint32_t espn_id, bool results) {
+  if (results && league_sport(league) == Sport::SOCCER)
+    return team_url(league, espn_id) + "/schedule";
+  return schedule_url(league, espn_id);
+}
+
 static void civil_from_epoch(int64_t epoch, int &y, int &m, int &d);
 
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch) {

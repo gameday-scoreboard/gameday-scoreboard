@@ -46,6 +46,8 @@
     "picture": true,
     "gameleaders": true,
     "top25": true,
+    "schedule": true,
+    "recap": true,
     "news": false,
     "weather": true
   },
