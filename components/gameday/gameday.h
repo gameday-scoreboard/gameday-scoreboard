@@ -30,6 +30,8 @@
 #include "best_game.h"
 #include "captive.h"
 #include "cards.h"
+#include "celebrate.h"
+#include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -96,6 +98,12 @@ struct UpdateFields {
   int opponent_rank{0};
   std::string splash_text;
   uint32_t splash_color{0};
+  // The celebration for this splash (celebrate.h decide_celebration): the
+  // kind, its second color, the win's second line and how long it holds.
+  uint8_t celeb_kind{0};
+  uint32_t celeb_alt{0xFFFFFF};
+  std::string celeb_line2;
+  uint32_t celeb_ms{0};
   std::string last_play;
   std::string clock_text;  // "5:36 - 3rd" while the game is live, else empty
   std::string down_distance;  // "3rd & 10" while live, else empty
@@ -326,6 +334,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
+  // Celebrations (celebrate.h): off, subtle or full. Full is the default.
+  ::espn::CelebLevel celebrations() const { return ::espn::celeb_level_from_stored(this->prefs8_.celeb); }
+  void set_celebrations(::espn::CelebLevel level);
   bool setup_done() const { return this->flag_(FLAG_SETUP); }
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
@@ -601,6 +612,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
+  ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];
@@ -754,10 +767,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
     uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
-    uint8_t spare;   // byte 2: taken by the celebrations setting (its own PR); not this one's
+    uint8_t celeb;   // byte 2, celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
     uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
-  static_assert(sizeof(Prefs8) == 4, "Prefs8 keeps its size; a blob that changes size fails to load");
+  static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
   static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
   static constexpr uint8_t VIZ8_NOWINBAR = 2;  // the win chance bar off
