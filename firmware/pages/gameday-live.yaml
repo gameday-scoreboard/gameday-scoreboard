@@ -1023,8 +1023,12 @@ script:
                 } else {
                   gameday::celebration_player().stop();
                   lv_obj_add_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
-                  lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex((uint32_t) splash_color), 0);
-                  lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+                  // White on the team color, unless the color is too light for it.
+                  uint32_t c = (uint32_t) splash_color;
+                  uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+                  bool light = r * 299 + g * 587 + b * 114 > 160000;
+                  lv_obj_set_style_bg_color(id(tt_splash), lv_color_hex(c), 0);
+                  lv_obj_set_style_text_color(lbl, lv_color_hex(light ? 0x000000 : 0xFFFFFF), 0);
                 }
                 // Over everything, including the no-game screen should the
                 // board change under a long celebration.
