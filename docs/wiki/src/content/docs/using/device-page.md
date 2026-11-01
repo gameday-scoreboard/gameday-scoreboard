@@ -131,7 +131,7 @@ Every card is on to start except News headlines and Weather (on once you set a t
 
 ### Celebrations
 
-The panel fills the screen with a splash when someone scores, in the scoring team's color. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.
+The panel fills the screen with a splash when someone scores, in the scoring team's color. On a white or pale team color the words are dark so they stay readable. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.
 
 ### Timezone
 
