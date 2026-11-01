@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -29,6 +30,8 @@
 #include "best_game.h"
 #include "captive.h"
 #include "cards.h"
+#include "celebrate.h"
+#include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -47,6 +50,7 @@
 #include "recap.h"
 #include "regulatory.h"
 #include "score_log.h"
+#include "game_viz.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
 #include "set_request.h"
@@ -94,10 +98,21 @@ struct UpdateFields {
   int opponent_rank{0};
   std::string splash_text;
   uint32_t splash_color{0};
+  // The celebration for this splash (celebrate.h decide_celebration): the
+  // kind, its second color, the win's second line and how long it holds.
+  uint8_t celeb_kind{0};
+  uint32_t celeb_alt{0xFFFFFF};
+  std::string celeb_line2;
+  uint32_t celeb_ms{0};
   std::string last_play;
   std::string clock_text;  // "5:36 - 3rd" while the game is live, else empty
   std::string down_distance;  // "3rd & 10" while live, else empty
   bool is_red_zone{false};
+  // The pictures on a wide board's situation row (game_viz.h): which the
+  // page draws now (VIZ_* bits, the owner's switches already applied) and
+  // our side's win chance (1 to 99, -1 when ESPN gave none).
+  uint8_t viz{0};
+  int win_pct{-1};
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
   // A side with no logo shows its abbreviation badge in the logo slot (badge.h):
@@ -313,9 +328,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
   bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
+  // The pictures on the board (game_viz.h), each on unless the owner turns it
+  // off. Stored as "off" bits so panels from before them keep all three.
+  bool field_strip_on() const { return (this->prefs8_.viz & VIZ8_NOFIELD) == 0; }
+  bool win_bar_on() const { return (this->prefs8_.viz & VIZ8_NOWINBAR) == 0; }
+  bool margin_spark_on() const { return (this->prefs8_.viz & VIZ8_NOSPARK) == 0; }
+  void set_field_strip(bool on) { this->set_viz8_(VIZ8_NOFIELD, !on); }
+  void set_win_bar(bool on) { this->set_viz8_(VIZ8_NOWINBAR, !on); }
+  void set_margin_spark(bool on) { this->set_viz8_(VIZ8_NOSPARK, !on); }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
+  // Celebrations (celebrate.h): off, subtle or full. Full is the default.
+  ::espn::CelebLevel celebrations() const { return ::espn::celeb_level_from_stored(this->prefs8_.celeb); }
+  void set_celebrations(::espn::CelebLevel level);
   bool setup_done() const { return this->flag_(FLAG_SETUP); }
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
@@ -462,6 +488,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
+  // The board game's field strip for a strip width_px wide (game_viz.h),
+  // valid only while football is on, and the margin samples the panel has
+  // seen of the board game. Read by gd_update in firmware/pages/gameday-live.yaml.
+  ::espn::FieldStrip field_strip(int width_px) const { return ::espn::field_strip(this->game_, width_px); }
+  const ::espn::MarginTrack &margin_track() const { return this->margin_tracks_.current(); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
@@ -589,6 +620,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
+  ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];
@@ -742,8 +775,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
     uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
-    uint8_t spare[2];
+    uint8_t celeb;   // byte 2, celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
+    uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
+  static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
+  static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
+  static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
+  static constexpr uint8_t VIZ8_NOWINBAR = 2;  // the win chance bar off
+  static constexpr uint8_t VIZ8_NOSPARK = 4;   // the score margin sparkline off
+  void set_viz8_(uint8_t f, bool set);
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
   // Season leaders before the start, on by default: set means off.
@@ -1216,6 +1256,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
+  ::espn::MarginTracks margin_tracks_;  // the board game's margin by read, and the last game's (game_viz.h)
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};

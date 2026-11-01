@@ -155,10 +155,22 @@
         </div>
       </div>
       <div class="card">
+        <h2>Live pictures</h2>
+        <p class="hint">Drawn on the row under the clock during a game, on a 128-wide board. A single 64x64 panel has no room for them.</p>
+        <div id="vizCtls">
+          <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is, the line to gain, which way the offense is going and the timeouts left, in the teams' colors. The red zone glows red.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: a thin bar split at ESPN's chance for each side to win, updated every play.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
+          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game as a small chart, your side's lead up in your color, theirs down in theirs.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+        </div>
+      </div>
+      <div class="card">
         <h2>Celebrations</h2>
-        <p class="hint">Full-screen splashes for scores. Yours always show.</p>
+        <p class="hint">Full-screen celebrations for scores and the win. Yours always show; the other side's stay quiet.</p>
         <div id="celebCtls">
-          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+          <div class="ctl"><label for="celebrate">Celebrations<small>Full: fireworks for a touchdown, the ball out of the park, the net or the goal lamp for a goal, a three through the hoop, and confetti with the final score when your team wins. Subtle: a quick flash in the team's color. Off: the board just updates.</small></label><select id="celebrate">
+            <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
+          </select></div>
+          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer, as a dim flash, and in Live games the second team's threes. Your team's threes and the win never need it.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
         </div>
       </div>
       <div class="card" id="cdCard" hidden>
@@ -437,6 +449,7 @@
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    celebrate: Number,
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
@@ -736,6 +749,8 @@
   };
   const releaseSelect = $("#release");
   releaseSelect.onchange = () => setGD({ release: releaseSelect.value });
+  const celebrateSelect = $("#celebrate");
+  celebrateSelect.onchange = () => setGD({ celebrate: celebrateSelect.value });
   const collideSelect = $("#collide");
   const favRotate = $("#favrotate");
   const showFavRotate = () => {
@@ -829,6 +844,8 @@
     if (document.activeElement !== favRotate) favRotate.value = S.rotate;
     if (document.activeElement !== lockonInput) lockonInput.value = S.lockon || 15;
     if (document.activeElement !== releaseSelect) releaseSelect.value = String(S.release || 30);
+    // Firmware without the setting sends no celebrate key: it celebrates in full.
+    if (document.activeElement !== celebrateSelect) celebrateSelect.value = String(S.celebrate === undefined ? 2 : S.celebrate);
     if (document.activeElement !== collideSelect) {
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
@@ -1317,7 +1334,7 @@
     // line, so no switch of their own; a switch for several sports lists them.
     const sports = new Set((S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
-    document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
+    document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
     // Firmware from before the countdown card leaves these out.

@@ -1784,6 +1784,29 @@ void GamedayComponent::set_best_game(bool on) {
   this->rebuild_state_(&this->last_fields_);
 }
 
+// The pictures' bits are "off" bits: a saved zero means on, so every panel
+// from before them comes up with all three.
+void GamedayComponent::set_viz8_(uint8_t f, bool set) {
+  uint8_t next = set ? (this->prefs8_.viz | f) : (this->prefs8_.viz & ~f);
+  if (next == this->prefs8_.viz)
+    return;
+  this->prefs8_.viz = next;
+  this->pref8_.save(&this->prefs8_);
+  this->sync_prefs_();
+  if (this->game_.valid)
+    this->emit_({});
+}
+
+void GamedayComponent::set_celebrations(::espn::CelebLevel level) {
+  uint8_t next = ::espn::celeb_level_to_stored(level);
+  if (next == this->prefs8_.celeb)
+    return;
+  this->prefs8_.celeb = next;
+  this->pref8_.save(&this->prefs8_);
+  this->sync_prefs_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
 void GamedayComponent::set_ticker8_(uint8_t f, bool on) {
   uint8_t next = on ? (this->prefs8_.ticker | f) : (this->prefs8_.ticker & ~f);
   if (next == this->prefs8_.ticker)
@@ -3872,13 +3895,51 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   }
   if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::BASKETBALL)
     f.situation = ::espn::basketball_series(g);
+  // The pictures on a wide board's situation row (game_viz.h). The margin
+  // samples follow the board game read by read while it is on; a redraw of
+  // the same read adds nothing. The bits say what the page draws now.
+  // Nothing at halftime or after the final: the line score and leaders
+  // cards take the row's turns then.
+  const bool playing = g.valid && g.state == GameState::IN && !::espn::at_halftime(g);
+  const bool spark_sport = g.sport == ::espn::Sport::BASKETBALL || g.sport == ::espn::Sport::HOCKEY;
+  const bool odds_sport = g.sport == ::espn::Sport::FOOTBALL || g.sport == ::espn::Sport::BASKETBALL;
+  if (g.valid && g.state == GameState::IN && !g.event_id.empty() && spark_sport)
+    this->margin_tracks_.pick(g.event_id).read(g.event_id, g.team_id, g.team_score - g.opp_score, g.display_clock,
+                                               g.period);
+  if (playing) {
+    f.win_pct = g.team_win_pct;
+    if (this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
+      f.viz |= ::espn::VIZ_FIELD;
+    // ESPN has a number for baseball too, but that row is the diamond's.
+    if (this->win_bar_on() && odds_sport && g.team_win_pct >= 1)
+      f.viz |= ::espn::VIZ_WINBAR;
+    if (this->margin_spark_on() && spark_sport && this->margin_tracks_.current().event_id == g.event_id &&
+        this->margin_tracks_.current().n > 0)
+      f.viz |= ::espn::VIZ_SPARK;
+  }
   f.team_color = ::espn::parse_color(g.team_color);
   f.opponent_color = ::espn::parse_color(g.opp_color);
 #ifdef GAMEDAY_DEMO
   this->demo_badges_(f);
 #endif
-  f.splash_text = splash.text;
-  f.splash_color = splash.color;
+  // The celebration for it (celebrate.h). The neutral boards are the live
+  // modes with nobody's team on them; the demo always has a side.
+  bool neutral = this->live_mode_() && !this->live_fallback_ && this->live_fav_ < 0;
+#ifdef GAMEDAY_DEMO
+  if (this->demo_playing_())
+    neutral = false;
+#endif
+  ::espn::CelebPlan celeb = ::espn::decide_celebration(this->prev_, g, splash, this->celebrations(), neutral,
+                                                       this->opponent_splashes());
+  // Only a fresh read shows a three; this emit_ also runs for redraws.
+  if (celeb.kind == ::espn::CelebKind::THREE && !this->celeb_latch_.take(g))
+    celeb = ::espn::CelebPlan{};
+  f.splash_text = celeb.kind == ::espn::CelebKind::NONE ? std::string() : celeb.text;
+  f.splash_color = celeb.color;
+  f.celeb_kind = (uint8_t) celeb.kind;
+  f.celeb_alt = celeb.alt;
+  f.celeb_line2 = celeb.line2;
+  f.celeb_ms = celeb.duration_ms;
 
   TickerOptions opts;
   opts.clock = false;  // the clock has its own row on the panel; never in the ticker
@@ -4022,6 +4083,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     ESP_LOGI(TAG, "Splash: %s", f.splash_text.c_str());
     // The message card makes way at once, and stays away for a while after.
     this->splash_ms_ = millis() == 0 ? 1 : millis();
+    // A long celebration (the win) holds the cards off for its whole run.
+    this->splash_hold_ms_ = f.celeb_ms + 2000 > ::espn::kMsgSplashGapMs ? f.celeb_ms + 2000 : ::espn::kMsgSplashGapMs;
     if (this->msg_shown_)
       this->msg_show_("");
   }
@@ -5089,7 +5152,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["play"] = this->ticker_last_play();
   doc["odds"] = this->ticker_odds();
   doc["leaders"] = this->ticker_leaders();
+  doc["field"] = this->field_strip_on();
+  doc["winbar"] = this->win_bar_on();
+  doc["spark"] = this->margin_spark_on();
   doc["opp"] = this->opponent_splashes();
+  doc["celebrate"] = (int) this->celebrations();
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
   doc["countdown"] = this->countdown_on();
@@ -5917,7 +5984,7 @@ bool GamedayComponent::card_between_(uint32_t now) const {
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   return !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
-         (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+         (this->splash_ms_ == 0 || now - this->splash_ms_ >= this->splash_hold_ms_);
 }
 
 void GamedayComponent::msg_tick_() {
@@ -6102,7 +6169,7 @@ void GamedayComponent::top25_tick_() {
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && !this->demo_playing_() &&
                        this->last_fields_.game_state != "IN" && !trouble && !this->msg_shown_ && !this->news_shown_ &&
-                       !this->pic_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= ::espn::kMsgSplashGapMs);
+                       !this->pic_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= this->splash_hold_ms_);
   if (!between) {
     this->top25_hide_();
     return;
@@ -6783,8 +6850,20 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
       case ::espn::SetKind::LEADERS:
         this->set_ticker_leaders(op.on);
         break;
+      case ::espn::SetKind::FIELD:
+        this->set_field_strip(op.on);
+        break;
+      case ::espn::SetKind::WINBAR:
+        this->set_win_bar(op.on);
+        break;
+      case ::espn::SetKind::SPARK:
+        this->set_margin_spark(op.on);
+        break;
       case ::espn::SetKind::OPP:
         this->set_opponent_splashes(op.on);
+        break;
+      case ::espn::SetKind::CELEBRATE:
+        this->set_celebrations((::espn::CelebLevel) op.value);
         break;
       case ::espn::SetKind::BEST:
         this->set_best_game(op.on);

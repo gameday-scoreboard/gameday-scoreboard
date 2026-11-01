@@ -24,6 +24,11 @@ Basketball teams have no Up next list on the device page: their season schedules
 - **The playoff series** on the row under the clock, like "NY lead 2-1" or "Series 2-2", when the game is a playoff game.
 - **The ticker** with the last play. During a break it shows the series, or the records outside the playoffs.
 
+
+:::note[Coming in the next release]
+On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started showing the game. Your team's lead fills up from the middle in your color, the other team's lead fills down in theirs, and a white pixel marks the latest read. A 10-point lead fills the row; smaller leads are proportionally shorter. The chart keeps the last two games the board showed, so Live games switching away and back, or two favorites alternating, picks up where it left off; a restart starts over. At halftime and after the final the row is left to the line score and leaders cards. A one-pixel **win chance bar** just above it shows ESPN's chance for each side, your color from the left. The panel samples both from the game document it already reads, so nothing extra is downloaded. **Score margin** and **Win chance bar** in the Live pictures card on the device page turn them off.
+:::
+
 Basketball has no game situation line, so there is no ticker switch for one. **Last play** in the Ticker card turns the last play on or off. See [The ticker](/using/ticker/).
 
 On a single 64x64 panel the clock takes the abbreviations' place during play. There is no room for the series row or the records.
@@ -31,6 +36,10 @@ On a single 64x64 panel the clock takes the abbreviations' place during play. Th
 ## Splashes
 
 Basketball only celebrates the win. A game has around a hundred scoring plays, so splashing each basket would keep the screen covered. When your team wins, a victory splash with fireworks says your abbreviation and "WINS". **Opponent scores too** makes no difference for basketball.
+
+:::note[Coming in the next release]
+With **Celebrations** on **Full**, a three gets 3 seconds: the ball arcs up and drops through the hoop, the net swings and sparks pop in your team's colors under "THREE!". It takes a made three that is the last play in ESPN's play-by-play and the only change between two reads, so an and-one, three free throws, or a three read together with another basket stay quiet, and so does a three that ESPN logs with another play after it (a missed shot, a foul) before the panel reads the game. The other side's threes stay quiet too. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. **Subtle** keeps the win to a quick flash and leaves baskets alone; **Off** shows no splash at all.
+:::
 
 ## The final
 

@@ -36,7 +36,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
-                                    "after",   "remote1", "remote2", "remote3", "remote4"};
+                                    "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
+                                    "field",   "winbar",  "spark"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -318,6 +319,10 @@ enum class SetKind : uint8_t {
   WXON,         // on, the weather card between games
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
+  FIELD,        // on, football's field strip on the board (game_viz.h)
+  WINBAR,       // on, the win chance bar on the board
+  SPARK,        // on, the score margin sparkline on the board
+  CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
 };
 
 struct TeamRef {
@@ -467,6 +472,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.value = night_parse_time(v);
     return op.value >= 0;
   }
+  if (k == "celebrate") {
+    // 0 off, 1 subtle, 2 full; anything else is refused.
+    op.kind = SetKind::CELEBRATE;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
+  }
   if (k == "nightlevel") {
     op.kind = SetKind::NIGHT_LEVEL;
     int level = atoi(v.c_str());
@@ -553,6 +563,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TZ_AUTO);
   if (k == "down")
     return on(SetKind::DOWN);
+  if (k == "field")
+    return on(SetKind::FIELD);
+  if (k == "winbar")
+    return on(SetKind::WINBAR);
+  if (k == "spark")
+    return on(SetKind::SPARK);
   if (k == "count")
     return on(SetKind::COUNT);
   if (k == "match")
