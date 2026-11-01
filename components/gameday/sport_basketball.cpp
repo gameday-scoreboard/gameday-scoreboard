@@ -96,7 +96,7 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
         add_part(out, pregame_records(s));
       add_odds(out, s, o);
       detail::add_leaders(out, s, o);
-      add_part(out, detail::venue_line(s));
+      add_part(out, detail::venue_line(s, o));
       return out;
     case GameState::POST:
       // Postponed, Canceled or Suspended: ESPN's post state without a result.
