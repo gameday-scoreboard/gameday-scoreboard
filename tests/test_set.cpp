@@ -55,8 +55,10 @@ struct Settings {
   bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
   bool jump{false}, banner{true}, favtake{false};
   bool leaders{true};
+  int celebrate{2};  // celebrate.h CelebLevel
   bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, top25{true}, news{false}, gameleaders{true};
   uint16_t cards_off{0};  // the Between games list's other cards (cards.h)
+  bool field{true}, winbar{true}, spark{true};
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
@@ -75,6 +77,7 @@ struct Settings {
   std::string msg, msgurl, nick, hook;
   std::string town;
   bool wxon{false};
+  int wxunit{0};
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -179,6 +182,7 @@ void load(Settings &s, JsonObjectConst o) {
   num("panels", s.panels);
   num("msgevery", s.msgevery);
   num("pregame", s.pregame);
+  num("wxunit", s.wxunit);
   if (o["hook"].is<const char *>())
     s.hook = o["hook"].as<const char *>();
   if (o["msg"].is<const char *>())
@@ -203,6 +207,9 @@ void load(Settings &s, JsonObjectConst o) {
   flag("banner", s.banner);
   flag("favtake", s.favtake);
   flag("leaders", s.leaders);
+  flag("field", s.field);
+  flag("winbar", s.winbar);
+  flag("spark", s.spark);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
@@ -228,6 +235,7 @@ void load(Settings &s, JsonObjectConst o) {
   s.night.screen_off = screen ? 0 : 1;
   int level = s.night.level;
   num("nightlevel", level);
+  num("celebrate", s.celebrate);
   s.night.level = (uint8_t) level;
   if (o["nightstart"].is<const char *>())
     s.night.start = (uint16_t) night_parse_time(o["nightstart"].as<const char *>());
@@ -340,11 +348,15 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::PLAY: s.play = op.on; break;
     case SetKind::ODDS: s.odds = op.on; break;
     case SetKind::OPP: s.opp = op.on; break;
+    case SetKind::CELEBRATE: s.celebrate = op.value; break;
     case SetKind::BEST: s.best = op.on; break;
     case SetKind::JUMP: s.jump = op.on; break;
     case SetKind::BANNER: s.banner = op.on; break;
     case SetKind::FAVTAKE: s.favtake = op.on; break;
     case SetKind::LEADERS: s.leaders = op.on; break;
+    case SetKind::FIELD: s.field = op.on; break;
+    case SetKind::WINBAR: s.winbar = op.on; break;
+    case SetKind::SPARK: s.spark = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
@@ -374,6 +386,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       }
       break;
     case SetKind::WXON: s.wxon = op.on; break;
+    case SetKind::WXUNIT: s.wxunit = op.value; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -455,11 +468,15 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["play"] = s.play;
   doc["odds"] = s.odds;
   doc["opp"] = s.opp;
+  doc["celebrate"] = s.celebrate;
   doc["best"] = s.best;
   doc["jump"] = s.jump;
   doc["banner"] = s.banner;
   doc["favtake"] = s.favtake;
   doc["leaders"] = s.leaders;
+  doc["field"] = s.field;
+  doc["winbar"] = s.winbar;
+  doc["spark"] = s.spark;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
@@ -482,6 +499,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["pregame"] = s.pregame;
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
+  doc["wxunit"] = s.wxunit;
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);

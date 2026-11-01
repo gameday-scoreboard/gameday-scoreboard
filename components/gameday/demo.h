@@ -27,24 +27,30 @@ struct DemoStep {
   bool red_zone;
   const char *play;
   uint32_t hold_ms;
+  // For the field strip and the win bar (game_viz.h): the ball as ESPN
+  // counts it, yards from the home goal line (our side is home), 255 for
+  // none; the yards to go; our win chance, -1 for none.
+  uint8_t yard_line;
+  uint8_t distance;
+  int8_t win;
 };
 
 // A believable drive-by-drive script. Splashes come from decide_splash on the
 // score deltas, so the panel celebrates exactly as it would in a real game.
 // The home side wins: in a bar that is the bar's team.
 constexpr DemoStep kDemoSteps[] = {
-    {GameState::PRE, 0, 0, "", 0, 0, "", false, "", 3500},
-    {GameState::IN, 0, 0, "15:00", 1, 1, "1st & 10", false, "Kickoff", 4000},
-    {GameState::IN, 0, 0, "9:41", 1, 1, "3rd & 4", true, "Pass short left for 8 yards", 3500},
-    {GameState::IN, 7, 0, "9:35", 1, 2, "", false, "Pass deep right for 21 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 7, 3, "2:10", 1, 1, "1st & 10", false, "38 yard field goal is GOOD", 4500},
-    {GameState::IN, 7, 3, "11:22", 2, 2, "2nd & 7", false, "Rush up the middle for 3 yards", 3500},
-    {GameState::IN, 7, 10, "6:48", 2, 1, "", false, "Pass deep middle for 44 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 14, 10, "1:03", 2, 2, "", false, "Rush right end for 12 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 14, 10, "0:00", 2, 0, "", false, "End of the 2nd quarter", 3500},
-    {GameState::IN, 21, 10, "8:15", 4, 2, "", false, "Interception returned 31 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 24, 10, "2:00", 4, 2, "4th & 9", true, "27 yard field goal is GOOD", 4000},
-    {GameState::POST, 24, 10, "", 4, 0, "", false, "", 6000},
+    {GameState::PRE, 0, 0, "", 0, 0, "", false, "", 3500, 255, 0, -1},
+    {GameState::IN, 0, 0, "15:00", 1, 1, "1st & 10", false, "Kickoff", 4000, 25, 10, 55},
+    {GameState::IN, 0, 0, "9:41", 1, 1, "3rd & 4", true, "Pass short left for 8 yards", 3500, 86, 4, 63},
+    {GameState::IN, 7, 0, "9:35", 1, 2, "", false, "Pass deep right for 21 yards, TOUCHDOWN", 5000, 75, 0, 74},
+    {GameState::IN, 7, 3, "2:10", 1, 1, "1st & 10", false, "38 yard field goal is GOOD", 4500, 30, 10, 68},
+    {GameState::IN, 7, 3, "11:22", 2, 2, "2nd & 7", false, "Rush up the middle for 3 yards", 3500, 56, 7, 64},
+    {GameState::IN, 7, 10, "6:48", 2, 1, "", false, "Pass deep middle for 44 yards, TOUCHDOWN", 5000, 25, 0, 47},
+    {GameState::IN, 14, 10, "1:03", 2, 2, "", false, "Rush right end for 12 yards, TOUCHDOWN", 5000, 75, 0, 71},
+    {GameState::IN, 14, 10, "0:00", 2, 0, "", false, "End of the 2nd quarter", 3500, 255, 0, 71},
+    {GameState::IN, 21, 10, "8:15", 4, 2, "", false, "Interception returned 31 yards, TOUCHDOWN", 5000, 75, 0, 91},
+    {GameState::IN, 24, 10, "2:00", 4, 2, "4th & 9", true, "27 yard field goal is GOOD", 4000, 12, 9, 96},
+    {GameState::POST, 24, 10, "", 4, 0, "", false, "", 6000, 255, 0, -1},
 };
 constexpr size_t kDemoStepCount = sizeof(kDemoSteps) / sizeof(kDemoSteps[0]);
 

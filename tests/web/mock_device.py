@@ -148,7 +148,7 @@ INITIAL = {
     # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
     "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.
@@ -158,8 +158,9 @@ INITIAL = {
     "pics": [], "picroom": 65536,
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
-    # The weather card (weather.h): the town and the switch; wx once a town is set.
-    "town": "", "wxon": False,
+    # The weather card (weather.h): the town, the switch and the degrees (0
+    # auto, 1 F, 2 C); wx once a town is set.
+    "town": "", "wxon": False, "wxunit": 0,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
@@ -594,8 +595,26 @@ def wx_lookup(town):
         return
     place = "Coppell, Texas" if town == "75019" else f"{town}, Texas"
     STATE["wx"] = {"place": place, "lat": 32.95, "lon": -97.02, "lookup": 200, "read": 200, "read_s": 60,
-                   "temp": 71, "hi": 81, "lo": 61, "code": 3, "cond": "Cloudy", "night": False,
+                   "unit": "F", "temp": 71, "hi": 81, "lo": 61, "code": 3, "cond": "Cloudy", "night": False,
                    "days": [{"d": "Thu", "hi": 80, "lo": 66, "code": 61}, {"d": "Fri", "hi": 75, "lo": 67, "code": 2}]}
+    wx_units()
+
+
+def wx_units():
+    """The forecast in the unit the panel shows: auto is F for this mock's
+    Texas towns and US Central."""
+    wx = STATE.get("wx")
+    if not wx or "temp" not in wx:
+        return
+    want = "C" if STATE.get("wxunit") == 2 else "F"
+    if wx["unit"] == want:
+        return
+    conv = (lambda f: round((f - 32) * 5 / 9)) if want == "C" else (lambda c: round(c * 9 / 5 + 32))
+    for d in [wx] + wx["days"]:
+        for k in ("temp", "hi", "lo"):
+            if k in d:
+                d[k] = conv(d[k])
+    wx["unit"] = want
 
 
 def apply_set(kv):
@@ -674,7 +693,7 @@ def apply_set(kv):
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "count", "match", "play", "odds", "leaders", "opp", "best", "bootaddr", "autoupd", "beta"):
+        elif k in ("down", "count", "match", "play", "odds", "leaders", "field", "winbar", "spark", "opp", "best", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
@@ -701,6 +720,10 @@ def apply_set(kv):
                 wx_lookup(town)
         elif k == "wxon":
             STATE["wxon"] = v == "1"
+        elif k == "wxunit":
+            if v in ("0", "1", "2"):
+                STATE["wxunit"] = int(v)
+                wx_units()
         elif k == "nick":
             # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
             STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)
@@ -740,6 +763,9 @@ def apply_set(kv):
         elif k == "after":
             if v in AFTER:
                 STATE["after"] = v
+        elif k == "celebrate":
+            if v in ("0", "1", "2"):
+                STATE["celebrate"] = int(v)
     # The same start and end keeps the hours it had (night_keep_hours).
     if STATE["nightstart"] == STATE["nightend"]:
         STATE["nightstart"], STATE["nightend"] = hours
@@ -901,8 +927,8 @@ def import_settings(doc):
             if not is_int(v):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
-                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
-                      "pregame": (0, LIMITS["kPregameMax"]),
+                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255), "celebrate": (0, 2),
+                      "pregame": (0, LIMITS["kPregameMax"]), "wxunit": (0, 2),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
