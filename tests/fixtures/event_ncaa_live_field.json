@@ -1,0 +1,150 @@
+{
+ "id": "401871071",
+ "date": "2026-10-27T23:00Z",
+ "status": {
+  "clock": 25.0,
+  "displayClock": "0:25",
+  "period": 3,
+  "type": {
+   "id": "2",
+   "name": "STATUS_IN_PROGRESS",
+   "state": "in",
+   "completed": false,
+   "description": "In Progress",
+   "detail": "0:25 - 3rd Quarter",
+   "shortDetail": "0:25 - 3rd"
+  }
+ },
+ "competitions": [
+  {
+   "timeValid": true,
+   "situation": {
+    "lastPlay": {
+     "id": "401871071593",
+     "type": {
+      "id": "8",
+      "text": "Penalty",
+      "abbreviation": "PEN"
+     },
+     "text": "PENALTY WKU False Start (#59 A.Lopez) 5 yards from DEL40 to DEL45. NO PLAY",
+     "scoreValue": 0,
+     "team": {
+      "id": "98"
+     },
+     "probability": {
+      "tiePercentage": 0.0,
+      "homeWinPercentage": 0.0517,
+      "awayWinPercentage": 0.9483,
+      "secondsLeft": 925
+     },
+     "start": {
+      "yardLine": 60,
+      "team": {
+       "id": "98"
+      }
+     },
+     "end": {
+      "yardLine": 55,
+      "team": {
+       "id": "98"
+      }
+     },
+     "statYardage": 5,
+     "drive": {
+      "description": "8 plays, 24 yards, 3:47",
+      "start": {
+       "yardLine": 31,
+       "text": "WKU 31"
+      },
+      "timeElapsed": {
+       "displayValue": "3:47"
+      }
+     }
+    },
+    "down": 4,
+    "yardLine": 55,
+    "distance": 11,
+    "downDistanceText": "4th & 11 at DEL 45",
+    "shortDownDistanceText": "4th & 11",
+    "possessionText": "DEL 45",
+    "isRedZone": false,
+    "homeTimeouts": 2,
+    "awayTimeouts": 3,
+    "possession": "98"
+   },
+   "competitors": [
+    {
+     "id": "98",
+     "homeAway": "home",
+     "score": "21",
+     "winner": false,
+     "records": [
+      {
+       "summary": "3-4"
+      }
+     ],
+     "team": {
+      "id": "98",
+      "abbreviation": "WKU",
+      "color": "e13a3e",
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/98.png"
+     },
+     "linescores": [
+      {
+       "value": 14.0,
+       "displayValue": "14",
+       "period": 1
+      },
+      {
+       "value": 7.0,
+       "displayValue": "7",
+       "period": 2
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 3
+      }
+     ]
+    },
+    {
+     "id": "48",
+     "homeAway": "away",
+     "score": "35",
+     "winner": false,
+     "records": [
+      {
+       "summary": "3-4"
+      }
+     ],
+     "team": {
+      "id": "48",
+      "abbreviation": "DEL",
+      "color": "00539f",
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/48.png"
+     },
+     "linescores": [
+      {
+       "value": 7.0,
+       "displayValue": "7",
+       "period": 1
+      },
+      {
+       "value": 21.0,
+       "displayValue": "21",
+       "period": 2
+      },
+      {
+       "value": 7.0,
+       "displayValue": "7",
+       "period": 3
+      }
+     ]
+    }
+   ],
+   "venue": {
+    "fullName": "Houchens Industries-L.T. Smith Stadium"
+   }
+  }
+ ]
+}

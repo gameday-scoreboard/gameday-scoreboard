@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -29,6 +30,8 @@
 #include "best_game.h"
 #include "captive.h"
 #include "cards.h"
+#include "celebrate.h"
+#include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
@@ -48,6 +51,7 @@
 #include "recap.h"
 #include "regulatory.h"
 #include "score_log.h"
+#include "game_viz.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
 #include "set_request.h"
@@ -95,10 +99,21 @@ struct UpdateFields {
   int opponent_rank{0};
   std::string splash_text;
   uint32_t splash_color{0};
+  // The celebration for this splash (celebrate.h decide_celebration): the
+  // kind, its second color, the win's second line and how long it holds.
+  uint8_t celeb_kind{0};
+  uint32_t celeb_alt{0xFFFFFF};
+  std::string celeb_line2;
+  uint32_t celeb_ms{0};
   std::string last_play;
   std::string clock_text;  // "5:36 - 3rd" while the game is live, else empty
   std::string down_distance;  // "3rd & 10" while live, else empty
   bool is_red_zone{false};
+  // The pictures on a wide board's situation row (game_viz.h): which the
+  // page draws now (VIZ_* bits, the owner's switches already applied) and
+  // our side's win chance (1 to 99, -1 when ESPN gave none).
+  uint8_t viz{0};
+  int win_pct{-1};
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
   // A side with no logo shows its abbreviation badge in the logo slot (badge.h):
@@ -158,6 +173,11 @@ struct UpdateFields {
   std::string wx_d1, wx_d2;            // "Thu"
   std::string wx_d1_hilo, wx_d2_hilo;  // "80/66"
   uint8_t wx_d1_icon{0}, wx_d2_icon{0};
+  // The kickoff forecast on the next game's board (weather.h): "54°" and
+  // "F", and its icon, with kick_temp "" when the board shows none (an
+  // indoor game, no forecast yet, or the game under way).
+  std::string kick_temp, kick_unit;
+  uint8_t kick_icon{::espn::kWxIconNone};
 };
 
 enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
@@ -309,9 +329,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
   bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
+  // The pictures on the board (game_viz.h), each on unless the owner turns it
+  // off. Stored as "off" bits so panels from before them keep all three.
+  bool field_strip_on() const { return (this->prefs8_.viz & VIZ8_NOFIELD) == 0; }
+  bool win_bar_on() const { return (this->prefs8_.viz & VIZ8_NOWINBAR) == 0; }
+  bool margin_spark_on() const { return (this->prefs8_.viz & VIZ8_NOSPARK) == 0; }
+  void set_field_strip(bool on) { this->set_viz8_(VIZ8_NOFIELD, !on); }
+  void set_win_bar(bool on) { this->set_viz8_(VIZ8_NOWINBAR, !on); }
+  void set_margin_spark(bool on) { this->set_viz8_(VIZ8_NOSPARK, !on); }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
+  // Celebrations (celebrate.h): off, subtle or full. Full is the default.
+  ::espn::CelebLevel celebrations() const { return ::espn::celeb_level_from_stored(this->prefs8_.celeb); }
+  void set_celebrations(::espn::CelebLevel level);
   bool setup_done() const { return this->flag_(FLAG_SETUP); }
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
@@ -381,6 +412,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The owner's town. A new one is looked up with Open-Meteo on the fetch
   // task and turns the card on; "" clears the town and turns it off.
   void set_town(const std::string &town);
+  // The weather's degrees: ::espn::kWxUnitAuto (the town's country, else the
+  // time zone), kWxUnitF or kWxUnitC. The card and the kickoff forecast.
+  void set_wx_unit(uint8_t unit);
   // What the panel has downloaded from Open-Meteo since boot, and the reads.
   uint64_t wx_bytes() const { return this->wx_bytes_.load(); }
   uint32_t wx_requests() const { return this->wx_requests_.load(); }
@@ -455,6 +489,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
+  // The board game's field strip for a strip width_px wide (game_viz.h),
+  // valid only while football is on, and the margin samples the panel has
+  // seen of the board game. Read by gd_update in firmware/pages/gameday-live.yaml.
+  ::espn::FieldStrip field_strip(int width_px) const { return ::espn::field_strip(this->game_, width_px); }
+  const ::espn::MarginTrack &margin_track() const { return this->margin_tracks_.current(); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
@@ -588,6 +627,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
+  uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
+  ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];
@@ -773,8 +814,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
     uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
-    uint8_t spare[2];
+    uint8_t celeb;   // byte 2, celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
+    uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
+  static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
+  static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
+  static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
+  static constexpr uint8_t VIZ8_NOWINBAR = 2;  // the win chance bar off
+  static constexpr uint8_t VIZ8_NOSPARK = 4;   // the score margin sparkline off
+  void set_viz8_(uint8_t f, bool set);
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
   // Season leaders before the start, on by default: set means off.
@@ -800,12 +848,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The weather card's settings (weather.h), in their own blob: the town as
   // typed, the place the geocoder found and its coordinates, the switch. The
   // forecast itself is read again at boot. Fixed size, like the night blob.
+  // unit and country took the blob's spare bytes, zero in a blob saved
+  // before them: auto, and no country (the time zone decides).
   struct PrefsWx {
     char town[::espn::kTownMax + 1];
     char place[::espn::kPlaceMax + 1];
     float lat, lon;
     uint8_t on;
-    uint8_t spare[3];
+    uint8_t unit;        // ::espn::kWxUnit*
+    char country[2];     // the place's, "US", from the lookup; zeros for none
   } __attribute__((packed));
   ESPPreferenceObject wx_pref_;
   PrefsWx wx_{};
@@ -826,6 +877,47 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_wx_job_();
   void apply_wx_job_();
   void wx_fields_(UpdateFields &f);
+  bool wx_fahrenheit_() const;
+  std::string wx_country_() const;
+  // The kickoff forecast (weather.h): the board's next game's, when ESPN's
+  // event has none, from Open-Meteo for the hour of the kickoff at the
+  // venue's city. The last few games' forecasts are kept, each for its
+  // event, kickoff and venue, so Favorite teams' cards don't each read again
+  // as they turn, and a game moved to another hour or place reads again. The
+  // venues looked up lately are kept so the next read needs no lookup. One
+  // backoff for all of them.
+  struct KickSlot {
+    std::string event;  // "" for an empty slot
+    int64_t kickoff{0};
+    std::string place;
+    ::espn::WxHour hour;
+    uint32_t read_ms{0};  // millis() of its last good read
+  };
+  KickSlot kick_slots_[::espn::kWxKickCache];
+  uint8_t kick_slot_next_{0};
+  const KickSlot *kick_slot_(const GameSnapshot &g) const;
+  uint32_t kick_fail_ms_{0};   // millis() of the last failure, 0 = none since
+  uint32_t kick_backoff_ms_{0};
+  ::espn::Backoff kick_fail_;
+  int kick_status_{-1};        // the last read's HTTP status, 0 no answer, -1 none yet
+  struct KickVenue {
+    std::string place;  // as ESPN wrote it, "Evanston, IL"; "" for an empty slot
+    bool found{false};  // false: Open-Meteo knows no such place
+    float lat{0}, lon{0};
+  };
+  KickVenue kick_venues_[::espn::kWxVenueCache];
+  uint8_t kick_venue_next_{0};
+  const KickVenue *kick_venue_(const std::string &place) const;
+  uint8_t kick_due_();  // 3 looks the venue up, 4 reads the hour, 0 nothing due
+  void start_kick_job_(uint8_t kind);
+  void apply_kick_job_();
+  // The board's forecast for the next game: f's kick_ fields and the
+  // ticker's words in o.
+  void kick_fields_(UpdateFields &f, ::espn::TickerOptions &o) const;
+  // The ms until the next ESPN read is due, as far as the panel can tell: 0
+  // when one is due now or could come at any moment (a live favorite, a
+  // refresh asked for). A weather read starts only with kWxEspnGapMs of it.
+  uint32_t espn_quiet_ms_() const;
   std::atomic<uint64_t> wx_bytes_{0};
   std::atomic<uint32_t> wx_requests_{0};
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
@@ -1003,13 +1095,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool season_ok{false};
     uint32_t season_bytes{0};
     // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
-    // on this task so it never runs alongside an ESPN read.
+    // 3 looks the next game's venue up, 4 reads its kickoff hour, on this
+    // task so it never runs alongside an ESPN read.
     uint8_t need_wx{0};
     std::string wx_url;
     std::string wx_town;  // the town the lookup is for
     float wx_lat{0}, wx_lon{0};  // the place the forecast is for
     ::espn::WxPlace wx_place;
     ::espn::WxForecast wx_forecast;
+    std::string wx_event;  // the game a kickoff read is for, and its kickoff
+    int64_t wx_at{0};
+    ::espn::WxHour wx_hour;
     bool wx_ok{false};
     int wx_status{0};  // HTTP status, 0 for no answer
     uint32_t wx_retry_after_ms{0};
@@ -1210,6 +1306,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
+  ::espn::MarginTracks margin_tracks_;  // the board game's margin by read, and the last game's (game_viz.h)
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};

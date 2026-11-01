@@ -1318,6 +1318,15 @@ test("between games: a town is looked up, turns the weather card on, and the pag
   await expectSet(request, { town: "75019" });
   await expect(page.locator("#wxPlace")).toHaveText("Found: Coppell, Texas");
   await expect(page.locator("#wxRead")).toHaveText("Read a minute ago: 71°F, cloudy, high 81, low 61.");
+  // Degrees: Auto says which it is showing; Celsius turns the forecast over.
+  await expect(page.locator("#wxUnitRow")).toBeVisible();
+  await expect(page.locator("#wxUnit")).toHaveValue("0");
+  await expect(page.locator("#wxUnit option").first()).toHaveText("Auto (°F now)");
+  await page.locator("#wxUnit").selectOption("2");
+  await expectSet(request, { wxunit: "2" });
+  await expect(page.locator("#wxRead")).toHaveText("Read a minute ago: 22°C, cloudy, high 27, low 16.");
+  await page.locator("#wxUnit").selectOption("1");
+  await expectSet(request, { wxunit: "1" });
   await expect(sw).toHaveClass(/\bon\b/);
   await expect(page.locator('#cardList [data-card="weather"]')).not.toHaveClass(/\bwaiting\b/);
   await sw.click();
@@ -1346,6 +1355,11 @@ test("between games: a town is looked up, turns the weather card on, and the pag
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#wxBox")).toBeHidden();
+  // and firmware from before the degrees setting leaves its row out.
+  await reset(request, { town: "75019", wxon: true, wxunit: null });
+  await page.goto("/");
+  await expect(page.locator("#wxBox")).toBeVisible();
+  await expect(page.locator("#wxUnitRow")).toBeHidden();
 });
 
 test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wide GIF, deletes", async ({ page, request }) => {
@@ -1597,6 +1611,47 @@ test("pre-game leaders switch: every sport but soccer, posts leaders", async ({ 
   await reset(request, { favs: [{ l: "epl", id: 359, abbr: "ARS", name: "Arsenal" }, {}, {}, {}] });
   await page.reload();
   await expect(sw).toBeHidden();
+});
+
+test("pictures switches: field strip, win chance bar and score margin, by sport", async ({ page, request }) => {
+  const sw = (name) => page.getByRole("switch", { name, exact: true });
+  // Nothing picked yet: all three, on.
+  await reset(request, { favs: [{}, {}, {}, {}] });
+  await page.goto("/");
+  await expect(sw("Field strip")).toBeVisible();
+  await expect(sw("Win chance bar")).toBeVisible();
+  await expect(sw("Score margin")).toBeVisible();
+  await expect(sw("Field strip")).toBeChecked();
+  await sw("Field strip").click();
+  await expectSet(request, { field: "0" });
+  await expect(sw("Field strip")).not.toBeChecked();
+  await sw("Win chance bar").click();
+  await expectSet(request, { winbar: "0" });
+  await sw("Score margin").click();
+  await expectSet(request, { spark: "0" });
+  const st = await deviceState(request);
+  expect([st.field, st.winbar, st.spark]).toEqual([false, false, false]);
+
+  // A football favorite: the strip and the bar, no margin chart.
+  await reset(request, { favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}] });
+  await page.reload();
+  await expect(sw("Field strip")).toBeVisible();
+  await expect(sw("Win chance bar")).toBeVisible();
+  await expect(sw("Score margin")).toBeHidden();
+
+  // Hockey only: the margin chart alone (ESPN has no win chance for hockey).
+  await reset(request, { favs: [{ l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, {}, {}, {}] });
+  await page.reload();
+  await expect(sw("Field strip")).toBeHidden();
+  await expect(sw("Win chance bar")).toBeHidden();
+  await expect(sw("Score margin")).toBeVisible();
+
+  // Basketball: the bar and the chart.
+  await reset(request, { favs: [{ l: "nba", id: 25, abbr: "SA", name: "San Antonio Spurs" }, {}, {}, {}] });
+  await page.reload();
+  await expect(sw("Field strip")).toBeHidden();
+  await expect(sw("Win chance bar")).toBeVisible();
+  await expect(sw("Score margin")).toBeVisible();
 });
 
 test("situation switches: one per sport the panel follows, each posting its own key", async ({ page, request }) => {

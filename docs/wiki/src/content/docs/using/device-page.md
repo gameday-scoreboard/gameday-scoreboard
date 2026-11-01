@@ -61,6 +61,9 @@ Settings are grouped in cards. In the order the page shows them:
 | Ticker: **Match stats** | Soccer: goals, cards, possession and shots. |
 | Ticker: **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
 | Ticker: **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
+| Live pictures: **Field strip** | Football, on a 128-wide board: the field across the row under the clock, with the ball, the line to gain, the direction of play and the timeouts left. Coming in the next release. |
+| Live pictures: **Win chance bar** | Football and basketball, on a 128-wide board: a thin bar split at ESPN's chance for each side to win. Coming in the next release. |
+| Live pictures: **Score margin** | Basketball and hockey, on a 128-wide board: the lead over the game as a small chart. Coming in the next release. |
 | **Opponent scores too** | Splashes for the other side's scores. Your team's always show. See [Celebrations](#celebrations). |
 | **Panel on** | Turns the panel's lights on or off. |
 | **Brightness** | Panel brightness, 1 to 255. |
@@ -109,7 +112,7 @@ The **Between games** card has **Countdown to the next game**, on unless you tur
 
 **News headlines**, off to start, puts ESPN headlines for your teams or leagues on the panel between games. See [News headlines](/using/news/).
 
-**Weather** has a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Its switch is the **Weather** row in the list below, which setting a town turns on. See [Weather](/using/weather/).
+**Weather** has a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Its switch is the **Weather** row in the list below, which setting a town turns on. **Degrees** (coming in the next release) picks °F, °C or Auto for the card and the kickoff forecast. See [Weather](/using/weather/).
 
 A **Pictures** card, after Between games, keeps up to 4 of your own pictures or GIFs for the panel to show between games: **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
 
@@ -134,6 +137,16 @@ Every card is on to start except News headlines and Weather (on once you set a t
 ### Celebrations
 
 The panel fills the screen with a splash when someone scores, in the scoring team's color. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.
+
+:::note[Coming in the next release]
+A **Celebrations** choice sets how big the show is:
+
+- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
+- **Subtle**: a quick flash in the team's color with white words, for every score and the win.
+- **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
+
+The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side": the first team's scores always get the full show in its colors, and with **Opponent scores too** on the second team's do too.
+:::
 
 ### Timezone
 
