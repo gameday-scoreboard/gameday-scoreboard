@@ -41,7 +41,9 @@
       "start": "11:00",
       "end": "23:00",
       "only": true,
-      "today": false
+      "today": false,
+      "color": "blue",
+      "icon": "star"
     },
     {
       "n": "College",
@@ -52,7 +54,9 @@
       "days": "",
       "start": "00:00",
       "end": "00:00",
-      "only": false
+      "only": false,
+      "color": "",
+      "icon": ""
     }
   ],
   "list": 2,

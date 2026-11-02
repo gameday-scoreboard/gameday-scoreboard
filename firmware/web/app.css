@@ -432,6 +432,18 @@ button { font: inherit; color: inherit; }
 .popts .ctl { padding: 6px 0; border-top: 0; }
 .popts .ctl label { font-size: 13px; }
 .popts input.num.time { width: auto; }
+/* A playlist's color and icon (playlists.h): the icon as the panel's pixels
+   on black, a color alone as a dot. */
+.pmark { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 4px; background: #000; }
+.pmark svg { width: 15px; height: 15px; shape-rendering: crispEdges; }
+.pmark.dot { width: 12px; height: 12px; border-radius: 50%; margin: 0 5px; }
+.plist .ctl > .pmark { margin-right: 8px; }
+#favListRow .pmark { margin-right: 6px; }
+.popts .plook { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; }
+.popts .plook .chips { margin-top: 0; }
+.popts .chip.look { display: inline-flex; align-items: center; min-height: 30px; padding: 3px 6px; }
+.popts .chip.look .pmark { width: 20px; height: 20px; }
+.popts .chip.look .pmark.dot { width: 14px; height: 14px; margin: 0 3px; }
 .rbtn select { max-width: 60%; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }

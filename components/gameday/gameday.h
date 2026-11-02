@@ -477,9 +477,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The banner (message.h): text over everything for secs seconds (0 is
   // the default), from the device page, the app or Home Assistant. "" takes
   // it down. say_text() is what firmware/pages/message.yaml draws.
-  void say(const std::string &text, int secs);
+  // mark: a playlist's color and icon to show it in (playlists.h), 0 for
+  // white and no icon.
+  void say(const std::string &text, int secs, uint8_t mark = 0);
   const std::string &say_text() const { return this->say_text_; }
   int say_secs() const { return this->say_secs_; }
+  // The banner's look: a playlist's color and icon (playlists.h ListColor,
+  // ListIcon) while it shows that playlist's name, white and no icon for
+  // anything else. say_icon() is 1 up, 0 none.
+  uint32_t say_rgb() const { return ::espn::list_rgb(this->say_mark_); }
+  int say_icon() const { return ::espn::list_icon(this->say_mark_); }
   // The message card's page on the scoreboard page now, "" while it is
   // down (gd_msg_card in firmware/pages/gameday-live.yaml). A page too tall
   // for the panel rolls up; the page says how long one pass takes, and the
@@ -575,7 +582,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void handle_wifi_(AsyncWebServerRequest *request);
 #endif
   void apply_set_(const std::vector<std::pair<std::string, std::string>> &kv);
-  void apply_ops_(const std::vector<::espn::SetOp> &ops);
+  // announce: a playlist or sport row picked goes up on the board by name.
+  void apply_ops_(const std::vector<::espn::SetOp> &ops, bool announce = false);
   // GET and POST /gameday/settings, the backup (settings_doc.h).
   void handle_settings_(AsyncWebServerRequest *request);
   // Main loop: an import checked by handle_settings_.
@@ -609,6 +617,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void msg_show_(const std::string &page);
   std::string say_text_;
   int say_secs_{::espn::kSayDefaultSecs};
+  uint8_t say_mark_{0};
   // The entries on hand, [msg_from_, msg_from_ + msg_n_), one per line:
   // the saved text, or one read's window of the list (PSRAM).
   PsString msg_list_;
@@ -966,6 +975,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static_assert(sizeof(Prefs11) == 96, "Prefs11 is a fixed-size blob");
   ESPPreferenceObject pref11_;
   Prefs11 prefs11_{};
+
+  // Each playlist's color and icon (playlists.h list_color, list_icon), a
+  // byte per playlist in their own fixed-size blob: mark[n] belongs to
+  // playlist n + 1 and is rewritten with the playlists.
+  struct Prefs12 {
+    uint8_t mark[::espn::kListMax];
+  } __attribute__((packed));
+  static_assert(sizeof(Prefs12) == 16, "Prefs12 is a fixed-size blob");
+  ESPPreferenceObject pref12_;
+  Prefs12 prefs12_{};
+  // The color and icon of playlist n (1..count); 0 for anything else.
+  uint8_t list_mark_(uint8_t n) const {
+    return n >= 1 && n <= this->prefs9_.count ? this->prefs12_.mark[n - 1] : 0;
+  }
   void set_remote_(uint8_t button, const ::espn::RemoteTarget &t);
   // What button n does now (playlists.h remote_resolve).
   ::espn::RemoteAction remote_action_(uint8_t button) const;

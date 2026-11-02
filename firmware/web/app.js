@@ -141,7 +141,7 @@
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">None of your teams are playing. Showing their next games.</div><button class="linkbtn" id="favStart" hidden>Add a team</button></div></div>
       <div class="favctls">
-        <div class="stepper" id="favListRow" hidden><label for="favList">Playing</label><select id="favList"></select></div>
+        <div class="stepper" id="favListRow" hidden><label for="favList">Playing</label><span id="favListMark" hidden></span><select id="favList"></select></div>
       </div>
     </div>
     </section>
@@ -725,6 +725,8 @@
         if (o.days) { e.days = o.days; if (o.start !== o.end) { e.start = o.start; e.end = o.end; } }
         if (o.only) e.only = true;
         if ("today" in o) e.today = o.today;
+        if (o.color) e.color = o.color;
+        if (o.icon) e.icon = o.icon;
         return e;
       }),
     };
@@ -1340,6 +1342,38 @@
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
   };
+  // A playlist's color and icon (playlists.h kListColors, kListIcons, copied
+  // into the bundle as LIST_LOOKS by scripts/build_web.py): the panel shows
+  // its name in the color, the 11 by 11 icon above it, and so does this page.
+  const LOOKS = typeof LIST_LOOKS !== "undefined" ? LIST_LOOKS : { colors: [], icons: [] };
+  const lookColor = (k) => (LOOKS.colors.find((c) => c[0] === k) || [])[1] || "";
+  const lookIcon = (k) => (LOOKS.icons.find((c) => c[0] === k) || [])[1] || null;
+  const SVG = "http://www.w3.org/2000/svg";
+  // The icon as the panel's pixels, in the list's color (white with none,
+  // as on the panel's black); a color with no icon is a dot of that color.
+  const lookMark = (l, cls) => {
+    const rows = l && lookIcon(l.icon), color = l && lookColor(l.color);
+    const n = el("span", "pmark" + (cls ? " " + cls : ""));
+    n.setAttribute("aria-hidden", "true");
+    if (rows) {
+      const svg = document.createElementNS(SVG, "svg");
+      svg.setAttribute("viewBox", "0 0 11 11");
+      const path = document.createElementNS(SVG, "path");
+      let d = "";
+      rows.forEach((r, y) => r.split("").forEach((c, x) => { if (c === "#") d += "M" + x + " " + y + "h1v1h-1z"; }));
+      path.setAttribute("d", d);
+      path.setAttribute("fill", color || "#ffffff");
+      svg.appendChild(path);
+      n.appendChild(svg);
+    } else if (color) {
+      n.classList.add("dot");
+      n.style.background = color;
+    } else {
+      n.hidden = true;
+    }
+    return n;
+  };
+  const cap = (k) => k.charAt(0).toUpperCase() + k.slice(1);
   // Playlists (components/gameday/playlists.h): named groups of favorites.
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
@@ -1351,20 +1385,27 @@
   const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
   // A playlist's options (playlists.h ListOpt) ride in its lists= text as @
   // tokens among its teams: @d:06 the schedule's days (0 Sunday), @t:11:00-23:00
-  // its hours, @only, @today:1 or @today:0. The state carries them as fields.
+  // its hours, @only, @today:1 or @today:0, and its look, @c:blue and @i:star.
+  // The state carries them as fields.
   const listOpts = (toks) => {
     const o = { days: "", start: "00:00", end: "00:00", only: false };
+    let color = "", icon = "";
     for (const t of toks) {
       if (t.startsWith("@d:")) o.days = "0123456".split("").filter((d) => t.slice(3).includes(d)).join("");
       else if (t.startsWith("@t:")) { const [a, b] = t.slice(3).split("-"); if (a && b) { o.start = a; o.end = b; } }
       else if (t === "@only") o.only = true;
       else if (t === "@today:1" || t === "@today:0") o.today = t === "@today:1";
+      else if (t.startsWith("@c:")) color = lookColor(t.slice(3)) ? t.slice(3) : "";
+      else if (t.startsWith("@i:")) icon = lookIcon(t.slice(3)) ? t.slice(3) : "";
     }
     if (!o.days) { o.start = "00:00"; o.end = "00:00"; }
+    o.color = color;
+    o.icon = icon;
     return o;
   };
   const optTokens = (l) => (l.days ? ",@d:" + l.days + (l.start !== l.end ? ",@t:" + l.start + "-" + l.end : "") : "")
-    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "");
+    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
@@ -1391,6 +1432,7 @@
       name.value = l.n;
       name.maxLength = 16;
       name.setAttribute("aria-label", "Playlist name");
+      row.appendChild(lookMark(l));
       name.onchange = () => {
         const n = cleanName(name.value);
         if (!n || n === l.n) { name.value = l.n; return; }
@@ -1510,6 +1552,28 @@
       today.appendChild(tl);
       today.appendChild(ts);
       opts.appendChild(today);
+      // Its look: a color and an icon, each with None, for its name on the
+      // panel and in Playing.
+      const look = (label, key, items, draw) => {
+        const r = el("div", "plook");
+        r.appendChild(el("span", "plabel", label));
+        const g = el("span", "chips");
+        g.setAttribute("role", "group");
+        g.setAttribute("aria-label", label + " of " + l.n);
+        [["", "None"]].concat(items).forEach(([k]) => {
+          const c = el("button", "chip look");
+          if (k) c.appendChild(draw(k)); else c.textContent = "None";
+          c.title = k ? cap(k) : "None";
+          c.setAttribute("aria-label", c.title);
+          setOn(c, (l[key] || "") === k, "aria-pressed");
+          c.onclick = () => put({ [key]: k });
+          g.appendChild(c);
+        });
+        r.appendChild(g);
+        opts.appendChild(r);
+      };
+      look("Color", "color", LOOKS.colors, (k) => lookMark({ color: k }));
+      look("Icon", "icon", LOOKS.icons, (k) => lookMark({ icon: k, color: l.color }));
       box.appendChild(opts);
       host.appendChild(box);
     });
@@ -1543,6 +1607,10 @@
       });
     }
     listPick.value = playingSport() ? "s:" + playingSport() : String(S.list || 0);
+    Array.from(listPick.options).forEach((o) => { const l = ls[Number(o.value) - 1]; o.style.color = (l && lookColor(l.color)) || ""; });
+    const mark = lookMark(playingSport() ? null : playingList(), "playing");
+    mark.id = "favListMark";
+    $("#favListMark").replaceWith(mark);
   };
   // Both keys each time, so the one not picked shows as off while the panel answers.
   listPick.onchange = () => setGD(listPick.value.startsWith("s:")
