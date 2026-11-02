@@ -96,6 +96,10 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
                                              (REPO / "components/gameday/hook.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/weather.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"))}
+# A playlist's colors and icons by key (playlists.h kListColors, kListIcons).
+PLAYLISTS_H = (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8")
+LIST_COLORS = tuple(re.findall(r'\{"(\w+)",\s*0x[0-9A-Fa-f]{6}\}', PLAYLISTS_H))
+LIST_ICONS = tuple(re.findall(r'\{"(\w+)",\s*\{\s*GD_ROW', PLAYLISTS_H))
 # After the game's choices (wake.h after_word), in no particular order.
 AFTER = tuple(re.findall(r'return "(\w+)";', re.search(r"after_word\(.*?\n}\n",
                          (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"), re.S).group(0)))
@@ -525,6 +529,8 @@ def norm_list(pl):
            "end": pl.get("end", "00:00"), "only": bool(pl.get("only"))}
     if "today" in pl:
         out["today"] = pl["today"]
+    out["color"] = pl.get("color", "")
+    out["icon"] = pl.get("icon", "")
     return out
 
 
@@ -540,6 +546,11 @@ def list_opt_token(tok, opt):
         opt["only"] = True
     elif tok in ("@today:1", "@today:0"):
         opt["today"] = tok == "@today:1"
+    elif tok.startswith("@c:"):
+        # list_mark_token(): one it doesn't know is no color.
+        opt["color"] = tok[3:] if tok[3:] in LIST_COLORS else ""
+    elif tok.startswith("@i:"):
+        opt["icon"] = tok[3:] if tok[3:] in LIST_ICONS else ""
 
 
 def list_opt_text(pl):
@@ -554,6 +565,11 @@ def list_opt_text(pl):
         out += ",@only"
     if "today" in pl:
         out += ",@today:1" if pl["today"] else ",@today:0"
+    # list_mark_text(): its color and icon.
+    if pl["color"]:
+        out += ",@c:" + pl["color"]
+    if pl["icon"]:
+        out += ",@i:" + pl["icon"]
     return out
 
 
@@ -806,6 +822,9 @@ def settings_doc():
                     e["only"] = True
                 if "today" in pl:
                     e["today"] = pl["today"]
+                for key in ("color", "icon"):
+                    if pl.get(key):
+                        e[key] = pl[key]
                 out["lists"].append(e)
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
@@ -902,6 +921,16 @@ def import_settings(doc):
                             return fail(f"lists {b} should be true or false.")
                         if b == "only" and e[b] or b == "today":
                             opt[b] = e[b]
+                # Its color and icon; one this firmware doesn't have is left out and listed.
+                for key, known, eg in (("color", LIST_COLORS, "blue"), ("icon", LIST_ICONS, "star")):
+                    if e.get(key) is None:
+                        continue
+                    if not isinstance(e[key], str):
+                        return fail(f'lists {key} should be a name like "{eg}".')
+                    if e[key] and e[key] not in known:
+                        skipped.append(f"lists={name}:{key}={e[key]}")
+                    elif e[key]:
+                        opt[key] = e[key]
                 if not name or len(parts) == LIMITS["kListMax"]:
                     skipped.append("lists=" + name)
                     continue

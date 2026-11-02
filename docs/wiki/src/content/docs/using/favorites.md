@@ -85,6 +85,18 @@ While a playlist plays, the cards between games are its teams only, with the sam
 A settings backup carries all three. The Game Day app shows the same options under each playlist.
 :::
 
+:::note[Coming in the next release]
+**Color and icon.** Under each playlist's options, **Color** and **Icon** give it a look, so you can tell your lists apart from across the room:
+
+- **Color** is one of red, orange, yellow, green, teal, blue, purple or pink.
+- **Icon** is one of a star, heart, lightning bolt, crown, flag or trophy. It shows in the playlist's color, or white with no color.
+- A playlist can have a color, an icon, both or neither (**None**, as every playlist starts).
+
+When a remote button or **Playing** switches to a playlist, the panel shows its name for 3 seconds in its color, with its icon above the name. **Playing** on the device page shows the playing list's icon, or a dot of its color, beside the picker, and each playlist's name in its color where the browser allows. The look moves with the playlist when you rename or reorder it, and a settings backup carries it.
+
+Picking a playlist or a sport row in **Playing** now shows its name on the panel too, as a remote button does. Home Assistant's Playlist select and a playlist's schedule switch quietly.
+:::
+
 The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below. (Coming in the next release, the buttons no longer follow the playlists' order; set a button to a playlist under **Remote** on the Device tab.)
 
 A favorite you take out of your list leaves every playlist it was in. Adding it back doesn't put it back in them.

@@ -9,7 +9,8 @@
 // teams), [] in live the leagues of the teams it follows. lists are the
 // playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], each with
 // its options when set: "days" ("06", 0 Sunday to 6 Saturday), "start" and
-// "end" ("11:00"), "only" and "today" (playlists.h ListOpt); cards the
+// "end" ("11:00"), "only" and "today" (playlists.h ListOpt), "color" and
+// "icon" ("blue", "star": playlists.h kListColors, kListIcons); cards the
 // between-games cards by id, {"next": true, "clock": false} (cards.h); remote1 to
 // remote4 what the WizMote's buttons do (set_request.h RemoteTarget). Brightness and
 // scroll are the Home Assistant numbers of the same names.
@@ -164,6 +165,12 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
           o["only"] = true;
         if (l["today"].is<bool>())
           o["today"] = l["today"].as<bool>();
+        // Its color and icon, also only when set.
+        for (const char *key : {"color", "icon"}) {
+          const char *v = l[key] | "";
+          if (*v != '\0')
+            o[key] = v;
+        }
       }
     } else if (strcmp(k, "cards") == 0) {
       // The state's list, as {"next": true, ...}: an object, so a backup
@@ -465,12 +472,28 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
               return detail::settings_fail(out, "lists today should be true or false.");
             list_opt_token(e["today"].as<bool>() ? "@today:1" : "@today:0", opt);
           }
+          // Its color and icon as their tokens. One this firmware doesn't
+          // have (from newer firmware) is left out and listed.
+          uint8_t mark = 0;
+          for (const char *key : {"color", "icon"}) {
+            if (e[key].isNull())
+              continue;
+            if (!e[key].is<const char *>())
+              return detail::settings_fail(out, std::string("lists ") + key + " should be a name like \"" +
+                                                    (key[0] == 'c' ? "blue" : "star") + "\".");
+            std::string v = e[key].as<const char *>();
+            if (v.empty())
+              continue;
+            list_mark_token(std::string(key[0] == 'c' ? "@c:" : "@i:") + v, mark);
+            if ((key[0] == 'c' ? list_color(mark) : list_icon(mark)) == 0)
+              out.skipped.push_back("lists=" + name + ":" + key + "=" + v);
+          }
           if (name.empty() || kept == (size_t) kListMax) {
             out.skipped.push_back("lists=" + name);
             continue;
           }
           kept++;
-          text += (text.empty() ? "" : ";") + name + "=" + refs + list_opt_text(opt);
+          text += (text.empty() ? "" : ";") + name + "=" + refs + list_opt_text(opt) + list_mark_text(mark);
         }
         parse_set(k, text, op, target.fav_max);
         break;

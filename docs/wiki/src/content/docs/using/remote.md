@@ -53,7 +53,7 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 
 - **Its own favorite**: favorite 1 to 4, whichever team is in that slot. The default.
 - A **favorite team**: that team, wherever it sits in your list.
-- A **playlist** or a **sport** (one of the sport rows under Playing): the panel switches to Favorite teams, plays it and shows its name on the board for a moment.
+- A **playlist** or a **sport** (one of the sport rows under Playing): the panel switches to Favorite teams, plays it and shows its name on the board for a moment, in the playlist's [color and icon](/using/favorites/#playlists) if you gave it one.
 - **All favorites**: back to every favorite.
 - **Nothing**.
 

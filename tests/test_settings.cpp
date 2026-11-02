@@ -427,15 +427,25 @@ void test_playlists() {
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"start":"11:00"}]})", "a start with no end");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"only":"yes"}]})", "only as text");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"today":1}]})", "today as a number");
+  // Its color and icon (playlists.h kListColors, kListIcons) as their tokens.
+  in = import(R"({"schema":1,"lists":[{"n":"A","t":["nfl:6"],"days":"0","color":"blue","icon":"star"},
+    {"n":"B","t":[],"color":"plaid","icon":"heart"},{"n":"C","t":[],"color":"","icon":""}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "A=nfl:6,@d:0,@c:blue,@i:star;B=,@i:heart;C=",
+         "color and icon came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  SCHECK(skipped(in, "lists=B:color=plaid"), "a color this firmware doesn't have isn't left out and listed");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"color":3}]})", "color as a number");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"icon":true}]})", "icon as true");
   // The export writes only what is set, so a backup from firmware without
   // the options reads the same (settings_from_state).
   JsonDocument state, exported;
   deserializeJson(state, R"({"favs":[{"l":"nfl","id":6}],"lists":[{"n":"A","f":[0],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},
-    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false},{"n":"C","f":[],"days":"5"}]})");
+    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false,"color":"","icon":""},{"n":"C","f":[],"days":"5","color":"pink","icon":"crown"}]})");
   settings_from_state(state.as<JsonObjectConst>(), 0, -1, -1, exported);
   std::string text;
   serializeJson(exported["lists"], text);
-  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"]},{"n":"C","t":[],"days":"5"}])",
+  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"]},{"n":"C","t":[],"days":"5","color":"pink","icon":"crown"}])",
          "the export's options: %s", text.c_str());
 }
 
@@ -477,6 +487,8 @@ void test_fullest_fits() {
     l["end"] = "23:00";
     l["only"] = true;
     l["today"] = true;
+    l["color"] = "orange";  // the longest keys
+    l["icon"] = "trophy";
   }
   state["list"] = kListMax;
   state["msg"] = std::string(kMsgTextMax, '"');

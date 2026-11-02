@@ -63,11 +63,12 @@ struct Settings {
   uint32_t cdymd{0};
   TeamRef favs[16];
   // Playlists as the firmware keeps them: a name, a mask over favs and the
-  // options (Prefs9 and Prefs10).
+  // options (Prefs9 and Prefs10), and its color and icon (Prefs12).
   struct List {
     std::string first;
     uint16_t second;
     ListOpt opt;
+    uint8_t mark{0};
   };
   std::vector<List> lists;
   int list{0};
@@ -147,7 +148,10 @@ void load(Settings &s, JsonObjectConst o) {
         opt.flags |= LISTOPT_ONLY;
       if (l["today"].is<bool>())
         list_opt_token(l["today"].as<bool>() ? "@today:1" : "@today:0", opt);
-      s.lists.push_back({l["n"].as<const char *>(), mask, opt});
+      uint8_t mark = 0;
+      list_mark_token("@c:" + std::string(l["color"] | ""), mark);
+      list_mark_token("@i:" + std::string(l["icon"] | ""), mark);
+      s.lists.push_back({l["n"].as<const char *>(), mask, opt, mark});
     }
   }
   if (o["list"].is<int>())
@@ -297,7 +301,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       s.lists.clear();
       s.list = 0;
       for (const auto &d : parse_lists(op.text, kFavMax)) {
-        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt});
+        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
@@ -434,6 +438,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     o["only"] = (l.opt.flags & LISTOPT_ONLY) != 0;
     if (l.opt.flags & LISTOPT_TODAY_SET)
       o["today"] = (l.opt.flags & LISTOPT_TODAY) != 0;
+    o["color"] = list_color_key(l.mark);
+    o["icon"] = list_icon_key(l.mark);
   }
   doc["list"] = s.list;
   std::vector<std::string> names;
@@ -804,6 +810,48 @@ void test_playlists() {
     SCHECK(std::string(kSportRowNames[s]).size() <= kListNameMax, "%s is longer than a playlist name", kSportRowNames[s]);
 }
 
+// A playlist's color and icon (playlists.h): their tokens in the lists=
+// text, both ways, and the panel's color for each.
+void test_list_marks() {
+  std::vector<ListDef> l =
+      parse_lists("Sundays=nfl:6,@c:blue,@i:star,@d:0;Hoops=nba:6,@i:heart;Red=@c:red;Plain=nba:6", kFavMax);
+  SCHECK(l.size() == 4 && l[0].teams.size() == 1 && l[0].opt.days == 1, "marks sit beside teams and options");
+  SCHECK(list_color(l[0].mark) == 6 && list_icon(l[0].mark) == 1, "blue and star read: %02x", l[0].mark);
+  SCHECK(std::string(list_color_key(l[0].mark)) == "blue" && std::string(list_icon_key(l[0].mark)) == "star",
+         "keys back");
+  SCHECK(list_color(l[1].mark) == 0 && std::string(list_icon_key(l[1].mark)) == "heart", "an icon alone");
+  SCHECK(std::string(list_color_key(l[2].mark)) == "red" && list_icon(l[2].mark) == 0, "a color alone");
+  SCHECK(l[3].mark == 0 && list_mark_text(0).empty(), "no tokens, no mark");
+  SCHECK(list_mark_text(l[0].mark) == ",@c:blue,@i:star", "tokens back: %s", list_mark_text(l[0].mark).c_str());
+  SCHECK(list_rgb(l[0].mark) == 0x3070FF && list_rgb(l[1].mark) == 0xFFFFFF, "blue, else white");
+  l = parse_lists("A=@c:plaid,@i:unicorn;B=@c:red,@c:green;C=@c:red,@c:", kFavMax);
+  SCHECK(l[0].mark == 0 && l[0].opt == ListOpt{}, "a color or icon it doesn't know is none, not an option");
+  SCHECK(std::string(list_color_key(l[1].mark)) == "green", "the last color wins");
+  SCHECK(l[2].mark == 0, "an empty color clears it");
+  // Every key is lower case and unique, so the tokens read back.
+  for (int i = 0; i < kListColorCount; i++) {
+    uint8_t m = 0;
+    SCHECK(list_mark_token(std::string("@c:") + kListColors[i].key, m) && list_color(m) == i + 1, "color %d",
+           i);
+  }
+  for (int i = 0; i < kListIconCount; i++) {
+    uint8_t m = 0;
+    SCHECK(list_mark_token(std::string("@i:") + kListIcons[i].key, m) && list_icon(m) == i + 1, "icon %d", i);
+    bool any = false;
+    for (uint16_t r : kListIcons[i].rows)
+      any = any || r != 0;
+    SCHECK(any && (kListIcons[i].rows[0] >> 11) == 0, "icon %s drawn inside 11 columns", kListIcons[i].key);
+  }
+  SCHECK(list_color(0x0F) == 0 && list_icon(0xF0) == 0, "a saved byte past the sets is none");
+  // A full list of teams keeps the tokens after it.
+  std::string full = "Full=";
+  for (int i = 1; i <= (int) kFavMax + 2; i++)
+    full += "nfl:" + std::to_string(i) + ",";
+  l = parse_lists(full + "@d:0,@c:teal,@i:bolt", kFavMax);
+  SCHECK(l[0].teams.size() == (size_t) kFavMax && l[0].opt.days == 1 && list_mark_text(l[0].mark) == ",@c:teal,@i:bolt",
+         "tokens after a full list: %zu teams, %s", l[0].teams.size(), list_mark_text(l[0].mark).c_str());
+}
+
 // Local day of the week (0 Sunday) and minute after midnight of an epoch in
 // a POSIX timezone, as the panel's clock gives them.
 std::pair<int, int> local_dm(int64_t epoch, const char *tz) {
@@ -981,6 +1029,7 @@ void test_remote() {
 int run_set_tests(int &total_checks) {
   test_remote();
   test_list_options();
+  test_list_marks();
   test_playlists();
   test_parse_set();
   test_cards();

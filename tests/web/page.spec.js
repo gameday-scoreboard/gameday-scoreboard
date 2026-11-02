@@ -35,7 +35,8 @@ const playlistsPost = (p) => {
   if (!d || !Array.isArray(d.lists) || Object.keys(d).some((k) => !["schema", "lists", "list"].includes(k))) return null;
   // A playlist's options come back as its @ tokens, in the firmware's order.
   const opts = (l) => (l.days ? ",@d:" + l.days + (l.start !== undefined ? ",@t:" + l.start + "-" + l.end : "") : "")
-    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "");
+    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
   const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",") + opts(l)).join(";") };
   if (d.list !== undefined) q.list = String(d.list);
   return q;
@@ -780,7 +781,50 @@ test("a playlist's options post as tokens: days, hours, only this list, only tod
   await expect(box.locator(".phours")).toHaveCount(0);
   // The state reads back what the mock kept.
   const st = await deviceState(request);
-  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true });
+  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true, color: "", icon: "" });
+});
+
+test("a playlist's color and icon post as tokens and show beside its name and in Playing", async ({ page, request }) => {
+  await reset(request, { mode: 4, list: 0, lists: [{ n: "Sundays", f: [0], days: "0" }, { n: "Hoops", f: [1] }] });
+  await page.goto("/");
+  await tab(page, "teams");
+  const box = page.locator("#listCtls .plist").nth(0);
+  const colors = box.getByRole("group", { name: "Color of Sundays" }).getByRole("button");
+  const icons = box.getByRole("group", { name: "Icon of Sundays" }).getByRole("button");
+  await expect(colors).toHaveCount(9);
+  await expect(icons).toHaveCount(7);
+  await expect(colors.nth(0)).toHaveAttribute("aria-pressed", "true");
+  // No look: no mark beside the name.
+  await expect(box.locator(".ctl > .pmark")).toBeHidden();
+  await box.getByRole("button", { name: "Blue" }).click();
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:0,@c:blue;Hoops=nfl:34" });
+  await expect(box.getByRole("button", { name: "Blue" })).toHaveAttribute("aria-pressed", "true");
+  await expect(box.locator(".ctl > .pmark.dot")).toHaveCSS("background-color", "rgb(48, 112, 255)");
+  await box.getByRole("button", { name: "Star" }).click();
+  await expectSet(request, { lists: "Sundays=nfl:6,@d:0,@c:blue,@i:star;Hoops=nfl:34" });
+  // The icon is the panel's pixels in the list's color.
+  await expect(box.locator(".ctl > .pmark svg path")).toHaveAttribute("fill", "#3070ff");
+  // The state reads back what the mock kept, in the firmware's key order.
+  const st = await deviceState(request);
+  expect(JSON.stringify(st.lists[0])).toBe(JSON.stringify({ n: "Sundays", f: [0], days: "0", start: "00:00", end: "00:00", only: false, color: "blue", icon: "star" }));
+  // A rename and a move keep them.
+  await box.getByRole("button", { name: "Move down Sundays" }).click();
+  await expectSet(request, { lists: "Hoops=nfl:34;Sundays=nfl:6,@d:0,@c:blue,@i:star" });
+  // Playing (Home tab) marks the list that plays, and its option comes in its color.
+  await tab(page, "board");
+  await page.locator("#favList").selectOption({ label: "Sundays" });
+  await expectSet(request, { mode: "4", list: "2", sport: "none" });
+  await expect(page.locator("#favListMark svg path")).toHaveAttribute("fill", "#3070ff");
+  await expect(page.locator("#favList option", { hasText: "Sundays" })).toHaveCSS("color", "rgb(48, 112, 255)");
+  await page.locator("#favList").selectOption({ label: "Hoops" });
+  await expect(page.locator("#favListMark")).toBeHidden();
+  // None takes each back off.
+  await tab(page, "teams");
+  const moved = page.locator("#listCtls .plist").nth(1);
+  await moved.getByRole("group", { name: "Icon of Sundays" }).getByRole("button", { name: "None" }).click();
+  await expectSet(request, { lists: "Hoops=nfl:34;Sundays=nfl:6,@d:0,@c:blue" });
+  await moved.getByRole("group", { name: "Color of Sundays" }).getByRole("button", { name: "None" }).click();
+  await expectSet(request, { lists: "Hoops=nfl:34;Sundays=nfl:6,@d:0" });
 });
 
 test("a playlist's options survive a rename and a reorder, and the bar says when a schedule has it on", async ({ page, request }) => {

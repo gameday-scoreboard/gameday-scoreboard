@@ -368,6 +368,9 @@ void GamedayComponent::setup() {
   this->pref11_ = global_preferences->make_preference<Prefs11>(fnv1_hash("gameday_prefs11_v1"));
   if (!this->pref11_.load(&this->prefs11_))
     this->prefs11_ = Prefs11{};  // each button on its own favorite
+  this->pref12_ = global_preferences->make_preference<Prefs12>(fnv1_hash("gameday_prefs12_v1"));
+  if (!this->pref12_.load(&this->prefs12_))
+    this->prefs12_ = Prefs12{};  // no colors or icons
   for (auto &b : this->prefs11_.btn)
     if (b.kind > (uint8_t) ::espn::RemoteKind::NONE)
       b = ::espn::RemoteTarget{};
@@ -649,8 +652,11 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   Prefs10 p10 = this->prefs10_;
-  for (uint8_t n = 0; n < ::espn::kListMax; n++)
+  Prefs12 p12{};
+  for (uint8_t n = 0; n < ::espn::kListMax; n++) {
     p10.opt[n] = n < p.count ? lists[n].opt : ::espn::ListOpt{};
+    p12.mark[n] = n < p.count ? lists[n].mark : 0;
+  }
   for (uint8_t n = 0; n < p.count; n++) {
     strncpy(p.name[n], lists[n].name.c_str(), ::espn::kListNameMax);
     p.mask[n] = ::espn::list_mask(lists[n].teams, favs);
@@ -682,6 +688,8 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
     p10.sched_before = p10.sched_sport = 0;
   this->prefs10_ = p10;
   this->pref10_.save(&this->prefs10_);
+  this->prefs12_ = p12;
+  this->pref12_.save(&this->prefs12_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
@@ -710,8 +718,9 @@ void GamedayComponent::play_list_(uint8_t n, uint8_t row, bool announce) {
              row != 0 ? ::espn::kSportRowNames[row - 1] : n == 0 ? "every favorite" : this->list_name_(n).c_str());
   }
   this->publish_playlist_select_();
-  if (announce)
-    this->say(row != 0 ? ::espn::kSportRowNames[row - 1] : n == 0 ? "All favorites" : this->list_name_(n), 3);
+  if (announce)  // in the playlist's color and icon, if it has them
+    this->say(row != 0 ? ::espn::kSportRowNames[row - 1] : n == 0 ? "All favorites" : this->list_name_(n), 3,
+              this->list_mark_(n));
   if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES) {
     this->set_mode_((uint8_t) Mode::FAVORITES);
     return;
@@ -5133,6 +5142,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     o["only"] = (opt.flags & ::espn::LISTOPT_ONLY) != 0;
     if (opt.flags & ::espn::LISTOPT_TODAY_SET)
       o["today"] = (opt.flags & ::espn::LISTOPT_TODAY) != 0;
+    // Its color and icon by key (playlists.h kListColors, kListIcons), "" for none.
+    o["color"] = ::espn::list_color_key(this->prefs12_.mark[n - 1]);
+    o["icon"] = ::espn::list_icon_key(this->prefs12_.mark[n - 1]);
   }
   doc["list"] = this->prefs9_.active;
   doc["sched"] = this->prefs10_.sched_applied;  // the playlist a schedule put on, 0 = none
@@ -5619,9 +5631,10 @@ static std::string board_lines(const std::string &text) {
   return out;
 }
 
-void GamedayComponent::say(const std::string &text, int secs) {
+void GamedayComponent::say(const std::string &text, int secs, uint8_t mark) {
   this->say_text_ = board_lines(::espn::message_clean(text, ::espn::kMsgTextMax, true));
   this->say_secs_ = ::espn::clamp_say_secs(secs);
+  this->say_mark_ = mark;
   if (this->say_text_.empty())
     ESP_LOGI(TAG, "Banner down");
   else
@@ -6927,10 +6940,12 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   }
   if (pick && !lists)
     this->night_skip("a team pick");
-  this->apply_ops_(ops);
+  // A playlist or sport row picked here goes up on the board by name, in the
+  // playlist's color and icon, as a remote button's does.
+  this->apply_ops_(ops, !lists);
 }
 
-void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
+void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool announce) {
   this->sync_gate_.begin();  // the keys below share one flash write
   bool dirty = false;
   // The message card's keys are saved together, once.
@@ -7019,13 +7034,15 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops) {
         if (op.value > this->prefs9_.count)
           ESP_LOGW(TAG, "No playlist %d", op.value);
         else
-          this->set_active_list_((uint8_t) op.value, false);
+          this->set_active_list_((uint8_t) op.value, announce && (op.value != this->prefs9_.active ||
+                                                                  this->prefs9_.sport != 0 || !this->favorites_mode_()));
         break;
       case ::espn::SetKind::SPORT:
         if (op.value != 0)
-          this->set_sport_row_((uint8_t) op.value, false);
+          this->set_sport_row_((uint8_t) op.value,
+                               announce && (op.value != this->prefs9_.sport || !this->favorites_mode_()));
         else if (keep_list < 0 && this->prefs9_.sport != 0)
-          this->set_active_list_(0, false);
+          this->set_active_list_(0, announce);
         break;
       case ::espn::SetKind::TZ:
         this->select_timezone(::espn::kTimezones[op.value].name);

@@ -48,10 +48,116 @@ constexpr uint8_t LISTOPT_ONLY = 1;       // Only this list's games
 constexpr uint8_t LISTOPT_TODAY_SET = 2;  // the list has its own Only today's games
 constexpr uint8_t LISTOPT_TODAY = 4;      // and it is on
 
+// A playlist's look: a color and an icon, each from a small fixed set, so
+// the name the panel shows when the list comes on is known across the room.
+// Like the options they ride in the lists= text as '@' tokens:
+//   @c:<color>   one of kListColors' keys: the name, and the icon, in it
+//   @i:<icon>    one of kListIcons' keys: drawn above the name
+// Kept as one byte per playlist, the color's number (1 up, 0 none) in the
+// low four bits and the icon's in the high four.
+struct ListColor {
+  const char *key;
+  uint32_t rgb;  // as the panel draws it; the device page uses the same
+};
+constexpr int kListColorCount = 8;
+constexpr ListColor kListColors[kListColorCount] = {
+    {"red", 0xFF2020},  {"orange", 0xFF8000}, {"yellow", 0xFFD800}, {"green", 0x20D020},
+    {"teal", 0x00C8C8}, {"blue", 0x3070FF},   {"purple", 0xA040FF}, {"pink", 0xFF40B0},
+};
+
+// 11 by 11 pixel art, a row each from the top, bit 10 the left column.
+constexpr int kListIconSize = 11;
+struct ListIcon {
+  const char *key;
+  uint16_t rows[kListIconSize];
+};
+#define GD_ROW(s)                                                                                          \
+  (uint16_t) (((s)[0] == '#') << 10 | ((s)[1] == '#') << 9 | ((s)[2] == '#') << 8 | ((s)[3] == '#') << 7 | \
+              ((s)[4] == '#') << 6 | ((s)[5] == '#') << 5 | ((s)[6] == '#') << 4 | ((s)[7] == '#') << 3 | \
+              ((s)[8] == '#') << 2 | ((s)[9] == '#') << 1 | ((s)[10] == '#'))
+constexpr int kListIconCount = 6;
+constexpr ListIcon kListIcons[kListIconCount] = {
+    {"star",
+     {GD_ROW(".....#....."), GD_ROW("....###...."), GD_ROW("....###...."), GD_ROW("###########"),
+      GD_ROW(".#########."), GD_ROW("..#######.."), GD_ROW("...#####..."), GD_ROW("..#######.."),
+      GD_ROW("..###.###.."), GD_ROW(".###...###."), GD_ROW(".#.......#.")}},
+    {"heart",
+     {GD_ROW("..........."), GD_ROW("..##...##.."), GD_ROW(".####.####."), GD_ROW("###########"),
+      GD_ROW("###########"), GD_ROW("###########"), GD_ROW(".#########."), GD_ROW("..#######.."),
+      GD_ROW("...#####..."), GD_ROW("....###...."), GD_ROW(".....#.....")}},
+    {"bolt",
+     {GD_ROW("......####."), GD_ROW(".....####.."), GD_ROW("....####..."), GD_ROW("...####...."),
+      GD_ROW("..########."), GD_ROW(".########.."), GD_ROW("....####..."), GD_ROW("...####...."),
+      GD_ROW("..####....."), GD_ROW("..###......"), GD_ROW(".##........")}},
+    {"crown",
+     {GD_ROW("..........."), GD_ROW("#....#....#"), GD_ROW("##..###..##"), GD_ROW("###.###.###"),
+      GD_ROW("###########"), GD_ROW("###########"), GD_ROW("###########"), GD_ROW("..........."),
+      GD_ROW("###########"), GD_ROW("###########"), GD_ROW("...........")}},
+    {"flag",
+     {GD_ROW("##........."), GD_ROW("#####......"), GD_ROW("########..."), GD_ROW("##########."),
+      GD_ROW("########..."), GD_ROW("#####......"), GD_ROW("##........."), GD_ROW("##........."),
+      GD_ROW("##........."), GD_ROW("##........."), GD_ROW("##.........")}},
+    {"trophy",
+     {GD_ROW(".#########."), GD_ROW("##.#####.##"), GD_ROW("#..#####..#"), GD_ROW("#..#####..#"),
+      GD_ROW(".#.#####.#."), GD_ROW("..#######.."), GD_ROW("....###...."), GD_ROW(".....#....."),
+      GD_ROW(".....#....."), GD_ROW("...#####..."), GD_ROW("..#######..")}},
+};
+#undef GD_ROW
+
+inline uint8_t list_color(uint8_t mark) { return (uint8_t) ((mark & 0x0F) <= kListColorCount ? mark & 0x0F : 0); }
+inline uint8_t list_icon(uint8_t mark) { return (uint8_t) ((mark >> 4) <= kListIconCount ? mark >> 4 : 0); }
+// The key of a mark's color or icon, "" for none.
+inline const char *list_color_key(uint8_t mark) {
+  uint8_t c = list_color(mark);
+  return c != 0 ? kListColors[c - 1].key : "";
+}
+inline const char *list_icon_key(uint8_t mark) {
+  uint8_t i = list_icon(mark);
+  return i != 0 ? kListIcons[i - 1].key : "";
+}
+// What the panel draws the name and the icon in: the list's color, else white.
+inline uint32_t list_rgb(uint8_t mark) {
+  uint8_t c = list_color(mark);
+  return c != 0 ? kListColors[c - 1].rgb : 0xFFFFFF;
+}
+
+// One '@c:' or '@i:' token into a playlist's mark. False for any other
+// token; a color or icon it doesn't know is no color or no icon.
+inline bool list_mark_token(const std::string &tok, uint8_t &mark) {
+  bool color = tok.compare(0, 3, "@c:") == 0, icon = tok.compare(0, 3, "@i:") == 0;
+  if (!color && !icon)
+    return false;
+  std::string key = tok.substr(3);
+  uint8_t n = 0;
+  if (color) {
+    for (int i = 0; i < kListColorCount; i++)
+      if (key == kListColors[i].key)
+        n = (uint8_t) (i + 1);
+    mark = (uint8_t) ((mark & 0xF0) | n);
+  } else {
+    for (int i = 0; i < kListIconCount; i++)
+      if (key == kListIcons[i].key)
+        n = (uint8_t) (i + 1);
+    mark = (uint8_t) ((mark & 0x0F) | (n << 4));
+  }
+  return true;
+}
+
+// The mark back as its tokens, ",@c:blue,@i:star" ("" for none).
+inline std::string list_mark_text(uint8_t mark) {
+  std::string out;
+  if (list_color(mark) != 0)
+    out += std::string(",@c:") + list_color_key(mark);
+  if (list_icon(mark) != 0)
+    out += std::string(",@i:") + list_icon_key(mark);
+  return out;
+}
+
 struct ListDef {
   std::string name;
   std::vector<TeamRef> teams;
   ListOpt opt;
+  uint8_t mark{0};  // its color and icon (list_color, list_icon)
 };
 
 // "11:00" -> minutes after midnight, -1 for anything else (0:00 to 23:59).
@@ -203,16 +309,18 @@ inline std::vector<ListDef> parse_lists(const std::string &v, size_t fav_max) {
       continue;
     std::string refs = eq == std::string::npos ? "" : part.substr(eq + 1);
     size_t p = 0;
-    while (p < refs.size() && d.teams.size() < fav_max) {
+    // Tokens after a full list of teams still count.
+    while (p < refs.size()) {
       size_t comma = refs.find(',', p);
       std::string ref = refs.substr(p, comma == std::string::npos ? std::string::npos : comma - p);
       p = comma == std::string::npos ? refs.size() : comma + 1;
       if (!ref.empty() && ref[0] == '@') {
-        list_opt_token(ref, d.opt);
+        if (!list_mark_token(ref, d.mark))
+          list_opt_token(ref, d.opt);
         continue;
       }
       TeamRef t;
-      if (!parse_team_ref(ref, t.league, t.id) || !known_team(t.league, t.id))
+      if (d.teams.size() >= fav_max || !parse_team_ref(ref, t.league, t.id) || !known_team(t.league, t.id))
         continue;
       bool dup = false;
       for (const auto &o : d.teams)
