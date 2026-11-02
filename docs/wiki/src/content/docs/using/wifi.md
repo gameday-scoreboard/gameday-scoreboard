@@ -52,7 +52,7 @@ The device page's Diagnostics count every Wi-Fi drop and its cause, and draw the
 
 ## The panel's address
 
-Every panel has a name on your network, `gameday-` and six characters, like `gameday-2f6a70`. Its device page is at that name plus `.local`, like `gameday-2f6a70.local`. The panel shows the address when it joins Wi-Fi, and again when you hold the boot button for about 1.5 seconds. The device page shows it in the Device card under **Address** and **Name**.
+Every panel has a name on your network, `gameday-` and six characters, like `gameday-2f6a70`. Its device page is at that name plus `.local`, like `gameday-2f6a70.local`. The panel shows the address when it joins Wi-Fi, and again when you hold the boot button for about 1.5 seconds. The device page shows it under **Panel** on the Device tab, as **Address** and **Name**.
 
 Some phones can't open `.local` addresses. Use the panel's IP address instead, a number like `192.168.1.50`. The panel shows it with the address on a boot button hold, and the ticker gives it until you pick a team.
 

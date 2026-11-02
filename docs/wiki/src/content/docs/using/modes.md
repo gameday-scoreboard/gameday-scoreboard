@@ -68,7 +68,7 @@ With **Stick with the higher team**, the panel also checks every **Switch every*
 
 ### Choosing the leagues
 
-The league buttons under the mode buttons pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
+The league chips under the mode cards on the Home tab pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
 
 ### When nothing is live
 

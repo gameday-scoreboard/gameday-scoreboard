@@ -96,7 +96,7 @@ Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorit
 Once you have a playlist, buttons 1 to 4 play your first four playlists instead. The panel switches to Favorite teams, plays that playlist, and shows its name for a moment. A button with no playlist does nothing. With no playlists, the buttons stay your first four favorites.
 
 :::note[Coming in the next release]
-Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to a favorite team, a playlist, a sport row, all your favorites or nothing. The Favorites card marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to a favorite team, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
 :::
 
 ## On the device page
