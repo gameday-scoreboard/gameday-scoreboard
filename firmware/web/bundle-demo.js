@@ -245,11 +245,23 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
         </div>
       </div>
       <div class="card">
+        <h2>Live pictures</h2>
+        <p class="hint">Drawn under the clock during a game. Not on a single 64x64 panel.</p>
+        <div id="vizCtls">
+          <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: each side's chance to win, as a thin bar.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
+          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game, as a small chart.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+        </div>
+      </div>
+      <div class="card">
         <h2>Celebrations</h2>
         <div class="cbody">
-          <p class="hint">Full-screen splashes for scores. Yours always show.</p>
+          <p class="hint">Full-screen celebrations for scores and the win. Yours always show.</p>
           <div id="celebCtls">
-            <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+            <div class="ctl"><label for="celebrate">Celebrations<small>Fireworks and confetti, a quick flash in the team's color, or nothing.</small></label><select id="celebrate">
+              <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
+            </select></div>
+            <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
           </div>
         </div>
       </div>
@@ -272,6 +284,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
             <div class="actions"><button class="btn" id="townGo">Look up</button></div>
             <p class="hint" id="wxPlace" hidden></p>
             <div class="ctl" id="wxOnRow"><label>Weather card</label><button class="sw" data-set="wxon" aria-label="Weather card"></button></div>
+            <div class="ctl" id="wxUnitRow" hidden><label for="wxUnit">Degrees<small>For the weather card and your next game's forecast.</small></label><select id="wxUnit">
+              <option value="0">Auto</option><option value="1">Fahrenheit (°F)</option><option value="2">Celsius (°C)</option>
+            </select></div>
             <p class="hint" id="wxRead" hidden></p>
             <p class="hint">Your town goes to Open-Meteo for the forecast.</p>
           </div>
@@ -615,6 +630,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    celebrate: Number,
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
@@ -624,7 +640,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
       return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    town: String, wxon: (v) => v === "1",
+    town: String, wxon: (v) => v === "1", wxunit: Number,
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -913,6 +929,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   };
   const releaseSelect = $("#release");
   releaseSelect.onchange = () => setGD({ release: releaseSelect.value });
+  const celebrateSelect = $("#celebrate");
+  celebrateSelect.onchange = () => setGD({ celebrate: celebrateSelect.value });
   const collideSelect = $("#collide");
   const favRotate = $("#favrotate");
   const showFavRotate = () => {
@@ -1003,6 +1021,8 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (document.activeElement !== favRotate) favRotate.value = S.rotate;
     if (document.activeElement !== lockonInput) lockonInput.value = S.lockon || 15;
     if (document.activeElement !== releaseSelect) releaseSelect.value = String(S.release || 30);
+    // Firmware without the setting sends no celebrate key: it celebrates in full.
+    if (document.activeElement !== celebrateSelect) celebrateSelect.value = String(S.celebrate === undefined ? 2 : S.celebrate);
     if (document.activeElement !== collideSelect) {
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
@@ -1207,6 +1227,9 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
   const postTown = () => setGD({ town: town.value.trim() });
   $("#townGo").onclick = postTown;
   town.onkeydown = (e) => { if (e.key === "Enter") postTown(); };
+  // Degrees: auto follows the town's country, else the time zone.
+  const wxUnit = $("#wxUnit");
+  wxUnit.onchange = () => setGD({ wxunit: wxUnit.value });
   // The weather block: the place the lookup found and how the reads go.
   const mins = (s) => Math.max(1, Math.round(s / 60));
   const ago = (s) => (s < 60 ? "just now" : mins(s) === 1 ? "a minute ago" : `${mins(s)} minutes ago`);
@@ -1214,6 +1237,13 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     $("#wxBox").hidden = S.town === undefined;  // firmware from before the card
     if (S.town === undefined) return;
     if (document.activeElement !== town) town.value = S.town || "";
+    // Older firmware has Fahrenheit only.
+    $("#wxUnitRow").hidden = S.wxunit === undefined;
+    if (S.wxunit !== undefined && document.activeElement !== wxUnit) {
+      wxUnit.value = String(S.wxunit);
+      const shown = (S.wx && S.wx.unit) || (S.kick && S.kick.unit);
+      wxUnit.options[0].textContent = shown ? `Auto (°${shown} now)` : "Auto";
+    }
     const w = S.wx;
     const place = $("#wxPlace");
     const read = $("#wxRead");
@@ -1228,7 +1258,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     if (!w.place) return;
     read.hidden = false;
     if (w.read_s !== undefined) {
-      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°F, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
+      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°${w.unit || "F"}, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
       if (w.held) read.textContent += " The next read waits for the game to end.";
       else if (w.read !== 200 && w.read !== -1) read.textContent += ` The last read failed${retry}.`;
     } else if (w.held) {
@@ -1600,7 +1630,7 @@ const TZS=[["US Eastern","America/New_York"],["US Central","America/Chicago"],["
     // line, so no switch of their own; a switch for several sports lists them.
     const sports = new Set((S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
-    document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
+    document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
     // Firmware from before the countdown card leaves these out.
