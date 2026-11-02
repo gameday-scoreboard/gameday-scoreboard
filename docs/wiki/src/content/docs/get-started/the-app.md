@@ -32,11 +32,11 @@ What you reach for during a game:
 The panel's name is at the top. Tap it to switch to another panel, to add one, or, with two or more, to manage them.
 
 :::note[Coming in the next release]
-On iPhone the Board follows the device page's Home tab:
+In both apps the Board follows the device page's Home tab:
 
-- The modes read **Favorite teams** ("Only the teams you pick") and **Live games** ("Games on right now, in leagues you pick"). The line under them says why the panel shows what it does, like "None of your teams are playing. Showing their next games." With no favorites it offers **Add a team**, and with playlists it has **Playing**.
+- The modes read **Favorite teams** ("Only the teams you pick") and **Live games** ("Games on right now, in leagues you pick"). The line under them says why the panel shows what it does, like "None of your teams are playing. Showing their next games." With no favorites it offers **Add a team**. On iPhone, with playlists, it has **Playing**; on Android **Playing** stays in **Teams > Favorites**.
 - **Panel on**, **Brightness** and **Showing** sit together, with **Refresh scores**. When **Showing** is on **Effects**, the effect, palette, speed and intensity show under it.
-- **Customize** takes the place of **Message**.
+- **Customize** takes the place of **Message**. On Android it's in **Settings**, next to **Display** and **Device**.
 :::
 
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
@@ -57,7 +57,7 @@ In the chooser's **On now** tab, a search that matches none of today's games lis
 - **Live games**: the leagues it follows and **Switch every**, and on iPhone **Pick the best game** and **Favorites take over**. Choosing leagues here doesn't change the panel's mode. See [Modes](/using/modes/).
 
 :::note[Coming in the next release]
-On iPhone, **Only today's games**, **Jump to the action** and **Score banner** are at the top of **Favorites**, as on the device page. A favorite shows which remote button lands on it only while a WizMote is paired.
+In both apps, **Only today's games**, **Jump to the action** and **Score banner** are at the top of **Favorites**, as on the device page. A favorite shows which remote button lands on it only while a WizMote is paired.
 :::
 
 ### Settings
@@ -68,11 +68,11 @@ On iPhone, **Only today's games**, **Jump to the action** and **Score banner** a
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
 
 :::note[Coming in the next release]
-On iPhone, Settings has three pages for the panel, like the device page's tabs:
+In both apps, Settings has three pages for the panel, like the device page's tabs:
 
-- **Display**: ticker speed, the night schedule, the ticker, celebrations and **Between games**. **Showing** moved to the Board.
+- **Display**: ticker speed, the night schedule (iPhone), the ticker, celebrations and **Between games**. **Showing** moved to the Board.
 - **Customize**: the banner, the message card and the date countdown.
-- **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks, **Diagnostics** and **Advanced**. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
+- **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
 Each setting has one short line saying what it does. The longer rules are on these pages.
 :::
