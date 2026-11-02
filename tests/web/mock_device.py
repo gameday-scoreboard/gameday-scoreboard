@@ -34,7 +34,8 @@ more fail names drop the connection with no answer, the way a panel that has
 gone does: "events" for the event stream (an open one ends within half a
 second), "down" for every route but the test hooks. "wifi" replaces the saved
 network list; null stands for firmware without the list, whose /gameday/wifi
-answers 404. "settings" is firmware without the backup: /gameday/settings
+answers 404. "wizmote" sets the WizMote Status line ("No remote paired");
+the panel starts paired. "settings" is firmware without the backup: /gameday/settings
 answers 404. GET /_log lists the /gameday/set, /gameday/action,
 /gameday/wifi and /gameday/settings requests seen since the last reset, and
 the entity posts (/select/Effect/set and the like), which change the entity
@@ -218,6 +219,8 @@ ENTITIES = [
     {"id": "update/Firmware", "domain": "update", "name": "Firmware", "state": "NO UPDATE", "value": "1.5.4",
      "current_version": "1.5.4", "summary": "", "release_url": ""},
     {"id": "text_sensor/IP", "domain": "text_sensor", "name": "IP", "state": "10.10.10.97", "value": "10.10.10.97"},
+    {"id": "text_sensor/WizMote Status", "domain": "text_sensor", "name": "WizMote Status",
+     "state": "Paired: 7C:DF:A1:00:00:01", "value": "Paired: 7C:DF:A1:00:00:01"},
     {"id": "button/Refresh Now", "domain": "button", "name": "Refresh Now", "state": ""},
     {"id": "button/Reboot", "domain": "button", "name": "Reboot", "state": ""},
     {"id": "button/Reset Wi-Fi", "domain": "button", "name": "Reset Wi-Fi", "state": ""},
@@ -1284,6 +1287,9 @@ class Handler(BaseHTTPRequestHandler):
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
             for e in ENTITIES:
                 e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
+            if "wizmote" in body:
+                wiz = entity("WizMote Status")
+                wiz["state"] = wiz["value"] = body["wizmote"]
             PUSHED.clear()
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":

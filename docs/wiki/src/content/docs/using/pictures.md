@@ -13,7 +13,7 @@ Between games the panel can show your own pictures: a fan photo, a piece of pixe
 
 ## Add a picture
 
-1. Open the [device page](/using/device-page/) and find **Pictures**.
+1. Open the [device page](/using/device-page/) and find **Pictures** on the Customize tab.
 2. Tap **Add a picture** and pick a file.
 
 The panel keeps up to 4 pictures, and they stay through a restart and through updates. Nothing shows until you add one.

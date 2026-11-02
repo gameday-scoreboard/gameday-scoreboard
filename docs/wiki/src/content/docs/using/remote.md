@@ -9,13 +9,13 @@ The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart 
 
 ## Pairing
 
-1. Open the **Remote** card on the device page, or **Remote** in the Game Day app (**Settings > Device**, then **Advanced** on iPhone or **Remote** on Android).
+1. Open **Remote** on the device page's Device tab, or **Remote** in the Game Day app (**Settings > Device**, then **Advanced** on iPhone or **Remote** on Android).
 2. Turn on **Discovery**. The status line says **Discovery on: press any button on the remote**.
 3. Press any button on the WizMote.
 
 The panel pairs with that remote and turns Discovery off by itself. The status line says **Paired:** and the remote's address.
 
-The panel pairs with one remote at a time. Pairing another one replaces the first. **Unpair remote** in the same card forgets the paired remote, and the status says **No remote paired**. Discovery always starts off after the panel restarts, so a remote you haven't paired can't take over the panel.
+The panel pairs with one remote at a time. Pairing another one replaces the first. **Unpair remote** in the same section forgets the paired remote, and the status says **No remote paired**. Discovery always starts off after the panel restarts, so a remote you haven't paired can't take over the panel.
 
 ## The buttons
 
@@ -30,7 +30,7 @@ The panel pairs with one remote at a time. Pairing another one replaces the firs
 
 The brightness buttons move the same **Brightness** setting as the device page and the app.
 
-During the [night schedule](/using/brightness-and-clock/)'s hours the panel stays at its night setting: the brightness buttons change the daytime brightness for the morning, and a screen that's off for the night stays off, whatever you press, until the hours end or a game of yours goes live. To light it up at night, turn **Night schedule** off in the Panel card on the device page.
+During the [night schedule](/using/brightness-and-clock/)'s hours the panel stays at its night setting: the brightness buttons change the daytime brightness for the morning, and a screen that's off for the night stays off, whatever you press, until the hours end or a game of yours goes live. To light it up at night, turn **Night schedule** off under **Screen** on the device page's Display tab.
 
 :::note[Coming in the next release]
 During the night schedule's hours the remote can always light the panel. **ON**, the brighter button and the numbered buttons turn night mode off for the rest of that night, at the panel's normal brightness. **NIGHT** does the same at the night level, about 8% of full, and pressing it again goes back to the schedule. Dimmer does nothing while night mode has the panel dimmed or dark, since it's already as dim as you set it. The next night the schedule runs as usual.
@@ -38,7 +38,7 @@ During the night schedule's hours the remote can always light the panel. **ON**,
 
 ## The numbered buttons
 
-Buttons 1 to 4 are the first four teams in your favorites list, in order. The device page marks them in the Favorites card. Each button also turns on a panel that is off.
+Buttons 1 to 4 are the first four teams in your favorites list, in order. While the remote is paired, the device page marks them **remote button 1** to **4** under **Favorites** on the Teams tab. Each button also turns on a panel that is off.
 
 - In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the panel carries on through your favorites.
 - In **Live games**, a button switches the panel to Favorite teams and jumps to that favorite.
@@ -49,7 +49,7 @@ To change what a button does, reorder your favorites on the device page or in th
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
 
 :::note[Coming in the next release]
-**Set each button yourself.** The **Remote** card on the device page, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:
+**Set each button yourself.** **Remote** on the device page's Device tab, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:
 
 - **Its own favorite**: favorite 1 to 4, whichever team is in that slot. The default.
 - A **favorite team**: that team, wherever it sits in your list.
@@ -57,5 +57,5 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 - **All favorites**: back to every favorite.
 - **Nothing**.
 
-A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and the Remote card says so. Set it to something else, or bring the team or playlist back, and it works again. A settings backup carries the four buttons.
+A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A settings backup carries the four buttons.
 :::

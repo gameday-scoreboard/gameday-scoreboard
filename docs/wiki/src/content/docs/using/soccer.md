@@ -33,7 +33,7 @@ On a single 64x64 panel there is no room for the latest goal row, the red card m
 
 ### Match stats in the ticker
 
-With **Match stats** on in the Ticker card, the ticker lists:
+With **Match stats** on under **Ticker** on the device page's Display tab, the ticker lists:
 
 - the goals for each side with the minute and scorer, like "Goals ARS 58' Guimaraes, 90'+7' Saka (P); SUN 12' Isidor"
 - yellow and red cards for each side, like "2Y 1R"
@@ -43,7 +43,7 @@ With **Match stats** on in the Ticker card, the ticker lists:
 
 ## Goal splashes
 
-A goal fills the screen for 4 seconds with fireworks on black, in the scoring club's color. Yours says "GOAL". The other side's says their abbreviation and "GOAL", like "LEE GOAL", unless you turn off **Opponent scores too** in the Celebrations card.
+A goal fills the screen for 4 seconds with fireworks on black, in the scoring club's color. Yours says "GOAL". The other side's says their abbreviation and "GOAL", like "LEE GOAL", unless you turn off **Opponent scores too** under **Celebrations** on the device page's Display tab.
 
 At full time a win gets a victory splash with fireworks, your abbreviation and "WINS". A draw gets no splash. When a shootout decides a level game, winning the shootout counts as the win.
 

@@ -9,9 +9,9 @@ The panel updates its own firmware over Wi-Fi. There is nothing to plug in. What
 
 ## How the panel checks
 
-The panel checks for a new release every 6 hours, and once a few seconds after it first sets its clock when it starts. **Check for updates** in the Device card on the device page checks right away.
+The panel checks for a new release every 6 hours, and once a few seconds after it first sets its clock when it starts. **Check for updates** on the device page's Device tab checks right away.
 
-The **Firmware** box in the Device card says what it found:
+The **Firmware** line under it says what it found:
 
 | The box says | What it means |
 | --- | --- |
@@ -32,14 +32,14 @@ When a new release is out, the panel says so on its ticker: **Update ready: open
 - It goes away once the update is installed.
 - With **Install updates automatically** on, the panel doesn't show it, since it installs the update overnight by itself.
 
-A release that fixes something broken, like scores that stopped after an ESPN change, is marked important. The ticker then says **Important update ready: open the Game Day app**, and the Firmware box on the device page says **Important update** and the version, with **It fixes something broken, so install it when you can.** The Game Day app says the same on its update badge.
+A release that fixes something broken, like scores that stopped after an ESPN change, is marked important. The ticker then says **Important update ready: open the Game Day app**, and the **Firmware** line on the device page's Device tab says **Important update** and the version, with **It fixes something broken, so install it when you can.** The Game Day app says the same on its update badge.
 
 **Diagnostics** on the device page has a row **Update ready on the ticker** while a release waits: when the ticker last started saying so, or that it hasn't yet since the panel restarted. A panel with **Install updates automatically** on says the ticker doesn't show it.
 :::
 
 ## Installing an update
 
-1. Open the device page and tap **Install** in the Firmware box.
+1. Open the device page and tap **Install** next to **Firmware** on the Device tab.
 2. Confirm. The panel downloads the update and restarts.
 
 While it installs, the box says **Installing** and the version, with **Keep the panel powered. It reboots when done and this page reconnects.** Leave the panel plugged in until it's back. The page reloads by itself once the panel answers on the new version.
@@ -50,7 +50,7 @@ You can install an update at any time, during a game too. Your team, favorites a
 
 ## Install updates automatically
 
-**Install updates automatically** in the Device card is off unless you turn it on. With it on, the panel installs a new release by itself overnight:
+**Install updates automatically** on the Device tab is off unless you turn it on. With it on, the panel installs a new release by itself overnight:
 
 - only between 3 and 5 AM in the panel's timezone
 - each panel at its own minute in the first hour, so a house with several panels doesn't download all at once
@@ -63,7 +63,7 @@ With the switch off, the panel still checks and the device page tells you when a
 
 If a new version crashes as it starts, the panel goes back to the firmware it had. It remembers that version and doesn't install it on its own again, so it never restarts into the same bad update every night. A later release still installs, and **Install** on the device page still tries the one that failed.
 
-The Firmware box says when this happened: **The update to** a version **didn't take and the panel went back to** the version it runs now, with **Install tries it again.**
+The **Firmware** line says when this happened: **The update to** a version **didn't take and the panel went back to** the version it runs now, with **Install tries it again.**
 
 ## Beta versions
 

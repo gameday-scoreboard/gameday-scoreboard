@@ -15,7 +15,7 @@ Nothing plays an effect unless you pick it. Every time the panel starts it shows
 
 ## Turning it on
 
-On the [device page](/using/device-page/), in the Panel card:
+On the [device page](/using/device-page/)'s Home tab, under the board:
 
 1. Set **Showing** to **Effects**. A panel that was switched off lights up for it.
 2. Pick an **Effect** and a **Palette** from the controls that appear under it. **Default** is the palette the effect was designed with.

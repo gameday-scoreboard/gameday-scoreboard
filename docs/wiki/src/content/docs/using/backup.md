@@ -10,14 +10,14 @@ Your teams, favorites, ticker switches and the rest take a while to set up. Save
 ## Save a backup
 
 1. Open the [device page](/using/device-page/).
-2. In the **Setup** card, under **Backup**, tap **Export settings**.
+2. On the Device tab, open **Setup** and, under **Backup**, tap **Export settings**.
 
 Your browser saves a small file named after the panel and the day, like `gameday-2f6a70-settings-2026-10-21.json`. Keep it somewhere you'll find it, like your phone's Files app or a cloud drive.
 
 ## Restore a backup
 
 1. Open the device page of the panel you want to set up.
-2. In the **Setup** card, under **Backup**, tap **Import settings** and pick the file.
+2. On the Device tab, open **Setup** and, under **Backup**, tap **Import settings** and pick the file.
 3. The page asks before it changes anything. Tap **OK**.
 
 The page says **Restored** when the panel has the settings. A file from another panel works the same way; the page tells you which panel it came from before you say yes.

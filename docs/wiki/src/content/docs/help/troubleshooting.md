@@ -65,7 +65,7 @@ Check that other devices on the same network can get online, then restart the ro
 
 ## Half the board is blank, or the picture shows twice
 
-Open the device page and find **Matrix** in the Setup card. Click the picture that matches your panel:
+Open the device page and find **Matrix** on the Device tab. Click the picture that matches your panel:
 
 | Your panel | Pick |
 | --- | --- |
@@ -86,13 +86,13 @@ The panel restarts with the new layout.
 
 ## The panel keeps losing Wi-Fi
 
-Look at **Signal** in the Device card on the device page. It's in dBm, and the closer the number is to zero, the stronger the signal. If it's weak, move the panel closer to the router, or the router closer to the panel.
+Look at **Signal** under **Diagnostics** on the device page's Device tab. It's in dBm, and the closer the number is to zero, the stronger the signal. If it's weak, move the panel closer to the router, or the router closer to the panel.
 
-The Diagnostics section of the Device card counts the panel's Wi-Fi drops and shows the cause of the last one, with a graph of the signal over the last day. Below -75 dBm the page says **Weak signal**.
+**Diagnostics** counts the panel's Wi-Fi drops and shows the cause of the last one, with a graph of the signal over the last day. Below -75 dBm the page says **Weak signal**.
 
 ## I need to reset Wi-Fi
 
-Use **Reset Wi-Fi** in the Device card on the device page, or the button on the controller if you can't reach the page:
+Use **Reset Wi-Fi** in the red box at the bottom of the device page's Device tab, or the button on the controller if you can't reach the page:
 
 1. Hold the button. At about 1.5 seconds the panel shows its address.
 2. At 5 seconds it says **Keep holding to reset Wi-Fi** and a bar fills.
@@ -116,7 +116,7 @@ After a Wi-Fi reset the panel keeps its saved networks and stays in setup for 15
 
 ## Start over from scratch
 
-Use **Factory reset** in the Device card on the device page. It erases everything: Wi-Fi, team, favorites and settings. The panel restarts into setup the way it came out of the box. Do this before you sell or give the panel away.
+Use **Factory reset** in the red box at the bottom of the device page's Device tab. It erases everything: Wi-Fi, team, favorites and settings. The panel restarts into setup the way it came out of the box. Do this before you sell or give the panel away.
 
 A [USB install](/get-started/install-firmware/) erases everything too.
 
@@ -130,7 +130,7 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 ## The panel goes dark or dim at night
 
-Check **Night schedule** in the Panel card on the device page. While it's on, the device page says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
+Check **Night schedule** under **Screen** on the device page's Display tab. While it's on, the Home tab says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
 
 :::note[Coming in the next release]
 To light the panel for the rest of one night, press **Turn on for tonight** next to **Night mode until**, or **ON** on the remote.

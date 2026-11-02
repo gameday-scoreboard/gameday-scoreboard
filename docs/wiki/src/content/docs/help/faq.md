@@ -13,11 +13,11 @@ To keep the board busy, add favorites from leagues that are in season, or switch
 
 ## Does it work during the offseason?
 
-Yes. Between seasons it shows the clock above, with your team's next game when ESPN has one. You can also show the clock page any time: set **Showing** in the Panel card on the device page. See [Brightness and the clock](/using/brightness-and-clock/).
+Yes. Between seasons it shows the clock above, with your team's next game when ESPN has one. You can also show the clock page any time: set **Showing** under the board on the device page's Home tab. See [Brightness and the clock](/using/brightness-and-clock/).
 
 ## Can it turn off at night?
 
-Yes. Turn on **Night schedule** in the Panel card on the device page and pick the hours. It can dim the panel to a night brightness or turn the screen off, and a live game for your team or a favorite keeps it bright until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+Yes. Turn on **Night schedule** under **Screen** on the device page's Display tab and pick the hours. It can dim the panel to a night brightness or turn the screen off, and a live game for your team or a favorite keeps it bright until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
 ## Can I use it outside?
 
@@ -48,7 +48,7 @@ In Live games with nothing on, the panel waits for the next start time instead o
 
 Nothing beyond the panel and its electricity. There's no subscription and no account. The scores come from ESPN's public feed, and the panel reads them itself over your Wi-Fi.
 
-If your internet plan has a data cap, **ESPN data** in the Device card on the device page shows how much the panel has downloaded since it started.
+If your internet plan has a data cap, **ESPN data** under **Diagnostics** on the device page's Device tab shows how much the panel has downloaded since it started.
 
 ## Can I follow more than one team?
 
@@ -56,7 +56,7 @@ Yes. **Favorite teams** holds up to 16 teams from any league, in priority order.
 
 ## Can I use a remote?
 
-Yes, a WiZ WizMote, the small battery remote sold for WiZ smart bulbs. It talks to the panel directly, with no hub. To pair it, open the Remote card on the device page or in the app, turn on **Discovery**, then press any button on the remote.
+Yes, a WiZ WizMote, the small battery remote sold for WiZ smart bulbs. It talks to the panel directly, with no hub. To pair it, open **Remote** on the device page's Device tab or in the app, turn on **Discovery**, then press any button on the remote.
 
 - **ON** and **OFF** turn the panel on and off.
 - The brightness buttons make it brighter or dimmer, and the night button dims it right down.
@@ -66,7 +66,7 @@ See [Remote](/using/remote/).
 
 ## Will it update itself?
 
-It checks for a new release every six hours, and the device page shows an **Install** button when one is out. If you turn on **Install updates automatically** in the Device card, the panel installs a new release on its own between 3 and 5 AM, never during a live game it's showing. That switch is off unless you turn it on.
+It checks for a new release every six hours, and the device page shows an **Install** button when one is out. If you turn on **Install updates automatically** on the device page's Device tab, the panel installs a new release on its own between 3 and 5 AM, never during a live game it's showing. That switch is off unless you turn it on.
 
 Your team and settings stay through an update. See [Updates](/using/updates/).
 

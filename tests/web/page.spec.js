@@ -75,6 +75,16 @@ const staysAs = async (locator, texts, ms) => {
   for (const end = Date.now() + ms; Date.now() < end; await sleep(100))
     expect(await locator.allTextContents()).toEqual(texts);
 };
+// The page is five tabs (Home, Teams, Display, Customize, Device) and only the
+// open one shows, so a test opens a control's tab before it taps or sees it.
+// A reload stays on the tab, which the address keeps.
+const tab = (page, name) => page.locator(`.tabbar [data-tab="${name}"]`).click();
+// The Device tab's rarely used cards are folded shut; this opens one (by id)
+// unless it is open already.
+const unfold = async (page, id) => {
+  const card = page.locator(id);
+  if (!(await card.evaluate((d) => d.open))) await card.locator("summary").click();
+};
 
 const LIVE = {
   s: "IN", ts: 14, os: 10, p: 1, tt: 2, ot: 3, rz: true,
@@ -86,7 +96,6 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   const g = (await (await request.get("/gameday/state")).json()).game;
   await reset(request, { game: { ...g, ...LIVE }, odds: false, status: "DAL 14 PHI 10 | 8:12 2nd" });
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
   await expect(page.locator("#gstate")).toHaveText("LIVE");
   await expect(page.locator("#tA .abbr")).toHaveText("DAL");
   await expect(page.locator("#tA .abbr")).toHaveClass(/poss/);
@@ -100,8 +109,9 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator("#play")).toHaveText("Last play: Prescott pass to Lamb for 12 yards");
   await expect(page.locator("#ticker")).toHaveText("DAL 14 PHI 10 | 8:12 2nd");
 
-  await expect(page.locator("#modes button.on")).toHaveText("Favorite teams");
+  await expect(page.locator("#modes button.on")).toHaveText(/^Favorite teams/);
   await expect(page.locator("#favbar")).toBeVisible();
+  await tab(page, "display");
   await expect(page.locator('.sw[data-set="down"]')).toHaveClass(/\bon\b/);
   await expect(page.locator('.sw[data-set="odds"]')).not.toHaveClass(/\bon\b/);
   // One situation switch per sport, shown for the sports the panel follows:
@@ -207,7 +217,11 @@ test("no game renders the empty board for favorites and for live modes", async (
   await page.reload();
   await expect(page.locator("#msg")).toHaveText("No live games right now");
   await expect(page.locator("#favbar")).toBeVisible();
-  await expect(page.locator("#favName")).toHaveText("No favorites set yet");
+  await expect(page.locator("#favName")).toHaveText("Add a team to get started");
+  // Its button opens the team picker on the Teams tab.
+  await page.locator("#favStart").click();
+  await expect(page).toHaveURL(/#teams$/);
+  await expect(page.getByRole("searchbox", { name: "Search teams" })).toBeFocused();
 });
 
 test("an empty board shows the panel's reason, and the default only when the panel has none", async ({ page, request }) => {
@@ -234,17 +248,20 @@ test("an empty board shows the panel's reason, and the default only when the pan
 test("a device that never answers /gameday/state leaves the page waiting, not broken", async ({ page, request }) => {
   await reset(request, {}, ["state"]);
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
+  // Entity controls still come from the event stream.
+  await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
+  await expect(page.locator("#showCtls .ctl")).toHaveCount(1);
+  await expect(page.locator("#panelCtls .ctl")).toHaveCount(1);
   await expect(page.locator("#gstate")).toHaveText("WAITING");
   await expect(page.locator("#board")).toHaveClass(/empty/);
-  await expect(page.locator("#modes button")).toHaveText(["Favorite teams", "Live games"]);
-  // Entity controls still come from the event stream.
-  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
+  await expect(page.locator("#modes button")).toHaveText([/^Favorite teams/, /^Live games/]);
 });
 
 test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", async ({ page, request }) => {
   await reset(request, {});
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#diagCard");
   await expect(page.locator("#rssi")).toHaveText("-61 dBm");
   await expect(page.locator("#wifiWeak")).toBeHidden();
   // Up an hour: every drop since start is in the day.
@@ -263,6 +280,7 @@ test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", 
     last: "router", last_ago: 7300,
   } });
   await page.reload();
+  await unfold(page, "#diagCard");
   await expect(page.locator("#wifiWeak")).toBeVisible();
   await expect(page.locator("#wifiWeak")).toHaveText(/Move the panel closer to the router/);
   await expect(page.locator("#wifiDrops")).toHaveText("3 in 24 h");
@@ -274,6 +292,7 @@ test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", 
   // No drops, and only a few minutes of history: no line yet.
   await reset(request, { wifi: { rssi: -55, step: 300, hist: [-55], weak: false, drops: 0, day: 0, causes: {} } });
   await page.reload();
+  await unfold(page, "#diagCard");
   await expect(page.locator("#wifiDrops")).toHaveText("None");
   await expect(page.locator("#wifiLast")).toHaveText("");
   await expect(page.locator("#wifiSparkBox")).toBeHidden();
@@ -281,6 +300,7 @@ test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", 
   // Firmware before the history: the rows stay hidden, Signal still comes from the RSSI sensor.
   await reset(request, { wifi: null });
   await page.reload();
+  await unfold(page, "#diagCard");
   await expect(page.locator("#hostname")).toHaveText("gameday-2f6a70.local");
   await expect(page.locator("#wifiDiag")).toBeHidden();
 });
@@ -288,6 +308,7 @@ test("Diagnostics shows the Wi-Fi history, its drops and the weak-signal hint", 
 test("a failed settings post is retried once, then reported", async ({ page, request }) => {
   await reset(request, {}, ["set"]);
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator('.sw[data-set="opp"]')).toHaveClass(/\bon\b/);
   await page.locator('.sw[data-set="opp"]').click();
   await expect(page.locator("#toast")).toHaveText("Device did not respond (HTTP 500). Try again.");
@@ -299,13 +320,15 @@ test("a failed settings post is retried once, then reported", async ({ page, req
 test("mode pills post the mode and swap the settings bar", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  await expect(page.locator("#modes button.on")).toHaveText("Favorite teams");
+  await expect(page.locator("#modes button.on")).toHaveText(/^Favorite teams/);
   await page.locator('#modes button[data-mode="5"]').click();
   await expectSet(request, { mode: "5" });
-  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
   await expect(page.locator("#livebar")).toBeVisible();
   await expect(page.locator("#favbar")).toBeHidden();
 
+  // Switch every is on the Teams tab.
+  await tab(page, "teams");
   await page.locator("#rotate").fill("45");
   await page.locator("#rotate").press("Enter");
   await expectSet(request, { rotate: "30" }); // the page clamps to 1..30
@@ -316,6 +339,7 @@ test("mode pills post the mode and swap the settings bar", async ({ page, reques
   await expectSet(request, { rotate: "8" });
   await expect(page.locator("#rotate")).toHaveValue("8");
 
+  await tab(page, "board");
   await page.locator('#modes button[data-mode="4"]').click();
   await expectSet(request, { mode: "4" });
   await expect(page.locator("#favbar")).toBeVisible();
@@ -335,10 +359,21 @@ test("favorite teams mode shows each favorite and posts its settings", async ({ 
   });
   await page.goto("/");
   await expect(page.locator("#favbar")).toBeVisible();
-  await expect(page.locator("#favName")).toHaveText("Locked on Houston Texans");
+  await expect(page.locator("#favName")).toHaveText("Houston Texans are on");
+  await expect(page.locator("#favStart")).toBeHidden();
   await expect(page.locator("#upnextList .un.fav .n")).toHaveText(["DAL vs PHI", "HOU vs JAX"]);
   await expect(page.locator("#upnextList .un.shown .w")).toHaveText("14 - 10 · 8:12 - 2nd");
 
+  // Locked also covers the lead-in before kickoff and the stretch after the final.
+  const g = (await deviceState(request)).next;
+  await reset(request, { mode: 4, shown: 1, locked: true, next: g });
+  await page.reload();
+  await expect(page.locator("#favName")).toHaveText("Dallas Cowboys play soon");
+  await reset(request, { mode: 4, shown: 2, locked: true, next: [g[0], { ...g[1], s: "POST", done: true }] });
+  await page.reload();
+  await expect(page.locator("#favName")).toHaveText("Houston Texans just finished");
+
+  await tab(page, "teams");
   await page.locator("#lockon").fill("200");
   await page.locator("#lockon").press("Enter");
   await expectSet(request, { lockon: "120" });
@@ -356,6 +391,7 @@ test("favorite teams mode shows each favorite and posts its settings", async ({ 
 test("the team picker searches the team list and adds a favorite", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect(page.locator("#modal")).toHaveClass(/open/);
   // On the first favorite's league
@@ -383,6 +419,7 @@ test("the picker opens on today's live games and adds a side", async ({ page, re
   );
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect(page.locator(".tabs button.on")).toHaveText("On now");
   await expect(page.locator("#tiles .gh")).toHaveText(["Live now"]);
@@ -407,6 +444,7 @@ test("an On now search that matches no game finds the team instead", async ({ pa
   );
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect(page.locator(".tabs button.on")).toHaveText("On now");
   // The Stars aren't playing today: the teams that match, with their league, under a Teams heading.
@@ -447,6 +485,7 @@ test("the On now tab asks ESPN for every college game, not the Top 25", async ({
   }
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect(page.locator(".tabs button.on")).toHaveText("On now");
   await expect(page.locator("#tiles .side .n")).toHaveText(["Abilene Chrstn", "Akron"]);
@@ -469,6 +508,7 @@ test("the On now tab keeps a late game on today's list after midnight Eastern, a
   }
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect.poll(() => asked.nba).toBe("20261022");
   await expect.poll(() => asked.nfl).toBe("20261022");
@@ -477,13 +517,17 @@ test("the On now tab keeps a late game on today's list after midnight Eastern, a
 test("ticker, celebration and startup switches post 0 and 1", async ({ page, request }) => {
   await reset(request, { play: false });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator('.sw[data-set="down"]')).toHaveClass(/\bon\b/);
   await page.locator('.sw[data-set="down"]').click();
   await expectSet(request, { down: "0" });
   await page.locator('.sw[data-set="play"]').click();
   await expectSet(request, { play: "1" });
+  await tab(page, "device");
+  await unfold(page, "#setupCard");
   await page.locator('.sw[data-set="bootaddr"]').click();
   await expectSet(request, { bootaddr: "0" });
+  await tab(page, "teams");
   await page.locator('.sw[data-set="today"]').click();
   await expectSet(request, { today: "1" });
   await expect(page.locator('.sw[data-set="jump"]')).not.toHaveClass(/\bon\b/);
@@ -499,19 +543,21 @@ test("ticker, celebration and startup switches post 0 and 1", async ({ page, req
 test("Showing Effects reveals the effect controls, and they post", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  // Showing and the effect controls are on the Home tab, under the panel's power and brightness.
   const showing = page.getByRole("combobox", { name: "Showing" });
   await expect(showing).toHaveValue("Scoreboard");
   await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects"]);
   await expect(page.locator("#fxCtls")).toBeHidden();
   // The Panel card's own controls are untouched by the hidden effect rows.
-  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
+  await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
+  await expect(page.locator("#showCtls .ctl")).toHaveCount(1);
 
   // Picking the Effects page: the mock applies it and pushes the new value on
   // the event stream, which is what reveals the controls.
   await showing.selectOption("Effects");
   await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/select/Select%20Page/set", q: { option: "Effects" } });
   await expect(page.locator("#fxCtls")).toBeVisible();
-  await expect(page.locator("#fxCtls p.hint")).toContainText("fills the panel until you pick another page");
+  await expect(page.locator("#fxCtls p.hint")).toContainText("stays on until you pick another page");
   const effect = page.getByRole("combobox", { name: "Effect", exact: true });
   const palette = page.getByRole("combobox", { name: "Palette" });
   const speed = page.getByRole("slider", { name: "Speed", exact: true });
@@ -538,34 +584,45 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   // Back to the scoreboard hides them again.
   await showing.selectOption("Scoreboard");
   await expect(page.locator("#fxCtls")).toBeHidden();
-  await expect(page.locator("#panelCtls .ctl")).toHaveCount(4);
+  await expect(page.locator("#showCtls .ctl")).toHaveCount(1);
 });
 
 test("a screen reader gets each control's name, role and state", async ({ page, request }) => {
   await reset(request, { play: false });
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/on/);
-  await expect(page.locator("#conn")).toHaveAttribute("aria-live", "polite");
   await expect(page.locator("#toast")).toHaveAttribute("role", "status");
 
+  // The section tabs: Home open, the arrow keys move between them.
+  const sections = page.getByRole("tablist", { name: "Sections" });
+  await expect(sections.getByRole("tab", { selected: true })).toHaveText("Home");
+  await sections.getByRole("tab", { name: "Home" }).press("ArrowRight");
+  await expect(sections.getByRole("tab", { selected: true })).toHaveText("Teams");
+  await expect(page.getByRole("tabpanel", { name: "Teams" })).toBeVisible();
+  await expect(page).toHaveURL(/#teams$/);
+
+  await tab(page, "display");
   await expect(page.getByRole("switch", { name: "Down and distance" })).toBeChecked();
   await expect(page.getByRole("switch", { name: "Last play" })).not.toBeChecked();
   await page.getByRole("switch", { name: "Last play" }).click();
   await expectSet(request, { play: "1" });
   await expect(page.getByRole("switch", { name: "Last play" })).toBeChecked();
   // The entity controls built from the event stream
+  await expect(page.getByRole("slider", { name: "Ticker speed" })).toHaveValue("5");
+  await tab(page, "board");
+  await expect(page.getByRole("combobox", { name: "Showing" })).toHaveValue("Scoreboard");
   await expect(page.getByRole("switch", { name: "Panel on" })).toBeChecked();
   await expect(page.getByRole("slider", { name: "Brightness" })).toHaveValue("128");
-  await expect(page.getByRole("slider", { name: "Ticker speed" })).toHaveValue("5");
-  await expect(page.getByRole("combobox", { name: "Showing" })).toHaveValue("Scoreboard");
 
   const modes = page.getByRole("group", { name: "Mode" });
-  await expect(modes.getByRole("button", { pressed: true })).toHaveText("Favorite teams");
-  await expect(modes.getByRole("button", { pressed: false })).toHaveText(["Live games"]);
+  await expect(modes.getByRole("button", { pressed: true })).toHaveText(/^Favorite teams/);
+  await expect(modes.getByRole("button", { pressed: false })).toHaveText([/^Live games/]);
+  await tab(page, "device");
+  await unfold(page, "#matrixCard");
   await expect(page.getByRole("button", { name: /^One 128x64 panel/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "One 64x64 panel" })).toHaveAttribute("aria-pressed", "false");
 
   // The picker's league tabs: one selected, in the Tab order, the arrow keys move between them.
+  await tab(page, "teams");
   await page.getByRole("button", { name: "Add a favorite" }).click();
   await expect(page.getByRole("searchbox", { name: "Search teams" })).toBeFocused();
   const tabs = page.getByRole("tablist", { name: "Leagues" });
@@ -584,7 +641,8 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
 
   await reset(request, { mode: 5, live: ["mlb", "nhl"], live_auto: false });
   await page.reload();
-  await expect(modes.getByRole("button", { pressed: true })).toHaveText("Live games");
+  await tab(page, "board");
+  await expect(modes.getByRole("button", { pressed: true })).toHaveText(/^Live games/);
   const chips = page.getByRole("group", { name: "Leagues" });
   await expect(chips.getByRole("button", { pressed: true })).toHaveText(["MLB", "NHL"]);
   await chips.getByRole("button", { name: "NBA", exact: true }).click();
@@ -595,6 +653,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
 test("bar build: no switch, a bar beta note and an email with the panel's name", async ({ page, request }) => {
   await reset(request, { autoupd: null, bar: { report: "support@gameday-scoreboard.com" } });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#autoupdRow")).toBeHidden();
   await expect(page.locator("#barRow")).toBeVisible();
@@ -604,6 +663,7 @@ test("bar build: no switch, a bar beta note and an email with the panel's name",
 
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#barRow")).toBeHidden();
 });
@@ -611,8 +671,17 @@ test("bar build: no switch, a bar beta note and an email with the panel's name",
 test("favorites post the whole list in order on add, move and remove", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   const rows = page.locator("#favCtls .ctl.fav");
   await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0).locator("small")).toHaveText("NFL · remote button 1");
+
+  // Without a paired remote the rows leave the buttons out.
+  await request.post("/_reset", { data: { wizmote: "No remote paired" } });
+  await page.reload();
+  await expect(rows.nth(0).locator("small")).toHaveText("NFL");
+  await reset(request);
+  await page.reload();
   await expect(rows.nth(0).locator("small")).toHaveText("NFL · remote button 1");
 
   await page.locator("#favAdd").click();
@@ -637,6 +706,7 @@ test("favorites post the whole list in order on add, move and remove", async ({ 
 test("playlists post every playlist on new, teams, rename, move and remove", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
   await page.locator("#listAdd").click();
   await expectSet(request, { lists: "Playlist 1=" });
@@ -670,6 +740,7 @@ test("the playlists card has no One per sport button", async ({ page, request })
     ],
   });
   await page.goto("/");
+  await tab(page, "teams");
   await expect(page.locator("#listAdd")).toBeVisible();
   await expect(page.locator("#listActions button")).toHaveCount(1);
   await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
@@ -678,6 +749,7 @@ test("the playlists card has no One per sport button", async ({ page, request })
 test("a playlist's options post as tokens: days, hours, only this list, only today", async ({ page, request }) => {
   await reset(request, { lists: [{ n: "Sundays", f: [0] }] });
   await page.goto("/");
+  await tab(page, "teams");
   const box = page.locator("#listCtls .plist").nth(0);
   const days = box.locator(".pdays .chip");
   await expect(days).toHaveText(["S", "M", "T", "W", "T", "F", "S"]);
@@ -717,7 +789,8 @@ test("a playlist's options survive a rename and a reorder, and the bar says when
     lists: [{ n: "A", f: [0] }, { n: "Sundays", f: [1], days: "0", start: "11:00", end: "23:00", only: true, today: false }],
   });
   await page.goto("/");
-  await expect(page.locator("#favName")).toHaveText("Cycling through Sundays · on its schedule");
+  await tab(page, "teams");
+  await expect(page.locator("#favName")).toHaveText("Playing your Sundays playlist, on its schedule");
   const box = page.locator("#listCtls .plist");
   await expect(box.nth(1).locator(".pdays .chip.on")).toHaveText(["S"]);
   await expect(box.nth(1).getByLabel("Only today's games Sundays")).toHaveValue("0");
@@ -737,6 +810,8 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
     lists: [{ n: "Sundays", f: [0] }],
   });
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
@@ -760,6 +835,7 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
   await btns.nth(3).locator("select").selectOption("none");
   await expectSet(request, { remote4: "none" });
   // Making another playlist leaves the buttons as they are.
+  await tab(page, "teams");
   await page.locator("#listAdd").click();
   await expectSet(request, { lists: "Sundays=nfl:6;Playlist 2=" });
   const st = await deviceState(request);
@@ -774,6 +850,8 @@ test("a remote button whose target is gone falls back to its own favorite and th
     remote: [{ v: "team:nba:6" }, { v: "list:Weekdays" }, { v: "sport:hockey" }, { v: "fav" }],
   });
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns.nth(0).locator("label small")).toHaveText("That team left your favorites, so it is favorite 1: dallas cowboys for now.");
   await expect(btns.nth(1).locator("label small")).toHaveText("That playlist is gone, so it is favorite 2: houston texans for now.");
@@ -798,6 +876,7 @@ test("all 16 playlists with every favorite save", async ({ page, request }) => {
   const keys = favs.map((f) => "nfl:" + f.id).join(",");
   await reset(request, { favs, lists: Array.from({ length: 15 }, (_, i) => ({ n: "Playlist " + (i + 1), f: all })) });
   await page.goto("/");
+  await tab(page, "teams");
   await expect(page.locator("#listCtls .plist")).toHaveCount(15);
   await page.locator("#listAdd").click();
   const want = Array.from({ length: 15 }, (_, i) => "Playlist " + (i + 1) + "=" + keys).join(";") + ";Playlist 16=";
@@ -810,6 +889,7 @@ test("all 16 playlists with every favorite save", async ({ page, request }) => {
 test("playlists wait for favorites", async ({ page, request }) => {
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
+  await tab(page, "teams");
   await expect(page.locator("#listCtls")).toHaveText("Add favorites first, then group them here.");
   await expect(page.locator("#listActions")).toBeHidden();
 });
@@ -828,11 +908,11 @@ test("Favorite teams plays a playlist: the picker posts it, the bar names it, th
   await page.goto("/");
   await expect(page.locator("#favListRow")).toBeVisible();
   await expect(page.locator("#favList option")).toHaveText(["All favorites", "Texans"]);
-  await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
+  await expect(page.locator("#favName")).toHaveText("None of your teams are playing. Showing their next games.");
   await expect(page.locator("#upnextList .un.out")).toHaveCount(0);
   await page.locator("#favList").selectOption("1");
   await expectSet(request, { mode: "4", list: "1", sport: "none" });
-  await expect(page.locator("#favName")).toHaveText("Cycling through Texans");
+  await expect(page.locator("#favName")).toHaveText("Playing your Texans playlist");
   await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI"]);
 });
 
@@ -855,14 +935,14 @@ test("Playing has a row per sport after All favorites, then the owner's playlist
   await page.locator("#favList").selectOption("s:basketball");
   await expectSet(request, { mode: "4", list: "0", sport: "basketball" });
   await expect(page.locator("#favList")).toHaveValue("s:basketball");
-  await expect(page.locator("#favName")).toHaveText("Cycling through your basketball favorites");
+  await expect(page.locator("#favName")).toHaveText("None of your basketball teams are playing. Showing their next games.");
   await expect(page.locator("#upnextList .un.out .n")).toHaveText(["DAL vs PHI", "TEX vs ALA"]);
   expect((await deviceState(request)).sport).toBe("basketball");
   // The sport rows aren't playlists: nothing in the Playlists card for them.
   await expect(page.locator("#listCtls .plist")).toHaveCount(1);
   await page.locator("#favList").selectOption("0");
   await expectSet(request, { mode: "4", list: "0", sport: "none" });
-  await expect(page.locator("#favName")).toHaveText("Cycling through your favorites");
+  await expect(page.locator("#favName")).toHaveText("None of your teams are playing. Showing their next games.");
   expect((await deviceState(request)).sport).toBe("");
 });
 
@@ -896,6 +976,7 @@ test("the playing picker is hidden without playlists", async ({ page, request })
 test("the favorites picker stays open: checks, a tap adds or takes out, a count, Done", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await expect(page.locator("#favCtls .ctl.fav")).toHaveCount(3);
   await page.locator("#favAdd").click();
   await expect(page.locator("#modal")).toHaveClass(/open/);
@@ -932,6 +1013,7 @@ test("the favorites picker says when the list is full", async ({ page, request }
   const mlb = (n) => Array.from({ length: n }, (_, i) => ({ l: "mlb", id: i + 1 }));
   await reset(request, { favs: mlb(15) });
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect(page.locator("#favCount")).toHaveText("15 of 16 favorites");
   await page.locator(".tabs button", { hasText: "NFL" }).click();
@@ -948,6 +1030,7 @@ test("the favorites list stops offering Add a favorite at the panel's limit", as
   const mlb = (n) => Array.from({ length: n }, (_, i) => ({ l: "mlb", id: i + 1 }));
   await reset(request, { favs: mlb(15) });
   await page.goto("/");
+  await tab(page, "teams");
   await expect(page.locator("#favCtls .ctl.fav")).toHaveCount(15);
   await expect(page.locator("#favAdd")).toBeVisible();
 
@@ -963,7 +1046,7 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   await reset(request, { mode: 5, live: ["mlb", "nhl"], live_auto: false });
   await page.goto("/");
   await expect(page.locator("#livebar")).toBeVisible();
-  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
   await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NHL"]);
   await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
@@ -982,7 +1065,7 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   // Mode 2 (live college football, from before) reads as Live games with NCAAF on.
   await reset(request, { mode: 2 });
   await page.reload();
-  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["NCAAF"]);
   await page.locator("#liveChips .chip", { hasText: /^NFL$/ }).click();
   await expectSet(request, { live: "ncaa,nfl", mode: "5" });
@@ -1037,10 +1120,11 @@ test("chip taps faster than the page re-reads each save the list on screen", asy
 test("Live games bar says when the leagues are automatic, and goes back to automatic", async ({ page, request }) => {
   const lg = page.locator("#liveLg");
   const back = page.locator("#liveAuto");
+  const AUTO = "Leagues follow your favorites. Tap one to choose by hand.";
   // Nothing picked: the leagues of the team and favorites (NFL and NCAAF in the mock), drawn as a suggestion.
   await reset(request, { mode: 5 });
   await page.goto("/");
-  await expect(lg).toHaveText("Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues follow your favorites. Tap a league to choose by hand:");
+  await expect(lg).toHaveText(AUTO);
   await expect(page.locator("#liveChips")).toHaveClass(/auto/);
   await expect(chipsOn(page)).toHaveText(["NFL", "NCAAF"]);
   await expect(back).toBeHidden();
@@ -1049,19 +1133,19 @@ test("Live games bar says when the leagues are automatic, and goes back to autom
   // turns manual before the device answers.
   await slowReads(page, 1000);
   await chip(page, "MLB").click();
-  await expect(lg).toHaveText("Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues:");
+  await expect(lg).toBeHidden();
   await expect(page.locator("#liveChips")).not.toHaveClass(/auto/);
   await expect(back).toBeVisible();
   await expectSet(request, { live: "nfl,ncaa,mlb" });
-  await staysAs(lg, ["Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues:"], 1500);
+  await staysAs(lg, [""], 1500);
   expect((await deviceState(request)).live_auto).toBe(false);
 
   // Back to automatic posts an empty list and the device works the leagues out again.
   await back.click();
   await expectSet(request, { live: "" });
-  await expect(lg).toContainText("Leagues follow your favorites.");
+  await expect(lg).toHaveText(AUTO);
   await expect(back).toBeHidden();
-  await staysAs(lg, ["Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues follow your favorites. Tap a league to choose by hand:"], 1500);
+  await staysAs(lg, [AUTO], 1500);
   await expect(chipsOn(page)).toHaveText(["NFL", "NCAAF"]);
   const st = await deviceState(request);
   expect([st.live_auto, st.live]).toEqual([true, ["nfl", "ncaa"]]);
@@ -1070,31 +1154,34 @@ test("Live games bar says when the leagues are automatic, and goes back to autom
   // An old football live mode has fixed leagues: no automatic wording, no link.
   await reset(request, { mode: 2 });
   await page.reload();
-  await expect(lg).toHaveText("Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. Leagues:");
+  await expect(lg).toBeHidden();
   await expect(back).toBeHidden();
 });
 
 test("Pick the best game switch posts and changes what the Live games bar says", async ({ page, request }) => {
   const name = page.locator("#liveName");
-  const sw = page.locator('#livebar .sw[data-set="best"]');
+  const sw = page.locator('.sw[data-set="best"]');
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
   await page.goto("/");
+  // The switch is in the Teams tab's Live games card; the bar stays on the Home tab.
+  await tab(page, "teams");
   await expect(sw).toHaveAttribute("aria-checked", "true");
-  await expect(name).toHaveText("Following the best game on");
+  await expect(name).toHaveText("Showing the best game on");
   await sw.click();
   await expectSet(request, { best: "0" });
   await expect(sw).toHaveAttribute("aria-checked", "false");
-  await expect(name).toHaveText("Following a random game in progress");
-  await expect(page.locator("#liveLg")).toHaveText("Moves on when it ends, or after Switch every. Leagues:");
+  await expect(name).toHaveText("Showing a game in progress. Picks another when it ends.");
+  await expect(page.locator("#liveLg")).toBeHidden();
   expect((await deviceState(request)).best).toBe(false);
 });
 
 test("Favorites take over switch posts, shows the two-favorites rule, and the bar names the favorite", async ({ page, request }) => {
   const name = page.locator("#liveName");
-  const sw = page.locator('#livebar .sw[data-set="favtake"]');
+  const sw = page.locator('.sw[data-set="favtake"]');
   const row = page.locator("#liveCollideRow");
   await reset(request, { mode: 5, live: ["nfl"], live_auto: false });
   await page.goto("/");
+  await tab(page, "teams");
   await expect(sw).toHaveAttribute("aria-checked", "false");
   await expect(row).toBeHidden();
   await sw.click();
@@ -1110,25 +1197,25 @@ test("Favorites take over switch posts, shows the two-favorites rule, and the ba
   await reset(request, { mode: 5, live: ["nfl"], live_auto: false, favtake: true,
     favlock: { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" } });
   await page.reload();
-  await expect(name).toHaveText("Locked on Dallas Cowboys");
-  await expect(page.locator("#liveLg")).toHaveText("A favorite is playing, so the panel stays on its game until it ends. Leagues:");
+  await expect(name).toHaveText("Dallas Cowboys are on, so the panel stays on the game until it ends");
+  await expect(page.locator("#liveLg")).toBeHidden();
 });
 
 test("Live games bar says when nothing is live and the panel shows your first favorite or finals", async ({ page, request }) => {
   const name = page.locator("#liveName");
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false });
   await page.goto("/");
-  await expect(name).toHaveText("Following the best game on");
+  await expect(name).toHaveText("Showing the best game on");
 
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false, fallback: true });
   await page.reload();
-  await expect(name).toHaveText("No live game right now, showing your first favorite until one starts");
-  await expect(page.locator("#liveLg")).toHaveText("Leagues:");
+  await expect(name).toHaveText("Nothing live right now. Showing your team until a game starts.");
+  await expect(page.locator("#liveLg")).toBeHidden();
 
   await reset(request, { mode: 5, favs: [{}, {}, {}, {}], recap: true, game: { s: "POST", l: "mlb" } });
   await page.reload();
-  await expect(name).toHaveText("No live game right now, showing recent finals");
-  await expect(page.locator("#liveLg")).toHaveText("Leagues follow your favorites. Tap a league to choose by hand:");
+  await expect(name).toHaveText("Nothing live right now. Showing recent finals.");
+  await expect(page.locator("#liveLg")).toHaveText("Leagues follow your favorites. Tap one to choose by hand.");
 });
 
 test("a slow settings post isn't overtaken by the next tap's", async ({ page, request }) => {
@@ -1158,7 +1245,7 @@ test("switching modes away and back before the page re-reads saves the last mode
   await page.locator('#modes button[data-mode="5"]').click();
   expect(await page.locator("#livebar").isVisible()).toBe(true);
   await expect.poll(() => sets(request)).toEqual([{ mode: "4" }, { mode: "5" }, { mode: "4" }, { mode: "5" }]);
-  await staysAs(page.locator("#modes button.on"), ["Live games"], 2500);
+  await staysAs(page.locator("#modes button.on"), ["Live gamesGames on right now, in leagues you pick"], 2500);
   await expect(chipsOn(page)).toHaveText(["MLB"]);
   expect((await deviceState(request)).mode).toBe(5);
 });
@@ -1170,13 +1257,14 @@ test("a chip tap the panel never got goes back to what the panel has", async ({ 
   await chip(page, "MLB").click();
   await expect(page.locator("#toast")).toHaveText("Device did not respond (HTTP 500). Try again.");
   await expect(chipsOn(page)).toHaveText(["NCAAF"]);
-  await expect(page.locator("#modes button.on")).toHaveText("Live games");
+  await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
   expect((await deviceState(request)).mode).toBe(2);
 });
 
 test("install updates automatically: off by default, posts 0 and 1, hidden when the firmware has no such setting", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
   const sw = page.locator('.sw[data-set="autoupd"]');
   await expect(page.locator("#autoupdRow")).toBeVisible();
   await expect(sw).not.toHaveClass(/\bon\b/);
@@ -1188,68 +1276,96 @@ test("install updates automatically: off by default, posts 0 and 1, hidden when 
 
   await reset(request, { autoupd: null });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#autoupdRow")).toBeHidden();
 });
 
-test("between games: a row per card in the panel's order, news and weather off to start, each posting cards=", async ({ page, request }) => {
+test("between games: a row per card that is on, in the panel's order, the rest behind Add a card, each posting cards=", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#cardsOld")).toBeHidden();
-  const rows = page.locator("#cardList .ctl");
   const want = (await deviceState(request)).cards;
-  await expect(rows).toHaveCount(want.length);
-  await expect(rows.locator("label")).toContainText(want.map((c) => c.name));
-  const sw = (id) => page.locator(`#cardList [data-card="${id}"] .sw`);
   // Every card on to start but news and weather (on once a town is set).
   expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather"]);
-  for (const c of want) {
-    if (c.on) await expect(sw(c.id)).toHaveClass(/\bon\b/);
-    else await expect(sw(c.id)).not.toHaveClass(/\bon\b/);
-  }
+  // The cards you make are switched on the Customize tab, so the list only names them.
+  const own = ["custom", "message", "picture"];
+  const shown = want.filter((c) => c.on && !own.includes(c.id));
+  const rows = page.locator("#cardList .xrow");
+  await expect(rows).toHaveCount(shown.length);
+  await expect(rows.locator(".xname > span")).toHaveText(shown.map((c) => c.name));
+  await expect(page.locator("#cardList .also")).toContainText("the date countdown, the message card and your pictures");
+  const row = (id) => page.locator(`#cardList .xrow[data-card="${id}"]`);
 
-  await sw("clock").click();
+  // A row opens to say what its card shows.
+  await expect(row("clock").locator(".xbody")).toBeHidden();
+  await row("clock").locator(".xbtn").click();
+  await expect(row("clock").locator(".xbody")).toBeVisible();
+  await expect(row("clock").locator(".xbtn")).toHaveAttribute("aria-expanded", "true");
+
+  await row("clock").locator(".lrm").click();
   await expectSet(request, { cards: "clock:0" });
-  await expect(sw("clock")).not.toHaveClass(/\bon\b/);
+  await expect(row("clock")).toHaveCount(0);
   await expect.poll(async () => (await deviceState(request)).cards.find((c) => c.id === "clock").on).toBe(false);
-  await sw("news").click();
+
+  // The cards that are off wait in the sheet, a row each with its Add button.
+  const sheet = page.locator(".lsheet");
+  await expect(page.locator("#cardAdd")).toHaveText("Add a card (3 more)");
+  await page.locator("#cardAdd").click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather"]);
+  await sheet.getByRole("button", { name: "Add News headlines" }).click();
   await expectSet(request, { cards: "news:1" });
   await expect.poll(async () => (await deviceState(request)).news).toBe(true);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather"]);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(row("news")).toHaveCount(1);
+
   // The countdown's row is the countdown switch.
-  await sw("countdown").click();
+  await row("countdown").locator(".lrm").click();
   await expectSet(request, { cards: "countdown:0" });
   await expect.poll(async () => (await deviceState(request)).countdown).toBe(false);
-  await expect(sw("countdown")).not.toHaveClass(/\bon\b/);
-  await sw("clock").click();
+  await expect(row("countdown")).toHaveCount(0);
+  await page.locator("#cardAdd").click();
+  await sheet.getByRole("button", { name: "Add Clock" }).click();
   await expectSet(request, { cards: "clock:1" });
-  await expect(sw("clock")).toHaveClass(/\bon\b/);
+  await expect(row("clock")).toHaveCount(1);
 });
 
-test("between games: a card with nothing to show is greyed with what it needs, and its switch still works", async ({ page, request }) => {
+test("between games: a card with nothing to show says what it needs, and its switch still works", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  const row = (id) => page.locator(`#cardList [data-card="${id}"]`);
-  // No day picked and no message yet.
-  await expect(row("custom")).toHaveClass(/\bwaiting\b/);
-  await expect(row("custom").locator(".card-hint")).toHaveText("Pick its day below first");
-  await expect(row("message")).toHaveClass(/\bwaiting\b/);
-  await expect(row("message").locator(".card-hint")).toBeVisible();
-  await expect(row("picture")).toHaveClass(/\bwaiting\b/);
+  await tab(page, "display");
+  const row = (id) => page.locator(`#cardList .xrow[data-card="${id}"]`);
+  const own = (id) => page.locator(`.cardsw[data-card="${id}"]`);
+  await expect(row("next")).toBeVisible();
   await expect(row("next")).not.toHaveClass(/\bwaiting\b/);
   await expect(row("next").locator(".card-hint")).toBeHidden();
-  await row("message").locator(".sw").click();
+
+  // The cards you make are switched where they are made, on the Customize tab.
+  await page.locator("#cardList .also").getByRole("button", { name: "Change them under Customize" }).click();
+  await expect(page.locator("#pane-customize")).toBeVisible();
+  // No day picked, no message and no picture yet.
+  await expect(own("custom").locator(".card-hint")).toHaveText("Pick its day first");
+  await expect(own("message").locator(".card-hint")).toHaveText("Add text or a list first");
+  await expect(own("picture").locator(".card-hint")).toHaveText("Add a picture first");
+  await expect(own("message").locator(".sw")).toHaveAttribute("aria-checked", "true");
+  await own("message").locator(".sw").click();
   await expectSet(request, { cards: "message:0" });
+  await expect(own("message").locator(".sw")).toHaveAttribute("aria-checked", "false");
 
   await page.locator("#cddate").fill("2026-12-25");
   await page.locator("#cddate").dispatchEvent("change");
   await expectSet(request, { cddate: "2026-12-25" });
-  await expect(row("custom")).not.toHaveClass(/\bwaiting\b/);
-  await expect(row("custom").locator(".card-hint")).toBeHidden();
+  await expect(own("custom").locator(".card-hint")).toBeHidden();
 
   // Top 25 waits for a college team.
   await reset(request, { favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}] });
   await page.goto("/");
+  await tab(page, "display");
   await expect(row("top25")).toHaveClass(/\bwaiting\b/);
   await expect(row("top25").locator(".card-hint")).toContainText("college");
 });
@@ -1257,6 +1373,7 @@ test("between games: a card with nothing to show is greyed with what it needs, a
 test("between games: the custom countdown posts its name and day", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#cdClear")).toBeHidden();
   await page.locator("#cdname").fill("Christmas");
   await page.locator("#cdname").press("Tab");
@@ -1276,8 +1393,10 @@ test("between games: the custom countdown posts its name and day", async ({ page
 test("between games: firmware from before the list has a switch per card, each posting its own key", async ({ page, request }) => {
   await reset(request, { cards: null });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#cardsOld")).toBeVisible();
-  await expect(page.locator("#cardList .ctl")).toHaveCount(0);
+  await expect(page.locator("#cardList .xrow")).toHaveCount(0);
+  await expect(page.locator("#cardAdd")).toHaveCount(0);
   await expect(page.locator("#wxOnRow")).toBeVisible();
   for (const [key, on] of [["countdown", true], ["gameleaders", true], ["top25", true], ["news", false], ["wxon", false]]) {
     const sw = page.locator(`.sw[data-set="${key}"]`);
@@ -1287,10 +1406,13 @@ test("between games: firmware from before the list has a switch per card, each p
     await expectSet(request, { [key]: on ? "0" : "1" });
     await expect.poll(async () => (await deviceState(request))[key]).toBe(!on);
   }
+  // Nor the Customize cards' own switches.
+  await expect(page.locator(".cardsw:not([hidden])")).toHaveCount(0);
 
   // And firmware from before each card leaves its row out.
   await reset(request, { cards: null, gameleaders: null, top25: null, news: null });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#glRow")).toBeHidden();
@@ -1299,25 +1421,38 @@ test("between games: firmware from before the list has a switch per card, each p
   // Before the countdown card there was no Between games card at all.
   await reset(request, { cards: null, countdown: null, cdname: null, cddate: null });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#cdCard")).toBeHidden();
 });
 
-test("between games: a town is looked up, turns the weather card on, and the page says what was read", async ({ page, request }) => {
+test("between games: weather is added from the sheet, a town is looked up, and the page says what was read", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  // The switch is the list's Weather row; the block's own row is for firmware without the list.
-  const sw = page.locator('#cardList [data-card="weather"] .sw');
-  await expect(page.locator("#wxBox")).toBeVisible();
+  await tab(page, "display");
+  const row = page.locator('#cardList .xrow[data-card="weather"]');
+  // Off to start: the town box waits out of sight until the card is added.
+  await expect(row).toHaveCount(0);
+  await expect(page.locator("#wxBox")).toBeHidden();
+  await page.locator("#cardAdd").click();
+  await page.locator(".lsheet").getByRole("button", { name: "Add Weather" }).click();
+  await expectSet(request, { cards: "weather:1" });
+  await page.locator(".lsheet").getByRole("button", { name: "Done" }).click();
+  // On with no town yet: greyed with what it needs, and the town box opens inside its row.
+  await expect(row).toHaveClass(/\bwaiting\b/);
+  await expect(row.locator(".card-hint")).toHaveText("Set your town first");
+  await row.locator(".xbtn").click();
+  await expect(row.locator("#wxBox")).toBeVisible();
+  // The block's own switch is for firmware without the list.
   await expect(page.locator("#wxOnRow")).toBeHidden();
-  await expect(page.locator('#cardList [data-card="weather"]')).toHaveClass(/\bwaiting\b/);
-  await expect(sw).not.toHaveClass(/\bon\b/);
   await expect(page.locator("#wxPlace")).toBeHidden();
   await page.locator("#town").fill("75019");
   await page.locator("#townGo").click();
   await expectSet(request, { town: "75019" });
   await expect(page.locator("#wxPlace")).toHaveText("Found: Coppell, Texas");
   await expect(page.locator("#wxRead")).toHaveText("Read a minute ago: 71°F, cloudy, high 81, low 61.");
+  await expect(row).not.toHaveClass(/\bwaiting\b/);
+  await expect(row.locator("#wxBox")).toBeVisible();
   // Degrees: Auto says which it is showing; Celsius turns the forecast over.
   await expect(page.locator("#wxUnitRow")).toBeVisible();
   await expect(page.locator("#wxUnit")).toHaveValue("0");
@@ -1327,12 +1462,6 @@ test("between games: a town is looked up, turns the weather card on, and the pag
   await expect(page.locator("#wxRead")).toHaveText("Read a minute ago: 22°C, cloudy, high 27, low 16.");
   await page.locator("#wxUnit").selectOption("1");
   await expectSet(request, { wxunit: "1" });
-  await expect(sw).toHaveClass(/\bon\b/);
-  await expect(page.locator('#cardList [data-card="weather"]')).not.toHaveClass(/\bwaiting\b/);
-  await sw.click();
-  await expectSet(request, { cards: "weather:0" });
-  await expect(sw).not.toHaveClass(/\bon\b/);
-  await expect.poll(async () => (await deviceState(request)).wxon).toBe(false);
 
   // A town Open-Meteo doesn't know; Enter posts it too.
   await page.locator("#town").fill("Nowhere");
@@ -1340,10 +1469,20 @@ test("between games: a town is looked up, turns the weather card on, and the pag
   await expectSet(request, { town: "Nowhere" });
   await expect(page.locator("#wxPlace")).toContainText('No place found for "Nowhere"');
   await expect(page.locator("#wxRead")).toBeHidden();
+  await expect(row).toHaveClass(/\bwaiting\b/);
+
+  // Removed: the row goes and the town box with it.
+  await row.locator(".lrm").click();
+  await expectSet(request, { cards: "weather:0" });
+  await expect(row).toHaveCount(0);
+  await expect(page.locator("#wxBox")).toBeHidden();
+  await expect.poll(async () => (await deviceState(request)).wxon).toBe(false);
 
   // A read that failed, waiting to try again, and one held for a live game.
   await reset(request, { town: "75019", wxon: true, wx: { place: "Coppell, Texas", lat: 32.95, lon: -97.02, lookup: 200, read: 0, wait_s: 240 } });
   await page.goto("/");
+  await tab(page, "display");
+  await row.locator(".xbtn").click();
   await expect(page.locator("#wxRead")).toHaveText("Couldn't reach Open-Meteo, tries again in 4 minutes.");
   await reset(request, { town: "75019", wxon: true, wx: { place: "Coppell, Texas", lat: 32.95, lon: -97.02, lookup: 200, read: -1, held: true } });
   await page.goto("/");
@@ -1352,12 +1491,15 @@ test("between games: a town is looked up, turns the weather card on, and the pag
   // Firmware from before the weather card leaves the block out.
   await reset(request, { town: null, wxon: null });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#wxBox")).toBeHidden();
   // and firmware from before the degrees setting leaves its row out.
   await reset(request, { town: "75019", wxon: true, wxunit: null });
   await page.goto("/");
+  await tab(page, "display");
+  await page.locator('#cardList .xrow[data-card="weather"] .xbtn').click();
   await expect(page.locator("#wxBox")).toBeVisible();
   await expect(page.locator("#wxUnitRow")).toBeHidden();
 });
@@ -1365,6 +1507,7 @@ test("between games: a town is looked up, turns the weather card on, and the pag
 test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wide GIF, deletes", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#picCard")).toBeVisible();
   const pic = (name, mimeType) => ({ name, mimeType,
     buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures", name)) });
@@ -1404,6 +1547,7 @@ test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wi
   // Firmware from before the picture card leaves the card out.
   await reset(request, { pics: null, picroom: null });
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#picCard")).toBeHidden();
 });
@@ -1412,6 +1556,7 @@ test("pictures: the add button says when the panel keeps 4", async ({ page, requ
   const four = [1, 2, 3, 4].map((s) => ({ s, k: "png", w: 64, h: 64, f: 1, b: 900, id: s }));
   await reset(request, { pics: four, picroom: 0 });
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#picList .pic")).toHaveCount(4);
   await expect(page.locator("#picAdd")).toBeDisabled();
   await expect(page.locator("#picAdd")).toHaveText("4 pictures kept");
@@ -1420,6 +1565,7 @@ test("pictures: the add button says when the panel keeps 4", async ({ page, requ
 test("follow beta: off by default, posts 0 and 1, hidden when the firmware has no beta channel", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
   const sw = page.locator('.sw[data-set="beta"]');
   await expect(page.locator("#betaRow")).toBeVisible();
   await expect(sw).not.toHaveClass(/\bon\b/);
@@ -1431,6 +1577,7 @@ test("follow beta: off by default, posts 0 and 1, hidden when the firmware has n
 
   await reset(request, { beta: null });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#betaRow")).toBeHidden();
 });
@@ -1441,6 +1588,7 @@ test("a beta is newer than its release number, and a release is behind the beta 
   let entity = { ...fw, value: "1.5.5-beta.812", current_version: "1.5.5" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.5-beta.812");
   await expect(page.locator("#fwInstall")).toBeVisible();
 
@@ -1462,6 +1610,7 @@ test("an update that rolled back says so and still offers Install", async ({ pag
   let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#fwText")).toHaveText("The update to v2026.10.1 didn't take and the panel went back to v2026.10.0");
   await expect(page.locator("#fwSub")).toContainText("Install tries it again. It won't install this one on its own.");
   await expect(page.locator("#fwInstall")).toBeVisible();
@@ -1491,6 +1640,7 @@ test("an important release says so in the Firmware box", async ({ page, request 
   const entity = { ...fw, value: "2026.10.3", current_version: "2026.10.2" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#fwText")).toHaveText("Important update: v2026.10.3");
   await expect(page.locator("#fwSub")).toContainText("It fixes something broken, so install it when you can. You have v2026.10.2.");
   await expect(page.locator("#fwSub")).not.toContainText("on its own");
@@ -1523,6 +1673,8 @@ test("Diagnostics says when the ticker last said an update is ready", async ({ p
   // Nothing waiting and never shown: no row.
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#diagCard");
   await expect(page.locator("#health")).toBeVisible();
   await expect(page.locator("#hNudgeRow")).toBeHidden();
 
@@ -1531,17 +1683,20 @@ test("Diagnostics says when the ticker last said an update is ready", async ({ p
   const entity = { ...fw, value: "2026.10.3", current_version: "2026.10.2" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.reload();
+  await unfold(page, "#diagCard");
   await expect(page.locator("#hNudgeRow")).toBeVisible();
   await expect(page.locator("#hNudge")).toHaveText("Not yet since the panel started");
 
   // Install updates automatically on: the ticker never says it.
   await reset(request, { autoupd: true });
   await page.reload();
+  await unfold(page, "#diagCard");
   await expect(page.locator("#hNudge")).toHaveText("Not shown: this panel installs updates on its own");
 
   // The time it last started, in the browser's own time (the fixture's build time, for the same words as the Firmware row).
   await reset(request, { update_shown: 1792285260 });
   await page.reload();
+  await unfold(page, "#diagCard");
   await expect(page.locator("#hNudge")).toHaveText("Oct 17, 8:01 PM");
   await expect(page.locator("#hFw")).toContainText("built Oct 17, 8:01 PM");
 });
@@ -1569,12 +1724,14 @@ test("release notes link to the release's section of the site changelog, a beta 
 test("favorites and switches keep each tap through a slow re-read", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   const labels = page.locator("#favCtls .ctl.fav label");
   await expect(labels).toHaveCount(3);
   await slowReads(page, 1000);
   await page.locator("#favCtls .ctl.fav").nth(0).getByRole("button", { name: "Remove" }).click();
   await sleep(600);
   await page.locator("#favCtls .ctl.fav").nth(0).getByRole("button", { name: "Move down" }).click();
+  await tab(page, "display");
   await page.locator('.sw[data-set="opp"]').click();
   await sleep(600);
   await page.locator('.sw[data-set="down"]').click();
@@ -1596,6 +1753,7 @@ test("pre-game leaders switch: every sport but soccer, posts leaders", async ({ 
   const sw = page.getByRole("switch", { name: "Pre-game season leaders", exact: true });
   await reset(request, {});
   await page.goto("/");
+  await tab(page, "display");
   await expect(sw).toBeChecked();
   await sw.click();
   await expectSet(request, { leaders: "0" });
@@ -1618,6 +1776,7 @@ test("pictures switches: field strip, win chance bar and score margin, by sport"
   // Nothing picked yet: all three, on.
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
+  await tab(page, "display");
   await expect(sw("Field strip")).toBeVisible();
   await expect(sw("Win chance bar")).toBeVisible();
   await expect(sw("Score margin")).toBeVisible();
@@ -1659,6 +1818,7 @@ test("situation switches: one per sport the panel follows, each posting its own 
   // Nothing picked yet: every sport's switch.
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
+  await tab(page, "display");
   await expect(sw("Down and distance")).toBeVisible();
   await expect(sw("Count and at-bat")).toBeVisible();
   await expect(sw("Match stats")).toBeVisible();
@@ -1698,6 +1858,7 @@ test("situation switches: one per sport the panel follows, each posting its own 
 test("the picker has a tab per league and adds a team from another sport", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "teams");
   await page.locator("#favAdd").click();
   await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
   await page.locator(".tabs button", { hasText: "NHL" }).click();
@@ -1740,6 +1901,8 @@ test("a splash shows for a few seconds, then is gone for screen readers too", as
 test("timezone follows the browser, or a zone picked by hand", async ({ page, request }) => {
   await reset(request, { tz: 0, tz_name: "US Eastern", tz_auto: true });
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#setupCard");
   await expectSet(request, { tz: "1" }); // the browser is pinned to America/Chicago
   await expect(page.locator("#toast")).toHaveText("Timezone set to US Central from this browser");
   await expect(page.locator("#tzline")).toContainText("US Central · set from this browser");
@@ -1763,6 +1926,8 @@ test("timezone follows the browser, or a zone picked by hand", async ({ page, re
 test("the panel picker posts the new layout", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#matrixCard");
   await expect(page.locator("#panels .panelpick.on")).toHaveAttribute("data-cols", "2");
   await expect(page.locator("#panels .panelpick.on")).toContainText("One 128x64 panel");
   await page.locator('#panels .panelpick[data-cols="1"]').click();
@@ -1790,6 +1955,8 @@ test("the device box shows what the panel downloaded from ESPN", async ({ page, 
 test("diagnostics say why the panel restarted and how it is doing", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#diagCard");
   await expect(page.locator("#health")).toBeVisible();
   await expect(page.locator("#hStart")).toHaveText("Restart, 2 h 1 min ago");
   await expect(page.locator("#hBoots")).toHaveText("2nd start since the power came on");
@@ -1881,6 +2048,8 @@ test("a warm panel or one whose power dipped says so, with nothing to press", as
 test("saved Wi-Fi networks are listed in order and one can be forgotten", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
   const rows = page.locator("#nets .ctl");
   await expect(page.locator("#netsCard")).toBeVisible();
   await expect(rows).toHaveCount(2);
@@ -1912,6 +2081,7 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   // Firmware without the list: the section stays hidden.
   await reset(request, {}, [], null);
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#netsCard")).toBeHidden();
 });
@@ -1964,35 +2134,47 @@ test("a Wi-Fi that wants a sign-in says how to fix it, in place of the panel's r
 test("says when the panel stops answering, and clears it when the panel is back", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
   await expect(page.locator("#gstate")).toHaveText("UPCOMING");
   await expect(page.locator("#gone")).toBeHidden();
+  await expect(page.locator("#gonePill")).toBeHidden();
+  await expect(page.locator("#board")).not.toHaveClass(/dim/);
 
   // The panel drops off the network: the stream ends and the state read gets no answer.
   await reset(request, {}, ["down"]);
   await expect(page.locator("#gone")).toHaveText(/^Panel not answering since \d{1,2}:\d{2}\s[AP]M$/);
+  // The header says it too, on every tab.
+  await expect(page.locator("#gonePill")).toHaveText("Not answering");
+  await tab(page, "device");
+  await expect(page.locator("#gonePill")).toBeVisible();
+  await tab(page, "board");
   await expect(page.locator("#board")).toHaveClass(/dim/);
-  await expect(page.locator("#conn")).not.toHaveClass(/\bon\b/);
   // The last score stays up, dimmed.
   await expect(page.locator("#tA .abbr")).toHaveText("DAL");
 
   // Back: the next poll answers and the stream reopens without waiting out its retry.
   await reset(request);
   await expect(page.locator("#gone")).toBeHidden({ timeout: 20000 });
+  await expect(page.locator("#gonePill")).toBeHidden();
   await expect(page.locator("#board")).not.toHaveClass(/dim/);
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
 });
 
 test("a dropped stream alone doesn't call the panel gone", async ({ page, request }) => {
   await reset(request);
+  const isStream = (r) => new URL(r.url()).pathname === "/events";
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
   // A phone waking up, or the stream refused: the page asks the panel, and it answers.
+  const ended = new Promise((ok) => {
+    for (const ev of ["requestfinished", "requestfailed"]) page.on(ev, (r) => isStream(r) && ok());
+  });
   await reset(request, {}, ["events"]);
-  await expect(page.locator("#conn")).not.toHaveClass(/\bon\b/);
+  await ended;
   await staysAs(page.locator("#gone:visible"), [], 2000);
+  await expect(page.locator("#board")).not.toHaveClass(/dim/);
+  // Back: the stream opens again.
+  const back = page.waitForResponse((r) => isStream(r) && r.status() === 200, { timeout: 20000 });
   await reset(request);
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/, { timeout: 20000 });
+  await back;
   await expect(page.locator("#gone")).toBeHidden();
 });
 
@@ -2000,12 +2182,13 @@ test("Reboot says it's restarting and reloads when the panel is back", async ({ 
   await reset(request);
   page.on("dialog", (d) => d.accept());
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
-  await page.locator("#actions button", { hasText: "Reboot" }).click();
+  await tab(page, "device");
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
+  await page.locator("#resetActions button", { hasText: "Reboot" }).click();
   const restarting = "Restarting. This page reconnects when the panel is back.";
   await expect(page.locator("#gone")).toHaveText(restarting);
   await expect(page.locator("#board")).toHaveClass(/dim/);
-  await expect(page.locator("#conn")).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#pane-board")).toBeVisible();
 
   // Down for a few seconds, then back: the page reloads on its own.
   await reset(request, {}, ["down"]);
@@ -2014,26 +2197,31 @@ test("Reboot says it's restarting and reloads when the panel is back", async ({ 
   const reloaded = page.waitForEvent("load", { timeout: 10000 });
   await reset(request);
   await reloaded;
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
   await expect(page.locator("#gone")).toBeHidden();
+  await expect(page.locator("#board")).not.toHaveClass(/dim/);
 });
 
 test("both resets say the panel restarts into setup and the page won't reconnect", async ({ page, request, baseURL }) => {
   await reset(request);
   page.on("dialog", (d) => d.accept());
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#gstate")).toHaveText("UPCOMING");
-  await page.locator("#actions button", { hasText: "Reset Wi-Fi" }).click();
+  await page.locator("#resetActions button", { hasText: "Reset Wi-Fi" }).click();
   await expect(page.locator("#gone")).toHaveText(
     "The panel is restarting into Wi-Fi setup for 15 minutes, so this page won't reconnect. Its settings are kept,"
     + " and unplugging it and plugging it back in takes it back to the Wi-Fi it already knows."
     + " To set it up again, use the Game Day app or join its \"Game Day 2f6a70\" Wi-Fi.");
   await expect(page.locator("#board")).toHaveClass(/dim/);
-  await expect(page.locator("#conn")).not.toHaveClass(/\bon\b/);
+  // The page goes to the Home tab, where that line is.
+  await expect(page.locator("#pane-board")).toBeVisible();
+  await expect(page.locator("#pane-device")).toBeHidden();
 
   await page.reload();
+  await tab(page, "device");
   await expect(page.locator("#gstate")).toHaveText("UPCOMING");
-  await page.locator("#actions button", { hasText: "Factory reset" }).click();
+  await page.locator("#resetActions button", { hasText: "Factory reset" }).click();
   await expect(page.locator("#gone")).toHaveText(
     "The panel is restarting into setup with everything erased, so this page won't reconnect."
     + " To set it up again, use the Game Day app or join its \"Game Day 2f6a70\" Wi-Fi.");
@@ -2042,19 +2230,20 @@ test("both resets say the panel restarts into setup and the page won't reconnect
   page.on("request", (r) => { if (r.url().startsWith(baseURL)) asked.push(r.url()); });
   await sleep(1500);
   expect(asked).toEqual([]);
-  await expect(page.locator("#conn")).not.toHaveClass(/\bon\b/);
+  await expect(page.locator("#board")).toHaveClass(/dim/);
 });
 
 test("a reset the panel never got doesn't claim it's resetting", async ({ page, request }) => {
   await reset(request);
   page.on("dialog", (d) => d.accept());
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
+  await tab(page, "device");
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
   await page.route("**/button/**", (route) => route.fulfill({ status: 500, body: "" }));
-  await page.locator("#actions button", { hasText: "Factory reset" }).click();
+  await page.locator("#resetActions button", { hasText: "Factory reset" }).click();
   await expect(page.locator("#toast")).toHaveText("Device did not respond (HTTP 500). Try again.");
   await expect(page.locator("#gone")).toBeHidden();
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
+  await expect(page.locator("#board")).not.toHaveClass(/dim/);
 });
 
 const actions = async (request) =>
@@ -2063,6 +2252,7 @@ const actions = async (request) =>
 test("the banner posts its text and seconds, and Take down posts no text", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#msgCard")).toBeVisible();
   await page.locator("#sayGo").click();
   await expect(page.locator("#toast")).toHaveText("Type the banner first");
@@ -2078,14 +2268,114 @@ test("the banner posts its text and seconds, and Take down posts no text", async
 test("Show on panel puts the FCC information on the panel", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  // It sits folded shut at the bottom of the Device tab, under the untitled card of resets.
+  const cards = page.locator("#pane-device .grid > .card");
+  await expect(cards.last()).toHaveId("fccCard");
+  await expect(cards.nth(-2)).toHaveClass(/dangercard/);
+  await expect(cards.nth(-2).locator("h2")).toHaveCount(0);
+  await expect(cards.nth(-2).locator("button")).toHaveText(["Reboot", "Reset Wi-Fi", "Factory reset"]);
+  await expect(page.locator("#fccShow")).toBeHidden();
+  await page.getByText("FCC information", { exact: true }).click();
   await page.locator("#fccShow").click();
   await expect.poll(() => actions(request)).toContainEqual({ do: "regulatory" });
   await expect(page.locator("#toast")).toHaveText("FCC information on the panel");
 });
 
+test("the Device tab's rarely used cards are folded shut, each with a line on what is inside", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  const folds = page.locator("#pane-device details.card");
+  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Diagnostics", "Remote", "Matrix", "FCC information"]);
+  for (const d of await folds.all()) expect(await d.evaluate((n) => n.open)).toBe(false);
+  await expect(page.locator("#setupCard .fsum")).toHaveText("Time zone, startup, backup");
+  await expect(page.locator("#netsSum")).toHaveText("2 saved");
+  await expect(page.locator("#diagSum")).toHaveText("Signal -61 dBm");
+  await expect(page.locator("#remoteSum")).toHaveText("Paired");
+  await expect(page.locator("#matrixSum")).toHaveText("One 128x64 panel");
+  // The Panel card and the look stay open.
+  await expect(page.locator("#hostname")).toBeVisible();
+  await expect(page.locator("#lookCard")).toBeVisible();
+
+  // A tap opens one and turns its chevron; another closes it.
+  await expect(page.locator("#rssi")).toBeHidden();
+  await page.locator("#diagCard summary").click();
+  await expect(page.locator("#rssi")).toBeVisible();
+  await expect(page.locator("#diagCard")).toHaveAttribute("open", "");
+  await page.locator("#diagCard summary").click();
+  await expect(page.locator("#rssi")).toBeHidden();
+
+  await request.post("/_reset", { data: { wizmote: "No remote paired" } });
+  await page.reload();
+  await expect(page.locator("#remoteSum")).toHaveText("No remote paired");
+});
+
+test("the Look switch picks Phone, Light or Dark, and this browser keeps it", async ({ page, request }) => {
+  await reset(request);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/#device");
+  const look = page.getByRole("radiogroup", { name: "Look" });
+  const html = page.locator("html");
+  // Phone, the default, follows the system.
+  await expect(look.getByRole("radio", { checked: true })).toHaveText("Phone");
+  await expect(html).not.toHaveClass(/light/);
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(html).toHaveClass(/light/);
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(242, 243, 247)");
+  // The scoreboard stays black.
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector("#board")).backgroundColor)).toBe("rgb(0, 0, 0)");
+
+  await look.getByRole("radio", { name: "Dark" }).click();
+  await expect(look.getByRole("radio", { checked: true })).toHaveText("Dark");
+  await expect(html).not.toHaveClass(/light/);
+  expect(await page.evaluate(() => localStorage.getItem("look"))).toBe("dark");
+  await page.reload();
+  await expect(look.getByRole("radio", { checked: true })).toHaveText("Dark");
+  await expect(html).not.toHaveClass(/light/);
+
+  await look.getByRole("radio", { name: "Light" }).click();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  await expect(html).toHaveClass(/light/);
+  await expect(look.getByRole("radio", { checked: true })).toHaveText("Light");
+});
+
+test("the board's round power button switches Power, and its strip shows brightness as a percent", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const power = page.locator("#quickCtls .sw.round");
+  await expect(power).toHaveAccessibleName("Panel on");
+  await expect(power).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator(".boardctl .val")).toHaveText("50%");
+  const paths = async () => (await entityPosts(request)).map((p) => p.path);
+  await power.click();
+  await expect(power).toHaveAttribute("aria-checked", "false");
+  await expect.poll(paths).toContain("/switch/Power/turn_off");
+  await power.click();
+  await expect(power).toHaveAttribute("aria-checked", "true");
+  await expect.poll(paths).toContain("/switch/Power/turn_on");
+  await page.getByRole("button", { name: "Refresh scores" }).click();
+  await expect.poll(paths).toContain("/button/Refresh%20Now/press");
+});
+
+test("the header is the panel's name, and a slim bar keeps it once it scrolls away", async ({ page, request }) => {
+  await reset(request, { nick: "Den" });
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.goto("/#device");
+  await expect(page.locator("h1")).toHaveText("Den");
+  await expect(page.locator("#minibar")).toHaveText("Den");
+  await expect(page.locator("body")).not.toHaveClass(/scrolled/);
+  await page.evaluate(() => window.scrollTo(0, 400));
+  await expect(page.locator("body")).toHaveClass(/scrolled/);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.locator("body")).not.toHaveClass(/scrolled/);
+});
+
 test("the nickname names the page and the header, and saving it posts nick", async ({ page, request }) => {
   await reset(request, { nick: "Garage" });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#nick")).toHaveValue("Garage");
   await expect(page.locator("#devname")).toHaveText("Garage");
   await expect(page).toHaveTitle("Garage · Game Day Scoreboard");
@@ -2108,6 +2398,7 @@ test("the nickname names the page and the header, and saving it posts nick", asy
 test("the nickname keeps the tab title when something else renames it, and the box while it is being typed in", async ({ page, request }) => {
   await reset(request, { nick: "Garage" });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page).toHaveTitle("Garage · Game Day Scoreboard");
   // ESPHome's own page script names the tab after the device on its pings.
   await page.evaluate(() => { document.title = "Game Day Scoreboard 2f6a70"; });
@@ -2123,6 +2414,7 @@ test("the nickname keeps the tab title when something else renames it, and the b
 test("the nickname box hides on firmware without it", async ({ page, request }) => {
   await reset(request, { nick: null });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#nickRow")).toBeHidden();
 });
@@ -2130,6 +2422,7 @@ test("the nickname box hides on firmware without it", async ({ page, request }) 
 test("the message card posts its text, address and timing, and Clear turns it off", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "customize");
   await page.locator("#msgText").fill("Wings $5 till 7\nPints $3");
   await page.locator("#msgEvery").selectOption("0");
   await page.locator("#msgSave").click();
@@ -2154,6 +2447,8 @@ test("the message card posts its text, address and timing, and Clear turns it of
 test("the game events card saves the heads-up and the webhook, refuses https, and sends a test", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#evCard");
   await expect(page.locator("#evCard")).toBeVisible();
   await expect(page.locator("#evPregame")).toHaveValue("15");
   await page.locator("#evPregame").selectOption("30");
@@ -2174,6 +2469,7 @@ test("the game events card saves the heads-up and the webhook, refuses https, an
 test("the game events card says how the last post went, and hides on firmware without it", async ({ page, request }) => {
   await reset(request, { hook: "http://192.168.1.20/a", hookpost: { status: 200, sent: 3, dropped: 0 } });
   await page.goto("/");
+  await tab(page, "device");
   await expect(page.locator("#evHookRead")).toHaveText("Posting fine: 3 events delivered.");
   await reset(request, { hook: "http://192.168.1.20/a", hookpost: { status: 0, sent: 0, dropped: 0 } });
   await page.reload();
@@ -2188,17 +2484,21 @@ test("the message card says how the list's last read went, and hides on firmware
   const url = "https://example.com/plates.txt";
   await reset(request, { msgurl: url, msgread: { status: 200, entries: 412 } });
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#msgUrl")).toHaveValue(url);
   await expect(page.locator("#msgRead")).toHaveText("The list has 412 entries.");
   await reset(request, { msgurl: url, msgread: { status: 404 } });
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#msgRead")).toHaveText("That address answered with an error (HTTP 404). It tries again in a few minutes.");
   await reset(request, { msgurl: url, msgread: { status: 0 } });
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#msgRead")).toHaveText("The panel couldn't reach that address. It tries again in a few minutes.");
 
   await reset(request, { msg: null, msgurl: null, msgevery: null, msgread: null });
   await page.goto("/");
+  await tab(page, "customize");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#msgCard")).toBeHidden();
 });
@@ -2206,6 +2506,7 @@ test("the message card says how the list's last read went, and hides on firmware
 test("night schedule: off by default, its times, screen and brightness post, hidden on firmware without it", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "display");
   const sw = page.locator('.sw[data-set="night"]');
   await expect(page.locator("#nightCtls")).toBeVisible();
   await expect(sw).not.toHaveClass(/\bon\b/);
@@ -2244,6 +2545,7 @@ test("night schedule: off by default, its times, screen and brightness post, hid
 
   await reset(request, { night: null, night_now: null });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#nightCtls")).toBeHidden();
 });
@@ -2251,6 +2553,7 @@ test("night schedule: off by default, its times, screen and brightness post, hid
 test("game-day wake: off by default, its lead and after the game post, hidden on firmware without it", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "display");
   const sw = page.locator('.sw[data-set="wake"]');
   await expect(page.locator("#wakeCtls")).toBeVisible();
   await expect(sw).not.toHaveClass(/\bon\b/);
@@ -2288,6 +2591,7 @@ test("game-day wake: off by default, its lead and after the game post, hidden on
 
   await reset(request, { wake: null, wakelead: null, after: null, wake_now: null });
   await page.goto("/");
+  await tab(page, "display");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#wakeCtls")).toBeHidden();
 });
@@ -2351,6 +2655,8 @@ test("night mode can be turned off for the rest of tonight and back on, from its
 test("Export downloads the settings, and Import restores a backup checked whole", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#setupCard");
   await expect(page.locator("#backup")).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#bkExport")]);
   expect(download.suggestedFilename()).toMatch(/^gameday-2f6a70-settings-\d{4}-\d\d-\d\d\.json$/);
@@ -2399,6 +2705,8 @@ test("Export downloads the settings, and Import restores a backup checked whole"
 test("Import of this panel's own backup with another layout waits out the restart", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#setupCard");
   await expect(page.locator("#backup")).toBeVisible();
   let asked = "";
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
@@ -2412,6 +2720,8 @@ test("Import of this panel's own backup with another layout waits out the restar
 test("Import of another panel's backup keeps this panel's layout", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#setupCard");
   await expect(page.locator("#backup")).toBeVisible();
   page.once("dialog", (d) => d.accept());
   await page.setInputFiles("#bkFile", { name: "small.json", mimeType: "application/json",
@@ -2426,6 +2736,8 @@ test("Import of another panel's backup keeps this panel's layout", async ({ page
 test("the backup section hides on firmware without it", async ({ page, request }) => {
   await reset(request, {}, ["settings"]);
   await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#setupCard");
   await expect(page.locator("#tzline")).toBeVisible();
   await sleep(300);
   await expect(page.locator("#backup")).toBeHidden();
