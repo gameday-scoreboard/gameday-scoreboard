@@ -23,7 +23,7 @@ NHL teams have no Up next list on the device page: their season schedules are to
 - **Overtime** reads "OT". In the playoffs, where overtime goes on until someone scores, later periods read "2OT", "3OT" and so on.
 - **A shootout**, in the regular season, reads "SO".
 - **Intermissions** show ESPN's words, like "End of 1st", and the ticker shows the series, or the records outside the playoffs.
-- **The ticker** with the last play. Turn it off with **Last play** in the Ticker card. See [The ticker](/using/ticker/).
+- **The ticker** with the last play. Turn it off with **Last play** under **Ticker** on the device page's Display tab. See [The ticker](/using/ticker/).
 
 
 :::note[Coming in the next release]
@@ -36,7 +36,7 @@ On a single 64x64 panel the clock takes the abbreviations' place during play, an
 
 ## Goal splashes
 
-A goal fills the screen for 4 seconds with fireworks on black, in the scoring team's color. Yours says "GOAL". The other side's says their abbreviation and "GOAL", like "PIT GOAL", unless you turn off **Opponent scores too** in the Celebrations card. The winning goal in a shootout splashes like any other.
+A goal fills the screen for 4 seconds with fireworks on black, in the scoring team's color. Yours says "GOAL". The other side's says their abbreviation and "GOAL", like "PIT GOAL", unless you turn off **Opponent scores too** under **Celebrations** on the device page's Display tab. The winning goal in a shootout splashes like any other.
 
 When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
 

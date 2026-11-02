@@ -38,7 +38,7 @@ Accented letters in names, like the é in Atlético or the ñ in Peña, show in 
 
 ## The switches
 
-The Ticker card on the device page has a switch for each part. All of them start on.
+**Ticker** on the device page's Display tab has a switch for each part. All of them start on.
 
 | Switch | What it adds |
 | --- | --- |
@@ -81,4 +81,4 @@ The two lines read "Running warm" and "Power dipped". The panel no longer dims i
 
 ## Ticker speed
 
-**Ticker speed** in the Panel card sets how fast the ticker scrolls, from 1 (slowest) to 10 (fastest). A new panel starts at 5. The speed stays the same whatever the length of the line, so a long last play scrolls at the same pace as a short one.
+**Ticker speed** under **Screen** on the Display tab sets how fast the ticker scrolls, from 1 (slowest) to 10 (fastest). A new panel starts at 5. The speed stays the same whatever the length of the line, so a long last play scrolls at the same pace as a short one.

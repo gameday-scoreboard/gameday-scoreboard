@@ -32,7 +32,7 @@ Holding the button on a panel that is off turns it on, so you can see the countd
 
 ## Reset Wi-Fi
 
-Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it with the 10 second hold, or with **Reset Wi-Fi** in the Device card on the device page.
+Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it with the 10 second hold, or with **Reset Wi-Fi** at the bottom of the device page's Device tab.
 
 The panel restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Give it the new network from the app or the hotspot; see [Set up your panel](/get-started/setup/).
 
@@ -48,7 +48,7 @@ Factory reset erases everything: the saved Wi-Fi networks, your team, your favor
 
 Before a factory reset you mean to set up again from, save a backup: **Export settings** on the device page, then **Import settings** once the panel is back on Wi-Fi. See [Back up and restore settings](/using/backup/).
 
-Start it from **Factory reset** in the Device card on the device page. The page asks you to confirm first.
+Start it from **Factory reset** at the bottom of the device page's Device tab. The page asks you to confirm first.
 
 With no app and no device page, hold the boot button until the screen says **Release to erase all**, at 20 seconds, then let go. If you change your mind, keep holding past 30 seconds until it says **Release to cancel**.
 

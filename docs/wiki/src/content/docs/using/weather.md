@@ -13,7 +13,7 @@ Between games the panel can show the weather where you live: the temperature now
 
 ## Set your town
 
-Under **Between games** on the [device page](/using/device-page/), type your town in **Town or ZIP code** and press **Look up**. Any of these work:
+Under **Between games** on the [device page](/using/device-page/)'s Display tab, open **Weather** and type your town in **Town or ZIP code** and press **Look up**. Any of these work:
 
 - A US ZIP code, like `75019`
 - A town and state, like `Springfield, IL` or `Portland, Maine`, which picks the right one of several towns with the same name

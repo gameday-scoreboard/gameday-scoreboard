@@ -16,7 +16,7 @@ The panel draws letters, numbers, punctuation and accented letters like Ã© and Ã
 
 ## A banner
 
-On the device page, the **Message** card has a **Banner** box. Type your words, set **Seconds on screen** (10 unless you change it, up to 600), and press **Show**. **Take down** clears it early.
+On the device page's Customize tab, find **Banner**. Type your words, set **Seconds on screen** (10 unless you change it, up to 600), and press **Show**. **Take down** clears it early.
 
 A banner covers everything, the clock page included, but it doesn't turn the panel on: if the panel is off, nobody sees it. It is never saved, so a restart clears it.
 
@@ -32,7 +32,7 @@ Use your panel's own name or address. Leaving `text` empty takes the banner down
 
 ## A message card
 
-In the **Message card** part of the same card, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
+On the same tab, under **Message card**, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
 
 **Show it** sets how often the card takes the board between games:
 
