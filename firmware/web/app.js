@@ -68,14 +68,22 @@
 
   // ---- DOM -------------------------------------------------------------
   document.body.innerHTML = `
+  <div class="minibar" id="minibar" aria-hidden="true"></div>
   <div class="wrap">
     <header class="top">
-      <div class="brand">
-        <div class="mark">GD</div>
-        <div><h1>Game Day Scoreboard<small id="devname">connecting</small></h1></div>
-      </div>
-      <div class="conn" id="conn" aria-live="polite"><i></i><span>offline</span></div>
+      <h1 id="devname">connecting</h1>
+      <div class="gonepill" id="gonePill" hidden>Not answering</div>
     </header>
+    <nav class="tabbar" role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-board" data-tab="board" aria-controls="pane-board" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h5v-5.5h3V20h5V9.5"/></svg><span>Home</span></button>
+      <button role="tab" id="tab-teams" data-tab="teams" aria-controls="pane-teams" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5L3 6.5l2 4 2-1V20h10V9.5l2 1 2-4-5.5-3c-.6 1.6-2 2.6-3.5 2.6S9.1 5.1 8.5 3.5z"/></svg><span>Teams</span></button>
+      <button role="tab" id="tab-display" data-tab="display" aria-controls="pane-display" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><g class="dots"><circle cx="7" cy="8" r="1.1"/><circle cx="7" cy="11" r="1.1"/><circle cx="7" cy="14" r="1.1"/><circle cx="12" cy="8" r="1.1"/><circle cx="12" cy="11" r="1.1"/><circle cx="12" cy="14" r="1.1"/><circle cx="17" cy="8" r="1.1"/><circle cx="17" cy="11" r="1.1"/><circle cx="17" cy="14" r="1.1"/></g></svg><span>Display</span></button>
+      <button role="tab" id="tab-customize" data-tab="customize" aria-controls="pane-customize" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 3.5c-3 1.6-7.4 5.8-9.3 8.4l1.9 1.9c2.6-1.9 6.8-6.3 8.4-9.3z"/><path d="M9.6 13.1c-2.1 0-3.6 1.6-3.6 3.6 0 1.2-.8 2.2-2.5 2.8 4.7 1.4 8.5-.6 8.5-3.9z"/></svg><span>Customize</span></button>
+      <button role="tab" id="tab-device" data-tab="device" aria-controls="pane-device" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.15 10.55 21.52 10.76 21.52 13.24 19.15 13.45 18.08 16.03 19.61 17.85 17.85 19.61 16.03 18.08 13.45 19.15 13.24 21.52 10.76 21.52 10.55 19.15 7.97 18.08 6.15 19.61 4.39 17.85 5.92 16.03 4.85 13.45 2.48 13.24 2.48 10.76 4.85 10.55 5.92 7.97 4.39 6.15 6.15 4.39 7.97 5.92 10.55 4.85 10.76 2.48 13.24 2.48 13.45 4.85 16.03 5.92 17.85 4.39 19.61 6.15 18.08 7.97z"/><circle cx="12" cy="12" r="3"/></svg><span>Device</span></button>
+    </nav>
+
+    <main class="panes">
+    <section class="pane" id="pane-board" data-tab="board" role="tabpanel" aria-labelledby="tab-board">
 
     <section class="board empty" id="board">
       <div class="state" id="gstate">WAITING</div>
@@ -96,6 +104,18 @@
       <div class="play" id="play"></div>
       <div class="splash" id="splash"></div>
     </section>
+    <div class="boardctl">
+      <div id="quickCtls"></div>
+      <div class="actions" id="quickActions"></div>
+    </div>
+    <div class="card showcard">
+      <div class="cbody">
+        <div id="showCtls"></div>
+        <div id="fxCtls" hidden>
+          <p class="hint">The effect stays on until you pick another page.</p>
+        </div>
+      </div>
+    </div>
 
     <div class="teambar guardbar" id="guard" role="status" hidden>
       <div class="cur"><div><div class="name" id="guardName"></div><div class="lg" id="guardText"></div></div></div>
@@ -112,255 +132,367 @@
     </section>
 
     <div class="modes" id="modes" role="group" aria-label="Mode">
-      <button data-mode="4" aria-pressed="false">Favorite teams</button>
-      <button data-mode="5" aria-pressed="false">Live games</button>
+      <button data-mode="4" aria-pressed="false">Favorite teams<small>Only the teams you pick</small></button>
+      <button data-mode="5" aria-pressed="false">Live games<small>Games on right now, in leagues you pick</small></button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name" id="liveName">Following a random game in progress</div><div class="lg" id="liveLg">Moves on when it ends, or after Switch every. Leagues:</div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
-      <div class="livectls">
-        <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
-        <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
-        <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
-        <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
-          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
-        </select></div>
-      </div>
+      <div class="cur"><div><div class="name" id="liveName">Showing a game in progress. Picks another when it ends.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
-      <div class="cur"><div><div class="name" id="favName">Cycling through your favorites</div><div class="lg">A favorite's game takes the panel near kickoff. When two overlap, the slot order or Alternate below decides.</div></div></div>
+      <div class="cur"><div><div class="name" id="favName">None of your teams are playing. Showing their next games.</div><button class="linkbtn" id="favStart" hidden>Add a team</button></div></div>
       <div class="favctls">
-        <div class="stepper" id="favListRow" hidden><label for="favList">Playing</label><select id="favList"></select></div>
-        <div class="stepper"><label for="lockon">Take over</label><input type="number" id="lockon" min="5" max="120" step="1"><span>min before kickoff</span></div>
-        <div class="stepper"><label for="release">After the final</label><select id="release">
-          <option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option>
-          <option value="600">10 min</option><option value="900">15 min</option><option value="1800">30 min</option><option value="3600">60 min</option>
-        </select></div>
-        <div class="stepper"><label for="collide">Two games at once</label><select id="collide">
-          <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
-        </select><input type="number" id="favrotate" min="1" max="30" step="1" aria-label="Alternate every, in minutes" hidden><span id="favrotateUnit" hidden>min</span></div>
+        <div class="stepper" id="favListRow" hidden><label for="favList">Playing</label><span id="favListMark" hidden></span><select id="favList"></select></div>
       </div>
     </div>
+    </section>
 
+    <section class="pane" id="pane-teams" data-tab="teams" role="tabpanel" aria-labelledby="tab-teams" hidden>
     <div class="grid">
       <div class="card">
+        <h2>Favorites</h2>
+        <div class="cbody">
+          <p class="hint" id="favHint">Up to 16 teams. The order sets the priority.</p>
+          <div class="ctl"><label>Only today's games<small>Skips favorites with no game today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
+          <div class="ctl"><label>Jump to the action<small>Jumps to the big moments when two favorites play at once.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
+          <div class="ctl"><label>Score banner<small>Shows scores from your other favorites along the bottom.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
+          <div id="favCtls"></div>
+          <button class="btn" id="favAdd">Add a favorite</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Playlists</h2>
+        <div class="cbody">
+          <p class="hint">Groups of favorites you can switch between.</p>
+          <div id="listCtls"></div>
+          <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>When favorites play</h2>
+        <div class="cbody">
+          <p class="hint">A favorite's game takes over the panel just before it starts.</p>
+          <div class="favctls">
+          <div class="stepper"><label for="lockon">Take over</label><input type="number" id="lockon" min="5" max="120" step="1"><span>min before kickoff</span></div>
+          <div class="stepper"><label for="release">After the final</label><select id="release">
+            <option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option>
+            <option value="600">10 min</option><option value="900">15 min</option><option value="1800">30 min</option><option value="3600">60 min</option>
+          </select></div>
+          <div class="stepper"><label for="collide">Two games at once</label><select id="collide">
+            <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+          </select><input type="number" id="favrotate" min="1" max="30" step="1" aria-label="Alternate every, in minutes" hidden><span id="favrotateUnit" hidden>min</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Live games</h2>
+        <div class="cbody">
+          <p class="hint">Follows a live game, then moves to the next one.</p>
+          <div class="livectls">
+          <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
+          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
+          <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
+          <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
+            <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
+          </select></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </section>
+
+    <section class="pane" id="pane-display" data-tab="display" role="tabpanel" aria-labelledby="tab-display" hidden>
+    <div class="grid">
+      <div class="card">
+        <h2>Screen</h2>
+        <div class="cbody">
+          <div id="panelCtls"></div>
+          <div id="nightCtls" hidden>
+            <div class="ctl"><label>Night schedule<small>Dims or turns off the panel overnight.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
+            <div id="nightSet" hidden>
+              <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
+              <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
+              <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
+              <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
+            </div>
+          </div>
+          <div id="wakeCtls" hidden>
+            <div class="ctl"><label>Game-day wake<small>Turns the panel on before your team plays.</small></label><button class="sw" data-set="wake" aria-label="Game-day wake"></button></div>
+            <div class="ctl" id="wakeLeadRow" hidden><label for="wakeLead">Turns on</label><select id="wakeLead">
+              <option value="5">5 minutes before</option><option value="10">10 minutes before</option><option value="15">15 minutes before</option>
+              <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
+            </select></div>
+            <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+            </select></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
         <h2>Ticker</h2>
-        <p class="hint">What scrolls along the bottom of the panel during a game.</p>
-        <div id="tickerCtls">
-          <div class="ctl" data-sport="football"><label>Down and distance<small>Football: the down, yards to go and where the ball is.</small></label><button class="sw" data-set="down" aria-label="Down and distance"></button></div>
-          <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
-          <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
-          <div class="ctl"><label>Last play<small>ESPN's latest play in every sport. In soccer, the latest goal or card.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
-          <div class="ctl"><label>Odds, TV and win chance<small>The line, over/under and TV channel before the start, in every league, when ESPN has them. In football, who is favored to win during the game.</small></label><button class="sw" data-set="odds" aria-label="Odds, TV and win chance"></button></div>
-          <div class="ctl" data-sport="football baseball basketball hockey"><label>Pre-game season leaders<small>Before the start, each team's season leader: passing in football, home runs in baseball, points in basketball and hockey.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
+        <div class="cbody">
+          <p class="hint">What scrolls along the bottom of the panel during a game.</p>
+          <div id="tickerCtls">
+            <div class="ctl" data-sport="football"><label>Down and distance<small>Football: the down, yards to go and where the ball is.</small></label><button class="sw" data-set="down" aria-label="Down and distance"></button></div>
+            <div class="ctl" data-sport="baseball"><label>Count and at-bat<small>Baseball: the count, outs, pitcher and batter.</small></label><button class="sw" data-set="count" aria-label="Count and at-bat"></button></div>
+            <div class="ctl" data-sport="soccer"><label>Match stats<small>Soccer: goals, cards, possession and shots.</small></label><button class="sw" data-set="match" aria-label="Match stats"></button></div>
+            <div class="ctl"><label>Last play<small>Shows the latest play.</small></label><button class="sw" data-set="play" aria-label="Last play"></button></div>
+            <div class="ctl"><label>Odds, TV and win chance<small>Shows the betting line and TV channel before games.</small></label><button class="sw" data-set="odds" aria-label="Odds, TV and win chance"></button></div>
+            <div class="ctl" data-sport="football baseball basketball hockey"><label>Pre-game season leaders<small>Shows each team's season leaders before games.</small></label><button class="sw" data-set="leaders" aria-label="Pre-game season leaders"></button></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Live pictures</h2>
+        <p class="hint">Drawn under the clock during a game. Not on a single 64x64 panel.</p>
+        <div id="vizCtls">
+          <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: each side's chance to win, as a thin bar.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
+          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game, as a small chart.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
         </div>
       </div>
       <div class="card">
         <h2>Celebrations</h2>
-        <p class="hint">Full-screen splashes for scores. Yours always show.</p>
-        <div id="celebCtls">
-          <div class="ctl"><label>Opponent scores too<small>The other side's scores in football, baseball, hockey and soccer. Basketball celebrates only the win.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+        <div class="cbody">
+          <p class="hint">Full-screen celebrations for scores and the win. Yours always show.</p>
+          <div id="celebCtls">
+            <div class="ctl"><label for="celebrate">Celebrations<small>Fireworks and confetti, a quick flash in the team's color, or nothing.</small></label><select id="celebrate">
+              <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
+            </select></div>
+            <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+          </div>
         </div>
       </div>
       <div class="card" id="cdCard" hidden>
         <h2>Between games</h2>
-        <p class="hint">What the panel shows while no game is on. Turn on the cards you want; they take turns.</p>
-        <div id="cardList"></div>
-        <div id="cardsOld">
-          <div class="ctl"><label>Countdown to the next game<small>Big digits to the start, "2d 14h", taking turns with the next game every 10 seconds.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
-          <div class="ctl" id="glRow"><label>Game leaders<small>At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.</small></label><button class="sw" data-set="gameleaders" aria-label="Game leaders"></button></div>
-          <div class="ctl" id="top25Row"><label>College Top 25<small>The AP poll, a page at a time, every 10 minutes. Only while you follow a college football or basketball team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
-          <div class="ctl" id="newsRow"><label>News headlines<small>ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
+        <div class="cbody">
+          <p class="hint">What shows when no game is on. The cards take turns.</p>
+          <div id="cardList"></div>
+          <div id="cardsOld">
+            <div class="ctl"><label>Countdown to the next game<small>Counts down to the next game, like 2d 14h.</small></label><button class="sw" data-set="countdown" aria-label="Countdown to the next game"></button></div>
+            <div class="ctl" id="glRow"><label>Game leaders<small>Shows top players at halftime and after the final.</small></label><button class="sw" data-set="gameleaders" aria-label="Game leaders"></button></div>
+            <div class="ctl" id="top25Row"><label>College Top 25<small>Shows the AP poll when you follow a college team.</small></label><button class="sw" data-set="top25" aria-label="College Top 25"></button></div>
+            <div class="ctl" id="newsRow"><label>News headlines<small>Shows ESPN headlines about your teams.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
+          </div>
+          <div id="cardPark" hidden></div>
+          <div id="wxBox" hidden>
+            <div class="sub">Weather</div>
+            <p class="hint">The forecast for your town.</p>
+            <div class="ctl"><label for="town">Town or ZIP code</label><input type="text" id="town" maxlength="40" placeholder="Coppell, TX" autocomplete="off"></div>
+            <div class="actions"><button class="btn" id="townGo">Look up</button></div>
+            <p class="hint" id="wxPlace" hidden></p>
+            <div class="ctl" id="wxOnRow"><label>Weather card</label><button class="sw" data-set="wxon" aria-label="Weather card"></button></div>
+            <div class="ctl" id="wxUnitRow" hidden><label for="wxUnit">Degrees<small>For the weather card and your next game's forecast.</small></label><select id="wxUnit">
+              <option value="0">Auto</option><option value="1">Fahrenheit (°F)</option><option value="2">Celsius (°C)</option>
+            </select></div>
+            <p class="hint" id="wxRead" hidden></p>
+            <p class="hint">Your town goes to Open-Meteo for the forecast.</p>
+          </div>
         </div>
-        <div class="sub">Your own countdown</div>
-        <p class="hint">A day to count down to, like Christmas or opening day. It takes the last 10 seconds of every minute until that day ends.</p>
-        <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
-        <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
-        <button class="btn" id="cdClear" hidden>Clear the countdown</button>
-        <div id="wxBox" hidden>
-          <div class="sub">Weather</div>
-          <p class="hint">Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days, in °F. Read every 30 minutes, never during your game.</p>
-          <div class="ctl"><label for="town">Town or ZIP code</label><input type="text" id="town" maxlength="40" placeholder="Coppell, TX" autocomplete="off"></div>
-          <div class="actions"><button class="btn" id="townGo">Look up</button></div>
-          <p class="hint" id="wxPlace" hidden></p>
-          <div class="ctl" id="wxOnRow"><label>Weather card</label><button class="sw" data-set="wxon" aria-label="Weather card"></button></div>
-          <p class="hint" id="wxRead" hidden></p>
-          <p class="hint">Your town goes to Open-Meteo for the forecast.</p>
+      </div>
+    </div>
+    </section>
+
+    <section class="pane" id="pane-customize" data-tab="customize" role="tabpanel" aria-labelledby="tab-customize" hidden>
+    <div class="grid">
+      <div class="card" id="sayCard" hidden>
+        <h2>Banner</h2>
+        <div class="cbody">
+          <p class="hint">Your words over whatever the panel shows, for a few seconds.</p>
+          <textarea id="sayText" class="field" rows="2" maxlength="200" placeholder="Pizza's here!" aria-label="Banner text"></textarea>
+          <div class="ctl"><label for="saySecs">Seconds on screen</label><input type="number" id="saySecs" class="num" min="1" max="600" step="1" value="10"></div>
+          <div class="actions"><button class="btn primary" id="sayGo">Show</button><button class="btn" id="sayStop">Take down</button></div>
+        </div>
+      </div>
+      <div class="card" id="msgCard" hidden>
+        <h2>Message card</h2>
+        <div class="cbody">
+          <div class="ctl cardsw" data-card="message" hidden><label>Show between games<small class="card-hint"></small></label><button class="sw" aria-label="Show the message card between games"></button></div>
+          <p class="hint">Your own text or list, between games.</p>
+          <textarea id="msgText" class="field" rows="3" maxlength="200" placeholder="One per line, like Wings $5 till 7" aria-label="Message card text"></textarea>
+          <label class="fl" for="msgUrl">Or a list from a web address<small>Shows each line of a text file from the web.</small></label>
+          <input type="url" id="msgUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
+          <p class="hint" id="msgRead" hidden></p>
+          <div class="ctl"><label for="msgEvery">Show it</label><select id="msgEvery">
+            <option value="0">Whenever no game is on</option><option value="1">Every minute</option><option value="2">Every 2 minutes</option>
+            <option value="5">Every 5 minutes</option><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option>
+          </select></div>
+          <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
         </div>
       </div>
       <div class="card" id="picCard" hidden>
         <h2>Pictures</h2>
-        <p class="hint">Your own picture or animated GIF between games, up to 4, one every 3 minutes for about 10 seconds. A photo is fitted to the panel. A GIF goes as it is, up to 128 by 64 pixels.</p>
-        <div id="picList"></div>
-        <p class="hint" id="picNote" hidden></p>
-        <div class="actions"><button class="btn primary" id="picAdd">Add a picture</button></div>
-        <input type="file" id="picFile" accept="image/png,image/gif,image/jpeg,image/webp" hidden>
+        <div class="cbody">
+          <div class="ctl cardsw" data-card="picture" hidden><label>Show between games<small class="card-hint"></small></label><button class="sw" aria-label="Show your pictures between games"></button></div>
+          <p class="hint">Up to 4 of your own pictures or GIFs.</p>
+          <div id="picList"></div>
+          <p class="hint" id="picNote" hidden></p>
+          <div class="actions"><button class="btn primary" id="picAdd">Add a picture</button></div>
+          <input type="file" id="picFile" accept="image/png,image/gif,image/jpeg,image/webp" hidden>
+        </div>
       </div>
-      <div class="card" id="msgCard" hidden>
-        <h2>Message</h2>
-        <div class="sub">Banner</div>
-        <p class="hint">Your words over whatever the panel shows, for a few seconds.</p>
-        <textarea id="sayText" class="field" rows="2" maxlength="200" placeholder="Pizza's here!" aria-label="Banner text"></textarea>
-        <div class="ctl"><label for="saySecs">Seconds on screen</label><input type="number" id="saySecs" class="num" min="1" max="600" step="1" value="10"></div>
-        <div class="actions"><button class="btn primary" id="sayGo">Show</button><button class="btn" id="sayStop">Take down</button></div>
-        <div class="sub">Message card</div>
-        <p class="hint">Takes turns with the scoreboard between games, and steps aside when a game is live. Nothing shows until you add text or a list.</p>
-        <textarea id="msgText" class="field" rows="3" maxlength="200" placeholder="One per line, like Wings $5 till 7" aria-label="Message card text"></textarea>
-        <label class="fl" for="msgUrl">Or a list from a web address<small>A plain text file, one entry per line, like a list of names. The panel reads it a page at a time, so it can be long. When there is an address, the card shows the list.</small></label>
-        <input type="url" id="msgUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
-        <p class="hint" id="msgRead" hidden></p>
-        <div class="ctl"><label for="msgEvery">Show it</label><select id="msgEvery">
-          <option value="0">Whenever no game is on</option><option value="1">Every minute</option><option value="2">Every 2 minutes</option>
-          <option value="5">Every 5 minutes</option><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option>
-        </select></div>
-        <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
+      <div class="card" id="cdOwnCard" hidden>
+        <h2>Date countdown</h2>
+        <div class="cbody">
+          <div class="ctl cardsw" data-card="custom" hidden><label>Show between games<small class="card-hint"></small></label><button class="sw" aria-label="Show the date countdown between games"></button></div>
+          <p class="hint">Counts down to any day, like Christmas.</p>
+          <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
+          <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
+          <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+        </div>
       </div>
-      <div class="card" id="evCard" hidden>
-        <h2>Game events</h2>
-        <p class="hint">The panel tells Home Assistant when the game starts, on every score, when the lead changes, at the end of each period and at the final, with both teams' colors, so an automation can flash your lights or sound a goal horn. The docs have ready-made blueprints.</p>
-        <div class="ctl"><label for="evPregame">Heads-up before the start<small>An event this long before your game starts, to turn the panel or the TV on.</small></label><select id="evPregame">
-          <option value="0">Off</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option>
-          <option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option>
-        </select></div>
-        <label class="fl" for="evHook">Also post them to a web address<small>For setups without Home Assistant, like Node-RED or a script on your network: each event as a small JSON post. Plain http:// only. Leave it empty to turn it off.</small></label>
-        <input type="url" id="evHook" class="field" maxlength="160" placeholder="http://192.168.1.20:1880/gameday" autocomplete="off">
-        <p class="hint" id="evHookRead" hidden></p>
-        <div class="actions"><button class="btn primary" id="evSave">Save</button><button class="btn" id="evTest">Send a test event</button></div>
-      </div>
+    </div>
+    </section>
+
+    <section class="pane" id="pane-device" data-tab="device" role="tabpanel" aria-labelledby="tab-device" hidden>
+    <div class="grid">
       <div class="card">
         <h2>Panel</h2>
-        <div id="nickRow" hidden>
-          <label class="fl" for="nick">Nickname<small>Tells your panels apart on this page and in the iPhone app, like Living room or Garage. Leave it empty to go by the panel's own name.</small></label>
-          <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
-        </div>
-        <div id="panelCtls"></div>
-        <div id="fxCtls" hidden>
-          <p class="hint">The effect fills the panel until you pick another page under Showing. The board comes back on its own when the panel has something to tell you, like Wi-Fi lost or a message.</p>
-        </div>
-        <div id="nightCtls" hidden>
-          <div class="ctl"><label>Night schedule<small>Dims the panel or turns the screen off between the times you set. A live game of your team or a favorite keeps it at normal brightness until the game ends. The remote, picking a team or Panel on turns it off for the rest of that night.</small></label><button class="sw" data-set="night" aria-label="Night schedule"></button></div>
-          <div id="nightSet" hidden>
-            <div class="ctl"><label for="nightStart">Starts at</label><input type="time" id="nightStart" class="num time" required></div>
-            <div class="ctl"><label for="nightEnd">Ends at</label><input type="time" id="nightEnd" class="num time" required></div>
-            <div class="ctl"><label>Screen at night<small id="nightScreenHint"></small></label><button class="sw" data-set="nightscreen" aria-label="Screen at night"></button></div>
-            <div class="ctl" id="nightLevelRow"><label for="nightLevel">Night brightness<small id="nightLevelHint"></small></label><input type="range" id="nightLevel" min="1" max="255" step="1"><span class="val" id="nightLevelVal" aria-hidden="true"></span></div>
+        <div class="cbody">
+          <div id="nickRow" hidden>
+            <label class="fl" for="nick">Nickname<small>A name for this panel, like Living room.</small></label>
+            <input type="text" id="nick" class="field" maxlength="32" placeholder="Living room" autocomplete="off" enterkeyhint="done">
+          </div>
+          <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
+          <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
+          <div class="actions" id="actions"></div>
+          <div class="fw" id="fw" hidden>
+            <div class="fwline"><span id="fwText">Firmware</span><button class="btn primary" id="fwInstall" hidden>Install</button></div>
+            <div class="fwsub" id="fwSub"></div>
+          </div>
+          <div class="ctl" id="autoupdRow" hidden>
+            <label>Install updates automatically<small>Auto-installs new updates overnight.</small></label>
+            <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
+          </div>
+          <div class="ctl" id="betaRow" hidden>
+            <label>Follow beta<small>Switches to beta firmware for new features early. It may have bugs.</small></label>
+            <button class="sw" data-set="beta" aria-label="Follow beta"></button>
+          </div>
+          <div class="ctl" id="barRow" hidden>
+            <label>Bar beta<small>Auto-installs beta firmware overnight.</small></label>
+            <a class="btn" id="barReport" href="#">Something wrong?</a>
           </div>
         </div>
-        <div id="wakeCtls" hidden>
-          <div class="ctl"><label>Game-day wake<small>A panel you turned off comes back on before a game of your team or a favorite starts. At night the night schedule still dims it or keeps the screen off until the game is live.</small></label><button class="sw" data-set="wake" aria-label="Game-day wake"></button></div>
-          <div class="ctl" id="wakeLeadRow" hidden><label for="wakeLead">Turns on</label><select id="wakeLead">
-            <option value="5">5 minutes before</option><option value="10">10 minutes before</option><option value="15">15 minutes before</option>
-            <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
+      </div>
+      <div class="card" id="lookCard">
+        <h2>This page</h2>
+        <div class="cbody">
+          <div class="ctl"><label>Look<small>Phone matches your phone's light or dark setting. Saved on this phone or computer only.</small></label>
+            <div class="seg3" role="radiogroup" aria-label="Look"><button role="radio" data-look="phone">Phone</button><button role="radio" data-look="light">Light</button><button role="radio" data-look="dark">Dark</button></div>
+          </div>
+        </div>
+      </div>
+      <details class="card fold" id="setupCard">
+        <summary><h2>Setup</h2><span class="fsum">Time zone, startup, backup</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Things you set once.</p>
+          <div class="sub">Time</div>
+          <div class="tzline" id="tzline">Timezone not known yet</div>
+          <div class="ctl" id="tzpick" hidden><label for="tzsel">Timezone</label><select id="tzsel"></select></div>
+          <div class="sub">Startup</div>
+          <div class="ctl">
+            <label>Show how to connect when the panel starts<small>Shows a QR code and this page's address at startup.</small></label>
+            <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
+          </div>
+          <div id="backup" hidden>
+            <div class="sub">Backup</div>
+            <p class="hint">Save settings to a file, or copy them to another panel.</p>
+            <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
+            <input type="file" id="bkFile" accept=".json,application/json" hidden>
+            <p class="hint" id="bkNote" role="status" hidden></p>
+          </div>
+        </div>
+      </details>
+      <details class="card fold" id="evCard" hidden>
+        <summary><h2>Game events</h2><span class="fsum">For Home Assistant and webhooks</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Tells Home Assistant when your team scores, so it can flash your lights.</p>
+          <div class="ctl"><label for="evPregame">Heads-up before the start<small>Sends an event before your game, to turn on the TV.</small></label><select id="evPregame">
+            <option value="0">Off</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option>
+            <option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option>
           </select></div>
-          <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-            <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
-          </select></div>
+          <label class="fl" for="evHook">Also post them to a web address<small>Sends events to Node-RED or a script. http:// only.</small></label>
+          <input type="url" id="evHook" class="field" maxlength="160" placeholder="http://192.168.1.20:1880/gameday" autocomplete="off">
+          <p class="hint" id="evHookRead" hidden></p>
+          <div class="actions"><button class="btn primary" id="evSave">Save</button><button class="btn" id="evTest">Send a test event</button></div>
         </div>
-      </div>
-      <div class="card">
-        <h2>Favorites</h2>
-        <p class="hint" id="favHint">Up to 16 teams from any league. In Favorite teams mode the order is the priority. Buttons 1 to 4 on a WizMote remote jump to the first four.</p>
-        <div class="ctl"><label>Only today's games<small>Between games, the panel skips favorites that aren't playing today.</small></label><button class="sw" data-set="today" aria-label="Only today's games"></button></div>
-        <div class="ctl"><label>Jump to the action<small>When two favorites are playing, the panel moves to the one in the red zone, with the bases loaded, or in a close finish, then comes back.</small></label><button class="sw" data-set="jump" aria-label="Jump to the action"></button></div>
-        <div class="ctl"><label>Score banner<small>While one favorite's game is on, another favorite's score shows along the bottom for five seconds.</small></label><button class="sw" data-set="banner" aria-label="Score banner"></button></div>
-        <div id="favCtls"></div>
-        <button class="btn" id="favAdd">Add a favorite</button>
-      </div>
-      <div class="card">
-        <h2>Playlists</h2>
-        <p class="hint">Your own groups of favorites. Pick one under Favorite teams, where favorites in more than one sport also get a row for each sport on its own. With a playlist set, buttons 1 to 4 on a WizMote play the first four. A favorite outside the playlist still takes the panel near its kickoff.</p>
-        <div id="listCtls"></div>
-        <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
-      </div>
-      <div class="card">
-        <h2>Remote</h2>
-        <p class="hint">Pair a WizMote: turn on discovery, then press any button on the remote.</p>
-        <div class="ctl"><label>Status</label><span class="val" id="wizStatus" style="min-width:0;text-align:left"></span></div>
-        <div id="remoteCtls"></div>
-        <div class="actions" id="remoteActions" style="margin-top:8px"></div>
-      </div>
-      <div class="card">
-        <h2>Setup</h2>
-        <p class="hint">Things you set once.</p>
-        <div class="sub">Matrix</div>
-        <p class="hint">Click the picture that matches yours. The panel restarts with the new layout.</p>
-        <div class="panels" id="panels">
-          <button class="panelpick" data-cols="1" aria-label="One 64x64 panel">
-            <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
-            <span>One 64x64 panel</span>
-          </button>
-          <button class="panelpick" data-cols="2" aria-label="One 128x64 panel, or two 64x64 side by side">
-            <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
-            <span>One 128x64 panel</span>
-            <small>or two 64x64 side by side</small>
-          </button>
-        </div>
-        <div class="sub">Time</div>
-        <div class="tzline" id="tzline">Timezone not known yet</div>
-        <div class="ctl" id="tzpick" hidden><label for="tzsel">Timezone</label><select id="tzsel"></select></div>
-        <div class="sub">Startup</div>
-        <div class="ctl">
-          <label>Show how to connect when the panel starts<small>After it joins Wi-Fi: a QR code for the Game Day app, then the page address, for about 20 seconds. Turn it off to go straight to the scoreboard. Hold the boot button any time to show the address again.</small></label>
-          <button class="sw" data-set="bootaddr" aria-label="Show how to connect when the panel starts"></button>
-        </div>
-        <div id="backup" hidden>
-          <div class="sub">Backup</div>
-          <p class="hint">Save this panel's settings to a file, then load them back after a reset or onto another panel. Wi-Fi networks and the WizMote pairing aren't in the file.</p>
-          <div class="actions"><button class="btn" id="bkExport">Export settings</button><button class="btn" id="bkImport">Import settings</button></div>
-          <input type="file" id="bkFile" accept=".json,application/json" hidden>
-          <p class="hint" id="bkNote" role="status" hidden></p>
-        </div>
-      </div>
-      <div class="card">
-        <h2>Device</h2>
-        <div class="actions" id="actions"></div>
-        <div class="fw" id="fw" hidden>
-          <div class="fwline"><span id="fwText">Firmware</span><button class="btn primary" id="fwInstall" hidden>Install</button></div>
-          <div class="fwsub" id="fwSub"></div>
-        </div>
-        <div class="ctl" id="autoupdRow" hidden>
-          <label>Install updates automatically<small>Between 3 and 5 AM, never during a live game. Off: the panel only tells you an update is out.</small></label>
-          <button class="sw" data-set="autoupd" aria-label="Install updates automatically"></button>
-        </div>
-        <div class="ctl" id="betaRow" hidden>
-          <label>Follow beta<small>Get test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.</small></label>
-          <button class="sw" data-set="beta" aria-label="Follow beta"></button>
-        </div>
-        <div class="ctl" id="barRow" hidden>
-          <label>Bar beta<small>This panel installs test versions on its own, between 3 and 5 AM and never during a live game.</small></label>
-          <a class="btn" id="barReport" href="#">Something wrong?</a>
-        </div>
-        <div id="netsCard" hidden>
-          <div class="sub">Wi-Fi networks</div>
-          <p class="hint">The panel joins the first of these it can see, the last one that worked first. Set up another with the Game Day app and it is added here.</p>
+      </details>
+      <details class="card fold" id="netsCard" hidden>
+        <summary><h2>Wi-Fi networks</h2><span class="fsum" id="netsSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Networks this panel knows. Add more in the Game Day app.</p>
           <div id="nets"></div>
           <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
         </div>
-        <div class="ctl" style="margin-top:8px"><label>Address</label><span class="val" id="ip"></span></div>
-        <div class="ctl"><label>Name</label><span class="val" id="hostname"></span></div>
-        <div class="ctl"><label>FCC information<small>The FCC ID and Part 15 statement on the panel's own screen, for about a minute.</small></label><button class="btn" id="fccShow">Show on panel</button></div>
-        <div class="sub">Diagnostics</div>
-        <div id="health" hidden>
-          <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
-          <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
-          <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
-          <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
-          <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
-          <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
-          <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
-        </div>
-        <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
-        <div id="wifiDiag" hidden>
-          <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
-          <div class="spark" id="wifiSparkBox" hidden>
-            <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
-            <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+      </details>
+      <details class="card fold" id="diagCard">
+        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <div id="health" hidden>
+            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
+            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
+            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
+            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
           </div>
-          <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+          <div id="wifiDiag" hidden>
+            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+            <div class="spark" id="wifiSparkBox" hidden>
+              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+            </div>
+            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+          </div>
+          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
+          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
         </div>
-        <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
-        <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
+      </details>
+      <details class="card fold" id="remoteCard">
+        <summary><h2>Remote</h2><span class="fsum" id="remoteSum">WizMote</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Pair a WizMote: turn on discovery, then press any button on the remote.</p>
+          <div class="ctl"><label>Status</label><span class="val" id="wizStatus" style="min-width:0;text-align:left"></span></div>
+          <div id="remoteCtls"></div>
+          <div class="actions" id="remoteActions" style="margin-top:8px"></div>
+          <p class="hint" id="remoteBtnHint">Choose what remote buttons 1 to 4 show.</p>
+          <div id="remoteBtns"></div>
+        </div>
+      </details>
+      <details class="card fold" id="matrixCard">
+        <summary><h2>Matrix</h2><span class="fsum" id="matrixSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Pick the layout that matches your panel.</p>
+          <div class="panels" id="panels">
+            <button class="panelpick" data-cols="1" aria-label="One 64x64 panel">
+              <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
+              <span>One 64x64 panel</span>
+            </button>
+            <button class="panelpick" data-cols="2" aria-label="One 128x64 panel, or two 64x64 side by side">
+              <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
+              <span>One 128x64 panel</span>
+              <small>or two 64x64 side by side</small>
+            </button>
+          </div>
+        </div>
+      </details>
+      <div class="card dangercard">
+        <div class="cbody">
+          <p class="hint">Reboot keeps everything. Reset Wi-Fi forgets the network. Factory reset erases every setting.</p>
+          <div class="actions" id="resetActions"></div>
+        </div>
       </div>
+      <details class="card fold" id="fccCard">
+        <summary><h2>FCC information</h2><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <div class="ctl"><label>Shows the FCC ID on the panel for a minute.</label><button class="btn" id="fccShow">Show on panel</button></div>
+        </div>
+      </details>
     </div>
+    </section>
+    </main>
 
     <p class="foot">
       <span id="ver"></span><span>·</span>
@@ -381,6 +513,70 @@
     </div>
   </div>
   <div class="toast" id="toast" role="status"></div>`;
+
+  // The panel's own page has no viewport tag, so a phone would lay this out
+  // as a zoomed-out desktop page.
+  if (!document.querySelector("meta[name=viewport]")) {
+    const m = document.createElement("meta");
+    m.name = "viewport";
+    m.content = "width=device-width, initial-scale=1, viewport-fit=cover";
+    document.head.appendChild(m);
+  }
+  // ---- look: Phone (the system's light or dark), Light or Dark --------------
+  // Kept in this browser only; the panel has no say in how its page looks.
+  const sysLight = matchMedia("(prefers-color-scheme: light)");
+  let look = "phone";
+  try { look = localStorage.getItem("look") || "phone"; } catch (_) {}
+  const lookButtons = Array.from(document.querySelectorAll(".seg3 [data-look]"));
+  const applyLook = () => {
+    document.documentElement.classList.toggle("light", look === "light" || (look === "phone" && sysLight.matches));
+    for (const b of lookButtons) b.setAttribute("aria-checked", String(b.dataset.look === look));
+  };
+  sysLight.addEventListener("change", applyLook);
+  for (const b of lookButtons) {
+    b.onclick = () => {
+      look = b.dataset.look;
+      try { localStorage.setItem("look", look); } catch (_) {}
+      applyLook();
+    };
+  }
+  applyLook();
+
+  // The name stays in a slim bar along the top once the big one scrolls away.
+  new IntersectionObserver(([e]) => document.body.classList.toggle("scrolled", !e.isIntersecting && e.boundingClientRect.top < 0))
+    .observe($("#devname"));
+
+  // ---- tabs ------------------------------------------------------------
+  // Home, Teams, Display, Customize and Device. The open one is
+  // in the address (#teams), so a reload stays on it.
+  const paneTabs = Array.from(document.querySelectorAll(".tabbar [role=tab]"));
+  let curPane = "";
+  const showPane = (k) => {
+    if (!paneTabs.some((b) => b.dataset.tab === k)) k = "board";
+    if (k === curPane) return;
+    curPane = k;
+    for (const b of paneTabs) {
+      const on = b.dataset.tab === k;
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    for (const p of document.querySelectorAll(".pane")) p.hidden = p.dataset.tab !== k;
+    history.replaceState(null, "", k === "board" ? location.pathname + location.search : "#" + k);
+  };
+  paneTabs.forEach((b, i) => {
+    b.onclick = () => {
+      showPane(b.dataset.tab);
+      window.scrollTo(0, 0);
+    };
+    b.onkeydown = (ev) => {
+      const step = ev.key === "ArrowRight" ? 1 : ev.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      const next = paneTabs[(i + step + paneTabs.length) % paneTabs.length];
+      next.focus();
+      next.click();
+    };
+  });
+  showPane(location.hash.slice(1));
 
   // ---- helpers ---------------------------------------------------------
   let toastTimer;
@@ -431,6 +627,7 @@
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
+    celebrate: Number,
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
@@ -440,17 +637,18 @@
       return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    town: String, wxon: (v) => v === "1",
+    town: String, wxon: (v) => v === "1", wxunit: Number,
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
       const [n, refs] = p.split("=");
       const keys = (refs || "").split(",");
-      return { n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) };
+      return Object.assign({ n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, listOpts(keys));
     }),
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
+    remote1: String, remote2: String, remote3: String, remote4: String,
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
@@ -521,7 +719,15 @@
       schema: 1,
       lists: String(params.lists).split(";").filter(Boolean).map((p) => {
         const [n, refs] = p.split("=");
-        return { n, t: (refs || "").split(",").filter(Boolean) };
+        const toks = (refs || "").split(",").filter(Boolean);
+        const o = listOpts(toks);
+        const e = { n, t: toks.filter((t) => t[0] !== "@") };
+        if (o.days) { e.days = o.days; if (o.start !== o.end) { e.start = o.start; e.end = o.end; } }
+        if (o.only) e.only = true;
+        if ("today" in o) e.today = o.today;
+        if (o.color) e.color = o.color;
+        if (o.icon) e.icon = o.icon;
+        return e;
       }),
     };
     if (params.list !== undefined) doc.list = Number(params.list);
@@ -581,13 +787,9 @@
     }
   };
 
-  // Every ping calls this; #conn is a live region, so only a flip touches it.
+  // Every ping calls this. A panel that stops answering says so on the board.
   const setConn = (on) => {
-    if (on === connected) return;
     connected = on;
-    const c = $("#conn");
-    c.classList.toggle("on", on);
-    c.querySelector("span").textContent = on ? "live" : "offline";
   };
 
   // The panel's own miss count can't say it has gone, so the page keeps its
@@ -600,6 +802,7 @@
     line.textContent = restart
       || (downSince ? "Panel not answering since " + new Date(downSince).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
     line.hidden = !line.textContent;
+    $("#gonePill").hidden = !downSince || !!restart;
     $("#board").classList.toggle("dim", !line.hidden);
   };
   const answered = () => {
@@ -629,6 +832,8 @@
     a.textContent = abbr || "---";
     a.classList.toggle("poss", !!poss);
     a.style.color = "#" + (color || "ffffff");
+    // Each side of the board glows its team's color (alpha 61 is about 38%).
+    $("#board").style.setProperty(node.id === "tA" ? "--ga" : "--gb", /^[0-9a-f]{6}$/i.test(color || "") ? "#" + color + "61" : "transparent");
     node.querySelector(".rec").textContent = rec || "";
     // Timeout pips are football's (other sports send no timeouts).
     node.querySelector(".pips").style.display = timeouts === null ? "none" : "";
@@ -723,6 +928,8 @@
   };
   const releaseSelect = $("#release");
   releaseSelect.onchange = () => setGD({ release: releaseSelect.value });
+  const celebrateSelect = $("#celebrate");
+  celebrateSelect.onchange = () => setGD({ celebrate: celebrateSelect.value });
   const collideSelect = $("#collide");
   const favRotate = $("#favrotate");
   const showFavRotate = () => {
@@ -763,15 +970,12 @@
     // no favorites a rotation of recent finals, and keeps scanning.
     // Favorites take over: a favorite's game in progress has the panel.
     const lock = S.favlock && S.favlock.id ? S.favlock : null;
-    $("#liveName").textContent = lock ? "Locked on " + (lock.name || lock.abbr)
-      : S.fallback ? "No live game right now, showing your first favorite until one starts"
-        : S.recap ? "No live game right now, showing recent finals"
-          : S.best ? "Following the best game on" : "Following a random game in progress";
-    $("#liveLg").textContent = (lock ? "A favorite is playing, so the panel stays on its game until it ends. "
-      : S.fallback || S.recap ? ""
-        : S.best ? "Closest game, least time left, overtime and ranked teams first. Looks again at a break in play, after Switch every. "
-          : "Moves on when it ends, or after Switch every. ")
-      + (auto ? "Leagues follow your favorites. Tap a league to choose by hand:" : "Leagues:");
+    $("#liveName").textContent = lock ? (lock.name || lock.abbr) + " are on, so the panel stays on the game until it ends"
+      : S.fallback ? "Nothing live right now. Showing your team until a game starts."
+        : S.recap ? "Nothing live right now. Showing recent finals."
+          : S.best ? "Showing the best game on" : "Showing a game in progress. Picks another when it ends.";
+    $("#liveLg").textContent = auto ? "Leagues follow your favorites. Tap one to choose by hand." : "";
+    $("#liveLg").hidden = !auto;
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
@@ -816,6 +1020,8 @@
     if (document.activeElement !== favRotate) favRotate.value = S.rotate;
     if (document.activeElement !== lockonInput) lockonInput.value = S.lockon || 15;
     if (document.activeElement !== releaseSelect) releaseSelect.value = String(S.release || 30);
+    // Firmware without the setting sends no celebrate key: it celebrates in full.
+    if (document.activeElement !== celebrateSelect) celebrateSelect.value = String(S.celebrate === undefined ? 2 : S.celebrate);
     if (document.activeElement !== collideSelect) {
       collideSelect.value = String(S.collide || 0);
       showFavRotate();
@@ -826,12 +1032,17 @@
       const set = (S.next || []).filter((n) => n.t && n.t.id).length;
       const shown = (S.next || []).find((n) => n.slot === S.shown);
       const playing = playingList();
+      // Says why the board shows what it does. Locked covers the lead-in
+      // before kickoff and the stretch after the final, not only the game.
+      const team = shown ? shown.t.name || shown.t.abbr : "";
       $("#favName").textContent = !set
-        ? "No favorites set yet"
+        ? "Add a team to get started"
         : S.locked && shown
-          ? "Locked on " + (shown.t.name || shown.t.abbr)
-          : playingSport() ? "Cycling through your " + playingSport() + " favorites"
-            : playing ? "Cycling through " + playing.n : "Cycling through your favorites";
+          ? team + (shown.s === "PRE" ? " play soon" : shown.s === "POST" ? " just finished" : " are on")
+          : playingSport() ? "None of your " + playingSport() + " teams are playing. Showing their next games."
+            : playing ? "Playing your " + playing.n + " playlist" + (S.sched && S.sched === S.list ? ", on its schedule" : "")
+              : "None of your teams are playing. Showing their next games.";
+      $("#favStart").hidden = !!set;
     }
     renderListPick();
   };
@@ -842,56 +1053,167 @@
     setOn(sw, false, "aria-checked");
     sw.onclick = () => setGD({ [sw.dataset.set]: S && S[sw.dataset.set] ? 0 : 1 });
   });
-  // The Between games list: a row per card in the state's cards, in its
-  // order, so a card newer firmware adds shows with no change here. A card
-  // with nothing to show yet is greyed with what it needs; its switch still
-  // works.
+  // The Between games list: the cards that are on, in the state's order (the
+  // order the panel shows them), and the rest behind Add a card. A card newer
+  // firmware adds shows with no change here. A card with nothing to show yet
+  // is greyed with what it needs. The cards you make (the date countdown, the
+  // message card, pictures) are switched on the Customize tab, where they are
+  // made, and only named here.
   const cardAbout = {
     next: "The next game's board: the teams, the day and the time.",
     clock: "The time in your team's colors, when no game is coming up for weeks. With Next game off, the clock shows instead of the next game.",
     countdown: "Big digits to the start, \"2d 14h\", taking turns with the next game every 10 seconds.",
-    custom: "A day you pick below, like Christmas, in the last 10 seconds of every minute until that day ends.",
-    message: "The Message card's text or list, taking turns with the scoreboard.",
-    picture: "Your pictures from the Pictures card, one at a time.",
     gameleaders: "At halftime and the final, each team's top players from the box score: passing, rushing and receiving in football, points and rebounds in basketball, goals and assists in hockey, the starting pitcher and top hitter in baseball.",
     top25: "The AP poll, a page at a time, every 10 minutes.",
     news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
-    weather: "Your town's forecast for 10 seconds every minute. Set the town under Weather below.",
+    weather: "Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days.",
   };
-  const cardRows = {};
-  const renderCards = () => {
-    const host = $("#cardList");
-    const cards = S.cards || [];
-    if (cards.map((c) => c.id).join() !== Object.keys(cardRows).join()) {
-      host.textContent = "";
-      for (const k of Object.keys(cardRows)) delete cardRows[k];
+  const OWN_CARDS = { custom: "the date countdown", message: "the message card", picture: "your pictures" };
+  const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news"]]];
+  const CARD_ICONS = {
+    next: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    countdown: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/>',
+    gameleaders: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',
+    top25: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
+    news: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10M7 12.5h10M7 16h6"/>',
+    weather: '<circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 20z"/>',
+  };
+  const cardIcon = (id) => '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (CARD_ICONS[id] || '<circle cx="12" cy="12" r="8"/>') + "</svg>";
+  // The firmware's hints point at where things used to be on this page.
+  const cardHint = (c) => (c.ok ? "" : (c.hint || "").replace(/ below first$/, " first").replace(" in the Pictures card", "").replace(" in the Message card", ""));
+  const groupCards = (cards) => {
+    const seen = new Set();
+    const groups = CARD_GROUPS.map(([name, ids]) => [name, cards.filter((c) => ids.includes(c.id) && seen.add(c.id))]);
+    groups.push(["More", cards.filter((c) => !seen.has(c.id))]);
+    return groups.filter((g) => g[1].length);
+  };
+  const toggleCard = (id) => {
+    const now = (S.cards || []).find((x) => x.id === id);
+    setGD({ cards: id + ":" + (now && now.on ? 0 : 1) });
+  };
+  // A card's own settings go inside its row; while it is off they wait here,
+  // still in the page, since the renders look their fields up by id.
+  const cardExtras = () => ({ weather: $("#wxBox") });
+  const cardsOpen = new Set();
+  let cardsKey = "";
+  let addSheet = null;
+  const renderAddSheet = () => {
+    if (!addSheet || addSheet.hidden) return;
+    const list = addSheet.querySelector(".llist");
+    list.textContent = "";
+    const off = (S.cards || []).filter((c) => !c.on && !OWN_CARDS[c.id]);
+    if (!off.length) list.appendChild(el("p", "hint", "Every card is on."));
+    for (const [gname, cards] of groupCards(off)) {
+      list.appendChild(el("div", "sub", gname));
       for (const c of cards) {
-        const row = el("div", "ctl card-row");
-        row.dataset.card = c.id;
-        const label = el("label", null, c.name);
-        const about = el("small", null, cardAbout[c.id] || "");
-        const hint = el("small", "card-hint");
-        label.append(about, hint);
-        const sw = el("button", "sw");
-        sw.setAttribute("role", "switch");
-        sw.setAttribute("aria-label", c.name);
-        sw.onclick = () => {
-          const now = (S.cards || []).find((x) => x.id === c.id);
-          setGD({ cards: c.id + ":" + (now && now.on ? 0 : 1) });
-        };
-        row.append(label, sw);
-        host.appendChild(row);
-        cardRows[c.id] = { row, hint, sw };
+        const row = el("div", "laddrow");
+        row.innerHTML = cardIcon(c.id);
+        const txt = el("div", "ltxt");
+        txt.append(el("div", "ln", c.name), el("small", null, cardAbout[c.id] || ""));
+        const add = el("button", "btn primary", "Add");
+        add.setAttribute("aria-label", "Add " + c.name);
+        add.onclick = () => toggleCard(c.id);
+        row.append(txt, add);
+        list.appendChild(row);
       }
     }
-    for (const c of cards) {
-      const r = cardRows[c.id];
-      setOn(r.sw, !!c.on, "aria-checked");
-      r.row.classList.toggle("waiting", !c.ok);
-      r.hint.hidden = c.ok || !c.hint;
-      r.hint.textContent = c.ok ? "" : c.hint || "";
+  };
+  const openAddSheet = () => {
+    if (!addSheet) {
+      addSheet = el("div", "lsheet");
+      addSheet.innerHTML = '<div class="lpanel" role="dialog" aria-modal="true" aria-label="Add a card"><div class="lhead"><h3>Add a card</h3><button class="btn">Done</button></div><div class="llist"></div></div>';
+      addSheet.querySelector(".lhead .btn").onclick = () => { addSheet.hidden = true; $("#cardAdd").focus(); };
+      addSheet.onclick = (ev) => { if (ev.target === addSheet) addSheet.hidden = true; };
+      addSheet.onkeydown = (ev) => { if (ev.key === "Escape") addSheet.hidden = true; };
+      document.body.appendChild(addSheet);
+    }
+    addSheet.hidden = false;
+    renderAddSheet();
+    addSheet.querySelector(".lhead .btn").focus();
+  };
+  const renderCards = () => {
+    const host = $("#cardList");
+    if (!S.cards) {
+      host.textContent = "";
+      cardsKey = "";
+      return renderOwnCards([]);
+    }
+    const cards = S.cards;
+    renderOwnCards(cards);
+    const key = cards.map((c) => [c.id, c.on, c.ok, c.hint].join(":")).join();
+    if (key === cardsKey) return renderAddSheet();
+    cardsKey = key;
+    const ex = cardExtras();
+    for (const c of cards) if (!c.on && ex[c.id]) $("#cardPark").appendChild(ex[c.id]);
+    host.textContent = "";
+    const on = cards.filter((c) => c.on && !OWN_CARDS[c.id]);
+    host.appendChild(el("div", "sub", "Showing now, in this order"));
+    if (!on.length) host.appendChild(el("p", "hint", "No cards on. Add one below."));
+    for (const c of on) {
+      const open = cardsOpen.has(c.id);
+      const row = el("div", "xrow" + (open ? " open" : "") + (c.ok ? "" : " waiting"));
+      row.dataset.card = c.id;
+      const head = el("div", "xhead");
+      const b = el("button", "xbtn");
+      b.setAttribute("aria-expanded", String(open));
+      b.innerHTML = cardIcon(c.id) + '<span class="xname"><span></span><small class="card-hint"></small></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+      b.querySelector(".xname span").textContent = c.name;
+      const hint = b.querySelector(".card-hint");
+      hint.textContent = cardHint(c);
+      hint.hidden = !hint.textContent;
+      const rm = el("button", "lrm");
+      rm.setAttribute("aria-label", "Remove " + c.name);
+      rm.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+      rm.onclick = () => toggleCard(c.id);
+      head.append(b, rm);
+      const body = el("div", "xbody");
+      body.hidden = !open;
+      body.appendChild(el("p", "hint", cardAbout[c.id] || ""));
+      if (ex[c.id]) body.appendChild(ex[c.id]);
+      b.onclick = () => {
+        if (cardsOpen.has(c.id)) cardsOpen.delete(c.id); else cardsOpen.add(c.id);
+        body.hidden = !cardsOpen.has(c.id);
+        b.setAttribute("aria-expanded", String(!body.hidden));
+        row.classList.toggle("open", !body.hidden);
+      };
+      row.append(head, body);
+      host.appendChild(row);
+    }
+    const own = cards.filter((c) => c.on && OWN_CARDS[c.id]).map((c) => OWN_CARDS[c.id]);
+    if (own.length) {
+      const also = el("p", "hint also", "Also taking turns: " + own.join(", ").replace(/, ([^,]*)$/, " and $1") + ". ");
+      const go = el("button", "linkbtn", "Change them under Customize");
+      go.onclick = () => { showPane("customize"); window.scrollTo(0, 0); };
+      also.appendChild(go);
+      host.appendChild(also);
+    }
+    const off = cards.filter((c) => !c.on && !OWN_CARDS[c.id]).length;
+    const bar = el("div", "actions ladd");
+    const add = el("button", "btn", off ? "Add a card (" + off + " more)" : "Every card is on");
+    add.id = "cardAdd";
+    add.disabled = !off;
+    add.onclick = openAddSheet;
+    bar.appendChild(add);
+    host.appendChild(bar);
+    renderAddSheet();
+  };
+  // The Show between games switch on each Customize card.
+  const renderOwnCards = (cards) => {
+    for (const row of document.querySelectorAll(".cardsw")) {
+      const c = cards.find((x) => x.id === row.dataset.card);
+      row.hidden = !c;
+      if (!c) continue;
+      setOn(row.querySelector(".sw"), !!c.on, "aria-checked");
+      const hint = row.querySelector(".card-hint");
+      hint.textContent = c.on ? cardHint(c) : "";
+      hint.hidden = !hint.textContent;
     }
   };
+  document.querySelectorAll(".cardsw .sw").forEach((sw) => {
+    sw.setAttribute("role", "switch");
+    sw.onclick = () => toggleCard(sw.closest(".cardsw").dataset.card);
+  });
   // The custom countdown: the name and the day post on their own, as they change.
   const cdName = $("#cdname");
   const cdDate = $("#cddate");
@@ -904,6 +1226,9 @@
   const postTown = () => setGD({ town: town.value.trim() });
   $("#townGo").onclick = postTown;
   town.onkeydown = (e) => { if (e.key === "Enter") postTown(); };
+  // Degrees: auto follows the town's country, else the time zone.
+  const wxUnit = $("#wxUnit");
+  wxUnit.onchange = () => setGD({ wxunit: wxUnit.value });
   // The weather block: the place the lookup found and how the reads go.
   const mins = (s) => Math.max(1, Math.round(s / 60));
   const ago = (s) => (s < 60 ? "just now" : mins(s) === 1 ? "a minute ago" : `${mins(s)} minutes ago`);
@@ -911,6 +1236,13 @@
     $("#wxBox").hidden = S.town === undefined;  // firmware from before the card
     if (S.town === undefined) return;
     if (document.activeElement !== town) town.value = S.town || "";
+    // Older firmware has Fahrenheit only.
+    $("#wxUnitRow").hidden = S.wxunit === undefined;
+    if (S.wxunit !== undefined && document.activeElement !== wxUnit) {
+      wxUnit.value = String(S.wxunit);
+      const shown = (S.wx && S.wx.unit) || (S.kick && S.kick.unit);
+      wxUnit.options[0].textContent = shown ? `Auto (°${shown} now)` : "Auto";
+    }
     const w = S.wx;
     const place = $("#wxPlace");
     const read = $("#wxRead");
@@ -925,7 +1257,7 @@
     if (!w.place) return;
     read.hidden = false;
     if (w.read_s !== undefined) {
-      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°F, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
+      read.textContent = `Read ${ago(w.read_s)}: ${w.temp}°${w.unit || "F"}, ${w.cond ? w.cond.toLowerCase() + ", " : ""}high ${w.hi}, low ${w.lo}.`;
       if (w.held) read.textContent += " The next read waits for the game to end.";
       else if (w.read !== 200 && w.read !== -1) read.textContent += ` The last read failed${retry}.`;
     } else if (w.held) {
@@ -939,9 +1271,26 @@
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
+  // From the WizMote Status entity. Without a paired remote the favorite
+  // rows leave out which button lands on them.
+  let remotePaired = false;
+  let lastFavSig = null;
   const favMax = () => (S && S.favmax) || 4;
   // renderSettings() redraws the list from S, which already carries the post.
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
+  // The WizMote's buttons (state remote, set remote1 to remote4): what each is
+  // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
+  // sport:football, all or none. A held post stands in until the panel answers.
+  const remoteTargets = () => [1, 2, 3, 4].map((b) => {
+    const h = S && S["remote" + b];
+    const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
+    return h !== undefined ? { v: h, gone: false } : r;
+  });
+  // The buttons whose press lands on favorite i (key), as "1, 3": its own
+  // favorite by default, or the team it was set to. Buttons whose target is
+  // gone are on their own favorite for now.
+  const remoteButtonFor = (key, i) => remoteTargets()
+    .map((r, b) => ((r.v === "fav" || r.gone ? b === i : r.v === "team:" + key) ? b + 1 : 0)).filter(Boolean).join(", ");
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
@@ -954,7 +1303,8 @@
       if (t) img.src = logoUrl(t[0], t[1], t[2]);
       row.appendChild(img);
       const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
-      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (i < 4 ? " · remote button " + (i + 1) : "")));
+      const btn = remoteButtonFor(key, i);
+      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -992,6 +1342,39 @@
     postFavs(favKeys.concat([key]));
     toast("Added the " + t[3]);
   };
+  // A playlist's color and icon (playlists.h kListColors, kListIcons, copied
+  // into the bundle as LIST_LOOKS by scripts/build_web.py): the panel shows
+  // its name in the color, the 11 by 11 icon above it, and so does this page.
+  const LOOKS = typeof LIST_LOOKS !== "undefined" ? LIST_LOOKS : { colors: [], icons: [] };
+  const lookColor = (k) => (LOOKS.colors.find((c) => c[0] === k) || [])[1] || "";
+  const lookIcon = (k) => (LOOKS.icons.find((c) => c[0] === k) || [])[1] || null;
+  const SVG = "http://www.w3.org/2000/svg";
+  // The icon as the panel's pixels, in the list's color (white with none,
+  // as on the panel's black); a color with no icon is a dot of that color.
+  const lookMark = (l, cls) => {
+    const rows = l && lookIcon(l.icon), color = l && lookColor(l.color);
+    const n = el("span", "pmark" + (cls ? " " + cls : ""));
+    n.setAttribute("aria-hidden", "true");
+    if (rows) {
+      const svg = document.createElementNS(SVG, "svg");
+      svg.setAttribute("viewBox", "0 0 11 11");
+      const path = document.createElementNS(SVG, "path");
+      let d = "";
+      rows.forEach((r, y) => r.split("").forEach((c, x) => { if (c === "#") d += "M" + x + " " + y + "h1v1h-1z"; }));
+      path.setAttribute("d", d);
+      path.setAttribute("fill", color || "#ffffff");
+      svg.appendChild(path);
+      n.appendChild(svg);
+    } else if (color) {
+      n.classList.add("dot");
+      n.style.background = color;
+    } else {
+      n.hidden = true;
+    }
+    return n;
+  };
+  // The names owners read, as the docs give them.
+  const lookName = (k) => ({ bolt: "Lightning bolt" }[k] || k.charAt(0).toUpperCase() + k.slice(1));
   // Playlists (components/gameday/playlists.h): named groups of favorites.
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
@@ -1001,7 +1384,30 @@
   const sportRows = () => (S && S.sports) || [];
   const playingSport = () => (S && S.sport && sportRows().includes(S.sport) ? S.sport : "");
   const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
-  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",")).join(";");
+  // A playlist's options (playlists.h ListOpt) ride in its lists= text as @
+  // tokens among its teams: @d:06 the schedule's days (0 Sunday), @t:11:00-23:00
+  // its hours, @only, @today:1 or @today:0, and its look, @c:blue and @i:star.
+  // The state carries them as fields.
+  const listOpts = (toks) => {
+    const o = { days: "", start: "00:00", end: "00:00", only: false };
+    let color = "", icon = "";
+    for (const t of toks) {
+      if (t.startsWith("@d:")) o.days = "0123456".split("").filter((d) => t.slice(3).includes(d)).join("");
+      else if (t.startsWith("@t:")) { const [a, b] = t.slice(3).split("-"); if (a && b) { o.start = a; o.end = b; } }
+      else if (t === "@only") o.only = true;
+      else if (t === "@today:1" || t === "@today:0") o.today = t === "@today:1";
+      else if (t.startsWith("@c:")) color = lookColor(t.slice(3)) ? t.slice(3) : "";
+      else if (t.startsWith("@i:")) icon = lookIcon(t.slice(3)) ? t.slice(3) : "";
+    }
+    if (!o.days) { o.start = "00:00"; o.end = "00:00"; }
+    o.color = color;
+    o.icon = icon;
+    return o;
+  };
+  const optTokens = (l) => (l.days ? ",@d:" + l.days + (l.start !== l.end ? ",@t:" + l.start + "-" + l.end : "") : "")
+    + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
+  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
   // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
@@ -1027,15 +1433,17 @@
       name.value = l.n;
       name.maxLength = 16;
       name.setAttribute("aria-label", "Playlist name");
+      row.appendChild(lookMark(l));
       name.onchange = () => {
         const n = cleanName(name.value);
         if (!n || n === l.n) { name.value = l.n; return; }
         if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another playlist has that name"); }
-        const next = ls.map((o, k) => (k === i ? { n, f: o.f } : o));
+        const next = ls.map((o, k) => (k === i ? Object.assign({}, o, { n }) : o));
         postLists(next, S.list === i + 1 ? i + 1 : undefined);
       };
       row.appendChild(name);
-      if (i < 4) row.appendChild(el("small", "pbtn", "Button " + (i + 1)));
+      const btns = remoteTargets().map((r, b) => (r.v === "list:" + l.n ? b + 1 : 0)).filter(Boolean);
+      if (btns.length) row.appendChild(el("small", "pbtn", (btns.length > 1 ? "Buttons " : "Button ") + btns.join(", ")));
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
         const b = el("button", null, label);
@@ -1056,7 +1464,7 @@
       mk("\u2715", "Remove", () => postLists(ls.filter((_, k) => k !== i)));
       row.appendChild(ctl);
       box.appendChild(row);
-      const chips = el("div", "chips");
+      const chips = el("div", "chips pteams");
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favKeys.forEach((key, fi) => {
@@ -1067,11 +1475,107 @@
         setOn(c, on, "aria-pressed");
         c.onclick = () => {
           const f = on ? l.f.filter((x) => x !== fi) : l.f.concat([fi]).sort((a, b) => a - b);
-          postLists(ls.map((o, k) => (k === i ? { n: o.n, f } : o)));
+          postLists(ls.map((o, k) => (k === i ? Object.assign({}, o, { f }) : o)));
         };
         chips.appendChild(c);
       });
       box.appendChild(chips);
+      // Its options: the schedule's days and hours, Only this list's games,
+      // its own Only today's games. Every change posts the playlists whole,
+      // from the playlists as they are now: the card isn't redrawn while a
+      // field in it has focus, so this row can be behind the last post.
+      const cur = () => lists()[i] || l;
+      const put = (patch) => postLists(lists().map((o, k) => (k === i ? Object.assign({}, o, patch) : o)));
+      const opts = el("div", "popts");
+      const sched = el("div", "psched");
+      sched.appendChild(el("span", "plabel", "Plays on"));
+      const days = el("span", "chips pdays");
+      days.setAttribute("role", "group");
+      days.setAttribute("aria-label", "Days " + l.n + " plays");
+      ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].forEach((day, d) => {
+        const c = el("button", "chip", day[0]);
+        c.title = day;
+        c.setAttribute("aria-label", day);
+        const on = (l.days || "").includes(String(d));
+        setOn(c, on, "aria-pressed");
+        c.onclick = () => {
+          const was = cur().days || "";
+          const next = "0123456".split("").filter((x) => (x === String(d) ? !was.includes(x) : was.includes(x))).join("");
+          put(next ? { days: next } : { days: "", start: "00:00", end: "00:00" });
+        };
+        days.appendChild(c);
+      });
+      sched.appendChild(days);
+      opts.appendChild(sched);
+      if (l.days) {
+        const hours = el("div", "phours");
+        const hint = el("small");
+        const hintFor = (o) => (o.start === o.end ? "all day" : o.end < o.start ? "into the next morning" : "");
+        const mk = (label, key) => {
+          const t = el("input", "num time");
+          t.type = "time";
+          t.value = l[key] || "00:00";
+          t.setAttribute("aria-label", label + " " + l.n);
+          t.onchange = () => {
+            if (!t.value) return;
+            put({ [key]: t.value });
+            hint.textContent = hintFor(Object.assign({}, cur(), { [key]: t.value }));
+          };
+          hours.appendChild(el("span", "plabel", label));
+          hours.appendChild(t);
+        };
+        mk("from", "start");
+        mk("to", "end");
+        hint.textContent = hintFor(l);
+        hours.appendChild(hint);
+        opts.appendChild(hours);
+      }
+      const only = el("div", "ctl");
+      only.appendChild(el("label", null, "Only this list's games"));
+      const sw = el("button", "sw");
+      sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-label", "Only this list's games " + l.n);
+      setOn(sw, !!l.only, "aria-checked");
+      sw.onclick = () => put({ only: !cur().only });
+      only.appendChild(sw);
+      opts.appendChild(only);
+      const today = el("div", "ctl");
+      const tl = el("label", null, "Only today's games");
+      const ts = el("select");
+      ts.setAttribute("aria-label", "Only today's games " + l.n);
+      [["", "Same as Favorites"], ["1", "On"], ["0", "Off"]].forEach(([v, t]) => { const o = el("option", null, t); o.value = v; ts.appendChild(o); });
+      ts.value = "today" in l ? (l.today ? "1" : "0") : "";
+      ts.onchange = () => {
+        const next = Object.assign({}, cur());
+        if (ts.value === "") delete next.today; else next.today = ts.value === "1";
+        postLists(lists().map((o, k) => (k === i ? next : o)));
+      };
+      today.appendChild(tl);
+      today.appendChild(ts);
+      opts.appendChild(today);
+      // Its look: a color and an icon, each with None, for its name on the
+      // panel and in Playing.
+      const look = (label, key, items, draw) => {
+        const r = el("div", "plook");
+        r.appendChild(el("span", "plabel", label));
+        const g = el("span", "chips");
+        g.setAttribute("role", "group");
+        g.setAttribute("aria-label", label + " of " + l.n);
+        [["", "None"]].concat(items).forEach(([k]) => {
+          const c = el("button", "chip look");
+          if (k) c.appendChild(draw(k)); else c.textContent = "None";
+          c.title = k ? lookName(k) : "None";
+          c.setAttribute("aria-label", c.title);
+          setOn(c, (l[key] || "") === k, "aria-pressed");
+          c.onclick = () => put({ [key]: k });
+          g.appendChild(c);
+        });
+        r.appendChild(g);
+        opts.appendChild(r);
+      };
+      look("Color", "color", LOOKS.colors, (k) => lookMark({ color: k }));
+      look("Icon", "icon", LOOKS.icons, (k) => lookMark({ icon: k, color: l.color }));
+      box.appendChild(opts);
       host.appendChild(box);
     });
     const none = !favKeys.length;
@@ -1079,8 +1583,6 @@
     else if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
     $("#listActions").hidden = none;
     $("#listAdd").hidden = ls.length >= listMax();
-    $("#favHint").textContent = "Up to 16 teams from any league. In Favorite teams mode the order is the priority. "
-      + (ls.length ? "Your playlists have buttons 1 to 4 on a WizMote remote." : "Buttons 1 to 4 on a WizMote remote jump to the first four.");
   };
   $("#listAdd").onclick = () => {
     const ls = lists();
@@ -1106,16 +1608,73 @@
       });
     }
     listPick.value = playingSport() ? "s:" + playingSport() : String(S.list || 0);
+    Array.from(listPick.options).forEach((o) => { const l = ls[Number(o.value) - 1]; o.style.color = (l && lookColor(l.color)) || ""; });
+    const mark = lookMark(playingSport() ? null : playingList(), "playing");
+    mark.id = "favListMark";
+    $("#favListMark").replaceWith(mark);
   };
   // Both keys each time, so the one not picked shows as off while the panel answers.
   listPick.onchange = () => setGD(listPick.value.startsWith("s:")
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
+  // The Remote card's four pickers, one per button, grouped: its own
+  // favorite, each favorite team, the sport rows, the playlists, all, nothing.
+  let remoteSig = "";
+  const renderRemote = () => {
+    const host = $("#remoteBtns");
+    const targets = remoteTargets();
+    const groups = [["", [["fav", "Its own favorite"]]],
+      ["Favorites", favKeys.map((k) => { const t = teamByKey(k); return ["team:" + k, t ? t[3] : k]; })],
+      ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
+      ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
+      ["", [["all", "All favorites"], ["none", "Nothing"]]]];
+    const sig = JSON.stringify([groups, targets, favKeys]);
+    if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
+    remoteSig = sig;
+    host.innerHTML = "";
+    targets.forEach((r, b) => {
+      const row = el("div", "ctl rbtn");
+      const label = el("label", null, "Button " + (b + 1));
+      const t = teamByKey(favKeys[b]);
+      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favKeys.length > b ? "" : " (empty)");
+      const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now" : "That team left your favorites")
+        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "." : "";
+      if (note) label.appendChild(el("small", null, note));
+      row.appendChild(label);
+      const sel = el("select");
+      sel.setAttribute("aria-label", "Remote button " + (b + 1));
+      let found = false;
+      for (const [g, opts] of groups) {
+        if (!opts.length) continue;
+        const into = g ? el("optgroup") : sel;
+        if (g) { into.label = g; sel.appendChild(into); }
+        for (const [v, text] of opts) {
+          const o = el("option", null, text);
+          o.value = v;
+          found = found || v === r.v;
+          into.appendChild(o);
+        }
+      }
+      if (!found) {
+        // Set to something that is gone: shown as it is, so it comes back when its target does.
+        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^sport:/, "") + " (gone)");
+        o.value = r.v;
+        sel.appendChild(o);
+      }
+      sel.value = r.v;
+      sel.onchange = () => setGD({ ["remote" + (b + 1)]: sel.value });
+      row.appendChild(sel);
+      host.appendChild(row);
+    });
+  };
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
     const keys = (S.favs || []).map(refKey).filter(Boolean);
-    if (keys.join(",") !== favKeys.join(",")) {
+    // Redrawn when the list changes, or the remote's marks on it do.
+    const favSig = keys.join(",") + "|" + JSON.stringify(remoteTargets());
+    if (favSig !== lastFavSig) {
+      lastFavSig = favSig;
       favKeys = keys;
       renderFavs();
       if ($("#modal").classList.contains("open")) markPicked();
@@ -1123,11 +1682,13 @@
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
     // Redrawn only when something changed, so a name being typed keeps its place.
-    const sig = favKeys.join(",") + "|" + JSON.stringify(lists());
-    if (sig !== listSig && !(document.activeElement && document.activeElement.classList.contains("pname"))) {
+    const sig = favKeys.join(",") + "|" + JSON.stringify(lists()) + "|" + JSON.stringify(remoteTargets());
+    if (sig !== listSig && !(document.activeElement && $("#listCtls").contains(document.activeElement) &&
+        document.activeElement.matches("input, select"))) {
       listSig = sig;
       renderLists();
     }
+    renderRemote();
     // A situation switch for each sport the panel follows (favorites, Live
     // games leagues picked by hand), all of them before anything is
     // picked. The automatic Live list is no help here: it never comes back
@@ -1135,11 +1696,11 @@
     // line, so no switch of their own; a switch for several sports lists them.
     const sports = new Set((S.favs || []).filter((t) => t && t.id).map((t) => t.l)
       .concat(S.live_auto ? [] : S.live || []).map((lg) => lgInfo(lg).path.split("/")[0]));
-    document.querySelectorAll("#tickerCtls .ctl[data-sport]").forEach((row) => {
+    document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
     // Firmware from before the countdown card leaves these out.
-    $("#cdCard").hidden = S.countdown === undefined;
+    $("#cdCard").hidden = $("#cdOwnCard").hidden = S.countdown === undefined;
     // The Between games list; firmware from before it has a switch per card.
     $("#cardsOld").hidden = !!S.cards;
     $("#wxOnRow").hidden = !!S.cards;  // the list's Weather row is the same switch
@@ -1155,9 +1716,10 @@
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the bar and demo builds have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
-    // The rollback line in the firmware box reads this document, which can
-    // land after the update entity does.
-    if ((S.update_failed || "") !== fwFailed && ents[byName["Firmware"]]) renderUpdate(ents[byName["Firmware"]]);
+    // The rollback line and the important mark in the firmware box read this
+    // document, which can land after the update entity does.
+    if (((S.update_failed || "") !== fwFailed || !!S.update_important !== fwImportant) && ents[byName["Firmware"]])
+      renderUpdate(ents[byName["Firmware"]]);
     // The bar build: a note, and an email to us with the panel's name in it.
     $("#barRow").hidden = !S.bar;
     if (S.bar) {
@@ -1249,7 +1811,7 @@
   };
   const renderMsg = () => {
     // Older firmware has no message card.
-    $("#msgCard").hidden = S.msg === undefined;
+    $("#msgCard").hidden = $("#sayCard").hidden = S.msg === undefined;
     if (S.msg === undefined) return;
     fillField($("#msgText"), "msg");
     fillField($("#msgUrl"), "msgurl");
@@ -1498,7 +2060,7 @@
   }).observe(document.head, { childList: true, subtree: true, characterData: true });
   const renderNick = () => {
     const nick = (S && S.nick) || "";
-    $("#devname").textContent = nick || pingTitle || (S && S.name) || "connecting";
+    $("#devname").textContent = $("#minibar").textContent = nick || pingTitle || (S && S.name) || "connecting";
     nickTitle = nick ? nick + " · Game Day Scoreboard" : "";
     const title = nickTitle || pingTitle || "Game Day Scoreboard";
     if (document.title !== title) document.title = title;
@@ -1522,6 +2084,8 @@
   const renderPanels = () => {
     if (!S || !S.panels) return;
     const cur = String(S.panels);
+    const on = $(`#panels .panelpick[data-cols="${cur}"] span`);
+    $("#matrixSum").textContent = on ? on.textContent : "";
     document.querySelectorAll("#panels .panelpick").forEach((b) => {
       setOn(b, b.dataset.cols === cur, "aria-pressed");
       b.onclick = () => {
@@ -1610,36 +2174,50 @@
 
   // ---- controls --------------------------------------------------------
   const controlDefs = [
-    { name: "Power", into: "#panelCtls", label: "Panel on" },
-    { name: "Brightness", into: "#panelCtls", label: "Brightness" },
+    // icon: drawn as a round button (Power, Refresh) or before a slider
+    // (Brightness, whose number shows as a percent of its range).
+    { name: "Power", into: "#quickCtls", label: "Panel on", icon: "power" },
+    { name: "Brightness", into: "#quickCtls", label: "Brightness", icon: "sun", pct: true },
     { name: "Scroll Speed", into: "#panelCtls", label: "Ticker speed" },
     // onValue: the effect controls show only while the panel is on its Effects
     // page, whoever put it there (this page, Home Assistant, or the panel
     // taking the screen back), so it follows the entity's value, not the tap.
-    { name: "Select Page", into: "#panelCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
     { name: "WizMote Auto-Discovery", into: "#remoteCtls", label: "Discovery" },
     { name: "Clear WizMote Pairing", into: "#remoteActions", label: "Unpair remote", danger: true },
-    { name: "Refresh Now", into: "#actions", label: "Refresh scores" },
+    { name: "Refresh Now", into: "#quickActions", label: "Refresh scores", icon: "refresh" },
     { name: "Check for Updates", into: "#actions", label: "Check for updates" },
     // restart: "" waits for the panel to come back; otherwise the panel
     // restarts into setup and this says why.
-    { name: "Reboot", into: "#actions", label: "Reboot", danger: true, restart: "" },
-    { name: "Reset Wi-Fi", into: "#actions", label: "Reset Wi-Fi", danger: true,
+    { name: "Reboot", into: "#resetActions", label: "Reboot", danger: true, restart: "" },
+    { name: "Reset Wi-Fi", into: "#resetActions", label: "Reset Wi-Fi", danger: true,
       restart: "The panel is restarting into Wi-Fi setup for 15 minutes, so this page won't reconnect. Its settings are kept, and unplugging it and plugging it back in takes it back to the Wi-Fi it already knows." },
-    { name: "Factory Reset", into: "#actions", label: "Factory reset", danger: true,
+    { name: "Factory Reset", into: "#resetActions", label: "Factory reset", danger: true,
       restart: "The panel is restarting into setup with everything erased, so this page won't reconnect." },
   ];
   const built = {};
+  const ICONS = {
+    power: '<path d="M12 3v9"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    refresh: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/>',
+  };
+  const icon = (k) => `<svg class="cico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 
   const buildControl = (def, e) => {
     const domain = domainOf(e);
     const host = $(def.into);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
+      if (def.icon) {
+        b.className = "btn round";
+        b.innerHTML = icon(def.icon);
+        b.setAttribute("aria-label", def.label);
+        b.title = def.label;
+      }
       b.onclick = async () => {
         if (def.danger && !confirm(def.label + "?")) return;
         const sent = post(e.id, "press");
@@ -1653,14 +2231,18 @@
       host.appendChild(b);
       return { update() {} };
     }
-    const row = el("div", "ctl");
+    const row = el("div", def.icon ? "ctl c-" + def.icon : "ctl");
     const label = el("label", null, def.label);
-    const id = "ctl-" + def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const id ="ctl-" + def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     row.appendChild(label);
     if (domain === "switch") {
       const sw = el("button", "sw");
       sw.setAttribute("role", "switch");
       sw.setAttribute("aria-label", def.label);
+      if (def.icon) {
+        sw.classList.add("round");
+        sw.innerHTML = icon(def.icon);
+      }
       setOn(sw, false, "aria-checked");
       sw.onclick = () => {
         const on = !sw.classList.contains("on");
@@ -1681,12 +2263,14 @@
       r.min = e.min_value ?? 0;
       r.max = e.max_value ?? 100;
       r.step = e.step ?? 1;
-      r.oninput = () => (val.textContent = r.value);
+      const show = (v) => (val.textContent = def.pct ? Math.round((v - r.min) / (r.max - r.min) * 100) + "%" : v);
+      r.oninput = () => show(r.value);
       r.onchange = () => post(e.id, "set", { value: r.value });
+      if (def.icon) row.insertAdjacentHTML("beforeend", icon(def.icon));
       row.appendChild(r);
       row.appendChild(val);
       host.appendChild(row);
-      return { update(ev) { if (document.activeElement !== r) { r.value = ev.value; val.textContent = ev.value; } } };
+      return { update(ev) { if (document.activeElement !== r) { r.value = ev.value; show(ev.value); } } };
     }
     if (domain === "select") {
       const s = el("select");
@@ -1747,7 +2331,17 @@
     const q = $("#q").value.trim().toLowerCase();
     const shown = list.filter((g) => !q || (g.away.name + " " + g.home.name + " " + g.away.abbr + " " + g.home.abbr).toLowerCase().includes(q));
     if (!shown.length) {
-      tiles.appendChild(el("div", "none", list.length ? "No game matches" : "No games today"));
+      // The box says "Search teams", so a team that isn't playing today still
+      // turns up: the matching teams from every league, under their own heading.
+      const teams = q ? searchTeams(q) : [];
+      if (!teams.length) {
+        tiles.appendChild(el("div", "none", list.length ? "No game matches" : "No games today"));
+        return;
+      }
+      tiles.appendChild(el("div", "gh", "Teams"));
+      const grid = el("div", "tiles");
+      for (const t of teams) grid.appendChild(teamTile(t));
+      tiles.appendChild(grid);
       return;
     }
     let lastState = null;
@@ -1810,33 +2404,38 @@
     line.textContent = favKeys.length + " of " + favMax() + " favorites";
   };
   let league = "now";
+  // Name or abbreviation, in every league; q is already trimmed and lowercased.
+  const searchTeams = (q) => TEAMS.filter((t) => (t[3] + " " + t[2]).toLowerCase().includes(q));
+  // One team's tile: logo, name, league and abbreviation; a tap adds or takes it out.
+  const teamTile = (t) => {
+    const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
+    tile.dataset.key = keyOf(t);
+    tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+    const img = el("img");
+    img.loading = "lazy";
+    img.src = logoUrl(t[0], t[1], t[2]);
+    img.alt = "";
+    tile.appendChild(img);
+    tile.appendChild(el("div", "n", t[3]));
+    tile.appendChild(el("div", "a", lgInfo(t[0]).prefix + " · " + t[2]));
+    tile.onclick = () => toggleFav(t);
+    return tile;
+  };
   const renderTiles = () => {
     if (league === "now") return renderGames();
     $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
-    const list = TEAMS.filter((t) => (q ? (t[3] + " " + t[2]).toLowerCase().includes(q) : t[0] === league));
+    const list = q ? searchTeams(q) : TEAMS.filter((t) => t[0] === league);
     if (!list.length) {
       tiles.appendChild(el("div", "none", "No team matches"));
       return;
     }
-    for (const t of list) {
-      const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
-      tile.dataset.key = keyOf(t);
-      tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
-      const img = el("img");
-      img.loading = "lazy";
-      img.src = logoUrl(t[0], t[1], t[2]);
-      img.alt = "";
-      tile.appendChild(img);
-      tile.appendChild(el("div", "n", t[3]));
-      tile.appendChild(el("div", "a", lgInfo(t[0]).prefix + " · " + t[2]));
-      tile.onclick = () => toggleFav(t);
-      tiles.appendChild(tile);
-    }
+    for (const t of list) tiles.appendChild(teamTile(t));
   };
   $("#favAdd").onclick = () => openPicker();
+  $("#favStart").onclick = () => { showPane("teams"); openPicker(); };
   const openPicker = async () => {
     // On the first favorite's league, or On now while a game is live.
     const first = teamByKey(favKeys[0] || "");
@@ -2065,6 +2664,12 @@
     if (h < 24) return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
     return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
   };
+  // Unix seconds as "Oct 17, 8:01 PM" in the browser's own time.
+  const dayTime = (t) => {
+    const d = new Date(t * 1000);
+    return d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
+      d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  };
   // 2nd, 3rd, 11th, 22nd.
   const ordinal = (n) => {
     const t = n % 100;
@@ -2083,16 +2688,25 @@
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
     const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
-    const b = h.built ? new Date(h.built * 1000) : null;
-    const builtText = b ? b.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " +
-      b.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
+    // When the ticker last started saying an update is ready (update_shown,
+    // Unix seconds, forgotten at a restart), while one waits.
+    const shownRow = $("#hNudgeRow");
+    shownRow.hidden = !S.update_shown && !fwWaiting;
+    $("#hNudge").textContent = S.update_shown ? dayTime(S.update_shown)
+      : S.autoupd ? "Not shown: this panel installs updates on its own" : "Not yet since the panel started";
     // Live here, so they no longer wait on the RSSI and heap sensors, which
     // are off until someone turns them on in Home Assistant. The Wi-Fi
     // object, when there is one, fills in the signal.
-    if (!S.wifi) $("#rssi").textContent = h.rssi != null ? h.rssi + " dBm" : "Not connected";
+    if (!S.wifi) signal(h.rssi != null ? h.rssi + " dBm" : "Not connected");
     $("#psram").textContent = h.psram_kb ? Math.round(h.psram_kb) + " KiB" : "";
     renderGuard(h);
+  };
+
+  const signal = (t) => {
+    $("#rssi").textContent = t;
+    $("#diagSum").textContent = /dBm$/.test(t) ? "Signal " + t : t;
   };
 
   // The heat and power marks (components/gameday/guard.h): heat is 1 while
@@ -2152,7 +2766,7 @@
     const w = S && S.wifi;
     $("#wifiDiag").hidden = !w;
     if (!w) return;
-    $("#rssi").textContent = w.rssi != null ? w.rssi + " dBm" : "Not connected";
+    signal(w.rssi != null ? w.rssi + " dBm" : "Not connected");
     $("#wifiWeak").hidden = !w.weak;
     const hist = w.hist || [], step = w.step || 300;
     $("#wifiSparkBox").hidden = hist.length < 2;
@@ -2182,8 +2796,11 @@
     restart = line;
     renderGone();
   };
-  // Reboot, the resets and the panel picker are far down the page; the line is on the board.
-  const toBoard = () => $("#board").scrollIntoView({ behavior: "smooth", block: "start" });
+  // Reboot, the resets and the panel picker are on the Device tab; the line is on the board.
+  const toBoard = () => {
+    showPane("board");
+    $("#board").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const waitForReboot = (fromVersion, line) => {
     const started = Date.now();
     let sawDown = false;
@@ -2322,9 +2939,13 @@
     /^\d+(\.\d+)+$/.test(String(u.value || "")) ? "https://install.gameday-scoreboard.com/changelog/#v" + u.value : u.release_url;
   let installing = false;
   let fwFailed = "";     // S.update_failed as the firmware box last drew it
+  let fwImportant = false;  // S.update_important as it last drew it
+  let fwWaiting = false;    // the box offers Install: a newer release is out
   const renderUpdate = (u) => {
     const box = $("#fw");
     box.hidden = false;
+    box.classList.remove("important");
+    fwWaiting = false;
     const cur = u.current_version ? "v" + u.current_version : "";
     const latest = u.value ? "v" + u.value : "";
     const st = String(u.state || "").toUpperCase();
@@ -2332,6 +2953,7 @@
     const sub = $("#fwSub");
     btn.hidden = true;
     fwFailed = (S && S.update_failed) || "";
+    fwImportant = !!(S && S.update_important);
     if (st.includes("INSTALLING") || installing) {
       $("#fwText").textContent = "Installing " + (latest || "update");
       sub.textContent = "Keep the panel powered. It reboots when done and this page reconnects.";
@@ -2343,12 +2965,20 @@
       // The panel rolled back from this very version (a crash in its first
       // minute); it won't install it on its own again, but Install still tries.
       const failed = !!(S && S.update_failed && S.update_failed === u.value);
+      const nightly = S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "";
+      fwWaiting = true;
       if (failed) {
         $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
         sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+      } else if (fwImportant) {
+        // The release is marked important (its summary starts with
+        // "Important:"): it fixes something broken, so the box says so.
+        box.classList.add("important");
+        $("#fwText").textContent = "Important update: " + latest;
+        sub.textContent = "It fixes something broken, so install it when you can." + (cur ? " You have " + cur + "." : "") + nightly;
       } else {
         $("#fwText").textContent = "Update available: " + latest;
-        sub.textContent = (cur ? "You have " + cur + "." : "") + (S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "");
+        sub.textContent = (cur ? "You have " + cur + "." : "") + nightly;
       }
       renderNotes(sub, latest, u.summary);
       btn.hidden = false;
@@ -2409,6 +3039,7 @@
       list.appendChild(row);
     });
     $("#netsEmpty").hidden = nets.length > 0;
+    $("#netsSum").textContent = nets.length ? nets.length + " saved" : "None saved";
     $("#netsCard").hidden = false;
   };
   const loadNetworks = async () => {
@@ -2437,9 +3068,18 @@
       // Home Assistant's shorter line, so the ticker and last play come from there.
       case "Game Status": scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
-      case "WizMote Status": $("#wizStatus").textContent = e.value || ""; break;
+      case "WizMote Status": {
+        $("#wizStatus").textContent = e.value || "";
+        $("#remoteSum").textContent = /^Paired/.test(e.value || "") ? "Paired" : e.value || "WizMote";
+        const paired = /^Paired/.test(e.value || "");
+        if (paired !== remotePaired) {
+          remotePaired = paired;
+          renderFavs();
+        }
+        break;
+      }
       case "IP": $("#ip").textContent = e.value || ""; break;
-      case "RSSI": if (!(S && (S.wifi || S.health))) $("#rssi").textContent = e.value ? e.value + " dBm" : ""; break;
+      case "RSSI": if (!(S && (S.wifi || S.health))) signal(e.value ? e.value + " dBm" : ""); break;
       case "Free Heap (PSRAM)": if (!(S && S.health)) $("#psram").textContent = e.value ? Math.round(e.value) + " KiB" : ""; break;
     }
   };

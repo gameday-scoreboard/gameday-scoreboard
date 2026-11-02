@@ -7,8 +7,12 @@
 //    "live": [], "tz": "US Central", "down": true, ..., "brightness": 128}
 // "" in favs is an empty slot (the remote's buttons keep their
 // teams), [] in live the leagues of the teams it follows. lists are the
-// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], cards the
-// between-games cards by id, {"next": true, "clock": false} (cards.h). Brightness and
+// playlists by name and team, [{"n": "Football", "t": ["nfl:6", "ncaa:251"]}], each with
+// its options when set: "days" ("06", 0 Sunday to 6 Saturday), "start" and
+// "end" ("11:00"), "only" and "today" (playlists.h ListOpt), "color" and
+// "icon" ("blue", "star": playlists.h kListColors, kListIcons); cards the
+// between-games cards by id, {"next": true, "clock": false} (cards.h); remote1 to
+// remote4 what the WizMote's buttons do (set_request.h RemoteTarget). Brightness and
 // scroll are the Home Assistant numbers of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
@@ -55,13 +59,14 @@ inline SettingType setting_type(const char *k) {
   static const char *const kBool[] = {"tzauto", "down",   "play",  "odds",  "opp",    "bootaddr",   "today",
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
                                       "leaders", "night", "nightscreen", "favtake", "countdown", "top25",
-                                      "news",    "gameleaders", "wxon", "wake"};
+                                      "news",    "gameleaders", "wxon", "wake",
+                                      "field",   "winbar", "spark"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
-                                     "wakelead"};
+                                     "wakelead", "celebrate", "wxunit"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
-                                      "sport", "town", "after"};
+                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -110,12 +115,12 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
   static const char *const kKeys[] = {"nick",     "mode",     "favs",     "rotate",      "lockon",     "release",
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
-                                      "odds",     "leaders",  "opp",      "best",        "bootaddr",   "night",
+                                      "odds",     "leaders",  "field",    "winbar",      "spark",      "opp",      "celebrate",   "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
-                                      "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "gameleaders",
+                                      "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
-                                      "lists",    "list",     "sport",    "hook",       "pregame"};
+                                      "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -145,6 +150,27 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
           if (!ref.empty())
             t.add(ref);
         }
+        // Its options (playlists.h ListOpt), only what is set, so a backup
+        // from firmware without them reads the same.
+        const char *days = l["days"] | "";
+        if (*days != '\0') {
+          o["days"] = days;
+          const char *start = l["start"] | "00:00", *end = l["end"] | "00:00";
+          if (strcmp(start, end) != 0) {
+            o["start"] = start;
+            o["end"] = end;
+          }
+        }
+        if (l["only"] | false)
+          o["only"] = true;
+        if (l["today"].is<bool>())
+          o["today"] = l["today"].as<bool>();
+        // Its color and icon, also only when set.
+        for (const char *key : {"color", "icon"}) {
+          const char *v = l[key] | "";
+          if (*v != '\0')
+            o[key] = v;
+        }
       }
     } else if (strcmp(k, "cards") == 0) {
       // The state's list, as {"next": true, ...}: an object, so a backup
@@ -155,6 +181,13 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
       for (JsonObjectConst c : s["cards"].as<JsonArrayConst>())
         if (c["id"].is<const char *>())
           cards[c["id"].as<const char *>()] = c["on"] | false;
+    } else if (strncmp(k, "remote", 6) == 0) {
+      // The state's remote list: each button's text (remote_text).
+      if (!s["remote"].is<JsonArrayConst>())
+        continue;
+      JsonVariantConst b = s["remote"][k[6] - '1'];
+      if (b["v"].is<const char *>())
+        out[k] = b["v"];
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
@@ -327,6 +360,11 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             out.kept.push_back(k);
           continue;
         }
+        if (strncmp(k.c_str(), "remote", 6) == 0 && !parse_set(k, text, op, target.fav_max)) {
+          // A team or sport this firmware doesn't know: left out and listed.
+          out.skipped.push_back(k + "=" + text);
+          continue;
+        }
         if (!parse_set(k, text, op, target.fav_max))
           return detail::settings_fail(out, k + " isn't a value the panel takes.");
         break;
@@ -406,12 +444,56 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             }
             refs += (refs.empty() ? "" : ",") + r;
           }
+          // Its options as their tokens (playlists.h): days as digits, hours
+          // as HH:MM, two switches. A wrong type refuses the document; hours
+          // the panel can't read are left out and listed.
+          ListOpt opt;
+          if (!e["days"].isNull()) {
+            if (!e["days"].is<const char *>())
+              return detail::settings_fail(out, "lists days should be digits like \"06\" (0 Sunday to 6 Saturday).");
+            list_opt_token("@d:" + std::string(e["days"].as<const char *>()), opt);
+          }
+          if (!e["start"].isNull() || !e["end"].isNull()) {
+            if (!e["start"].is<const char *>() || !e["end"].is<const char *>())
+              return detail::settings_fail(out, "lists start and end should be times like \"11:00\".");
+            std::string hours = std::string(e["start"].as<const char *>()) + "-" + e["end"].as<const char *>();
+            list_opt_token("@t:" + hours, opt);
+            if (opt.start == 0 && opt.end == 0 && hours != "00:00-00:00" && hours != "0:00-0:00")
+              out.skipped.push_back("lists=" + name + ":" + hours);
+          }
+          if (!e["only"].isNull()) {
+            if (!e["only"].is<bool>())
+              return detail::settings_fail(out, "lists only should be true or false.");
+            if (e["only"].as<bool>())
+              opt.flags |= LISTOPT_ONLY;
+          }
+          if (!e["today"].isNull()) {
+            if (!e["today"].is<bool>())
+              return detail::settings_fail(out, "lists today should be true or false.");
+            list_opt_token(e["today"].as<bool>() ? "@today:1" : "@today:0", opt);
+          }
+          // Its color and icon as their tokens. One this firmware doesn't
+          // have (from newer firmware) is left out and listed.
+          uint8_t mark = 0;
+          for (const char *key : {"color", "icon"}) {
+            if (e[key].isNull())
+              continue;
+            if (!e[key].is<const char *>())
+              return detail::settings_fail(out, std::string("lists ") + key + " should be a name like \"" +
+                                                    (key[0] == 'c' ? "blue" : "star") + "\".");
+            std::string v = e[key].as<const char *>();
+            if (v.empty())
+              continue;
+            list_mark_token(std::string(key[0] == 'c' ? "@c:" : "@i:") + v, mark);
+            if ((key[0] == 'c' ? list_color(mark) : list_icon(mark)) == 0)
+              out.skipped.push_back("lists=" + name + ":" + key + "=" + v);
+          }
           if (name.empty() || kept == (size_t) kListMax) {
             out.skipped.push_back("lists=" + name);
             continue;
           }
           kept++;
-          text += (text.empty() ? "" : ";") + name + "=" + refs;
+          text += (text.empty() ? "" : ";") + name + "=" + refs + list_opt_text(opt) + list_mark_text(mark);
         }
         parse_set(k, text, op, target.fav_max);
         break;

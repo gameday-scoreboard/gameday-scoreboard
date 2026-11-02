@@ -5,17 +5,17 @@ sidebar:
   order: 17
 ---
 
-The Panel card on the device page holds the settings for the screen itself: **Panel on**, **Brightness**, **Ticker speed** and **Showing**. The Game Day app and Home Assistant have the same settings.
+On the device page, **Panel on**, **Brightness** and **Showing** sit under the board on the Home tab, and **Ticker speed** and the night settings are under **Screen** on the Display tab. The Game Day app and Home Assistant have the same settings.
 
 ## Brightness
 
-**Brightness** runs from 1 (dimmest) to 255 (brightest). A new panel starts at 128. The panel keeps your setting through restarts.
+**Brightness** runs from 1 (dimmest) to 255 (brightest). A new panel starts at 128. Coming in the next release, the device page shows it as a percent, so 128 reads 50%. The panel keeps your setting through restarts.
 
 A WizMote remote's brightness buttons move the same setting, a tenth of full at a time, and **NIGHT** dims the panel right down to a night level, about 8% of full. See [WizMote remote](/using/remote/).
 
 ## Night schedule
 
-The night schedule dims the panel, or turns its screen off, between two times you pick, so a panel in the living room isn't lighting up the house at 2 AM. It's off on a new panel. Set it in the Panel card on the device page:
+The night schedule dims the panel, or turns its screen off, between two times you pick, so a panel in the living room isn't lighting up the house at 2 AM. It's off on a new panel. Set it under **Screen** on the device page's Display tab:
 
 1. Turn on **Night schedule**.
 2. Set **Starts at** and **Ends at**. A new panel starts at 11 PM to 7 AM. The night can run past midnight.
@@ -67,7 +67,7 @@ One exception: a panel that **After the game** turned off stays off through a re
 ## Game-day wake and after the game
 
 :::note[Coming in the next release]
-The panel can turn itself on before your games and decide what it does once they're over, so it doesn't have to be lit all day. Both are in the Panel card on the device page, and both are off on a new panel.
+The panel can turn itself on before your games and decide what it does once they're over, so it doesn't have to be lit all day. Both are under **Screen** on the device page's Display tab, and both are off on a new panel.
 
 **Game-day wake** turns a panel you switched off back on before a game of your team or one of your favorites starts. Pick how long before under **Turns on**: 5 minutes to 2 hours, 15 minutes to start. It wakes the panel once per game, so if you turn it off again before the start, it stays off for that game. In Live games it wakes for your first favorite's games, and with **Favorites take over** on, for any favorite's. During the night schedule's hours it still turns the panel on, but the night setting holds until the game is live: dimmed, or dark with **Screen at night** off.
 

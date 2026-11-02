@@ -36,17 +36,49 @@
       "n": "Sundays",
       "f": [
         0
-      ]
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false,
+      "color": "blue",
+      "icon": "star"
     },
     {
       "n": "College",
       "f": [
         1,
         2
-      ]
+      ],
+      "days": "",
+      "start": "00:00",
+      "end": "00:00",
+      "only": false,
+      "color": "",
+      "icon": ""
     }
   ],
   "list": 2,
+  "sched": 0,
+  "remote": [
+    {
+      "v": "fav",
+      "gone": false
+    },
+    {
+      "v": "team:ncaa:2294",
+      "gone": false
+    },
+    {
+      "v": "list:College",
+      "gone": false
+    },
+    {
+      "v": "sport:basketball",
+      "gone": false
+    }
+  ],
   "listmax": 16,
   "sports": [],
   "sport": "",
@@ -66,7 +98,11 @@
   "play": true,
   "odds": true,
   "leaders": true,
+  "field": true,
+  "winbar": true,
+  "spark": true,
   "opp": true,
+  "celebrate": 2,
   "best": true,
   "bootaddr": true,
   "countdown": true,
@@ -105,11 +141,14 @@
     {"id": "picture", "name": "Pictures", "on": true, "ok": true, "hint": "Add a picture in the Pictures card first"},
     {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
     {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
+    {"id": "schedule", "name": "Schedule", "on": true, "ok": true, "hint": "Only for football and soccer teams in Favorite teams"},
+    {"id": "seasonrecap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for football and soccer teams in Favorite teams"},
     {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
     {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"}
   ],
   "town": "75019",
   "wxon": true,
+  "wxunit": 0,
   "wx": {
     "place": "Coppell, Texas",
     "lat": 32.9546,
@@ -119,6 +158,7 @@
     "wait_s": 0,
     "held": true,
     "read_s": 412,
+    "unit": "F",
     "temp": 71,
     "hi": 81,
     "lo": 61,
@@ -129,6 +169,14 @@
       {"d": "Thu", "hi": 80, "lo": 66, "code": 61},
       {"d": "Fri", "hi": 75, "lo": 67, "code": 2}
     ]
+  },
+  "kick": {
+    "src": "open-meteo",
+    "unit": "F",
+    "place": "Evanston, IL",
+    "read": 200,
+    "temp": 56,
+    "cond": "Cloudy"
   },
   "night": true,
   "nightstart": "23:00",
@@ -144,6 +192,7 @@
   "beta": false,
   "update_failed": "2026.10.2",
   "update_important": true,
+  "update_shown": 1793142120,
   "bar": {
     "report": "support@gameday-scoreboard.com"
   },

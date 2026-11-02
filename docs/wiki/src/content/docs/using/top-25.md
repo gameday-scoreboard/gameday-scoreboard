@@ -40,7 +40,7 @@ A single 64x64 panel shows five teams a page, so a turn is five pages. A 128x64 
 
 ## Turning it off
 
-The Top 25 is on for every panel. Turn it off with **College Top 25** under **Between games** on the [device page](/using/device-page/).
+The Top 25 is on for every panel. Turn it off with **College Top 25** under **Between games** on the [device page](/using/device-page/). A ranked team's rank on the corner of its logo on the [game board](/using/football/#before-the-game) is always drawn; this switch doesn't change it.
 
 ## Where it comes from
 

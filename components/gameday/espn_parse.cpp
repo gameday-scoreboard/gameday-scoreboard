@@ -61,6 +61,12 @@ std::string schedule_url(League league, uint32_t espn_id) {
   return team_url(league, espn_id) + "/schedule";
 }
 
+std::string season_url(League league, uint32_t espn_id, bool results) {
+  if (results && league_sport(league) == Sport::SOCCER)
+    return team_url(league, espn_id) + "/schedule";
+  return schedule_url(league, espn_id);
+}
+
 static void civil_from_epoch(int64_t epoch, int &y, int &m, int &d);
 
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch) {
@@ -263,9 +269,28 @@ bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_i
   return parse_summary(json, sport, our_team_id, event_id, stage, out);
 }
 int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out) {
+  return parse_season(in, our_team_id, out);
+}
+bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out) {
+  struct StringSource : ByteSource {
+    const std::string &s;
+    size_t at{0};
+    explicit StringSource(const std::string &str) : s(str) {}
+    int read() override { return at < s.size() ? (unsigned char) s[at++] : -1; }
+    size_t readBytes(char *dst, size_t n) override {
+      size_t k = std::min(n, s.size() - at);
+      memcpy(dst, s.data() + at, k);
+      at += k;
+      return k;
+    }
+  } src(json);
+  return parse_season_from(src, our_team_id, out);
+}
 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
+bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)
@@ -433,11 +458,12 @@ std::string pregame_name(const GameSnapshot &s) {
   return "Week " + std::to_string(s.week);
 }
 
-std::string venue_line(const GameSnapshot &s) {
+std::string venue_line(const GameSnapshot &s, const TickerOptions &o) {
   std::string venue = s.venue == s.game_name ? std::string() : s.venue;
-  if (s.weather.empty())
+  const std::string &weather = o.weather.empty() ? s.weather : o.weather;
+  if (weather.empty())
     return venue;
-  return venue.empty() ? s.weather : s.weather + " at " + venue;
+  return venue.empty() ? weather : weather + " at " + venue;
 }
 
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
@@ -509,7 +535,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
         add_part(out, pregame_records(s));
       add_odds(out, s, o);
       detail::add_leaders(out, s, o);
-      add_part(out, venue_line(s));
+      add_part(out, venue_line(s, o));
       return out;
     case GameState::POST:
       // A game that ended without being completed says why: Postponed,

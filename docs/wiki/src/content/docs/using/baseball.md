@@ -28,7 +28,7 @@ MLB has no Up next list on the device page: a team's season schedule is too larg
 - **The inning** in the clock row, in ESPN's words, like "Top 5th", "Mid 5th" or "Rain Delay".
 - **The count and outs**: the balls and strikes to the left of a small diamond and the outs, like "2 OUT", to its right.
 - **The runners**: the diamond's bases light gold for each runner. With the bases loaded they turn red.
-- **The ticker** with the count, the outs, the pitcher and the batter, and the last play. Turn them off with **Count and at-bat** and **Last play** in the Ticker card. See [The ticker](/using/ticker/).
+- **The ticker** with the count, the outs, the pitcher and the batter, and the last play. Turn them off with **Count and at-bat** and **Last play** under **Ticker** on the device page's Display tab. See [The ticker](/using/ticker/).
 
 Between half innings the ticker shows each team's hits and errors instead, with the series when there is one.
 
@@ -47,6 +47,10 @@ When the score changes, the panel fills the screen for 4 seconds in the scoring 
 A home run gets fireworks on black with the words in the team's color. Other runs flash the screen in the team's color. The other side's splashes need **Opponent scores too** on.
 
 When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
+
+:::note[Coming in the next release]
+With **Celebrations** on **Full**, a home run shows the ball arcing up and out over the outfield wall under the stadium lights and bursting in your team's colors as it leaves the park. Other runs sweep a bar of light across the board. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's runs are a dim 2-second flash. **Subtle** keeps every score to the quick flash; **Off** shows no splash at all.
+:::
 
 ## The final
 

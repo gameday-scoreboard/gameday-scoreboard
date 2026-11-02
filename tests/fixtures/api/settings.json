@@ -26,7 +26,11 @@
   "play": true,
   "odds": true,
   "leaders": true,
+  "field": true,
+  "winbar": true,
+  "spark": true,
   "opp": true,
+  "celebrate": 2,
   "best": true,
   "bootaddr": true,
   "night": true,
@@ -46,6 +50,8 @@
     "picture": true,
     "gameleaders": true,
     "top25": true,
+    "schedule": true,
+    "seasonrecap": true,
     "news": false,
     "weather": true
   },
@@ -56,6 +62,7 @@
   "cddate": "2026-12-25",
   "town": "75019",
   "wxon": true,
+  "wxunit": 0,
   "gameleaders": true,
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
@@ -67,7 +74,14 @@
       "n": "Sundays",
       "t": [
         "nfl:6"
-      ]
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false,
+      "color": "blue",
+      "icon": "star"
     },
     {
       "n": "College",
@@ -81,6 +95,10 @@
   "sport": "none",
   "hook": "http://192.168.1.20:1880/gameday",
   "pregame": 15,
+  "remote1": "fav",
+  "remote2": "team:ncaa:2294",
+  "remote3": "list:College",
+  "remote4": "sport:basketball",
   "panels": 2,
   "brightness": 128,
   "scroll": 5

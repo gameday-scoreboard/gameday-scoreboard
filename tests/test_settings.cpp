@@ -413,6 +413,54 @@ void test_playlists() {
   deserializeJson(st, R"({"sport":"hockey"})");
   settings_from_state(st.as<JsonObjectConst>(), 0, -1, -1, out);
   SCHECK(std::string(out["sport"] | "") == "hockey", "the export left the sport row out");
+  // Each playlist's options come back as their tokens (playlists.h ListOpt).
+  in = import(R"({"schema":1,"lists":[{"n":"Sundays","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":false},
+    {"n":"Late","t":[],"days":"60","only":false},{"n":"Plain","t":["nfl:6"]}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0;Late=,@d:06;Plain=nfl:6",
+         "options came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  in = import(R"({"schema":1,"lists":[{"n":"A","t":[],"days":"1","start":"25:00","end":"23:00"}]})");
+  SCHECK(in.error.empty() && skipped(in, "lists=A:25:00-23:00") && find(in, SetKind::LISTS)->text == "A=,@d:1",
+         "hours the panel can't read are left out and listed");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"days":1}]})", "days as a number");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"start":"11:00"}]})", "a start with no end");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"only":"yes"}]})", "only as text");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"today":1}]})", "today as a number");
+  // Its color and icon (playlists.h kListColors, kListIcons) as their tokens.
+  in = import(R"({"schema":1,"lists":[{"n":"A","t":["nfl:6"],"days":"0","color":"blue","icon":"star"},
+    {"n":"B","t":[],"color":"plaid","icon":"heart"},{"n":"C","t":[],"color":"","icon":""}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "A=nfl:6,@d:0,@c:blue,@i:star;B=,@i:heart;C=",
+         "color and icon came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  SCHECK(skipped(in, "lists=B:color=plaid"), "a color this firmware doesn't have isn't left out and listed");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"color":3}]})", "color as a number");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"icon":true}]})", "icon as true");
+  // The export writes only what is set, so a backup from firmware without
+  // the options reads the same (settings_from_state).
+  JsonDocument state, exported;
+  deserializeJson(state, R"({"favs":[{"l":"nfl","id":6}],"lists":[{"n":"A","f":[0],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},
+    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false,"color":"","icon":""},{"n":"C","f":[],"days":"5","color":"pink","icon":"crown"}]})");
+  settings_from_state(state.as<JsonObjectConst>(), 0, -1, -1, exported);
+  std::string text;
+  serializeJson(exported["lists"], text);
+  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"]},{"n":"C","t":[],"days":"5","color":"pink","icon":"crown"}])",
+         "the export's options: %s", text.c_str());
+}
+
+// The WizMote's buttons (remote1 to remote4): text the panel takes, and a
+// team or sport it doesn't know left out and listed.
+void test_remote() {
+  SettingsImport in = import(R"({"schema":1,"remote1":"team:nfl:6","remote2":"list:Sundays","remote3":"sport:hockey","remote4":"none"})");
+  SCHECK(in.error.empty() && in.ops.size() == 4 && in.ops[1].kind == SetKind::REMOTE && in.ops[1].slot == 2 &&
+             in.ops[1].text == "list:Sundays",
+         "remote keys came back wrong: %s", in.error.c_str());
+  in = import(R"({"schema":1,"remote1":"team:xfl:5","remote2":"sport:curling","remote3":"fav"})");
+  SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:curling") &&
+             in.ops.size() == 1,
+         "an unknown team or sport isn't left out and listed");
+  refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
 }
 
 // The fullest export the panel can write comes back through its own import:
@@ -434,6 +482,13 @@ void test_fullest_fits() {
     JsonArray f = l["f"].to<JsonArray>();
     for (int j = 0; j < 16; j++)
       f.add(j);
+    l["days"] = "0123456";
+    l["start"] = "11:00";
+    l["end"] = "23:00";
+    l["only"] = true;
+    l["today"] = true;
+    l["color"] = "orange";  // the longest keys
+    l["icon"] = "trophy";
   }
   state["list"] = kListMax;
   state["msg"] = std::string(kMsgTextMax, '"');
@@ -498,6 +553,7 @@ int main() {
   test_other_panel();
   test_night_hours();
   test_playlists();
+  test_remote();
   test_fullest_fits();
   test_reply();
   printf("%d checks, %d failures\n", checks, failures);

@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-The two buttons under the board on the device page, **Favorite teams** and **Live games**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
+The two cards under the board on the device page's Home tab, **Favorite teams** and **Live games**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
 
 Favorite teams replaces My team. To follow one team, make it your only favorite. A panel that was in My team starts in Favorite teams after the update. The team it followed isn't copied over, so add it as a favorite. Live games with nothing on shows your first favorite instead of the My team pick, and the **Team** entity is gone from Home Assistant.
 
@@ -68,7 +68,7 @@ With **Stick with the higher team**, the panel also checks every **Switch every*
 
 ### Choosing the leagues
 
-The league buttons under the mode buttons pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
+The league chips under the mode cards on the Home tab pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
 
 ### When nothing is live
 

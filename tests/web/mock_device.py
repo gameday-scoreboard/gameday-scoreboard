@@ -34,7 +34,8 @@ more fail names drop the connection with no answer, the way a panel that has
 gone does: "events" for the event stream (an open one ends within half a
 second), "down" for every route but the test hooks. "wifi" replaces the saved
 network list; null stands for firmware without the list, whose /gameday/wifi
-answers 404. "settings" is firmware without the backup: /gameday/settings
+answers 404. "wizmote" sets the WizMote Status line ("No remote paired");
+the panel starts paired. "settings" is firmware without the backup: /gameday/settings
 answers 404. GET /_log lists the /gameday/set, /gameday/action,
 /gameday/wifi and /gameday/settings requests seen since the last reset, and
 the entity posts (/select/Effect/set and the like), which change the entity
@@ -95,6 +96,10 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
                                              (REPO / "components/gameday/hook.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/weather.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"))}
+# A playlist's colors and icons by key (playlists.h kListColors, kListIcons).
+PLAYLISTS_H = (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8")
+LIST_COLORS = tuple(re.findall(r'\{"(\w+)",\s*0x[0-9A-Fa-f]{6}\}', PLAYLISTS_H))
+LIST_ICONS = tuple(re.findall(r'\{"(\w+)",\s*\{\s*GD_ROW', PLAYLISTS_H))
 # After the game's choices (wake.h after_word), in no particular order.
 AFTER = tuple(re.findall(r'return "(\w+)";', re.search(r"after_word\(.*?\n}\n",
                          (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"), re.S).group(0)))
@@ -144,9 +149,11 @@ INITIAL = {
     "name": "gameday-2f6a70", "version": "v1.5.4", "setup": True, "panels": 2,
     "mode": 4, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
-    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "sched": 0,
+    # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
+    "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "opp": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.
@@ -156,8 +163,9 @@ INITIAL = {
     "pics": [], "picroom": 65536,
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
     "hook": "", "pregame": 15,
-    # The weather card (weather.h): the town and the switch; wx once a town is set.
-    "town": "", "wxon": False,
+    # The weather card (weather.h): the town, the switch and the degrees (0
+    # auto, 1 F, 2 C); wx once a town is set.
+    "town": "", "wxon": False, "wxunit": 0,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
@@ -215,6 +223,8 @@ ENTITIES = [
     {"id": "update/Firmware", "domain": "update", "name": "Firmware", "state": "NO UPDATE", "value": "1.5.4",
      "current_version": "1.5.4", "summary": "", "release_url": ""},
     {"id": "text_sensor/IP", "domain": "text_sensor", "name": "IP", "state": "10.10.10.97", "value": "10.10.10.97"},
+    {"id": "text_sensor/WizMote Status", "domain": "text_sensor", "name": "WizMote Status",
+     "state": "Paired: 7C:DF:A1:00:00:01", "value": "Paired: 7C:DF:A1:00:00:01"},
     {"id": "button/Refresh Now", "domain": "button", "name": "Refresh Now", "state": ""},
     {"id": "button/Reboot", "domain": "button", "name": "Reboot", "state": ""},
     {"id": "button/Reset Wi-Fi", "domain": "button", "name": "Reset Wi-Fi", "state": ""},
@@ -418,6 +428,10 @@ def state_doc():
         STATE["cards"] = []
         for cid, name, _default, hint in CARDS:
             STATE["cards"].append({"id": cid, "name": name, "on": on[cid], "ok": card_ok(cid), "hint": hint})
+    STATE["lists"] = [norm_list(pl) for pl in STATE["lists"]]
+    STATE.setdefault("sched", 0)
+    STATE["remote"] = [{"v": b.get("v", "fav"), "gone": remote_gone(i + 1, b.get("v", "fav"))}
+                       for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
     return STATE
 
 
@@ -475,6 +489,90 @@ def remap_lists(before):
         STATE["sport"] = ""
 
 
+def remote_parse(v):
+    """remote_parse(): the text of a button's target, canonical, or None when the panel refuses it."""
+    if v in ("fav", "all", "none"):
+        return v
+    if v.startswith("team:"):
+        ref = parse_team_ref(v[5:])
+        return f"team:{ref[0]}:{ref[1]}" if ref else None
+    if v.startswith("sport:"):
+        return v if v[6:] in SPORT_KEYS else None
+    if v.startswith("list:") and len(v) > 5:
+        return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
+    return None
+
+
+def remote_gone(button, v):
+    """remote_resolve().gone: the button's team, playlist or sport row is gone, so it does its default."""
+    if v.startswith("team:"):
+        ref = parse_team_ref(v[5:])
+        return ref not in fav_refs()
+    if v.startswith("list:"):
+        return v[5:] not in [pl["n"] for pl in STATE["lists"]]
+    if v.startswith("sport:"):
+        return v[6:] not in sport_rows()
+    return False
+
+
+def list_time(v):
+    """list_parse_time(): "11:00" -> "HH:MM" as the state writes it, None for anything else."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", v)
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        return None
+    return f"{int(m[1]):02d}:{m[2]}"
+
+
+def norm_list(pl):
+    """A playlist with every option the state document writes (a test's override may leave them out)."""
+    out = {"n": pl["n"], "f": pl["f"], "days": pl.get("days", ""), "start": pl.get("start", "00:00"),
+           "end": pl.get("end", "00:00"), "only": bool(pl.get("only"))}
+    if "today" in pl:
+        out["today"] = pl["today"]
+    out["color"] = pl.get("color", "")
+    out["icon"] = pl.get("icon", "")
+    return out
+
+
+def list_opt_token(tok, opt):
+    """list_opt_token(): one @ token of a playlist's teams into its options."""
+    if tok.startswith("@d:"):
+        opt["days"] = "".join(d for d in "0123456" if d in tok[3:])
+    elif tok.startswith("@t:"):
+        start, dash, end = tok[3:].partition("-")
+        if dash and list_time(start) and list_time(end):
+            opt["start"], opt["end"] = list_time(start), list_time(end)
+    elif tok == "@only":
+        opt["only"] = True
+    elif tok in ("@today:1", "@today:0"):
+        opt["today"] = tok == "@today:1"
+    elif tok.startswith("@c:"):
+        # list_mark_token(): one it doesn't know is no color.
+        opt["color"] = tok[3:] if tok[3:] in LIST_COLORS else ""
+    elif tok.startswith("@i:"):
+        opt["icon"] = tok[3:] if tok[3:] in LIST_ICONS else ""
+
+
+def list_opt_text(pl):
+    """list_opt_text(): a playlist's options back as their tokens."""
+    pl = norm_list(pl)
+    out = ""
+    if pl["days"]:
+        out += ",@d:" + pl["days"]
+        if pl["start"] != pl["end"]:
+            out += f",@t:{pl['start']}-{pl['end']}"
+    if pl["only"]:
+        out += ",@only"
+    if "today" in pl:
+        out += ",@today:1" if pl["today"] else ",@today:0"
+    # list_mark_text(): its color and icon.
+    if pl["color"]:
+        out += ",@c:" + pl["color"]
+    if pl["icon"]:
+        out += ",@i:" + pl["icon"]
+    return out
+
+
 def parse_lists(v):
     """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
     out = []
@@ -485,12 +583,15 @@ def parse_lists(v):
         name = message_clean(name.replace("=", ""), LIMITS["kListNameMax"], False)
         if not name:
             continue
-        teams = []
+        teams, opt = [], {}
         for r in refs.split(",") if refs else []:
+            if r.startswith("@"):
+                list_opt_token(r, opt)
+                continue
             ref = parse_team_ref(r)
             if ref and ref not in teams and len(teams) < FAV_MAX:
                 teams.append(ref)
-        out.append({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams]})
+        out.append(norm_list({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams], **opt}))
     return out
 
 
@@ -513,8 +614,26 @@ def wx_lookup(town):
         return
     place = "Coppell, Texas" if town == "75019" else f"{town}, Texas"
     STATE["wx"] = {"place": place, "lat": 32.95, "lon": -97.02, "lookup": 200, "read": 200, "read_s": 60,
-                   "temp": 71, "hi": 81, "lo": 61, "code": 3, "cond": "Cloudy", "night": False,
+                   "unit": "F", "temp": 71, "hi": 81, "lo": 61, "code": 3, "cond": "Cloudy", "night": False,
                    "days": [{"d": "Thu", "hi": 80, "lo": 66, "code": 61}, {"d": "Fri", "hi": 75, "lo": 67, "code": 2}]}
+    wx_units()
+
+
+def wx_units():
+    """The forecast in the unit the panel shows: auto is F for this mock's
+    Texas towns and US Central."""
+    wx = STATE.get("wx")
+    if not wx or "temp" not in wx:
+        return
+    want = "C" if STATE.get("wxunit") == 2 else "F"
+    if wx["unit"] == want:
+        return
+    conv = (lambda f: round((f - 32) * 5 / 9)) if want == "C" else (lambda c: round(c * 9 / 5 + 32))
+    for d in [wx] + wx["days"]:
+        for k in ("temp", "hi", "lo"):
+            if k in d:
+                d[k] = conv(d[k])
+    wx["unit"] = want
 
 
 def apply_set(kv):
@@ -593,7 +712,7 @@ def apply_set(kv):
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "count", "match", "play", "odds", "leaders", "opp", "best", "bootaddr", "autoupd", "beta"):
+        elif k in ("down", "count", "match", "play", "odds", "leaders", "field", "winbar", "spark", "opp", "best", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
@@ -620,6 +739,10 @@ def apply_set(kv):
                 wx_lookup(town)
         elif k == "wxon":
             STATE["wxon"] = v == "1"
+        elif k == "wxunit":
+            if v in ("0", "1", "2"):
+                STATE["wxunit"] = int(v)
+                wx_units()
         elif k == "nick":
             # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
             STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)
@@ -629,6 +752,15 @@ def apply_set(kv):
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
+        elif re.fullmatch(r"remote[1-4]", k):
+            # set_remote_(): a playlist's name as the playlists keep it.
+            v = remote_parse(v)
+            if v is None:
+                continue
+            if v.startswith("list:"):
+                name = message_clean(v[5:].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
+                v = "list:" + name if name else "fav"
+            STATE["remote"][int(k[6]) - 1] = {"v": v}
         elif k == "hook":
             if hook_url_ok(v):
                 STATE["hook"] = v
@@ -650,6 +782,9 @@ def apply_set(kv):
         elif k == "after":
             if v in AFTER:
                 STATE["after"] = v
+        elif k == "celebrate":
+            if v in ("0", "1", "2"):
+                STATE["celebrate"] = int(v)
     # The same start and end keeps the hours it had (night_keep_hours).
     if STATE["nightstart"] == STATE["nightend"]:
         STATE["nightstart"], STATE["nightend"] = hours
@@ -675,8 +810,22 @@ def settings_doc():
             out["favs"] = favs
         elif k == "lists":
             # The state's teams are places in favs; the backup names them.
-            out["lists"] = [{"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
-                            for pl in s.get("lists", [])]
+            out["lists"] = []
+            for pl in s.get("lists", []):
+                e = {"n": pl["n"], "t": [team_text(s["favs"][i]) for i in pl["f"] if team_text(s["favs"][i])]}
+                # Its options, only what is set (settings_from_state).
+                if pl.get("days"):
+                    e["days"] = pl["days"]
+                    if pl["start"] != pl["end"]:
+                        e["start"], e["end"] = pl["start"], pl["end"]
+                if pl.get("only"):
+                    e["only"] = True
+                if "today" in pl:
+                    e["today"] = pl["today"]
+                for key in ("color", "icon"):
+                    if pl.get(key):
+                        e[key] = pl[key]
+                out["lists"].append(e)
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
             out["live"] = list(LIVE_LIST[0])
@@ -690,6 +839,8 @@ def settings_doc():
         elif k == "cards":
             if "cards" in s:
                 out["cards"] = {c["id"]: c["on"] for c in s["cards"]}
+        elif re.fullmatch(r"remote[1-4]", k):
+            out[k] = s["remote"][int(k[6]) - 1]["v"]
         elif k in s:
             out[k] = s[k]
     if s.get("panels"):
@@ -753,10 +904,37 @@ def import_settings(doc):
                         skipped.append(f"lists={name}:{t}")
                         continue
                     refs.append(t)
+                opt = {}
+                if e.get("days") is not None:
+                    if not isinstance(e["days"], str):
+                        return fail('lists days should be digits like "06" (0 Sunday to 6 Saturday).')
+                    list_opt_token("@d:" + e["days"], opt)
+                if e.get("start") is not None or e.get("end") is not None:
+                    if not isinstance(e.get("start"), str) or not isinstance(e.get("end"), str):
+                        return fail('lists start and end should be times like "11:00".')
+                    list_opt_token("@t:" + e["start"] + "-" + e["end"], opt)
+                    if "start" not in opt and (e["start"], e["end"]) not in (("00:00", "00:00"), ("0:00", "0:00")):
+                        skipped.append(f"lists={name}:{e['start']}-{e['end']}")
+                for b in ("only", "today"):
+                    if e.get(b) is not None:
+                        if not isinstance(e[b], bool):
+                            return fail(f"lists {b} should be true or false.")
+                        if b == "only" and e[b] or b == "today":
+                            opt[b] = e[b]
+                # Its color and icon; one this firmware doesn't have is left out and listed.
+                for key, known, eg in (("color", LIST_COLORS, "blue"), ("icon", LIST_ICONS, "star")):
+                    if e.get(key) is None:
+                        continue
+                    if not isinstance(e[key], str):
+                        return fail(f'lists {key} should be a name like "{eg}".')
+                    if e[key] and e[key] not in known:
+                        skipped.append(f"lists={name}:{key}={e[key]}")
+                    elif e[key]:
+                        opt[key] = e[key]
                 if not name or len(parts) == LIMITS["kListMax"]:
                     skipped.append("lists=" + name)
                     continue
-                parts.append(name + "=" + ",".join(refs))
+                parts.append(name + "=" + ",".join(refs) + list_opt_text({"n": name, "f": [], **opt}))
             kv.append(("lists", ";".join(parts)))
             continue
         if k == "cards":
@@ -781,8 +959,8 @@ def import_settings(doc):
             if not is_int(v):
                 return fail(k + " should be a whole number.")
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
-                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255),
-                      "pregame": (0, LIMITS["kPregameMax"]),
+                      "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255), "celebrate": (0, 2),
+                      "pregame": (0, LIMITS["kPregameMax"]), "wxunit": (0, 2),
                       "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
@@ -808,7 +986,8 @@ def import_settings(doc):
                 kv.append((k, v if r == 1 else "none"))
             elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
                     k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS) or (
-                    k == "after" and v not in AFTER):
+                    k == "after" and v not in AFTER) or (
+                    re.fullmatch(r"remote[1-4]", k) and remote_parse(v) is None):
                 skipped.append(f"{k}={v}")
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
@@ -1137,6 +1316,9 @@ class Handler(BaseHTTPRequestHandler):
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
             for e in ENTITIES:
                 e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
+            if "wizmote" in body:
+                wiz = entity("WizMote Status")
+                wiz["state"] = wiz["value"] = body["wizmote"]
             PUSHED.clear()
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":

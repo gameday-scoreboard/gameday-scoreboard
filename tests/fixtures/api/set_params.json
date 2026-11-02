@@ -50,8 +50,17 @@
   "pregame",
   "town",
   "wxon",
+  "wxunit",
   "cards",
   "wake",
   "wakelead",
-  "after"
+  "after",
+  "remote1",
+  "remote2",
+  "remote3",
+  "remote4",
+  "celebrate",
+  "field",
+  "winbar",
+  "spark"
 ]

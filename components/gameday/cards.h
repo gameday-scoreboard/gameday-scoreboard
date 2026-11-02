@@ -31,6 +31,8 @@ enum class Card : uint8_t {
   NEWS = 7,
   PICTURE = 8,
   WEATHER = 9,
+  SCHEDULE = 10,
+  RECAP = 11,
 };
 
 constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
@@ -38,7 +40,7 @@ constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
 // The bits cards_off keeps; a saved blob's other bits are cleared on load.
 constexpr uint16_t kCardsOffBits = card_bit(Card::LEADERS) | card_bit(Card::NEXT) | card_bit(Card::CLOCK) |
                                    card_bit(Card::CUSTOM) | card_bit(Card::MESSAGE) | card_bit(Card::TOP25) |
-                                   card_bit(Card::PICTURE);
+                                   card_bit(Card::PICTURE) | card_bit(Card::SCHEDULE) | card_bit(Card::RECAP);
 
 struct CardRow {
   Card card;
@@ -58,6 +60,8 @@ constexpr CardRow kCards[] = {
     {Card::PICTURE,   "picture",     "Pictures",                   true,  "Add a picture in the Pictures card first"},
     {Card::LEADERS,   "gameleaders", "Game leaders",               true,  ""},
     {Card::TOP25,     "top25",       "College Top 25",             true,  "Only while you follow a college football or basketball team"},
+    {Card::SCHEDULE,  "schedule",    "Schedule",                   true,  "Only for football and soccer teams in Favorite teams"},
+    {Card::RECAP,     "seasonrecap", "Season recap",               true,  "Only for football and soccer teams in Favorite teams"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},
     {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
 };

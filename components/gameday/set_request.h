@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -34,8 +35,9 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "news",   "town",     "wxon",     "cards",   "wake",    "wakelead",
-                                    "after"};
+                                    "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
+                                    "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
+                                    "field",   "winbar",  "spark"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -168,6 +170,100 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
   return scan_leagues(mode, before) != scan_leagues(mode, after);
 }
 
+// What a WizMote button 1 to 4 does (wizmote.yaml, remote_number). Each
+// starts at its own favorite (button n is favorite n) and stays there until
+// the owner sets it; nothing in the firmware moves it. As text, in set
+// requests, the state document and the settings backup:
+//   fav              the button's own favorite (its default)
+//   team:nfl:6       a favorite team, followed wherever it moves in the list
+//   list:<name>      one of the owner's playlists, by name
+//   sport:football   a sport row (playlists.h), football to soccer
+//   all              All favorites
+//   none             nothing
+// A button whose team, playlist or sport row is gone does what its default
+// does, and the state says so (playlists.h remote_resolve).
+enum class RemoteKind : uint8_t { FAVORITE = 0, TEAM = 1, LIST = 2, SPORT = 3, ALL = 4, NONE = 5 };
+constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
+struct RemoteTarget {
+  uint8_t kind{0};  // RemoteKind
+  uint8_t league{0};
+  uint32_t id{0};                // TEAM
+  uint8_t sport{0};              // SPORT, a Sport
+  char name[kRemoteNameMax]{};   // LIST, no terminator when full
+} __attribute__((packed));
+
+inline const char *remote_sport_key(uint8_t sport) {
+  static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
+  return sport < 5 ? kWords[sport] : "";
+}
+
+inline std::string remote_name(const RemoteTarget &t) {
+  size_t n = 0;
+  while (n < kRemoteNameMax && t.name[n] != '\0')
+    n++;
+  return std::string(t.name, n);
+}
+
+// The text above into a target; false for anything else. A playlist name
+// is kept as sent, up to kRemoteNameMax bytes; the component cleans it as
+// it cleans a playlist's.
+inline bool remote_parse(const std::string &v, RemoteTarget &t) {
+  t = RemoteTarget{};
+  if (v == "fav")
+    return true;
+  if (v == "all") {
+    t.kind = (uint8_t) RemoteKind::ALL;
+    return true;
+  }
+  if (v == "none") {
+    t.kind = (uint8_t) RemoteKind::NONE;
+    return true;
+  }
+  if (v.compare(0, 5, "team:") == 0) {
+    uint8_t league = 0;
+    uint32_t id = 0;  // not t.id itself: a packed field can't be bound by reference
+    if (!parse_team_ref(v.substr(5), league, id) || !known_team(league, id))
+      return false;
+    t.kind = (uint8_t) RemoteKind::TEAM;
+    t.league = league;
+    t.id = id;
+    return true;
+  }
+  if (v.compare(0, 6, "sport:") == 0) {
+    for (uint8_t s = 0; s < 5; s++)
+      if (v.substr(6) == remote_sport_key(s)) {
+        t.kind = (uint8_t) RemoteKind::SPORT;
+        t.sport = s;
+        return true;
+      }
+    return false;
+  }
+  if (v.compare(0, 5, "list:") == 0 && v.size() > 5) {
+    t.kind = (uint8_t) RemoteKind::LIST;
+    std::string name = v.substr(5, kRemoteNameMax);
+    memcpy(t.name, name.data(), name.size());
+    return true;
+  }
+  return false;
+}
+
+inline std::string remote_text(const RemoteTarget &t) {
+  switch ((RemoteKind) t.kind) {
+    case RemoteKind::TEAM:
+      return std::string("team:") + league_key((League) t.league) + ":" + std::to_string(t.id);
+    case RemoteKind::LIST:
+      return "list:" + remote_name(t);
+    case RemoteKind::SPORT:
+      return std::string("sport:") + remote_sport_key(t.sport);
+    case RemoteKind::ALL:
+      return "all";
+    case RemoteKind::NONE:
+      return "none";
+    default:
+      return "fav";
+  }
+}
+
 enum class SetKind : uint8_t {
   MODE,      // value, read_mode's
   ROTATE,    // value, minutes
@@ -209,6 +305,7 @@ enum class SetKind : uint8_t {
   NIGHT_SCREEN, // on: lit at the night brightness, off: dark
   NIGHT_LEVEL,  // value, 1 to 255
   NICK,         // text, the panel's nickname (kNickMax); "" clears it
+  REMOTE,       // slot 1-4, text: what a WizMote button does (RemoteTarget, remote_text)
   LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
   LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
   SPORT,        // value, the sport row Favorite teams plays, 1 + Sport; 0 = none (every favorite)
@@ -220,7 +317,12 @@ enum class SetKind : uint8_t {
   NEWS,         // on, the news card between games (news.h)
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
+  WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
+  FIELD,        // on, football's field strip on the board (game_viz.h)
+  WINBAR,       // on, the win chance bar on the board
+  SPARK,        // on, the score margin sparkline on the board
+  CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
 };
 
 struct TeamRef {
@@ -370,6 +472,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.value = night_parse_time(v);
     return op.value >= 0;
   }
+  if (k == "celebrate") {
+    // 0 off, 1 subtle, 2 full; anything else is refused.
+    op.kind = SetKind::CELEBRATE;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
+  }
   if (k == "nightlevel") {
     op.kind = SetKind::NIGHT_LEVEL;
     int level = atoi(v.c_str());
@@ -398,6 +505,15 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.kind = SetKind::SPORT;
     op.value = v == "none" ? 0 : sport_row_from_key(v.c_str());
     return v == "none" || op.value != 0;
+  }
+  if (k.size() == 7 && k.compare(0, 6, "remote") == 0 && k[6] >= '1' && k[6] <= '4') {
+    RemoteTarget t;
+    if (!remote_parse(v, t))
+      return false;
+    op.kind = SetKind::REMOTE;
+    op.slot = (uint8_t) (k[6] - '0');
+    op.text = remote_text(t);
+    return true;
   }
   if (k == "hook") {
     op.kind = SetKind::HOOK;
@@ -433,6 +549,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "wxon")
     return on(SetKind::WXON);
+  if (k == "wxunit") {
+    // 0 auto (the town's country, else the time zone), 1 F, 2 C
+    op.kind = SetKind::WXUNIT;
+    op.value = v == "0" ? kWxUnitAuto : v == "1" ? kWxUnitF : v == "2" ? kWxUnitC : -1;
+    return op.value >= 0;
+  }
   if (k == "night")
     return on(SetKind::NIGHT);
   if (k == "nightscreen")
@@ -441,6 +563,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::TZ_AUTO);
   if (k == "down")
     return on(SetKind::DOWN);
+  if (k == "field")
+    return on(SetKind::FIELD);
+  if (k == "winbar")
+    return on(SetKind::WINBAR);
+  if (k == "spark")
+    return on(SetKind::SPARK);
   if (k == "count")
     return on(SetKind::COUNT);
   if (k == "match")

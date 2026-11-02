@@ -66,7 +66,7 @@ Until you pick a team or a mode, the ticker along the bottom says **Pick a team 
 To see the address again any time, hold the button on the controller for about 1.5 seconds and let go. The panel shows its full address and IP address for 20 seconds. More on the button in [Buttons and resets](/using/buttons-and-resets/).
 
 :::tip
-To skip the QR code and the address when the panel starts, turn off **Show how to connect when the panel starts** in the Setup card on the device page. The panel then goes straight to the scoreboard.
+To skip the QR code and the address when the panel starts, turn off **Show how to connect when the panel starts** under **Setup** on the device page's Device tab. The panel then goes straight to the scoreboard.
 :::
 
 ## New router or Wi-Fi password
@@ -84,7 +84,7 @@ A panel that can't get back on its Wi-Fi restarts itself once, a minute into the
 
 Every network you set up is added to a list of up to five. Set the panel up on a phone hotspot for a tailgate, and it still knows your home network when it gets back. When it starts, it joins whichever saved network it can see, trying the last one that worked first.
 
-The Device card on the device page lists the saved networks under **Wi-Fi networks**. **Connected** marks the one in use, and **Tried first** marks the one it tries first. **Forget** takes a network off the list.
+**Wi-Fi networks** on the device page's Device tab lists the saved networks. **Connected** marks the one in use, and **Tried first** marks the one it tries first. **Forget** takes a network off the list.
 
 **Reset Wi-Fi** and **Factory reset** on the device page clear the whole list. See [Wi-Fi](/using/wifi/) for more.
 

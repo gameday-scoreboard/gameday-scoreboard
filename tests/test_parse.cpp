@@ -17,6 +17,7 @@
 #include "espn_parse_impl.h"
 #include "favorites.h"
 #include "game_leaders.h"
+#include "game_viz.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -25,6 +26,7 @@
 #include "logo_lru.h"
 #include "message.h"
 #include "news.h"
+#include "season.h"
 #include "weather.h"
 #include "offseason.h"
 #include "panel_text.h"
@@ -3098,6 +3100,9 @@ static void test_pregame_extras() {
   CHECK_EQ(nu.weather, std::string("54F Clear"));
   CHECK_EQ(nu.team_leader, std::string("Chiles 1,398 yds 9 TD"));
   CHECK_EQ(nu.opp_leader, std::string("Lonergan 1,066 yds 10 TD"));
+  // NU was #24 that week; RUTG unranked (ESPN sends 99)
+  CHECK_EQ((int) nu.team_rank, 24);
+  CHECK_EQ((int) nu.opp_rank, 99);
   TickerOptions o;
   o.odds = false;
   CHECK_EQ(status_text(nu, o, "Sat 2:30 PM"),
@@ -3125,6 +3130,44 @@ static void test_pregame_extras() {
   CHECK_EQ(top.opp_leader, std::string(""));
   // A postseason game has no week
   CHECK_EQ((int) mlb_event("fixtures/event_mlb_pre.json", kBrewers).week, 0);
+
+  // The board's kickoff forecast (weather.h): ESPN's temperature as a number
+  // and AccuWeather's icon number from whichever field has no letters, and
+  // for a forecast of the panel's own, the venue's place and whether it is
+  // indoors.
+  CHECK_EQ((int) nu.weather_f, 54);
+  CHECK_EQ((int) nu.weather_accu, 33);  // in displayValue that day
+  CHECK_EQ(nu.venue_place, std::string("Evanston, IL"));
+  CHECK_EQ((int) nu.venue_indoor, 0);
+  CHECK_EQ((int) atl.venue_indoor, 1);
+  CHECK_EQ((int) atl.weather_f, (int) kNoWeatherF);
+  CHECK_EQ(atl.venue_place, std::string(""));  // a dome needs no forecast
+  GameSnapshot sd = mlb_event("fixtures/event_mlb_pre.json", kBrewers);
+  CHECK_EQ(sd.venue_place, std::string("San Diego, California"));
+  CHECK_EQ((int) sd.weather_f, 82);
+  CHECK_EQ((int) sd.weather_accu, 34);  // in conditionId
+  // Soccer: no forecast from ESPN and no indoor flag; MLS writes the state in
+  // the city.
+  GameSnapshot ars;
+  CHECK(parse_event_str(slurp("fixtures/event_epl_pre.json"), Sport::SOCCER, 359, ars));
+  CHECK_EQ(ars.venue_place, std::string("London, England"));
+  CHECK_EQ((int) ars.venue_indoor, -1);
+  CHECK_EQ((int) ars.weather_f, (int) kNoWeatherF);
+  CHECK_EQ(espn::detail::venue_place("Miami, Florida", "", "USA"), std::string("Miami, Florida"));
+  CHECK_EQ(espn::detail::venue_place("", "TX", "USA"), std::string(""));
+  CHECK_EQ(espn::detail::venue_place("Foxborough", "", ""), std::string("Foxborough"));
+  // An indoor sport reads no address
+  GameSnapshot nba;
+  CHECK(parse_event_str(slurp("fixtures/event_nba_pre.json"), Sport::BASKETBALL, 22, nba));
+  CHECK(nba.state == GameState::PRE);
+  CHECK_EQ(nba.venue_place, std::string(""));
+  CHECK_EQ(live.venue_place, std::string(""));  // only before the start
+  // The ticker's forecast follows the panel when it says one: Celsius, or its
+  // own forecast for a game ESPN has none for
+  o.weather = "12C Clear";
+  CHECK_EQ(espn::detail::venue_line(nu, o), std::string("12C Clear at Ryan Field"));
+  o.weather.clear();
+  CHECK_EQ(espn::detail::venue_line(nu, o), std::string("54F Clear at Ryan Field"));
 
   CHECK_EQ(espn::detail::stat_leader("G. Antetokounmpo", "35.0", "PPG"), std::string("Antetokounmpo 35.0 PPG"));
   CHECK_EQ(espn::detail::stat_leader("M. Penix Jr.", "3", "pts"), std::string("Penix Jr. 3 pts"));
@@ -4838,7 +4881,9 @@ static void test_update_nudge() {
   t.clock_valid = false;
   CHECK(!update_nudge_on(t, fresh));
   CHECK_EQ(fresh.day, 0);
+  CHECK_EQ(fresh.since, 0);  // /gameday/state leaves update_shown out until it shows
   CHECK(update_nudge_on(in, fresh));
+  CHECK_EQ(fresh.since, in.now);
 }
 
 static void test_update_mark() {
@@ -5799,6 +5844,176 @@ static MsgReader<std::string> read_list(const std::string &file, uint32_t from, 
   return r;
 }
 
+// The schedule and season recap cards (season.h): one read of the season
+// schedule, its next games, the regular season's record and how the
+// playoffs ended.
+static void test_season() {
+  // In season (Dallas, week 9): ten games ahead, soonest first, and the
+  // record so far counted from the finals.
+  SeasonRead r;
+  CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 6, r));
+  CHECK_EQ(r.year, 2026);
+  CHECK_EQ(season_record(r, false, ""), std::string("3-4"));
+  CHECK(!r.post);
+  CHECK_EQ(r.next.size(), kSeasonGames);
+  CHECK_EQ(r.next[0].opp, std::string("ARI"));
+  CHECK(r.next[0].home);
+  CHECK_EQ(r.next[0].tv, std::string("Fox"));
+  CHECK_EQ(r.next[0].kickoff_epoch, parse_iso8601_z("2026-11-01T18:00Z"));
+  CHECK_EQ(r.next[1].opp, std::string("IND"));
+  CHECK(!r.next[1].home);
+  // Three to show; one played drops off and the spare comes in.
+  CHECK_EQ(season_upcoming(r, r.next[0].kickoff_epoch - 1).size(), kSeasonShown);
+  std::vector<SeasonGame> up = season_upcoming(r, r.next[0].kickoff_epoch);
+  CHECK_EQ(up.size(), kSeasonShown);
+  CHECK_EQ(up[0].opp, std::string("IND"));
+  CHECK(season_upcoming(r, r.next[3].kickoff_epoch).empty());
+
+  // Off season, playoffs lost (Dallas Wings): the 44-game regular season
+  // and the first round's last game.
+  CHECK(parse_season_str(slurp("fixtures/schedule_wnba_dal_offseason.json"), 3, r));
+  CHECK_EQ(r.year, 2026);
+  CHECK_EQ(season_record(r, false, "1-2"), std::string("27-17"));
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("First Round"));
+  CHECK(r.next.empty());
+  CHECK(season_recap_ready(r, ""));
+  CHECK_EQ(recap_header("DAL", r.year), std::string("DAL 2026"));
+  CHECK_EQ(recap_body(r, false, ""), std::string("27-17\nlost First Round"));
+
+  // A schedule of the playoffs alone (Yankees, October): the record is the
+  // team read's.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mlb_nyy_offseason.json"), 10, r));
+  CHECK_EQ(r.finals(), 0);
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("ALDS"));
+  CHECK_EQ(recap_body(r, false, "93-68"), std::string("93-68\nlost ALDS"));
+  CHECK(season_recap_ready(r, "93-68"));
+  CHECK(!season_recap_ready(r, ""));
+  // A team that missed the playoffs, read while the list holds only the
+  // playoffs: no finals of its own and no playoff game, the record alone.
+  SeasonRead missed;
+  missed.year = 2025;
+  CHECK(season_recap_ready(missed, "7-10"));
+  CHECK_EQ(recap_body(missed, false, "7-10"), std::string("7-10"));
+  CHECK(!season_recap_ready(missed, ""));
+  CHECK_EQ(recap_body(r, false, ""), std::string("lost ALDS"));
+
+  // Soccer: results newest first, a draw neither side won, written W-D-L;
+  // the playoff round from the season type's name.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mls_cin_2025.json"), 18267, r));
+  CHECK_EQ(r.year, 2025);
+  CHECK_EQ(season_record(r, true, ""), std::string("20-5-9"));
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
+  CHECK_EQ(recap_body(r, true, ""), std::string("20-5-9\nlost East Semifinals"));
+
+  // College: the playoff's sponsor and bowl left off.
+  CHECK(parse_season_str(slurp("fixtures/schedule_ncaa_ala_2025_post.json"), 333, r));
+  CHECK_EQ(r.year, 2025);
+  CHECK_EQ(std::string(r.round), std::string("CFP Quarterfinal"));
+  CHECK(!r.post_won);
+  // NBA: the series, not the game.
+  CHECK(parse_season_str(slurp("fixtures/schedule_nba_phi_2026_post.json"), 20, r));
+  CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
+
+  CHECK_EQ(season_url(League::NFL, 6, true), schedule_url(League::NFL, 6));
+  CHECK_EQ(season_url(League::MLS, 18267, false), schedule_url(League::MLS, 18267));
+  CHECK_EQ(season_url(League::MLS, 18267, true),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/18267/schedule"));
+
+  // Not JSON, or a team not in it.
+  CHECK(!parse_season_str("<html>", 6, r));
+  CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 99999, r));
+  CHECK(r.next.empty() && r.finals() == 0);
+  CHECK(!season_recap_ready(r, ""));
+  // A team that missed the playoffs, read while they're on (Rockies, 10/31):
+  // the season's year and an empty list; the record is the team read's.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mlb_col_missed.json"), 27, r));
+  CHECK(r.year == 2026 && r.finals() == 0 && !r.post && r.next.empty());
+  CHECK(season_recap_ready(r, "58-104"));
+  CHECK_EQ(recap_body(r, false, "58-104"), std::string("58-104"));
+
+  CHECK_EQ(season_round("NFC Wild Card Playoffs", "Postseason"), std::string("NFC Wild Card"));
+  CHECK_EQ(season_round("Super Bowl LX", "Postseason"), std::string("Super Bowl LX"));
+  CHECK_EQ(season_round("World Series - Game 7", "Postseason"), std::string("World Series"));
+  CHECK_EQ(season_round("", "Postseason"), std::string(""));
+  CHECK_EQ(season_round("", "Western Conference Playoffs - Round One"), std::string("West Round One"));
+  CHECK_EQ(season_round("Duke's Mayo Bowl Presented by Duke's", "Postseason"), std::string("Duke's Mayo Bowl"));
+  CHECK(season_round(std::string(60, 'x') + " y", "").size() <= kSeasonRoundMax);
+  SeasonRead w;
+  w.year = 2025;
+  w.wins = 15;
+  w.losses = 2;
+  w.post = w.post_won = true;
+  w.set_round("Super Bowl LX");
+  CHECK_EQ(recap_body(w, false, ""), std::string("15-2\nwon Super Bowl LX"));
+  w.ties = 1;
+  w.set_round("");
+  CHECK_EQ(recap_body(w, false, ""), std::string("15-2-1\nwon in the playoffs"));
+
+  // The card's lines: wide on two panels, two lines a game on one.
+  struct tm kick {};
+  kick.tm_wday = 0;
+  kick.tm_mon = 10;
+  kick.tm_mday = 1;
+  kick.tm_hour = 12;
+  SeasonGame g;
+  g.home = true;
+  g.opp = "ARI";
+  g.tv = "Fox";
+  CHECK_EQ(schedule_line(kick, g, true), std::string("Sun 11/1 vs ARI 12P Fox"));
+  CHECK_EQ(schedule_line(kick, g, false), std::string("Sun 11/1\nARI 12P"));
+  g.home = false;
+  g.opp = "UCLA";
+  kick.tm_hour = 19;
+  kick.tm_min = 30;
+  CHECK_EQ(schedule_line(kick, g, false), std::string("Sun 11/1\n@UCLA 7:30P"));
+  g.tv = "ESPN Unlimited";
+  CHECK_EQ(schedule_line(kick, g, true), std::string("Sun 11/1 @ UCLA 7:30P"));
+  g.time_tbd = true;
+  kick.tm_hour = 0;
+  CHECK_EQ(schedule_line(kick, g, false), std::string("Sun 11/1\n@UCLA TBD"));
+  CHECK_EQ(season_time(kick, false), std::string("12:30A"));
+  kick.tm_min = 0;
+  CHECK_EQ(season_time(kick, false), std::string("12A"));
+  for (const char *line : {"Sun 11/1", "@UCLA 12:30P"})
+    CHECK(std::string(line).size() <= 12);
+  // The longest real wide line, a four-letter opponent at 12:30 on a
+  // two-digit date, still fits 25 characters; the network is left off.
+  struct tm late {};
+  late.tm_wday = 3;
+  late.tm_mon = 11;
+  late.tm_mday = 30;
+  late.tm_hour = 12;
+  late.tm_min = 30;
+  SeasonGame lg;
+  lg.home = true;
+  lg.opp = "UCLA";
+  lg.tv = "ESPN";
+  CHECK_EQ(schedule_line(late, lg, true), std::string("Wed 12/30 vs UCLA 12:30P"));
+  CHECK(schedule_line(late, lg, true).size() <= 25);
+  CHECK_EQ(schedule_header("DAL"), std::string("DAL SCHEDULE"));
+
+  // Which card a team's turn shows.
+  CHECK(season_card(false, true, true, true, true) == SeasonCard::SCHEDULE);
+  CHECK(season_card(false, false, true, true, true) == SeasonCard::NONE);
+  CHECK(season_card(false, true, true, false, true) == SeasonCard::NONE);
+  CHECK(season_card(true, true, true, true, true) == SeasonCard::RECAP);
+  CHECK(season_card(true, true, false, true, true) == SeasonCard::NONE);
+  CHECK(season_card(true, true, true, true, false) == SeasonCard::NONE);
+
+  // Read every six hours, at once for the other half of a soccer season,
+  // not again for kSeasonRetryMs after a failure.
+  const uint32_t t = 50000000;
+  CHECK(season_read_due(t, 0, 0, true));
+  CHECK(!season_read_due(t, t - 1000, 0, true));
+  CHECK(season_read_due(t, t - kSeasonReadMs, 0, true));
+  CHECK(season_read_due(t, t - 1000, 0, false));
+  CHECK(!season_read_due(t, 0, t - 1000, true));
+  CHECK(season_read_due(t, 0, t - kSeasonRetryMs, true));
+}
+
 // The news card (news.h): the feed, its headlines, the source in turn and the
 // hourly read.
 static void test_news() {
@@ -5932,24 +6147,24 @@ static void test_weather() {
   std::string fc = slurp("fixtures/wx_forecast_coppell.json");
   StringSource fsrc(fc);
   WxForecast f0;
-  CHECK(parse_forecast_from(fsrc, f0) && f0.valid && f0.temp == 76);
+  CHECK(parse_forecast_from(fsrc, f0) && f0.valid && wx_deg(f0.t10, true) == 76);
 
-  // The recorded forecast, rounded to whole degrees, the days from its dates.
+  // The recorded forecast in tenths of a degree F, the days from its dates.
   WxForecast f;
   json = slurp("fixtures/wx_forecast_coppell.json");
   CHECK(parse_forecast(json, f));
   CHECK(f.valid);
-  CHECK_EQ(f.temp, 76);
+  CHECK_EQ(wx_deg(f.t10, true), 76);
   CHECK_EQ(f.code, 3);
   CHECK(!f.night);
-  CHECK_EQ(f.today.hi, 82);
-  CHECK_EQ(f.today.lo, 67);
+  CHECK_EQ(wx_deg(f.today.hi10, true), 82);
+  CHECK_EQ(wx_deg(f.today.lo10, true), 67);
   CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Thu"));
-  CHECK_EQ(f.next[0].hi, 73);
-  CHECK_EQ(f.next[0].lo, 66);
+  CHECK_EQ(wx_deg(f.next[0].hi10, true), 73);
+  CHECK_EQ(wx_deg(f.next[0].lo10, true), 66);
   CHECK_EQ(f.next[0].code, 51);
   CHECK_EQ(std::string(weekday_text(f.next[0].wday)), std::string("Fri"));
-  CHECK_EQ(f.next[1].hi, 68);
+  CHECK_EQ(wx_deg(f.next[1].hi10, true), 68);
   CHECK_EQ(f.next[1].code, 63);
   CHECK_EQ(std::string(weekday_text(f.next[1].wday)), std::string("Sat"));
   // Below zero rounds away from it; night comes from is_day.
@@ -5957,9 +6172,10 @@ static void test_weather() {
          "\"2027-01-04\",\"2027-01-05\"],\"weather_code\":[71,73,0],\"temperature_2m_max\":[1,2,3],"
          "\"temperature_2m_min\":[-10.4,-9,-8]}}";
   CHECK(parse_forecast(json, f));
-  CHECK_EQ(f.temp, -4);
+  CHECK_EQ(f.t10, -35);
+  CHECK_EQ(wx_deg(f.t10, true), -4);
   CHECK(f.night);
-  CHECK_EQ(f.today.lo, -10);
+  CHECK_EQ(wx_deg(f.today.lo10, true), -10);
   CHECK_EQ(std::string(weekday_text(f.today.wday)), std::string("Sun"));
   // Short of three days, or no reading now: a failed read.
   json = "{\"current\":{\"temperature_2m\":70},\"daily\":{\"temperature_2m_max\":[1,2],\"temperature_2m_min\":[1,2]}}";
@@ -6009,6 +6225,145 @@ static void test_weather() {
   CHECK(countdown_turn(min0 + 50, false, false, true) == CountdownCard::NONE);
   CHECK(countdown_turn(min0 + 39, true, false, true) == CountdownCard::NEXT);
   CHECK(countdown_turn(min0 + 40, true, false, false) == CountdownCard::NONE);
+
+  // The lookup keeps the place's country, for the auto unit.
+  json = slurp("fixtures/wx_geocode_75019.json");
+  CHECK(parse_geocode(json, p) && p.country == "US");
+  json = slurp("fixtures/wx_geocode_london.json");
+  CHECK(parse_geocode(json, p) && p.country == "GB" && p.name == "London, United Kingdom");
+}
+
+// The kickoff forecast and the F/C setting (weather.h).
+static void test_kickoff_weather() {
+  // One hour, the kickoff's, in UTC: Sunday night in Green Bay is Monday
+  // 01:00 UTC.
+  CHECK_EQ(wx_utc_hour(1793581200), std::string("2026-11-02T01:00"));
+  CHECK_EQ(wx_utc_hour(0), std::string("1970-01-01T00:00"));
+  CHECK_EQ(wx_utc_hour(951782400), std::string("2000-02-29T00:00"));
+  CHECK_EQ(hour_url(44.51916f, -88.01983f, 1793581200),
+           std::string("https://api.open-meteo.com/v1/forecast?latitude=44.5192&longitude=-88.0198"
+                       "&hourly=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=GMT"
+                       "&start_hour=2026-11-02T01:00&end_hour=2026-11-02T01:00"));
+  // The recorded hour, and Open-Meteo's answer past 16 days.
+  WxHour h;
+  std::string json = slurp("fixtures/wx_hour_greenbay.json");
+  CHECK(parse_hour(json, h));
+  CHECK(h.valid && h.t10 == 555 && h.code == 3 && h.night);
+  json = slurp("fixtures/wx_hour_too_far.json");
+  CHECK(!parse_hour(json, h));
+  json = "{\"hourly\":{\"temperature_2m\":[null],\"weather_code\":[null]}}";
+  CHECK(!parse_hour(json, h));
+  json = "{\"hourly\":{\"temperature_2m\":[70.2],\"weather_code\":[0],\"is_day\":[1]}}";
+  CHECK(parse_hour(json, h) && h.t10 == 702 && !h.night);
+
+  // When the panel reads a forecast of its own: an outdoor sport before the
+  // start, not in a dome, ESPN with none, a city, 15 days out at most.
+  const int64_t now = 1793000000;
+  CHECK(wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + 3600, now));
+  CHECK(wx_kick_wanted(true, true, -1, false, "London, England", now + 3600, now));  // soccer says nothing
+  CHECK(!wx_kick_wanted(true, true, 1, false, "Atlanta, GA", now + 3600, now));      // a dome
+  CHECK(!wx_kick_wanted(true, false, 0, false, "Boston, MA", now + 3600, now));      // hockey
+  CHECK(!wx_kick_wanted(true, true, 0, true, "Evanston, IL", now + 3600, now));      // ESPN has one
+  CHECK(!wx_kick_wanted(false, true, 0, false, "Evanston, IL", now + 3600, now));    // under way
+  CHECK(!wx_kick_wanted(true, true, 0, false, "", now + 3600, now));
+  CHECK(wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + kWxKickAheadS, now));
+  CHECK(!wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + kWxKickAheadS + 1, now));
+  CHECK(wx_kick_wanted(true, true, 0, false, "Evanston, IL", now - 3599, now));  // a late start
+  CHECK(!wx_kick_wanted(true, true, 0, false, "Evanston, IL", now - 3600, now));
+  CHECK(!wx_kick_wanted(true, true, 0, false, "Evanston, IL", now + 3600, 0));  // no clock
+
+  // F or C: the setting, else the town's country, else the time zone.
+  CHECK(wx_fahrenheit(kWxUnitAuto, "US", "Europe/London"));
+  CHECK(!wx_fahrenheit(kWxUnitAuto, "GB", "America/Chicago"));
+  CHECK(wx_fahrenheit(kWxUnitAuto, "", "America/Chicago"));
+  CHECK(wx_fahrenheit(kWxUnitAuto, "", "Pacific/Honolulu"));
+  CHECK(!wx_fahrenheit(kWxUnitAuto, "", "America/Halifax"));
+  CHECK(!wx_fahrenheit(kWxUnitAuto, "", "UTC"));
+  CHECK(wx_fahrenheit(kWxUnitAuto, "PR", "UTC"));
+  CHECK(!wx_fahrenheit(kWxUnitC, "US", "America/Chicago"));
+  CHECK(wx_fahrenheit(kWxUnitF, "DE", "Europe/Berlin"));
+  // Tenths of a degree F in whole degrees, half away from zero.
+  CHECK_EQ(wx_deg(540, true), 54);
+  CHECK_EQ(wx_deg(540, false), 12);   // 12.2
+  CHECK_EQ(wx_deg(320, false), 0);
+  CHECK_EQ(wx_deg(329, false), 1);    // 0.5
+  CHECK_EQ(wx_deg(328, false), 0);    // 0.44
+  CHECK_EQ(wx_deg(-35, true), -4);
+  CHECK_EQ(wx_deg(-35, false), -20);  // -19.7
+  CHECK_EQ(wx_deg(-400, false), -40);
+  CHECK_EQ(wx_deg(2120, false), 100);
+  CHECK_EQ(wx_ticker_text(540, false, "Clear"), std::string("12C Clear"));
+  CHECK_EQ(wx_ticker_text(555, true, ""), std::string("56F"));
+  CHECK_EQ(espn_wx_words("54F Clear"), std::string("Clear"));
+  CHECK_EQ(espn_wx_words("72F"), std::string(""));
+  CHECK_EQ(espn_wx_words("80F Mostly sunny"), std::string("Mostly sunny"));
+
+  // ESPN's icon: AccuWeather's number, else the words; then the sun or the
+  // moon for the kickoff's hour.
+  CHECK(accu_icon(1) == (uint8_t) WxIcon::SUN);
+  CHECK(accu_icon(33) == (uint8_t) WxIcon::MOON);
+  CHECK(accu_icon(35) == (uint8_t) WxIcon::PART);
+  CHECK(accu_icon(7) == (uint8_t) WxIcon::CLOUD);
+  CHECK(accu_icon(18) == (uint8_t) WxIcon::RAIN);
+  CHECK(accu_icon(15) == (uint8_t) WxIcon::STORM);
+  CHECK(accu_icon(22) == (uint8_t) WxIcon::SNOW);
+  CHECK(accu_icon(11) == (uint8_t) WxIcon::FOG);
+  CHECK(accu_icon(0) == kWxIconNone);
+  CHECK(accu_icon(9) == kWxIconNone);  // AccuWeather has no 9 or 10
+  CHECK(words_icon("Mostly Sunny") == (uint8_t) WxIcon::SUN);
+  CHECK(words_icon("Partly cloudy") == (uint8_t) WxIcon::PART);
+  CHECK(words_icon("Mostly cloudy w/ t-storms") == (uint8_t) WxIcon::STORM);
+  CHECK(words_icon("Rain and snow") == (uint8_t) WxIcon::SNOW);
+  CHECK(words_icon("Showers") == (uint8_t) WxIcon::RAIN);
+  CHECK(words_icon("Ice") == (uint8_t) WxIcon::SNOW);
+  CHECK(words_icon("Nice") == kWxIconNone);
+  CHECK(words_icon("Windy") == kWxIconNone);
+  CHECK(espn_wx_icon(0, "Clear") == (uint8_t) WxIcon::SUN);
+  CHECK(espn_wx_icon(34, "Mostly clear") == (uint8_t) WxIcon::MOON);
+  CHECK(espn_wx_icon(0, "") == kWxIconNone);
+  CHECK(wx_icon_at((uint8_t) WxIcon::MOON, false) == (uint8_t) WxIcon::SUN);  // NU's 11 AM kickoff, read at night
+  CHECK(wx_icon_at((uint8_t) WxIcon::SUN, true) == (uint8_t) WxIcon::MOON);
+  CHECK(wx_icon_at((uint8_t) WxIcon::RAIN, true) == (uint8_t) WxIcon::RAIN);
+  CHECK(wx_dark_at(10, 19) && !wx_dark_at(10, 18));
+  CHECK(!wx_dark_at(7, 19) && wx_dark_at(7, 20));
+  CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
+
+  // The sun or the moon by the venue's own clock, not the panel's. NU's
+  // 11 AM kickoff (16:00 UTC, CDT) is daytime; Sunday night in Green Bay
+  // (01:20 UTC Monday, 7:20 PM CST after the change back) is dark, and so is
+  // a 7:30 PM Eastern November game a Pacific panel sees as 4:30 PM.
+  bool dst = false;
+  CHECK_EQ(wx_state_offset("Evanston, IL", dst), -6);
+  CHECK(dst);
+  CHECK_EQ(wx_state_offset("San Diego, California", dst), -8);
+  CHECK_EQ(wx_state_offset("Glendale, AZ", dst), -7);
+  CHECK(!dst);
+  CHECK_EQ(wx_state_offset("London, England", dst), 0);
+  CHECK_EQ(wx_state_offset("Foxborough", dst), 0);
+  CHECK_EQ(wx_venue_dark(1792857600, "Evanston, IL"), 0);         // 2026-10-24 16:00 UTC
+  CHECK_EQ(wx_venue_dark(1793582400, "Green Bay, WI"), 1);        // 2026-11-02 01:20 UTC
+  CHECK_EQ(wx_venue_dark(1794961800, "East Rutherford, NJ"), 1);  // 2026-11-18 00:30 UTC
+  CHECK_EQ(wx_venue_dark(1794961800, "Glendale, AZ"), 0);         // 5:30 PM there
+  CHECK_EQ(wx_venue_dark(1794961800, "London, England"), -1);     // abroad: ESPN's icon as it is
+  CHECK_EQ(wx_venue_dark(1783393200, "Chicago, IL"), 1);          // 2026-07-07 03:00 UTC, 10 PM CDT
+  CHECK_EQ(wx_venue_dark(1783447200, "Chicago, IL"), 0);          // 1 PM CDT
+  WxCivil c = wx_civil(1793582400);
+  CHECK(c.year == 2026 && c.month == 11 && c.day == 2 && c.hour == 1);
+
+  // When a weather read may start: with the next ESPN read 25 s or more
+  // away. Favorite teams re-runs its choice every second, so the gap comes
+  // from the favorites' own reads: schedules read a minute ago next come in
+  // six hours, which leaves room; one never read, or failed, is due.
+  const uint32_t t = 10000000, kRetry = 60000, kSched = 6 * 3600 * 1000;
+  CHECK(wx_gap_ok(wx_fav_read_in_ms(false, t - 60000, t, kRetry, kSched)));
+  CHECK_EQ(wx_fav_read_in_ms(false, t - 60000, t, kRetry, kSched), kSched - 60000);
+  CHECK_EQ(wx_fav_read_in_ms(true, 0, t, kRetry, kSched), 0u);
+  CHECK_EQ(wx_fav_read_in_ms(true, t - 50000, t, kRetry, kSched), 10000u);
+  CHECK(!wx_gap_ok(wx_fav_read_in_ms(true, t - 50000, t, kRetry, kSched)));
+  CHECK_EQ(wx_due_in_ms(t - 20000, 60000, t), 40000u);
+  CHECK_EQ(wx_due_in_ms(0, 60000, t), 0u);
+  CHECK_EQ(wx_due_in_ms(t - 70000, 60000, t), 0u);
+  CHECK(wx_gap_ok(kWxEspnGapMs) && !wx_gap_ok(kWxEspnGapMs - 1));
 }
 
 // The FCC screen (regulatory.h): every page fits its board, and the words
@@ -6569,6 +6924,260 @@ static void test_wifi_history() {
 
 // The line score at halftime and the final (line_score.h), from the recorded
 // single-event documents.
+// The pictures on the situation row (game_viz.h): the field strip's
+// geometry, the win bar's split and the margin sparkline's samples.
+static void test_game_viz() {
+  // The recorded FIU @ JXST read: FIU (away) has the ball at its own 31,
+  // 3rd & 4. ESPN's yardLine 69 counts from the home goal line.
+  GameSnapshot g;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, g));
+  CHECK_EQ((int) g.yard_line, 69);
+  CHECK_EQ((int) g.down, 3);
+  CHECK_EQ((int) g.distance, 4);
+  CHECK(!g.team_home);
+  CHECK_EQ(g.possession, 1);
+  // 128 wide, 6 px end zones: the field is columns 6..121 (115 px across).
+  FieldStrip f = field_strip(g, 128);
+  CHECK(f.valid);
+  CHECK_EQ((int) f.ez, 6);
+  // FIU's own 31 is 31 yards from the left (its) end zone.
+  CHECK_EQ((int) f.ball_x, field_col(31, 128, 6));
+  CHECK_EQ(field_col(31, 128, 6), 6 + (31 * 115 + 50) / 100);
+  CHECK(f.has_offense);
+  CHECK(f.to_right);  // we have it, so we attack the right end zone
+  CHECK_EQ((int) f.gain_x, field_col(35, 128, 6));
+  CHECK(!f.red_zone);
+  CHECK_EQ((int) f.left_timeouts, 0);   // FIU, away, 0 left
+  CHECK_EQ((int) f.right_timeouts, 1);  // JXST, home, 1 left
+  CHECK(!f.text_left);  // the ball is on the left half, so the text goes right
+  // The same read from the home side: the ball sits 69 from our end zone,
+  // and the offense (them) attacks our end zone on the left.
+  GameSnapshot h;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 55, h));
+  CHECK(h.team_home);
+  CHECK_EQ(h.possession, 2);
+  FieldStrip fh = field_strip(h, 128);
+  CHECK(fh.valid);
+  CHECK_EQ((int) fh.ball_x, field_col(69, 128, 6));
+  CHECK(!fh.to_right);
+  CHECK_EQ((int) fh.gain_x, field_col(65, 128, 6));
+  CHECK(fh.text_left);
+  CHECK_EQ((int) fh.left_timeouts, 1);
+  CHECK_EQ((int) fh.right_timeouts, 0);
+  // DEL @ WKU on 2026-10-27 (trimmed from a live read): WKU, home, has the
+  // ball, 4th & 11 at the DEL 45 (ESPN yardLine 55, 55 from WKU's goal line);
+  // Delaware is 94.8% to win with 3 timeouts to WKU's 2.
+  GameSnapshot del;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 48, del));
+  CHECK_EQ((int) del.yard_line, 55);
+  CHECK_EQ((int) del.down, 4);
+  CHECK_EQ((int) del.distance, 11);
+  CHECK_EQ((int) del.team_win_pct, 95);
+  CHECK_EQ(del.possession, 2);
+  FieldStrip fd = field_strip(del, 128);
+  CHECK(fd.valid);
+  CHECK_EQ((int) fd.ball_x, field_col(45, 128, 6));  // 45 from Delaware's end zone on the left
+  CHECK(!fd.to_right);                                // WKU drives at it
+  CHECK_EQ((int) fd.gain_x, field_col(34, 128, 6));
+  CHECK_EQ((int) fd.left_timeouts, 3);
+  CHECK_EQ((int) fd.right_timeouts, 2);
+  CHECK_EQ(win_bar_split(del.team_win_pct, 128), 122);
+  GameSnapshot wku;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 98, wku));
+  CHECK_EQ((int) wku.team_win_pct, 5);
+  CHECK_EQ(wku.possession, 1);
+  FieldStrip fw = field_strip(wku, 128);
+  CHECK_EQ((int) fw.ball_x, field_col(55, 128, 6));
+  CHECK(fw.to_right);
+  CHECK_EQ((int) fw.gain_x, field_col(66, 128, 6));
+  // Goal to go: the line to gain is the goal line, so no column of its own.
+  GameSnapshot gl = g;
+  gl.yard_line = 100 - 96;  // FIU at the JXST 4
+  gl.distance = 4;
+  gl.is_red_zone = true;
+  FieldStrip fg = field_strip(gl, 128);
+  CHECK(fg.valid);
+  CHECK_EQ((int) fg.gain_x, -1);
+  CHECK(fg.red_zone);
+  CHECK_EQ((int) fg.red_from, fg.ball_x + 2);
+  CHECK_EQ((int) fg.red_to, 121);
+  CHECK_EQ((int) fg.ball_x, field_col(96, 128, 6));
+  CHECK(fg.text_left);
+  // At the goal line the marker still fits inside the field.
+  gl.yard_line = 0;
+  fg = field_strip(gl, 128);
+  CHECK(fg.valid);
+  CHECK_EQ((int) fg.ball_x, 120);
+  CHECK(fg.red_from <= fg.red_to);
+  // Nobody has the ball (between plays after a score): no tip, no line, no red zone.
+  GameSnapshot np = g;
+  np.possession = 0;
+  np.is_red_zone = true;
+  FieldStrip fn = field_strip(np, 128);
+  CHECK(fn.valid);
+  CHECK(!fn.has_offense);
+  CHECK_EQ((int) fn.gain_x, -1);
+  CHECK(!fn.red_zone);
+  // Nothing without a yard line, before the start, in another sport, or on a
+  // board too narrow for it.
+  GameSnapshot none = g;
+  none.yard_line = 255;
+  CHECK(!field_strip(none, 128).valid);
+  none = g;
+  none.state = GameState::PRE;
+  CHECK(!field_strip(none, 128).valid);
+  none = g;
+  none.sport = Sport::BASKETBALL;
+  CHECK(!field_strip(none, 128).valid);
+  // A document with no situation, or out-of-range numbers, leaves the defaults.
+  GameSnapshot pre;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_pre.json"), Sport::FOOTBALL, 6, pre) || true);
+  CHECK_EQ((int) pre.yard_line, 255);
+  CHECK_EQ((int) pre.down, 0);
+  CHECK_EQ((int) pre.distance, 0);
+
+  // The win bar: our columns of 128 for our chance, never the whole bar.
+  CHECK_EQ(win_bar_split(50, 128), 64);
+  CHECK_EQ(win_bar_split(1, 128), 1);
+  CHECK_EQ(win_bar_split(99, 128), 127);
+  CHECK_EQ(win_bar_split(72, 128), 92);
+  CHECK_EQ(win_bar_split(0, 128), -1);
+  CHECK_EQ(win_bar_split(100, 128), -1);
+  CHECK_EQ(win_bar_split(-1, 128), -1);
+
+  // The margin track: one sample per read, a redraw adds nothing, and a new
+  // game starts over.
+  MarginTrack t;
+  CHECK(t.read("1", 10, 0, "12:00", 1));
+  CHECK(!t.read("1", 10, 0, "12:00", 1));  // the same read drawn again
+  CHECK(t.read("1", 10, 0, "11:40", 1));   // the clock moved
+  CHECK(t.read("1", 10, 3, "11:40", 1));   // a basket
+  CHECK_EQ((int) t.n, 3);
+  CHECK_EQ((int) t.margin[2], 3);
+  CHECK(t.read("2", 10, -2, "20:00", 1));
+  CHECK_EQ((int) t.n, 1);
+  CHECK_EQ(t.event_id, std::string("2"));
+  CHECK_EQ((int) t.margin[0], -2);
+  // The same game from the other side (two favorites playing each other):
+  // every sample flips with it, as the scoring log does.
+  MarginTrack side;
+  side.read("7", 10, 3, "9:00", 1);
+  side.read("7", 10, 5, "8:00", 1);
+  CHECK(side.read("7", 20, -5, "8:00", 1));
+  CHECK_EQ((int) side.n, 3);
+  CHECK_EQ((int) side.margin[0], -3);
+  CHECK_EQ((int) side.margin[1], -5);
+  CHECK_EQ((int) side.margin[2], -5);
+  CHECK_EQ(side.last_margin, -5);
+  CHECK_EQ((int) side.team_id, 20);
+  // A read with no team id (the demo's made-up teams) never flips.
+  side.read("7", 0, -7, "7:00", 1);
+  CHECK_EQ((int) side.margin[3], -7);
+  CHECK_EQ((int) side.team_id, 20);
+  // Full: pairs merge and every second read makes a sample from then on.
+  MarginTrack m;
+  for (int i = 0; i < MarginTrack::kMax; i++)
+    m.add("g", 1, i - 64);
+  CHECK_EQ((int) m.n, (int) MarginTrack::kMax);
+  CHECK_EQ((int) m.stride, 1);
+  m.add("g", 1, 100);  // the 129th read: the pairs merge and it is sample 65
+  CHECK_EQ((int) m.n, 65);
+  CHECK_EQ((int) m.stride, 2);
+  CHECK_EQ((int) m.pending, 0);
+  CHECK_EQ((int) m.margin[0], -63);  // the second of each pair stays
+  CHECK_EQ((int) m.margin[63], 63);
+  CHECK_EQ((int) m.margin[64], 100);
+  CHECK_EQ(m.last_margin, 100);
+  m.add("g", 1, 90);  // every second read is a sample now
+  CHECK_EQ((int) m.n, 65);
+  CHECK_EQ((int) m.pending, 1);
+  CHECK_EQ(m.last_margin, 90);
+  // Clamped to what fits the slot.
+  m.add("g", 1, 300);
+  CHECK_EQ((int) m.n, 66);
+  CHECK_EQ((int) m.margin[65], 127);
+  // 4096 reads (a long game polled often) still fit.
+  for (int i = 0; i < 4096; i++)
+    m.add("g", 1, 5);
+  CHECK(m.n <= MarginTrack::kMax);
+  CHECK(m.stride >= 32);
+  // Two games' tracks: leaving a game and coming back keeps its samples; a
+  // third game takes the older slot.
+  MarginTracks tracks;
+  tracks.pick("a").read("a", 1, 4, "5:00", 1);
+  tracks.pick("a").read("a", 1, 6, "4:00", 1);
+  CHECK_EQ((int) tracks.current().n, 2);
+  tracks.pick("b").read("b", 2, -1, "19:00", 1);
+  CHECK_EQ(tracks.current().event_id, std::string("b"));
+  CHECK_EQ((int) tracks.current().n, 1);
+  tracks.pick("a").read("a", 1, 8, "3:00", 1);
+  CHECK_EQ(tracks.current().event_id, std::string("a"));
+  CHECK_EQ((int) tracks.current().n, 3);
+  CHECK_EQ((int) tracks.current().margin[0], 4);
+  tracks.pick("c").read("c", 3, 0, "20:00", 1);
+  CHECK_EQ(tracks.current().event_id, std::string("c"));
+  tracks.pick("b");
+  CHECK_EQ(tracks.current().event_id, std::string("b"));
+  CHECK_EQ((int) tracks.current().n, 0);  // b was the older slot, c took it
+
+  // The sparkline's columns: stretched across the width, scaled to the peak.
+  int8_t cols[128];
+  MarginTrack e;
+  CHECK_EQ(margin_columns(e, 128, 4, 3, cols), 0);
+  MarginTrack one;
+  one.add("g", 1, 2);
+  CHECK_EQ(margin_columns(one, 128, 4, 3, cols), 1);
+  CHECK_EQ((int) cols[0], 4);  // the only point is the peak
+  CHECK_EQ((int) cols[127], 4);
+  // With a floor on the scale, a 1-0 hockey lead is a sliver.
+  MarginTrack goal;
+  goal.add("g", 1, 1);
+  CHECK_EQ(margin_columns(goal, 128, 4, 3, cols, margin_min_peak(Sport::HOCKEY)), 1);
+  CHECK_EQ((int) cols[0], 2);  // ceil(1 * 4 / 3)
+  MarginTrack basket;
+  basket.add("g", 1, 2);
+  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 1);
+  CHECK_EQ((int) cols[0], 1);  // ceil(2 * 4 / 10)
+  basket.add("g", 1, -20);
+  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 2);
+  CHECK_EQ((int) cols[127], -3);  // past the floor the peak rules again
+  MarginTrack two;
+  two.add("g", 1, 0);
+  two.add("g", 1, 8);
+  CHECK_EQ(margin_columns(two, 128, 4, 3, cols), 2);
+  CHECK_EQ((int) cols[0], 0);
+  CHECK_EQ((int) cols[127], 4);
+  CHECK_EQ((int) cols[64], 2);  // halfway is 4 of 8, so 2 of 4 px
+  MarginTrack swing;
+  swing.add("g", 1, 10);
+  swing.add("g", 1, -10);
+  swing.add("g", 1, 10);
+  CHECK_EQ(margin_columns(swing, 128, 4, 3, cols), 3);
+  CHECK_EQ((int) cols[0], 4);
+  CHECK_EQ((int) cols[127], 4);
+  // A deficit fills down to 3 at most.
+  int low = 0;
+  for (int x = 0; x < 128; x++)
+    low = std::min(low, (int) cols[x]);
+  CHECK_EQ(low, -3);
+  // A 1-point lead against a 20-point peak still shows a pixel.
+  MarginTrack tiny;
+  tiny.add("g", 1, 20);
+  tiny.add("g", 1, 1);
+  CHECK_EQ(margin_columns(tiny, 128, 4, 3, cols), 2);
+  CHECK_EQ((int) cols[127], 1);
+  // A pending read (after a merge) is the last point.
+  MarginTrack pend;
+  pend.add("g", 1, 0);  // the sample
+  pend.stride = 2;      // as after a merge
+  pend.add("g", 1, 6);  // pending, not a sample yet
+  CHECK_EQ((int) pend.n, 1);
+  CHECK_EQ((int) pend.pending, 1);
+  CHECK_EQ(margin_columns(pend, 128, 4, 3, cols), 2);
+  CHECK_EQ((int) cols[0], 0);
+  CHECK_EQ((int) cols[127], 4);
+}
+
 static void test_line_score() {
   // NHL final, WSH 5-3 over PIT, read as Washington's panel
   GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
@@ -7415,6 +8024,7 @@ int main() {
   test_schedule_league();
   test_schedule_due();
   test_no_live_rescan();
+  test_game_viz();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();
@@ -7486,7 +8096,9 @@ int main() {
   test_prefs_sync();
   test_message();
   test_news();
+  test_season();
   test_weather();
+  test_kickoff_weather();
   test_regulatory();
   test_wifi_history();
   test_ha_events();

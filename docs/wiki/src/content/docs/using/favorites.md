@@ -9,9 +9,9 @@ Favorite teams lets the panel follow up to 16 teams from any league, in the orde
 
 ## Setting up your list
 
-On the device page, open the **Favorites** card and tap **Add a favorite**. The team chooser opens and stays open, so you can add several teams in one go: tap a team to add it to the end of the list. Teams already in your list show a check mark, and tapping a checked team takes it out again. A line at the top counts them, like **5 of 16 favorites**; once the list is full, the chooser says so. Tap **Done** when you're finished.
+On the device page's Teams tab, tap **Add a favorite** under **Favorites**. The team chooser opens and stays open, so you can add several teams in one go: tap a team to add it to the end of the list. Teams already in your list show a check mark, and tapping a checked team takes it out again. A line at the top counts them, like **5 of 16 favorites**; once the list is full, the chooser says so. Tap **Done** when you're finished.
 
-Back in the **Favorites** card, each row has buttons to move the team up or down and to remove it. The Game Day app edits the same list.
+Back under **Favorites**, each row has buttons to move the team up or down and to remove it. The Game Day app edits the same list.
 
 The order is the priority. Higher teams win when two games clash (unless you choose **Alternate**, below), and the first four are buttons 1 to 4 on a WizMote remote. The page marks those four with their button number.
 
@@ -29,7 +29,7 @@ When none of your favorites has a game on, the panel shows each favorite's card 
 
 A favorite whose next game is still to come gets a second 10 seconds for its countdown, like "2d 14h", before the playlist moves on. See [Countdowns](/using/countdowns/).
 
-The bar under the mode buttons on the device page says **Cycling through your favorites**.
+The line under the mode cards on the device page's Home tab says **Cycling through your favorites**.
 
 ## When a game is on
 
@@ -45,7 +45,7 @@ The minutes for **Alternate** are the same setting as **Switch every** in Live g
 
 Panels set up before Favorite teams could alternate keep **Stick with the higher team** until you change it.
 
-**When two favorites are playing.** While one favorite's game is on the board, the panel also checks your other favorites' games in progress, each about every 30 seconds. Two switches in the **Favorites** card use those checks:
+**When two favorites are playing.** While one favorite's game is on the board, the panel also checks your other favorites' games in progress, each about every 30 seconds. Two switches under **Favorites** on the Teams tab use those checks:
 
 - **Jump to the action** moves the panel to another favorite's game at its big moment, then back to the game it left once that moment has passed for a minute. A big moment is football in the red zone, the bases loaded, or a game within one score in its last two minutes or overtime (from the 88th minute in soccer). It's off on every panel until you turn it on. A game you picked with a remote button stays up.
 - **Score banner** shows another favorite's score along the bottom of the board for five seconds, like **KC TD, 21-17**, the favorite's score first. It covers touchdowns, field goals, runs, home runs and goals, not basketball, where teams score on most trips down the floor. A banner comes within about 30 seconds of the score. It's on until you turn it off.
@@ -56,10 +56,10 @@ The checks behind Jump to the action and Score banner no longer affect the game 
 
 A playlist is a group of your favorites with a name, like your football teams or your basketball teams. Favorite teams can play one playlist instead of every favorite.
 
-- The **Playlists** card on the device page makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
+- **Playlists** on the device page's Teams tab makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
 - **One per sport** makes a playlist for each sport among your favorites, named Football, Baseball, Basketball, Hockey and Soccer. It skips a sport that already has a playlist by that name.
 - Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
-- **Playing**, under **Favorite teams** on the device page, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
+- **Playing**, under the mode cards on the device page's Home tab, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
 
 ### A row for each sport
 
@@ -69,13 +69,35 @@ When your favorites cover more than one sport, **Playing** has a row for each of
 - **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
 - Picking one plays every favorite in that sport, with the same rules as a playlist: **Only today's games**, **Take over** and the rest.
 - You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
-- They aren't playlists: they don't show in the **Playlists** card, don't count toward the 16, and aren't on the remote's buttons. A playlist of your own named Football sits beside **All football**.
+- They aren't playlists: they don't show under **Playlists**, don't count toward the 16, and a remote button plays one only when you set it to (see [The numbered buttons](/using/remote/#the-numbered-buttons)). A playlist of your own named Football sits beside **All football**.
 - The **One per sport** button is gone, since these rows do its job and never go out of date. Playlists it made before stay until you remove them.
 :::
 
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
 
-The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below.
+:::note[Coming in the next release]
+**Playlist options.** Under each playlist's teams on the device page, three settings shape how it plays:
+
+- **Plays on** is a schedule. Tap the days (S M T W T F S) the playlist should play, and set the hours with **from** and **to**, in the panel's time zone; with no hours set it plays all day on those days. Hours that end before they start run into the next morning, so Saturdays from 8:00 PM to 2:00 AM covers Sunday 1 AM. When a schedule starts, the panel switches to Favorite teams playing that playlist, and the bar says **on its schedule**; when it ends, the panel goes back to what it was playing before, and to the mode it was in. If a game it's locked on is still going, the switch waits for the final. Two schedules at once: the playlist higher in the card wins. Picking another playlist yourself during the hours stays until you change it again.
+- **Only this list's games** keeps the panel on this playlist's teams even near another favorite's kickoff. Off, as every playlist starts, a favorite outside the playlist still takes the panel for its game.
+- **Only today's games** can differ from the **Favorites** switch for this playlist: **Same as Favorites**, **On** or **Off**.
+
+A settings backup carries all three. The Game Day app shows the same options under each playlist.
+:::
+
+:::note[Coming in the next release]
+**Color and icon.** Under each playlist's options, **Color** and **Icon** give it a look, so you can tell your lists apart from across the room:
+
+- **Color** is one of red, orange, yellow, green, teal, blue, purple or pink.
+- **Icon** is one of a star, heart, lightning bolt, crown, flag or trophy. It shows in the playlist's color, or white with no color.
+- A playlist can have a color, an icon, both or neither (**None**, as every playlist starts).
+
+When a remote button or **Playing** switches to a playlist, the panel shows its name for 3 seconds in its color, with its icon above the name. **Playing** on the device page shows the playing list's icon, or a dot of its color, beside the picker, and each playlist's name in its color where the browser allows. The look moves with the playlist when you rename or reorder it, and a settings backup carries it.
+
+Picking a playlist or a sport row in **Playing** now shows its name on the panel too, as a remote button does. Home Assistant's Playlist select and a playlist's schedule switch quietly.
+:::
+
+The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below. (Coming in the next release, the buttons no longer follow the playlists' order; set a button to a playlist under **Remote** on the Device tab.)
 
 A favorite you take out of your list leaves every playlist it was in. Adding it back doesn't put it back in them.
 
@@ -85,9 +107,13 @@ Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorit
 
 Once you have a playlist, buttons 1 to 4 play your first four playlists instead. The panel switches to Favorite teams, plays that playlist, and shows its name for a moment. A button with no playlist does nothing. With no playlists, the buttons stay your first four favorites.
 
+:::note[Coming in the next release]
+Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to a favorite team, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+:::
+
 ## On the device page
 
-The **Up next** list under the board has one row per favorite: the live score, the final, or the next kickoff and TV channel. The row the panel is showing is highlighted. **No game scheduled** means ESPN lists no game for that team.
+The **Up next** list on the Home tab has one row per favorite: the live score, the final, or the next kickoff and TV channel. The row the panel is showing is highlighted. **No game scheduled** means ESPN lists no game for that team.
 
 If none of your favorites has any game scheduled, the board shows a clock in your first favorite's colors. See [The off-season clock](/using/brightness-and-clock/#the-off-season-clock).
 
