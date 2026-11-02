@@ -82,6 +82,10 @@ On Android, **Display** has a **Live pictures** card after the ticker, with the 
 :::
 
 :::note[Coming in the next release]
+On Android, **Display** has a **Weather** card after **Between games**, with the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
+:::
+
+:::note[Coming in the next release]
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 :::
 
