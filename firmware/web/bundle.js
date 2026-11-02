@@ -1377,7 +1377,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     }
     return n;
   };
-  const cap = (k) => k.charAt(0).toUpperCase() + k.slice(1);
+  // The names owners read, as the docs give them.
+  const lookName = (k) => ({ bolt: "Lightning bolt" }[k] || k.charAt(0).toUpperCase() + k.slice(1));
   // Playlists (components/gameday/playlists.h): named groups of favorites.
   // Every change posts them all (lists=Name=nfl:6,nba:6;...), teams by key.
   const lists = () => (S && S.lists) || [];
@@ -1567,7 +1568,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         [["", "None"]].concat(items).forEach(([k]) => {
           const c = el("button", "chip look");
           if (k) c.appendChild(draw(k)); else c.textContent = "None";
-          c.title = k ? cap(k) : "None";
+          c.title = k ? lookName(k) : "None";
           c.setAttribute("aria-label", c.title);
           setOn(c, (l[key] || "") === k, "aria-pressed");
           c.onclick = () => put({ [key]: k });

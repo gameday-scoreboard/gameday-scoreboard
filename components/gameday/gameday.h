@@ -978,7 +978,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 
   // Each playlist's color and icon (playlists.h list_color, list_icon), a
   // byte per playlist in their own fixed-size blob: mark[n] belongs to
-  // playlist n + 1 and is rewritten with the playlists.
+  // playlist n + 1 and is rewritten with the playlists. Firmware without it
+  // leaves it alone, so playlists edited there and then upgraded can show
+  // the old marks by position until the owner sets them again.
   struct Prefs12 {
     uint8_t mark[::espn::kListMax];
   } __attribute__((packed));
