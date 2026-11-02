@@ -78,6 +78,10 @@ Each setting has one short line saying what it does. The longer rules are on the
 :::
 
 :::note[Coming in the next release]
+On Android, **Display** has a **Live pictures** card after the ticker, with the device page's **Field strip**, **Win chance bar** and **Score margin** switches for the pictures a 128-wide board draws under the clock during a game. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
+:::
+
+:::note[Coming in the next release]
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 :::
 
