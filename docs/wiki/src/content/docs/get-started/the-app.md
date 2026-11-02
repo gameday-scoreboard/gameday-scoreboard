@@ -31,6 +31,14 @@ What you reach for during a game:
 
 The panel's name is at the top. Tap it to switch to another panel, to add one, or, with two or more, to manage them.
 
+:::note[Coming in the next release]
+On iPhone the Board follows the device page's Home tab:
+
+- The modes read **Favorite teams** ("Only the teams you pick") and **Live games** ("Games on right now, in leagues you pick"). The line under them says why the panel shows what it does, like "None of your teams are playing. Showing their next games." With no favorites it offers **Add a team**, and with playlists it has **Playing**.
+- **Panel on**, **Brightness** and **Showing** sit together, with **Refresh scores**. When **Showing** is on **Effects**, the effect, palette, speed and intensity show under it.
+- **Customize** takes the place of **Message**.
+:::
+
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
 
 :::note[Coming in the next release]
@@ -48,12 +56,26 @@ In the chooser's **On now** tab, a search that matches none of today's games lis
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
 - **Live games**: the leagues it follows and **Switch every**, and on iPhone **Pick the best game** and **Favorites take over**. Choosing leagues here doesn't change the panel's mode. See [Modes](/using/modes/).
 
+:::note[Coming in the next release]
+On iPhone, **Only today's games**, **Jump to the action** and **Score banner** are at the top of **Favorites**, as on the device page. A favorite shows which remote button lands on it only while a WizMote is paired.
+:::
+
 ### Settings
 
 - **Display**: ticker speed, **Showing** (the scoreboard or the clock), the ticker and celebrations. It also has **Between games**, with the countdown to the next game and your own countdown, and on iPhone the night schedule. See [Brightness and the clock](/using/brightness-and-clock/), [The ticker](/using/ticker/) and [Countdowns](/using/countdowns/).
 - **Device**: the panel's **Nickname**, **Setup**, firmware updates, **Reboot**, **Reset Wi-Fi**, the panel's saved Wi-Fi networks and the remote. **Setup** has the timezone, and on iPhone the walkthrough again. **Backup** saves and restores the panel's settings. On iPhone, **Advanced** has the panel layout, the remote and the panel's memory. On Android the panel layout is under **Setup** and the remote under **Remote**. See [Back up and restore settings](/using/backup/), [Wi-Fi](/using/wifi/) and [WizMote remote](/using/remote/).
 - **Panels**: every panel saved in the app, and new ones nearby.
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
+
+:::note[Coming in the next release]
+On iPhone, Settings has three pages for the panel, like the device page's tabs:
+
+- **Display**: ticker speed, the night schedule, the ticker, celebrations and **Between games**. **Showing** moved to the Board.
+- **Customize**: the banner, the message card and the date countdown.
+- **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks, **Diagnostics** and **Advanced**. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
+
+Each setting has one short line saying what it does. The longer rules are on these pages.
+:::
 
 :::note[Coming in the next release]
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
