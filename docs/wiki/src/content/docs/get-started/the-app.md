@@ -86,7 +86,11 @@ On Android, **Display** has a **Weather** card after **Between games**, with the
 :::
 
 :::note[Coming in the next release]
-On Android, **Between games** lists every card the panel takes turns with when no game is on, in the order it shows them, each with its own switch, like the device page's list: **Next game**, **Clock**, **Countdown to the next game**, **Game leaders**, **College Top 25**, **News headlines**, **Weather** and the rest. A card with nothing to show yet is greyed, with what it needs under its name, like "Pick its day under Customize first". **News headlines** starts off. See [Between games](/using/device-page/#between-games) and [News headlines](/using/news/). The list shows once the panel runs firmware with it; until then **Between games** has the countdown switch.
+On Android, **Between games** lists every card the panel takes turns with when no game is on, in the order it shows them, each with its own switch, like the device page's list: **Next game**, **Clock**, **Countdown to the next game**, **Game leaders**, **College Top 25**, **News headlines**, **Weather** and the rest. A card with nothing to show yet is greyed, with what it needs under its name, like "Pick its day under Customize first". **News headlines** starts off. **Game leaders** puts each team's top players from the box score on the board at halftime and the final. See [Between games](/using/device-page/#between-games) and [News headlines](/using/news/). The list shows once the panel runs firmware with it; until then **Between games** has the countdown switch.
+:::
+
+:::note[Coming in the next release]
+On Android, the **Screen** card in **Display** has the device page's **Game-day wake** and **After the game**, under ticker speed: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
 :::
 
 :::note[Coming in the next release]
