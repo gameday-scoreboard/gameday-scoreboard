@@ -86,6 +86,10 @@ On Android, **Display** has a **Weather** card after **Between games**, with the
 :::
 
 :::note[Coming in the next release]
+On Android, **Between games** lists every card the panel takes turns with when no game is on, in the order it shows them, each with its own switch, like the device page's list: **Next game**, **Clock**, **Countdown to the next game**, **Game leaders**, **College Top 25**, **News headlines**, **Weather** and the rest. A card with nothing to show yet is greyed, with what it needs under its name, like "Pick its day under Customize first". **News headlines** starts off. See [Between games](/using/device-page/#between-games) and [News headlines](/using/news/). The list shows once the panel runs firmware with it; until then **Between games** has the countdown switch.
+:::
+
+:::note[Coming in the next release]
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 :::
 
