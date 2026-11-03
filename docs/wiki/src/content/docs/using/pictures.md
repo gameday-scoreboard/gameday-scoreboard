@@ -16,6 +16,8 @@ Between games the panel can show your own pictures: a fan photo, a piece of pixe
 1. Open the [device page](/using/device-page/) and find **Pictures** on the Customize tab.
 2. Tap **Add a picture** and pick a file.
 
+On Android, the app has it too: **Settings > Customize > Pictures**, then **Add a picture** picks one from your phone's photos. The app treats each file the same way as the device page, below.
+
 The panel keeps up to 4 pictures, and they stay through a restart and through updates. Nothing shows until you add one.
 
 What you can add:
