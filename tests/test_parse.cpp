@@ -3398,6 +3398,35 @@ static void test_lookahead() {
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, none, "401856724"));
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 2294, none));
 
+  // College basketball reads its conference's scoreboard the same way, and
+  // November and December are mostly non-conference games. The conference
+  // scoreboard lists those too: on 2026-11-06 all ten Big Ten games were
+  // non-conference (each conference's scoreboard matched groups=50 that day
+  // and on the 11/2 opener), so Michigan's game with UConn is on Michigan's.
+  Schedule mich;
+  CHECK(parse_team_str(slurp("fixtures/team_mcbb_mich.json"), mich));
+  CHECK_EQ(mich.group, 7u);
+  CHECK_EQ(team_day_url(League::MCBB, mich.group, parse_iso8601_z("2026-11-07T01:30Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=7&dates=20261106"));
+  const std::string b1g = slurp("fixtures/day_mcbb_20261106.json");
+  const struct {
+    uint32_t team;
+    const char *event;
+  } b1g_games[] = {{2483, "401920717"}, {2509, "401926131"}, {194, "401916314"}, {164, "401926135"},
+                   {275, "401920894"},  {kMichigan, "401920685"}, {77, "401920733"}, {135, "401916304"},
+                   {2294, "401920726"}, {26, "401922219"}};
+  for (const auto &g : b1g_games) {
+    Schedule day;
+    CHECK(parse_team_game_str(b1g, g.team, day));
+    CHECK_EQ(day.event_id, std::string(g.event));
+  }
+  // The other side is on it too (UConn, Big East), and a Big Ten team that is
+  // off that day (Illinois) has nothing.
+  Schedule conn_day;
+  CHECK(parse_team_game_str(b1g, kUConn, conn_day));
+  CHECK_EQ(conn_day.event_id, std::string("401920685"));
+  CHECK(!parse_team_game_str(b1g, 356, none));
+
   // The NFL keeps the game: NE @ CHI was final on 2026-10-22 and Chicago's
   // team endpoint still named it, while Memphis's (college, in overtime two
   // minutes later) named next week's. So the NFL skips the day read.
