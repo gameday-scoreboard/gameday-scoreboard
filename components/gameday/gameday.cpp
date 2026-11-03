@@ -6443,8 +6443,8 @@ std::vector<GamedayComponent::SeasonTeam> GamedayComponent::season_teams_() cons
     if (e.team == nullptr || !this->fav_in_list_(e.slot - 1))
       continue;
     const ::espn::LeagueInfo *info = ::espn::league_info(e.team->league);
-    if (info == nullptr || !info->season_list)
-      continue;  // a season schedule of a megabyte or more (leagues.h)
+    if (info == nullptr || !::espn::season_cards(*info))
+      continue;  // MLB's 2.8 MB season schedule
     // Between seasons by the Favorites clock's rule (offseason.h).
     bool polled = e.game.valid && e.game.event_id == e.sched.event_id;
     int64_t kick = polled ? e.game.kickoff_epoch : e.sched.kickoff_epoch;
@@ -6517,20 +6517,25 @@ void GamedayComponent::season_tick_() {
     const SeasonTeam &t = teams[i];
     if (t.off_season ? !recap_on : !sched_on)
       continue;
-    const bool soccer = ::espn::league_sport(t.team->league) == ::espn::Sport::SOCCER;
+    const ::espn::LeagueInfo *info = ::espn::league_info(t.team->league);  // set: season_teams_ checked it
+    const bool soccer = info->sport == ::espn::Sport::SOCCER;
     const bool results = soccer && t.off_season;
     SeasonEntry *e = this->season_entry_(t.team->league, t.team->espn_id);
-    if (::espn::season_read_due(now, e != nullptr ? e->read_ms : 0, e != nullptr ? e->fail_ms : 0,
-                                e == nullptr || e->read_ms == 0 || e->results == results)) {
+    const bool same_kind = e == nullptr || e->read_ms == 0 || e->off == t.off_season;
+    if (::espn::season_read_due(now, e != nullptr ? e->read_ms : 0, e != nullptr ? e->fail_ms : 0, same_kind,
+                                ::espn::season_big(*info))) {
       this->season_read_due_ = true;
       this->season_read_league_ = t.team->league;
       this->season_read_id_ = t.team->espn_id;
       this->season_read_results_ = results;
+      this->season_read_off_ = t.off_season;
       this->season_pos_ = (uint32_t) i;
       return;
     }
-    if (e == nullptr || e->read_ms == 0 || e->results != results)
-      continue;  // the read failed: the next team, and this one again after the retry
+    // The read failed, or it's from the other half of the season and not
+    // due again yet: the next team, and this one again later.
+    if (e == nullptr || e->read_ms == 0 || e->off != t.off_season)
+      continue;
     const std::vector<::espn::SeasonGame> up = ::espn::season_upcoming(e->read, epoch);
     ::espn::SeasonCard c = ::espn::season_card(t.off_season, sched_on, recap_on, !up.empty(),
                                                ::espn::season_recap_ready(e->read, t.record));
@@ -6540,7 +6545,7 @@ void GamedayComponent::season_tick_() {
     const std::string abbr = panel_text(t.team->abbr);
     if (c == ::espn::SeasonCard::RECAP) {
       this->season_show_(::espn::recap_header(abbr, e->read.year),
-                         panel_text(::espn::recap_body(e->read, soccer, t.record)));
+                         panel_text(::espn::recap_body(e->read, info->sport, t.record)));
       return;
     }
     const bool wide = this->top25_cols_ == 2;  // the page's layout (tt_apply_layout)
@@ -6568,14 +6573,17 @@ void GamedayComponent::start_season_job_() {
   this->job_.season_league = this->season_read_league_;
   this->job_.season_id = this->season_read_id_;
   this->job_.season_results = this->season_read_results_;
+  this->job_.season_off = this->season_read_off_;
   this->start_worker_();
 }
 
 // Worker task. About 200 to 400 KB (on 10/31: NFL 292 KB, college 389 KB,
-// Premier League 255 KB, MLS fixtures 186 KB), streamed through the parse's
-// filter.
+// Premier League 255 KB, MLS fixtures 186 KB), and up to 1.9 MB for
+// basketball and hockey (season_cards), streamed through the parse's
+// filter, which keeps a few hundred bytes a game.
 void GamedayComponent::run_season_job_() {
   Job &j = this->job_;
+  const uint32_t start = millis();
   auto container = this->open_(::espn::season_url(j.season_league, j.season_id, j.season_results));
   if (container == nullptr)
     return;
@@ -6590,6 +6598,7 @@ void GamedayComponent::run_season_job_() {
   j.season_ok = ::espn::parse_season_from(src, j.season_id, j.season_read);
   container->end();
   j.season_bytes = (uint32_t) reader.total();
+  j.season_ms = millis() - start;
   if (!j.season_ok)
     ESP_LOGW(TAG, "Season: parse failed after %u bytes", (unsigned) j.season_bytes);
 }
@@ -6604,12 +6613,15 @@ void GamedayComponent::apply_season_job_() {
   }
   e->fail_ms = 0;
   e->read_ms = now;
-  e->results = j.season_results;
+  e->off = j.season_off;
+  if (e->reads < UINT16_MAX)
+    e->reads++;
   e->read = std::move(j.season_read);
-  ESP_LOGI(TAG, "Season: team %u, %u: %u-%u-%u, %u games ahead, playoffs: %s (%u bytes)", (unsigned) e->id,
-           (unsigned) e->read.year, (unsigned) e->read.wins, (unsigned) e->read.losses, (unsigned) e->read.ties,
-           (unsigned) e->read.next.size(), e->read.post ? ::espn::season_post_line(e->read).c_str() : "none",
-           (unsigned) j.season_bytes);
+  ESP_LOGI(TAG, "Season: team %u, %u: %u-%u-%u (%u late), %u games ahead, playoffs: %s (%u bytes in %u ms, read %u)",
+           (unsigned) e->id, (unsigned) e->read.year, (unsigned) e->read.wins, (unsigned) e->read.losses,
+           (unsigned) e->read.ties, (unsigned) e->read.late_losses, (unsigned) e->read.next.size(),
+           e->read.post ? ::espn::season_post_line(e->read).c_str() : "none", (unsigned) j.season_bytes,
+           (unsigned) j.season_ms, (unsigned) e->reads);
 }
 
 // ---- The picture card (picture.h, picture_card.h) ---------------------------

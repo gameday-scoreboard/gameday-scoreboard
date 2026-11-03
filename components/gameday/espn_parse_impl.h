@@ -668,6 +668,7 @@ inline void fill_season_filter(JsonDocument &f) {
   comp["timeValid"] = true;
   comp["status"]["type"]["state"] = true;
   comp["status"]["type"]["completed"] = true;
+  comp["status"]["period"] = true;
   comp["notes"].add<JsonObject>()["headline"] = true;
   JsonObject c = comp["competitors"].add<JsonObject>();
   c["homeAway"] = true;
@@ -679,7 +680,8 @@ inline void fill_season_filter(JsonDocument &f) {
 }  // namespace detail
 
 // A team's season schedule into out: the games not started (soonest first,
-// up to kSeasonGames), the regular season's finals counted, and the last
+// up to kSeasonGames), the regular season's finals counted (and the losses
+// past a third period, for hockey's record), and the last
 // playoff game's round and result. A playoff game is season type 3, or a
 // soccer type named for the playoffs; preseason (type 1) doesn't count.
 // False when the document doesn't parse.
@@ -739,8 +741,11 @@ template<typename TInput> bool parse_season(TInput &input, uint32_t our_team_id,
       }
     } else if (type != 1) {
       uint8_t &n = won ? out.wins : lost ? out.losses : out.ties;
-      if (n < 255)
+      if (n < 255) {
         n++;
+        if (lost && (comp["status"]["period"] | 0) > 3)
+          out.late_losses++;
+      }
     }
   }
   // Soonest first, in place: an insertion sort is plenty for a season.
