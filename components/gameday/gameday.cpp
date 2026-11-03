@@ -6618,11 +6618,10 @@ void GamedayComponent::apply_season_job_() {
   if (e->reads < UINT16_MAX)
     e->reads++;
   e->read = std::move(j.season_read);
-  ESP_LOGI(TAG, "Season: team %u, %u: %u-%u-%u (%u late), %u games ahead, playoffs: %s (%u bytes in %u ms, read %u)",
-           (unsigned) e->id, (unsigned) e->read.year, (unsigned) e->read.wins, (unsigned) e->read.losses,
-           (unsigned) e->read.ties, (unsigned) e->read.late_losses, (unsigned) e->read.next.size(),
-           e->read.post ? ::espn::season_post_line(e->read).c_str() : "none", (unsigned) j.season_bytes,
-           (unsigned) j.season_ms, (unsigned) e->reads);
+  ESP_LOGI(TAG, "Season: team %u, %u: %s, %u games ahead, playoffs: %s (%u bytes in %u ms, read %u)", (unsigned) e->id,
+           (unsigned) e->read.year, ::espn::season_record(e->read, ::espn::league_sport(e->league), "").c_str(),
+           (unsigned) e->read.next.size(), e->read.post ? ::espn::season_post_line(e->read).c_str() : "none",
+           (unsigned) j.season_bytes, (unsigned) j.season_ms, (unsigned) e->reads);
 }
 
 // ---- The picture card (picture.h, picture_card.h) ---------------------------
