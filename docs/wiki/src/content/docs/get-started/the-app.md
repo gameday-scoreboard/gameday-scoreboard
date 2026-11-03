@@ -86,7 +86,7 @@ On Android, **Display** has a **Weather** card after **Between games**, with the
 :::
 
 :::note[Coming in the next release]
-On Android, **Between games** under **Display** has a **College Top 25** switch after **Countdown to the next game**. While you follow a college football or basketball team, the AP poll takes a turn between games, five teams at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with the card.
+On Android, **Between games** under **Display** has a **College Top 25** switch after **Countdown to the next game**. While you follow a college football or basketball team, the AP poll takes a turn between games, a page at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with College Top 25.
 :::
 
 :::note[Coming in the next release]
