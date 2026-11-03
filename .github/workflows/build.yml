@@ -679,7 +679,7 @@ jobs:
           # resolve the same wherever the folder lands) so site.yml can
           # rebuild site/firmware/<variant>/ from a release asset instead of
           # a Build artifact, which expires after 90 days.
-          for v in moonhub75 moonhub75-2panel scoreboard75; do
+          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare; do
             (cd artifacts && zip -r "../release/firmware-$v.zip" "$v")
             ASSETS="$ASSETS release/firmware-$v.zip"
           done

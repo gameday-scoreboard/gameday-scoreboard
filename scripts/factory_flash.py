@@ -25,7 +25,7 @@ Run it with the ESPHome venv's python, which has esptool and pyserial:
 
 --release downloads the factory image from the GitHub release once and keeps
 it in factory/firmware/. The version and pinout are read from the image
-itself, and an image built for the other pinout is refused. --dry-run prints
+itself, and an image built for another pinout is refused. --dry-run prints
 the esptool commands with a made-up MAC instead of talking to a board.
 
 Leave out --port for a batch. Each controller has its own USB serial number,
@@ -581,7 +581,7 @@ def main():
     src.add_argument("--release", help="release tag to download the factory image from, e.g. v1.5.5")
     src.add_argument("--image", type=Path, help="local .factory.bin to flash")
     # The product board is on the MoonHub75 pinout; scoreboard75 is the early test boards.
-    ap.add_argument("--variant", default="moonhub75", choices=["moonhub75", "scoreboard75"])
+    ap.add_argument("--variant", default="moonhub75", choices=["moonhub75", "scoreboard75", "waveshare"])
     ap.add_argument("--port", help="serial port, for one board only (default: find the Espressif USB device "
                     "for each unit)")
     ap.add_argument("--baud", type=int, default=460800)
