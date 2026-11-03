@@ -206,6 +206,7 @@ struct LiveGame {
 struct Final {
   uint8_t league{0};
   uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  uint8_t away_rank{99}, home_rank{99};  // each side's AP rank for its logo, 99 when unranked
   int64_t kickoff_epoch{0};
   std::string detail;  // "Final", "Final/OT"
   uint32_t away_id{0}, home_id{0};
@@ -224,6 +225,7 @@ GameSnapshot final_snapshot(const Final &f);
 struct Pending {
   uint8_t league{0};
   uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  uint8_t away_rank{99}, home_rank{99};  // each side's AP rank for its logo, 99 when unranked
   int64_t kickoff_epoch{0};
   std::string event_id;
   uint32_t away_id{0}, home_id{0};
