@@ -94,6 +94,10 @@ On Android, the **Screen** card in **Display** has the device page's **Game-day 
 :::
 
 :::note[Coming in the next release]
+On Android, **Customize** has a **Pictures** card after the message card, like the device page's: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF goes as it is (see [Pictures](/using/pictures/)). The card shows once the panel runs firmware with pictures.
+:::
+
+:::note[Coming in the next release]
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 :::
 
