@@ -6580,7 +6580,8 @@ void GamedayComponent::start_season_job_() {
 // Worker task. About 200 to 400 KB (on 10/31: NFL 292 KB, college 389 KB,
 // Premier League 255 KB, MLS fixtures 186 KB), and up to 1.9 MB for
 // basketball and hockey (season_cards), streamed through the parse's
-// filter, which keeps a few hundred bytes a game.
+// filter into a PSRAM document (about 1 KB a game: 83 KB for a whole NHL
+// season on the host, tests/heap_budget.cpp's season_nhl).
 void GamedayComponent::run_season_job_() {
   Job &j = this->job_;
   const uint32_t start = millis();

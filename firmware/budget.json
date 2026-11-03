@@ -1,5 +1,5 @@
 {
-  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there. 2026-10-28: flash caps and max_growth.flash raised for the 52 WLED effects (about 81 KB of flash in one change; see the effects PR). 2026-10-30: flash caps raised 10 KB for the kickoff forecast and the F/C setting (about 17 KB; see that PR), and the soccer and NFL event reads' JSON ceilings for the venue address it reads (about 300 B each). 2026-10-31: flash caps raised 8,000 B for the schedule and season recap cards (about 19.8 KB of flash: the season schedule parse and its two cards).",
+  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there. 2026-10-28: flash caps and max_growth.flash raised for the 52 WLED effects (about 81 KB of flash in one change; see the effects PR). 2026-10-30: flash caps raised 10 KB for the kickoff forecast and the F/C setting (about 17 KB; see that PR), and the soccer and NFL event reads' JSON ceilings for the venue address it reads (about 300 B each). 2026-10-31: flash caps raised 8,000 B for the schedule and season recap cards (about 19.8 KB of flash: the season schedule parse and its two cards). 2026-11-03: season_nhl added, the same cards' read at its biggest (a whole NHL season, 82 finals).",
   "max_growth": {
     "flash": 98304,
     "static_ram": 4096,
@@ -76,6 +76,10 @@
     "schedule_nfl": {
       "heap": 1936,
       "json": 6657
+    },
+    "season_nhl": {
+      "heap": 1042,
+      "json": 90916
     },
     "summary_mlb": {
       "heap": 1984,
