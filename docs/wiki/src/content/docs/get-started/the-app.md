@@ -53,6 +53,10 @@ When the panel shows its thermometer or plug in the corner, the Board shows the 
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
 :::
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
+
+:::note[Coming in the next release]
+On Android, when your favorites cover more than one sport, **Playing** also lists **All football**, **All basketball** and the rest, one for each sport, between **All favorites** and your playlists. **Playlists** no longer has **One per sport**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
+:::
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
 - **Live games**: the leagues it follows and **Switch every**, and on iPhone **Pick the best game** and **Favorites take over**. Choosing leagues here doesn't change the panel's mode. See [Modes](/using/modes/).
 
