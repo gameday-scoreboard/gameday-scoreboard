@@ -180,6 +180,9 @@ void GamedayComponent::demo_show_step_(bool splash) {
     g.opp_color = color;
   }
   g.valid = true;
+  // Each run is a game of its own to the game events (ha_track_).
+  if (this->demo_step_ == 0)
+    this->demo_run_++;
   g.state = d.state;
   g.completed = d.state == GameState::POST;
   g.team_score = d.us;
@@ -190,6 +193,11 @@ void GamedayComponent::demo_show_step_(bool splash) {
   g.short_down_distance = d.down;
   g.down_distance = d.down;
   g.is_red_zone = d.red_zone;
+  g.yard_line = d.yard_line;
+  g.distance = d.distance;
+  g.down = d.down[0] >= '1' && d.down[0] <= '4' ? (uint8_t) (d.down[0] - '0') : 0;
+  g.team_win_pct = d.win;
+  g.team_home = true;
   g.last_play = d.play;
   g.team_winner = d.state == GameState::POST && d.us > d.them;
   g.team_timeouts = d.period <= 2 ? 3 : 2;

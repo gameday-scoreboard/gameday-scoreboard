@@ -1,6 +1,6 @@
-// Owner text on a full-screen box: the banner (firmware/pages/message.yaml)
-// and the message card (firmware/pages/gameday-live.yaml). The text takes
-// the biggest font it fits in, centered; past the smallest it rolls up
+// Text on a full-screen box: the banner (firmware/pages/message.yaml), the
+// message card and the news card (firmware/pages/gameday-live.yaml). The text
+// takes the biggest font it fits in, centered; past the smallest it rolls up
 // slowly, holding at the top and the bottom.
 #pragma once
 
@@ -18,12 +18,12 @@ static constexpr uint32_t kBoardRollHoldMs = 2000;
 
 inline void board_roll_y_(void *label, int32_t v) { lv_obj_set_y((lv_obj_t *) label, v); }
 
-// fonts: biggest first. Returns how long one pass of a rolling text takes in
-// ms, 0 when it stands still.
+// fonts: biggest first. H is the box's height, the panel's by default (the
+// news card's headline sits under its top line). Returns how long one pass
+// of a rolling text takes in ms, 0 when it stands still.
 inline uint32_t board_text(lv_obj_t *box, lv_obj_t *label, const char *text, const lv_font_t *const *fonts,
-                           size_t n_fonts) {
+                           size_t n_fonts, int32_t H = 64) {
   const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
-  const int32_t H = 64;
   lv_obj_set_size(box, W, H);
   lv_anim_delete(label, board_roll_y_);
   const lv_font_t *font = fonts[n_fonts - 1];

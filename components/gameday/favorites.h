@@ -43,6 +43,9 @@ struct FavRules {
   bool today_only{false};     // idle playlist: only games today (local time) or live
   int64_t day_start{0};       // today's local midnight, epoch seconds
   int64_t day_end{0};         // the next one
+  // Only this list's games (playlists.h): a favorite outside the playlist
+  // no longer locks on near its kickoff while the playlist plays.
+  bool only_list{false};
 };
 
 struct FavChoice {
@@ -106,7 +109,9 @@ inline FavChoice pick_favorite(const std::vector<FavGame> &games, int64_t now, c
   FavChoice c;
   if (games.empty())
     return c;
-  auto locked = [&](int i) { return i >= 0 && i < (int) games.size() && fav_locked(games[i], now, r); };
+  auto locked = [&](int i) {
+    return i >= 0 && i < (int) games.size() && (!r.only_list || games[i].in_list) && fav_locked(games[i], now, r);
+  };
   auto valid = [&](int i) { return i >= 0 && i < (int) games.size() && games[i].valid; };
   bool any_locked = false;
   for (int i = 0; i < (int) games.size(); i++)

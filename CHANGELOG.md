@@ -24,11 +24,45 @@ that line is also the update summary on the device page, so keep it under
 240 characters. Panels link to their release's section there. Neither
 the site nor the docs' What's new page shows `## Unreleased`.
 
+A release that fixes something broken for owners (scores gone after an ESPN
+change, a panel that won't start) starts its summary line with
+`Important:`. Panels read that word from the update summary: their ticker
+says "Important update ready" instead of "Update ready", and the app is told
+through `update_important` in the panel's state.
+
 ## Unreleased
+
+### ⚠️ Heads up
+
+- 🔌 The panel no longer dims itself when hot or after a power dip, and the Clear button is gone: a thermometer or plug in the corner says what happened, and after a power dip it starts at half brightness for 3 seconds
+
+### ✨ New
+
+- 📱 The device page has five tabs (Home, Teams, Display, Customize and Device), fits a phone's screen, shows brightness as a percent, and has a light, dark or follow-the-phone look
+- 🔍 Searching **On now** in the team chooser finds a team that isn't playing today, under a **Teams** heading
+- 🏆 Game leaders: at halftime and the final the board takes a turn with each team's top players, from the box score. Off under Between games on the device page.
+- 📅 Each playlist can have a schedule (days and hours), keep the panel on its own teams, and its own **Only today's games**
+- 🎛️ Set each WizMote button 1 to 4 yourself under **Remote** on the device page: a favorite, a playlist, a sport, all favorites or nothing; making a playlist no longer moves the buttons
+- 🎨 Give each playlist a color and an icon: when a remote button or **Playing** switches to it, the panel shows its name in that color with the icon above
+- 🌙 The remote, a team pick or **Panel on** turns night mode off for the rest of the night
+- ⏰ **Game-day wake** turns the panel on before your game, and **After the game** turns it off or shows the clock once the final has been up a while
+- 🔔 While a new release waits, the ticker says **Update ready: open the Game Day app** for an hour a day, never during a live game, and **Important update ready** for a release that fixes something broken; the device page's Firmware box says **Important update** too, and its Diagnostics show when the ticker last said so
+- 🏟️ Home Assistant gets an event at the start, every score, lead change, period end and final, with both teams' colors, plus a heads-up before the start; the same events can go to a webhook address on your network
+- 🌤️ A weather card between games: your town's temperature, today's high and low and the next two days, once you set a town under **Between games** on the device page
+- 📰 A news card between games: ESPN headlines for your teams or leagues, one every 3 minutes, off until you turn on **News headlines**
+- 🎵 **Playing** has a row for each sport in your favorites, like **All football**, that keeps up with your list on its own; the **One per sport** button is gone
+- 🏈 While you follow a college team, the AP Top 25 takes a turn between games every 10 minutes, for college football and basketball
+- 🔢 A college team in the AP Top 25 has its rank on the top corner of its logo, on the next-game card, during the game, and on Live games' Later today and final score cards
+- 🖼️ Your own pictures between games: add up to 4 photos or GIFs under **Pictures** on the device page, and a GIF animates
+- 🎆 **Effects**, a third page under **Showing**: one of 52 moving patterns fills the panel in place of the scoreboard; the board comes back when you pick the Scoreboard again or when the panel has something to tell you
+- 🗂️ Between games on the device page is one list with a switch for each card: next game, clock, both countdowns, the message card, pictures, game leaders, Top 25, news and weather
+- 🗓️ Schedule and season recap cards between games: a football or soccer favorite's next three games, and its record and playoff result once its season is over
 
 ### 🐛 Fixes
 
+- 🎨 A white or pale team's color flash after a score has dark text, so you can read it
 - 📶 A new panel goes back to **SETUP** after **Can't join**, not to **Wi-Fi lost**
+- 📅 A New Year's Day game seen on Dec 31 says **Tomorrow**, not a weekday
 
 ## v2026.10.2
 

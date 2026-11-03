@@ -16,7 +16,7 @@ The panel draws letters, numbers, punctuation and accented letters like Ã© and Ã
 
 ## A banner
 
-On the device page, the **Message** card has a **Banner** box. Type your words, set **Seconds on screen** (10 unless you change it, up to 600), and press **Show**. **Take down** clears it early.
+On the device page's Customize tab, find **Banner**. Type your words, set **Seconds on screen** (10 unless you change it, up to 600), and press **Show**. **Take down** clears it early.
 
 A banner covers everything, the clock page included, but it doesn't turn the panel on: if the panel is off, nobody sees it. It is never saved, so a restart clears it.
 
@@ -32,7 +32,7 @@ Use your panel's own name or address. Leaving `text` empty takes the banner down
 
 ## A message card
 
-In the **Message card** part of the same card, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
+On the same tab, under **Message card**, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
 
 **Show it** sets how often the card takes the board between games:
 
@@ -48,6 +48,10 @@ The card never covers a live game or a score celebration.
 The card makes way for the panel's own trouble line. When three reads from ESPN in a row fail, when the Wi-Fi wants a sign-in, or when the panel has no internet, the board says so in place of your message, on **Whenever no game is on** too. Your message comes back by itself once the trouble clears: right away on **Whenever no game is on**, at its next turn otherwise. See [Panel messages](/help/panel-messages/) for what each line means.
 
 **Clear** empties the text and the address, and the card stops.
+
+:::note[Coming in the next release]
+**Message card** in the **Between games** list on the [device page](/using/device-page/#between-games) turns the card's turns off and on without clearing it, so your text or list is there when you turn it back on.
+:::
 
 ### A list from a web address
 

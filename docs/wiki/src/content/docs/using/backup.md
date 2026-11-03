@@ -10,14 +10,14 @@ Your teams, favorites, ticker switches and the rest take a while to set up. Save
 ## Save a backup
 
 1. Open the [device page](/using/device-page/).
-2. In the **Setup** card, under **Backup**, tap **Export settings**.
+2. On the Device tab, open **Setup** and, under **Backup**, tap **Export settings**.
 
 Your browser saves a small file named after the panel and the day, like `gameday-2f6a70-settings-2026-10-21.json`. Keep it somewhere you'll find it, like your phone's Files app or a cloud drive.
 
 ## Restore a backup
 
 1. Open the device page of the panel you want to set up.
-2. In the **Setup** card, under **Backup**, tap **Import settings** and pick the file.
+2. On the Device tab, open **Setup** and, under **Backup**, tap **Import settings** and pick the file.
 3. The page asks before it changes anything. Tap **OK**.
 
 The page says **Restored** when the panel has the settings. A file from another panel works the same way; the page tells you which panel it came from before you say yes.
@@ -35,18 +35,21 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - The Live games leagues, **Switch every** and **Pick the best game**
 - **Take over**, **After the final** and **Two games at once**
 - Every ticker switch and **Opponent scores too**
+- **Celebrations** (Off, Subtle or Full)
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
+- Game-day wake, its **Turns on** time and **After the game** (coming in the next release)
 - The message card's text, list address and timing
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
-The file also has your playlists, with their teams and their order, and the one Favorite teams is playing. See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day.
+The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (coming in the next release: or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. Coming in the next release: the [news card](/using/news/)'s **News headlines** switch too, and the [weather card](/using/weather/)'s town and switch, and every switch in the **Between games** list. A restored town is looked up again only if the panel doesn't have it already, and a backup from older firmware leaves the cards it doesn't name as they are.
 
 ## What isn't
 
 - **Wi-Fi networks.** Passwords never leave the panel. A new or reset panel joins Wi-Fi through the Game Day app or its own setup hotspot first, then you restore. See [Wi-Fi](/using/wifi/).
 - **The WizMote pairing.** Pair the remote again. See [WizMote remote](/using/remote/).
+- **Your pictures** (coming in the next release). Add them again from your own files. See [Pictures](/using/pictures/).
 
 ## When it won't restore
 

@@ -17,7 +17,7 @@ Use your main network, not a guest network. A guest network can let the panel jo
 
 The panel remembers up to five Wi-Fi networks, like your home, a phone hotspot and a friend's house. At start-up it joins whichever saved network it can see, trying the last one that worked first. Set it up on a phone hotspot for a tailgate and it still knows your home network when you get back.
 
-The Device card on the device page lists the saved networks under **Wi-Fi networks**, in the order the panel tries them, with **Connected** beside the one it's on, or **Tried first** beside the top one. **Forget** takes a network off the list. If the panel is on that network now, it stays connected until it next restarts.
+**Wi-Fi networks** on the device page's Device tab lists the saved networks, in the order the panel tries them, with **Connected** beside the one it's on, or **Tried first** beside the top one. **Forget** takes a network off the list. If the panel is on that network now, it stays connected until it next restarts.
 
 When the list is full, adding a sixth network drops the one at the bottom. The panel always keeps one network to join, so forgetting the last one doesn't take it off Wi-Fi. [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) and [Factory reset](/using/buttons-and-resets/#factory-reset) clear them all.
 
@@ -48,11 +48,11 @@ When the panel starts up and can't find its Wi-Fi, as after a power cut while th
 
 On a bar, hotel or dorm Wi-Fi that lets the panel join but then wants you to sign in on a web page, the panel says **Wi-Fi needs sign-in, use home or a hotspot**, with the QR code for the app. The panel can't sign in to those pages, so set it up on a home network or a phone hotspot. The message goes away by itself once scores come through.
 
-The device page's Diagnostics count every Wi-Fi drop and its cause, and draw the last day of signal. See [The device page](/using/device-page/#the-device-card).
+The device page's Diagnostics count every Wi-Fi drop and its cause, and draw the last day of signal. See [The device page](/using/device-page/#diagnostics).
 
 ## The panel's address
 
-Every panel has a name on your network, `gameday-` and six characters, like `gameday-2f6a70`. Its device page is at that name plus `.local`, like `gameday-2f6a70.local`. The panel shows the address when it joins Wi-Fi, and again when you hold the boot button for about 1.5 seconds. The device page shows it in the Device card under **Address** and **Name**.
+Every panel has a name on your network, `gameday-` and six characters, like `gameday-2f6a70`. Its device page is at that name plus `.local`, like `gameday-2f6a70.local`. The panel shows the address when it joins Wi-Fi, and again when you hold the boot button for about 1.5 seconds. The device page shows it under **Panel** on the Device tab, as **Address** and **Name**.
 
 Some phones can't open `.local` addresses. Use the panel's IP address instead, a number like `192.168.1.50`. The panel shows it with the address on a boot button hold, and the ticker gives it until you pick a team.
 
