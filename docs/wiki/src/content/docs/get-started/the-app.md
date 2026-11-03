@@ -20,6 +20,14 @@ Both apps have three tabs: **Board**, **Teams** and **Settings**. They show the 
 
 A few things are on iPhone only for now: the night schedule, and the **Pick the best game** and **Favorites take over** switches. They're marked below. On Android, use the [device page](/using/device-page/) for them.
 
+:::note[Coming in the next release]
+The Android app gets the night schedule and **Favorites take over** too, so only **Pick the best game** stays on iPhone:
+
+- **Settings > Display > Screen** has the night schedule: **Night schedule**, **Starts at**, **Ends at**, **Screen at night** and **Night brightness**. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+- While night mode is on, the Board says so under the game, like **Night mode until 7:00 AM**, with **Turn on for tonight** to light the panel for the rest of the night. Then it says **Night mode off until 11:00 PM**, with **Back to night mode**. Turning **Panel on** on from the app during the night's hours also lights it for the rest of the night.
+- **Teams > Live games** has **Favorites take over**, with **Two favorites at once** while it's on.
+:::
+
 ### Board
 
 What you reach for during a game:

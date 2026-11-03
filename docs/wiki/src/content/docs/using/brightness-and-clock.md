@@ -30,10 +30,10 @@ You can always get past the schedule. During its hours, any of these turns night
 
 - **ON**, the brighter button, **NIGHT** (at the night level instead) or a numbered button on the [WizMote](/using/remote/)
 - picking a team or a mode, or changing your favorites, in the app or on the device page
-- **Panel on** on the device page
-- **Turn on for tonight** next to **Night mode until** on the device page
+- **Panel on** on the device page or in the Android app
+- **Turn on for tonight** next to **Night mode until** on the device page or the Android app's Board
 
-The device page then says **Night mode off until 11:00 PM**, the next start time. To go back to the schedule before then, press **Back to night mode** there, or **NIGHT** on the remote. The next night the schedule runs as usual. Home Assistant automations don't turn night mode off, so one that runs at night can't wake the panel by mistake.
+The device page and the Android app then say **Night mode off until 11:00 PM**, the next start time. To go back to the schedule before then, press **Back to night mode** there, or **NIGHT** on the remote. The next night the schedule runs as usual. Home Assistant automations don't turn night mode off, so one that runs at night can't wake the panel by mistake.
 :::
 
 The schedule runs on the panel's own clock, set from the internet, in the timezone under Setup. Until the panel has the time after it starts, it stays at its normal brightness. The heat and power protection below still hold the night brightness down when they need to.
@@ -55,7 +55,7 @@ You can also turn it off and on with:
 A few things turn a dark panel back on by themselves, since they mean someone wants to look at it: picking a team or a mode in the app, on the device page or in Home Assistant, a numbered button or **NIGHT** on the remote, and the brighter button on the remote, which brings back the brightness the panel had. During the night schedule's hours the panel comes back at its night setting instead: at the night brightness, or with **Screen at night** off, still dark until the hours end or a game of yours goes live.
 
 :::note[Coming in the next release]
-During the night schedule's hours, the remote, a team or mode picked in the app or on the device page, and **Panel on** on the device page turn night mode off for the rest of the night, so the panel comes back at its normal brightness. Home Assistant still brings it back at its night setting. See [Night schedule](#night-schedule).
+During the night schedule's hours, the remote, a team or mode picked in the app or on the device page, and **Panel on** on the device page or in the Android app turn night mode off for the rest of the night, so the panel comes back at its normal brightness. Home Assistant still brings it back at its night setting. See [Night schedule](#night-schedule).
 :::
 
 The panel always comes back on after a restart or a power cut.
