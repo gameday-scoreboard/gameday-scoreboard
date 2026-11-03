@@ -86,6 +86,10 @@ On Android, **Display** has a **Weather** card after **Between games**, with the
 :::
 
 :::note[Coming in the next release]
+On Android, the **Screen** card in **Display** has the device page's **Game-day wake** and **After the game**, under ticker speed: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
+:::
+
+:::note[Coming in the next release]
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 :::
 
