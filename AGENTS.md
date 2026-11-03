@@ -126,6 +126,6 @@ is the short version.
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
   `firmware/` or `components/` without one, unless the PR description
   has a line `No owner-visible change, no docs: <why>` (the reviewer checks
-  that claim). Describe behavior `main` doesn't have yet in a
-  `:::note[Coming in the next release]` aside. `npm run build` in
-  `docs/wiki` must pass.
+  that claim). Describe the behavior as it is on `dev`, in the present
+  tense: the docs site publishes from `main`, so the page goes live with
+  the release. `npm run build` in `docs/wiki` must pass.

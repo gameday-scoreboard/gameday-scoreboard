@@ -10,9 +10,10 @@ branch, with the numbers in the error and in the job summary.
         build: the folder build-action leaves, with its .ota.bin and .elf.
     python3 scripts/size_budget.py host <heap.json> <out.json>
         The parser figures `make -C tests heap` printed (tests/heap_budget.cpp).
-    python3 scripts/size_budget.py check <sizes dir> [--base <dir>] [--base-label <text>]
+    python3 scripts/size_budget.py check <sizes dir> [--base <dir>] [--base-label <text>] [--absent-ok <build,...>]
         Every *.json under the sizes dir against the budget; with --base, also
-        against the base branch's figures.
+        against the base branch's figures. --absent-ok names builds that may
+        have no figures, like the ones a pull request into dev skips.
     python3 scripts/size_budget.py seed <sizes dir>
         Prints a budget with 10% headroom (at least 1 KB) over those figures.
     python3 scripts/size_budget.py --selftest
@@ -80,8 +81,9 @@ def fmt(n) -> str:
     return "" if n is None else f"{n:,}"
 
 
-def check(budget: dict, sizes: dict, base: dict, base_label: str) -> tuple:
-    """Returns (errors, summary rows)."""
+def check(budget: dict, sizes: dict, base: dict, base_label: str, absent_ok: frozenset = frozenset()) -> tuple:
+    """Returns (errors, summary rows). Builds in absent_ok may have no figures
+    (a pull request into dev doesn't build them)."""
     errors, rows = [], []
     growth = budget.get("max_growth", {})
     for group in ("firmware", "host"):
@@ -89,6 +91,8 @@ def check(budget: dict, sizes: dict, base: dict, base_label: str) -> tuple:
         measured = sizes.get(group, {})
         for name in sorted(set(limits) | set(measured)):
             if name not in measured:
+                if name in absent_ok:
+                    continue
                 errors.append(f"budget.json has {group}.{name} but nothing measured it. Remove the entry if it is gone.")
                 continue
             if name not in limits:
@@ -135,11 +139,12 @@ def run_check(args: list) -> int:
     sizes_dir = Path(args[0])
     base_dir = Path(args[args.index("--base") + 1]) if "--base" in args else None
     base_label = args[args.index("--base-label") + 1] if "--base-label" in args else ""
+    absent_ok = frozenset(filter(None, args[args.index("--absent-ok") + 1].split(","))) if "--absent-ok" in args else frozenset()
     budget = json.loads(BUDGET.read_text(encoding="utf-8"))
     base = load_sizes(base_dir) if base_dir and base_dir.is_dir() else {}
     if not base:
         base_label = ""
-    errors, rows = check(budget, load_sizes(sizes_dir), base, base_label or "the base branch")
+    errors, rows = check(budget, load_sizes(sizes_dir), base, base_label or "the base branch", absent_ok)
     text = summary(rows, errors, base_label)
     out = os.environ.get("GITHUB_STEP_SUMMARY")
     if out:
@@ -174,6 +179,8 @@ def selftest() -> None:
     assert len(new) == 1 and "no budget" in new[0]
     gone, _ = check(budget, {}, {}, "dev")
     assert len(gone) == 1 and "nothing measured" in gone[0]
+    skipped, _ = check(budget, {}, {}, "dev", frozenset({"a"}))
+    assert skipped == []
     assert seed({"host": {"x": {"json": 20000, "heap": 18}}}) == {"firmware": {}, "host": {"x": {"json": 22000, "heap": 1042}}}
 
     with tempfile.TemporaryDirectory() as d:
