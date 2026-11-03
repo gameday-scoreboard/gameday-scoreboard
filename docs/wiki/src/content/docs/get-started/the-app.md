@@ -82,6 +82,10 @@ On Android, **Display** has a **Live pictures** card after the ticker, with the 
 :::
 
 :::note[Coming in the next release]
+On Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
+:::
+
+:::note[Coming in the next release]
 On Android, **Display** has a **Weather** card after **Between games**, with the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
 :::
 
