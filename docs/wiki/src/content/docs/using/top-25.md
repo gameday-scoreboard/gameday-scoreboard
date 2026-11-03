@@ -5,10 +5,6 @@ sidebar:
   order: 4.5
 ---
 
-:::note[Coming in the next release]
-Everything on this page is new in the next release.
-:::
-
 While you follow a college team, the panel shows this week's AP Top 25 between games: each team's rank, its abbreviation and its record, a page at a time.
 
 ## When it shows

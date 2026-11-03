@@ -32,9 +32,7 @@ Under **Date countdown** on the device page's Customize tab, give a countdown a 
 
 It takes the last 10 seconds of every minute, whenever no game is on, in every mode: over the next game's board, the off-season clock, the Favorite teams playlist, and the Later today and final scores in Live games. A game in progress, or a favorite's game that has taken the panel, is never covered.
 
-:::note[Coming in the next release]
 The date countdown gets a switch in the **Between games** list on the [device page](/using/device-page/#between-games), on to start. Off, the countdown keeps its name and day but stops taking turns.
-:::
 
 The name can be up to 20 characters long, fewer with accented letters. Emoji are left out, since the panel can't draw them. Without a name, the panel shows the day, like "Dec 25". It's in your team's colors, or your favorite's in Favorite teams. When Live games is showing other teams' games, or no team is picked, it's gray.
 

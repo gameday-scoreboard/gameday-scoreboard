@@ -30,7 +30,9 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
-## Unreleased
+## v2026.11.0
+
+The device page in five tabs, Game-day wake and After the game, weather, news, the Top 25, game leaders, season cards, your own pictures, Effects, and a build for the Waveshare ESP32-S3-RGB-Matrix board.
 
 ### ⚠️ Heads up
 
@@ -57,6 +59,7 @@ through `update_important` in the panel's state.
 - 🎆 **Effects**, a third page under **Showing**: one of 52 moving patterns fills the panel in place of the scoreboard; the board comes back when you pick the Scoreboard again or when the panel has something to tell you
 - 🗂️ Between games on the device page is one list with a switch for each card: next game, clock, both countdowns, the message card, pictures, game leaders, Top 25, news and weather
 - 🗓️ Schedule and season recap cards between games: a football or soccer favorite's next three games, and its record and playoff result once its season is over
+- 🧩 A build for the Waveshare ESP32-S3-RGB-Matrix board, the board in ready-made Game Day Scoreboards: the installer now asks for your board first. It hasn't been tested on a real board yet.
 
 ### 🐛 Fixes
 

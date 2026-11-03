@@ -49,9 +49,7 @@ The firmware leans on PSRAM. It runs code from PSRAM (`execute_from_psram`), and
 
 ## Waveshare ESP32-S3 RGB Matrix
 
-:::note[Coming in the next release]
 The Waveshare ESP32-S3 RGB Matrix has its own pin map, `firmware/controllers/waveshare.yaml`, and its own build, `firmware/gameday-waveshare.yaml`. It hasn't run on a panel yet, so the installer doesn't offer it. Build it yourself to try it, and tell us how it went. The board has no fuse and no reverse-polarity protection, so check the power leads before you plug them in.
-:::
 
 ## Other boards
 

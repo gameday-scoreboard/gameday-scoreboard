@@ -5,10 +5,6 @@ sidebar:
   order: 12.6
 ---
 
-:::note[Coming in the next release]
-The picture card is new in the next release.
-:::
-
 Between games the panel can show your own pictures: a fan photo, a piece of pixel art, your family's name in your team's colors. An animated GIF plays.
 
 ## Add a picture
