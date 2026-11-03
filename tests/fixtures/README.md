@@ -21,8 +21,47 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
 | `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
+| `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
+| `rankings_mcbb_20261019.json` | `sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1`, the preseason AP poll, every record 0-0 (recorded 2026-10-29) |
+| `news_nfl.json` | `.../football/nfl/news?limit=6`, the league's six latest headlines (recorded 2026-10-29) |
+| `schedule_nfl_dal_inseason.json` | `.../football/nfl/teams/6/schedule`, week 9: seven finals (3-4) and ten games ahead (recorded 2026-10-31) |
+| `schedule_wnba_dal_offseason.json` | `.../basketball/wnba/teams/3/schedule` after the season: 44 regular-season finals (27-17) and a first-round loss (recorded 2026-10-31) |
+| `schedule_mlb_nyy_offseason.json` | `.../baseball/mlb/teams/10/schedule` after the ALDS: the five playoff games only, so the record is the team read's (recorded 2026-10-31) |
+| `schedule_mls_cin_2025.json` | `.../soccer/usa.1/teams/18267/schedule?season=2025`: results newest first, draws, and the playoffs named by season type (recorded 2026-10-31) |
+| `schedule_ncaa_ala_2025_post.json` | `.../college-football/teams/333/schedule?season=2025&seasontype=3`: two playoff games, the second "at the Rose Bowl Presented by Prudential" (recorded 2026-10-31) |
+| `schedule_nba_phi_2026_post.json` | `.../basketball/nba/teams/20/schedule?season=2026&seasontype=3`: two playoff series, "East Semifinals - Game 4" last (recorded 2026-10-31) |
+| `schedule_mlb_col_missed.json` | `.../baseball/mlb/teams/27/schedule` during the playoffs, for a team that missed them: the season's year and an empty `events` list, as ESPN sent it (recorded 2026-10-31) |
+
+The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`) keep only the fields a schedule parse reads
+(every event, each cut to its date, season type, week, status, notes,
+broadcast and both sides' id, abbreviation, side, winner and score).
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
+
+`pictures/` holds the picture card's test files (`test_picture.cpp`,
+`fuzz_picture.cpp`, the device page tests), made with Pillow 11.1 on
+2026-10-29: `noise.gif` (64x32, two interlaced frames of 256-color noise,
+so the LZW code size reaches 12 bits), `box_d2.gif` and `box_d3.gif` (a red
+box stepping 20 px right over four 128x64 frames cropped to what changed,
+disposal 2 and 3), `still.gif` (a yellow box on a transparent 40x30),
+`wide.gif` (129x64), `blue.png` (64x32) and `tall.png` (64x65).
+
+Game summaries (`.../summary?event=<id>`, the document the Game leaders card
+reads at halftime and the final), recorded 2026-10-28. Each is trimmed to its
+`header`, `leaders`, `boxscore` and the small top-level objects; the plays,
+drives, videos and news that make up most of the 400 KB to 1.2 MB document are
+emptied but their keys kept, so the filter still skips them.
+
+| File | Source |
+| --- | --- |
+| `summary_nfl_final.json` | 401873009 DAL @ PHI, Final (10/26): passing, rushing and receiving leaders both sides |
+| `summary_ncaa_final.json` | 401858274 PITT @ MIA, Final (10/24), college football's leaders |
+| `summary_nba_final.json` | 401909877 BKN @ BOS, Final/OT (10/27): points, assists and rebounds |
+| `summary_nba_half.json` | 401909887 HOU @ MIL at halftime |
+| `summary_nba_no_leaders.json` | 401909889 DEN @ NO at halftime, with the `leaders` block removed by hand |
+| `summary_nhl_final.json` | 401892585 CBJ @ PHI, Final/OT (10/27): goals, assists and points |
+| `summary_nhl_end2.json` | 401892596 PHI @ WSH at the end of the 2nd |
+| `summary_mlb_final.json` | 401908045 MIL @ TB, Final/12 (10/27): no `leaders`; `boxscore.players` with the batting and pitching groups |
 
 MLB, recorded 2026-10-07 (postseason) from the single-event endpoint
 `.../baseball/mlb/scoreboard/<event id>` that per-event leagues poll:
@@ -136,6 +175,7 @@ during FLA @ TEX (halftime):
 | --- | --- |
 | `team_ncaa_tex_live.json` | `.../football/college-football/teams/251`, nextEvent is 401856732 MISS @ TEX on 10/24, group 8 (SEC) |
 | `day_ncaa_20261017.json` | `.../college-football/scoreboard?groups=8&dates=20261017`, 401856724 FLA @ TEX and MSST @ LSU in progress, five SEC games to come |
+| `day_mcbb_20261106.json` | `.../mens-college-basketball/scoreboard?groups=7&dates=20261106` (recorded 2026-11-03), ten Big Ten games to come, every one non-conference: 401920685 CONN vs MICH among them |
 
 The NFL does not. Recorded 2026-10-22 at 10:32 PM Central, NE @ CHI final,
 and two minutes later ECU @ MEM (college) in overtime:

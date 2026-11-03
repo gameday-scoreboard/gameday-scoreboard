@@ -105,6 +105,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       case SetKind::LIST:
         require(op.value >= 0 && op.value <= kListMax, "list is past kListMax", k, v);
         break;
+      case SetKind::SPORT:
+        require(op.value >= 0 && op.value <= kSportCount, "sport is past kSportCount", k, v);
+        break;
       case SetKind::MSGEVERY:
         require(op.value >= 0 && op.value <= kMsgEveryMax, "msgevery is out of range", k, v);
         break;

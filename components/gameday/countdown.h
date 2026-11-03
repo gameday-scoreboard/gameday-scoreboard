@@ -11,6 +11,7 @@
 #include <string>
 
 #include "message.h"
+#include "weather.h"
 
 namespace espn {
 
@@ -140,7 +141,8 @@ inline std::string countdown_name(const std::string &v) {
   return out;
 }
 
-enum class CountdownCard : uint8_t { NONE, NEXT, CUSTOM };
+// The weather card (weather.h) shares this screen and these turns.
+enum class CountdownCard : uint8_t { NONE, NEXT, CUSTOM, WEATHER };
 
 // The custom countdown takes the last turn of each minute, on the wall clock,
 // so it comes up at the same moment on every panel in the house.
@@ -148,10 +150,13 @@ inline bool custom_turn(int64_t now) { return now % kCountdownCycleS >= kCountdo
 
 // Live games' fallback card between games: which card has the board at now.
 // The next game's card and its countdown take turns; the custom countdown the
-// last turn of each minute. next and custom say whether each has something to show.
-inline CountdownCard countdown_turn(int64_t now, bool next, bool custom) {
+// last turn of each minute, the weather card the turn before it. next, custom
+// and weather say whether each has something to show.
+inline CountdownCard countdown_turn(int64_t now, bool next, bool custom, bool weather = false) {
   if (custom && custom_turn(now))
     return CountdownCard::CUSTOM;
+  if (weather && weather_turn(now))
+    return CountdownCard::WEATHER;
   if (next && (now % kCountdownCycleS / kCountdownTurnS) % 2 == 1)
     return CountdownCard::NEXT;
   return CountdownCard::NONE;

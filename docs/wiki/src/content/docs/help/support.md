@@ -14,9 +14,9 @@ For a Game Day Scoreboard you bought, email [support@gameday-scoreboard.com](mai
 Include what you can of this:
 
 - **What happened.** What the panel or the app was doing, and what it said on the screen.
-- **The firmware version.** It's in the Device card on the device page, next to **Firmware**.
+- **The firmware version.** It's on the device page's Device tab, under **Diagnostics**, next to **Firmware**.
 - **The controller.** The Game Day Scoreboard controller, or the board you built it on.
-- **The panel layout.** Which picture is picked under **Matrix** in the Setup card: **One 128x64 panel** or **One 64x64 panel**.
+- **The panel layout.** Which picture is picked under **Matrix** on the device page's Device tab: **One 128x64 panel** or **One 64x64 panel**.
 
 A photo of the panel showing the problem helps too.
 

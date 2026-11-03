@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "psram.h"
+#include "rankings.h"
+#include "season.h"
 #include "teams.h"
 
 namespace espn {
@@ -92,6 +94,8 @@ struct Hockey {
 };
 
 // One scoreboard event, resolved to "us" and "them".
+constexpr int16_t kNoWeatherF = INT16_MIN;
+
 struct GameSnapshot {
   bool valid{false};
   GameState state{GameState::NOT_FOUND};
@@ -106,6 +110,7 @@ struct GameSnapshot {
   uint32_t team_id{0}, opp_id{0};
   int team_score{0}, opp_score{0};
   std::string team_record, opp_record;
+  uint8_t team_rank{99}, opp_rank{99};  // AP rank (college), 99 when unranked
   std::string team_color, opp_color;
   std::string team_logo, opp_logo;
   bool team_winner{false};
@@ -114,6 +119,13 @@ struct GameSnapshot {
   std::string last_play, down_distance;
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
+  // Football, for the field strip (game_viz.h): where the ball is as ESPN
+  // gives it, yards from the HOME team's goal line (home at its own 35 is 35,
+  // away at its own 31 is 69), 255 when the document has none; the down and
+  // the yards to go, 0 when none.
+  uint8_t yard_line{255};
+  uint8_t down{0};
+  uint8_t distance{0};
   // Football: how the drive went ("4 plays, 58 yards, 1:36"), only while the
   // last play is a touchdown or field goal, and our side's chance to win
   // after the last play (1 to 99), -1 when ESPN gives none.
@@ -142,6 +154,15 @@ struct GameSnapshot {
   // when the event has none).
   uint8_t week{0};
   std::string weather;
+  // The same forecast for the board (weather.h): its temperature in whole
+  // degrees F (kNoWeatherF without one) and AccuWeather's icon number (0
+  // for none). Before the start of a sport played outside, the venue's place
+  // for a forecast of the panel's own when ESPN has none ("Evanston, IL"),
+  // and whether it is indoors: 1, 0, or -1 when ESPN doesn't say.
+  int16_t weather_f{kNoWeatherF};
+  uint8_t weather_accu{0};
+  int8_t venue_indoor{-1};
+  std::string venue_place;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};
@@ -185,6 +206,7 @@ struct LiveGame {
 struct Final {
   uint8_t league{0};
   uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  uint8_t away_rank{99}, home_rank{99};  // each side's AP rank for its logo, 99 when unranked
   int64_t kickoff_epoch{0};
   std::string detail;  // "Final", "Final/OT"
   uint32_t away_id{0}, home_id{0};
@@ -203,6 +225,7 @@ GameSnapshot final_snapshot(const Final &f);
 struct Pending {
   uint8_t league{0};
   uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  uint8_t away_rank{99}, home_rank{99};  // each side's AP rank for its logo, 99 when unranked
   int64_t kickoff_epoch{0};
   std::string event_id;
   uint32_t away_id{0}, home_id{0};
@@ -244,6 +267,10 @@ struct TickerOptions {
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
+  // The forecast as the panel says it before the start ("12C Clear" for an
+  // owner on Celsius, or the panel's own forecast when the event has none,
+  // weather.h). "" says the event's own.
+  std::string weather;
 };
 
 struct Splash {
@@ -255,6 +282,9 @@ const char *league_path(League league);  // the last part of the ESPN path: "nfl
 std::string team_option(const Team &t);  // "NFL: Dallas Cowboys", the Home Assistant option
 std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
+// The season read's (season.h): schedule_url, but a soccer team's results
+// rather than its fixtures with results, for the recap between seasons.
+std::string season_url(League league, uint32_t espn_id, bool results);
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
 // Every game of the day for one league. top25: men's college basketball
@@ -280,10 +310,24 @@ std::string event_url(League league, const std::string &event_id, const char *co
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const char *comp_slug);
 std::string dark_logo(const std::string &url);
 std::string team_logo_url(League league, uint32_t espn_id, const char *abbr);  // for a team with no game loaded yet
+// The news feed's latest headlines (news.h): the team's with an id, else the
+// league's. 15 to 170 KB.
+std::string news_url(League league, uint32_t team_id);
 
 bool parse_team_str(const std::string &json, Schedule &out);
 // Up to `max` games not yet started, in date order, from the schedule endpoint.
 bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out);
+// A byte stream for a parse compiled in espn_parse.cpp: a big parse
+// template instantiated in gameday.cpp can overflow that file's literal pool
+// and fail the link ("l32r: literal target out of range").
+struct ByteSource {
+  virtual ~ByteSource() = default;
+  virtual int read() = 0;
+  virtual size_t readBytes(char *dst, size_t n) = 0;
+};
+// parse_season (season.h) from a stream, and from a string for the host tests.
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out);
+bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out);
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);
 // The team's next game that is not over yet in a day's scoreboard
@@ -294,6 +338,8 @@ bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule
 // some other game reads as a failure.
 bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out,
                      const std::string &event_id = "");
+// parse_news into a std::string, for the host tests.
+int parse_news_str(const std::string &json, std::string &list);
 
 // neutral = nobody is "our" team (live-game modes): both sides splash with their abbreviation.
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
@@ -330,6 +376,10 @@ std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed,
 // touching the network. Pass a string literal: only the pointer is kept,
 // and the worker task reads it while the main loop may set it.
 void set_site_root(const char *root);
+// The same for the core API, which only the Top 25 card reads (rankings.h).
+void set_core_root(const char *root);
+// The league's AP poll, this week's.
+std::string rankings_url(League league);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.
@@ -340,9 +390,15 @@ std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_loc
 // kickoff window, not a name.
 std::string short_game_name(const std::string &headline);
 // The local calendar day of a broken-down time, as a number that changes at
-// local midnight. kickoff_label counts "Today" and "Tomorrow" in these, so a
-// board drawn on an earlier one has a stale label.
-inline int64_t local_day(const struct tm &t) { return (int64_t) t.tm_year * 366 + t.tm_yday; }
+// local midnight and goes up by one a day across New Year too. kickoff_label
+// counts "Today" and "Tomorrow" in these, so a board drawn on an earlier one
+// has a stale label. tm_year * 366 + tm_yday was off by one or two from
+// Dec 31 to Jan 1, so a New Year's Day game seen on Dec 31 read "Fri" rather
+// than "Tomorrow".
+inline int64_t local_day(const struct tm &t) {
+  const int64_t y = (int64_t) t.tm_year + 1899;  // the full year before this one
+  return (int64_t) t.tm_year * 365 + y / 4 - y / 100 + y / 400 + t.tm_yday;
+}
 // "Sat 3:30 PM", or "Sat TBD" with time_tbd, when ESPN has no kickoff time
 // yet (then kick_local is from tbd_day_epoch).
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd = false);
@@ -431,7 +487,7 @@ std::string pregame_name(const GameSnapshot &s);
 // The pre-game ticker's last part: the forecast and the venue, "76F Cloudy at
 // Hard Rock Stadium". A venue that repeats the game's name ("Rose Bowl") is
 // left out.
-std::string venue_line(const GameSnapshot &s);
+std::string venue_line(const GameSnapshot &s, const TickerOptions &o = TickerOptions());
 // The pre-game betting parts when the ticker shows odds: the line, the
 // over/under and the TV listing. Soccer builds its own line.
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);

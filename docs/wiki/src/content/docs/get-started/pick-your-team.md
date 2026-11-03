@@ -16,8 +16,8 @@ Once the app has put the panel on your Wi-Fi, it opens the panel so you can add 
 ## From the device page
 
 1. Open the panel's address in a browser on any phone or computer on the same Wi-Fi. It's the `gameday-xxxxxx.local` name the panel shows when it starts, with your panel's own six characters, like `gameday-2f6a70.local`. If your phone won't open a `.local` address, use the IP address the panel shows instead.
-2. Make sure **Favorite teams** is on, the first of the two buttons under the board.
-3. In the **Favorites** card, tap **Add a favorite**.
+2. Make sure **Favorite teams** is on, the first of the two cards under the board on the Home tab.
+3. On the Teams tab, under **Favorites**, tap **Add a favorite**.
 4. Pick a league tab and tap a logo, or type in **Search teams** to find a team in any league. Add more if you like, then tap **Done**.
 
 The page says **Added the** and the team's name, and the panel switches to it within a few seconds.
@@ -47,6 +47,8 @@ Each sport has its own board. See [Football](/using/football/), [Baseball](/usin
 The first tab in the team picker, **On now**, lists today's games across the leagues, straight from ESPN. They're grouped as **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap the side you want to follow to add that team.
 
 Your browser reads this list from ESPN, so the tab needs your phone or computer to be online, not only the panel.
+
+Search on **On now** finds a team that isn't playing today. When nothing on today's list matches what you typed, the teams that do match show under a **Teams** heading, with their league, and a tap adds one. Today's games still come first when one matches.
 
 ## Changes take effect right away
 

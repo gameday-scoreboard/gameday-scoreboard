@@ -15,21 +15,23 @@
   card.style.marginTop = "14px";
   card.innerHTML = `
     <h2>Demo</h2>
-    <p class="hint">A scripted game that loops until you stop it, with the normal board for a few seconds between runs. On a WizMote: 1 pro, 2 college, 4 back to live scores.</p>
-    <div class="ctl"><label>Now</label><span class="val" id="demoNow" style="min-width:0;text-align:left">...</span></div>
-    <div class="actions" style="margin:6px 0 4px">
-      <button class="btn primary" data-demo="pro">Start pro</button>
-      <button class="btn primary" data-demo="college">Start college</button>
-      <button class="btn" data-demo="stop">Stop</button>
-    </div>
-    <div class="sub">Pro football</div>
-    <div class="ctl"><label>Home</label><select data-team="pro_home"></select></div>
-    <div class="ctl"><label>Away</label><select data-team="pro_away"></select></div>
-    <div class="sub">College football</div>
-    <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
-    <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
-    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
-  $("#board").after(card);
+    <div class="cbody">
+      <p class="hint">A scripted game that loops until you stop it, with the normal board for a few seconds between runs. On a WizMote: 1 pro, 2 college, 4 back to live scores.</p>
+      <div class="ctl"><label>Now</label><span class="val" id="demoNow" style="min-width:0;text-align:left">...</span></div>
+      <div class="actions" style="margin:6px 0 4px">
+        <button class="btn primary" data-demo="pro">Start pro</button>
+        <button class="btn primary" data-demo="college">Start college</button>
+        <button class="btn" data-demo="stop">Stop</button>
+      </div>
+      <div class="sub">Pro football</div>
+      <div class="ctl"><label>Home</label><select data-team="pro_home"></select></div>
+      <div class="ctl"><label>Away</label><select data-team="pro_away"></select></div>
+      <div class="sub">College football</div>
+      <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
+      <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
+      <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>
+    </div>`;
+  $(".boardctl").after(card);
 
   let D = null;
   const post = async (params) => {

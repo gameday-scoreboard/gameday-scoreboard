@@ -25,7 +25,7 @@ const demoPosts = async (request) =>
 test("release page has no Demo card", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
-  await expect(page.locator("#conn")).toHaveClass(/\bon\b/);
+  await expect(page.locator("#gstate")).toHaveText("UPCOMING");
   await expect(page.locator("#demo")).toHaveCount(0);
 });
 

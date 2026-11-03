@@ -95,7 +95,7 @@ jobs:
           python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json
           ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           RUN=""
-          for v in moonhub75 moonhub75-2panel scoreboard75; do
+          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare; do
             if echo "$ASSETS" | grep -qx "firmware-$v.zip"; then
               echo "$v firmware from the $TAG release asset firmware-$v.zip"
               gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p "firmware-$v.zip" -O "/tmp/firmware-$v.zip"

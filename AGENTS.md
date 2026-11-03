@@ -15,6 +15,8 @@ is the short version.
   `firmware/controllers/`; everything else is in
   `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
   gameday.yaml booting two panels wide, offered by the installer.
+  `firmware/gameday-waveshare.yaml` is the Waveshare ESP32-S3 RGB Matrix
+  build: CI builds it, the installer doesn't offer it yet.
   `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.
@@ -96,6 +98,9 @@ is the short version.
 
 - Branch from `dev` and open PRs against `dev`. `beta` and `main` only take
   promotion PRs, and CI enforces that.
+- Name the branch after the change (`espn-gzip`, `power-cut-boot`). The
+  name stays in the merge commit, so CI's Branch rules job refuses a head
+  branch with a tracker's ticket in it, like `card-123-...`.
 - A PR description says what changed and how it was tested. No links to
   private repos or trackers, no ticket numbers from them, and no AI
   attribution in PR text or comments. Maintainers keep reviews and

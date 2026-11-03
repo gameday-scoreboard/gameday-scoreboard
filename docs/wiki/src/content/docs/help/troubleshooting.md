@@ -65,7 +65,7 @@ Check that other devices on the same network can get online, then restart the ro
 
 ## Half the board is blank, or the picture shows twice
 
-Open the device page and find **Matrix** in the Setup card. Click the picture that matches your panel:
+Open the device page and find **Matrix** on the Device tab. Click the picture that matches your panel:
 
 | Your panel | Pick |
 | --- | --- |
@@ -86,13 +86,13 @@ The panel restarts with the new layout.
 
 ## The panel keeps losing Wi-Fi
 
-Look at **Signal** in the Device card on the device page. It's in dBm, and the closer the number is to zero, the stronger the signal. If it's weak, move the panel closer to the router, or the router closer to the panel.
+Look at **Signal** under **Diagnostics** on the device page's Device tab. It's in dBm, and the closer the number is to zero, the stronger the signal. If it's weak, move the panel closer to the router, or the router closer to the panel.
 
-The Diagnostics section of the Device card counts the panel's Wi-Fi drops and shows the cause of the last one, with a graph of the signal over the last day. Below -75 dBm the page says **Weak signal**.
+**Diagnostics** counts the panel's Wi-Fi drops and shows the cause of the last one, with a graph of the signal over the last day. Below -75 dBm the page says **Weak signal**.
 
 ## I need to reset Wi-Fi
 
-Use **Reset Wi-Fi** in the Device card on the device page, or the button on the controller if you can't reach the page:
+Use **Reset Wi-Fi** in the red box at the bottom of the device page's Device tab, or the button on the controller if you can't reach the page:
 
 1. Hold the button. At about 1.5 seconds the panel shows its address.
 2. At 5 seconds it says **Keep holding to reset Wi-Fi** and a bar fills.
@@ -116,7 +116,7 @@ After a Wi-Fi reset the panel keeps its saved networks and stays in setup for 15
 
 ## Start over from scratch
 
-Use **Factory reset** in the Device card on the device page. It erases everything: Wi-Fi, team, favorites and settings. The panel restarts into setup the way it came out of the box. Do this before you sell or give the panel away.
+Use **Factory reset** in the red box at the bottom of the device page's Device tab. It erases everything: Wi-Fi, team, favorites and settings. The panel restarts into setup the way it came out of the box. Do this before you sell or give the panel away.
 
 A [USB install](/get-started/install-firmware/) erases everything too.
 
@@ -130,7 +130,9 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 ## The panel goes dark or dim at night
 
-Check **Night schedule** in the Panel card on the device page. While it's on, the device page says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
+Check **Night schedule** under **Screen** on the device page's Display tab. While it's on, the Home tab says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
+
+To light the panel for the rest of one night, press **Turn on for tonight** next to **Night mode until**, or **ON** on the remote.
 
 **Why:** the night schedule dims the panel, or turns its screen off, between the times you set. A live game for your team or a favorite brings it back to normal brightness until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
@@ -143,6 +145,14 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 **A plug, and Check power supply:** the panel restarted twice in a row because its power dipped, so it keeps its brightness low to stay on. Use the power supply that came with it, not a phone charger or a USB port. Then press **Clear** on the device page. The icon stays until you do.
 
 **Why:** above a 75 C reading from the controller's chip, the panel steps its brightness down, a step every two minutes while it stays hot, as far as a quarter of your setting. Once the chip reads under 70 C, it comes back a step at a time. A power supply too weak for the panel makes it restart when it lights up, and a lower brightness draws less power. The device page shows the same message, and the chip temperature under Diagnostics.
+
+The panel stays at your brightness and there is no Clear button. The icon in the corner only says what happened:
+
+**A thermometer, and Running warm:** the controller's chip reads 75 C or more. Keep the panel out of direct sun and give it some air behind it. The icon goes once the chip reads under 70 C.
+
+**A plug, and Power dipped:** the panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. Use the power supply that came with it, not a phone charger or a USB port. The icon goes once the panel has run 10 minutes without another dip.
+
+The device page shows the same words under the board. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
 
 ## The device page says an update didn't take
 

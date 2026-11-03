@@ -24,13 +24,15 @@ Between seasons, when the board shows the [off-season clock](/using/brightness-a
 
 A game with no start time yet, shown as TBD, gets no countdown.
 
-The countdown is on for every panel. Turn it off with **Countdown to the next game** under **Between games** on the [device page](/using/device-page/).
+The countdown is on for every panel. Turn it off with **Countdown to the next game** under **Between games** on the [device page](/using/device-page/)'s Display tab.
 
 ## Your own countdown
 
-Under **Between games** on the device page, give a countdown a **Name**, like "Christmas" or "Opening day", and a **Day**. The panel counts down to the start of that day in the panel's timezone, and on the day itself it reads **Today**. The day after, it stops showing; set a new day for the next one. **Clear the countdown** removes it.
+Under **Date countdown** on the device page's Customize tab, give a countdown a **Name**, like "Christmas" or "Opening day", and a **Day**. The panel counts down to the start of that day in the panel's timezone, and on the day itself it reads **Today**. The day after, it stops showing; set a new day for the next one. **Clear the countdown** removes it.
 
 It takes the last 10 seconds of every minute, whenever no game is on, in every mode: over the next game's board, the off-season clock, the Favorite teams playlist, and the Later today and final scores in Live games. A game in progress, or a favorite's game that has taken the panel, is never covered.
+
+The date countdown gets a switch in the **Between games** list on the [device page](/using/device-page/#between-games), on to start. Off, the countdown keeps its name and day but stops taking turns.
 
 The name can be up to 20 characters long, fewer with accented letters. Emoji are left out, since the panel can't draw them. Without a name, the panel shows the day, like "Dec 25". It's in your team's colors, or your favorite's in Favorite teams. When Live games is showing other teams' games, or no team is picked, it's gray.
 

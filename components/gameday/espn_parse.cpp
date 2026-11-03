@@ -1,4 +1,6 @@
 #include "espn_parse.h"
+#include "game_leaders.h"
+#include "weather.h"
 
 #include <atomic>
 #include <cstdio>
@@ -13,6 +15,14 @@ namespace espn {
 static std::atomic<const char *> site_root{"https://site.api.espn.com/apis/site/v2/sports/"};
 
 void set_site_root(const char *root) { site_root.store(root, std::memory_order_relaxed); }
+
+static std::atomic<const char *> core_root{"https://sports.core.api.espn.com/v2/sports/"};
+
+void set_core_root(const char *root) { core_root.store(root, std::memory_order_relaxed); }
+
+std::string rankings_url(League league) {
+  return std::string(core_root.load(std::memory_order_relaxed)) + top25_path(league);
+}
 
 // "https://.../sports/football/nfl", with no trailing slash.
 static std::string site_base(League league) {
@@ -37,11 +47,24 @@ std::string team_url(League league, uint32_t espn_id) {
   return site_base(league) + "/teams/" + std::to_string(espn_id);
 }
 
+std::string news_url(League league, uint32_t team_id) {
+  std::string url = site_base(league) + "/news?limit=" + std::to_string(kNewsMax);
+  if (team_id != 0)
+    url += "&team=" + std::to_string(team_id);
+  return url;
+}
+
 std::string schedule_url(League league, uint32_t espn_id) {
   // A soccer team's schedule lists past results unless asked for fixtures.
   if (league_sport(league) == Sport::SOCCER)
     return team_url(league, espn_id) + "/schedule?fixture=true";
   return team_url(league, espn_id) + "/schedule";
+}
+
+std::string season_url(League league, uint32_t espn_id, bool results) {
+  if (results && league_sport(league) == Sport::SOCCER)
+    return team_url(league, espn_id) + "/schedule";
+  return schedule_url(league, espn_id);
 }
 
 static void civil_from_epoch(int64_t epoch, int &y, int &m, int &d);
@@ -85,6 +108,10 @@ std::string team_url(League league, uint32_t espn_id, const char *comp_slug) {
 
 std::string event_url(League league, const std::string &event_id, const char *comp_slug) {
   return comp_base(league, comp_slug) + "/scoreboard/" + event_id;
+}
+
+std::string summary_url(League league, const std::string &event_id) {
+  return site_base(league) + "/summary?event=" + event_id;
 }
 
 // Number of days since 1970-01-01 for a UTC epoch, then split into y/m/d.
@@ -184,6 +211,8 @@ GameSnapshot final_snapshot(const Final &f) {
   g.opp_id = f.home_id;
   g.team_score = f.away_score;
   g.opp_score = f.home_score;
+  g.team_rank = f.away_rank;
+  g.opp_rank = f.home_rank;
   g.team_abbr = f.away_abbr;
   g.opp_abbr = f.home_abbr;
   g.team_color = f.away_color;
@@ -204,6 +233,8 @@ GameSnapshot pending_snapshot(const Pending &p) {
   g.kickoff_epoch = p.kickoff_epoch;
   g.team_id = p.away_id;
   g.opp_id = p.home_id;
+  g.team_rank = p.away_rank;
+  g.opp_rank = p.home_rank;
   g.team_abbr = p.away_abbr;
   g.opp_abbr = p.home_abbr;
   g.team_color = p.away_color;
@@ -236,6 +267,34 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
                      const std::string &event_id) {
   return parse_event(json, sport, our_team_id, out, event_id);
 }
+
+bool parse_summary_str(const std::string &json, Sport sport, uint32_t our_team_id, const std::string &event_id,
+                       LeadersStage stage, GameLeaders &out) {
+  return parse_summary(json, sport, our_team_id, event_id, stage, out);
+}
+int parse_news_str(const std::string &json, std::string &list) { return parse_news(json, list); }
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out) {
+  return parse_season(in, our_team_id, out);
+}
+bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out) {
+  struct StringSource : ByteSource {
+    const std::string &s;
+    size_t at{0};
+    explicit StringSource(const std::string &str) : s(str) {}
+    int read() override { return at < s.size() ? (unsigned char) s[at++] : -1; }
+    size_t readBytes(char *dst, size_t n) override {
+      size_t k = std::min(n, s.size() - at);
+      memcpy(dst, s.data() + at, k);
+      at += k;
+      return k;
+    }
+  } src(json);
+  return parse_season_from(src, our_team_id, out);
+}
+
+bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
+bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
+bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)
@@ -403,11 +462,12 @@ std::string pregame_name(const GameSnapshot &s) {
   return "Week " + std::to_string(s.week);
 }
 
-std::string venue_line(const GameSnapshot &s) {
+std::string venue_line(const GameSnapshot &s, const TickerOptions &o) {
   std::string venue = s.venue == s.game_name ? std::string() : s.venue;
-  if (s.weather.empty())
+  const std::string &weather = o.weather.empty() ? s.weather : o.weather;
+  if (weather.empty())
     return venue;
-  return venue.empty() ? s.weather : s.weather + " at " + venue;
+  return venue.empty() ? weather : weather + " at " + venue;
 }
 
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds) {
@@ -479,7 +539,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
         add_part(out, pregame_records(s));
       add_odds(out, s, o);
       detail::add_leaders(out, s, o);
-      add_part(out, venue_line(s));
+      add_part(out, venue_line(s, o));
       return out;
     case GameState::POST:
       // A game that ended without being completed says why: Postponed,

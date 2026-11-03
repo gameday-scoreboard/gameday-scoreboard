@@ -41,7 +41,7 @@ If the two halves of the board show up in the wrong order, swap the two panels.
 
 ## Change the layout
 
-In the Setup card on the device page, click the picture that matches your panels. The panel saves the choice and restarts with the new layout. Nothing needs reflashing.
+Under **Matrix** on the device page's Device tab, click the picture that matches your panels. The panel saves the choice and restarts with the new layout. Nothing needs reflashing.
 
 Factory Reset returns the layout to the build's default. The one-panel build starts as one 64x64 panel. A board installed with the 128x64 choice switches to the one-panel build at its first update, so after a factory reset on that board, pick the 128x64 layout again.
 
@@ -52,6 +52,8 @@ Power the panels from a 5 V supply rated for them. The panel's listing gives the
 A new install starts at about half brightness (128 of 255). Change it with the Brightness setting on the device page.
 
 A panel that restarts twice in a row because its power dipped, as on a phone charger or a supply too weak for it, holds its brightness low so it stays on. A small plug pulses in its top right corner, and every two minutes the bottom line says "Check power supply", until you press Clear on the device page. A panel that runs hot dims itself a step at a time and says "Too warm, dimming" until it cools.
+
+The panel no longer dims itself. After a restart because its power dipped, it lights up at half brightness for 3 seconds, then goes to your brightness; a small plug pulses in its top right corner and the bottom line says "Power dipped" every two minutes, until it has run 10 minutes without another dip. A panel whose chip reads 75 C or more shows a thermometer and "Running warm" until it reads under 70 C. Nothing to clear. A supply that keeps browning out the panel needs replacing, not a setting.
 
 ## Ribbon cables and wiring checks
 

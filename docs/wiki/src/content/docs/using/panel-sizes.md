@@ -35,8 +35,8 @@ The off-season clock shows the date under the time, and the next game goes in th
 
 ## Changing the layout
 
-1. Open the device page and find the **Setup** card.
-2. Under **Matrix**, click the picture that matches your panel.
+1. Open the device page and go to the Device tab.
+2. Open **Matrix** and click the picture that matches your panel.
 3. The page says **Restarting as** and the size. The panel restarts with the new layout a second later, and the page reconnects when it's back.
 
 Your team and settings stay as they were. A [factory reset](/using/buttons-and-resets/) puts the layout back to the one the firmware starts on: 128x64 for the Game Day Scoreboard and the two-panel DIY build, 64x64 for the one-panel DIY build.

@@ -53,7 +53,8 @@ email, which answers faster than an issue.
 
 ## Changing the code
 
-1. Fork the repo and branch from `dev`.
+1. Fork the repo and branch from `dev`. Name the branch after the change,
+   like `espn-gzip`.
 2. Make the change and test it (below).
 3. Open a pull request against `dev`. `beta` and `main` only take
    promotion PRs from the maintainers, and CI fails anything else.

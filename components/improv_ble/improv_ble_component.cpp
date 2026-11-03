@@ -496,14 +496,27 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
   this->failed_ssid_ = this->connecting_sta_.get_ssid().str();
   this->failed_ms_ = std::max<uint32_t>(millis(), 1);
   this->handover_failed_ = true;
-  // After "Reset Wi-Fi" the panel had a blank network, which is what keeps it
-  // in setup (components/saved_networks). Put that back rather than clearing
-  // the list: Bluetooth and the hotspot stay up, the app can send the name
-  // and password again, and gd_setup_window takes the panel back to its
-  // saved networks once the owner has gone. Before the state change below:
-  // on_start in pages/boot.yaml redraws the setup screen from it at once.
-  if (this->setup_mode_)
+  // Put the right network in memory before the state change below: improv's
+  // on_start (pages/boot.yaml) redraws the screen from it at once, and a
+  // failed network still there reads as a real one the panel has lost.
+  if (this->setup_mode_) {
+    // After "Reset Wi-Fi" the panel had a blank network, which is what keeps
+    // it in setup (components/saved_networks). Put that back rather than
+    // clearing the list: Bluetooth and the hotspot stay up, the app can send
+    // the name and password again, and gd_setup_window takes the panel back
+    // to its saved networks once the owner has gone.
     wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+  } else if (!this->restore_sta_.get_ssid().empty()) {
+    // Go back to the network the panel had, which is still the one saved in
+    // flash. Upstream clears the list here, which left a panel with a wrong
+    // password offline until a power cycle and kept the offline restart in
+    // gameday-common.yaml from firing.
+    wifi::global_wifi_component->set_sta(this->restore_sta_);
+    wifi::global_wifi_component->start_connecting(this->restore_sta_);
+  } else {
+    // A new panel, nothing to go back to: back to setup, as upstream.
+    wifi::global_wifi_component->clear_sta();
+  }
   // GAMEDAY: end
   this->set_error_(improv::ERROR_UNABLE_TO_CONNECT);
   this->set_state_(improv::STATE_AUTHORIZED);
@@ -513,22 +526,11 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
 #endif
   ESP_LOGW(TAG, "Timed out while connecting to Wi-Fi network");
   // GAMEDAY: begin
-  if (this->setup_mode_) {
+  if (this->setup_mode_)
     ESP_LOGI(TAG, "Staying in setup for another try");
-    return;
-  }
-  // Go back to the network the panel had, which is still the one saved in
-  // flash. Upstream clears the list here, which left a panel with a wrong
-  // password offline until a power cycle and kept the offline
-  // restart in gameday-common.yaml from firing.
-  if (!this->restore_sta_.get_ssid().empty()) {
+  else if (!this->restore_sta_.get_ssid().empty())
     ESP_LOGI(TAG, "Going back to the saved network");
-    wifi::global_wifi_component->set_sta(this->restore_sta_);
-    wifi::global_wifi_component->start_connecting(this->restore_sta_);
-    return;
-  }
   // GAMEDAY: end
-  wifi::global_wifi_component->clear_sta();
 }
 
 void ImprovBLEComponent::check_wifi_connection_() {

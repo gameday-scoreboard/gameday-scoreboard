@@ -22,7 +22,34 @@ script:
             return;
           const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
                                        id(spleen_8)->get_lv_font()};
-          gameday::board_text(id(gd_say_box), id(gd_say_lbl), text.c_str(), fonts, 3);
+          // A playlist's name comes in its color, with its icon above it
+          // (components/gameday/playlists.h); anything else is white.
+          const lv_color_t color = lv_color_hex(id(gameday_ctl).say_rgb());
+          lv_obj_set_style_text_color(id(gd_say_lbl), color, 0);
+          lv_obj_t *cv = id(gd_say_icon);
+          lv_obj_add_flag(cv, LV_OBJ_FLAG_HIDDEN);
+          const int icon = id(gameday_ctl).say_icon();
+          const int32_t S = ::espn::kListIconSize, gap = S + 2;
+          // The text a line shorter, the icon over it and the two centered
+          // together; a text that would roll goes up alone.
+          bool with_icon = icon != 0 &&
+                           gameday::board_text(id(gd_say_box), id(gd_say_lbl), text.c_str(), fonts, 3, 64 - gap) == 0;
+          if (!with_icon)
+            gameday::board_text(id(gd_say_box), id(gd_say_lbl), text.c_str(), fonts, 3);
+          lv_obj_set_height(id(gd_say_box), 64);
+          if (with_icon) {
+            const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+            const int32_t top = lv_obj_get_style_y(id(gd_say_lbl), LV_PART_MAIN);
+            lv_canvas_fill_bg(cv, lv_color_hex(0x000000), LV_OPA_COVER);
+            const uint16_t *rows = ::espn::kListIcons[icon - 1].rows;
+            for (int32_t y = 0; y < S; y++)
+              for (int32_t x = 0; x < S; x++)
+                if ((rows[y] >> (S - 1 - x)) & 1u)
+                  lv_canvas_set_px(cv, x, y, color, LV_OPA_COVER);
+            lv_obj_set_pos(cv, (W - S) / 2, top);
+            lv_obj_set_y(id(gd_say_lbl), top + gap);
+            lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
+          }
           lv_obj_move_foreground(id(gd_say_box));
           lv_obj_clear_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);
       - if:
@@ -72,3 +99,11 @@ lvgl:
                 long_mode: WRAP
                 text: ""
                 text_color: 0xFFFFFF
+            # A playlist's icon (playlists.h kListIcons), placed by gd_say.
+            - canvas:
+                id: gd_say_icon
+                x: 26
+                y: 0
+                width: 11
+                height: 11
+                hidden: true

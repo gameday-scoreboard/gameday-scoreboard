@@ -37,7 +37,7 @@ Put your panel's name in place of `gameday-xxxxxx`. The panel lights red, green,
 
 ## The FCC information isn't yours
 
-**Show on panel** next to **FCC information** on the device page puts the Game Day Scoreboard's model (GDS-1), FCC ID and FCC statement on the screen. Your board runs the same firmware, so it shows them too, but they describe the Game Day Scoreboard that was sold, not a board you built. Getting your own build through the FCC rules is up to you.
+**Show on panel** under **FCC information** at the bottom of the device page's Device tab puts the Game Day Scoreboard's model (GDS-1), FCC ID and FCC statement on the screen. Your board runs the same firmware, so it shows them too, but they describe the Game Day Scoreboard that was sold, not a board you built. Getting your own build through the FCC rules is up to you.
 
 ## Support is on GitHub
 

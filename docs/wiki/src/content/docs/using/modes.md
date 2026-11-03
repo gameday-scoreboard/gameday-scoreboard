@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-The two buttons under the board on the device page, **Favorite teams** and **Live games**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
+The two cards under the board on the device page's Home tab, **Favorite teams** and **Live games**, choose what the panel follows. The Game Day app has the same choice. The panel changes over right away and keeps the choice through restarts.
 
 Favorite teams replaces My team. To follow one team, make it your only favorite. A panel that was in My team starts in Favorite teams after the update. The team it followed isn't copied over, so add it as a favorite. Live games with nothing on shows your first favorite instead of the My team pick, and the **Team** entity is gone from Home Assistant.
 
@@ -68,7 +68,7 @@ With **Stick with the higher team**, the panel also checks every **Switch every*
 
 ### Choosing the leagues
 
-The league buttons under the mode buttons pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
+The league chips under the mode cards on the Home tab pick the leagues. Until you pick any, Live games follows the leagues of your favorites (NFL when you have none), and the page says so. Tap a league to choose by hand; **Back to automatic** goes back to following your favorites. At least one league stays on.
 
 ### When nothing is live
 
@@ -76,6 +76,8 @@ What the panel shows depends on whether you have favorites:
 
 - **With favorites**, it shows your first favorite's card, as in [How a team's game is shown](#how-a-teams-game-is-shown), with a line like "No live NFL games, showing DAL" at the front of the ticker. It keeps looking, and switches to a live game when one starts.
 - **With no favorites**, it rotates through the games still to come today under **Later today**, each with both logos, the start time and the TV channel, then the latest final scores for every league it follows, under headers like "Yesterday's NHL scores". When no game is left today, a "Next" card names the next matchup and its time, like "Next: BOS at NYR Thu 6:00 PM". A game drops off the Later today list once it starts.
+
+A ranked college team has its AP rank on the corner of its logo on the Later today and final score cards too, the same as on the [game board](/using/football/#before-the-game).
 
 The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours.
 

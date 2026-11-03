@@ -15,6 +15,20 @@ enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA
 
 enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
 
+// The state document's and /gameday/set's word for each, in Sport order.
+constexpr int kSportCount = 5;
+constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer"};
+static_assert((int) Sport::SOCCER + 1 == kSportCount, "a key per Sport");
+
+// A sport row in Playing (playlists.h) is numbered 1 + its Sport; 0 is none.
+// "football" -> 1, and 0 for a word that names no sport.
+inline uint8_t sport_row_from_key(const char *k) {
+  for (int s = 0; s < kSportCount; s++)
+    if (strcmp(k, kSportKeys[s]) == 0)
+      return (uint8_t) (s + 1);
+  return 0;
+}
+
 struct LeagueInfo {
   League league;
   const char *key;       // team refs and the state document: "nfl", "mlb"

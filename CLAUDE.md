@@ -28,6 +28,7 @@ contributors; read it too.
   ("Docs updated") fails a PR into `dev` that touches firmware/ or
   components/ without a docs change unless the PR description has a line
   `No owner-visible change, no docs: <why>`, which the reviewer checks.
+  The label `docs: not needed` still passes, as a fallback for older PRs.
   Behavior that `main` doesn't have yet goes in a
   `:::note[Coming in the next release]` aside, removed at release time.
   Docs describe the firmware on the branch they sit on, written for the
@@ -51,10 +52,10 @@ contributors; read it too.
   PR into `main` or a `v*` tag when it isn't a final like `2026.10.0`. A fix
   that is only in a beta: copy the component into `components/` and stay
   on the final, wait for the final or ask for a patch-release backport, or
-  Brandon's `esphome-beta-ok` label on the promotion PR (then re-run the
-  job). Diagram in CONTRIBUTING.md.
+  the repo owner's `esphome-beta-ok` label on the promotion PR (then re-run
+  the job). Diagram in CONTRIBUTING.md.
 - Product is not part of Apollo Automation. Brand is "Game Day Scoreboard".
-- Decisions not to reopen without Brandon: OTA with no password, `api:` with
+- Decisions not to reopen without the repo owner: OTA with no password, `api:` with
   no key, the device web page open ("panel trusts the home network"). Do not
   raise LAN hardening again. Prioritize customer-visible failures.
 - A PR an owner would notice adds its bullet under `## Unreleased` in
@@ -68,7 +69,7 @@ contributors; read it too.
 - Name branches after the change (`espn-gzip`); CI's Branch rules job
   refuses a PR from a `card-<number>` branch.
 - ESPHome venv at ~/development/tools/esphome-venv flashes over USB and
-  streams logs; Brandon's panel is gameday-2f6a70.local. Use `esphome
+  streams logs; the repo owner's panel is gameday-2f6a70.local. Use `esphome
   compile`, not `esphome config`, to catch C++ errors. Host tests: `make -C
   tests`. Rebuild the web bundle with the venv's python (bare python3 on
   this Mac is 3.9.6, too old) after editing firmware/web/app.js.
