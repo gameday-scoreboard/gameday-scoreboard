@@ -57,7 +57,7 @@ In the chooser's **On now** tab, a search that matches none of today's games lis
 :::note[Coming in the next release]
 On Android, each playlist has an **Options** card under its teams, with the device page's playlist options: **Plays on** (tap the days, then set **From** and **To**), **Only this list's games**, and **Only today's games** (**Same as Favorites**, **On** or **Off**). The playlist's row shows its schedule, like "Weekends 8:00 PM to 2:00 AM". The card shows once the panel runs firmware with playlist options. See [Playlists](/using/favorites/#playlists).
 
-At the bottom of **Options**, **Color** and **Icon** give the playlist its look, as on the device page: tap one, or **None**. The playlist's row shows its icon in its color, or a dot of the color, before its name. So does **Playing**, beside the playlist it plays and in its list.
+At the bottom of **Options**, **Color** and **Icon** give the playlist its look, as on the device page: tap one, or **None**. The playlist's row shows its icon in its color (white with no color), or a dot of the color, before its name. So does **Playing**, beside the playing playlist's name and on each playlist in its picker.
 :::
 
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
