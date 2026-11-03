@@ -82,7 +82,7 @@ On Android, **Display** has a **Live pictures** card after the ticker, with the 
 :::
 
 :::note[Coming in the next release]
-On Android, **Display** has a **Weather** card after **Between games**, with the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
+On Android, **Display** has a **Weather** card after **Between games**, with the device page's weather settings: your town in **Town or ZIP code** and **Look up**, what the panel found under it (like "Found: Coppell, Texas"), the **Weather card** switch, **Degrees** (**Auto**, **Fahrenheit (°F)** or **Celsius (°C)**) and when the forecast was last read. See [Set your town](/using/weather/#set-your-town) and [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. They show once the panel runs firmware with them.
 :::
 
 :::note[Coming in the next release]
