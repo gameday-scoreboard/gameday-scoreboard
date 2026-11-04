@@ -29,7 +29,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 ## What's in the file
 
 - The panel's **Nickname**. A backup loaded onto a second panel gives it the same nickname, so rename that one afterwards.
-- What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out.
+- What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out. A backup saved in Live games comes back in Live games.
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
 - The Live games leagues, **Switch every** and **Pick the best game**
@@ -57,11 +57,13 @@ The panel checks the whole file before it changes anything. If a setting in it h
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 
+**That backup is too big for the panel to take** means the settings in it add up to more than the panel holds, about 8 KB. Only a panel with nearly every favorite and playlist slot full gets there.
+
 **This backup is from newer firmware** means the file came from a panel on a release that saves backups differently. [Update the panel](/using/updates/), then restore it.
 
 ## When something is left out
 
-A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
+A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons. A team listed in two favorite slots comes back once, in the first, with the second slot empty.
 
 A message list address this panel's firmware can't read, like one from a later release that takes another kind of address, is left out and listed the same way instead of stopping the whole restore.
 
