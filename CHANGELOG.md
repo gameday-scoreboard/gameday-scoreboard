@@ -39,6 +39,9 @@ through `update_important` in the panel's state.
 ### 🐛 Fixes
 
 - 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
+- 💾 The device page restores its own settings backups again once you have several playlists; it used to call them too big
+- 💾 Restoring a backup saved in Live games keeps Live games, instead of switching the panel to Favorite teams
+- 💾 A backup with the same team in two favorite slots restores, with the second slot left empty
 
 ## v2026.11.0
 
