@@ -63,7 +63,6 @@ A playlist is a group of your favorites with a name, like your football teams or
 
 ### A row for each sport
 
-:::note[Coming in the next release]
 When your favorites cover more than one sport, **Playing** has a row for each of them after **All favorites**, then your own playlists:
 
 - **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
@@ -71,11 +70,9 @@ When your favorites cover more than one sport, **Playing** has a row for each of
 - You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
 - They aren't playlists: they don't show under **Playlists**, don't count toward the 16, and a remote button plays one only when you set it to (see [The numbered buttons](/using/remote/#the-numbered-buttons)). A playlist of your own named Football sits beside **All football**.
 - The **One per sport** button is gone, since these rows do its job and never go out of date. Playlists it made before stay until you remove them.
-:::
 
 While a playlist plays, the cards between games are its teams only, with the same rules as above. A favorite outside the playlist still takes the panel near its kickoff, so a playlist never makes you miss a game. The Up next list dims the favorites outside it.
 
-:::note[Coming in the next release]
 **Playlist options.** Under each playlist's teams on the device page, three settings shape how it plays:
 
 - **Plays on** is a schedule. Tap the days (S M T W T F S) the playlist should play, and set the hours with **from** and **to**, in the panel's time zone; with no hours set it plays all day on those days. Hours that end before they start run into the next morning, so Saturdays from 8:00 PM to 2:00 AM covers Sunday 1 AM. When a schedule starts, the panel switches to Favorite teams playing that playlist, and the bar says **on its schedule**; when it ends, the panel goes back to what it was playing before, and to the mode it was in. If a game it's locked on is still going, the switch waits for the final. Two schedules at once: the playlist higher in the card wins. Picking another playlist yourself during the hours stays until you change it again.
@@ -83,9 +80,7 @@ While a playlist plays, the cards between games are its teams only, with the sam
 - **Only today's games** can differ from the **Favorites** switch for this playlist: **Same as Favorites**, **On** or **Off**.
 
 A settings backup carries all three. The Game Day app shows the same options under each playlist.
-:::
 
-:::note[Coming in the next release]
 **Color and icon.** Under each playlist's options, **Color** and **Icon** give it a look, so you can tell your lists apart from across the room:
 
 - **Color** is one of red, orange, yellow, green, teal, blue, purple or pink.
@@ -95,9 +90,8 @@ A settings backup carries all three. The Game Day app shows the same options und
 When a remote button or **Playing** switches to a playlist, the panel shows its name for 3 seconds in its color, with its icon above the name. **Playing** on the device page shows the playing list's icon, or a dot of its color, beside the picker, and each playlist's name in its color where the browser allows. The look moves with the playlist when you rename or reorder it, and a settings backup carries it.
 
 Picking a playlist or a sport row in **Playing** now shows its name on the panel too, as a remote button does. Home Assistant's Playlist select and a playlist's schedule switch quietly.
-:::
 
-The order of the playlists matters for the remote: the first four are buttons 1 to 4. See below. (Coming in the next release, the buttons no longer follow the playlists' order; set a button to a playlist under **Remote** on the Device tab.)
+The remote's buttons don't follow the playlists' order: set a button to a playlist under **Remote** on the Device tab. See below.
 
 A favorite you take out of your list leaves every playlist it was in. Adding it back doesn't put it back in them.
 
@@ -105,11 +99,7 @@ A favorite you take out of your list leaves every playlist it was in. Adding it 
 
 Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorite teams, the panel shows that favorite's card at once. If its game is locked on, the panel stays on it; otherwise the card stays up for its 10 seconds and the cards carry on from there. A button for an empty slot does nothing. See [WizMote remote](/using/remote/).
 
-Once you have a playlist, buttons 1 to 4 play your first four playlists instead. The panel switches to Favorite teams, plays that playlist, and shows its name for a moment. A button with no playlist does nothing. With no playlists, the buttons stay your first four favorites.
-
-:::note[Coming in the next release]
 Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to a favorite team, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
-:::
 
 ## On the device page
 

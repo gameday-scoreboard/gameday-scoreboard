@@ -24,7 +24,6 @@ If the check can't reach the update server, the page says **Could not reach the 
 
 ## Update ready on the ticker
 
-:::note[Coming in the next release]
 When a new release is out, the panel says so on its ticker: **Update ready: open the Game Day app**, in front of the usual line.
 
 - It shows for an hour a day. The hour starts at 5 PM in the panel's timezone, or later if a game the panel follows is live then.
@@ -35,7 +34,6 @@ When a new release is out, the panel says so on its ticker: **Update ready: open
 A release that fixes something broken, like scores that stopped after an ESPN change, is marked important. The ticker then says **Important update ready: open the Game Day app**, and the **Firmware** line on the device page's Device tab says **Important update** and the version, with **It fixes something broken, so install it when you can.** The Game Day app says the same on its update badge.
 
 **Diagnostics** on the device page has a row **Update ready on the ticker** while a release waits: when the ticker last started saying so, or that it hasn't yet since the panel restarted. A panel with **Install updates automatically** on says the ticker doesn't show it.
-:::
 
 ## Installing an update
 
