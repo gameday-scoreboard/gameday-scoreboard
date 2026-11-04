@@ -39,6 +39,10 @@ through `update_important` in the panel's state.
 ### 🐛 Fixes
 
 - 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
+- 📶 Tapping Save on the setup hotspot page without picking a network no longer forgets every saved network at the next restart
+- 🗓️ Moving or deleting playlists while a schedule is playing one no longer brings back the wrong playlist when it ends, or wipes every playlist's schedule after a restart
+- 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
+- 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
 
 ## v2026.11.0
 

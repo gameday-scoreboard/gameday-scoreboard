@@ -238,24 +238,25 @@ static void test_changed_slot_is_added() {
   CHECK(strcmp(l.nets[0].password, "pw-phone2") == 0);
 }
 
-static void test_reset_empties_the_list() {
+static void test_blank_slot_keeps_the_list() {
   NetworkList l;
   clear(l);
   Slot slot{"Home", "pw-home"};
   boot(l, slot);
   put_front(l, "iPhone", "pw-phone");
-  // Reset Wi-Fi in older firmware blanked the slot. Even a list that firmware
-  // did not clear itself goes, so a reset stays a reset.
+  const uint32_t hash = l.slot_hash;
+  // Save on the hotspot page with no network picked blanks ESPHome's slot.
+  // The saved networks stay, and so does what the list last saw in the slot.
   slot = Slot{"", ""};
-  CHECK(boot(l, slot));
-  CHECK(l.count == 0);
-  CHECK(l.slot_hash == 0);
   CHECK(!boot(l, slot));
+  CHECK(names(l) == "iPhone,Home");
+  CHECK(l.slot_hash == hash);
   CHECK(!merge_slot(l, nullptr, nullptr));
-  // Set up again after the reset.
-  slot = Slot{"Home", "pw-home"};
+  CHECK(l.count == 2);
+  // A real setup afterwards still goes to the front.
+  slot = Slot{"Cabin", "pw-cabin"};
   CHECK(boot(l, slot));
-  CHECK(names(l) == "Home");
+  CHECK(names(l) == "Cabin,iPhone,Home");
 }
 
 static void test_forget_survives_a_restart() {
@@ -364,7 +365,7 @@ int main() {
   test_slot_hash();
   test_migration_from_one_network();
   test_changed_slot_is_added();
-  test_reset_empties_the_list();
+  test_blank_slot_keeps_the_list();
   test_forget_survives_a_restart();
   test_forget_the_last_network();
   test_setup_window();
