@@ -41,6 +41,12 @@ If the app loses its connection to the panel for a moment while the panel still 
 
 When the panel shows its thermometer or plug in the corner, the Board shows the same words under the game, **Running warm** or **Power dipped**, with what to do. There's nothing to press: it goes when the panel's icon does. See [Icons in the corner](/help/panel-messages/#icons-in-the-corner).
 
+On iPhone, while the night schedule has the panel dimmed or dark, the Board says so under the game, like **Night mode until 7:00 AM**, with what brings the panel back. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+
+:::note[Coming in the next release]
+Under **Night mode until**, **Turn on for tonight** puts the panel back at its normal brightness for the rest of the night. Turning **Panel on** back on during the night does the same. The Board then says **Night mode off until** the next start time, like **Night mode off until 11:00 PM**, and **Back to night mode** goes back to the schedule. During a live game of yours there's no button, since the game already has the panel lit. The next night the schedule runs as usual.
+:::
+
 ### Teams
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
