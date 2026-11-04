@@ -181,6 +181,10 @@ What the panel shows when no game is on. **Countdown to the next game**, on unle
 
 Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a football or soccer team in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 
+:::note[Coming in the next release]
+**Schedule** and **Season recap** work for basketball and hockey favorites too, every league but MLB. Without a team outside MLB in Favorite teams they say "Only for teams in Favorite teams, not baseball".
+:::
+
 The **Weather** card holds a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Setting a town turns the card on. **Degrees** picks °F, °C or Auto for the card and the kickoff forecast.
 
 ## Customize

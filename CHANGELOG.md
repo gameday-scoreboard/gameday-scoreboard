@@ -30,6 +30,12 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+### ✨ New
+
+- 🗓️ Schedule and season recap cards now work for NBA, WNBA, NHL and college basketball favorites too, every league but MLB
+
 ## v2026.11.0
 
 The device page in five tabs, Game-day wake and After the game, weather, news, the Top 25, game leaders, season cards, your own pictures, Effects, and a build for the Waveshare ESP32-S3-RGB-Matrix board.
