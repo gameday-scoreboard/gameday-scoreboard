@@ -4808,7 +4808,10 @@ static void test_auto_update() {
   CHECK(version_newer("2026.10.0-beta.813", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.811", "2026.10.0-beta.812"));
-  CHECK(version_newer("2026.10.0-beta.812", "2026.10.0"));  // a hand-flashed bar panel takes the beta
+  // A bar panel hand-flashed with a release takes the next release's betas,
+  // never a beta of the release it already runs (older code).
+  CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0"));
+  CHECK(version_newer("2026.10.1-beta.812", "2026.10.0"));
   CHECK(version_newer("2026.10.1-beta.900", "2026.10.0-beta.950"));
   CHECK(version_newer("2026.10.0-beta.1000", "2026.10.0-beta.999"));
   CHECK(!version_newer("2026.10.0-beta.", "2026.10.0"));
