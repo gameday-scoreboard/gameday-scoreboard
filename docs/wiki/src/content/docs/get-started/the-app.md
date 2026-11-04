@@ -77,6 +77,8 @@ On Android, the **Screen** card in **Display** has the device page's **Game-day 
 
 On Android, **Customize** has a **Pictures** card after the message card, like the device page's: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF goes as it is (see [Pictures](/using/pictures/)). The card shows once the panel runs firmware with pictures.
 
+On Android, **Device** has a **Remote buttons** card after **Remote**, with the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). The card shows once the panel runs firmware with the pickers.
+
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 
 ## Your panels
