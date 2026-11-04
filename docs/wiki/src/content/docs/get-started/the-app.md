@@ -83,7 +83,7 @@ In both apps, **Only today's games**, **Jump to the action** and **Score banner*
 In both apps, Settings has three pages for the panel, like the device page's tabs:
 
 - **Display**: ticker speed, the night schedule (iPhone), the ticker, celebrations and **Between games**. **Showing** moved to the Board. On Android, the **Celebrations** card also has a **Celebrations** choice, **Full**, **Subtle** or **Off**, for how big the show is (see [Celebrations](/using/device-page/#celebrations)). It shows once the panel runs firmware with that setting.
-- **Customize**: the banner, the message card and the date countdown.
+- **Customize**: the banner, the message card, your pictures and the date countdown.
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
 Each setting has one short line saying what it does. The longer rules are on these pages.
@@ -98,7 +98,7 @@ On Android, **Display** has a **Weather** card after **Between games**, with the
 
 On iPhone and Android, **Display** has the device page's **Game-day wake** and **After the game**, under the night schedule in **Screen** on iPhone and under ticker speed in the **Screen** card on Android: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
 
-On Android, **Customize** has a **Pictures** card after the message card, like the device page's: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF goes as it is (see [Pictures](/using/pictures/)). The card shows once the panel runs firmware with pictures.
+On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
 
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
 
