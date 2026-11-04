@@ -117,6 +117,15 @@ The panel list is **Settings > Panels**, and it's what the Board shows until you
 - **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
 - **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
 
+## The Live score widget
+
+Both apps have a **Live score** widget for your Home Screen with your panel's game: the teams, the score, and the clock or the start time. Between games it shows the panel's next game, or what the panel says when there's nothing on. Tap it to open the app on that panel.
+
+- **iPhone**: a small and a medium size for the Home Screen, and two for the Lock Screen. With more than one panel, touch and hold the widget, choose **Edit Widget** and pick the **Panel**.
+- **Android**: a 2 by 2 widget, and a wider look when you stretch it to 4 by 2. With more than one panel, the app asks which one when you place it. To change it later, touch and hold the widget and open its settings (Android 12 and newer).
+
+The widget reads your panel over your home Wi-Fi: about every 10 minutes while a game is on, less often between games, and straight away while the app is open on that panel. Away from home it keeps the last score for a few minutes, then says it can't reach the panel. Open the app on your home Wi-Fi and it catches up.
+
 ## Try the app before your panel arrives
 
 With no panel saved yet, the panel list has **Try a demo panel**. It opens a demo panel inside the app, with made-up teams playing a game on a loop, so you can look around every tab. Nothing you change there reaches a real panel, and the demo isn't saved to your list. To leave it, tap its name at the top of the Board and choose **Close the demo**.
