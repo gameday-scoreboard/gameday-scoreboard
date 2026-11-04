@@ -81,6 +81,14 @@ struct NightSkipRtc {
 static const uint32_t NIGHT_SKIP_MARK = 0x4E534B31;
 RTC_NOINIT_ATTR static NightSkipRtc night_skip_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+// The panel's UTC offset at an epoch, from its timezone: the local time
+// there read as if it were UTC, less the epoch.
+static int32_t utc_offset_at(int64_t epoch) {
+  ESPTime t = ESPTime::from_epoch_local((time_t) epoch);
+  t.recalc_timestamp_utc();
+  return (int32_t) ((int64_t) t.timestamp - epoch);
+}
+
 // The wake's state (wake.h) the same way: a panel After the game turned off
 // stays off through the nightly update, and one woken for a game isn't woken
 // again for it. The state is kept as bytes: WakeState has default member
@@ -2127,7 +2135,8 @@ void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
     ESPTime now = this->time_->now();
     if (now.is_valid()) {
       this->night_skip_until_ =
-          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second);
+          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second,
+                                   utc_offset_at);
       this->save_night_skip_();
     }
   }
@@ -2216,7 +2225,8 @@ bool GamedayComponent::night_skip(const char *why) {
     return false;  // holding needs a clock, so this can't happen
   ESP_LOGI(TAG, "Night schedule: %s skips the rest of the night", why);
   this->night_skip_until_ =
-      ::espn::night_skip_until(this->night_, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second);
+      ::espn::night_skip_until(this->night_, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second,
+                               utc_offset_at);
   this->save_night_skip_();
   this->night_tick_();
   return true;

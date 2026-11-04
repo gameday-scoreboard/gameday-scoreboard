@@ -50,7 +50,7 @@ You can also turn it off and on with:
 
 A few things turn a dark panel back on by themselves, since they mean someone wants to look at it: picking a team or a mode in the app, on the device page or in Home Assistant, a numbered button or **NIGHT** on the remote, and the brighter button on the remote, which brings back the brightness the panel had. During the night schedule's hours the panel comes back at its night setting instead: at the night brightness, or with **Screen at night** off, still dark until the hours end or a game of yours goes live.
 
-During the night schedule's hours, the remote, a team or mode picked in the app or on the device page, and **Panel on** on the device page turn night mode off for the rest of the night, so the panel comes back at its normal brightness. Home Assistant still brings it back at its night setting. See [Night schedule](#night-schedule).
+During the night schedule's hours, a team or mode picked in the app or on the device page, **Panel on** on the device page, and most presses on the remote turn night mode off for the rest of the night, so the panel comes back at its normal brightness. [Night schedule](#night-schedule) lists which remote buttons do it. Home Assistant still brings it back at its night setting.
 
 The panel always comes back on after a restart or a power cut.
 
