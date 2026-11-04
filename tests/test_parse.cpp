@@ -5498,6 +5498,58 @@ static void test_countdown() {
   CHECK(!pick_favorite(one, T + 25, r, 0, T + 20, -1).again);
 }
 
+// The panel's clock in a POSIX timezone, as night_skip_until() is given it
+static int32_t tz_offset_at(int64_t epoch) {
+  time_t t = (time_t) epoch;
+  struct tm lt{};
+  localtime_r(&t, &lt);
+  return (int32_t) lt.tm_gmtoff;
+}
+
+// A night skipped across the nights the clocks change, in US Central: it
+// ends at the real end time, by the wall clock, either way.
+static void test_night_skip_clock_change(NightPrefs p) {
+  const char *was = getenv("TZ");
+  std::string saved = was != nullptr ? was : "";
+  setenv("TZ", "CST6CDT,M3.2.0,M11.1.0", 1);
+  tzset();
+  auto skip = [&](const char *at) {
+    const int64_t t = parse_iso8601_z(at);
+    time_t tt = (time_t) t;
+    struct tm lt{};
+    localtime_r(&tt, &lt);
+    return night_skip_until(p, t, lt.tm_hour * 60 + lt.tm_min, lt.tm_sec, tz_offset_at);
+  };
+  p.on = 1;
+  p.start = 23 * 60;
+  p.end = 7 * 60;
+  // Back an hour at 2 AM CDT on Nov 1, 2026 (7:00 UTC). 7 AM CST is 13:00 UTC.
+  const int64_t seven_cst = parse_iso8601_z("2026-11-01T13:00Z");
+  CHECK_EQ(skip("2026-11-01T04:30:20Z"), seven_cst);  // 11:30:20 PM CDT
+  CHECK_EQ(skip("2026-11-01T06:30Z"), seven_cst);     // 1:30 AM CDT, the first time
+  CHECK_EQ(skip("2026-11-01T07:30Z"), seven_cst);     // 1:30 AM CST, the second time
+  CHECK_EQ(skip("2026-11-01T09:00Z"), seven_cst);     // 3:00 AM CST, after the change
+  // The night after: no change in it, 7 AM CST on Nov 2.
+  CHECK_EQ(skip("2026-11-02T05:00Z"), parse_iso8601_z("2026-11-02T13:00Z"));
+  // Forward an hour at 2 AM CST on Mar 14, 2027 (8:00 UTC). 7 AM CDT is 12:00 UTC.
+  const int64_t seven_cdt = parse_iso8601_z("2027-03-14T12:00Z");
+  CHECK_EQ(skip("2027-03-14T05:00Z"), seven_cdt);  // 11:00 PM CST
+  CHECK_EQ(skip("2027-03-14T07:30Z"), seven_cdt);  // 1:30 AM CST
+  CHECK_EQ(skip("2027-03-14T09:00Z"), seven_cdt);  // 4:00 AM CDT
+  // An end of 2:30 AM, which Mar 14 never reaches: not before 3 AM CDT, and
+  // by then the hours check has ended the skip.
+  p.end = 2 * 60 + 30;
+  CHECK(skip("2027-03-14T05:00Z") >= parse_iso8601_z("2027-03-14T08:00Z"));
+  // An end of 1:30 AM on Nov 1 is the first 1:30, in daylight time.
+  p.end = 60 + 30;
+  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T06:30Z"));
+  if (saved.empty())
+    unsetenv("TZ");
+  else
+    setenv("TZ", saved.c_str(), 1);
+  tzset();
+}
+
 static void test_night() {
   // Times as the page's fields send them
   CHECK_EQ(night_parse_time("23:00"), 23 * 60);
@@ -5575,13 +5627,15 @@ static void test_night() {
     // Skipped until the end of the hours it was in: 7 AM, from 11:30:20 PM
     // or 2:00:45 AM, and 6 AM inside a 1 AM to 6 AM night.
     const int64_t t = 1792000000;
-    CHECK_EQ(night_skip_until(p, t, 23 * 60 + 30, 20), t - 20 + (int64_t) (7 * 60 + 30) * 60);
-    CHECK_EQ(night_skip_until(p, t, 2 * 60, 45), t - 45 + (int64_t) (5 * 60) * 60);
+    NightUtcOffset fixed = [](int64_t) -> int32_t { return -5 * 3600; };
+    CHECK_EQ(night_skip_until(p, t, 23 * 60 + 30, 20, fixed), t - 20 + (int64_t) (7 * 60 + 30) * 60);
+    CHECK_EQ(night_skip_until(p, t, 2 * 60, 45, fixed), t - 45 + (int64_t) (5 * 60) * 60);
     NightPrefs early = p;
     early.start = 60;
     early.end = 6 * 60;
-    CHECK_EQ(night_skip_until(early, t, 3 * 60 + 59, 0), t + (int64_t) (2 * 60 + 1) * 60);
+    CHECK_EQ(night_skip_until(early, t, 3 * 60 + 59, 0, fixed), t + (int64_t) (2 * 60 + 1) * 60);
   }
+  test_night_skip_clock_change(p);
 
   p.level = 20;
   CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
