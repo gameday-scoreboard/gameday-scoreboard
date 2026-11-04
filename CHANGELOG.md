@@ -43,6 +43,7 @@ through `update_important` in the panel's state.
 - 🗓️ Moving or deleting playlists while a schedule is playing one no longer brings back the wrong playlist when it ends, or wipes every playlist's schedule after a restart
 - 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
 - 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
+- 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
 
 ## v2026.11.0
 
