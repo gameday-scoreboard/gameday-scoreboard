@@ -3398,6 +3398,35 @@ static void test_lookahead() {
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, none, "401856724"));
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 2294, none));
 
+  // College basketball reads its conference's scoreboard the same way, and
+  // November and December are mostly non-conference games. The conference
+  // scoreboard lists those too: on 2026-11-06 all ten Big Ten games were
+  // non-conference (each conference's scoreboard matched groups=50 that day
+  // and on the 11/2 opener), so Michigan's game with UConn is on Michigan's.
+  Schedule mich;
+  CHECK(parse_team_str(slurp("fixtures/team_mcbb_mich.json"), mich));
+  CHECK_EQ(mich.group, 7u);
+  CHECK_EQ(team_day_url(League::MCBB, mich.group, parse_iso8601_z("2026-11-07T01:30Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=7&dates=20261106"));
+  const std::string b1g = slurp("fixtures/day_mcbb_20261106.json");
+  const struct {
+    uint32_t team;
+    const char *event;
+  } b1g_games[] = {{2483, "401920717"}, {2509, "401926131"}, {194, "401916314"}, {164, "401926135"},
+                   {275, "401920894"},  {kMichigan, "401920685"}, {77, "401920733"}, {135, "401916304"},
+                   {2294, "401920726"}, {26, "401922219"}};
+  for (const auto &g : b1g_games) {
+    Schedule day;
+    CHECK(parse_team_game_str(b1g, g.team, day));
+    CHECK_EQ(day.event_id, std::string(g.event));
+  }
+  // The other side is on it too (UConn, Big East), and a Big Ten team that is
+  // off that day (Illinois) has nothing.
+  Schedule conn_day;
+  CHECK(parse_team_game_str(b1g, kUConn, conn_day));
+  CHECK_EQ(conn_day.event_id, std::string("401920685"));
+  CHECK(!parse_team_game_str(b1g, 356, none));
+
   // The NFL keeps the game: NE @ CHI was final on 2026-10-22 and Chicago's
   // team endpoint still named it, while Memphis's (college, in overtime two
   // minutes later) named next week's. So the NFL skips the day read.
@@ -3963,12 +3992,18 @@ static void test_recap() {
     CHECK_EQ(f.home_id, kOhioState);
     CHECK_EQ(f.home_score, 10);
     CHECK_EQ((int) f.rank, 1);
+    CHECK_EQ((int) f.away_rank, 2);
+    CHECK_EQ((int) f.home_rank, 1);
     CHECK_EQ(f.detail, std::string("Final"));
     CHECK_EQ(f.kickoff_epoch, parse_iso8601_z("2025-12-07T01:00Z"));
     CHECK(!f.away_color.empty());
     CHECK_EQ(finals[3].detail, std::string("Final/OT"));
     CHECK_EQ((int) finals[3].rank, 17);  // UVA #17, Duke unranked (99)
+    CHECK_EQ((int) finals[3].away_rank, 99);
+    CHECK_EQ((int) finals[3].home_rank, 17);
     CHECK_EQ((int) finals[4].rank, 99);  // neither ranked
+    CHECK_EQ((int) finals[4].away_rank, 99);
+    CHECK_EQ((int) finals[4].home_rank, 99);
     // The card: away side first like a broadcast, logos from the ids
     Final c = f;
     c.league = (uint8_t) League::NCAA;
@@ -3977,6 +4012,12 @@ static void test_recap() {
     CHECK(g.state == GameState::POST);
     CHECK_EQ(g.team_abbr, std::string("IU"));
     CHECK_EQ(g.opp_score, 10);
+    // Each side's rank rides along to its logo, as on the live board
+    CHECK_EQ((int) g.team_rank, 2);
+    CHECK_EQ((int) g.opp_rank, 1);
+    GameSnapshot uva = final_snapshot(finals[3]);
+    CHECK_EQ((int) uva.team_rank, 99);
+    CHECK_EQ((int) uva.opp_rank, 17);
     CHECK_EQ(g.team_logo, team_logo_url(League::NCAA, 84, "IU"));
     CHECK_EQ(g.opp_logo, team_logo_url(League::NCAA, kOhioState, "OSU"));
     CHECK_EQ(status_text(g, TickerOptions{}, "").substr(0, 5), std::string("Final"));
@@ -4196,6 +4237,8 @@ static void test_later_today() {
     CHECK_EQ(g.opp_abbr, std::string("DET"));
     CHECK_EQ(g.kickoff_epoch, p.kickoff_epoch);
     CHECK_EQ(g.tv, std::string("ESPN+"));
+    CHECK_EQ((int) g.team_rank, 99);  // no AP poll in hockey
+    CHECK_EQ((int) g.opp_rank, 99);
     CHECK_EQ(g.team_logo, team_logo_url(League::NHL, 124292, "SEA"));
     CHECK_EQ(g.opp_logo, team_logo_url(League::NHL, p.home_id, "DET"));
   }
@@ -4288,6 +4331,23 @@ static void test_later_today() {
     CHECK_EQ(college[0].away_abbr, std::string("WIS"));
     CHECK_EQ((int) college[0].rank, 4);
     CHECK_EQ((int) college[7].rank, 17);
+    // Each side keeps its own rank for the card: WIS at #4 ND, #24 LOU at #9 MISS
+    CHECK_EQ((int) college[0].away_rank, 99);
+    CHECK_EQ((int) college[0].home_rank, 4);
+    GameSnapshot nd = pending_snapshot(college[0]);
+    CHECK_EQ((int) nd.team_rank, 99);
+    CHECK_EQ((int) nd.opp_rank, 4);
+    const Pending *lou = nullptr;
+    for (const auto &p : college)
+      if (p.away_abbr == "LOU")
+        lou = &p;
+    CHECK(lou != nullptr);
+    if (lou != nullptr) {
+      CHECK_EQ((int) lou->rank, 9);
+      GameSnapshot g = pending_snapshot(*lou);
+      CHECK_EQ((int) g.team_rank, 24);
+      CHECK_EQ((int) g.opp_rank, 9);
+    }
   }
 
   // TBD, postponed and canceled games are not to come; a live game and a

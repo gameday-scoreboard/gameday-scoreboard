@@ -5,10 +5,6 @@ sidebar:
   order: 12.55
 ---
 
-:::note[Coming in the next release]
-The schedule and season recap cards are new in the next release.
-:::
-
 Between games the panel can show what's coming up for your team, and once the season is over, how it went.
 
 Both cards are for football teams (NFL and college) and soccer teams (MLS and the Premier League) in **Favorite teams** mode. Basketball, hockey and baseball teams don't get them yet: ESPN's season schedules for those leagues are too big for the panel to read.

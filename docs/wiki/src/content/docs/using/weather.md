@@ -5,10 +5,6 @@ sidebar:
   order: 12.6
 ---
 
-:::note[Coming in the next release]
-The weather card is new in the next release.
-:::
-
 Between games the panel can show the weather where you live: the temperature now with an icon for the sky, today's high and low, and the next two days small underneath. Before an outdoor game the next game's board also shows the forecast for kickoff at the stadium.
 
 ## Set your town
@@ -33,19 +29,11 @@ At night a clear sky shows a moon instead of a sun.
 
 ## Fahrenheit or Celsius
 
-:::note[Coming in the next release]
-The **Degrees** setting is new in the next release. Before it, the weather card is in °F only.
-:::
-
 **Degrees** under **Weather** on the device page picks **Fahrenheit**, **Celsius** or **Auto**, the setting a new panel starts with. Auto uses °F when your town is in the United States (or one of the few other places that use it) and °C anywhere else. With no town set yet, it goes by the panel's time zone: °F in the US time zones, °C in the others. The device page shows which one Auto picked, like **Auto (°F now)**.
 
 The setting covers the weather card, the kickoff forecast on the board, and the forecast in the ticker ("12C Cloudy at Ryan Field"). Switching it needs no new read: the board changes at once.
 
 ## The forecast for kickoff
-
-:::note[Coming in the next release]
-The kickoff forecast on the board is new in the next release.
-:::
 
 Before a football, baseball or soccer game at an outdoor stadium, the next game's board shows a small icon for the sky and the temperature expected at kickoff. On a wide board it sits between the two logos, where the game clock goes once the game starts; on a single 64x64 panel it sits between the two scores, as the icon and the number. It goes away when the game starts, and it never shows for a dome or an arena (a venue ESPN lists as indoors).
 

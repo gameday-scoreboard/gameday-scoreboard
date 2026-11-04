@@ -175,6 +175,7 @@ during FLA @ TEX (halftime):
 | --- | --- |
 | `team_ncaa_tex_live.json` | `.../football/college-football/teams/251`, nextEvent is 401856732 MISS @ TEX on 10/24, group 8 (SEC) |
 | `day_ncaa_20261017.json` | `.../college-football/scoreboard?groups=8&dates=20261017`, 401856724 FLA @ TEX and MSST @ LSU in progress, five SEC games to come |
+| `day_mcbb_20261106.json` | `.../mens-college-basketball/scoreboard?groups=7&dates=20261106` (recorded 2026-11-03), ten Big Ten games to come, every one non-conference: 401920685 CONN vs MICH among them |
 
 The NFL does not. Recorded 2026-10-22 at 10:32 PM Central, NE @ CHI final,
 and two minutes later ECU @ MEM (college) in overtime:
