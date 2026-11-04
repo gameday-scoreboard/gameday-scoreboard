@@ -740,6 +740,18 @@ static void test_ha_events() {
   CHECK_EQ(e.size(), (size_t) 1);
   CHECK_EQ(e[0].result, std::string("loss"));
   CHECK_EQ(e[0].winner, std::string("PHI"));
+  // A second leg won on penalties after losing the leg itself 1-2.
+  HaTracker leg;
+  GameSnapshot lg = live(1, 2);
+  lg.sport = Sport::SOCCER;
+  sf(leg.update(lg, false));
+  lg.state = GameState::POST;
+  lg.completed = true;
+  lg.soc.team_shootout = 4;
+  lg.soc.opp_shootout = 3;
+  e = sf(leg.update(lg, false));
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].result, std::string("win"));
   fc.soc.team_shootout = fc.soc.opp_shootout = -1;
   HaTracker draw;
   fc.state = GameState::IN;
@@ -8103,6 +8115,14 @@ static void test_game_leaders() {
   CHECK_EQ(espn::detail::fit_leader({"Jax", "4.0 IP 2 ER 6 K"}, 12), std::string("Jax 4.0 IP"));
   CHECK_EQ(espn::detail::fit_leader({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17), std::string("Rasmu 4.0 IP 1 ER"));
   CHECK_EQ(espn::detail::fit_leader({"Simpson", "2-4 1 HR"}, 9), std::string("Simps 2-4"));
+  // Names are folded to what the fonts draw and cut by character, never
+  // through the middle of one.
+  CHECK_EQ(espn::detail::leader_surname("L. Dončić"), std::string("Doncic"));
+  CHECK_EQ(espn::detail::leader_surname("J. Šlafkovský"), std::string("Slafkovský"));
+  CHECK_EQ(espn::detail::fit_leader({"Peña", "2-4 1 HR"}, 13), std::string("Peña 2-4 1 HR"));
+  CHECK_EQ(espn::detail::fit_leader({"Peña", "2-4 1 HR"}, 12), std::string("Peñ 2-4 1 HR"));
+  CHECK_EQ(espn::detail::glyph_prefix("Peña", 3), std::string("Peñ"));
+  CHECK_EQ(espn::detail::glyph_count("Peña"), (size_t) 4);
   CHECK(espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 21));
   CHECK(!espn::detail::leader_fits({"Rasmussen", "4.0 IP 1 ER 4 K"}, 17));
 

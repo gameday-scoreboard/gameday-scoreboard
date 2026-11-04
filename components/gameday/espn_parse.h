@@ -173,6 +173,15 @@ struct GameSnapshot {
   std::string game_name;  // "Rose Bowl", "Super Bowl LX"; empty for most games
 };
 
+// A soccer shootout that was played and has a winner decides the match,
+// whatever the score says. In the second leg of a two-legged cup tie ESPN's
+// score is that leg's alone (Lille 2-1 Aston Villa, 3-3 on aggregate, Villa
+// won 4-3 on penalties), so a level score is not the test.
+inline bool shootout_decides(const GameSnapshot &g) {
+  return g.sport == Sport::SOCCER && g.soc.team_shootout >= 0 && g.soc.opp_shootout >= 0 &&
+         g.soc.team_shootout != g.soc.opp_shootout;
+}
+
 // One future game from the team's schedule endpoint, for the "Up next" list.
 struct Upcoming {
   std::string event_id;

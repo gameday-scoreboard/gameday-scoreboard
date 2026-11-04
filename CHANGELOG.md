@@ -39,6 +39,11 @@ through `update_important` in the panel's state.
 ### 🐛 Fixes
 
 - 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
+- ⚽ A cup tie won on penalties after losing the second leg celebrates the right team, on the panel and in Home Assistant
+- ⭐ A favorite whose game didn't load comes back within minutes instead of staying off the board for up to six hours
+- 🏀 Halftime and final leaders with accented names, like Dončić, show their letters instead of empty boxes
+- 📱 The team picker's league tabs fit on a phone, with Done always in reach
+- 🎮 Unpair remote stays unpaired after a restart
 
 ## v2026.11.0
 
