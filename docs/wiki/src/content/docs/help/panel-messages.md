@@ -30,9 +30,7 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | --- | --- | --- |
 | **Can't join**, a network name, **Check name / and password** | The network the app just sent didn't work: the name or the password is wrong, or the panel can't see that network. It shows for 30 seconds. | Check both in the app, which asks for them again. After a Wi-Fi reset, close the app instead and the panel goes back to its saved networks a minute later. |
 
-:::note[Coming in the next release]
 After **Can't join**, a new panel goes back to **SETUP / Game Day / app**. Before, it went on to **Waiting for** and later **Wi-Fi lost / open app**.
-:::
 
 ## When the Wi-Fi is the problem
 
@@ -72,9 +70,7 @@ These show on the board or in the ticker.
 
 Your own [message card](/using/messages/) also steps aside while three reads from ESPN in a row have failed (**no update** in the ticker), while the Wi-Fi wants a sign-in, and while the panel says **No internet**.
 
-:::note[Coming in the next release]
 A running [effect](/using/effects/) gives the screen back for **Wi-Fi lost**, **Wi-Fi needs sign-in**, **No internet**, the heat and power marks, a banner, the button's address and a firmware install: the panel puts **Showing** back to the Scoreboard, the board shows the line, and the device page and Home Assistant show the page change.
-:::
 
 **Can't reach ESPN** also shows in two places that said **No upcoming game** before: in Favorite teams until ESPN has answered for every favorite, not only the first, and after **No live NFL games, showing CHI** when your team's card can't be read. A panel that can't reach ESPN for days keeps saying so instead of switching to **No upcoming game** every couple of days.
 
@@ -112,14 +108,12 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 
 More in [Troubleshooting](/help/troubleshooting/#the-panel-is-dim-or-shows-a-thermometer-or-plug-in-the-corner).
 
-:::note[Coming in the next release]
 The panel no longer dims itself and there is nothing to clear. The icons only say what happened:
 
 | You see | What it means | What to do |
 | --- | --- | --- |
 | An orange thermometer and **Running warm** | The controller's chip reads 75 C or more. | Keep the panel out of direct sun and give it air behind it. The icon goes once the chip reads under 70 C. |
 | A red plug and **Power dipped** | The panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. | Use the power supply that came with it, not a phone charger or a USB port. The icon goes after 10 minutes without another dip. |
-:::
 
 ## Red, green, blue and white screens
 

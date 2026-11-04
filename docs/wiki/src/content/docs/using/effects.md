@@ -5,10 +5,6 @@ sidebar:
   order: 13
 ---
 
-:::note[Coming in the next release]
-Effects arrive in the next release. A panel on v2026.10.2 has only the Scoreboard and the Clock under **Showing**; everything on this page describes the release after it.
-:::
-
 **Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. The panel keeps following your games underneath, so the moment you go back to the Scoreboard the board is up to date, and the device page, the app, Home Assistant and the remote all keep working while a pattern runs.
 
 Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own.

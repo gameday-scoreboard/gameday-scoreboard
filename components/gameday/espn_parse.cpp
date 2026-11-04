@@ -211,6 +211,8 @@ GameSnapshot final_snapshot(const Final &f) {
   g.opp_id = f.home_id;
   g.team_score = f.away_score;
   g.opp_score = f.home_score;
+  g.team_rank = f.away_rank;
+  g.opp_rank = f.home_rank;
   g.team_abbr = f.away_abbr;
   g.opp_abbr = f.home_abbr;
   g.team_color = f.away_color;
@@ -231,6 +233,8 @@ GameSnapshot pending_snapshot(const Pending &p) {
   g.kickoff_epoch = p.kickoff_epoch;
   g.team_id = p.away_id;
   g.opp_id = p.home_id;
+  g.team_rank = p.away_rank;
+  g.opp_rank = p.home_rank;
   g.team_abbr = p.away_abbr;
   g.opp_abbr = p.home_abbr;
   g.team_color = p.away_color;
