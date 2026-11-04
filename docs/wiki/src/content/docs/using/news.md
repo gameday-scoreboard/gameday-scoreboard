@@ -5,10 +5,6 @@ sidebar:
   order: 12.5
 ---
 
-:::note[Coming in the next release]
-The news card is new in the next release.
-:::
-
 Between games the panel can show the latest sports headlines from ESPN, one at a time, so the board has something new to say while you wait for the next game.
 
 ## Turn it on

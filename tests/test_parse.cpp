@@ -3398,6 +3398,35 @@ static void test_lookahead() {
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 251, none, "401856724"));
   CHECK(!parse_team_game_str(slurp("fixtures/day_ncaa_20261017.json"), 2294, none));
 
+  // College basketball reads its conference's scoreboard the same way, and
+  // November and December are mostly non-conference games. The conference
+  // scoreboard lists those too: on 2026-11-06 all ten Big Ten games were
+  // non-conference (each conference's scoreboard matched groups=50 that day
+  // and on the 11/2 opener), so Michigan's game with UConn is on Michigan's.
+  Schedule mich;
+  CHECK(parse_team_str(slurp("fixtures/team_mcbb_mich.json"), mich));
+  CHECK_EQ(mich.group, 7u);
+  CHECK_EQ(team_day_url(League::MCBB, mich.group, parse_iso8601_z("2026-11-07T01:30Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=7&dates=20261106"));
+  const std::string b1g = slurp("fixtures/day_mcbb_20261106.json");
+  const struct {
+    uint32_t team;
+    const char *event;
+  } b1g_games[] = {{2483, "401920717"}, {2509, "401926131"}, {194, "401916314"}, {164, "401926135"},
+                   {275, "401920894"},  {kMichigan, "401920685"}, {77, "401920733"}, {135, "401916304"},
+                   {2294, "401920726"}, {26, "401922219"}};
+  for (const auto &g : b1g_games) {
+    Schedule day;
+    CHECK(parse_team_game_str(b1g, g.team, day));
+    CHECK_EQ(day.event_id, std::string(g.event));
+  }
+  // The other side is on it too (UConn, Big East), and a Big Ten team that is
+  // off that day (Illinois) has nothing.
+  Schedule conn_day;
+  CHECK(parse_team_game_str(b1g, kUConn, conn_day));
+  CHECK_EQ(conn_day.event_id, std::string("401920685"));
+  CHECK(!parse_team_game_str(b1g, 356, none));
+
   // The NFL keeps the game: NE @ CHI was final on 2026-10-22 and Chicago's
   // team endpoint still named it, while Memphis's (college, in overtime two
   // minutes later) named next week's. So the NFL skips the day read.
@@ -3963,12 +3992,18 @@ static void test_recap() {
     CHECK_EQ(f.home_id, kOhioState);
     CHECK_EQ(f.home_score, 10);
     CHECK_EQ((int) f.rank, 1);
+    CHECK_EQ((int) f.away_rank, 2);
+    CHECK_EQ((int) f.home_rank, 1);
     CHECK_EQ(f.detail, std::string("Final"));
     CHECK_EQ(f.kickoff_epoch, parse_iso8601_z("2025-12-07T01:00Z"));
     CHECK(!f.away_color.empty());
     CHECK_EQ(finals[3].detail, std::string("Final/OT"));
     CHECK_EQ((int) finals[3].rank, 17);  // UVA #17, Duke unranked (99)
+    CHECK_EQ((int) finals[3].away_rank, 99);
+    CHECK_EQ((int) finals[3].home_rank, 17);
     CHECK_EQ((int) finals[4].rank, 99);  // neither ranked
+    CHECK_EQ((int) finals[4].away_rank, 99);
+    CHECK_EQ((int) finals[4].home_rank, 99);
     // The card: away side first like a broadcast, logos from the ids
     Final c = f;
     c.league = (uint8_t) League::NCAA;
@@ -3977,6 +4012,12 @@ static void test_recap() {
     CHECK(g.state == GameState::POST);
     CHECK_EQ(g.team_abbr, std::string("IU"));
     CHECK_EQ(g.opp_score, 10);
+    // Each side's rank rides along to its logo, as on the live board
+    CHECK_EQ((int) g.team_rank, 2);
+    CHECK_EQ((int) g.opp_rank, 1);
+    GameSnapshot uva = final_snapshot(finals[3]);
+    CHECK_EQ((int) uva.team_rank, 99);
+    CHECK_EQ((int) uva.opp_rank, 17);
     CHECK_EQ(g.team_logo, team_logo_url(League::NCAA, 84, "IU"));
     CHECK_EQ(g.opp_logo, team_logo_url(League::NCAA, kOhioState, "OSU"));
     CHECK_EQ(status_text(g, TickerOptions{}, "").substr(0, 5), std::string("Final"));
@@ -4196,6 +4237,8 @@ static void test_later_today() {
     CHECK_EQ(g.opp_abbr, std::string("DET"));
     CHECK_EQ(g.kickoff_epoch, p.kickoff_epoch);
     CHECK_EQ(g.tv, std::string("ESPN+"));
+    CHECK_EQ((int) g.team_rank, 99);  // no AP poll in hockey
+    CHECK_EQ((int) g.opp_rank, 99);
     CHECK_EQ(g.team_logo, team_logo_url(League::NHL, 124292, "SEA"));
     CHECK_EQ(g.opp_logo, team_logo_url(League::NHL, p.home_id, "DET"));
   }
@@ -4288,6 +4331,23 @@ static void test_later_today() {
     CHECK_EQ(college[0].away_abbr, std::string("WIS"));
     CHECK_EQ((int) college[0].rank, 4);
     CHECK_EQ((int) college[7].rank, 17);
+    // Each side keeps its own rank for the card: WIS at #4 ND, #24 LOU at #9 MISS
+    CHECK_EQ((int) college[0].away_rank, 99);
+    CHECK_EQ((int) college[0].home_rank, 4);
+    GameSnapshot nd = pending_snapshot(college[0]);
+    CHECK_EQ((int) nd.team_rank, 99);
+    CHECK_EQ((int) nd.opp_rank, 4);
+    const Pending *lou = nullptr;
+    for (const auto &p : college)
+      if (p.away_abbr == "LOU")
+        lou = &p;
+    CHECK(lou != nullptr);
+    if (lou != nullptr) {
+      CHECK_EQ((int) lou->rank, 9);
+      GameSnapshot g = pending_snapshot(*lou);
+      CHECK_EQ((int) g.team_rank, 24);
+      CHECK_EQ((int) g.opp_rank, 9);
+    }
   }
 
   // TBD, postponed and canceled games are not to come; a live game and a
@@ -5438,6 +5498,58 @@ static void test_countdown() {
   CHECK(!pick_favorite(one, T + 25, r, 0, T + 20, -1).again);
 }
 
+// The panel's clock in a POSIX timezone, as night_skip_until() is given it
+static int32_t tz_offset_at(int64_t epoch) {
+  time_t t = (time_t) epoch;
+  struct tm lt{};
+  localtime_r(&t, &lt);
+  return (int32_t) lt.tm_gmtoff;
+}
+
+// A night skipped across the nights the clocks change, in US Central: it
+// ends at the real end time, by the wall clock, either way.
+static void test_night_skip_clock_change(NightPrefs p) {
+  const char *was = getenv("TZ");
+  std::string saved = was != nullptr ? was : "";
+  setenv("TZ", "CST6CDT,M3.2.0,M11.1.0", 1);
+  tzset();
+  auto skip = [&](const char *at) {
+    const int64_t t = parse_iso8601_z(at);
+    time_t tt = (time_t) t;
+    struct tm lt{};
+    localtime_r(&tt, &lt);
+    return night_skip_until(p, t, lt.tm_hour * 60 + lt.tm_min, lt.tm_sec, tz_offset_at);
+  };
+  p.on = 1;
+  p.start = 23 * 60;
+  p.end = 7 * 60;
+  // Back an hour at 2 AM CDT on Nov 1, 2026 (7:00 UTC). 7 AM CST is 13:00 UTC.
+  const int64_t seven_cst = parse_iso8601_z("2026-11-01T13:00Z");
+  CHECK_EQ(skip("2026-11-01T04:30:20Z"), seven_cst);  // 11:30:20 PM CDT
+  CHECK_EQ(skip("2026-11-01T06:30Z"), seven_cst);     // 1:30 AM CDT, the first time
+  CHECK_EQ(skip("2026-11-01T07:30Z"), seven_cst);     // 1:30 AM CST, the second time
+  CHECK_EQ(skip("2026-11-01T09:00Z"), seven_cst);     // 3:00 AM CST, after the change
+  // The night after: no change in it, 7 AM CST on Nov 2.
+  CHECK_EQ(skip("2026-11-02T05:00Z"), parse_iso8601_z("2026-11-02T13:00Z"));
+  // Forward an hour at 2 AM CST on Mar 14, 2027 (8:00 UTC). 7 AM CDT is 12:00 UTC.
+  const int64_t seven_cdt = parse_iso8601_z("2027-03-14T12:00Z");
+  CHECK_EQ(skip("2027-03-14T05:00Z"), seven_cdt);  // 11:00 PM CST
+  CHECK_EQ(skip("2027-03-14T07:30Z"), seven_cdt);  // 1:30 AM CST
+  CHECK_EQ(skip("2027-03-14T09:00Z"), seven_cdt);  // 4:00 AM CDT
+  // An end of 2:30 AM, which Mar 14 never reaches: not before 3 AM CDT, and
+  // by then the hours check has ended the skip.
+  p.end = 2 * 60 + 30;
+  CHECK(skip("2027-03-14T05:00Z") >= parse_iso8601_z("2027-03-14T08:00Z"));
+  // An end of 1:30 AM on Nov 1 is the first 1:30, in daylight time.
+  p.end = 60 + 30;
+  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T06:30Z"));
+  if (saved.empty())
+    unsetenv("TZ");
+  else
+    setenv("TZ", saved.c_str(), 1);
+  tzset();
+}
+
 static void test_night() {
   // Times as the page's fields send them
   CHECK_EQ(night_parse_time("23:00"), 23 * 60);
@@ -5515,13 +5627,15 @@ static void test_night() {
     // Skipped until the end of the hours it was in: 7 AM, from 11:30:20 PM
     // or 2:00:45 AM, and 6 AM inside a 1 AM to 6 AM night.
     const int64_t t = 1792000000;
-    CHECK_EQ(night_skip_until(p, t, 23 * 60 + 30, 20), t - 20 + (int64_t) (7 * 60 + 30) * 60);
-    CHECK_EQ(night_skip_until(p, t, 2 * 60, 45), t - 45 + (int64_t) (5 * 60) * 60);
+    NightUtcOffset fixed = [](int64_t) -> int32_t { return -5 * 3600; };
+    CHECK_EQ(night_skip_until(p, t, 23 * 60 + 30, 20, fixed), t - 20 + (int64_t) (7 * 60 + 30) * 60);
+    CHECK_EQ(night_skip_until(p, t, 2 * 60, 45, fixed), t - 45 + (int64_t) (5 * 60) * 60);
     NightPrefs early = p;
     early.start = 60;
     early.end = 6 * 60;
-    CHECK_EQ(night_skip_until(early, t, 3 * 60 + 59, 0), t + (int64_t) (2 * 60 + 1) * 60);
+    CHECK_EQ(night_skip_until(early, t, 3 * 60 + 59, 0, fixed), t + (int64_t) (2 * 60 + 1) * 60);
   }
+  test_night_skip_clock_change(p);
 
   p.level = 20;
   CHECK_EQ((int) night_brightness(128, Night::DIM, p), 20);
@@ -5853,7 +5967,7 @@ static void test_season() {
   SeasonRead r;
   CHECK(parse_season_str(slurp("fixtures/schedule_nfl_dal_inseason.json"), 6, r));
   CHECK_EQ(r.year, 2026);
-  CHECK_EQ(season_record(r, false, ""), std::string("3-4"));
+  CHECK_EQ(season_record(r, Sport::FOOTBALL, ""), std::string("3-4"));
   CHECK(!r.post);
   CHECK_EQ(r.next.size(), kSeasonGames);
   CHECK_EQ(r.next[0].opp, std::string("ARI"));
@@ -5873,13 +5987,13 @@ static void test_season() {
   // and the first round's last game.
   CHECK(parse_season_str(slurp("fixtures/schedule_wnba_dal_offseason.json"), 3, r));
   CHECK_EQ(r.year, 2026);
-  CHECK_EQ(season_record(r, false, "1-2"), std::string("27-17"));
+  CHECK_EQ(season_record(r, Sport::FOOTBALL, "1-2"), std::string("27-17"));
   CHECK(r.post && !r.post_won);
   CHECK_EQ(std::string(r.round), std::string("First Round"));
   CHECK(r.next.empty());
   CHECK(season_recap_ready(r, ""));
   CHECK_EQ(recap_header("DAL", r.year), std::string("DAL 2026"));
-  CHECK_EQ(recap_body(r, false, ""), std::string("27-17\nlost First Round"));
+  CHECK_EQ(recap_body(r, Sport::BASKETBALL, ""), std::string("27-17\nlost First Round"));
 
   // A schedule of the playoffs alone (Yankees, October): the record is the
   // team read's.
@@ -5887,7 +6001,7 @@ static void test_season() {
   CHECK_EQ(r.finals(), 0);
   CHECK(r.post && !r.post_won);
   CHECK_EQ(std::string(r.round), std::string("ALDS"));
-  CHECK_EQ(recap_body(r, false, "93-68"), std::string("93-68\nlost ALDS"));
+  CHECK_EQ(recap_body(r, Sport::BASKETBALL, "93-68"), std::string("93-68\nlost ALDS"));
   CHECK(season_recap_ready(r, "93-68"));
   CHECK(!season_recap_ready(r, ""));
   // A team that missed the playoffs, read while the list holds only the
@@ -5895,18 +6009,18 @@ static void test_season() {
   SeasonRead missed;
   missed.year = 2025;
   CHECK(season_recap_ready(missed, "7-10"));
-  CHECK_EQ(recap_body(missed, false, "7-10"), std::string("7-10"));
+  CHECK_EQ(recap_body(missed, Sport::FOOTBALL, "7-10"), std::string("7-10"));
   CHECK(!season_recap_ready(missed, ""));
-  CHECK_EQ(recap_body(r, false, ""), std::string("lost ALDS"));
+  CHECK_EQ(recap_body(r, Sport::BASKETBALL, ""), std::string("lost ALDS"));
 
   // Soccer: results newest first, a draw neither side won, written W-D-L;
   // the playoff round from the season type's name.
   CHECK(parse_season_str(slurp("fixtures/schedule_mls_cin_2025.json"), 18267, r));
   CHECK_EQ(r.year, 2025);
-  CHECK_EQ(season_record(r, true, ""), std::string("20-5-9"));
+  CHECK_EQ(season_record(r, Sport::SOCCER, ""), std::string("20-5-9"));
   CHECK(r.post && !r.post_won);
   CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
-  CHECK_EQ(recap_body(r, true, ""), std::string("20-5-9\nlost East Semifinals"));
+  CHECK_EQ(recap_body(r, Sport::SOCCER, ""), std::string("20-5-9\nlost East Semifinals"));
 
   // College: the playoff's sponsor and bowl left off.
   CHECK(parse_season_str(slurp("fixtures/schedule_ncaa_ala_2025_post.json"), 333, r));
@@ -5916,6 +6030,42 @@ static void test_season() {
   // NBA: the series, not the game.
   CHECK(parse_season_str(slurp("fixtures/schedule_nba_phi_2026_post.json"), 20, r));
   CHECK_EQ(std::string(r.round), std::string("East Semifinals"));
+  // NBA in season (Mavericks, 11/3): an 82-game list, seven played (4-3),
+  // an NBA Cup game counted like any other.
+  CHECK(parse_season_str(slurp("fixtures/schedule_nba_dal_inseason.json"), 6, r));
+  CHECK_EQ(r.year, 2027);
+  CHECK_EQ(season_record(r, Sport::BASKETBALL, ""), std::string("4-3"));
+  CHECK_EQ(r.next.size(), kSeasonGames);
+  CHECK_EQ(r.next[0].opp, std::string("SA"));
+  CHECK(!r.next[0].home);
+  CHECK_EQ(r.next[0].tv, std::string("ESPN"));
+  CHECK_EQ(r.next[0].kickoff_epoch, parse_iso8601_z("2026-11-05T02:30Z"));
+  CHECK_EQ(r.next[2].tv, std::string("DAZN (YES)"));
+  // Hockey: an overtime or shootout loss is the record's third number,
+  // written even when it's 0 (Ducks: 15 overtime and 8 shootout finals in
+  // 2025-26, 6 of them lost).
+  CHECK(parse_season_str(slurp("fixtures/schedule_nhl_ana_2026.json"), 25, r));
+  CHECK_EQ(r.year, 2026);
+  CHECK(r.wins == 43 && r.losses == 39 && r.late_losses == 6 && r.ties == 0);
+  CHECK_EQ(season_record(r, Sport::HOCKEY, ""), std::string("43-33-6"));
+  CHECK_EQ(recap_body(r, Sport::HOCKEY, ""), std::string("43-33-6"));
+  CHECK(parse_season_str(slurp("fixtures/schedule_nhl_ana_inseason.json"), 25, r));
+  CHECK_EQ(season_record(r, Sport::HOCKEY, ""), std::string("6-7-1"));
+  CHECK_EQ(r.next[0].opp, std::string("VAN"));
+  CHECK_EQ(r.next[3].opp, std::string("PIT"));
+  CHECK(r.next[3].home);
+  SeasonRead no_ot;
+  no_ot.wins = 5;
+  no_ot.losses = 2;
+  CHECK_EQ(season_record(no_ot, Sport::HOCKEY, ""), std::string("5-2-0"));
+  // A basketball overtime loss is a plain loss.
+  no_ot.late_losses = 1;
+  CHECK_EQ(season_record(no_ot, Sport::BASKETBALL, ""), std::string("5-2"));
+  // College basketball's tournament: the round, not the region.
+  CHECK(parse_season_str(slurp("fixtures/schedule_mcbb_ala_2026_post.json"), 333, r));
+  CHECK(r.post && !r.post_won);
+  CHECK_EQ(std::string(r.round), std::string("NCAA Sweet 16"));
+  CHECK_EQ(recap_body(r, Sport::BASKETBALL, "23-10"), std::string("23-10\nlost NCAA Sweet 16"));
 
   CHECK_EQ(season_url(League::NFL, 6, true), schedule_url(League::NFL, 6));
   CHECK_EQ(season_url(League::MLS, 18267, false), schedule_url(League::MLS, 18267));
@@ -5932,7 +6082,7 @@ static void test_season() {
   CHECK(parse_season_str(slurp("fixtures/schedule_mlb_col_missed.json"), 27, r));
   CHECK(r.year == 2026 && r.finals() == 0 && !r.post && r.next.empty());
   CHECK(season_recap_ready(r, "58-104"));
-  CHECK_EQ(recap_body(r, false, "58-104"), std::string("58-104"));
+  CHECK_EQ(recap_body(r, Sport::BASKETBALL, "58-104"), std::string("58-104"));
 
   CHECK_EQ(season_round("NFC Wild Card Playoffs", "Postseason"), std::string("NFC Wild Card"));
   CHECK_EQ(season_round("Super Bowl LX", "Postseason"), std::string("Super Bowl LX"));
@@ -5941,16 +6091,25 @@ static void test_season() {
   CHECK_EQ(season_round("", "Western Conference Playoffs - Round One"), std::string("West Round One"));
   CHECK_EQ(season_round("Duke's Mayo Bowl Presented by Duke's", "Postseason"), std::string("Duke's Mayo Bowl"));
   CHECK(season_round(std::string(60, 'x') + " y", "").size() <= kSeasonRoundMax);
+  CHECK_EQ(season_round("NCAA Men's Basketball Championship - West Region - First Four", "Postseason"),
+           std::string("NCAA First Four"));
+  CHECK_EQ(season_round("NCAA Men's Basketball Championship - Final Four", "Postseason"),
+           std::string("NCAA Final Four"));
+  CHECK_EQ(season_round("NCAA Men's Basketball Championship - National Championship", "Postseason"),
+           std::string("NCAA National Championship"));
+  CHECK_EQ(season_round("NIT - Quarterfinal", "Postseason"), std::string("NIT Quarterfinal"));
+  CHECK_EQ(season_round("College Basketball Crown - Semifinals", "Postseason"), std::string("Crown Semifinals"));
+  CHECK_EQ(season_round("West 2nd Round - Game 6", "Postseason"), std::string("West 2nd Round"));
   SeasonRead w;
   w.year = 2025;
   w.wins = 15;
   w.losses = 2;
   w.post = w.post_won = true;
   w.set_round("Super Bowl LX");
-  CHECK_EQ(recap_body(w, false, ""), std::string("15-2\nwon Super Bowl LX"));
+  CHECK_EQ(recap_body(w, Sport::FOOTBALL, ""), std::string("15-2\nwon Super Bowl LX"));
   w.ties = 1;
   w.set_round("");
-  CHECK_EQ(recap_body(w, false, ""), std::string("15-2-1\nwon in the playoffs"));
+  CHECK_EQ(recap_body(w, Sport::FOOTBALL, ""), std::string("15-2-1\nwon in the playoffs"));
 
   // The card's lines: wide on two panels, two lines a game on one.
   struct tm kick {};
@@ -6003,15 +6162,33 @@ static void test_season() {
   CHECK(season_card(true, true, false, true, true) == SeasonCard::NONE);
   CHECK(season_card(true, true, true, true, false) == SeasonCard::NONE);
 
-  // Read every six hours, at once for the other half of a soccer season,
-  // not again for kSeasonRetryMs after a failure.
-  const uint32_t t = 50000000;
-  CHECK(season_read_due(t, 0, 0, true));
-  CHECK(!season_read_due(t, t - 1000, 0, true));
-  CHECK(season_read_due(t, t - kSeasonReadMs, 0, true));
-  CHECK(season_read_due(t, t - 1000, 0, false));
-  CHECK(!season_read_due(t, 0, t - 1000, true));
-  CHECK(season_read_due(t, 0, t - kSeasonRetryMs, true));
+  // Read every six hours, for the other half of the season kSeasonRetryMs
+  // after the last read, not again for kSeasonRetryMs after a failure.
+  const uint32_t t = 100000000;
+  CHECK(season_read_due(t, 0, 0, true, false));
+  CHECK(!season_read_due(t, t - 1000, 0, true, false));
+  CHECK(season_read_due(t, t - kSeasonReadMs, 0, true, false));
+  CHECK(!season_read_due(t, t - 1000, 0, false, false));
+  CHECK(season_read_due(t, t - kSeasonRetryMs, 0, false, false));
+  CHECK(!season_read_due(t, 0, t - 1000, true, false));
+  CHECK(season_read_due(t, 0, t - kSeasonRetryMs, true, false));
+  // A big schedule: once a day, an hour after a failure or a turn of the season.
+  CHECK(season_read_due(t, 0, 0, true, true));
+  CHECK(!season_read_due(t, t - kSeasonReadMs, 0, true, true));
+  CHECK(!season_read_due(t, t - kSeasonBigReadMs + 1000, 0, true, true));
+  CHECK(season_read_due(t, t - kSeasonBigReadMs, 0, true, true));
+  CHECK(!season_read_due(t, t - kSeasonRetryMs, 0, false, true));
+  CHECK(season_read_due(t, t - kSeasonBigRetryMs, 0, false, true));
+  CHECK(!season_read_due(t, 0, t - kSeasonRetryMs, true, true));
+  CHECK(season_read_due(t, 0, t - kSeasonBigRetryMs, true, true));
+
+  // Which leagues have the cards, and which read once a day.
+  for (const auto &l : kLeagues) {
+    CHECK_EQ(season_cards(l), l.league != League::MLB);
+    CHECK_EQ(season_big(l), !l.season_list);
+  }
+  CHECK(season_big(*league_info(League::NHL)) && season_cards(*league_info(League::NHL)));
+  CHECK(!season_big(*league_info(League::EPL)));
 }
 
 // The news card (news.h): the feed, its headlines, the source in turn and the

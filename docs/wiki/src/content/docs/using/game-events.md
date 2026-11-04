@@ -5,10 +5,6 @@ sidebar:
   order: 16.5
 ---
 
-:::note[Coming in the next release]
-Everything on this page comes with the next release. Until then the panel sends Home Assistant only `esphome.gameday_score` and `esphome.gameday_final`, described on [Home Assistant](/using/home-assistant/#score-events), and has no webhook.
-:::
-
 The panel can be the heart of game day at home. As the game it follows goes on, it sends an event at each moment that matters, with both teams and their colors, so your lights, speakers and TV can join in:
 
 | Event | When |

@@ -77,7 +77,7 @@ flowchart LR
     dev["dev<br/>changes merge here<br/>ESPHome beta allowed"]
     beta["beta<br/>bar panels, test channel<br/>ESPHome beta allowed"]
     main["main<br/>customers<br/>final ESPHome only"]
-    tag["Release tag<br/>zip and site manifests"]
+    tag["Release tag, automatic<br/>zip and site manifests"]
     dev -- "promotion PR, CI green" --> beta
     beta -- "ship it, pin must be final" --> main
     main --> tag
@@ -87,6 +87,12 @@ When `dev` is on a beta pin, the final ships first: the pin moves on
 `dev`, `dev` is promoted to `beta`, the bar panels run it for a night, and
 then `beta` is promoted to `main`. What customers get is what the beta
 channel ran.
+
+An ESPHome pin bump merges into `dev` only after a bench on test panels:
+an update over the air from the current release to the new build and
+back, a night on two panels with no restarts and steady memory, and a
+live game on screen. A new monthly ESPHome release waits for its first
+patch release.
 
 A fix we want that is only in an ESPHome beta, in order:
 

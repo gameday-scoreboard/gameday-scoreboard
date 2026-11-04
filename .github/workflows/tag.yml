@@ -1,0 +1,51 @@
+name: Tag release
+
+# A beta-to-main merge is the release. When main's firmware version has no tag
+# yet, this tags the merge and runs Build on the tag, which publishes the
+# release, the flasher site and the update feed. A tag made with the
+# workflow's own token doesn't start other workflows, so this starts Build
+# itself (workflow_dispatch is the one event GitHub lets that token trigger).
+# A version that already has a tag does nothing: a merge whose version wasn't
+# bumped releases nothing, and an existing tag never moves. Pushing a tag by
+# hand still works the same as before.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag main's version if it has no tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml | head -n1)
+          if ! grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<< "$v"; then
+            echo "::error file=firmware/gameday-common.yaml::version is '$v', not a release number like 2026.11.0"
+            exit 1
+          fi
+          tag="v$v"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag is already tagged, so there is nothing to release."
+            exit 0
+          fi
+          if ! grep -qx "## $tag" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::main is at $v but CHANGELOG.md has no '## $tag' section, so it isn't tagged. Add the section on dev and promote again."
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          echo "Tagged $tag at $GITHUB_SHA"
+          gh workflow run build.yml --ref "$tag"
+          echo "Started Build on $tag"
