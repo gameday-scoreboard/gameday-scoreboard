@@ -2804,6 +2804,7 @@
   const waitForReboot = (fromVersion, line) => {
     const started = Date.now();
     let sawDown = false;
+    let sawInstalling = false;
     if (es) { es.close(); es = null; }
     setConn(false);
     showRestart(line);
@@ -2821,11 +2822,24 @@
           const settled = !String(j.state || "").toUpperCase().includes("INSTALLING");
           // Once the device has been seen down, a settled answer means it is back.
           if (changed || (sawDown && settled)) { location.reload(); return; }
+          sawInstalling = sawInstalling || !settled;
+          // An install that stops with the panel never down and on the same
+          // version failed (a download or checksum error): say so now.
+          if (installing && sawInstalling && settled && !sawDown) {
+            clearTimeout(timer);
+            installing = false;
+            restart = "";
+            renderGone();
+            toast("The update didn't install. Try again.");
+            connect();
+            return;
+          }
         }
       } catch (_) { sawDown = true; }
       clearTimeout(timer);
       if (Date.now() - started < 5 * 60 * 1000) { setTimeout(tick, 2000); return; }
       // Not back in five minutes: stop saying it's restarting and listen again.
+      installing = false;
       restart = "";
       renderGone();
       connect();
@@ -2900,12 +2914,18 @@
   // true if a is newer than b, false if older, null if either is unreadable.
   // A beta's build number ("2026.10.0-beta.812") counts as a fourth part, as
   // in the firmware (auto_update.h), so a beta is newer than its plain number.
+  // As auto_update.h's version_newer: a beta carries the next release's
+  // number, so the release is newer than its own betas.
   const isNewer = (a, b) => {
-    const parse = (v) => String(v || "").replace(/^v/, "").replace("-beta.", ".").split(".").map((n) => parseInt(n, 10));
+    const parse = (v) => {
+      const [num, build] = String(v || "").replace(/^v/, "").split("-beta.");
+      return { n: num.split(".").map((n) => parseInt(n, 10)), beta: build !== undefined, build: parseInt(build, 10) || 0 };
+    };
     const pa = parse(a), pb = parse(b);
-    if (pa.length < 3 || pb.length < 3 || pa.some(isNaN) || pb.some(isNaN)) return null;
-    for (let i = 0; i < 4; i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x > y; }
-    return false;
+    if (pa.n.length < 3 || pb.n.length < 3 || pa.n.some(isNaN) || pb.n.some(isNaN)) return null;
+    for (let i = 0; i < 4; i++) { const x = pa.n[i] || 0, y = pb.n[i] || 0; if (x !== y) return x > y; }
+    if (pa.beta !== pb.beta) return !pa.beta;
+    return pa.beta && pa.build > pb.build;
   };
 
   // ---- firmware update -----------------------------------------------------
