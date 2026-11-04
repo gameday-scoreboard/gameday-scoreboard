@@ -42,7 +42,7 @@ A release that fixes something broken, like scores that stopped after an ESPN ch
 
 While it installs, the box says **Installing** and the version, with **Keep the panel powered. It reboots when done and this page reconnects.** Leave the panel plugged in until it's back. The page reloads by itself once the panel answers on the new version.
 
-If the power goes out or the download fails partway through, the panel keeps running the firmware it had. A new version only starts once it's fully downloaded and checked.
+If the power goes out or the download fails partway through, the panel keeps running the firmware it had. A new version only starts once it's fully downloaded and checked. If the download fails and the panel stays on, the box says **The update didn't install. Try again.**
 
 You can install an update at any time, during a game too. Your team, favorites and settings stay as they were.
 
@@ -59,10 +59,12 @@ With the switch off, the panel still checks and the device page tells you when a
 
 ## An update that didn't take
 
-If a new version crashes as it starts, the panel goes back to the firmware it had. It remembers that version and doesn't install it on its own again, so it never restarts into the same bad update every night. A later release still installs, and **Install** on the device page still tries the one that failed.
+If a new version crashes as it starts, the panel goes back to the firmware it had. It remembers that version (only when the new version was fully installed; a download cut off partway doesn't count against it) and doesn't install it on its own again, so it never restarts into the same bad update every night. A later release still installs, and **Install** on the device page still tries the one that failed.
 
 The **Firmware** line says when this happened: **The update to** a version **didn't take and the panel went back to** the version it runs now, with **Install tries it again.**
 
 ## Beta versions
 
 Beta versions are test builds of the next release, for test panels. They can have bugs. Panels you own run the published releases.
+
+A beta carries the number of the release it's building toward, like 2026.11.1-beta.5 before 2026.11.1. Turn **Follow beta** off and the panel stays on its beta until that release comes out, then installs it like any update.
