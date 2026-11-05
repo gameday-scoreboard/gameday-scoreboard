@@ -249,6 +249,8 @@ script:
       opponent_color: int
       team_badge: bool
       opponent_badge: bool
+      team_fill: int
+      opponent_fill: int
       team_ring: int
       opponent_ring: int
       possession: int
@@ -282,9 +284,10 @@ script:
       - lambda: |-
           id(gd_sport) = sport;
           // A side with no team yet (just after a team change) shows no logo.
-          // A side with no logo to fetch (the demo build's made-up teams)
-          // shows its abbreviation badge in the logo's place, drawn by the
-          // app's rules (badge.h) so the panel and the phone match.
+          // A side with no logo to fetch (a team ESPN has no logo for, or the
+          // demo build's made-up teams) shows its abbreviation badge in the
+          // logo's place, drawn by the app's rules (badge.h) so the panel and
+          // the phone match.
           auto slot = [](lv_obj_t *img, lv_obj_t *box, lv_obj_t *lbl, const std::string &abbr, bool badge,
                          uint32_t fill, uint32_t ring) {
             if (abbr.empty() || badge) lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
@@ -304,9 +307,9 @@ script:
             lv_obj_clear_flag(box, LV_OBJ_FLAG_HIDDEN);
           };
           slot(id(gd_team_logo_img), id(gd_team_badge), id(gd_team_badge_lbl), team_abbr, team_badge,
-               (uint32_t) team_color, (uint32_t) team_ring);
+               (uint32_t) team_fill, (uint32_t) team_ring);
           slot(id(gd_opp_logo_img), id(gd_opp_badge), id(gd_opp_badge_lbl), opponent_abbr, opponent_badge,
-               (uint32_t) opponent_color, (uint32_t) opponent_ring);
+               (uint32_t) opponent_fill, (uint32_t) opponent_ring);
       - lvgl.label.update:
           id: tt_away_team_lbl
           text: !lambda 'return team_abbr;'

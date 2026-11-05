@@ -116,11 +116,13 @@ struct UpdateFields {
   int win_pct{-1};
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
-  // A side with no logo shows its abbreviation badge in the logo slot (badge.h):
-  // the fill is its color above, the ring this second color. Only the demo
-  // build's made-up teams set these; release firmware leaves them false.
+  // A side with no logo shows its abbreviation badge in the logo slot (badge.h)
+  // in this fill and ring: a team ESPN has no logo for (small schools), or
+  // the demo build's made-up teams.
   bool team_badge{false};
   bool opponent_badge{false};
+  uint32_t team_fill{0};
+  uint32_t opponent_fill{0};
   uint32_t team_ring{0};
   uint32_t opponent_ring{0};
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty

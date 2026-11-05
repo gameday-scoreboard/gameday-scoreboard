@@ -38,6 +38,7 @@ through `update_important` in the panel's state.
 
 ### 🐛 Fixes
 
+- 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation badge instead of an empty space
 - 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
 - 📶 Tapping Save on the setup hotspot page without picking a network no longer forgets every saved network at the next restart
 - 🗓️ Moving or deleting playlists while a schedule is playing one no longer brings back the wrong playlist when it ends, or wipes every playlist's schedule after a restart

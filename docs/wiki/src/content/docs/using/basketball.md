@@ -9,7 +9,7 @@ NBA, WNBA and men's college basketball games share one board. This page describe
 
 ## Before the game
 
-The next-game card shows both logos, your team on the left, with the records under them. A men's college basketball team in the AP Top 25 has its rank on the outer top corner of its logo, small white digits on a black patch, before and during the game; see [Football](/using/football/#before-the-game) for the details. The ticker carries the tip-off day and time in the panel's timezone, the playoff series when there is one, the betting line, over/under and TV channel when ESPN has them and **Odds, TV and win chance** is on, and the arena.
+The next-game card shows both logos, your team on the left, with the records under them. A team ESPN has no logo for, like a Division III school playing a Division I team, shows its abbreviation badge in the logo's place. A men's college basketball team in the AP Top 25 has its rank on the outer top corner of its logo, small white digits on a black patch, before and during the game; see [Football](/using/football/#before-the-game) for the details. The ticker carries the tip-off day and time in the panel's timezone, the playoff series when there is one, the betting line, over/under and TV channel when ESPN has them and **Odds, TV and win chance** is on, and the arena.
 
 Before a playoff game the ticker starts with the round, like "East 1st Round - Game 2".
 

@@ -889,6 +889,8 @@ gameday:
         opponent_color: !lambda 'return (int) x.opponent_color;'
         team_badge: !lambda 'return x.team_badge;'
         opponent_badge: !lambda 'return x.opponent_badge;'
+        team_fill: !lambda 'return (int) x.team_fill;'
+        opponent_fill: !lambda 'return (int) x.opponent_fill;'
         team_ring: !lambda 'return (int) x.team_ring;'
         opponent_ring: !lambda 'return (int) x.opponent_ring;'
         possession: !lambda 'return x.possession;'
