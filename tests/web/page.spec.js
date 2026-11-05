@@ -912,6 +912,43 @@ test("a remote button whose target is gone falls back to its own favorite and th
   await expect(rows.nth(1).locator("small")).toHaveText("NFL · remote button 1, 2");
 });
 
+test("a remote button set to a playlist follows it through a rename", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("nfl", 34, "HOU", "Houston Texans"), {}, {}],
+    lists: [{ n: "Sundays", f: [0] }, { n: "Texans", f: [1] }],
+    remote: [{ v: "list:Sundays" }, { v: "fav" }, { v: "fav" }, { v: "fav" }],
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  const name = page.locator("#listCtls .plist").nth(0).locator(".pname");
+  await name.fill("Game day");
+  await name.press("Enter");
+  await expectSet(request, { lists: "Game day=nfl:6;Texans=nfl:34" });
+  await expect.poll(async () => (await deviceState(request)).remote[0]).toEqual({ v: "list:Game day", gone: false });
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  await expect(page.locator("#remoteBtns .rbtn").nth(0).locator("select")).toHaveValue("list:Game day");
+});
+
+// A restored backup or fav1=none leaves an empty slot ahead of the teams;
+// playlists count places in the slot list, gaps and all.
+test("a gap in the favorites keeps each playlist's teams", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [{}, t("nfl", 6, "DAL", "Dallas Cowboys"), t("nfl", 34, "HOU", "Houston Texans"), {}],
+    lists: [{ n: "Both", f: [1, 2] }],
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  const chips = page.locator("#listCtls .plist").nth(0).locator(".pteams .chip");
+  await expect(chips).toHaveText(["DAL", "HOU"]);
+  await expect(page.locator("#listCtls .plist .pteams .chip.on")).toHaveText(["DAL", "HOU"]);
+  await chips.filter({ hasText: "HOU" }).click();
+  await expectSet(request, { lists: "Both=nfl:6" });
+  await expect(page.locator("#listCtls .plist .pteams .chip.on")).toHaveText(["DAL"]);
+});
+
 // All 16 playlists with every favorite are about 3 KB, far past the panel's
 // 512-byte URL and its 1 KB form body; the mock refuses both as the panel does.
 test("all 16 playlists with every favorite save", async ({ page, request }) => {
@@ -2804,4 +2841,58 @@ test("the backup section hides on firmware without it", async ({ page, request }
   await expect(page.locator("#tzline")).toBeVisible();
   await sleep(300);
   await expect(page.locator("#backup")).toBeHidden();
+});
+
+// These five were missing from the page's list of settings it holds while a
+// post is out, so a tap showed only when a read came back.
+test("Live pictures and update switches hold their tap through a slow read", async ({ page, request }) => {
+  await reset(request, { autoupd: false, beta: false });
+  await page.goto("/");
+  await slowReads(page, 1000);
+  await tab(page, "display");
+  const field = page.locator('.sw[data-set="field"]');
+  await expect(field).toHaveAttribute("aria-checked", "true");
+  await field.click();
+  // At once, not when the slow read lands.
+  await expect(field).toHaveAttribute("aria-checked", "false", { timeout: 300 });
+  for (const end = Date.now() + 2500; Date.now() < end; await sleep(100))
+    expect(await field.getAttribute("aria-checked")).toBe("false");
+  await expectSet(request, { field: "0" });
+  await tab(page, "device");
+  const beta = page.locator('.sw[data-set="beta"]');
+  await beta.click();
+  await expect(beta).toHaveAttribute("aria-checked", "true", { timeout: 300 });
+  for (const end = Date.now() + 2500; Date.now() < end; await sleep(100))
+    expect(await beta.getAttribute("aria-checked")).toBe("true");
+});
+
+test("a Power tap the panel never gets goes back", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const power = page.locator("#quickCtls .sw");
+  await expect(power).toHaveAttribute("aria-checked", "true");
+  await page.route("**/switch/**", (route) => route.abort());
+  await power.click();
+  await expect(page.locator("#toast")).toContainText("Device did not respond");
+  await expect(power).toHaveAttribute("aria-checked", "true");
+});
+
+test("a mode tap says the mode's name alone", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator('#modes button[data-mode="5"]').click();
+  await expect(page.locator("#toast")).toHaveText("Live games");
+});
+
+test("a settings save the panel never answers gives up after 8 seconds and the switch goes back", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "display");
+  const sw = page.locator('.sw[data-set="play"]');
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await page.route("**/gameday/set?*", () => {});  // never answered
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#toast")).toHaveText("Device did not respond (no answer). Try again.", { timeout: 10000 });
+  await expect(sw).toHaveAttribute("aria-checked", "true");
 });

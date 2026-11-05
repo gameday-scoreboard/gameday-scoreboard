@@ -292,6 +292,26 @@ inline std::string list_name_clean(const std::string &in) {
   return message_clean(utf8_only(kept), kListNameMax, false);
 }
 
+// The new name of playlist `name` when the playlists were posted again with
+// it renamed: as many playlists as before, and in its place a name that is
+// new where its own is gone. "" when it was kept, moved or removed. What a
+// WizMote button was set to follows a rename.
+inline std::string list_renamed(const std::vector<std::string> &before, const std::vector<std::string> &after,
+                                const std::string &name) {
+  if (name.empty() || before.size() != after.size())
+    return "";
+  for (size_t n = 0; n < before.size(); n++) {
+    if (before[n] != name)
+      continue;
+    const std::string &to = after[n];
+    for (size_t k = 0; k < after.size(); k++)
+      if (after[k] == name || before[k] == to)
+        return "";
+    return to;
+  }
+  return "";
+}
+
 // "Football=nfl:6,ncaa:251;Hoops=nba:6" -> playlists in order. "" clears
 // them all. A playlist with no name after cleaning is left out; unknown
 // teams and repeats in one playlist drop out. At most kListMax playlists,

@@ -573,6 +573,14 @@ def list_opt_text(pl):
     return out
 
 
+def list_renamed(before, after, name):
+    """list_renamed() in components/gameday/playlists.h: the new name of a playlist renamed in place."""
+    if not name or len(before) != len(after) or name not in before:
+        return ""
+    to = after[before.index(name)]
+    return "" if name in after or to in before else to
+
+
 def parse_lists(v):
     """parse_lists() in components/gameday/playlists.h, with list_mask() against the favorites."""
     out = []
@@ -685,7 +693,15 @@ def apply_set(kv):
         elif k == "lists":
             # set_lists_(): the playlist being played stays chosen by its name.
             active = STATE["lists"][STATE["list"] - 1]["n"] if STATE["list"] else ""
+            old_names = [pl["n"] for pl in STATE["lists"]]
             STATE["lists"] = parse_lists(v)
+            # A WizMote button on a renamed playlist follows it (list_renamed()).
+            new_names = [pl["n"] for pl in STATE["lists"]]
+            for b in STATE["remote"]:
+                if b["v"].startswith("list:"):
+                    to = list_renamed(old_names, new_names, b["v"][5:])
+                    if to:
+                        b["v"] = "list:" + to
             STATE["list"] = next((i + 1 for i, pl in enumerate(STATE["lists"]) if active and pl["n"] == active), 0)
             if 0 <= keep_list <= len(STATE["lists"]):
                 STATE["list"] = keep_list
