@@ -16,14 +16,19 @@ struct LogoSlot {
 };
 
 // Index of the least recently used slot that can be dropped, or -1 when every
-// slot is busy or on screen.
-inline int pick_evict(const std::vector<LogoSlot> &slots) {
+// slot is busy or on screen. now is millis(): the age now - used stays right
+// across the wrap after 49.7 days, where comparing the times would not.
+inline int pick_evict(const std::vector<LogoSlot> &slots, uint32_t now) {
   int best = -1;
+  uint32_t best_age = 0;
   for (size_t i = 0; i < slots.size(); i++) {
     if (slots[i].busy || slots[i].pinned)
       continue;
-    if (best < 0 || slots[i].used < slots[(size_t) best].used)
+    uint32_t age = now - slots[i].used;
+    if (best < 0 || age > best_age) {
       best = (int) i;
+      best_age = age;
+    }
   }
   return best;
 }

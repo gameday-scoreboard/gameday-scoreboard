@@ -37,13 +37,15 @@ The setting covers the weather card, the kickoff forecast on the board, and the 
 
 Before a football, baseball or soccer game at an outdoor stadium, the next game's board shows a small icon for the sky and the temperature expected at kickoff. On a wide board it sits between the two logos, where the game clock goes once the game starts; on a single 64x64 panel it sits between the two scores, as the icon and the number. It goes away when the game starts, and it never shows for a dome or an arena (a venue ESPN lists as indoors).
 
+For a kickoff after dark at a US stadium, a clear sky shows a moon instead of a sun. Dark goes by the stadium's own clock and the time of year: from 5 PM in November, December and January, 6 PM in February and October, 7 PM in March and September, 8 PM in April, May and August, and 9 PM in June and July.
+
 The forecast is ESPN's when ESPN has one for the game, which it usually does for NFL, college football and baseball games a few days out. That's the same forecast the ticker already shows ("54F Clear at Ryan Field"). When ESPN has none, which is most soccer games and games further out, the panel asks Open-Meteo for the hour of kickoff at the stadium's city, as soon as the game is 15 days away or closer. Then the ticker shows that forecast too.
 
 This works without a town set and whether the weather card is on or off. The panel keeps the forecasts of the last four games it read, so with Favorite teams turning its cards, each game's forecast is read at most once every three hours (a game moved to another time or stadium is read again). Like the weather card's, these reads only start while the next ESPN read is at least 25 seconds away, so they never hold up the scores.
 
 ## How often it reads
 
-The panel reads the forecast every 30 minutes, and once right after you set a town or the panel starts. It doesn't read while a game it follows is live, so the forecast never takes time from the scores; it reads again once the game ends.
+The panel reads the forecast every 30 minutes, and once right after you set a town, change the time zone or the panel starts. Just after midnight it reads again, and until that read comes in the card already shows the new day's high and low. It doesn't read while a game it follows is live, so the forecast never takes time from the scores; it reads again once the game ends.
 
 If a read fails, the panel tries again a little later, waiting longer each time it fails. The device page says when the last good read was. A forecast more than 3 hours old leaves the rotation until a read works again.
 

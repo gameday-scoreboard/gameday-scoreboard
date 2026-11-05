@@ -403,33 +403,10 @@ static std::string with_commas(const std::string &number) {
   return out;
 }
 
-// "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix.
-static std::string surname(const std::string &short_name) {
-  std::string name = short_name;
-  while (name.size() > 3 && name[1] == '.' && name[2] == ' ')
-    name.erase(0, 3);
-  return name;
-}
-
 std::string leader_line(const std::string &short_name, const std::string &display_value) {
-  std::string name = surname(short_name);
+  std::string name = leader_short_surname(short_name);
   std::string yards, tds;
-  size_t start = 0;
-  while (start <= display_value.size()) {
-    size_t comma = display_value.find(", ", start);
-    std::string tok = display_value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
-    size_t sp = tok.find(' ');
-    if (sp != std::string::npos) {
-      std::string num = tok.substr(0, sp), unit = tok.substr(sp + 1);
-      if (unit == "YDS")
-        yards = num;
-      else if (unit == "TD")
-        tds = num;
-    }
-    if (comma == std::string::npos)
-      break;
-    start = comma + 2;
-  }
+  football_yards_tds(display_value, yards, tds);
   std::string yds = with_commas(yards);
   if (name.empty() || yds.empty())
     return "";
@@ -450,7 +427,7 @@ std::string stat_leader(const std::string &short_name, const std::string &value,
     else
       return "";
   }
-  std::string name = surname(short_name);
+  std::string name = leader_short_surname(short_name);
   if (name.empty() || !nonzero)
     return "";
   return name + " " + value + " " + unit;

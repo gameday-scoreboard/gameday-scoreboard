@@ -63,6 +63,19 @@ through `update_important` in the panel's state.
 - 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
 - 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
 - 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
+- 📋 The scoring plays on the halftime and final ticker no longer list a score twice when ESPN briefly sends an older copy of the game
+- 🏈 A safety after a missed extra point gets its own line in the scoring plays instead of joining the touchdown's
+- 🏠 Home Assistant's period events name an NHL shootout and soccer's extra time and penalties, instead of calling them overtime
+- 🏆 Two teams tied for 25th both show on the Top 25 card
+- 💬 A message with a character that isn't valid text no longer keeps the apps from reading the panel
+- 🌙 Night mode turned off for a night that ends between 1 and 2 AM stays off through the repeated hour when the clocks go back
+- 🖼️ A looping GIF's first frame keeps its own timing on every pass
+- 🖼️ A picture half saved or half deleted when the power went out no longer takes up room after a restart
+- 🏈 Field strip, Win bar and Margin spark stay the way you set them when no game is on, instead of switching back in Home Assistant and in backups
+- 🌙 The kickoff forecast shows a moon for evening games in fall and winter, from 5 PM in December, instead of a sun until 7 PM
+- 🌡️ After midnight the weather card shows the new day's high and low instead of yesterday's
+- 🏒 Hockey's ticker shows the records in the regular season instead of ESPN's season series line
+- 🕰️ The device page picks US Central for a browser in Ojinaga, Mexico, and US Mountain for one in Ciudad Juárez
 
 ## v2026.11.0
 

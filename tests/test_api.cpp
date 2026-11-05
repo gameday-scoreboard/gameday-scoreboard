@@ -14,6 +14,7 @@
 // ([] is any element of an array).
 #include <ArduinoJson.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -524,8 +525,25 @@ void test_set_forms() {
 
 }  // namespace
 
+// A setting changed with no game on the board still has to reach the state
+// and the backups: every "redraw if there's a game" in gameday.cpp has an
+// else that rebuilds the state. The field strip, win bar and spark switches
+// once lacked it and flipped back in Home Assistant.
+void test_setters_rebuild_state() {
+  const std::string src = strip_comments(slurp(kSource));
+  static const std::regex re(R"re(if \(this->game_\.valid\)\s*this->emit_\(\{\}\);\s*(else\s*this->rebuild_state_)?)re");
+  int found = 0;
+  for (std::sregex_iterator it(src.begin(), src.end(), re), end; it != end; ++it) {
+    found++;
+    size_t line = 1 + std::count(src.begin(), src.begin() + it->position(), '\n');
+    SCHECK((*it)[1].matched, "%s:%zu redraws a game but never rebuilds the state when there is none", kSource, line);
+  }
+  SCHECK(found >= 3, "the source scan found no setters; update test_api.cpp");
+}
+
 int main() {
   test_state();
+  test_setters_rebuild_state();
   test_wifi_route();
   test_set_params();
   test_actions();
