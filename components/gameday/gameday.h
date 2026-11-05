@@ -39,6 +39,9 @@
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
+#include "brand.h"
+#include "brand_card.h"
+#include "brand_lvgl.h"
 #include "health.h"
 #include "hook.h"
 #include "line_score.h"
@@ -492,6 +495,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // for the panel rolls up; the page says how long one pass takes, and the
   // card stays up at least that long.
   const std::string &msg_card() const { return this->msg_card_; }
+  // The message card's page is the bar build's opening card (brand.h): the
+  // pack's logo, title and wall name, drawn by brand_card_draw().
+  bool brand_card_up() const { return this->msg_shown_ && this->msg_card_ == ::espn::kBrandPage; }
+  const ::espn::BrandPack &brand_pack() const { return this->brand_; }
+  const BrandLogo &brand_logo() const { return this->brand_logo_; }
   // The board game's line score at halftime and the final, laid out for a
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
@@ -1101,6 +1109,26 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool msg_eof{false};
     bool msg_ok{false};
     int msg_status{0};  // HTTP status, 0 for no answer
+    // The bar build's brand pack (brand.h) and its logo, on this task too.
+    // logo_have is what the panel has on hand, so the same logo isn't read
+    // twice.
+    bool need_brand{false};
+    std::string brand_url;
+    std::string brand_doc;
+    int brand_status{0};
+    bool brand_ok{false};
+    std::string brand_error;
+    ::espn::BrandPack brand_pack;
+    bool brand_logo_read{false};  // a logo was read: brand_logo or brand_logo_error holds it
+    BrandLogo brand_logo;
+    std::string brand_logo_error;
+    std::string logo_have_url;
+    bool logo_have_tint{false};
+    uint32_t logo_have_fg{0}, logo_have_bg{0};
+    // The pack on hand, whose logo is read when this read fails (after a
+    // restart the logo isn't kept, only the pack).
+    bool brand_keep_ok{false};
+    ::espn::BrandPack brand_keep;
     // The Top 25 card's poll for one league (rankings.h), on this task too.
     bool need_top25{false};
     uint8_t top25_slot{0};
@@ -1378,7 +1406,45 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t now_tried_{0};
   // Where the bar's "Something wrong?" link on the device page writes to.
   std::string report_email_;
+  // The brand pack (brand.h): its address, saved on its own, and the last
+  // good file, saved apart so the look survives a boot with no network.
+  struct PrefsBrandUrl {
+    char url[::espn::kBrandUrlMax + 1];
+    uint8_t spare[3];
+  } __attribute__((packed));
+  struct PrefsBrandDoc {
+    uint16_t size;
+    char doc[::espn::kBrandMaxBytes];
+  } __attribute__((packed));
+  ESPPreferenceObject brand_url_pref_, brand_doc_pref_;
+  std::string brand_url_;
+  std::string brand_doc_;      // the file brand_ was read from, as saved
+  bool brand_read_due_{false};
+  uint32_t brand_read_ms_{0};  // millis() of the last good read, 0 = none since boot
+  uint32_t brand_fail_ms_{0};  // millis() of the last failed one, 0 = none since
+  int brand_status_{-1};       // the last read's HTTP status, 0 no answer, -1 none yet
+  std::string brand_error_;    // why the last read's file wasn't used, "" when it was
+  std::string brand_logo_error_;
+  void load_brand_();
+  void set_brand_(const std::string &url);
+  void brand_tick_();
+  void start_brand_job_();
+  void run_brand_job_();
+  void run_brand_logo_(const ::espn::BrandPack &p);
+  void apply_brand_job_();
 #endif
+  // The pack on hand, empty off the bar build or with none read.
+  ::espn::BrandPack brand_;
+  bool brand_ok_{false};
+  BrandLogo brand_logo_;
+  // The opening card went up for this pass through the list; it goes up
+  // again when the list comes back round to the top.
+  bool brand_opened_{false};
+  // The list the message card reads: the panel's own address, else the
+  // pack's plate list on the bar build.
+  const std::string &msg_src_() const {
+    return !this->msg_url_.empty() || !this->brand_ok_ ? this->msg_url_ : this->brand_.list;
+  }
 #ifdef GAMEDAY_BETA_CHANNEL
   http_request::HttpRequestUpdate *beta_update_{nullptr};
   const char *stable_source_{nullptr};

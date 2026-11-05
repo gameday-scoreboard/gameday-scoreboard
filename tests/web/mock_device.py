@@ -769,6 +769,8 @@ def apply_set(kv):
         elif k == "msgurl":
             if msg_url_ok(v):
                 STATE["msgurl"] = v
+        elif k == "brand":
+            pass  # parse_set takes it; only the bar build reads a brand pack, and this is a home build
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
@@ -1009,7 +1011,7 @@ def import_settings(doc):
                     skipped.append(f"{k}={v}")
                     continue
                 kv.append((k, v if r == 1 else "none"))
-            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
+            elif (k == "tz" and timezone_index(v) < 0) or (k in ("msgurl", "brand") and not msg_url_ok(v)) or (
                     k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS) or (
                     k == "after" and v not in AFTER) or (
                     re.fullmatch(r"remote[1-4]", k) and remote_parse(v) is None):

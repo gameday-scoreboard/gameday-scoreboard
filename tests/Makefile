@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_picture build/test_celebrate
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_picture build/test_celebrate build/test_brand
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -18,6 +18,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_logo_cache
 	./build/test_picture
 	./build/test_celebrate
+	./build/test_brand
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -68,6 +69,12 @@ build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp 
 build/test_picture: test_picture.cpp ../components/gameday/picture.h ../components/gameday/gif.h ../components/gameday/psram.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_picture.cpp -o $@ $(LDFLAGS)
+
+# Brand packs on the bar build: the pack file, its defaults, the logo's
+# colors and the opening card's layout (brand.h).
+build/test_brand: test_brand.cpp ../components/gameday/brand.h ../components/gameday/message.h ../components/gameday/countdown.h ../components/gameday/night.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_brand.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the

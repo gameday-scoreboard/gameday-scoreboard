@@ -35,6 +35,7 @@ through `update_important` in the panel's state.
 ### ✨ New
 
 - 🗓️ Schedule and season recap cards now work for NBA, WNBA, NHL and college basketball favorites too, every league but MLB
+- 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
 
 ### 🐛 Fixes
 

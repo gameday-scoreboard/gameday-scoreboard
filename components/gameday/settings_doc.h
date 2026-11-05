@@ -65,7 +65,7 @@ inline SettingType setting_type(const char *k) {
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
                                      "wakelead", "celebrate", "wxunit"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "msgurl", "brand", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
                                       "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
@@ -119,7 +119,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
-                                      "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
+                                      "msg",      "msgurl",   "msgevery", "brand",       "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
@@ -354,7 +354,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         }
         // A sport this firmware has no row for (newer firmware may have more)
         // is left out and listed, like a team it doesn't know.
-        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
+        if ((k == "tz" && timezone_index(text.c_str()) < 0) || ((k == "msgurl" || k == "brand") && !msg_url_ok(text)) ||
             (k == "hook" && !hook_url_ok(text)) ||
             (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0) ||
             (k == "after" && after_parse(text) < 0)) {
