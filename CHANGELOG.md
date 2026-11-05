@@ -30,7 +30,9 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
-## Unreleased
+## v2026.11.1
+
+Fixes from a full review of the firmware: Wi-Fi and setup, backups, updates, the scoreboard and the device page. Schedule and Season recap come to basketball and hockey.
 
 ### ✨ New
 
