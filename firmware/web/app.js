@@ -2496,23 +2496,21 @@
   // ---- timezone suggestion from the browser --------------------------------
   // Browsers report an IANA zone; the device's list carries one IANA name per
   // entry plus a few common aliases here. Same-zone cities all map to the
-  // same POSIX rule, so a near match is still the right choice.
+  // same POSIX rule, so a near match is still the right choice. Every alias
+  // points at a zone in the list (tests/test_parse.cpp checks it).
   const TZ_ALIASES = {
     "America/Detroit": "America/New_York", "America/Toronto": "America/New_York", "America/Indiana/Indianapolis": "America/New_York",
     "America/Kentucky/Louisville": "America/New_York", "America/Montreal": "America/New_York", "America/Nassau": "America/New_York",
     "America/Winnipeg": "America/Chicago", "America/Indiana/Knox": "America/Chicago", "America/Menominee": "America/Chicago",
-    "America/North_Dakota/Center": "America/Chicago", "America/Matamoros": "America/Chicago",
-    "America/Edmonton": "America/Denver", "America/Boise": "America/Denver", "America/Ojinaga": "America/Denver",
+    "America/North_Dakota/Center": "America/Chicago", "America/Matamoros": "America/Chicago", "America/Ojinaga": "America/Chicago",
+    "America/Edmonton": "America/Denver", "America/Boise": "America/Denver", "America/Ciudad_Juarez": "America/Denver",
     "America/Vancouver": "America/Los_Angeles", "America/Tijuana": "America/Los_Angeles",
     "America/Juneau": "America/Anchorage", "America/Sitka": "America/Anchorage", "America/Nome": "America/Anchorage",
     "Europe/Dublin": "Europe/London", "Europe/Paris": "Europe/Berlin", "Europe/Madrid": "Europe/Berlin", "Europe/Rome": "Europe/Berlin",
     "Europe/Amsterdam": "Europe/Berlin", "Europe/Brussels": "Europe/Berlin", "Europe/Vienna": "Europe/Berlin", "Europe/Zurich": "Europe/Berlin",
     "Europe/Stockholm": "Europe/Berlin", "Europe/Oslo": "Europe/Berlin", "Europe/Copenhagen": "Europe/Berlin", "Europe/Warsaw": "Europe/Berlin",
-    "Europe/Prague": "Europe/Berlin", "Europe/Budapest": "Europe/Berlin", "Europe/Helsinki": "Europe/Athens", "Europe/Kiev": "Europe/Athens",
-    "Europe/Kyiv": "Europe/Athens", "Europe/Bucharest": "Europe/Athens", "Europe/Sofia": "Europe/Athens",
-    "Asia/Hong_Kong": "Asia/Shanghai", "Asia/Taipei": "Asia/Shanghai", "Asia/Manila": "Asia/Singapore", "Asia/Kuala_Lumpur": "Asia/Singapore",
+    "Europe/Prague": "Europe/Berlin", "Europe/Budapest": "Europe/Berlin",
     "Australia/Melbourne": "Australia/Sydney", "Australia/Hobart": "Australia/Sydney", "Australia/Canberra": "Australia/Sydney",
-    "Australia/Darwin": "Australia/Adelaide",
   };
   const browserZoneName = () => {
     let iana = "";

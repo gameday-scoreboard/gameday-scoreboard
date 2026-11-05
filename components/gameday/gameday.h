@@ -780,7 +780,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs {
     uint8_t old_league;
     uint32_t old_team_id;
-    uint8_t tz_index;
+    uint8_t tz_index;  // a position in kTimezones, which only ever grows at the end (timezones.h)
     uint8_t flags;
   } __attribute__((packed));
   // Kept separate so adding fields never invalidates the original blob.
@@ -879,6 +879,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int wx_lookup_status_{-1};  // the last lookup's HTTP status, 0 no answer, -1 waiting or none yet
   int wx_status_{-1};         // the last forecast read's status, 0 no answer, -1 none yet
   uint32_t wx_read_ms_{0};    // millis() of the last good forecast read, 0 = none this boot
+  bool wx_reread_{false};     // read the forecast again now: a new day, or a new time zone
   uint32_t wx_fail_ms_{0};    // millis() of the last failed read or lookup, 0 = none since
   uint32_t wx_backoff_ms_{0}; // the wait that failure started (poll_timing.h, the weather's own run)
   ::espn::Backoff wx_fail_;
@@ -888,6 +889,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_wx_job_();
   void apply_wx_job_();
   void wx_fields_(UpdateFields &f);
+  void wx_day_tick_();
   bool wx_fahrenheit_() const;
   std::string wx_country_() const;
   // The kickoff forecast (weather.h): the board's next game's, when ESPN's

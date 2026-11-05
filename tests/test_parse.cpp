@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -251,6 +252,30 @@ static void test_event_live() {
   CHECK_EQ((int) s.team_win_pct, 4);
   CHECK_EQ(win_chance(s), std::string("JXST 96% to win"));
   CHECK(s.drive.empty());
+
+  // A score past int's range is held at 999 and a negative one at 0, and a
+  // win probability outside 0 to 1 is dropped: no undefined casts.
+  auto swap = [](std::string j, const std::string &from, const std::string &to) {
+    size_t at = j.find(from);
+    CHECK(at != std::string::npos);
+    if (at != std::string::npos)
+      j.replace(at, from.size(), to);
+    return j;
+  };
+  std::string wild = swap(swap(swap(json, "\"score\":\"24\"", "\"score\":\"99999999999999999999\""), "\"score\":\"27\"",
+                                 "\"score\":\"-5\""),
+                            "\"awayWinPercentage\":0.043300000000000005", "\"awayWinPercentage\":1e30");
+  GameSnapshot w;
+  CHECK(parse_event_str(wild, Sport::FOOTBALL, 2229, w, "401871053"));
+  CHECK_EQ(w.team_score, 999);
+  CHECK_EQ(w.opp_score, 0);
+  CHECK_EQ((int) w.team_win_pct, -1);
+  wild = swap(json, "\"awayWinPercentage\":0.043300000000000005", "\"awayWinPercentage\":-1e30");
+  CHECK(parse_event_str(wild, Sport::FOOTBALL, 2229, w, "401871053"));
+  CHECK_EQ((int) w.team_win_pct, -1);
+  wild = swap(json, "\"score\":\"24\"", "\"score\":24");  // a number, not a string
+  CHECK(parse_event_str(wild, Sport::FOOTBALL, 2229, w, "401871053"));
+  CHECK_EQ(w.team_score, 24);
 
   GameSnapshot x;
   CHECK(!parse_event_str(json, Sport::FOOTBALL, kSeahawks, x, "401871053"));  // not our game
@@ -1287,6 +1312,7 @@ static void test_status_text() {
   CHECK_EQ(espn::detail::leader_line("M. Penix Jr.", "52/77, 719 YDS, 3 TD, 1 INT"), std::string("Penix Jr. 719 yds 3 TD"));
   CHECK_EQ(espn::detail::leader_line("B. Robinson", "102 CAR, 580 YDS, 4 TD"), std::string("Robinson 580 yds 4 TD"));
   CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
+  CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS, 0 TD"), std::string("London 488 yds"));  // as the game card
   CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
   CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
   // ESPN writes the yards with no thousands separator today (pinned from the
@@ -1923,14 +1949,20 @@ static void test_team_cache() {
   CHECK_EQ(sc.group, (uint32_t) 1);
   CHECK_EQ(sc.league, (uint8_t) League::NCAA);
 
-  // Nothing to keep: no next game, an id too long for the record, no clock.
+  // No next game, or an id too long for the record: the saved game goes, so
+  // a game ESPN no longer lists can't come back at the next boot.
   Schedule none;
   none.valid = true;
-  TeamCache n;
-  CHECK(!team_cache_save(none, League::NFL, 6, saved, n));
+  TeamCache n = c;
+  CHECK(team_cache_save(none, League::NFL, 6, saved, n));
+  CHECK(!team_cache_load(n, League::NFL, 6, saved + 60, s));
   Schedule longid = d;
   longid.event_id = "1234567890123456";  // 16 characters, no room for the end
-  CHECK(!team_cache_save(longid, League::NFL, 6, saved, n));
+  n = c;
+  CHECK(team_cache_save(longid, League::NFL, 6, saved, n));
+  CHECK(!team_cache_load(n, League::NFL, 6, saved + 60, s));
+  // Nothing read, or no clock: the saved record stays as it is.
+  CHECK(!team_cache_save(Schedule{}, League::NFL, 6, saved, n));
   CHECK(!team_cache_save(d, League::NFL, 6, 0, n));
 
   // A blank record (nothing saved yet reads back as zeros) is never used.
@@ -3255,6 +3287,23 @@ static void test_nhl_pre_post() {
   CHECK(po.team_winner);
   CHECK_EQ(po.nhl.series, std::string("CAR leads series 2-0"));
   CHECK_EQ(status_text(po, o, ""), std::string("Final/2OT | CAR leads series 2-0"));
+  // ESPN's regular season series ("Season series tied 1-1") leaves the records in place.
+  {
+    std::string reg = slurp("fixtures/event_nhl_final_2ot.json");
+    const std::pair<std::string, std::string> swaps[] = {
+        {"\"type\":3,\"slug\":\"post-season\"", "\"type\":2,\"slug\":\"regular-season\""},
+        {"\"type\":\"playoff\"", "\"type\":\"season\""}};
+    for (const auto &sw : swaps) {
+      size_t at = reg.find(sw.first);
+      CHECK(at != std::string::npos);
+      if (at != std::string::npos)
+        reg.replace(at, sw.first.size(), sw.second);
+    }
+    GameSnapshot rs;
+    CHECK(parse_event_str(reg, Sport::HOCKEY, kHurricanes, rs, root_id(reg)));
+    CHECK(!rs.nhl.playoffs);
+    CHECK_EQ(rs.nhl.series, std::string(""));
+  }
   GameSnapshot pre = po;
   pre.state = GameState::PRE;
   pre.odds = pre.over_under = pre.tv = "";
@@ -3634,6 +3683,38 @@ static void test_timezone_index() {
     CHECK_EQ(espn::timezone_index(espn::kTimezones[i].name), (int) i);
     CHECK_EQ(espn::timezone_index(espn::kTimezones[i].iana), (int) i);
   }
+  // Panels save the position, so no row moves: a new zone goes at the end.
+  static const char *const kSaved[] = {"US Eastern",  "US Central",      "US Mountain",         "US Arizona",
+                                       "US Pacific",  "US Alaska",       "US Hawaii",           "Canada Atlantic",
+                                       "Canada Newfoundland", "Mexico City", "UK and Ireland", "Central Europe",
+                                       "Australia Eastern", "UTC"};
+  CHECK(espn::kTimezoneCount >= sizeof(kSaved) / sizeof(kSaved[0]));
+  for (size_t i = 0; i < sizeof(kSaved) / sizeof(kSaved[0]) && i < espn::kTimezoneCount; i++)
+    CHECK_EQ(std::string(espn::kTimezones[i].name), std::string(kSaved[i]));
+  // The device page's browser-zone aliases each point at a zone in the list.
+  std::string js = slurp("../firmware/web/app.js");
+  size_t a = js.find("const TZ_ALIASES = {"), b = js.find("};", a);
+  CHECK(a != std::string::npos && b != std::string::npos);
+  std::map<std::string, std::string> aliases;
+  if (a != std::string::npos && b != std::string::npos) {
+    const std::string block = js.substr(a, b - a);
+    for (size_t i = block.find('"'); i != std::string::npos; i = block.find('"', i)) {
+      size_t e1 = block.find('"', i + 1), s2 = block.find('"', e1 + 1), e2 = block.find('"', s2 + 1);
+      if (e2 == std::string::npos)
+        break;
+      aliases[block.substr(i + 1, e1 - i - 1)] = block.substr(s2 + 1, e2 - s2 - 1);
+      i = e2 + 1;
+    }
+  }
+  CHECK(aliases.size() > 20);
+  for (const auto &kv : aliases) {
+    if (espn::timezone_index(kv.second.c_str()) < 0)
+      printf("alias %s points at %s, not in kTimezones\n", kv.first.c_str(), kv.second.c_str());
+    CHECK(espn::timezone_index(kv.second.c_str()) >= 0);
+  }
+  // Ojinaga keeps US Central time since tzdata 2022g; Ciudad Juarez keeps Mountain.
+  CHECK_EQ(aliases["America/Ojinaga"], std::string("America/Chicago"));
+  CHECK_EQ(aliases["America/Ciudad_Juarez"], std::string("America/Denver"));
 }
 
 // Recorded 2026-10-08 from the 2025-26 postseason, see fixtures/README.md
@@ -6316,7 +6397,7 @@ static void test_weather() {
   CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
            std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
                        "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
-                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=3"));
+                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=4"));
   // The town as kept: one line, no emoji, at most kTownMax bytes.
   CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
   CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);
@@ -6383,6 +6464,45 @@ static void test_weather() {
   CHECK_EQ(wx_deg(f.next[1].hi10, true), 68);
   CHECK_EQ(f.next[1].code, 63);
   CHECK_EQ(std::string(weekday_text(f.next[1].wday)), std::string("Sat"));
+  CHECK_EQ(f.day0, wx_days_from_civil(2026, 10, 29));
+  CHECK(!f.has_later);  // recorded with three days
+  // After midnight the first day is yesterday's: a three-day forecast can't
+  // move on, so it goes; a four-day one moves on a day; two days behind goes.
+  WxForecast old3 = f;
+  CHECK(!wx_roll_day(old3, f.day0));
+  CHECK(old3.valid && old3.today.hi10 == f.today.hi10);
+  CHECK(wx_roll_day(old3, f.day0 + 1));
+  CHECK(!old3.valid);
+  CHECK_EQ(wx_days_from_civil(1970, 1, 1), 0);
+  CHECK_EQ(wx_days_from_civil(2026, 11, 5), 20762);
+  CHECK_EQ(wx_days_from_civil(2000, 3, 1), 11017);
+  CHECK_EQ(wx_days_from_date("2026-11-05"), 20762);
+  CHECK_EQ(wx_days_from_date("not a date"), 0);
+  CHECK_EQ(wx_days_from_date(nullptr), 0);
+  json = "{\"current\":{\"temperature_2m\":50,\"weather_code\":0,\"is_day\":0},\"daily\":{\"time\":[\"2026-11-05\","
+         "\"2026-11-06\",\"2026-11-07\",\"2026-11-08\"],\"weather_code\":[0,3,61,71],\"temperature_2m_max\":[60,61,62,63],"
+         "\"temperature_2m_min\":[40,41,42,43]}}";
+  WxForecast f4;
+  CHECK(parse_forecast(json, f4));
+  CHECK(f4.has_later && f4.later.hi10 == 630 && f4.later.code == 71);
+  CHECK_EQ(std::string(weekday_text(f4.later.wday)), std::string("Sun"));
+  WxForecast rolled = f4;
+  CHECK(wx_roll_day(rolled, f4.day0 + 1));
+  CHECK(rolled.valid);
+  CHECK_EQ(rolled.day0, f4.day0 + 1);
+  CHECK_EQ(rolled.today.hi10, 610);  // Friday's high, not Thursday's
+  CHECK_EQ(rolled.next[0].hi10, 620);
+  CHECK_EQ(rolled.next[1].hi10, 630);
+  CHECK_EQ(std::string(weekday_text(rolled.next[1].wday)), std::string("Sun"));
+  CHECK(!wx_roll_day(rolled, f4.day0 + 1));  // once a day
+  CHECK(wx_roll_day(rolled, f4.day0 + 2));   // no fifth day to move to
+  CHECK(!rolled.valid);
+  rolled = f4;
+  CHECK(wx_roll_day(rolled, f4.day0 + 2));
+  CHECK(!rolled.valid);
+  rolled = f4;
+  CHECK(!wx_roll_day(rolled, f4.day0 - 1));  // a time zone to the west: the read again fixes it
+  CHECK(rolled.valid && rolled.day0 == f4.day0);
   // Below zero rounds away from it; night comes from is_day.
   json = "{\"current\":{\"temperature_2m\":-3.5,\"weather_code\":0,\"is_day\":0},\"daily\":{\"time\":[\"2027-01-03\","
          "\"2027-01-04\",\"2027-01-05\"],\"weather_code\":[71,73,0],\"temperature_2m_max\":[1,2,3],"
@@ -6540,9 +6660,25 @@ static void test_kickoff_weather() {
   CHECK(wx_icon_at((uint8_t) WxIcon::MOON, false) == (uint8_t) WxIcon::SUN);  // NU's 11 AM kickoff, read at night
   CHECK(wx_icon_at((uint8_t) WxIcon::SUN, true) == (uint8_t) WxIcon::MOON);
   CHECK(wx_icon_at((uint8_t) WxIcon::RAIN, true) == (uint8_t) WxIcon::RAIN);
-  CHECK(wx_dark_at(10, 19) && !wx_dark_at(10, 18));
-  CHECK(!wx_dark_at(7, 19) && wx_dark_at(7, 20));
+  CHECK(wx_dark_at(10, 18) && !wx_dark_at(10, 17));
+  CHECK(!wx_dark_at(7, 20) && wx_dark_at(7, 21));
+  CHECK(wx_dark_at(12, 17) && !wx_dark_at(12, 16));  // a December 5 PM kickoff is after sunset
   CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
+  CHECK(!wx_dark_at(0, 20) && !wx_dark_at(13, 20));
+  // US daylight time, given the local standard time: the second Sunday in
+  // March at 2 AM to the first Sunday in November at 2 AM daylight.
+  CHECK(!wx_us_dst(1804681800));  // 2027-03-10 12:30, before the 14th
+  CHECK(!wx_us_dst(1804987800));  // 2027-03-14 01:30
+  CHECK(wx_us_dst(1804991400));   // 2027-03-14 02:30
+  CHECK(!wx_us_dst(1772933400));  // 2026-03-08 01:30
+  CHECK(wx_us_dst(1772937000));   // 2026-03-08 02:30
+  CHECK(wx_us_dst(1825504200));   // 2027-11-06 12:30, before the 7th
+  CHECK(wx_us_dst(1825547400));   // 2027-11-07 00:30 standard, 01:30 daylight
+  CHECK(!wx_us_dst(1825551000));  // 2027-11-07 01:30 standard
+  CHECK(wx_us_dst(1793493000));   // 2026-11-01 00:30
+  CHECK(!wx_us_dst(1793496600));  // 2026-11-01 01:30
+  CHECK(!wx_us_dst(1772281800));  // February
+  CHECK(!wx_us_dst(1796128200));  // December
 
   // The sun or the moon by the venue's own clock, not the panel's. NU's
   // 11 AM kickoff (16:00 UTC, CDT) is daytime; Sunday night in Green Bay
@@ -6559,7 +6695,12 @@ static void test_kickoff_weather() {
   CHECK_EQ(wx_venue_dark(1792857600, "Evanston, IL"), 0);         // 2026-10-24 16:00 UTC
   CHECK_EQ(wx_venue_dark(1793582400, "Green Bay, WI"), 1);        // 2026-11-02 01:20 UTC
   CHECK_EQ(wx_venue_dark(1794961800, "East Rutherford, NJ"), 1);  // 2026-11-18 00:30 UTC
-  CHECK_EQ(wx_venue_dark(1794961800, "Glendale, AZ"), 0);         // 5:30 PM there
+  CHECK_EQ(wx_venue_dark(1794961800, "Glendale, AZ"), 1);         // 5:30 PM there, after sunset in November
+  CHECK_EQ(wx_venue_dark(1794961800 - 3600, "Glendale, AZ"), 0);  // 4:30 PM
+  CHECK_EQ(wx_venue_dark(1796602500, "Green Bay, WI"), 1);        // 2026-12-06 6:15 PM CST
+  CHECK_EQ(wx_venue_dark(1793484000, "Evanston, IL"), 0);         // 2026-10-31 5 PM CDT
+  CHECK_EQ(wx_venue_dark(1793491200, "Evanston, IL"), 1);         // 7 PM CDT
+  CHECK_EQ(wx_venue_dark(1812849300, "Chicago, IL"), 0);          // 2027-06-12 8:15 PM CDT, still light
   CHECK_EQ(wx_venue_dark(1794961800, "London, England"), -1);     // abroad: ESPN's icon as it is
   CHECK_EQ(wx_venue_dark(1783393200, "Chicago, IL"), 1);          // 2026-07-07 03:00 UTC, 10 PM CDT
   CHECK_EQ(wx_venue_dark(1783447200, "Chicago, IL"), 0);          // 1 PM CDT
