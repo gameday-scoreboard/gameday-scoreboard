@@ -319,6 +319,17 @@
           <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
         </div>
       </div>
+      <div class="card" id="brandCard" hidden>
+        <h2>Bar look</h2>
+        <div class="cbody">
+          <p class="hint">Your bar's logo, colors and plate list from one brand file. The panel opens the message card with them.</p>
+          <label class="fl" for="brandUrl">Brand file address<small>A web address we give you. The panel reads it again every half hour.</small></label>
+          <input type="url" id="brandUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
+          <p class="hint" id="brandRead" hidden></p>
+          <div class="ctl" id="brandLogoRow" hidden><label>Logo</label><img id="brandLogo" class="brandlogo" alt="The bar's logo"></div>
+          <div class="actions"><button class="btn primary" id="brandSave">Save</button><button class="btn" id="brandClear">Clear</button></div>
+        </div>
+      </div>
       <div class="card" id="picCard" hidden>
         <h2>Pictures</h2>
         <div class="cbody">
@@ -650,7 +661,7 @@
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
     remote1: String, remote2: String, remote3: String, remote4: String,
-    msg: String, msgurl: String, msgevery: Number, nick: String,
+    msg: String, msgurl: String, msgevery: Number, nick: String, brand: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
     wake: (v) => v === "1", wakelead: Number, after: String,
@@ -1756,6 +1767,7 @@
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+    renderBrand();
     renderPics();
     renderEvents();
   };
@@ -1890,6 +1902,50 @@
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- the bar build's brand pack (components/gameday/brand.h) ----------------
+  let brandSeen = null;
+  const renderBrand = () => {
+    // Only the bar build reads brand packs.
+    $("#brandCard").hidden = S.brand === undefined;
+    if (S.brand === undefined) return;
+    const input = $("#brandUrl");
+    if (S.brand !== brandSeen && document.activeElement !== input) {
+      brandSeen = S.brand;
+      input.value = S.brand;
+    }
+    const read = S.brandread;
+    const line = $("#brandRead");
+    line.hidden = !S.brand;
+    const logo = read && read.ok && read.logo_ok ? read.logo : "";
+    $("#brandLogoRow").hidden = !logo;
+    if (logo && $("#brandLogo").getAttribute("src") !== logo) $("#brandLogo").src = logo;
+    if (!S.brand) return;
+    const kept = read && read.ok ? " Showing the last look it read." : "";
+    let text;
+    if (!read || read.status === undefined || read.status < 0) text = read && read.ok ? "Showing the saved look. Reading the file again." : "Not read yet.";
+    else if (read.status === 0) text = "The panel couldn't reach that address. It tries again in a few minutes." + kept;
+    else if (read.status !== 200) text = "That address answered with an error (HTTP " + read.status + "). It tries again in a few minutes." + kept;
+    else if (read.error) text = read.error + kept;
+    else text = "Loaded: " + (read.name || read.title || "the brand file") + ".";
+    if (read && read.ok && read.warning) text += " Left out: " + read.warning + ".";
+    if (read && read.logo_error) text += " " + read.logo_error;
+    line.textContent = text;
+  };
+  $("#brandSave").onclick = () => {
+    const url = $("#brandUrl").value.trim();
+    if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The brand file's address starts with http:// or https://");
+    if (!asciiUrl(url)) return toast(ASCII_URL);
+    brandSeen = null;
+    setGD({ brand: url });
+    toast(url ? "Brand file saved" : "Bar look off");
+  };
+  $("#brandClear").onclick = () => {
+    $("#brandUrl").value = "";
+    brandSeen = null;
+    setGD({ brand: "" });
+    toast("Bar look off");
   };
 
   // ---- game-day wake and after the game (components/gameday/wake.h) ----------
