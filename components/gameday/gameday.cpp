@@ -507,6 +507,14 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
     return;
   std::vector<League> live_before = this->live_leagues_();
   std::vector<::espn::TeamRef> before = this->fav_refs_all_();
+  // One team in two slots plays twice, and makes a backup only the import's
+  // duplicate check can take back. favs= removes repeats on its own.
+  if (id != 0)
+    for (uint8_t i = 0; i < FAV_MAX; i++)
+      if (i != slot - 1 && before[i] == ::espn::TeamRef{league, id}) {
+        ESP_LOGW(TAG, "Favorite %u: that team is already favorite %u", (unsigned) slot, (unsigned) (i + 1));
+        return;
+      }
   this->put_fav_(slot - 1, league, id);
   if (slot <= 4)
     this->pref3_.save(&this->prefs3_);
