@@ -10,12 +10,13 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_picture build/test_celebrate
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
 	./build/test_settings
 	./build/test_logo_cache
+	./build/test_logo_cache_asan
 	./build/test_picture
 	./build/test_celebrate
 
@@ -63,6 +64,12 @@ build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
 build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
+
+# The same with the address sanitizer, which stops on a logo freed while the
+# logo task still writes to it (test_full_cache_keeps_busy_logos).
+build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@
 
 # The picture card's GIF player and upload checks, against fixtures/pictures/.
 build/test_picture: test_picture.cpp ../components/gameday/picture.h ../components/gameday/gif.h ../components/gameday/psram.h
