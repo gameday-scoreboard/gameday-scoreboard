@@ -6060,6 +6060,15 @@ void GamedayComponent::msg_reset_() {
   this->msg_since_ms_ = millis() - (uint32_t) this->msg_every_ * 60u * 1000u;
 }
 
+void GamedayComponent::set_wall_bench(char option, const std::string &title) {
+  this->wall_opt_ = option >= 'A' && option <= 'E' ? option : 0;
+  this->wall_title_ = panel_text(::espn::message_clean(title, ::espn::kWallTitleMax, false));
+  this->wall_counter_.clear();
+  this->msg_reset_();  // the next page starts at the top in the new look
+  ESP_LOGI(TAG, "Bench wall look %c, title \"%s\"", this->wall_opt_ ? this->wall_opt_ : '-',
+           this->wall_title_.c_str());
+}
+
 void GamedayComponent::msg_show_(const std::string &page) {
   if (page == this->msg_card_) {
     // The same page again (a one-page list holding the board): leave it be,
@@ -6105,8 +6114,15 @@ void GamedayComponent::msg_tick_() {
   const bool url = !this->msg_url_.empty();
   const bool may_read = url && (this->msg_fail_ms_ == 0 || now - this->msg_fail_ms_ >= ::espn::kMsgRetryMs);
   const bool stale = may_read && this->msg_list_ms_ != 0 && now - this->msg_list_ms_ >= ::espn::kMsgRefreshMs;
-  ::espn::MsgPage page = ::espn::msg_next_page(this->msg_pos_, this->msg_from_, this->msg_n_, this->msg_eof_, stale,
-                                               ::espn::kMsgPageLines);
+  uint32_t per = ::espn::kMsgPageLines;
+  if (this->wall_opt_ != 0) {
+    const int W = this->panels_ != nullptr ? this->panels_->cols() * 64 : 64;
+    this->wall_ = ::espn::wall_layout(this->wall_opt_, W, 64, ::espn::msg_widest(this->msg_list_),
+                                      !this->wall_title_.empty());
+    per = std::max<uint32_t>(1, this->wall_.per());
+  }
+  ::espn::MsgPage page =
+      ::espn::msg_next_page(this->msg_pos_, this->msg_from_, this->msg_n_, this->msg_eof_, stale, per);
   if (page.read) {
     // The card waits for the read; a page already up stays until it lands.
     if (may_read && !(this->busy_ && this->job_.need_msg)) {
@@ -6123,6 +6139,9 @@ void GamedayComponent::msg_tick_() {
     return;
   }
   this->msg_pos_ = page.next;
+  this->wall_counter_ = this->wall_opt_ != 0 && this->wall_.counter
+                            ? ::espn::wall_counter(page.first, per, this->msg_total_)
+                            : std::string();
   this->msg_show_(board_lines(::espn::msg_entries(this->msg_list_, page.first - this->msg_from_, page.count)));
 }
 

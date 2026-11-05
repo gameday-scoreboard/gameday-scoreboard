@@ -1049,9 +1049,103 @@ script:
             lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
             return;
           }
-          const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
-                                       id(spleen_8)->get_lv_font()};
-          id(gameday_ctl).set_msg_roll_ms(gameday::board_text(id(tt_msg), id(tt_msg_lbl), page.c_str(), fonts, 3));
+          // The plate wall looks (message.h, wall_layout): made on first use.
+          static lv_obj_t *w_title = nullptr, *w_count = nullptr;
+          static lv_obj_t *w_slot[::espn::kWallMaxSlots], *w_name[::espn::kWallMaxSlots];
+          const char opt = id(gameday_ctl).wall_option();
+          if (opt == 0) {
+            if (w_title != nullptr) {
+              lv_obj_add_flag(w_title, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_add_flag(w_count, LV_OBJ_FLAG_HIDDEN);
+              for (int i = 0; i < ::espn::kWallMaxSlots; i++)
+                lv_obj_add_flag(w_slot[i], LV_OBJ_FLAG_HIDDEN);
+            }
+            lv_obj_clear_flag(id(tt_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+            const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                         id(spleen_8)->get_lv_font()};
+            id(gameday_ctl).set_msg_roll_ms(gameday::board_text(id(tt_msg), id(tt_msg_lbl), page.c_str(), fonts, 3));
+            lv_obj_move_foreground(id(tt_msg));
+            lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const uint32_t gold = 0xFFB000;  // the Top 25 card's title color
+          const lv_font_t *f8 = id(spleen_8)->get_lv_font();
+          const lv_font_t *f12 = id(spleen_12)->get_lv_font();
+          if (w_title == nullptr) {
+            w_title = lv_label_create(id(tt_msg));
+            w_count = lv_label_create(id(tt_msg));
+            for (lv_obj_t *l : {w_title, w_count}) {
+              lv_obj_set_style_text_font(l, f8, 0);
+              lv_obj_set_style_text_color(l, lv_color_hex(gold), 0);
+              lv_label_set_long_mode(l, LV_LABEL_LONG_CLIP);
+            }
+            for (int i = 0; i < ::espn::kWallMaxSlots; i++) {
+              w_slot[i] = lv_obj_create(id(tt_msg));
+              lv_obj_remove_style_all(w_slot[i]);
+              lv_obj_set_scrollbar_mode(w_slot[i], LV_SCROLLBAR_MODE_OFF);
+              lv_obj_set_style_border_color(w_slot[i], lv_color_hex(gold), 0);
+              w_name[i] = lv_label_create(w_slot[i]);
+              lv_obj_set_style_text_color(w_name[i], lv_color_hex(0xFFFFFF), 0);
+              lv_label_set_long_mode(w_name[i], LV_LABEL_LONG_CLIP);
+            }
+          }
+          lv_anim_delete(id(tt_msg_lbl), nullptr);
+          lv_obj_add_flag(id(tt_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+          id(gameday_ctl).set_msg_roll_ms(0);
+          const int W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          lv_obj_set_size(id(tt_msg), W, 64);
+          const ::espn::WallLayout &L = id(gameday_ctl).wall();
+          const std::string &count = id(gameday_ctl).wall_counter();
+          // Title row: left with the counter at the right, centered without.
+          if (L.title) {
+            const int cw = count.empty() ? 0 : (int) count.size() * 5 + 2;
+            lv_label_set_text(w_title, id(gameday_ctl).wall_title().c_str());
+            lv_obj_set_style_text_align(w_title, count.empty() ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_pos(w_title, count.empty() ? 0 : 1, 0);
+            lv_obj_set_size(w_title, count.empty() ? W : W - 1 - cw, 8);
+            lv_obj_clear_flag(w_title, LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(w_title, LV_OBJ_FLAG_HIDDEN);
+          }
+          if (L.title && !count.empty()) {
+            lv_label_set_text(w_count, count.c_str());
+            lv_obj_set_style_text_align(w_count, LV_TEXT_ALIGN_RIGHT, 0);
+            lv_obj_set_pos(w_count, W - 1 - (int) count.size() * 5 - 2, 0);
+            lv_obj_set_size(w_count, (int) count.size() * 5 + 2, 8);
+            lv_obj_clear_flag(w_count, LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(w_count, LV_OBJ_FLAG_HIDDEN);
+          }
+          // Names down the first column, then the next.
+          const int col_w = (W - 2) / L.cols - (L.cols > 1 ? 2 : 0);
+          const int h = L.plates ? 12 : L.font;
+          size_t p = 0;
+          for (int i = 0; i < ::espn::kWallMaxSlots; i++) {
+            std::string name;
+            if (p <= page.size()) {
+              size_t nl = page.find('\n', p);
+              if (nl == std::string::npos)
+                nl = page.size();
+              name = page.substr(p, nl - p);
+              p = nl + 1;
+            }
+            if (i >= (int) L.per() || name.empty()) {
+              lv_obj_add_flag(w_slot[i], LV_OBJ_FLAG_HIDDEN);
+              continue;
+            }
+            const int col = i / L.rows, row = i % L.rows;
+            const int x = 1 + col * ((W - 2) / L.cols) + (col > 0 ? 2 : 0);
+            lv_obj_set_pos(w_slot[i], x, L.top + row * L.pitch);
+            lv_obj_set_size(w_slot[i], col_w, h);
+            lv_obj_set_style_border_width(w_slot[i], L.plates ? 1 : 0, 0);
+            lv_obj_set_style_radius(w_slot[i], L.plates ? 3 : 0, 0);
+            lv_obj_set_style_text_font(w_name[i], L.font == 12 ? f12 : f8, 0);
+            lv_obj_set_style_text_align(w_name[i], (L.plates || L.cols == 1) ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_size(w_name[i], L.plates ? col_w - 4 : col_w, L.font);
+            lv_obj_set_pos(w_name[i], L.plates ? 2 : 0, L.plates ? 2 : 0);
+            lv_label_set_text(w_name[i], name.c_str());
+            lv_obj_clear_flag(w_slot[i], LV_OBJ_FLAG_HIDDEN);
+          }
           lv_obj_move_foreground(id(tt_msg));
           lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
 

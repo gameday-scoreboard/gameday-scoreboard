@@ -502,6 +502,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::FieldStrip field_strip(int width_px) const { return ::espn::field_strip(this->game_, width_px); }
   const ::espn::MarginTrack &margin_track() const { return this->margin_tracks_.current(); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
+  // The plate wall look of the message card (message.h, wall_layout), on
+  // the bench only for now: option 'A' to 'E', 0 today's centered text.
+  void set_wall_bench(char option, const std::string &title);
+  char wall_option() const { return this->wall_opt_; }
+  const std::string &wall_title() const { return this->wall_title_; }
+  const ::espn::WallLayout &wall() const { return this->wall_; }
+  const std::string &wall_counter() const { return this->wall_counter_; }
   // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
   // The page says how many columns the display has room for.
@@ -635,6 +642,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_since_ms_{0};  // when the card last went up or down
   uint32_t msg_tick_ms_{0};
   uint32_t msg_roll_ms_{0};
+  char wall_opt_{0};
+  std::string wall_title_;
+  ::espn::WallLayout wall_;
+  std::string wall_counter_;
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
   ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it

@@ -288,6 +288,96 @@ inline MsgPage msg_next_page(uint32_t pos, uint32_t from, uint32_t n, bool eof, 
   return p;
 }
 
+// The message card as a wall of names (the plate wall): a title row, an
+// optional page counter, and the names in rows and columns sized to fit.
+// option is the bench's look, 'A' to 'E' (0 is today's centered text):
+//   A gold title and page counter, two columns when the names fit half the width
+//   B the same, one column
+//   C title only, no counter, two columns when they fit
+//   D no title, small type, two columns when they fit
+//   E title and counter, each name on a gold-edged plate
+constexpr size_t kWallTitleMax = 32;  // bytes
+constexpr int kWallBodyY = 10;        // the names start under the title row
+constexpr int kWallMaxSlots = 16;
+
+struct WallLayout {
+  uint8_t font{12};  // 12 or 8 (spleen_12, spleen_8)
+  uint8_t cols{1};
+  uint8_t rows{0};
+  uint8_t pitch{13};  // px from one row to the next
+  uint8_t top{0};     // y of the first row
+  bool title{false};
+  bool counter{false};
+  bool plates{false};
+  uint32_t per() const { return (uint32_t) cols * rows; }
+};
+
+// The most characters in any entry of a list kept one per line.
+template<class S> uint32_t msg_widest(const S &list) {
+  uint32_t best = 0, cur = 0;
+  for (char c : list) {
+    if (c == '\n') {
+      best = cur > best ? cur : best;
+      cur = 0;
+    } else if (((unsigned char) c & 0xC0) != 0x80) {
+      cur++;
+    }
+  }
+  return cur > best ? cur : best;
+}
+
+// W x H is the display; widest the longest name in characters; has_title
+// whether the owner gave the wall a title.
+inline WallLayout wall_layout(char option, int W, int H, uint32_t widest, bool has_title) {
+  WallLayout L;
+  L.title = has_title && option != 'D';
+  L.counter = L.title && (option == 'A' || option == 'B' || option == 'E');
+  L.plates = option == 'E';
+  L.top = L.title ? kWallBodyY : 0;
+  const int body = H - L.top;
+  struct Try {
+    uint8_t font, cols;
+  };
+  static const Try kTwo[] = {{12, 2}, {8, 2}, {12, 1}, {8, 1}};
+  static const Try kOne[] = {{12, 1}, {8, 1}};
+  static const Try kSmall[] = {{8, 2}, {8, 1}};
+  const Try *tries = kTwo;
+  size_t n = 4;
+  if (option == 'B') {
+    tries = kOne;
+    n = 2;
+  } else if (option == 'D' || option == 'E') {
+    tries = kSmall;
+    n = 2;
+  }
+  for (size_t i = 0; i < n; i++) {
+    const int cw = tries[i].font == 12 ? 6 : 5;  // advance; spleen_8's last column is blank
+    const int col_w = (W - 2) / tries[i].cols - (tries[i].cols > 1 ? 2 : 0) - (L.plates ? 4 : 0);
+    L.font = tries[i].font;
+    L.cols = tries[i].cols;
+    if ((int) widest * cw - (tries[i].font == 8 ? 1 : 0) <= col_w)
+      break;
+  }
+  L.pitch = L.plates || L.font == 12 ? 13 : option == 'D' ? 8 : 9;
+  int rows = (body + 1) / L.pitch;
+  if (L.cols * rows > kWallMaxSlots)
+    rows = kWallMaxSlots / L.cols;
+  L.rows = (uint8_t) rows;
+  return L;
+}
+
+// "3/10" for the page starting at entry first, or "" while the length of the
+// list is unknown (total 0) or it fits one page.
+inline std::string wall_counter(uint32_t first, uint32_t per, uint32_t total) {
+  if (per == 0 || total <= per)
+    return "";
+  const uint32_t pages = (total + per - 1) / per;
+  uint32_t page = first / per + 1;
+  if (page > pages)
+    page = pages;
+  return std::to_string(page) + "/" + std::to_string(pages);
+}
+
 // The card's clock. every 0 holds the board between games, a new page every
 // page_ms; every N gives it one page for page_ms every N minutes. since_ms is
 // the time since the card last went up (shown) or down (not shown).
