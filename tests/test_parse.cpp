@@ -2623,6 +2623,11 @@ static void test_soccer_text_helpers() {
   CHECK_EQ(soccer_board_record("999-999-999"), std::string("3996 pts"));
   // A count past three digits (the fuzzer's 1068893704 overflowed 3 * w).
   CHECK_EQ(soccer_board_record("1068893704-1-1"), std::string("1068893704-1-1"));
+  CHECK_EQ(hockey_board_record("30-12-5"), std::string("30-12-5"));
+  CHECK_EQ(hockey_board_record("30-12-10"), std::string("70 pts"));  // too wide under a logo
+  CHECK_EQ(hockey_board_record("44-30"), std::string("44-30"));
+  CHECK_EQ(hockey_board_record(""), std::string(""));
+  CHECK_EQ(hockey_board_record("1068893704-1-1"), std::string("1068893704-1-1"));
   CHECK_EQ(soccer_board_record("12-2147483648-1"), std::string("12-2147483648-1"));
 }
 
