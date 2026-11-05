@@ -20,6 +20,11 @@
 #include "timezones.h"
 #include "timezones_parsed.h"
 
+// A panel's zone is a position in kTimezones that also indexes the parsed
+// table, so the two must have a row for every zone.
+static_assert(::espn::kTimezonesParsedCount == ::espn::kTimezoneCount,
+              "timezones_parsed.h is out of date; run scripts/build_timezones.py");
+
 #ifdef GAMEDAY_TZ_PARSED
 #include "esphome/components/time/posix_tz.h"
 #endif
