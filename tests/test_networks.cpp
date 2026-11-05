@@ -160,7 +160,9 @@ struct Slot {
 };
 
 // A boot as SavedNetworks::setup() does it: the list from flash meets the slot.
-static bool boot(NetworkList &l, const Slot &slot) { return merge_slot(l, slot.ssid.c_str(), slot.password.c_str()); }
+static bool boot(NetworkList &l, const Slot &slot, Network *pending = nullptr) {
+  return merge_slot(l, slot.ssid.c_str(), slot.password.c_str(), pending);
+}
 
 // POST /gameday/wifi?forget= as SavedNetworks::forget() does it.
 static bool forget_net(NetworkList &l, Slot &slot, const char *ssid) {
@@ -227,15 +229,42 @@ static void test_changed_slot_is_added() {
   CHECK(names(l) == "Home,iPhone");
   CHECK(l.slot_hash == slot_hash("iPhone", "pw-phone"));
   CHECK(!boot(l, slot));
-  // A new password for a known network is a fresh setup: it goes first with it.
+  // A new password for a known network may be mistyped: the list keeps the
+  // one that worked, and the new one comes back as pending, to try first
+  // this boot. Connecting with it (wifi: on_connect) is what stores it.
+  Network pending{};
   slot = Slot{"Home", "pw-new"};
-  CHECK(boot(l, slot));
+  CHECK(boot(l, slot, &pending));
   CHECK(names(l) == "Home,iPhone");
-  CHECK(strcmp(l.nets[0].password, "pw-new") == 0);
+  CHECK(strcmp(l.nets[0].password, "pw-home") == 0);
+  CHECK(strcmp(pending.ssid, "Home") == 0);
+  CHECK(strcmp(pending.password, "pw-new") == 0);
+  CHECK(l.slot_hash == slot_hash("Home", "pw-new"));
+  // It did not connect: the next boot has nothing pending and the saved
+  // password is still there.
+  CHECK(!boot(l, slot, &pending));
+  CHECK(pending.ssid[0] == '\0');
+  CHECK(strcmp(l.nets[0].password, "pw-home") == 0);
+  // A later network, iPhone, with a new password that does connect.
   slot = Slot{"iPhone", "pw-phone2"};
-  CHECK(boot(l, slot));
+  CHECK(boot(l, slot, &pending));
+  CHECK(names(l) == "Home,iPhone");
+  CHECK(strcmp(l.nets[1].password, "pw-phone") == 0);
+  CHECK(strcmp(pending.ssid, "iPhone") == 0);
+  CHECK(put_front(l, pending.ssid, pending.password));  // wifi: on_connect
   CHECK(names(l) == "iPhone,Home");
   CHECK(strcmp(l.nets[0].password, "pw-phone2") == 0);
+  CHECK(!boot(l, slot, &pending));
+  CHECK(pending.ssid[0] == '\0');
+  // Without somewhere to put it the new password is dropped, never saved.
+  slot = Slot{"Home", "pw-other"};
+  CHECK(boot(l, slot));
+  CHECK(strcmp(l.nets[1].password, "pw-home") == 0);
+  // A network the list does not have still goes first at once.
+  slot = Slot{"Cabin", "pw-cabin"};
+  CHECK(boot(l, slot, &pending));
+  CHECK(names(l) == "Cabin,iPhone,Home");
+  CHECK(pending.ssid[0] == '\0');
 }
 
 static void test_blank_slot_keeps_the_list() {

@@ -153,6 +153,9 @@ async def to_code(config: ConfigType) -> None:
     cg.add_define("USE_IMPROV_BLE")
     # GAMEDAY: told when a Wi-Fi scan finishes, to answer RPC 0x04
     wifi.request_wifi_scan_results_listener()
+    # GAMEDAY: told when the panel joins a network, so a handover only
+    # reports success once the network sent was actually joined
+    wifi.request_wifi_connect_state_listener()
 
     await improv_base.setup_improv_core(var, config)
 

@@ -55,6 +55,12 @@ through `update_important` in the panel's state.
 - 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
 - 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
 - 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
+- 📶 A new password for a saved network, typed on the setup hotspot page, no longer replaces the one that worked until the panel joins with it
+- 📶 At start-up the panel looks for all its saved networks on its first Wi-Fi scan, not only the last one set up
+- 📶 Forgetting a network, or a failed setup from the app, no longer leaves the panel trying just one saved network until it restarts
+- 📱 The app can find the panel over Bluetooth after a later Wi-Fi drop, even when a phone stayed connected after setup
+- 📱 Setup from the app only reports success once the panel is on the new network, and the network list comes back at once with no Wi-Fi in range
+- 🧾 Updates and restarts no longer show up as watchdog crashes in the crash report, and a brownout keeps a saved crash's details
 
 ## v2026.11.0
 

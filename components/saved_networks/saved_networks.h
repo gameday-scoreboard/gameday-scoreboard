@@ -28,11 +28,15 @@
 // that one boot is in setup and any later one, after an unplug or after the
 // 15 minutes in gameday-common.yaml run out, is back on the saved networks.
 //
-// Within a boot the list is only saved, never re-applied: a setup from the
-// app narrows the live list to the new network the way ESPHome always did,
-// and the one-minute offline restart in gameday-common.yaml brings the full
-// list back. Forgetting a network takes it out of flash at once; the live
-// session keeps it until the next restart.
+// A new password for a saved network, from a setup that restarted before it
+// connected, is tried first that boot but not saved over the one that
+// worked: after PENDING_MS with no connection the panel goes back to the
+// saved password (wifi_list::merge_slot()).
+//
+// A setup from the app narrows the live list to the new network the way
+// ESPHome always did; a failed one hands the whole list back (reapply(),
+// from improv_ble). Forgetting a network takes it out of flash and out of
+// the live list at once.
 
 #include <mutex>
 #include <string>
@@ -84,12 +88,23 @@ class SavedNetworks : public Component {
   std::vector<Entry> list();
   size_t count();
   static constexpr size_t max() { return MAX_NETWORKS; }
+  // Hands the whole saved list to the Wi-Fi component again, after something
+  // narrowed it to one network. Main loop only.
+  void reapply();
+
+  // How long a new password for a saved network gets before the panel goes
+  // back to the one that worked.
+  static constexpr uint32_t PENDING_MS = 60000;
 
  protected:
-  void apply_();  // hands the list to the Wi-Fi component (setup only)
+  void apply_();  // hands the list to the Wi-Fi component; main loop only
   void save_();   // main loop only
+  void pending_timeout_();
 
   NetworkList list_{};
+  // A new password for a saved network, tried first this boot and stored
+  // only once it connects. ssid[0] is 0 when there is none.
+  wifi_list::Network pending_{};
   std::mutex mutex_;
   ESPPreferenceObject pref_;
   ESPPreferenceObject setup_pref_;
