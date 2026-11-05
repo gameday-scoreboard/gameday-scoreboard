@@ -95,12 +95,12 @@ Look at **Signal** under **Diagnostics** on the device page's Device tab. It's i
 Use **Reset Wi-Fi** in the red box at the bottom of the device page's Device tab, or the button on the controller if you can't reach the page:
 
 1. Hold the button. At about 1.5 seconds the panel shows its address.
-2. At 5 seconds it says **Keep holding to reset Wi-Fi** and a bar fills.
-3. At 10 seconds it says **Wi-Fi reset, restarting** and resets.
+2. At 5 seconds it says **Keep holding**, **Wi-Fi reset** and counts down.
+3. At 10 seconds it says **Release to reset Wi-Fi**. Let go now, before 20 seconds, and it says **Wi-Fi reset, restarting**.
 
-Let go before 10 seconds and nothing resets.
+Keep holding past 20 seconds and letting go does a factory reset instead, so let go as soon as it says **Release to reset Wi-Fi**.
 
-**Why:** a Wi-Fi reset makes the panel forget its saved networks and restart into setup, so you can put it on a new network from the Game Day app or its hotspot. Your team, favorites and other settings stay as they were. See [Buttons and resets](/using/buttons-and-resets/).
+**Why:** a Wi-Fi reset restarts the panel into setup for 15 minutes, keeping its saved networks, so you can put it on a new network from the Game Day app or its hotspot. Your team, favorites and other settings stay as they were. See [Buttons and resets](/using/buttons-and-resets/).
 
 Nothing resets while you hold the button. Letting go does what the screen says:
 
