@@ -2104,7 +2104,11 @@
   // GET /gameday/settings is the file; POST takes one back, checked whole on
   // the panel before anything changes. Firmware without it answers 404 and the
   // section stays hidden.
-  const BACKUP_MAX = 4096;
+  // The panel takes a backup of up to 8192 bytes (settings_doc.h
+  // kSettingsMaxBytes), sent compact. A file can be bigger than that on disk:
+  // pages before this one saved it indented.
+  const BACKUP_MAX = 8192;
+  const BACKUP_FILE_MAX = 65536;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
   const probeBackup = async (retry) => {
     try {
@@ -2124,7 +2128,7 @@
     const day = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
-    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc) + "\n"], { type: "application/json" }));
     const a = el("a");
     a.href = url;
     a.download = name;
@@ -2138,12 +2142,17 @@
   $("#bkFile").onchange = async () => {
     const f = $("#bkFile").files[0];
     if (!f) return;
-    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    if (f.size > BACKUP_FILE_MAX) { backupNote("That file is too big to be a settings backup."); return; }
     const text = await f.text();
     let doc;
     try { doc = JSON.parse(text); } catch (_) { doc = null; }
     if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
       backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const body = JSON.stringify(doc);
+    if (new TextEncoder().encode(body).length > BACKUP_MAX) {
+      backupNote("That backup is too big for the panel to take.");
       return;
     }
     const other = !!S && doc.name !== S.name;
@@ -2152,7 +2161,7 @@
     if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are" + own + ".")) return;
     let r, j;
     try {
-      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body });
       j = await r.json().catch(() => ({}));
     } catch (_) {
       toast("Device did not respond. Try again.");
@@ -2804,6 +2813,7 @@
   const waitForReboot = (fromVersion, line) => {
     const started = Date.now();
     let sawDown = false;
+    let sawInstalling = false;
     if (es) { es.close(); es = null; }
     setConn(false);
     showRestart(line);
@@ -2821,11 +2831,24 @@
           const settled = !String(j.state || "").toUpperCase().includes("INSTALLING");
           // Once the device has been seen down, a settled answer means it is back.
           if (changed || (sawDown && settled)) { location.reload(); return; }
+          sawInstalling = sawInstalling || !settled;
+          // An install that stops with the panel never down and on the same
+          // version failed (a download or checksum error): say so now.
+          if (installing && sawInstalling && settled && !sawDown) {
+            clearTimeout(timer);
+            installing = false;
+            restart = "";
+            renderGone();
+            toast("The update didn't install. Try again.");
+            connect();
+            return;
+          }
         }
       } catch (_) { sawDown = true; }
       clearTimeout(timer);
       if (Date.now() - started < 5 * 60 * 1000) { setTimeout(tick, 2000); return; }
       // Not back in five minutes: stop saying it's restarting and listen again.
+      installing = false;
       restart = "";
       renderGone();
       connect();
@@ -2900,12 +2923,18 @@
   // true if a is newer than b, false if older, null if either is unreadable.
   // A beta's build number ("2026.10.0-beta.812") counts as a fourth part, as
   // in the firmware (auto_update.h), so a beta is newer than its plain number.
+  // As auto_update.h's version_newer: a beta carries the next release's
+  // number, so the release is newer than its own betas.
   const isNewer = (a, b) => {
-    const parse = (v) => String(v || "").replace(/^v/, "").replace("-beta.", ".").split(".").map((n) => parseInt(n, 10));
+    const parse = (v) => {
+      const [num, build] = String(v || "").replace(/^v/, "").split("-beta.");
+      return { n: num.split(".").map((n) => parseInt(n, 10)), beta: build !== undefined, build: parseInt(build, 10) || 0 };
+    };
     const pa = parse(a), pb = parse(b);
-    if (pa.length < 3 || pb.length < 3 || pa.some(isNaN) || pb.some(isNaN)) return null;
-    for (let i = 0; i < 4; i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x > y; }
-    return false;
+    if (pa.n.length < 3 || pb.n.length < 3 || pa.n.some(isNaN) || pb.n.some(isNaN)) return null;
+    for (let i = 0; i < 4; i++) { const x = pa.n[i] || 0, y = pb.n[i] || 0; if (x !== y) return x > y; }
+    if (pa.beta !== pb.beta) return !pa.beta;
+    return pa.beta && pa.build > pb.build;
   };
 
   // ---- firmware update -----------------------------------------------------

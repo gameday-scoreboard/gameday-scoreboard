@@ -95,12 +95,12 @@ Look at **Signal** under **Diagnostics** on the device page's Device tab. It's i
 Use **Reset Wi-Fi** in the red box at the bottom of the device page's Device tab, or the button on the controller if you can't reach the page:
 
 1. Hold the button. At about 1.5 seconds the panel shows its address.
-2. At 5 seconds it says **Keep holding to reset Wi-Fi** and a bar fills.
-3. At 10 seconds it says **Wi-Fi reset, restarting** and resets.
+2. At 5 seconds it says **Keep holding**, **Wi-Fi reset** and counts down.
+3. At 10 seconds it says **Release to reset Wi-Fi**. Let go now, before 20 seconds, and it says **Wi-Fi reset, restarting**.
 
-Let go before 10 seconds and nothing resets.
+Keep holding past 20 seconds and letting go does a factory reset instead, so let go as soon as it says **Release to reset Wi-Fi**.
 
-**Why:** a Wi-Fi reset makes the panel forget its saved networks and restart into setup, so you can put it on a new network from the Game Day app or its hotspot. Your team, favorites and other settings stay as they were. See [Buttons and resets](/using/buttons-and-resets/).
+**Why:** a Wi-Fi reset restarts the panel into setup for 15 minutes, keeping its saved networks, so you can put it on a new network from the Game Day app or its hotspot. Your team, favorites and other settings stay as they were. See [Buttons and resets](/using/buttons-and-resets/).
 
 Nothing resets while you hold the button. Letting go does what the screen says:
 
@@ -132,9 +132,7 @@ If it stays dark or keeps restarting, check that it's on the power supply that c
 
 Check **Night schedule** under **Screen** on the device page's Display tab. While it's on, the Home tab says **Night mode until** and the time it ends. Turn the schedule off, change its hours, or set **Screen at night** to On to keep the panel lit at its night brightness.
 
-:::note[Coming in the next release]
 To light the panel for the rest of one night, press **Turn on for tonight** next to **Night mode until**, or **ON** on the remote.
-:::
 
 **Why:** the night schedule dims the panel, or turns its screen off, between the times you set. A live game for your team or a favorite brings it back to normal brightness until the game ends. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
@@ -148,7 +146,6 @@ A small icon pulsing slowly in the top right corner means the panel is holding i
 
 **Why:** above a 75 C reading from the controller's chip, the panel steps its brightness down, a step every two minutes while it stays hot, as far as a quarter of your setting. Once the chip reads under 70 C, it comes back a step at a time. A power supply too weak for the panel makes it restart when it lights up, and a lower brightness draws less power. The device page shows the same message, and the chip temperature under Diagnostics.
 
-:::note[Coming in the next release]
 The panel stays at your brightness and there is no Clear button. The icon in the corner only says what happened:
 
 **A thermometer, and Running warm:** the controller's chip reads 75 C or more. Keep the panel out of direct sun and give it some air behind it. The icon goes once the chip reads under 70 C.
@@ -156,7 +153,6 @@ The panel stays at your brightness and there is no Clear button. The icon in the
 **A plug, and Power dipped:** the panel restarted because its power dipped. It lit up at half brightness for 3 seconds, then went to your brightness. Use the power supply that came with it, not a phone charger or a USB port. The icon goes once the panel has run 10 minutes without another dip.
 
 The device page shows the same words under the board. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
-:::
 
 ## The device page says an update didn't take
 

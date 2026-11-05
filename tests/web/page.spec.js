@@ -1626,26 +1626,32 @@ test("follow beta: off by default, posts 0 and 1, hidden when the firmware has n
   await expect(page.locator("#betaRow")).toBeHidden();
 });
 
-test("a beta is newer than its release number, and a release is behind the beta before it", async ({ page, request }) => {
+test("a beta carries the next release's number: newer than the last release, older than its own", async ({ page, request }) => {
   await reset(request, { beta: true });
   const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
-  let entity = { ...fw, value: "1.5.5-beta.812", current_version: "1.5.5" };
+  let entity = { ...fw, value: "1.5.6-beta.812", current_version: "1.5.5" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.goto("/");
   await tab(page, "device");
-  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.5-beta.812");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.812");
   await expect(page.locator("#fwInstall")).toBeVisible();
 
-  // Beta turned off on a beta build: the release it was built from is not an update.
-  entity = { ...fw, value: "1.5.5", current_version: "1.5.5-beta.812" };
+  // Beta turned off on a beta build: the release it was building toward is an update.
+  entity = { ...fw, value: "1.5.6", current_version: "1.5.6-beta.812" };
   await page.reload();
-  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.5-beta.812");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+
+  // A beta of a release the panel already runs is behind it.
+  entity = { ...fw, value: "1.5.6-beta.812", current_version: "1.5.6" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.6");
   await expect(page.locator("#fwInstall")).toBeHidden();
 
   // The next beta is newer than the last.
-  entity = { ...fw, value: "1.5.6-beta.3", current_version: "1.5.5-beta.812" };
+  entity = { ...fw, value: "1.5.6-beta.813", current_version: "1.5.6-beta.812" };
   await page.reload();
-  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.813");
 });
 
 test("an update that rolled back says so and still offers Install", async ({ page, request }) => {
@@ -2704,7 +2710,10 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   await expect(page.locator("#backup")).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#bkExport")]);
   expect(download.suggestedFilename()).toMatch(/^gameday-2f6a70-settings-\d{4}-\d\d-\d\d\.json$/);
-  const doc = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
+  const saved = fs.readFileSync(await download.path(), "utf8");
+  const doc = JSON.parse(saved);
+  // Saved compact, the size the panel takes back.
+  expect(saved).toBe(JSON.stringify(doc) + "\n");
   expect(doc).toMatchObject({ schema: 1, name: "gameday-2f6a70", mode: 4,
                               favs: ["nfl:6", "nfl:34", "ncaa:145"], live: [], down: true, panels: 2, brightness: 128, scroll: 5 });
   await expect(page.locator("#bkNote")).toHaveText(/^Saved gameday-2f6a70-settings-/);
@@ -2744,6 +2753,16 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   await sleep(300);
   expect((await posts()).length).toBe(sent);
   expect((await deviceState(request)).favs[0].abbr).toBe("ATL");
+
+  // An indented file over 4 KB (older pages saved them that way) goes in,
+  // sent compact.
+  const roomy = JSON.stringify(doc, null, 2).replace(/\n/g, "\n" + " ".repeat(40));
+  expect(roomy.length).toBeGreaterThan(4096);
+  page.once("dialog", (d) => d.accept());
+  await page.setInputFiles("#bkFile", file("roomy.json", roomy));
+  await expect(page.locator("#bkNote")).toHaveText(/^Restored\./);
+  expect((await posts()).at(-1).body).toBe(JSON.stringify(doc));
+  expect((await deviceState(request)).favs[0].abbr).toBe("DAL");
 });
 
 test("Import of this panel's own backup with another layout waits out the restart", async ({ page, request }) => {

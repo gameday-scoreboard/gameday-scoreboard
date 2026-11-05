@@ -676,7 +676,11 @@ def apply_set(kv):
             ref = parse_team_ref(v)
             if ref is None and v not in ("none", ""):
                 continue
-            STATE["favs"][int(k[3]) - 1] = team(*ref) if ref else {}
+            slot = int(k[3]) - 1
+            # set_favorite_(): a team already in another slot is refused.
+            if ref and any(i != slot and (f.get("l"), f.get("id")) == ref for i, f in enumerate(STATE["favs"])):
+                continue
+            STATE["favs"][slot] = team(*ref) if ref else {}
             remap_lists(before)
         elif k == "lists":
             # set_lists_(): the playlist being played stays chosen by its name.
@@ -834,7 +838,8 @@ def settings_doc():
         elif k == "tzauto":
             out["tzauto"] = s["tz_auto"]
         elif k == "sport":
-            if "sport" in s:
+            # Only in Favorite teams: on a restore the row would switch the mode to it.
+            if "sport" in s and s.get("mode", 4) == 4:
                 out["sport"] = s["sport"] or "none"
         elif k == "cards":
             if "cards" in s:
@@ -878,8 +883,12 @@ def import_settings(doc):
     ranges = {"rotate": ("kRotateMinMinutes", "kRotateMaxMinutes"), "lockon": ("kLockonMinMinutes", "kLockonMaxMinutes"),
               "release": ("kReleaseMinSeconds", "kReleaseMaxSeconds"),
               "wakelead": ("kWakeLeadMin", "kWakeLeadMax")}
+    # A sport row only plays in Favorite teams (settings_doc.h).
+    favorites = not is_int(doc.get("mode")) or doc["mode"] == 4
     for k in SET_KEYS:
         if k not in doc or doc[k] is None:
+            continue
+        if k == "sport" and not favorites:
             continue
         v, kind = doc[k], SETTINGS_TYPES.get(k)
         if k == "lists":
@@ -1017,9 +1026,8 @@ def import_settings(doc):
                 if r == -1:
                     skipped.append("favs=" + e)
                 ref = parse_team_ref(e) if r == 1 else None
-                if ref and ref in favs:
-                    return fail(f"favs lists {e} twice.")
-                favs.append(ref)
+                # A team already in an earlier slot leaves this one empty.
+                favs.append(None if ref and ref in favs else ref)
         else:
             skipped.append(k)
     # The same start and end: the end is left out (settings_doc.h).
@@ -1126,13 +1134,23 @@ def selftest():
     if code != 200 or reply["skipped"] or settings_doc() != want:
         bad += 1
         print(f"FAIL the settings fixture didn't come back whole: {code} {json.dumps(reply)}")
-    for doc in ({"schema": 1, "mode": "4"}, {"schema": 2}, {"schema": 1, "favs": ["nfl:6", "nfl:6"]},
-                {"schema": 1, "brightness": 40, "scroll": "5"}):
+    for doc in ({"schema": 1, "mode": "4"}, {"schema": 2}, {"schema": 1, "brightness": 40, "scroll": "5"}):
         before = json.dumps(STATE, sort_keys=True)
         code, _ = import_settings(doc)
         if code != 400 or json.dumps(STATE, sort_keys=True) != before:
             bad += 1
             print(f"FAIL {json.dumps(doc)} wasn't refused whole")
+    # One team in two slots restores, with the second slot empty.
+    code, _ = import_settings({"schema": 1, "favs": ["nfl:6", "mlb:15", "nfl:6"]})
+    if code != 200 or [f.get("abbr", "") for f in STATE["favs"][:3]] != ["DAL", "ATL", ""]:
+        bad += 1
+        print(f"FAIL a favorite listed twice didn't restore with the slot empty: {code} {STATE['favs'][:3]}")
+    # A Live games backup's sport row stays out, so the mode stays Live games.
+    reset_state({})
+    code, _ = import_settings({"schema": 1, "mode": 5, "sport": "football"})
+    if code != 200 or STATE["mode"] != 5:
+        bad += 1
+        print(f"FAIL a Live games backup's sport row switched the mode: {code} mode {STATE['mode']}")
     reset_state({})
     for e in ENTITIES:
         e.update(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"]))

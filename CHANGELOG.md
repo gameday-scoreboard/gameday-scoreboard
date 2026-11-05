@@ -32,6 +32,34 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
+### ✨ New
+
+- 🗓️ Schedule and season recap cards now work for NBA, WNBA, NHL and college basketball favorites too, every league but MLB
+
+### 🐛 Fixes
+
+- 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
+- ⚽ A cup tie won on penalties after losing the second leg celebrates the right team, on the panel and in Home Assistant
+- ⭐ A favorite whose game didn't load comes back within minutes instead of staying off the board for up to six hours
+- 🏀 Halftime and final leaders with accented names, like Dončić, show their letters instead of empty boxes
+- 📱 The team picker's league tabs fit on a phone, with Done always in reach
+- 🎮 Unpair remote stays unpaired after a restart
+- 🧪 Turning Follow beta off gets you the release your beta was building toward, instead of waiting for the one after it
+- 🔄 A restart partway through a download no longer marks that release as one that "didn't take", so the panel still installs it on its own
+- 🔄 The device page says when an install fails instead of showing "Installing" for five minutes
+- 💾 The device page restores its own settings backups again once you have several playlists; it used to call them too big
+- 💾 Restoring a backup saved in Live games keeps Live games, instead of switching the panel to Favorite teams
+- 💾 A backup with the same team in two favorite slots restores, with the second slot left empty
+- 📶 Tapping Save on the setup hotspot page without picking a network no longer forgets every saved network at the next restart
+- 🗓️ Moving or deleting playlists while a schedule is playing one no longer brings back the wrong playlist when it ends, or wipes every playlist's schedule after a restart
+- 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
+- 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
+- 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
+
+## v2026.11.0
+
+The device page in five tabs, Game-day wake and After the game, weather, news, the Top 25, game leaders, season cards, your own pictures, Effects, and a build for the Waveshare ESP32-S3-RGB-Matrix board.
+
 ### ⚠️ Heads up
 
 - 🔌 The panel no longer dims itself when hot or after a power dip, and the Clear button is gone: a thermometer or plug in the corner says what happened, and after a power dip it starts at half brightness for 3 seconds
@@ -52,11 +80,12 @@ through `update_important` in the panel's state.
 - 📰 A news card between games: ESPN headlines for your teams or leagues, one every 3 minutes, off until you turn on **News headlines**
 - 🎵 **Playing** has a row for each sport in your favorites, like **All football**, that keeps up with your list on its own; the **One per sport** button is gone
 - 🏈 While you follow a college team, the AP Top 25 takes a turn between games every 10 minutes, for college football and basketball
-- 🔢 A college team in the AP Top 25 has its rank on the top corner of its logo, on the next-game card and during the game
+- 🔢 A college team in the AP Top 25 has its rank on the top corner of its logo, on the next-game card, during the game, and on Live games' Later today and final score cards
 - 🖼️ Your own pictures between games: add up to 4 photos or GIFs under **Pictures** on the device page, and a GIF animates
 - 🎆 **Effects**, a third page under **Showing**: one of 52 moving patterns fills the panel in place of the scoreboard; the board comes back when you pick the Scoreboard again or when the panel has something to tell you
 - 🗂️ Between games on the device page is one list with a switch for each card: next game, clock, both countdowns, the message card, pictures, game leaders, Top 25, news and weather
 - 🗓️ Schedule and season recap cards between games: a football or soccer favorite's next three games, and its record and playoff result once its season is over
+- 🧩 A build for the Waveshare ESP32-S3-RGB-Matrix board, the board in ready-made Game Day Scoreboards: the installer now asks for your board first. It hasn't been tested on a real board yet.
 
 ### 🐛 Fixes
 

@@ -252,6 +252,15 @@ int main() {
       return parse_upcoming(json, 6, 4, up);
     });
   }
+  {
+    // The schedule and recap cards' read (season.h) at its biggest: a whole
+    // NHL season, 82 finals (1.9 MB from ESPN, streamed through the filter).
+    std::string json = slurp("fixtures/schedule_nhl_ana_2026.json");
+    measure("season_nhl", [&] {
+      SeasonRead r;
+      return parse_season_str(json, 25, r);
+    });
+  }
 
   printf("\n}\n");
   set_json_allocator(nullptr);
