@@ -60,13 +60,11 @@ void SavedNetworks::setup() {
     // that kept one network this is where its home network comes from.
     const wifi::WiFiAP slot = w->get_sta();
     const std::string ssid = slot.get_ssid().str();
-    const uint8_t before = this->list_.count;
     if (wifi_list::merge_slot(this->list_, ssid.c_str(), slot.get_password().c_str())) {
-      if (ssid.empty())
-        ESP_LOGI(TAG, "Wi-Fi was reset; forgetting %u saved network(s)", before);
-      else
-        ESP_LOGI(TAG, "Network set up since the last boot: %s", ssid.c_str());
+      ESP_LOGI(TAG, "Network set up since the last boot: %s", ssid.c_str());
       this->save_();
+    } else if (ssid.empty() && this->list_.count > 0) {
+      ESP_LOGI(TAG, "ESPHome's network slot is blank; keeping %u saved network(s)", this->list_.count);
     }
   }
   // A blank network that still counts as has_sta() is what the on_boot

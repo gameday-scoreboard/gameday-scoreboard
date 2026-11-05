@@ -81,6 +81,14 @@ struct NightSkipRtc {
 static const uint32_t NIGHT_SKIP_MARK = 0x4E534B31;
 RTC_NOINIT_ATTR static NightSkipRtc night_skip_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+// The panel's UTC offset at an epoch, from its timezone: the local time
+// there read as if it were UTC, less the epoch.
+static int32_t utc_offset_at(int64_t epoch) {
+  ESPTime t = ESPTime::from_epoch_local((time_t) epoch);
+  t.recalc_timestamp_utc();
+  return (int32_t) ((int64_t) t.timestamp - epoch);
+}
+
 // The wake's state (wake.h) the same way: a panel After the game turned off
 // stays off through the nightly update, and one woken for a game isn't woken
 // again for it. The state is kept as bytes: WakeState has default member
@@ -150,6 +158,10 @@ static const uint32_t NO_GAMES_RESCAN = 3 * 60 * MINUTE;
 // worst honest case, not over it. 2 x watchdog_timeout for the network plus
 // 60s for handshakes and parsing leaves only a genuinely wedged worker here.
 static const uint32_t WORKER_DEADLINE = 120 * 1000;
+// A season read (up to 1.9 MB) gives up this long after it starts, well
+// inside WORKER_DEADLINE, so a slow link fails the read instead of the loop
+// writing off a worker that is still writing job_.
+static const uint32_t SEASON_READ_LIMIT = 90 * 1000;
 // Days of league scoreboards read to find a team's next game when ESPN's team
 // endpoint still names a finished one (leagues without a season list).
 static const int LOOKAHEAD_DAYS = 3;
@@ -195,12 +207,26 @@ class ContainerReader {
 
   size_t total() const { return this->total_; }
 
+  // Stop reading (as at the end of the body) once `ms` have passed since
+  // `since`. Each read() is bounded only by the HTTP timeout, so a slow
+  // trickle could otherwise outlast WORKER_DEADLINE.
+  void set_time_limit(uint32_t since, uint32_t ms) {
+    this->since_ms_ = since;
+    this->limit_ms_ = ms;
+  }
+  bool timed_out() const { return this->timed_out_; }
+
  private:
   bool fill_() {
     if (this->pos_ < this->len_)
       return true;
     if (this->eof_)
       return false;
+    if (this->limit_ms_ != 0 && millis() - this->since_ms_ >= this->limit_ms_) {
+      this->eof_ = true;
+      this->timed_out_ = true;
+      return false;
+    }
     int n = this->container_->read(this->buf_, sizeof(this->buf_));
     if (n <= 0) {
       this->eof_ = true;
@@ -218,7 +244,10 @@ class ContainerReader {
   size_t pos_{0};
   size_t len_{0};
   size_t total_{0};
+  uint32_t since_ms_{0};
+  uint32_t limit_ms_{0};  // 0: no limit
   bool eof_{false};
+  bool timed_out_{false};
 };
 
 // ---- GamedaySelect ---------------------------------------------------------
@@ -361,10 +390,16 @@ void GamedayComponent::setup() {
   if (this->prefs9_.sport > ::espn::kSportCount || this->prefs9_.active != 0)
     this->prefs9_.sport = 0;
   this->pref10_ = global_preferences->make_preference<Prefs10>(fnv1_hash("gameday_prefs10_v1"));
-  if (!this->pref10_.load(&this->prefs10_) || this->prefs10_.sched_applied > this->prefs9_.count ||
-      this->prefs10_.sched_applied < 0 || this->prefs10_.sched_before > this->prefs9_.count ||
-      this->prefs10_.sched_before < 0 || this->prefs10_.sched_sport > ::espn::kSportCount)
+  if (!this->pref10_.load(&this->prefs10_)) {
     this->prefs10_ = Prefs10{};  // no options, no schedule under way
+  } else if (this->prefs10_.sched_applied > this->prefs9_.count || this->prefs10_.sched_applied < 0 ||
+             this->prefs10_.sched_before > this->prefs9_.count || this->prefs10_.sched_before < 0 ||
+             this->prefs10_.sched_sport > ::espn::kSportCount) {
+    // A schedule state that doesn't fit the playlists: drop only that, so
+    // every playlist keeps its days, hours and options.
+    this->prefs10_.sched_applied = this->prefs10_.sched_before = 0;
+    this->prefs10_.sched_sport = this->prefs10_.sched_mode = 0;
+  }
   this->pref11_ = global_preferences->make_preference<Prefs11>(fnv1_hash("gameday_prefs11_v1"));
   if (!this->pref11_.load(&this->prefs11_))
     this->prefs11_ = Prefs11{};  // each button on its own favorite
@@ -472,6 +507,14 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
     return;
   std::vector<League> live_before = this->live_leagues_();
   std::vector<::espn::TeamRef> before = this->fav_refs_all_();
+  // One team in two slots plays twice, and makes a backup only the import's
+  // duplicate check can take back. favs= removes repeats on its own.
+  if (id != 0)
+    for (uint8_t i = 0; i < FAV_MAX; i++)
+      if (i != slot - 1 && before[i] == ::espn::TeamRef{league, id}) {
+        ESP_LOGW(TAG, "Favorite %u: that team is already favorite %u", (unsigned) slot, (unsigned) (i + 1));
+        return;
+      }
   this->put_fav_(slot - 1, league, id);
   if (slot <= 4)
     this->pref3_.save(&this->prefs3_);
@@ -649,6 +692,9 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
   std::string applied_name = this->list_name_((uint8_t) this->prefs10_.sched_applied);
+  // The playlist to go back to when the schedule ends (0: every favorite).
+  const int8_t before_was = this->prefs10_.sched_before;
+  std::string before_name = before_was > 0 ? this->list_name_((uint8_t) before_was) : std::string();
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   Prefs10 p10 = this->prefs10_;
@@ -684,8 +730,17 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   for (uint8_t n = 1; n <= p.count && !applied_name.empty(); n++)
     if (this->list_name_(n) == applied_name)
       p10.sched_applied = (int8_t) n;
-  if (p10.sched_applied == 0)
+  if (p10.sched_applied == 0) {
     p10.sched_before = p10.sched_sport = 0;
+  } else if (before_was > 0) {
+    // So does the one to go back to: a moved playlist is found by its name,
+    // and a deleted one gives way to every favorite. Its old number could
+    // point at another playlist, or past the end of the list.
+    p10.sched_before = 0;
+    for (uint8_t n = 1; n <= p.count && !before_name.empty(); n++)
+      if (this->list_name_(n) == before_name)
+        p10.sched_before = (int8_t) n;
+  }
   this->prefs10_ = p10;
   this->pref10_.save(&this->prefs10_);
   this->prefs12_ = p12;
@@ -1181,7 +1236,13 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
       const FavEntry &e = this->fav_[i];
       if (this->fav_in_list_(e.slot - 1) != (pass == 0))
         continue;
-      bool missing = !e.sched.valid || e.stale;
+      // A team read that worked with a game read that failed leaves a
+      // schedule but no game for it. Nothing else reads that game again (side
+      // polls skip a favorite with no game, and the board's own poll needs it
+      // locked), so it counts as missing and gets the short retry, not the
+      // six-hour refresh.
+      bool missing = !e.sched.valid || e.stale ||
+                     (!e.sched.event_id.empty() && e.game.event_id != e.sched.event_id);
       uint32_t age = now - e.fetched_ms;
       if ((missing && (e.fetched_ms == 0 || age >= RETRY_INTERVAL)) || (!missing && age >= SCHEDULE_INTERVAL)) {
         refresh = (int) i;
@@ -1434,9 +1495,14 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   this->schedule_next_(0);
 }
 
-uint32_t GamedayComponent::our_id_() const {
-  if (this->job_.fav_index >= 0)
-    return this->job_.our_id;
+// Worker task: only the job's own copy, set by the job's starter on the main
+// loop. fav_, live_fallback_ and live_away_id_ belong to the main loop, which
+// can rebuild fav_ while a read is under way.
+uint32_t GamedayComponent::our_id_() const { return this->job_.our_id; }
+
+// Main loop, from start_job_: the team a My team, cup or Live games read is
+// oriented around.
+uint32_t GamedayComponent::orient_id_() const {
   // In the fallback the panel is showing favorite #1's own game, so the
   // snapshot is oriented around that team.
   uint8_t m = this->job_.mode;
@@ -1466,7 +1532,19 @@ void GamedayComponent::dump_config() {
 #endif
 }
 
-void GamedayComponent::on_shutdown() { ::espn::boot_log_planned(boot_log); }
+void GamedayComponent::on_shutdown() {
+  ::espn::boot_log_planned(boot_log);
+#if defined(USE_UPDATE) && defined(ESPHOME_PROJECT_VERSION)
+  // An install that gets to a clean restart has written the new image (the
+  // update restarts the panel with App.safe_reboot() once it is in place).
+  // A crash or power cut partway through never gets here.
+  if (this->update_installing_) {
+    this->update_mark_.written = 1;
+    this->update_mark_pref_.save(&this->update_mark_);
+    global_preferences->sync();
+  }
+#endif
+}
 
 void GamedayComponent::loop() {
   if (this->power_dip_.tick(millis()))
@@ -2127,7 +2205,8 @@ void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
     ESPTime now = this->time_->now();
     if (now.is_valid()) {
       this->night_skip_until_ =
-          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second);
+          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second,
+                                   utc_offset_at);
       this->save_night_skip_();
     }
   }
@@ -2216,7 +2295,8 @@ bool GamedayComponent::night_skip(const char *why) {
     return false;  // holding needs a clock, so this can't happen
   ESP_LOGI(TAG, "Night schedule: %s skips the rest of the night", why);
   this->night_skip_until_ =
-      ::espn::night_skip_until(this->night_, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second);
+      ::espn::night_skip_until(this->night_, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second,
+                               utc_offset_at);
   this->save_night_skip_();
   this->night_tick_();
   return true;
@@ -2429,7 +2509,8 @@ void GamedayComponent::settle_update_mark_() {
 #if defined(USE_UPDATE) && defined(ESPHOME_PROJECT_VERSION)
   if (App.get_updates().empty())
     return;
-  this->update_mark_pref_ = global_preferences->make_preference<::espn::UpdateMark>(fnv1_hash("gameday_update_mark_v1"));
+  // v2 added `written`; a v1 mark just starts over.
+  this->update_mark_pref_ = global_preferences->make_preference<::espn::UpdateMark>(fnv1_hash("gameday_update_mark_v2"));
   if (!this->update_mark_pref_.load(&this->update_mark_))
     this->update_mark_ = ::espn::UpdateMark{};
   const ::espn::UpdateMark before = this->update_mark_;
@@ -2477,6 +2558,7 @@ void GamedayComponent::update_state_changed_() {
     // this firmware may do is restart into the new one.
     this->update_installing_ = true;
     ::espn::update_mark_set(this->update_mark_.installing, u->update_info.latest_version);
+    this->update_mark_.written = 0;
     this->update_mark_pref_.save(&this->update_mark_);
     global_preferences->sync();
   } else if (this->update_installing_) {
@@ -3100,6 +3182,7 @@ void GamedayComponent::start_job_() {
   j.generation = this->generation_;
   j.team = this->fallback_team_();
   j.mode = this->effective_mode_();
+  j.our_id = this->orient_id_();
   j.scan_leagues = this->scan_leagues_();
   j.top25 = this->no_team_default();
   // This game's leaders at halftime and the final (game_leaders.h): one
@@ -6443,8 +6526,8 @@ std::vector<GamedayComponent::SeasonTeam> GamedayComponent::season_teams_() cons
     if (e.team == nullptr || !this->fav_in_list_(e.slot - 1))
       continue;
     const ::espn::LeagueInfo *info = ::espn::league_info(e.team->league);
-    if (info == nullptr || !info->season_list)
-      continue;  // a season schedule of a megabyte or more (leagues.h)
+    if (info == nullptr || !::espn::season_cards(*info))
+      continue;  // MLB's 2.8 MB season schedule
     // Between seasons by the Favorites clock's rule (offseason.h).
     bool polled = e.game.valid && e.game.event_id == e.sched.event_id;
     int64_t kick = polled ? e.game.kickoff_epoch : e.sched.kickoff_epoch;
@@ -6517,20 +6600,25 @@ void GamedayComponent::season_tick_() {
     const SeasonTeam &t = teams[i];
     if (t.off_season ? !recap_on : !sched_on)
       continue;
-    const bool soccer = ::espn::league_sport(t.team->league) == ::espn::Sport::SOCCER;
+    const ::espn::LeagueInfo *info = ::espn::league_info(t.team->league);  // set: season_teams_ checked it
+    const bool soccer = info->sport == ::espn::Sport::SOCCER;
     const bool results = soccer && t.off_season;
     SeasonEntry *e = this->season_entry_(t.team->league, t.team->espn_id);
-    if (::espn::season_read_due(now, e != nullptr ? e->read_ms : 0, e != nullptr ? e->fail_ms : 0,
-                                e == nullptr || e->read_ms == 0 || e->results == results)) {
+    const bool same_kind = e == nullptr || e->read_ms == 0 || e->off == t.off_season;
+    if (::espn::season_read_due(now, e != nullptr ? e->read_ms : 0, e != nullptr ? e->fail_ms : 0, same_kind,
+                                ::espn::season_big(*info))) {
       this->season_read_due_ = true;
       this->season_read_league_ = t.team->league;
       this->season_read_id_ = t.team->espn_id;
       this->season_read_results_ = results;
+      this->season_read_off_ = t.off_season;
       this->season_pos_ = (uint32_t) i;
       return;
     }
-    if (e == nullptr || e->read_ms == 0 || e->results != results)
-      continue;  // the read failed: the next team, and this one again after the retry
+    // The read failed, or it's from the other half of the season and not
+    // due again yet: the next team, and this one again later.
+    if (e == nullptr || e->read_ms == 0 || e->off != t.off_season)
+      continue;
     const std::vector<::espn::SeasonGame> up = ::espn::season_upcoming(e->read, epoch);
     ::espn::SeasonCard c = ::espn::season_card(t.off_season, sched_on, recap_on, !up.empty(),
                                                ::espn::season_recap_ready(e->read, t.record));
@@ -6540,7 +6628,7 @@ void GamedayComponent::season_tick_() {
     const std::string abbr = panel_text(t.team->abbr);
     if (c == ::espn::SeasonCard::RECAP) {
       this->season_show_(::espn::recap_header(abbr, e->read.year),
-                         panel_text(::espn::recap_body(e->read, soccer, t.record)));
+                         panel_text(::espn::recap_body(e->read, info->sport, t.record)));
       return;
     }
     const bool wide = this->top25_cols_ == 2;  // the page's layout (tt_apply_layout)
@@ -6568,18 +6656,23 @@ void GamedayComponent::start_season_job_() {
   this->job_.season_league = this->season_read_league_;
   this->job_.season_id = this->season_read_id_;
   this->job_.season_results = this->season_read_results_;
+  this->job_.season_off = this->season_read_off_;
   this->start_worker_();
 }
 
 // Worker task. About 200 to 400 KB (on 10/31: NFL 292 KB, college 389 KB,
-// Premier League 255 KB, MLS fixtures 186 KB), streamed through the parse's
-// filter.
+// Premier League 255 KB, MLS fixtures 186 KB), and up to 1.9 MB for
+// basketball and hockey (season_cards), streamed through the parse's
+// filter into a PSRAM document (about 1 KB a game: 83 KB for a whole NHL
+// season on the host, tests/heap_budget.cpp's season_nhl).
 void GamedayComponent::run_season_job_() {
   Job &j = this->job_;
+  const uint32_t start = millis();
   auto container = this->open_(::espn::season_url(j.season_league, j.season_id, j.season_results));
   if (container == nullptr)
     return;
   ContainerReader reader(container, this->espn_bytes_);
+  reader.set_time_limit(start, SEASON_READ_LIMIT);
   // Through espn_parse.cpp (ByteSource), away from this file's literal pool.
   struct Source : ::espn::ByteSource {
     ContainerReader &r;
@@ -6590,8 +6683,14 @@ void GamedayComponent::run_season_job_() {
   j.season_ok = ::espn::parse_season_from(src, j.season_id, j.season_read);
   container->end();
   j.season_bytes = (uint32_t) reader.total();
-  if (!j.season_ok)
+  j.season_ms = millis() - start;
+  if (reader.timed_out()) {
+    j.season_ok = false;
+    ESP_LOGW(TAG, "Season: gave up after %u s with %u bytes read", (unsigned) (SEASON_READ_LIMIT / 1000),
+             (unsigned) j.season_bytes);
+  } else if (!j.season_ok) {
     ESP_LOGW(TAG, "Season: parse failed after %u bytes", (unsigned) j.season_bytes);
+  }
 }
 
 void GamedayComponent::apply_season_job_() {
@@ -6604,12 +6703,14 @@ void GamedayComponent::apply_season_job_() {
   }
   e->fail_ms = 0;
   e->read_ms = now;
-  e->results = j.season_results;
+  e->off = j.season_off;
+  if (e->reads < UINT16_MAX)
+    e->reads++;
   e->read = std::move(j.season_read);
-  ESP_LOGI(TAG, "Season: team %u, %u: %u-%u-%u, %u games ahead, playoffs: %s (%u bytes)", (unsigned) e->id,
-           (unsigned) e->read.year, (unsigned) e->read.wins, (unsigned) e->read.losses, (unsigned) e->read.ties,
+  ESP_LOGI(TAG, "Season: team %u, %u: %s, %u games ahead, playoffs: %s (%u bytes in %u ms, read %u)", (unsigned) e->id,
+           (unsigned) e->read.year, ::espn::season_record(e->read, ::espn::league_sport(e->league), "").c_str(),
            (unsigned) e->read.next.size(), e->read.post ? ::espn::season_post_line(e->read).c_str() : "none",
-           (unsigned) j.season_bytes);
+           (unsigned) j.season_bytes, (unsigned) j.season_ms, (unsigned) e->reads);
 }
 
 // ---- The picture card (picture.h, picture_card.h) ---------------------------

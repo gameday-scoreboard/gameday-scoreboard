@@ -44,7 +44,7 @@ for v in moonhub75 scoreboard75; do
     ok=0
   fi
 done
-if [ $ok = 1 ] && bash "$(dirname "$0")/check_site_firmware.sh" --follow-beta "$tmp"; then
+if [ $ok = 1 ] && VARIANTS="moonhub75-beta scoreboard75-beta" bash "$(dirname "$0")/check_site_firmware.sh" --follow-beta "$tmp"; then
   for v in moonhub75 scoreboard75; do
     rm -rf "$site/firmware/$v-beta"
     cp -r "$tmp/firmware/$v-beta" "$site/firmware/$v-beta"
@@ -52,5 +52,19 @@ if [ $ok = 1 ] && bash "$(dirname "$0")/check_site_firmware.sh" --follow-beta "$
   echo "Follow beta channel: $(jq -r .version "$site/firmware/scoreboard75-beta/manifest.json")"
 else
   echo "::warning::The beta-firmware prerelease has no Follow beta builds, or they don't check out; this deploy leaves them out."
+fi
+
+# Waveshare's Follow beta goes on by itself: prereleases published before
+# publish-beta built it have no Waveshare file, and that mustn't take the
+# other boards' channel down. It has to be the same beta as theirs.
+want=$(jq -r .version "$tmp/firmware/scoreboard75-beta/manifest.json" 2>/dev/null || true)
+if gh release download beta-firmware --repo "$GITHUB_REPOSITORY" -p "firmware-waveshare-beta.zip" -D "$tmp" &&
+   unzip -q -o "$tmp/firmware-waveshare-beta.zip" -d "$tmp/firmware" &&
+   VARIANTS=waveshare-beta bash "$(dirname "$0")/check_site_firmware.sh" --follow-beta "$tmp" "$want"; then
+  rm -rf "$site/firmware/waveshare-beta"
+  cp -r "$tmp/firmware/waveshare-beta" "$site/firmware/waveshare-beta"
+  echo "Waveshare Follow beta channel: $(jq -r .version "$site/firmware/waveshare-beta/manifest.json")"
+else
+  echo "::warning::The beta-firmware prerelease has no Waveshare Follow beta build, or it doesn't check out; Waveshare panels with Follow beta on find no update."
 fi
 exit 0

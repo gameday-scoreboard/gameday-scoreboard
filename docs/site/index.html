@@ -60,6 +60,10 @@
     .panelpick svg rect { fill: #1d2532; stroke: #5a6678; stroke-width: 2; }
     .panelpick[aria-pressed="true"] svg rect { fill: #3a3210; stroke: #f2b632; }
     .panelpick small { color: #9da7b3; font-size: 0.8rem; margin-top: -4px; }
+    .boardpick { padding: 14px 10px; text-align: center; }
+    .boardpick span { font-weight: 600; overflow-wrap: anywhere; }
+    .boardpick small { margin-top: 0; }
+    @media (max-width: 480px) { #boards { grid-template-columns: 1fr; } }
     footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
     .demo { display: block; width: 100%; border-radius: 12px; border: 1px solid #262e38; background: #000; margin: 0 0 6px; }
     .demo-note { margin: 0 0 28px; }
@@ -102,6 +106,19 @@
 
   <div class="card">
     <h2>1. Install</h2>
+    <p>Which controller board is it? Click the one you have.</p>
+    <div class="panels" id="boards">
+      <button type="button" class="panelpick boardpick" data-board="waveshare" aria-pressed="false">
+        <span>Waveshare ESP32-S3-RGB-Matrix</span>
+        <small>The board in ready-made Game Day Scoreboards. New build, not yet tested on hardware.</small>
+      </button>
+      <button type="button" class="panelpick boardpick" data-board="moonhub75" aria-pressed="false">
+        <span>MoonHub75 pinout</span>
+        <small>Any ESP32-S3 HUB75 controller wired like the MoonHub75</small>
+      </button>
+    </div>
+    <p class="note" id="waveshare-layout" hidden>It starts laid out for one 128x64 panel. On a single 64x64 panel, open Matrix on the device page's Device tab once it's on WiFi and pick the one-panel picture.</p>
+    <div id="moonhub-panels" hidden>
     <p>Which panels does yours drive? Click the picture that matches, so the scoreboard starts with the right layout. You can change it later on the device page.</p>
     <div class="panels" id="panels">
       <button type="button" class="panelpick" data-manifest="firmware/moonhub75/manifest.json" aria-pressed="false">
@@ -114,7 +131,8 @@
         <small>or two 64x64 side by side</small>
       </button>
     </div>
-    <p>Then plug the controller into this computer over USB and click Install.</p>
+    </div>
+    <p id="install-hint" hidden>Then plug the controller into this computer over USB and click Install.</p>
     <p id="install" hidden>
       <esp-web-install-button manifest="firmware/moonhub75/manifest.json">
         <button slot="activate">Install Game Day Scoreboard</button>
@@ -123,19 +141,34 @@
       </esp-web-install-button>
     </p>
     <script>
-      // The two builds are the same firmware with a different first-boot
-      // layout; both take updates from the one-panel manifest afterwards.
+      // The board picks the build. Waveshare has one build that starts 128
+      // wide. MoonHub75's two builds are the same firmware with a different
+      // first-boot layout; both take updates from the one-panel manifest
+      // afterwards.
       (() => {
+        const boards = document.querySelectorAll("#boards .boardpick");
         const picks = document.querySelectorAll("#panels .panelpick");
         const installer = document.querySelector("#install esp-web-install-button");
+        const show = (manifest) => {
+          if (manifest) installer.setAttribute("manifest", manifest);
+          document.getElementById("install").hidden = !manifest;
+          document.getElementById("install-hint").hidden = !manifest;
+        };
+        boards.forEach((b) => b.addEventListener("click", () => {
+          boards.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+          const waveshare = b.dataset.board === "waveshare";
+          document.getElementById("waveshare-layout").hidden = !waveshare;
+          document.getElementById("moonhub-panels").hidden = waveshare;
+          const panel = document.querySelector('#panels .panelpick[aria-pressed="true"]');
+          show(waveshare ? "firmware/waveshare/manifest.json" : panel && panel.dataset.manifest);
+        }));
         picks.forEach((b) => b.addEventListener("click", () => {
           picks.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-          installer.setAttribute("manifest", b.dataset.manifest);
-          document.getElementById("install").hidden = false;
+          show(b.dataset.manifest);
         }));
       })();
     </script>
-    <p class="note">For the Game Day Scoreboard controller and any ESP32-S3 HUB75 controller on the <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> pinout with 16MB flash and octal PSRAM. Have a test controller on the scoreboard75 pinout? Use the <a href="/install/scoreboard75/">scoreboard75 installer</a>. Using another board? See <a href="/diy/">Runs on your own panel</a>.</p>
+    <p class="note">The Waveshare build is for the <a href="https://www.waveshare.com/esp32-s3-rgb-matrix.htm">ESP32-S3-RGB-Matrix</a> board only. The MoonHub75 build fits any ESP32-S3 HUB75 controller on the <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> pinout with 16MB flash and octal PSRAM. Have a test controller on the scoreboard75 pinout? Use the <a href="/install/scoreboard75/">scoreboard75 installer</a>. Using another board? See <a href="/diy/">Runs on your own panel</a>.</p>
     <p class="note">Installing replaces whatever firmware was on the controller. WiFi comes next, in the same window.</p>
   </div>
 
@@ -149,7 +182,7 @@
     <p>The panel itself tells you where to go once it's online: open the <code>gameday-xxxxxx.local</code> name it shows on your phone, or the address shown under it if your phone doesn't resolve <code>.local</code> names.</p>
     <ol>
       <li>In the <strong>Favorites</strong> card, tap <strong>Add a favorite</strong> and pick from the logos, a tab per league, or use the <strong>On now</strong> tab to add a team that's playing now. One favorite follows one team; add more and the panel takes turns.</li>
-      <li>Two panels side by side? In the <strong>Setup</strong> card, click the two-panel picture. The matrix restarts using both.</li>
+      <li>Wrong layout, or two panels side by side? On the <strong>Device</strong> tab, open <strong>Matrix</strong> and click the picture that matches. The matrix restarts with it.</li>
       <li>The timezone follows the phone or computer you opened the page on, so kickoff times read right without setting anything.</li>
       <li>Optional: the ticker parts, opponent celebrations, more favorites up to 16 (the first four on a <a href="https://app.gameday-scoreboard.com/setup/#remote">WizMote remote</a>), or <strong>Live games</strong>, which follows a random game in progress in the leagues you pick.</li>
     </ol>

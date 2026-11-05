@@ -13,12 +13,10 @@ The controller has one button, the boot button. A quick press turns the panel on
 | --- | --- |
 | Quick press | Turns the panel on or off. |
 | Hold about 1.5 seconds | Shows the panel's `.local` address and its IP address for 20 seconds, then goes back to the board. Nothing is reset. |
-| Hold 5 seconds | The screen says **Keep holding to reset Wi-Fi**, with a bar filling up. Let go before 10 seconds and nothing is reset. |
-| Hold 10 seconds | The panel resets Wi-Fi while you hold it, says **Wi-Fi reset, restarting** and restarts into setup. See [Reset Wi-Fi](#reset-wi-fi). |
 
 The address hold is the quickest way to find the panel again. See [Wi-Fi](/using/wifi/).
 
-Nothing resets until you let go, and the button gains a factory reset. Hold it and watch the screen:
+Holding longer resets the panel, but nothing resets until you let go. Hold it and watch the screen:
 
 | Hold | The screen says | Let go then and |
 | --- | --- | --- |
@@ -32,7 +30,7 @@ Holding the button on a panel that is off turns it on, so you can see the countd
 
 ## Reset Wi-Fi
 
-Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it with the 10 second hold, or with **Reset Wi-Fi** at the bottom of the device page's Device tab.
+Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it by holding the button past 10 seconds and letting go before 20, or with **Reset Wi-Fi** at the bottom of the device page's Device tab.
 
 The panel restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Give it the new network from the app or the hotspot; see [Set up your panel](/get-started/setup/).
 

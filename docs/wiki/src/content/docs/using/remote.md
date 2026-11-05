@@ -32,9 +32,7 @@ The brightness buttons move the same **Brightness** setting as the device page a
 
 During the [night schedule](/using/brightness-and-clock/)'s hours the panel stays at its night setting: the brightness buttons change the daytime brightness for the morning, and a screen that's off for the night stays off, whatever you press, until the hours end or a game of yours goes live. To light it up at night, turn **Night schedule** off under **Screen** on the device page's Display tab.
 
-:::note[Coming in the next release]
 During the night schedule's hours the remote can always light the panel. **ON**, the brighter button and the numbered buttons turn night mode off for the rest of that night, at the panel's normal brightness. **NIGHT** does the same at the night level, about 8% of full, and pressing it again goes back to the schedule. Dimmer does nothing while night mode has the panel dimmed or dark, since it's already as dim as you set it. The next night the schedule runs as usual.
-:::
 
 ## The numbered buttons
 
@@ -48,7 +46,6 @@ To change what a button does, reorder your favorites on the device page or in th
 
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
 
-:::note[Coming in the next release]
 **Set each button yourself.** **Remote** on the device page's Device tab, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:
 
 - **Its own favorite**: favorite 1 to 4, whichever team is in that slot. The default.
@@ -58,4 +55,3 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 - **Nothing**.
 
 A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A settings backup carries the four buttons.
-:::

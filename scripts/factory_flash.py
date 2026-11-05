@@ -25,7 +25,7 @@ Run it with the ESPHome venv's python, which has esptool and pyserial:
 
 --release downloads the factory image from the GitHub release once and keeps
 it in factory/firmware/. The version and pinout are read from the image
-itself, and an image built for the other pinout is refused. --dry-run prints
+itself, and an image built for another pinout is refused. --dry-run prints
 the esptool commands with a made-up MAC instead of talking to a board.
 
 Leave out --port for a batch. Each controller has its own USB serial number,
@@ -263,15 +263,21 @@ def pick_port():
     raise RuntimeError(f"can't tell which port is the controller; pass --port. Ports: {listed}")
 
 
+# How long to keep waiting for QC to start once the version line is in.
+QC_START_GRACE_S = 10
+
+
 def watch_boot(port, seconds, want_qc, press_wait=0):
     """(version, qc, pressed) from the boot log: the version the firmware logs,
     or None if it isn't seen in time, whether QC mode started from the flag,
     and whether the QC button press cleared it.
 
     Native USB drops off the bus while the chip resets, so keep trying to open
-    the port until the time runs out. QC starts at the end of setup, a moment
-    after the version line, so wait up to 10 s more for it. With press_wait,
-    keep reading that long after QC starts for the operator's press.
+    the port until the time runs out. The two lines can come in either order:
+    QC starts from on_boot inside setup, and ESPHome logs the version when it
+    dumps the config after setup, so on real boards QC is usually first. If
+    the version comes first, wait up to QC_START_GRACE_S more for QC. With
+    press_wait, keep reading that long after QC starts for the operator's press.
     """
     import serial
 
@@ -288,7 +294,9 @@ def watch_boot(port, seconds, want_qc, press_wait=0):
                     m = BOOT_VERSION_RE.search(buf)
                     if m and version is None:
                         version = m.group(1)
-                        deadline = min(deadline, time.monotonic() + 10)
+                        # Once QC is on, its press_wait deadline stands.
+                        if not qc:
+                            deadline = min(deadline, time.monotonic() + QC_START_GRACE_S)
                     if not qc and BOOT_QC_RE.search(buf):
                         qc = True
                         if press_wait:
@@ -510,8 +518,11 @@ def selftest():
             return False
 
         def read(self, n):
+            # "" in the script is a read that times out with nothing.
             if FakeSerial.script:
-                return FakeSerial.script.pop(0).encode()
+                s = FakeSerial.script.pop(0)
+                if s:
+                    return s.encode()
             time.sleep(0.01)
             return b""
 
@@ -531,6 +542,15 @@ def selftest():
         assert watch_boot("COM7", 5, True, press_wait=1) == ("1.5.5", True, False)
         FakeSerial.script = boot[:1] + ["[I][qc:193]: Factory flag cleared\n"]
         assert watch_boot("COM7", 1, True, press_wait=5) == ("1.5.5", False, False)
+        # Real boards log QC first and the version after setup. The press then
+        # still gets press_wait, not the short wait for QC to start.
+        global QC_START_GRACE_S
+        grace, QC_START_GRACE_S = QC_START_GRACE_S, 0.1
+        try:
+            FakeSerial.script = [boot[1], boot[0]] + [""] * 30 + ["[I][qc:193]: Factory flag cleared\n"]
+            assert watch_boot("COM7", 5, True, press_wait=5) == ("1.5.5", True, True)
+        finally:
+            QC_START_GRACE_S = grace
     finally:
         if real_serial is None:
             del sys.modules["serial"]
@@ -580,8 +600,9 @@ def main():
     src = ap.add_mutually_exclusive_group()
     src.add_argument("--release", help="release tag to download the factory image from, e.g. v1.5.5")
     src.add_argument("--image", type=Path, help="local .factory.bin to flash")
-    # The product board is on the MoonHub75 pinout; scoreboard75 is the early test boards.
-    ap.add_argument("--variant", default="moonhub75", choices=["moonhub75", "scoreboard75"])
+    # Ready-made scoreboards ship on the Waveshare ESP32-S3-RGB-Matrix. moonhub75 is the
+    # DIY pinout; scoreboard75 is the early test boards.
+    ap.add_argument("--variant", default="waveshare", choices=["waveshare", "moonhub75", "scoreboard75"])
     ap.add_argument("--port", help="serial port, for one board only (default: find the Espressif USB device "
                     "for each unit)")
     ap.add_argument("--baud", type=int, default=460800)
