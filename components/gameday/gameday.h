@@ -1201,7 +1201,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Mode 4 with at least one favorite set; with none it runs as Live games
   // (no_team_default).
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
-  uint32_t our_id_() const;  // team id the snapshot is oriented around
+  uint32_t our_id_() const;     // worker: the job's team id the snapshot is oriented around
+  uint32_t orient_id_() const;  // main loop: works that id out for start_job_
   std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
