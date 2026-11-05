@@ -298,9 +298,25 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       // set_lists_: the one being played stays chosen by its name, or by
       // list= in the same request.
       std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
+      std::vector<ListDef> defs = parse_lists(op.text, kFavMax);
+      // A WizMote button on a renamed playlist follows it.
+      std::vector<std::string> old_names, new_names;
+      for (const auto &l : s.lists)
+        old_names.push_back(l.first);
+      for (const auto &d : defs)
+        new_names.push_back(d.name);
+      for (auto &b : s.remote) {
+        if (b.kind != (uint8_t) RemoteKind::LIST)
+          continue;
+        std::string to = list_renamed(old_names, new_names, remote_name(b));
+        if (to.empty())
+          continue;
+        memset(b.name, 0, sizeof(b.name));
+        memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+      }
       s.lists.clear();
       s.list = 0;
-      for (const auto &d : parse_lists(op.text, kFavMax)) {
+      for (const auto &d : defs) {
         s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
@@ -783,6 +799,12 @@ void test_playlists() {
   SCHECK(list_name_clean("  Sunday   Football Crew  ") == "Sunday Football", "cut to 16 bytes, spaces squeezed");
   SCHECK(list_name_clean("a\tb\x01" "c") == "a bc", "tabs to spaces, control characters out");
   SCHECK(list_name_clean("ÉÉÉÉÉÉÉÉÉ").size() == 16, "cut at a character boundary");
+  SCHECK(list_renamed({"A", "B"}, {"A", "C"}, "B") == "C", "a rename in place carries the name");
+  SCHECK(list_renamed({"A", "B"}, {"A", "C"}, "A").empty(), "a kept playlist is not renamed");
+  SCHECK(list_renamed({"A", "B"}, {"B", "A"}, "A").empty(), "a move is not a rename");
+  SCHECK(list_renamed({"A", "B"}, {"A"}, "B").empty(), "a removed playlist is gone, not renamed");
+  SCHECK(list_renamed({"A", "B"}, {"A", "B", "C"}, "B").empty(), "an added one renames nothing");
+  SCHECK(list_renamed({"A", "B"}, {"B", "C"}, "A").empty(), "a name taken from another playlist is not a rename");
 
   std::vector<TeamRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 25}};
   SCHECK(list_mask({{(uint8_t) League::NHL, 25}, {(uint8_t) League::NFL, 6}}, favs) == 0b101, "mask by favorite");

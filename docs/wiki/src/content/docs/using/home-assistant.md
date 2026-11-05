@@ -23,7 +23,7 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **Scroll Speed** | The ticker speed, 1 to 10. |
 | **Select Page** | The Scoreboard or the Clock page, with **Page Next** and **Page Previous** buttons. |
 | **Game Status** | The game in one line: the matchup, whether it's upcoming, live or final, and the score. |
-| **Last Play** | ESPN's latest play. |
+| **Last Play** | ESPN's latest play. A very long one is cut short, since Home Assistant keeps 255 characters. |
 | **Firmware** | The firmware update, so Home Assistant shows when a new release is out. |
 | **Install Updates Automatically** | The same switch as on the device page. See [Firmware updates](/using/updates/). |
 | **Check for Updates**, **Refresh Now**, **Reboot** | The device page's buttons. |

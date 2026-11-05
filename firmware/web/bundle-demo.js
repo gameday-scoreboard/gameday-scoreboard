@@ -635,6 +635,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
+    field: (v) => v === "1", winbar: (v) => v === "1", spark: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
     // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
     cards: (v) => {
       const pairs = new Map(v.split(",").map((p) => p.split(":")));
@@ -648,7 +649,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
       const [n, refs] = p.split("=");
       const keys = (refs || "").split(",");
-      return Object.assign({ n, f: favKeys.map((k, i) => (keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, listOpts(keys));
+      return Object.assign({ n, f: favSlots.map((k, i) => (k && keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, listOpts(keys));
     }),
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
@@ -738,18 +739,28 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     return ["/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) }];
   };
   const postSet = async (params, attempt = 0) => {
+    // A panel that lost power never answers; the next post in the queue
+    // can't wait on it forever.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let why = "";
     try {
-      const r = await fetch(...setRequest(params));
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return true;
+      const [url, opts] = setRequest(params);
+      const r = await fetch(url, Object.assign({ signal: ctl.signal }, opts));
+      if (r.ok) return true;
+      why = "HTTP " + r.status;
     } catch (e) {
-      if (attempt < 1) {
-        await new Promise((res) => setTimeout(res, 500));
-        return postSet(params, attempt + 1);
-      }
-      toast("Device did not respond (" + (e.message || "network") + "). Try again.");
-      return false;
+      why = e.name === "AbortError" ? "no answer" : e.message || "network";
+    } finally {
+      clearTimeout(timer);
     }
+    // A busy moment gets one more try; 8 seconds of silence doesn't.
+    if (attempt < 1 && why !== "no answer") {
+      await new Promise((res) => setTimeout(res, 500));
+      return postSet(params, attempt + 1);
+    }
+    toast("Device did not respond (" + why + "). Try again.");
+    return false;
   };
   // Settings post. Posts go one at a time, in tap order, so a slow one (or its
   // retry) never lands after a later one. The device applies them on its main
@@ -914,7 +925,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       const cur = S ? String(S.mode || 0) : "";
       if (cur === b.dataset.mode || (b.dataset.mode === "5" && isLive(cur))) return;
       setGD({ mode: b.dataset.mode });
-      toast(b.textContent);
+      toast(b.firstChild.textContent);  // the name, not its line underneath
     };
   });
   const rotateInput = $("#rotate");
@@ -926,7 +937,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // Favorite teams mode settings (mode 4).
   const lockonInput = $("#lockon");
   lockonInput.onchange = () => {
-    const v = Math.min(120, Math.max(5, Math.round(Number(lockonInput.value)) || 15));
+    // Too low is the least there is (0 gives 5); blank or not a number keeps the default.
+    const n = Math.round(Number(lockonInput.value));
+    const v = lockonInput.value.trim() === "" || !Number.isFinite(n) ? 15 : Math.min(120, Math.max(5, n));
     lockonInput.value = v;
     setGD({ lockon: v });
   };
@@ -1148,6 +1161,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     const key = cards.map((c) => [c.id, c.on, c.ok, c.hint].join(":")).join();
     if (key === cardsKey) return renderAddSheet();
     cardsKey = key;
+    // Moving a card's controls takes the focus off them (the town being
+    // typed while its lookup changes the card's hint), so it is put back.
+    const had = document.activeElement;
+    const sel = had && typeof had.selectionStart === "number" ? [had.selectionStart, had.selectionEnd] : null;
     const ex = cardExtras();
     for (const c of cards) if (!c.on && ex[c.id]) $("#cardPark").appendChild(ex[c.id]);
     host.textContent = "";
@@ -1201,6 +1218,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     bar.appendChild(add);
     host.appendChild(bar);
     renderAddSheet();
+    if (had && had !== document.activeElement && !had.closest("#cardPark") && document.body.contains(had)) {
+      had.focus({ preventScroll: true });
+      if (sel) had.setSelectionRange(sel[0], sel[1]);
+    }
   };
   // The Show between games switch on each Customize card.
   const renderOwnCards = (cards) => {
@@ -1275,6 +1296,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
+  // The state's favorite slots as keys, "" for an empty one. Playlists and
+  // the remote's buttons count places in this list, gaps and all.
+  let favSlots = [];
   // From the WizMote Status entity. Without a paired remote the favorite
   // rows leave out which button lands on them.
   let remotePaired = false;
@@ -1307,7 +1331,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       if (t) img.src = logoUrl(t[0], t[1], t[2]);
       row.appendChild(img);
       const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
-      const btn = remoteButtonFor(key, i);
+      const btn = remoteButtonFor(key, favSlots.indexOf(key));
       if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
@@ -1411,7 +1435,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const optTokens = (l) => (l.days ? ",@d:" + l.days + (l.start !== l.end ? ",@t:" + l.start + "-" + l.end : "") : "")
     + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
     + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
-  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favKeys[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
+  const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favSlots[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
   // The panel keeps 16 bytes of a name (kListNameMax), so an accented letter counts as two.
@@ -1471,7 +1495,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       const chips = el("div", "chips pteams");
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
-      favKeys.forEach((key, fi) => {
+      favSlots.forEach((key, fi) => {
+        if (!key) return;
         const t = teamByKey(key);
         const on = l.f.includes(fi);
         const c = el("button", "chip", t ? t[2] : key);
@@ -1632,15 +1657,15 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
       ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
       ["", [["all", "All favorites"], ["none", "Nothing"]]]];
-    const sig = JSON.stringify([groups, targets, favKeys]);
+    const sig = JSON.stringify([groups, targets, favSlots]);
     if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
     remoteSig = sig;
     host.innerHTML = "";
     targets.forEach((r, b) => {
       const row = el("div", "ctl rbtn");
       const label = el("label", null, "Button " + (b + 1));
-      const t = teamByKey(favKeys[b]);
-      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favKeys.length > b ? "" : " (empty)");
+      const t = teamByKey(favSlots[b] || "");
+      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favSlots[b] ? "" : " (empty)");
       const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now" : "That team left your favorites")
         + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "." : "";
       if (note) label.appendChild(el("small", null, note));
@@ -1674,9 +1699,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
-    const keys = (S.favs || []).map(refKey).filter(Boolean);
+    favSlots = (S.favs || []).map(refKey);
+    const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = keys.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + JSON.stringify(remoteTargets());
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -1686,7 +1712,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       $("#favAdd").hidden = favKeys.length >= favMax();
     }
     // Redrawn only when something changed, so a name being typed keeps its place.
-    const sig = favKeys.join(",") + "|" + JSON.stringify(lists()) + "|" + JSON.stringify(remoteTargets());
+    const sig = favSlots.join(",") + "|" + JSON.stringify(lists()) + "|" + JSON.stringify(remoteTargets());
     if (sig !== listSig && !(document.activeElement && $("#listCtls").contains(document.activeElement) &&
         document.activeElement.matches("input, select"))) {
       listSig = sig;
@@ -1811,6 +1837,13 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     const v = String(S[key] || (key === "msgevery" ? 0 : ""));
     if (v === msgSeen[key] || document.activeElement === input) return;
     msgSeen[key] = v;
+    // Home Assistant or a backup can set minutes the list doesn't offer
+    // (3, 7): shown as their own choice, in order, not as a blank.
+    if (input.tagName === "SELECT" && !Array.from(input.options).some((o) => o.value === v)) {
+      const o = el("option", null, "Every " + v + " minutes");
+      o.value = v;
+      input.insertBefore(o, Array.from(input.options).find((x) => Number(x.value) > Number(v)) || null);
+    }
     input.value = v;
   };
   const renderMsg = () => {
@@ -1843,9 +1876,14 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     doAction("regulatory");
     toast("FCC information on the panel");
   };
+  // The panel keeps an address of plain ASCII only (msg_url_ok, hook_url_ok)
+  // and drops any other, so say so here rather than look saved.
+  const asciiUrl = (url) => !url || /^[\x21-\x7e]+$/.test(url);
+  const ASCII_URL = "The panel can't use accented letters, curly quotes or spaces in an address. Copy it from the browser's address bar.";
   $("#msgSave").onclick = () => {
     const url = $("#msgUrl").value.trim();
     if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The list's address starts with http:// or https://");
+    if (!asciiUrl(url)) return toast(ASCII_URL);
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: $("#msgText").value, msgurl: url, msgevery: $("#msgEvery").value });
     toast(url || $("#msgText").value.trim() ? "Message card saved" : "Message card off");
@@ -2044,6 +2082,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   $("#evSave").onclick = () => {
     const url = $("#evHook").value.trim();
     if (url && !/^http:\/\/[^\s/?#]+\S*$/.test(url)) return toast(/^https:/.test(url) ? "Use plain http://, the panel posts on your home network" : "The address starts with http://");
+    if (!asciiUrl(url)) return toast(ASCII_URL);
     evSeen.hook = null;
     setGD({ hook: url });
     toast(url ? "Events go to that address too" : "Webhook off");
@@ -2114,15 +2153,19 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const BACKUP_MAX = 8192;
   const BACKUP_FILE_MAX = 65536;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
-  const probeBackup = async (retry) => {
+  // tries: how many more times to ask when the panel doesn't answer.
+  const probeBackup = async (tries = 0) => {
     try {
       const r = await fetch("/gameday/settings?_=" + Date.now(), { cache: "no-store" });
       // Only a 404 is firmware without it; a 500 is a panel still starting.
-      if (r.status === 404) $("#backup").hidden = true;
-      else if (r.ok) $("#backup").hidden = false;
-      else if (retry) setTimeout(() => probeBackup(false), 5000);
-      return r.ok ? await r.json() : null;
+      if (r.status === 404) { $("#backup").hidden = true; return null; }
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const doc = await r.json();
+      $("#backup").hidden = false;
+      return doc;
     } catch (_) {
+      // A panel still starting or busy, or a dropped request: ask again.
+      if (tries > 0) setTimeout(() => probeBackup(tries - 1), 5000);
       return null;
     }
   };
@@ -2257,15 +2300,17 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         sw.innerHTML = icon(def.icon);
       }
       setOn(sw, false, "aria-checked");
-      sw.onclick = () => {
+      let known = false;  // what the panel last said
+      sw.onclick = async () => {
         const on = !sw.classList.contains("on");
         setOn(sw, on, "aria-checked");
-        post(e.id, on ? "turn_on" : "turn_off");
+        // A tap the panel never got goes back to what it last said.
+        if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
         if (def.name === "Power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
       };
       row.appendChild(sw);
       host.appendChild(row);
-      return { update(ev) { setOn(sw, ev.value === true || ev.state === "ON", "aria-checked"); } };
+      return { update(ev) { known = ev.value === true || ev.state === "ON"; setOn(sw, known, "aria-checked"); } };
     }
     if (domain === "number") {
       const val = el("span", "val");
@@ -2277,13 +2322,26 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       r.max = e.max_value ?? 100;
       r.step = e.step ?? 1;
       const show = (v) => (val.textContent = def.pct ? Math.round((v - r.min) / (r.max - r.min) * 100) + "%" : v);
+      // While a finger or the mouse holds the thumb the panel's value waits;
+      // after that the slider follows it again, focused or not.
+      let dragging = false;
+      r.onpointerdown = () => {
+        dragging = true;
+        const end = () => {
+          dragging = false;
+          window.removeEventListener("pointerup", end);
+          window.removeEventListener("pointercancel", end);
+        };
+        window.addEventListener("pointerup", end);
+        window.addEventListener("pointercancel", end);
+      };
       r.oninput = () => show(r.value);
       r.onchange = () => post(e.id, "set", { value: r.value });
       if (def.icon) row.insertAdjacentHTML("beforeend", icon(def.icon));
       row.appendChild(r);
       row.appendChild(val);
       host.appendChild(row);
-      return { update(ev) { if (document.activeElement !== r) { r.value = ev.value; show(ev.value); } } };
+      return { update(ev) { if (!dragging) { r.value = ev.value; show(ev.value); } } };
     }
     if (domain === "select") {
       const s = el("select");
@@ -2305,13 +2363,23 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // The day the panel reads (scan_day_shift in espn_parse.h) turns over at
   // 4 AM Eastern, so a late West Coast game stays on today's list.
   const scanDate = () => new Date(Date.now() - 9 * 3600000).toISOString().slice(0, 10).replace(/-/g, "");
-  const loadGames = async (force) => {
-    if (!force && games && Date.now() - gamesAt < 60000) return games;
+  const gamesFresh = () => games && Date.now() - gamesAt < 60000;
+  // Callers while a load is out share it. A league feed that hangs is given
+  // up after 6 seconds, so it can't hold up the others.
+  let gamesLoad = null;
+  const loadGames = () => {
+    if (gamesFresh()) return Promise.resolve(games);
+    if (!gamesLoad) gamesLoad = fetchGames().finally(() => { gamesLoad = null; });
+    return gamesLoad;
+  };
+  const fetchGames = async () => {
     const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 6000);
       try {
-        const j = await (await fetch(u)).json();
+        const j = await (await fetch(u, { signal: ctl.signal })).json();
         for (const ev of j.events || []) {
           const c = ev.competitions?.[0];
           if (!c) continue;
@@ -2325,6 +2393,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           out.push({ league: lg, id: ev.id, state, detail: type.shortDetail || "", away: side("away"), home: side("home"), date: ev.date });
         }
       } catch (_) { /* one league failing should not hide the other */ }
+      clearTimeout(timer);
     }));
     const rank = { in: 0, pre: 1, post: 2, off: 3 };
     out.sort((a, b) => (rank[a.state] - rank[b.state]) || (a.date < b.date ? -1 : 1));
@@ -2338,7 +2407,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     tiles.className = "games";
     tiles.innerHTML = "";
     tiles.appendChild(el("div", "none", "Loading today's games"));
-    const list = await loadGames(false);
+    const list = await loadGames();
     if (league !== "now") return;  // the user moved on while we were loading
     tiles.innerHTML = "";
     const q = $("#q").value.trim().toLowerCase();
@@ -2449,20 +2518,23 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   };
   $("#favAdd").onclick = () => openPicker();
   $("#favStart").onclick = () => { showPane("teams"); openPicker(); };
-  const openPicker = async () => {
-    // On the first favorite's league, or On now while a game is live.
+  const openPicker = () => {
+    // On the first favorite's league, or On now while a game is live. It
+    // opens at once; today's games, when they come, move it to On now
+    // unless a tab or a search was picked meanwhile.
     const first = teamByKey(favKeys[0] || "");
-    league = first ? first[0] : "nfl";
-    try {
-      const list = await loadGames(false);
-      if (list.some((g) => g.state === "in")) league = "now";
-    } catch (_) {}
+    const live = (list) => list.some((g) => g.state === "in");
+    const opened = gamesFresh() && live(games) ? "now" : first ? first[0] : "nfl";
+    league = opened;
     $$tabs(league);
     $("#q").value = "";
     renderFavCount();
     renderTiles();
     $("#modal").classList.add("open");
     setTimeout(() => $("#q").focus(), 50);
+    if (opened !== "now") loadGames().then((list) => {
+      if (league === opened && !$("#q").value.trim() && $("#modal").classList.contains("open") && live(list)) showTab(tabButtons.find((b) => b.dataset.lg === "now"));
+    });
   };
   // One tab per league that has teams in this firmware's list.
   for (const lg of Object.keys(LEAGUES)) {
@@ -2892,7 +2964,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         onState(Object.assign({ id: uid }, j));
         const st = String(j.state || "").toUpperCase();
         // The firmware row shows the result; only shout when there is something to do
-        if (st.includes("AVAILABLE")) toast("Update available: v" + j.value);
+        // A panel ahead of the release (a beta, or a build of its own) is offered
+        // the older version too; the firmware row says it's ahead.
+        if (st.includes("AVAILABLE") && isNewer(j.value, j.current_version) !== false) toast("Update available: v" + j.value);
         else if (st.includes("INSTALLING")) { /* the install is running; nothing to say */ }
         else if (!st.includes("NO UPDATE")) toast("Could not reach the update server. Try again in a minute.");
       } else if (uid) {
@@ -3075,13 +3149,16 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#netsSum").textContent = nets.length ? nets.length + " saved" : "None saved";
     $("#netsCard").hidden = false;
   };
-  const loadNetworks = async () => {
+  // Only firmware without the list (404) hides the card. Another failure
+  // leaves it as it was, and asks again while tries last.
+  const loadNetworks = async (tries = 0) => {
     try {
       const r = await fetch("/gameday/wifi?_=" + Date.now(), { cache: "no-store" });
-      if (!r.ok) { $("#netsCard").hidden = true; return; }
+      if (r.status === 404) { $("#netsCard").hidden = true; return; }
+      if (!r.ok) throw new Error("HTTP " + r.status);
       renderNetworks(await r.json());
     } catch (_) {
-      $("#netsCard").hidden = true;
+      if (tries > 0) setTimeout(() => loadNetworks(tries - 1), 5000);
     }
   };
 
@@ -3141,8 +3218,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   };
   connect();
   fetchState();
-  loadNetworks();
-  probeBackup(true);
+  loadNetworks(3);
+  probeBackup(3);
   // Fallback poll in case an event is missed; the ticker event is the fast path.
   const pollTimer = setInterval(fetchState, 15000);
 })();
@@ -3185,13 +3262,16 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   let D = null;
   const post = async (params) => {
     const qs = Object.entries(params).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+    let ok = false;
     try {
       const r = await fetch("/gameday/demo?" + qs, { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
+      ok = true;
     } catch (e) {
       $("#demoNow").textContent = "Device did not respond (" + (e.message || "network") + ")";
     }
     setTimeout(load, 400);
+    return ok;
   };
 
   const selects = Array.from(card.querySelectorAll("select[data-team]"));
@@ -3210,10 +3290,17 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     b.onclick = () => post(b.dataset.demo === "stop" ? { do: "stop" } : { do: "start", kind: b.dataset.demo });
   });
   const madeup = $("#demoMadeup");
-  madeup.onclick = () => {
+  // The tapped value stands until a read that left after the panel answered:
+  // one already out carries the old value.
+  let held = null;  // {v, after}
+  madeup.onclick = async () => {
     const on = !madeup.classList.contains("on");
     madeup.classList.toggle("on", on);
-    post({ madeup: on ? 1 : 0 });
+    const mine = held = { v: on, after: Infinity };
+    const ok = await post({ madeup: on ? 1 : 0 });
+    if (held !== mine) return;  // tapped again since
+    if (ok) mine.after = Date.now();
+    else { held = null; render(); }
   };
 
   const matchup = (side) =>
@@ -3230,18 +3317,26 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       const t = D[kind] && D[kind][end];
       if (t) s.value = t.l + ":" + t.id;
     });
-    madeup.classList.toggle("on", !!D.madeup);
+    madeup.classList.toggle("on", held ? held.v : !!D.madeup);
   };
 
+  // A read asked for during another one runs after it, so it sees the latest post.
   let inflight = false;
+  let again = false;
   const load = async () => {
-    if (inflight) return;
+    if (inflight) { again = true; return; }
     inflight = true;
+    const left = Date.now();
     try {
-      const r = await fetch("/gameday/demo?_=" + Date.now(), { cache: "no-store" });
-      if (r.ok) { D = await r.json(); render(); }
+      const r = await fetch("/gameday/demo?_=" + left, { cache: "no-store" });
+      if (r.ok) {
+        D = await r.json();
+        if (held && left > held.after) held = null;
+        render();
+      }
     } catch (_) { /* the poll comes back around */ }
     inflight = false;
+    if (again) { again = false; load(); }
   };
   load();
   setInterval(load, 5000);

@@ -54,4 +54,4 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 - **All favorites**: back to every favorite.
 - **Nothing**.
 
-A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A settings backup carries the four buttons.
+A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A button set to a playlist follows it when you rename it. A settings backup carries the four buttons.

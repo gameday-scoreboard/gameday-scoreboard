@@ -695,6 +695,25 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   // The playlist to go back to when the schedule ends (0: every favorite).
   const int8_t before_was = this->prefs10_.sched_before;
   std::string before_name = before_was > 0 ? this->list_name_((uint8_t) before_was) : std::string();
+  std::vector<std::string> old_names, new_names;
+  for (uint8_t n = 1; n <= this->prefs9_.count; n++)
+    old_names.push_back(this->list_name_(n));
+  for (size_t n = 0; n < std::min(lists.size(), (size_t) ::espn::kListMax); n++)
+    new_names.push_back(lists[n].name);
+  // A WizMote button set to a renamed playlist follows it to its new name.
+  bool btn_moved = false;
+  for (auto &b : this->prefs11_.btn) {
+    if (b.kind != (uint8_t) ::espn::RemoteKind::LIST)
+      continue;
+    std::string to = ::espn::list_renamed(old_names, new_names, ::espn::remote_name(b));
+    if (to.empty())
+      continue;
+    memset(b.name, 0, sizeof(b.name));
+    memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+    btn_moved = true;
+  }
+  if (btn_moved)
+    this->pref11_.save(&this->prefs11_);
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   Prefs10 p10 = this->prefs10_;

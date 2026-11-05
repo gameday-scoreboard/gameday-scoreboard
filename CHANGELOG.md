@@ -55,6 +55,15 @@ through `update_important` in the panel's state.
 - 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
 - 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
 - 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
+- 🎮 Renaming a playlist keeps the remote buttons set to it, instead of sending them back to their own favorites
+- ⭐ After a favorite slot is emptied, editing a playlist keeps its teams instead of dropping or swapping them
+- 📱 Field strip, Win chance bar, Score margin, Install updates automatically and Follow beta flip as soon as you tap them on the device page
+- 📱 The brightness slider keeps following changes from Home Assistant after you use it, and a Panel on tap the panel never got goes back
+- 📱 Add a team opens at once instead of waiting on every league's games, and a settings change gives up after 8 seconds when the panel stops answering
+- 📱 A message list or webhook address with accented letters or curly quotes gets a note instead of looking saved
+- 🔄 Check for updates on a panel running a newer beta no longer says an update is available
+- 🏈 A very long Last Play shows in Home Assistant instead of "unknown"
+- 🔆 The QC and FCC screens stay at full brightness when Brightness changes at night, and QC stays lit when Power goes off
 
 ## v2026.11.0
 
