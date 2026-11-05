@@ -94,7 +94,7 @@ On Android, **Display** has a **Live pictures** card after the ticker, with the 
 
 On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
 
-On iPhone, **Between games** under **Display** has a **College Top 25** switch after **Game leaders**. While the panel follows a college football or basketball team, the AP poll takes a turn with the board every 10 minutes, a page at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with the card.
+On iPhone and Android, **Between games** under **Display** has a **College Top 25** switch after **Game leaders**. While the panel follows a college football or basketball team, the AP poll takes a turn with the board every 10 minutes, a page at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with the card.
 
 On iPhone, **Between games** also has a **News headlines** switch after **College Top 25**. Every 3 minutes between games, one of ESPN's latest headlines for your teams, or for your leagues on **Live games**, takes a turn with the board (see [News headlines](/using/news/)). It's off until you turn it on, and the switch shows once the panel runs firmware with the card.
 
