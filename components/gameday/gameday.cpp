@@ -6376,7 +6376,7 @@ void GamedayComponent::load_brand_() {
     std::string err;
     if (::espn::brand_parse(d->doc, d->size, this->brand_, err)) {
       this->brand_ok_ = true;
-      this->brand_doc_.assign(d->doc, d->size);
+      this->brand_doc_hash_ = fnv1_hash(std::string(d->doc, d->size));
       ESP_LOGI(TAG, "Brand pack from flash: %s", this->brand_.name.empty() ? this->brand_.title.c_str()
                                                                            : this->brand_.name.c_str());
     }
@@ -6394,7 +6394,7 @@ void GamedayComponent::set_brand_(const std::string &url) {
   PrefsBrandUrl u{};
   strncpy(u.url, url.c_str(), sizeof(u.url) - 1);
   this->brand_url_pref_.save(&u);
-  if (!this->brand_doc_.empty()) {
+  if (this->brand_doc_hash_ != 0) {
     auto *d = new PrefsBrandDoc{};
     this->brand_doc_pref_.save(d);  // size 0: no file
     delete d;
@@ -6402,7 +6402,7 @@ void GamedayComponent::set_brand_(const std::string &url) {
   this->sync_prefs_();
   this->brand_ = ::espn::BrandPack{};
   this->brand_ok_ = false;
-  this->brand_doc_.clear();
+  this->brand_doc_hash_ = 0;
   this->brand_logo_.clear();
   this->brand_status_ = -1;
   this->brand_error_.clear();
@@ -6551,17 +6551,20 @@ void GamedayComponent::apply_brand_job_() {
   const std::string old_list = this->msg_src_();
   this->brand_ = std::move(j.brand_pack);
   this->brand_ok_ = true;
-  if (j.brand_doc != this->brand_doc_) {
-    this->brand_doc_ = std::move(j.brand_doc);
+  const uint32_t hash = fnv1_hash(j.brand_doc);
+  if (hash != this->brand_doc_hash_) {
+    this->brand_doc_hash_ = hash;
     auto *d = new PrefsBrandDoc{};
-    d->size = (uint16_t) this->brand_doc_.size();
-    memcpy(d->doc, this->brand_doc_.data(), this->brand_doc_.size());
+    d->size = (uint16_t) j.brand_doc.size();
+    memcpy(d->doc, j.brand_doc.data(), j.brand_doc.size());
     this->brand_doc_pref_.save(d);
     delete d;
     this->sync_prefs_();
     ESP_LOGI(TAG, "Brand pack: %s", this->brand_.name.empty() ? this->brand_.title.c_str()
                                                               : this->brand_.name.c_str());
   }
+  std::string().swap(j.brand_doc);  // the job lives on until the next one: no copy kept
+  j.brand_keep = ::espn::BrandPack{};
   const bool tint = this->brand_.logo_color.empty();
   const std::string &logo_url = tint ? this->brand_.logo : this->brand_.logo_color;
   if (logo_url.empty()) {

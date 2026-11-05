@@ -1418,7 +1418,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   } __attribute__((packed));
   ESPPreferenceObject brand_url_pref_, brand_doc_pref_;
   std::string brand_url_;
-  std::string brand_doc_;      // the file brand_ was read from, as saved
+  // fnv1_hash() of the file brand_ was read from, so a read of the same
+  // file doesn't write the flash again; 0 for none saved.
+  uint32_t brand_doc_hash_{0};
   bool brand_read_due_{false};
   uint32_t brand_read_ms_{0};  // millis() of the last good read, 0 = none since boot
   uint32_t brand_fail_ms_{0};  // millis() of the last failed one, 0 = none since
