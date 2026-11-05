@@ -653,13 +653,15 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(chips.getByRole("button", { pressed: true })).toHaveText(["MLB", "NBA", "NHL"]);
 });
 
-test("bar build: no switch, a bar beta note and an email with the panel's name", async ({ page, request }) => {
+test("bar build: no auto-install switch, Follow beta, a bar note and an email with the panel's name", async ({ page, request }) => {
   await reset(request, { autoupd: null, bar: { report: "support@gameday-scoreboard.com" } });
   await page.goto("/");
   await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#autoupdRow")).toBeHidden();
+  await expect(page.locator("#betaRow")).toBeVisible();
   await expect(page.locator("#barRow")).toBeVisible();
+  await expect(page.locator("#barRow label")).toContainText("Bar build");
   const href = await page.locator("#barReport").getAttribute("href");
   expect(href).toMatch(/^mailto:support@gameday-scoreboard\.com\?subject=Bar%20panel%20gameday-2f6a70&body=/);
   expect(decodeURIComponent(href.split("body=")[1])).toContain("Panel: gameday-2f6a70");

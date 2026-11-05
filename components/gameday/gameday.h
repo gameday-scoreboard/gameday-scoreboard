@@ -462,7 +462,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static bool asleep_at_boot();
   // "Follow beta": the update entity reads the beta manifest instead of the
   // release one. Off unless the owner turns it on; only in builds with
-  // beta_channel (the release builds, gameday-common.yaml).
+  // beta_channel (the release and bar builds, gameday-common.yaml).
 #ifdef GAMEDAY_BETA_CHANNEL
   void set_beta_channel(http_request::HttpRequestUpdate *update, const char *stable, const char *beta) {
     this->beta_update_ = update;
