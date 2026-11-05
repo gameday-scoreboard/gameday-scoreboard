@@ -42,6 +42,8 @@
 #include "brand.h"
 #include "brand_card.h"
 #include "brand_lvgl.h"
+#include "plate_wall.h"
+#include "plate_wall_lvgl.h"
 #include "health.h"
 #include "hook.h"
 #include "line_score.h"
@@ -308,7 +310,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void refresh_now();
   // WizMote buttons 1-4: each does what the owner set it to (set_request.h
   // RemoteTarget), its own favorite until then. The demo build gives them to
-  // the demo (demo.cpp).
+  // the demo (demo.cpp); on the bar build, button 4 throws the plate party
+  // while the card shows the brand pack's plate list.
   void remote_number(uint8_t n);
   // Favorites with no favorite set: the panel follows live games and the
   // finals rotation, and the boot screen gives the app's QR code a turn
@@ -501,6 +504,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 #ifdef GAMEDAY_BAR
   const ::espn::BrandPack &brand_pack() const { return this->brand_; }
   const BrandLogo &brand_logo() const { return this->brand_logo_; }
+  const BrandSprite &brand_sprite() const { return this->brand_sprite_; }
+  // The message card's page is the plate wall's (plate_wall.h): a member's
+  // plate, a plate party or the event page, drawn by plate_wall_show().
+  bool plate_card_up() const {
+    return this->msg_shown_ && (this->msg_card_[0] == ::espn::kPlatePageMark ||
+                                this->msg_card_[0] == ::espn::kPartyPageMark ||
+                                this->msg_card_[0] == ::espn::kEventPageMark);
+  }
+  // The newest plate's party (the top of the list), up now and over a game
+  // too, from the remote's button 4 or the device page. who is for the log.
+  void plate_party(const char *who);
 #endif
   // The board game's line score at halftime and the final, laid out for a
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
@@ -1131,8 +1145,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // The logo of the pack on hand, read when this read fails (after a
     // restart the logo isn't kept, only the pack).
     bool brand_keep_ok{false};
-    std::string keep_logo, keep_logo_color;
+    std::string keep_logo, keep_logo_color, keep_sprite;
     uint32_t keep_rim{0}, keep_bg{0};
+    // The pack's sprite, the same way: read when it isn't the one on hand.
+    std::string sprite_have_url;
+    bool brand_sprite_read{false};
+    BrandSprite brand_sprite;
+    std::string brand_sprite_error;
+    // The list is the pack's plate list: lines keep up to kPlateLineMax.
+    bool msg_plates{false};
 #endif
     // The Top 25 card's poll for one league (rankings.h), on this task too.
     bool need_top25{false};
@@ -1438,12 +1459,32 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_brand_job_();
   void run_brand_job_();
   void run_brand_logo_(const ::espn::BrandPack &p);
+  void run_brand_sprite_(const std::string &url);
   void apply_brand_job_();
+  void apply_brand_sprite_(const std::string &url);
   void take_brand_logo_(BrandLogo &read);
   // The pack on hand, none read yet when brand_ok_ is false.
   ::espn::BrandPack brand_;
   bool brand_ok_{false};
   BrandLogo brand_logo_;
+  BrandSprite brand_sprite_;
+  std::string brand_sprite_error_;
+  // The plate wall (plate_wall.h). The card reads the pack's plate list:
+  // one member a page, in the plate wall's look.
+  bool plates_() const { return this->msg_url_.empty() && this->brand_ok_; }
+  // The top line of the list's last read from the top, and its id kept in
+  // flash, to see a new plate.
+  struct PrefsPlateTop {
+    char id[::espn::kPlateIdMax + 1];
+  } __attribute__((packed));
+  ESPPreferenceObject plate_pref_;
+  std::string plate_top_id_;
+  std::string party_line_;
+  bool party_due_{false};    // the party goes up at the card's next page
+  bool party_force_{false};  // asked for: now, over a game too
+  bool brand_event_done_{false};  // the event page had its turn after the opening card
+  void plate_top_(const std::string &line);
+  std::string event_page_() const;
 #else
   static constexpr bool brand_ok_ = false;  // only the bar build reads packs
 #endif
