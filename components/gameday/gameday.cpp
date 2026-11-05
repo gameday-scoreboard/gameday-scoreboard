@@ -4005,11 +4005,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.opponent_color = ::espn::parse_color(g.opp_color);
   // ESPN has no logo for some small schools (a Division III team on a
   // Division I schedule): that side shows its abbreviation badge, the way
-  // the app does. ESPN gives no second color, so the badge has no ring.
+  // the app does.
   f.team_badge = f.team_logo.empty() && !f.team_abbr.empty();
   f.opponent_badge = f.opponent_logo.empty() && !f.opponent_abbr.empty();
-  f.team_fill = f.team_ring = ::espn::badge_fill(g.team_color);
-  f.opponent_fill = f.opponent_ring = ::espn::badge_fill(g.opp_color);
+  f.team_fill = ::espn::badge_fill(g.team_color);
+  f.opponent_fill = ::espn::badge_fill(g.opp_color);
 #ifdef GAMEDAY_DEMO
   this->demo_badges_(f);
 #endif

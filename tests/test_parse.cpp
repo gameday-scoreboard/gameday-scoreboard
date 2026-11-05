@@ -3804,9 +3804,10 @@ static void test_badge() {
   CHECK_EQ(badge_fill("000000"), kBadgeNoColorFill);
   CHECK_EQ(badge_fill("12345"), kBadgeNoColorFill);
   CHECK_EQ(badge_fill("GG0000"), kBadgeNoColorFill);
-  // A gray badge has no ring and takes white text.
-  BadgeStyle g = badge_style(kBadgeNoColorFill, kBadgeNoColorFill);
-  CHECK(!g.has_ring && !g.dark_text);
+  // The panel's glow starts at 60% of the fill.
+  CHECK_EQ(badge_glow(0xFFFFFF), 0x999999u);
+  CHECK_EQ(badge_glow(0x000000), 0x000000u);
+  CHECK_EQ(badge_glow(kBadgeNoColorFill), 0x4C4C4Cu);
 }
 
 // The demo build's matchups, made-up teams and script (demo.h).

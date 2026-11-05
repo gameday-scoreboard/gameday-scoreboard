@@ -222,13 +222,10 @@ void GamedayComponent::demo_show_step_(bool splash) {
 void GamedayComponent::demo_badges_(UpdateFields &f) const {
   if (!this->demo_playing_() || !this->demo_prefs_.madeup)
     return;
-  DemoKind kind = (DemoKind) this->demo_kind_;
   f.team_badge = true;
   f.opponent_badge = true;
   f.team_fill = f.team_color;
   f.opponent_fill = f.opponent_color;
-  f.team_ring = ::espn::demo_made_up(kind, true).alt;
-  f.opponent_ring = ::espn::demo_made_up(kind, false).alt;
 }
 
 ::espn::DemoMatchup GamedayComponent::demo_matchup_(uint8_t kind) const {
