@@ -1061,6 +1061,19 @@ script:
       - lambda: |-
           const std::string &page = id(gameday_ctl).msg_card();
           #ifdef GAMEDAY_BAR
+          if (id(gameday_ctl).plate_card_up()) {
+            // The plate wall (components/gameday/plate_wall.h): one canvas
+            // over the scoreboard, which says how long the page needs.
+            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(tt_brand), LV_OBJ_FLAG_HIDDEN);
+            const gameday::PlateWallFonts fonts{id(spleen_8)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                                id(spleen_16)->get_lv_font()};
+            id(gameday_ctl).set_msg_roll_ms(gameday::plate_wall_show(
+                lv_obj_get_parent(id(tt_brand)), page, id(gameday_ctl).brand_pack(), id(gameday_ctl).brand_sprite(),
+                fonts));
+            return;
+          }
+          gameday::plate_wall_hide();
           if (id(gameday_ctl).brand_card_up()) {
             // The bar build's opening card (components/gameday/brand.h).
             lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);

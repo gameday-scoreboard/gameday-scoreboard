@@ -910,6 +910,12 @@ void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t
 // Each button does what the owner set it to; its own favorite until then,
 // and again while what it was set to is gone.
 void GamedayComponent::remote_number(uint8_t n) {
+#ifdef GAMEDAY_BAR
+  if (n == 4 && this->plates_()) {
+    this->plate_party("the remote");
+    return;
+  }
+#endif
   ::espn::RemoteAction a = this->remote_action_(n);
   if (a.gone)
     ESP_LOGI(TAG, "Remote button %u: %s is gone, so favorite %u", (unsigned) n,
@@ -5434,7 +5440,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // hand or a read has answered: the last read's HTTP status (0 for no
   // answer, -1 none yet), what the pack gave, error when the last file
   // wasn't used (the pack shown is then the last good one), warning for a
-  // field it couldn't use, logo_error when the logo didn't read.
+  // field it couldn't use, logo_error when the logo didn't read; sprite_ok
+  // and sprite_error the same for a pack with a sprite.
   doc["brand"] = this->brand_url_;
   if (!this->brand_url_.empty() && (this->brand_ok_ || this->brand_status_ >= 0)) {
     JsonObject br = doc["brandread"].to<JsonObject>();
@@ -5449,11 +5456,15 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       br["logo"] = this->brand_.logo_color.empty() ? this->brand_.logo : this->brand_.logo_color;
       br["logo_ok"] = !this->brand_logo_.empty();
       br["list"] = this->brand_.list;
+      if (!this->brand_.sprite.empty())
+        br["sprite_ok"] = !this->brand_sprite_.empty();
       if (!this->brand_.warning.empty())
         br["warning"] = this->brand_.warning;
     }
     if (!this->brand_logo_error_.empty())
       br["logo_error"] = this->brand_logo_error_;
+    if (!this->brand_sprite_error_.empty())
+      br["sprite_error"] = this->brand_sprite_error_;
   }
 #endif
   // The message card (message.h). msgread is the list's last read, left out
@@ -6214,6 +6225,21 @@ void GamedayComponent::msg_tick_() {
                        now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
                        !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
+#ifdef GAMEDAY_BAR
+  // A plate party someone asked for (plate_party) goes up now, over a game
+  // too, and keeps the board for its time; then the card's own turns again.
+  if (this->party_force_) {
+    if (this->party_due_ && !this->demo_playing_()) {
+      this->party_due_ = false;
+      this->msg_show_(::espn::kPartyPageMark + panel_text(this->party_line_));
+      return;
+    }
+    if (this->msg_shown_ && this->msg_card_[0] == ::espn::kPartyPageMark && now - this->msg_since_ms_ < page_ms)
+      return;
+    this->party_force_ = false;
+    this->party_due_ = false;
+  }
+#endif
   ::espn::MsgTurn turn =
       ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
   if (turn == ::espn::MsgTurn::NONE)
@@ -6222,18 +6248,44 @@ void GamedayComponent::msg_tick_() {
     this->msg_show_("");
     return;
   }
+#ifdef GAMEDAY_BAR
+  // A new plate at the top of the list: its party is the next page.
+  if (this->party_due_ && this->plates_() && !this->party_line_.empty()) {
+    this->party_due_ = false;
+    this->msg_show_(::espn::kPartyPageMark + panel_text(this->party_line_));
+    return;
+  }
+#endif
   // The bar build's opening card goes up before the list's first page, each
   // time round, and alone when there is no list.
   if (this->brand_ok_ && !this->brand_opened_) {
     this->brand_opened_ = true;
+#ifdef GAMEDAY_BAR
+    this->brand_event_done_ = false;
+#endif
     this->msg_show_(::espn::kBrandPage);
     return;
   }
+#ifdef GAMEDAY_BAR
+  // The pack's event, in the two weeks before it: right after the opening card.
+  if (this->brand_ok_ && !this->brand_event_done_) {
+    this->brand_event_done_ = true;
+    const std::string ev = this->event_page_();
+    if (!ev.empty()) {
+      this->msg_show_(ev);
+      return;
+    }
+  }
+  // The plate wall: one member a page.
+  const uint32_t per = this->plates_() ? 1 : ::espn::kMsgPageLines;
+#else
+  const uint32_t per = ::espn::kMsgPageLines;
+#endif
   const bool url = !this->msg_src_().empty();
   const bool may_read = url && (this->msg_fail_ms_ == 0 || now - this->msg_fail_ms_ >= ::espn::kMsgRetryMs);
   const bool stale = may_read && this->msg_list_ms_ != 0 && now - this->msg_list_ms_ >= ::espn::kMsgRefreshMs;
-  ::espn::MsgPage page = ::espn::msg_next_page(this->msg_pos_, this->msg_from_, this->msg_n_, this->msg_eof_, stale,
-                                               ::espn::kMsgPageLines);
+  ::espn::MsgPage page =
+      ::espn::msg_next_page(this->msg_pos_, this->msg_from_, this->msg_n_, this->msg_eof_, stale, per);
   if (page.read) {
     // The card waits for the read; a page already up stays until it lands.
     if (may_read && !(this->busy_ && this->job_.need_msg)) {
@@ -6256,22 +6308,13 @@ void GamedayComponent::msg_tick_() {
   this->msg_pos_ = page.next;
   if (page.next <= page.first)
     this->brand_opened_ = false;  // back to the top next: the opening card first
-  std::string entries = ::espn::msg_entries(this->msg_list_, page.first - this->msg_from_, page.count);
-  if (this->msg_url_.empty() && this->brand_ok_) {
-    // The pack's plate list: "12|Ann B.|quote|2" lines read "#12 Ann B.".
-    std::string shown;
-    size_t p = 0;
-    while (p <= entries.size()) {
-      size_t nl = entries.find('\n', p);
-      if (nl == std::string::npos)
-        nl = entries.size();
-      if (!shown.empty())
-        shown += '\n';
-      shown += ::espn::brand_list_line(entries.substr(p, nl - p));
-      p = nl + 1;
-    }
-    entries.swap(shown);
+  const std::string entries = ::espn::msg_entries(this->msg_list_, page.first - this->msg_from_, page.count);
+#ifdef GAMEDAY_BAR
+  if (this->plates_()) {
+    this->msg_show_(::espn::kPlatePageMark + panel_text(entries));
+    return;
   }
+#endif
   this->msg_show_(board_lines(entries));
 }
 
@@ -6282,6 +6325,9 @@ void GamedayComponent::start_msg_job_() {
   this->job_.need_msg = true;
   this->job_.msg_url = this->msg_src_();
   this->job_.msg_from = this->msg_read_from_;
+#ifdef GAMEDAY_BAR
+  this->job_.msg_plates = this->plates_();
+#endif
   this->start_worker_();
 }
 
@@ -6301,32 +6347,43 @@ void GamedayComponent::run_msg_job_() {
     container->end();
     return;
   }
-  ::espn::MsgReader<PsString> reader(j.msg_from, ::espn::kMsgChunkLines);
-  uint8_t buf[512];
-  bool more = true;
-  bool complete = false;
-  const uint32_t started = millis();
-  // A server that trickles its file out is cut off well inside the loop's
-  // WORKER_DEADLINE, so this task is never written off.
-  while (more && reader.bytes() < ::espn::kMsgReadMaxBytes && millis() - started < MSG_READ_LIMIT) {
-    int n = container->read(buf, sizeof(buf));
-    if (n <= 0) {
-      complete = n == 0 && container->is_read_complete();
-      break;
+  auto read = [&](auto &reader) {
+    uint8_t buf[512];
+    bool more = true;
+    bool complete = false;
+    const uint32_t started = millis();
+    // A server that trickles its file out is cut off well inside the loop's
+    // WORKER_DEADLINE, so this task is never written off.
+    while (more && reader.bytes() < ::espn::kMsgReadMaxBytes && millis() - started < MSG_READ_LIMIT) {
+      int n = container->read(buf, sizeof(buf));
+      if (n <= 0) {
+        complete = n == 0 && container->is_read_complete();
+        break;
+      }
+      more = reader.feed((const char *) buf, (size_t) n);
     }
-    more = reader.feed((const char *) buf, (size_t) n);
+    container->end();
+    // A file longer than the read allows ends there: the next page is the top.
+    if (more && (complete || reader.bytes() >= ::espn::kMsgReadMaxBytes))
+      reader.finish();
+    else if (more && reader.kept() == 0)
+      return;  // cut off with nothing to show: a failed read
+    j.msg_ok = true;
+    j.msg_eof = reader.eof();
+    j.msg_n = reader.kept();
+    j.msg_seen = reader.seen();
+    j.msg_list = std::move(reader.list());
+  };
+#ifdef GAMEDAY_BAR
+  if (j.msg_plates) {
+    // A plate's line holds its quote too.
+    ::espn::MsgReader<PsString, ::espn::kPlateLineMax> plates(j.msg_from, ::espn::kMsgChunkLines);
+    read(plates);
+    return;
   }
-  container->end();
-  // A file longer than the read allows ends there: the next page is the top.
-  if (more && (complete || reader.bytes() >= ::espn::kMsgReadMaxBytes))
-    reader.finish();
-  else if (more && reader.kept() == 0)
-    return;  // cut off with nothing to show: a failed read
-  j.msg_ok = true;
-  j.msg_eof = reader.eof();
-  j.msg_n = reader.kept();
-  j.msg_seen = reader.seen();
-  j.msg_list = std::move(reader.list());
+#endif
+  ::espn::MsgReader<PsString> reader(j.msg_from, ::espn::kMsgChunkLines);
+  read(reader);
 }
 
 void GamedayComponent::apply_msg_job_() {
@@ -6353,6 +6410,10 @@ void GamedayComponent::apply_msg_job_() {
     this->msg_total_ = j.msg_seen;
   ESP_LOGI(TAG, "Message list: entries %u to %u%s", (unsigned) j.msg_from + 1, (unsigned) (j.msg_from + j.msg_n),
            j.msg_eof ? ", the end of the file" : "");
+#ifdef GAMEDAY_BAR
+  if (j.msg_from == 0 && j.msg_plates)
+    this->plate_top_(::espn::msg_entries(this->msg_list_, 0, 1));
+#endif
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -6362,6 +6423,12 @@ void GamedayComponent::apply_msg_job_() {
 void GamedayComponent::load_brand_() {
   this->brand_url_pref_ = global_preferences->make_preference<PrefsBrandUrl>(fnv1_hash("gameday_brand_url_v1"));
   this->brand_doc_pref_ = global_preferences->make_preference<PrefsBrandDoc>(fnv1_hash("gameday_brand_doc_v1"));
+  this->plate_pref_ = global_preferences->make_preference<PrefsPlateTop>(fnv1_hash("gameday_plate_top_v1"));
+  PrefsPlateTop top{};
+  if (this->plate_pref_.load(&top)) {
+    top.id[sizeof(top.id) - 1] = '\0';
+    this->plate_top_id_ = top.id;
+  }
   PrefsBrandUrl u{};
   if (!this->brand_url_pref_.load(&u))
     return;  // never set: no pack
@@ -6399,11 +6466,21 @@ void GamedayComponent::set_brand_(const std::string &url) {
     this->brand_doc_pref_.save(d);  // size 0: no file
     delete d;
   }
+  // Another bar's list: its top line is saved on the first read, no party.
+  if (!this->plate_top_id_.empty()) {
+    this->plate_top_id_.clear();
+    PrefsPlateTop top{};
+    this->plate_pref_.save(&top);
+  }
   this->sync_prefs_();
+  this->party_line_.clear();
+  this->party_due_ = this->party_force_ = false;
   this->brand_ = ::espn::BrandPack{};
   this->brand_ok_ = false;
   this->brand_doc_hash_ = 0;
   this->brand_logo_.clear();
+  this->brand_sprite_.clear();
+  this->brand_sprite_error_.clear();
   this->brand_status_ = -1;
   this->brand_error_.clear();
   this->brand_logo_error_.clear();
@@ -6438,10 +6515,12 @@ void GamedayComponent::start_brand_job_() {
   this->job_.logo_have_bg = this->brand_logo_.bg;
   if (this->brand_logo_.empty())
     this->job_.logo_have_url.clear();
+  this->job_.sprite_have_url = this->brand_sprite_.empty() ? "" : this->brand_sprite_.url;
   this->job_.brand_keep_ok = this->brand_ok_;
   if (this->brand_ok_) {
     this->job_.keep_logo = this->brand_.logo;
     this->job_.keep_logo_color = this->brand_.logo_color;
+    this->job_.keep_sprite = this->brand_.sprite;
     this->job_.keep_rim = this->brand_.rim;
     this->job_.keep_bg = this->brand_.background;
   }
@@ -6487,15 +6566,69 @@ void GamedayComponent::run_brand_job_() {
   if (j.brand_ok) {
     j.brand_doc = std::move(doc);
     this->run_brand_logo_(j.brand_pack);
+    this->run_brand_sprite_(j.brand_pack.sprite);
   } else if (j.brand_keep_ok) {
-    // The last good pack's logo, if it isn't on hand.
+    // The last good pack's logo and sprite, if they aren't on hand.
     ::espn::BrandPack keep;
     keep.logo = j.keep_logo;
     keep.logo_color = j.keep_logo_color;
     keep.rim = j.keep_rim;
     keep.background = j.keep_bg;
     this->run_brand_logo_(keep);
+    this->run_brand_sprite_(j.keep_sprite);
   }
+}
+
+// Worker task: the sprite at url, unless it is the one on hand.
+void GamedayComponent::run_brand_sprite_(const std::string &url) {
+  Job &j = this->job_;
+  if (url.empty() || url == j.sprite_have_url)
+    return;
+  j.brand_sprite_read = true;
+  std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}, {"Accept", "image/png"}};
+  auto img = this->http_->get(url, headers);
+  if (img == nullptr) {
+    j.brand_sprite_error = "No answer from the sprite's address.";
+    return;
+  }
+  if (img->status_code != 200) {
+    j.brand_sprite_error = "The sprite's address answered HTTP " + std::to_string(img->status_code) + ".";
+    img->end();
+    return;
+  }
+  ::espn::PsVector<uint8_t> file;
+  const bool got = read_capped(img, ::espn::kBrandLogoMaxBytes, file);
+  img->end();
+  if (!got) {
+    j.brand_sprite_error = "The sprite file was cut off.";
+    return;
+  }
+  j.brand_sprite_error = brand_decode_sprite(file.data(), file.size(), j.brand_sprite);
+  if (j.brand_sprite_error.empty())
+    j.brand_sprite.url = url;
+}
+
+// Main loop: what the job read of the sprite at url (the pack's on hand).
+void GamedayComponent::apply_brand_sprite_(const std::string &url) {
+  Job &j = this->job_;
+  if (url.empty()) {
+    this->brand_sprite_.clear();
+    this->brand_sprite_error_.clear();
+    return;
+  }
+  if (!j.brand_sprite_read)
+    return;  // the one on hand
+  if (j.brand_sprite_error.empty()) {
+    this->brand_sprite_ = std::move(j.brand_sprite);
+    this->brand_sprite_error_.clear();
+    return;
+  }
+  // A sprite that didn't read: the plate wall goes on without one, unless
+  // the one on hand came from the same file.
+  if (this->brand_sprite_.url != url)
+    this->brand_sprite_.clear();
+  this->brand_sprite_error_ = j.brand_sprite_error;
+  ESP_LOGW(TAG, "Brand sprite: %s", j.brand_sprite_error.c_str());
 }
 
 // Worker task: p's logo, unless it is the one on hand.
@@ -6552,6 +6685,8 @@ void GamedayComponent::apply_brand_job_() {
       if (this->brand_card_up())
         this->fire_action_("msg");
     }
+    if (this->brand_ok_)
+      this->apply_brand_sprite_(this->brand_.sprite);
     this->rebuild_state_(&this->last_fields_);
     return;
   }
@@ -6592,11 +6727,58 @@ void GamedayComponent::apply_brand_job_() {
       ESP_LOGW(TAG, "Brand logo: %s", j.brand_logo_error.c_str());
     }
   }
+  this->apply_brand_sprite_(this->brand_.sprite);
   if (this->msg_src_() != old_list)
     this->msg_reset_();  // the pack's plate list changed: read it from the top
   else if (this->brand_card_up())
     this->fire_action_("msg");  // redraw the opening card in the new look
   this->rebuild_state_(&this->last_fields_);
+}
+
+// ---- The plate wall (plate_wall.h), bar build only ---------------------------
+
+// The top line of a read of the plate list from the top. The list comes
+// newest first, so a different plate there is a new one: its party goes up
+// once. The first read after a new pack only saves it.
+void GamedayComponent::plate_top_(const std::string &line) {
+  this->party_line_ = line;
+  const std::string id = ::espn::plate_id(::espn::plate_line(line));
+  const ::espn::PlateNews news = ::espn::plate_news(this->plate_top_id_, id);
+  if (news == ::espn::PlateNews::NONE)
+    return;
+  if (news == ::espn::PlateNews::NEW) {
+    ESP_LOGI(TAG, "New plate on top of the list (%s): plate party next", id.c_str());
+    this->party_due_ = true;
+  }
+  this->plate_top_id_ = id;
+  PrefsPlateTop top{};
+  strncpy(top.id, id.c_str(), sizeof(top.id) - 1);
+  this->plate_pref_.save(&top);
+  this->sync_prefs_();
+}
+
+void GamedayComponent::plate_party(const char *who) {
+  if (!this->plates_() || this->party_line_.empty()) {
+    ESP_LOGI(TAG, "Plate party from %s: no plate list read yet", who);
+    return;
+  }
+  ESP_LOGI(TAG, "Plate party from %s", who);
+  this->party_due_ = true;
+  this->party_force_ = true;
+  this->msg_tick_ms_ = millis() - 1000;  // the card's next look is the next loop
+}
+
+// The event page, or "" when the pack has no event in the next two weeks (or
+// the clock isn't set): its day and time on the panel's own calendar.
+std::string GamedayComponent::event_page_() const {
+  if (this->brand_.event_name.empty() || this->brand_.event_ymd == 0 || !this->clock_set_())
+    return "";
+  const ESPTime now = this->time_->now();
+  const ::espn::PlateEvent ev = ::espn::plate_event(this->brand_.event_ymd, this->brand_.event_minute, now.year,
+                                                    now.month, now.day_of_month);
+  if (!ev.show)
+    return "";
+  return std::string(1, ::espn::kEventPageMark) + ev.day + "\n" + ev.time;
 }
 #endif  // GAMEDAY_BAR
 
@@ -7268,6 +7450,9 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
+#ifdef GAMEDAY_BAR
+    known = known || name == "plate_party";
+#endif
     if (!known) {
       request->send(404, "application/json", "{\"error\":\"unknown action\"}");
       return;
@@ -7293,6 +7478,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);
       else if (name == "demo_stop")
         this->stop_demo();
+#endif
+#ifdef GAMEDAY_BAR
+      else if (name == "plate_party")
+        this->plate_party("the device page");
 #endif
       this->fire_action_(name);
     });

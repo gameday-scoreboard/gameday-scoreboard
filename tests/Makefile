@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_picture build/test_celebrate build/test_brand
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_picture build/test_celebrate build/test_brand build/test_plate_wall
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -19,6 +19,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_picture
 	./build/test_celebrate
 	./build/test_brand
+	./build/test_plate_wall
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -75,6 +76,12 @@ build/test_picture: test_picture.cpp ../components/gameday/picture.h ../componen
 build/test_brand: test_brand.cpp ../components/gameday/brand.h ../components/gameday/message.h ../components/gameday/countdown.h ../components/gameday/night.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_brand.cpp -o $@ $(LDFLAGS)
+
+# The plate wall on the bar build: list lines, a new plate's party, names in
+# plates, the quote's rise, page times and the event page (plate_wall.h).
+build/test_plate_wall: test_plate_wall.cpp ../components/gameday/plate_wall.h ../components/gameday/message.h ../components/gameday/weather.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_plate_wall.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the

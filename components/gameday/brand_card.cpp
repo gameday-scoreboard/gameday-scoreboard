@@ -28,25 +28,29 @@ void rgba_draw(pngle_t *pngle, uint32_t x, uint32_t y, uint32_t w, uint32_t h, c
     }
 }
 
-}  // namespace
-
-std::string brand_decode_logo(const uint8_t *data, size_t size, bool tint, uint32_t fg, uint32_t bg, BrandLogo &out) {
+// A PNG file of up to 128 x 64 to RGBA, w x h. "" when it decoded, else what
+// to tell the owner about it ("the logo", "the sprite": what).
+std::string decode_rgba(const uint8_t *data, size_t size, const char *what, ::espn::PsVector<uint8_t> &rgba,
+                        uint32_t &w, uint32_t &h) {
+  const std::string it = what;
   if (size == 0)
-    return "The logo file is empty.";
+    return "The " + it + " file is empty.";
   if (size > ::espn::kBrandLogoMaxBytes)
-    return "The logo file is too big; it can be up to 32 KB.";
+    return "The " + it + " file is too big; it can be up to 32 KB.";
   if (::espn::pic_sniff(data, size) != ::espn::PicKind::PNG)
-    return "The logo has to be a PNG file.";
+    return "The " + it + " has to be a PNG file.";
   // pic_check reads the size from the PNG's header.
   const ::espn::PicCheck c = ::espn::pic_check(data, size);
   if (!c.error.empty())
-    return c.error == ::espn::pic_too_big_text() ? "The logo can be up to 128 by 64 pixels." : "The logo file is damaged.";
-  const uint32_t w = c.info.w, h = c.info.h;
-  ::espn::PsVector<uint8_t> rgba((size_t) w * h * 4, 0);
+    return c.error == ::espn::pic_too_big_text() ? "The " + it + " can be up to 128 by 64 pixels."
+                                                 : "The " + it + " file is damaged.";
+  w = c.info.w;
+  h = c.info.h;
+  rgba.assign((size_t) w * h * 4, 0);
   RAMAllocator<pngle_t> allocator;
   pngle_t *pngle = allocator.allocate(1, PNGLE_T_SIZE);
   if (pngle == nullptr)
-    return "No room to read the logo.";
+    return "No room to read the " + it + ".";
   memset(pngle, 0, PNGLE_T_SIZE);
   pngle_reset(pngle);
   RgbaTarget target{rgba.data(), w, h, 0};
@@ -54,12 +58,21 @@ std::string brand_decode_logo(const uint8_t *data, size_t size, bool tint, uint3
   pngle_set_draw_callback(pngle, rgba_draw);
   const int fed = pngle_feed(pngle, const_cast<uint8_t *>(data), size);
   if (fed < 0)
-    ESP_LOGW(TAG, "Logo PNG: %s", pngle_error(pngle));
+    ESP_LOGW(TAG, "%s PNG: %s", what, pngle_error(pngle));
   const bool ok = fed >= 0 && target.drawn >= w * h && pngle_get_width(pngle) == w && pngle_get_height(pngle) == h;
   pngle_reset(pngle);
   allocator.deallocate(pngle, PNGLE_T_SIZE);
-  if (!ok)
-    return "The logo file is damaged.";
+  return ok ? "" : "The " + it + " file is damaged.";
+}
+
+}  // namespace
+
+std::string brand_decode_logo(const uint8_t *data, size_t size, bool tint, uint32_t fg, uint32_t bg, BrandLogo &out) {
+  ::espn::PsVector<uint8_t> rgba;
+  uint32_t w = 0, h = 0;
+  const std::string err = decode_rgba(data, size, "logo", rgba, w, h);
+  if (!err.empty())
+    return err;
   out.pixels.assign((size_t) w * h, 0);
   ::espn::brand_logo_pixels(rgba.data(), w, h, tint, fg, bg, out.pixels.data());
   out.w = (uint16_t) w;
@@ -67,6 +80,21 @@ std::string brand_decode_logo(const uint8_t *data, size_t size, bool tint, uint3
   out.tint = tint;
   out.fg = fg;
   out.bg = bg;
+  return "";
+}
+
+std::string brand_decode_sprite(const uint8_t *data, size_t size, BrandSprite &out) {
+  ::espn::PsVector<uint8_t> rgba;
+  uint32_t w = 0, h = 0;
+  const std::string err = decode_rgba(data, size, "sprite", rgba, w, h);
+  if (!err.empty())
+    return err;
+  if (w > (uint32_t) ::espn::kBrandSpriteMaxW || h > (uint32_t) ::espn::kBrandSpriteMaxH)
+    return "The sprite can be up to 64 by 32 pixels.";
+  out.mask.assign((size_t) w * h, 0);
+  ::espn::brand_sprite_mask(rgba.data(), w, h, out.mask.data());
+  out.w = (uint16_t) w;
+  out.h = (uint16_t) h;
   return "";
 }
 

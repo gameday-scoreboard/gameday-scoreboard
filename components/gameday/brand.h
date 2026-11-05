@@ -5,7 +5,7 @@
 //    "colors": {"rim": "#D4A017", "number": "#C8102E", "quote": "#4FA3D9",
 //               "background": "#000000"},
 //    "logo": "https://example.com/logo.png", "logo_color": "https://example.com/logo-color.png",
-//    "list": "https://example.com/plates.txt",
+//    "sprite": "https://example.com/sprite.png", "list": "https://example.com/plates.txt",
 //    "event": {"name": "GLASS NIGHT", "date": "2026-11-12", "time": "18:00"},
 //    "party": {"new": "NEW PLATE!", "round2": "ROUND TWO!"}}
 // Every field may be left out: a missing or unreadable one falls back to a
@@ -17,6 +17,8 @@
 // logo is one color: the lit part (opaque pixels, or light ones when the file
 // has no transparency) is drawn in the rim color on the background. logo_color,
 // when given, is drawn as it is instead. Both are PNG files up to 128 x 64.
+// sprite is a small one-color PNG, up to 64 x 32, lit the same way and drawn
+// in the rim color: it flies across the plate wall (plate_wall.h).
 // list is the plate list the message card reads when the panel has no list
 // address of its own, one line a plate: "number|name|quote|round".
 //
@@ -39,6 +41,7 @@ constexpr size_t kBrandUrlMax = kMsgUrlMax;          // the pack's address, and 
 constexpr size_t kBrandMaxBytes = 2048;              // the pack file
 constexpr size_t kBrandLogoMaxBytes = 32 * 1024;     // each logo file
 constexpr int kBrandLogoMaxW = 128, kBrandLogoMaxH = 64;
+constexpr int kBrandSpriteMaxW = 64, kBrandSpriteMaxH = 32;
 constexpr size_t kBrandNameMax = 48;                 // the bar's name, for the device page
 constexpr size_t kBrandTitleMax = 24;                // "MUG CLUB", "WALL OF FAME"
 constexpr size_t kBrandWordMax = 16;                 // party wording, "NEW PLATE!"
@@ -55,7 +58,7 @@ constexpr uint32_t kBrandWhite = 0xFFFFFF, kBrandBlack = 0x000000;
 struct BrandPack {
   std::string name, title, wall;
   uint32_t rim{kBrandWhite}, number{kBrandWhite}, quote{kBrandWhite}, background{kBrandBlack};
-  std::string logo, logo_color, list;
+  std::string logo, logo_color, sprite, list;
   std::string event_name;
   uint32_t event_ymd{0};   // YYYYMMDD, 0 for none
   int event_minute{-1};    // minutes after midnight, -1 for no time
@@ -159,6 +162,7 @@ inline bool brand_parse(const char *data, size_t size, BrandPack &out, std::stri
   }
   p.logo = detail::brand_url(o["logo"], p, "logo");
   p.logo_color = detail::brand_url(o["logo_color"], p, "logo_color");
+  p.sprite = detail::brand_url(o["sprite"], p, "sprite");
   p.list = detail::brand_url(o["list"], p, "list");
   JsonVariantConst ev = o["event"];
   if (ev.is<JsonObjectConst>()) {
@@ -210,20 +214,33 @@ inline uint16_t brand_565(uint32_t rgb) {
 // means opaque (alpha 128 and up) when any pixel is see-through, else light
 // (luma 128 and up), so a white logo on black and a logo cut out on
 // transparency both work. In color: each pixel blended over bg by its alpha.
+namespace detail {
+
+// Whether any pixel of an RGBA image is see-through.
+inline bool brand_has_clear(const uint8_t *rgba, uint32_t n) {
+  for (uint32_t i = 0; i < n; i++)
+    if (rgba[i * 4 + 3] < 250)
+      return true;
+  return false;
+}
+
+inline bool brand_lit(const uint8_t *p, bool clear) {
+  const uint32_t luma = (p[0] * 77u + p[1] * 150u + p[2] * 29u) >> 8;
+  return clear ? p[3] >= 128 : luma >= 128;
+}
+
+}  // namespace detail
+
 inline void brand_logo_pixels(const uint8_t *rgba, uint32_t w, uint32_t h, bool tint, uint32_t fg, uint32_t bg,
                               uint16_t *out) {
   const uint32_t n = w * h;
-  bool clear = false;
-  for (uint32_t i = 0; i < n && !clear; i++)
-    clear = rgba[i * 4 + 3] < 250;
+  const bool clear = detail::brand_has_clear(rgba, n);
   const uint16_t f = brand_565(fg), b = brand_565(bg);
   const uint32_t br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;
   for (uint32_t i = 0; i < n; i++) {
     const uint8_t *p = rgba + i * 4;
     if (tint) {
-      const uint32_t luma = (p[0] * 77u + p[1] * 150u + p[2] * 29u) >> 8;
-      const bool lit = clear ? p[3] >= 128 : luma >= 128;
-      out[i] = lit ? f : b;
+      out[i] = detail::brand_lit(p, clear) ? f : b;
     } else {
       const uint32_t a = p[3];
       const uint32_t r = (p[0] * a + br * (255 - a)) / 255, g = (p[1] * a + bgc * (255 - a)) / 255,
@@ -231,6 +248,15 @@ inline void brand_logo_pixels(const uint8_t *rgba, uint32_t w, uint32_t h, bool 
       out[i] = brand_565((r << 16) | (g << 8) | bl);
     }
   }
+}
+
+// The sprite's lit pixels, the same way as a one-color logo: out[i] is 1
+// where it is drawn, 0 where the board shows through.
+inline void brand_sprite_mask(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out) {
+  const uint32_t n = w * h;
+  const bool clear = detail::brand_has_clear(rgba, n);
+  for (uint32_t i = 0; i < n; i++)
+    out[i] = detail::brand_lit(rgba + i * 4, clear) ? 1 : 0;
 }
 
 // Where the opening card puts things on a W x H board: the logo at the top,
@@ -291,23 +317,6 @@ inline BrandLayout brand_layout(int W, int H, int logo_w, int logo_h, const std:
   if (wall_h > 0)
     L.wall_y = top + title_h + gap;
   return L;
-}
-
-// A plate list line as the message card shows it until the plate wall draws
-// them: "12|Ann B.|Cheers|2" reads "#12 Ann B.". A line with no '|' is left as
-// it is.
-inline std::string brand_list_line(const std::string &line) {
-  const size_t a = line.find('|');
-  if (a == std::string::npos)
-    return line;
-  const std::string num = line.substr(0, a);
-  const size_t b = line.find('|', a + 1);
-  std::string name = line.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1);
-  const size_t s = name.find_first_not_of(' '), e = name.find_last_not_of(' ');
-  name = s == std::string::npos ? "" : name.substr(s, e - s + 1);
-  if (num.empty())
-    return name;
-  return name.empty() ? "#" + num : "#" + num + " " + name;
 }
 
 }  // namespace espn

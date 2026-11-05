@@ -327,6 +327,7 @@
           <input type="url" id="brandUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
           <p class="hint" id="brandRead" hidden></p>
           <div class="ctl" id="brandLogoRow" hidden><label>Logo</label><img id="brandLogo" class="brandlogo" alt="The bar's logo"></div>
+          <div class="ctl" id="brandPartyRow" hidden><label>Plate party<small>Shows the newest plate's party now, even over a game.</small></label><button class="btn" id="brandParty">Plate party</button></div>
           <div class="actions"><button class="btn primary" id="brandSave">Save</button><button class="btn" id="brandClear">Clear</button></div>
         </div>
       </div>
@@ -1921,6 +1922,8 @@
     const logo = read && read.ok && read.logo_ok ? read.logo : "";
     $("#brandLogoRow").hidden = !logo;
     if (logo && $("#brandLogo").getAttribute("src") !== logo) $("#brandLogo").src = logo;
+    // The plate wall shows the pack's list while the panel has no list of its own.
+    $("#brandPartyRow").hidden = !(S.brand && read && read.ok && read.list && !S.msgurl);
     if (!S.brand) return;
     const kept = read && read.ok ? " Showing the last look it read." : "";
     let text;
@@ -1931,7 +1934,12 @@
     else text = "Loaded: " + (read.name || read.title || "the brand file") + ".";
     if (read && read.ok && read.warning) text += " Left out: " + read.warning + ".";
     if (read && read.logo_error) text += " " + read.logo_error;
+    if (read && read.sprite_error) text += " " + read.sprite_error;
     line.textContent = text;
+  };
+  $("#brandParty").onclick = () => {
+    doAction("plate_party");
+    toast("Plate party");
   };
   $("#brandSave").onclick = () => {
     const url = $("#brandUrl").value.trim();

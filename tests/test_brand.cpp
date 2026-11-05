@@ -32,6 +32,7 @@ static void test_full_pack() {
     "name": "Main Street Taproom", "title": "MUG CLUB", "wall": "WALL OF FAME",
     "colors": {"rim": "#D4A017", "number": "c8102e", "quote": "#4FA3D9", "background": "#0B3D2E"},
     "logo": "https://example.com/logo.png", "logo_color": "http://192.168.1.20/logo-color.png",
+    "sprite": "https://example.com/sprite.png",
     "list": "https://example.com/plates.txt",
     "event": {"name": "GLASS NIGHT", "date": "2026-11-12", "time": "18:00"},
     "party": {"new": "NEW MUG!", "round2": "DOUBLE MUG!"}
@@ -49,6 +50,7 @@ static void test_full_pack() {
   CHECK(p.background == 0x0B3D2E);
   CHECK(p.logo == "https://example.com/logo.png");
   CHECK(p.logo_color == "http://192.168.1.20/logo-color.png");
+  CHECK(p.sprite == "https://example.com/sprite.png");
   CHECK(p.list == "https://example.com/plates.txt");
   CHECK(p.event_name == "GLASS NIGHT");
   CHECK(p.event_ymd == 20261112);
@@ -64,7 +66,7 @@ static void test_defaults() {
   std::string err;
   CHECK(parse(R"({"title":"MUG CLUB"})", p, err));
   CHECK(p.rim == kBrandWhite && p.number == kBrandWhite && p.quote == kBrandWhite && p.background == kBrandBlack);
-  CHECK(p.logo.empty() && p.logo_color.empty() && p.list.empty());
+  CHECK(p.logo.empty() && p.logo_color.empty() && p.sprite.empty() && p.list.empty());
   CHECK(p.event_ymd == 0 && p.event_minute == -1 && p.event_name.empty());
   CHECK(p.party_new == "NEW PLATE!" && p.party_round2 == "ROUND TWO!");
   CHECK(p.warning.empty());
@@ -77,12 +79,12 @@ static void test_bad_fields_fall_back() {
   BrandPack p;
   std::string err;
   CHECK(parse(R"({"title":"MUG CLUB","colors":{"rim":"gold","number":"#12345","quote":7,"background":"#102030"},
-                  "logo":"ftp://example.com/l.png","list":"not a url","wall":5,
+                  "logo":"ftp://example.com/l.png","list":"not a url","wall":5,"sprite":"sprite.png",
                   "event":{"name":"X","date":"2026-02-30"},"party":{"new":3}})",
               p, err));
   CHECK(p.rim == kBrandWhite && p.number == kBrandWhite && p.quote == kBrandWhite);
   CHECK(p.background == 0x102030);  // the good one is kept
-  CHECK(p.logo.empty() && p.list.empty() && p.wall.empty());
+  CHECK(p.logo.empty() && p.list.empty() && p.wall.empty() && p.sprite.empty());
   CHECK(p.event_ymd == 0 && p.event_name.empty());
   CHECK(p.party_new == "NEW PLATE!");
   CHECK(p.warning == "wall isn't text");  // the first one found, in the file's field order
@@ -189,12 +191,16 @@ static void test_layout() {
   CHECK(L.scale == 256);
 }
 
-static void test_list_line() {
-  CHECK(brand_list_line("12|Ann B.|Cheers to that|2") == "#12 Ann B.");
-  CHECK(brand_list_line("7|Bob") == "#7 Bob");
-  CHECK(brand_list_line("|Cara|quote") == "Cara");
-  CHECK(brand_list_line("9|  |quote") == "#9");
-  CHECK(brand_list_line("Just a name") == "Just a name");
+static void test_sprite_mask() {
+  // The sprite is lit the way a one-color logo is: opaque pixels when it has
+  // transparency, light ones when it has none.
+  const uint8_t cut[] = {255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 128};
+  uint8_t out[4];
+  brand_sprite_mask(cut, 2, 2, out);
+  CHECK(out[0] == 1 && out[1] == 1 && out[2] == 0 && out[3] == 1);
+  const uint8_t solid[] = {255, 255, 255, 255, 0, 0, 0, 255, 200, 200, 200, 255, 40, 40, 40, 255};
+  brand_sprite_mask(solid, 4, 1, out);
+  CHECK(out[0] == 1 && out[1] == 0 && out[2] == 1 && out[3] == 0);
 }
 
 int main() {
@@ -206,7 +212,7 @@ int main() {
   test_colors();
   test_logo_pixels();
   test_layout();
-  test_list_line();
+  test_sprite_mask();
   printf("%d/%d brand checks passed\n", checks - failures, checks);
   return failures == 0 ? 0 : 1;
 }
