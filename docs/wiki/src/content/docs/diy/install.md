@@ -1,14 +1,14 @@
 ---
 title: "Install the firmware"
-description: "Flash the Game Day Scoreboard firmware onto a MoonHub75-pinout board from your browser, and how updates reach it."
+description: "Flash the Game Day Scoreboard firmware onto a MoonHub75-pinout or Waveshare board from your browser, and how updates reach it."
 sidebar:
   order: 4
 ---
 
-The [installer](https://install.gameday-scoreboard.com/) flashes the prebuilt firmware for the MoonHub75 pinout from your browser. It's the same installer the Game Day Scoreboard controller uses. You don't need ESPHome or any other software.
+The [installer](https://install.gameday-scoreboard.com/) flashes the prebuilt firmware for the MoonHub75 pinout or the Waveshare ESP32-S3-RGB-Matrix from your browser. It's the same installer a Game Day Scoreboard uses. You don't need ESPHome or any other software.
 
 :::caution
-Installing erases whatever firmware was on the board. The installer is for boards on the MoonHub75 pinout only. A board with other pins needs its own build; see [Boards](/diy/boards/).
+Installing erases whatever firmware was on the board. The installer is for boards on the MoonHub75 pinout and the Waveshare ESP32-S3-RGB-Matrix only. A board with other pins needs its own build; see [Boards](/diy/boards/).
 :::
 
 ## Before you start
@@ -20,10 +20,11 @@ Installing erases whatever firmware was on the board. The installer is for board
 ## Install
 
 1. Open the [installer](https://install.gameday-scoreboard.com/) in Chrome or Edge.
-2. Click the picture that matches your panels: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). This sets the layout the scoreboard starts with. The Install button appears once you pick.
-3. Plug the board into the computer over USB.
-4. Click **Install Game Day Scoreboard** and pick the board's port when the browser asks.
-5. When the install finishes, click **Next**. The board restarts, and within about half a minute the same window asks for your Wi-Fi.
+2. Under **Which controller board is it?**, click **MoonHub75 pinout** (or **Waveshare ESP32-S3-RGB-Matrix** for that board, which starts one 128x64 panel wide and shows Install straight away).
+3. On a MoonHub75-pinout board, click the picture that matches your panels: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). This sets the layout the scoreboard starts with. The Install button appears once you pick.
+4. Plug the board into the computer over USB.
+5. Click **Install Game Day Scoreboard** and pick the board's port when the browser asks.
+6. When the install finishes, click **Next**. The board restarts, and within about half a minute the same window asks for your Wi-Fi.
 
 The two pictures install two builds of the same firmware. The 64x64 choice installs the build from `firmware/gameday.yaml`. The 128x64 choice installs the build from `firmware/gameday-2panel.yaml`, which is the same firmware starting two panels wide. You can change the layout later on the device page either way.
 
@@ -45,10 +46,11 @@ Each build has a variant name, and the variant names the folder the panel reads 
 | --- | --- | --- | --- |
 | `moonhub75` | `firmware/gameday.yaml` | Installer, 64x64 choice | `moonhub75` |
 | `moonhub75-2panel` | `firmware/gameday-2panel.yaml` | Installer, 128x64 choice | `moonhub75` |
+| `waveshare` | `firmware/gameday-waveshare.yaml` | Installer, Waveshare choice | `waveshare` |
 | `scoreboard75` | `firmware/gameday-scoreboard75.yaml` | Test controllers on the scoreboard75 pinout only | `scoreboard75` |
 
 The 128x64 build reads its updates from the `moonhub75` folder too. The panel saves its layout the first time it starts, so that update keeps it two panels wide.
 
-Each release on [GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/releases) carries the MoonHub75 factory image, `gameday-scoreboard-<version>-moonhub75.factory.bin`, for flashing over USB by hand, and a zip of each variant's folder, `firmware-<variant>.zip`, which the installer site is built from. Each zip also holds that board's factory image, `<variant>/gameday-esp32s3.factory.bin`.
+Each release on [GitHub](https://github.com/gameday-scoreboard/gameday-scoreboard/releases) carries the Waveshare and MoonHub75 factory images, `gameday-scoreboard-v<version>-waveshare.factory.bin` and `gameday-scoreboard-v<version>-moonhub75.factory.bin`, for flashing over USB by hand, and a zip of each variant's folder, `firmware-<variant>.zip`, which the installer site is built from. Each zip also holds that board's factory image, `<variant>/gameday-esp32s3.factory.bin`.
 
 A **Follow beta** switch on the device page gets test versions of the next release before everyone else. They can have bugs. Turned off, the panel stays on its beta until the next release.

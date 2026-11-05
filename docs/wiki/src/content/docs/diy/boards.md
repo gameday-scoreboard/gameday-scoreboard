@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-The prebuilt firmware for DIY builds targets one pinout, the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75)'s. Any board wired to those pins runs it. A board with different pins needs its own build.
+The prebuilt firmware for DIY builds targets two boards: the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, which any board wired to those pins runs, and the Waveshare ESP32-S3-RGB-Matrix, the board in a Game Day Scoreboard. A board with different pins needs its own build.
 
 ## MoonHub75
 
@@ -49,7 +49,7 @@ The firmware leans on PSRAM. It runs code from PSRAM (`execute_from_psram`), and
 
 ## Waveshare ESP32-S3 RGB Matrix
 
-The Waveshare ESP32-S3 RGB Matrix has its own pin map, `firmware/controllers/waveshare.yaml`, and its own build, `firmware/gameday-waveshare.yaml`. It hasn't run on a panel yet, so the installer doesn't offer it. Build it yourself to try it, and tell us how it went. The board has no fuse and no reverse-polarity protection, so check the power leads before you plug them in.
+The Waveshare ESP32-S3 RGB Matrix has its own pin map, `firmware/controllers/waveshare.yaml`, and its own build, `firmware/gameday-waveshare.yaml`. It's the board in a Game Day Scoreboard, and the installer offers it. It hasn't run on a panel yet, so tell us how it goes. The board has no fuse and no reverse-polarity protection, so check the power leads before you plug them in.
 
 ## Other boards
 

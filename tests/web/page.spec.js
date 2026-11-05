@@ -2710,7 +2710,10 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   await expect(page.locator("#backup")).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#bkExport")]);
   expect(download.suggestedFilename()).toMatch(/^gameday-2f6a70-settings-\d{4}-\d\d-\d\d\.json$/);
-  const doc = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
+  const saved = fs.readFileSync(await download.path(), "utf8");
+  const doc = JSON.parse(saved);
+  // Saved compact, the size the panel takes back.
+  expect(saved).toBe(JSON.stringify(doc) + "\n");
   expect(doc).toMatchObject({ schema: 1, name: "gameday-2f6a70", mode: 4,
                               favs: ["nfl:6", "nfl:34", "ncaa:145"], live: [], down: true, panels: 2, brightness: 128, scroll: 5 });
   await expect(page.locator("#bkNote")).toHaveText(/^Saved gameday-2f6a70-settings-/);
@@ -2750,6 +2753,16 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   await sleep(300);
   expect((await posts()).length).toBe(sent);
   expect((await deviceState(request)).favs[0].abbr).toBe("ATL");
+
+  // An indented file over 4 KB (older pages saved them that way) goes in,
+  // sent compact.
+  const roomy = JSON.stringify(doc, null, 2).replace(/\n/g, "\n" + " ".repeat(40));
+  expect(roomy.length).toBeGreaterThan(4096);
+  page.once("dialog", (d) => d.accept());
+  await page.setInputFiles("#bkFile", file("roomy.json", roomy));
+  await expect(page.locator("#bkNote")).toHaveText(/^Restored\./);
+  expect((await posts()).at(-1).body).toBe(JSON.stringify(doc));
+  expect((await deviceState(request)).favs[0].abbr).toBe("DAL");
 });
 
 test("Import of this panel's own backup with another layout waits out the restart", async ({ page, request }) => {

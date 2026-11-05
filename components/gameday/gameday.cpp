@@ -158,6 +158,10 @@ static const uint32_t NO_GAMES_RESCAN = 3 * 60 * MINUTE;
 // worst honest case, not over it. 2 x watchdog_timeout for the network plus
 // 60s for handshakes and parsing leaves only a genuinely wedged worker here.
 static const uint32_t WORKER_DEADLINE = 120 * 1000;
+// A season read (up to 1.9 MB) gives up this long after it starts, well
+// inside WORKER_DEADLINE, so a slow link fails the read instead of the loop
+// writing off a worker that is still writing job_.
+static const uint32_t SEASON_READ_LIMIT = 90 * 1000;
 // Days of league scoreboards read to find a team's next game when ESPN's team
 // endpoint still names a finished one (leagues without a season list).
 static const int LOOKAHEAD_DAYS = 3;
@@ -203,12 +207,26 @@ class ContainerReader {
 
   size_t total() const { return this->total_; }
 
+  // Stop reading (as at the end of the body) once `ms` have passed since
+  // `since`. Each read() is bounded only by the HTTP timeout, so a slow
+  // trickle could otherwise outlast WORKER_DEADLINE.
+  void set_time_limit(uint32_t since, uint32_t ms) {
+    this->since_ms_ = since;
+    this->limit_ms_ = ms;
+  }
+  bool timed_out() const { return this->timed_out_; }
+
  private:
   bool fill_() {
     if (this->pos_ < this->len_)
       return true;
     if (this->eof_)
       return false;
+    if (this->limit_ms_ != 0 && millis() - this->since_ms_ >= this->limit_ms_) {
+      this->eof_ = true;
+      this->timed_out_ = true;
+      return false;
+    }
     int n = this->container_->read(this->buf_, sizeof(this->buf_));
     if (n <= 0) {
       this->eof_ = true;
@@ -226,7 +244,10 @@ class ContainerReader {
   size_t pos_{0};
   size_t len_{0};
   size_t total_{0};
+  uint32_t since_ms_{0};
+  uint32_t limit_ms_{0};  // 0: no limit
   bool eof_{false};
+  bool timed_out_{false};
 };
 
 // ---- GamedaySelect ---------------------------------------------------------
@@ -369,10 +390,16 @@ void GamedayComponent::setup() {
   if (this->prefs9_.sport > ::espn::kSportCount || this->prefs9_.active != 0)
     this->prefs9_.sport = 0;
   this->pref10_ = global_preferences->make_preference<Prefs10>(fnv1_hash("gameday_prefs10_v1"));
-  if (!this->pref10_.load(&this->prefs10_) || this->prefs10_.sched_applied > this->prefs9_.count ||
-      this->prefs10_.sched_applied < 0 || this->prefs10_.sched_before > this->prefs9_.count ||
-      this->prefs10_.sched_before < 0 || this->prefs10_.sched_sport > ::espn::kSportCount)
+  if (!this->pref10_.load(&this->prefs10_)) {
     this->prefs10_ = Prefs10{};  // no options, no schedule under way
+  } else if (this->prefs10_.sched_applied > this->prefs9_.count || this->prefs10_.sched_applied < 0 ||
+             this->prefs10_.sched_before > this->prefs9_.count || this->prefs10_.sched_before < 0 ||
+             this->prefs10_.sched_sport > ::espn::kSportCount) {
+    // A schedule state that doesn't fit the playlists: drop only that, so
+    // every playlist keeps its days, hours and options.
+    this->prefs10_.sched_applied = this->prefs10_.sched_before = 0;
+    this->prefs10_.sched_sport = this->prefs10_.sched_mode = 0;
+  }
   this->pref11_ = global_preferences->make_preference<Prefs11>(fnv1_hash("gameday_prefs11_v1"));
   if (!this->pref11_.load(&this->prefs11_))
     this->prefs11_ = Prefs11{};  // each button on its own favorite
@@ -480,6 +507,14 @@ void GamedayComponent::set_favorite_(uint8_t slot, uint8_t league, uint32_t id) 
     return;
   std::vector<League> live_before = this->live_leagues_();
   std::vector<::espn::TeamRef> before = this->fav_refs_all_();
+  // One team in two slots plays twice, and makes a backup only the import's
+  // duplicate check can take back. favs= removes repeats on its own.
+  if (id != 0)
+    for (uint8_t i = 0; i < FAV_MAX; i++)
+      if (i != slot - 1 && before[i] == ::espn::TeamRef{league, id}) {
+        ESP_LOGW(TAG, "Favorite %u: that team is already favorite %u", (unsigned) slot, (unsigned) (i + 1));
+        return;
+      }
   this->put_fav_(slot - 1, league, id);
   if (slot <= 4)
     this->pref3_.save(&this->prefs3_);
@@ -657,6 +692,9 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
   std::vector<::espn::TeamRef> favs = this->fav_refs_all_();
   std::string applied_name = this->list_name_((uint8_t) this->prefs10_.sched_applied);
+  // The playlist to go back to when the schedule ends (0: every favorite).
+  const int8_t before_was = this->prefs10_.sched_before;
+  std::string before_name = before_was > 0 ? this->list_name_((uint8_t) before_was) : std::string();
   Prefs9 p{};
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   Prefs10 p10 = this->prefs10_;
@@ -692,8 +730,17 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   for (uint8_t n = 1; n <= p.count && !applied_name.empty(); n++)
     if (this->list_name_(n) == applied_name)
       p10.sched_applied = (int8_t) n;
-  if (p10.sched_applied == 0)
+  if (p10.sched_applied == 0) {
     p10.sched_before = p10.sched_sport = 0;
+  } else if (before_was > 0) {
+    // So does the one to go back to: a moved playlist is found by its name,
+    // and a deleted one gives way to every favorite. Its old number could
+    // point at another playlist, or past the end of the list.
+    p10.sched_before = 0;
+    for (uint8_t n = 1; n <= p.count && !before_name.empty(); n++)
+      if (this->list_name_(n) == before_name)
+        p10.sched_before = (int8_t) n;
+  }
   this->prefs10_ = p10;
   this->pref10_.save(&this->prefs10_);
   this->prefs12_ = p12;
@@ -1442,9 +1489,14 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   this->schedule_next_(0);
 }
 
-uint32_t GamedayComponent::our_id_() const {
-  if (this->job_.fav_index >= 0)
-    return this->job_.our_id;
+// Worker task: only the job's own copy, set by the job's starter on the main
+// loop. fav_, live_fallback_ and live_away_id_ belong to the main loop, which
+// can rebuild fav_ while a read is under way.
+uint32_t GamedayComponent::our_id_() const { return this->job_.our_id; }
+
+// Main loop, from start_job_: the team a My team, cup or Live games read is
+// oriented around.
+uint32_t GamedayComponent::orient_id_() const {
   // In the fallback the panel is showing favorite #1's own game, so the
   // snapshot is oriented around that team.
   uint8_t m = this->job_.mode;
@@ -3124,6 +3176,7 @@ void GamedayComponent::start_job_() {
   j.generation = this->generation_;
   j.team = this->fallback_team_();
   j.mode = this->effective_mode_();
+  j.our_id = this->orient_id_();
   j.scan_leagues = this->scan_leagues_();
   j.top25 = this->no_team_default();
   // This game's leaders at halftime and the final (game_leaders.h): one
@@ -6613,6 +6666,7 @@ void GamedayComponent::run_season_job_() {
   if (container == nullptr)
     return;
   ContainerReader reader(container, this->espn_bytes_);
+  reader.set_time_limit(start, SEASON_READ_LIMIT);
   // Through espn_parse.cpp (ByteSource), away from this file's literal pool.
   struct Source : ::espn::ByteSource {
     ContainerReader &r;
@@ -6624,8 +6678,13 @@ void GamedayComponent::run_season_job_() {
   container->end();
   j.season_bytes = (uint32_t) reader.total();
   j.season_ms = millis() - start;
-  if (!j.season_ok)
+  if (reader.timed_out()) {
+    j.season_ok = false;
+    ESP_LOGW(TAG, "Season: gave up after %u s with %u bytes read", (unsigned) (SEASON_READ_LIMIT / 1000),
+             (unsigned) j.season_bytes);
+  } else if (!j.season_ok) {
     ESP_LOGW(TAG, "Season: parse failed after %u bytes", (unsigned) j.season_bytes);
+  }
 }
 
 void GamedayComponent::apply_season_job_() {

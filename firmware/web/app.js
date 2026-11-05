@@ -2104,7 +2104,11 @@
   // GET /gameday/settings is the file; POST takes one back, checked whole on
   // the panel before anything changes. Firmware without it answers 404 and the
   // section stays hidden.
-  const BACKUP_MAX = 4096;
+  // The panel takes a backup of up to 8192 bytes (settings_doc.h
+  // kSettingsMaxBytes), sent compact. A file can be bigger than that on disk:
+  // pages before this one saved it indented.
+  const BACKUP_MAX = 8192;
+  const BACKUP_FILE_MAX = 65536;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
   const probeBackup = async (retry) => {
     try {
@@ -2124,7 +2128,7 @@
     const day = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     const name = (doc.name || "gameday") + "-settings-" + day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) + ".json";
-    const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(doc) + "\n"], { type: "application/json" }));
     const a = el("a");
     a.href = url;
     a.download = name;
@@ -2138,12 +2142,17 @@
   $("#bkFile").onchange = async () => {
     const f = $("#bkFile").files[0];
     if (!f) return;
-    if (f.size > BACKUP_MAX) { backupNote("That file is too big to be a settings backup."); return; }
+    if (f.size > BACKUP_FILE_MAX) { backupNote("That file is too big to be a settings backup."); return; }
     const text = await f.text();
     let doc;
     try { doc = JSON.parse(text); } catch (_) { doc = null; }
     if (!doc || typeof doc !== "object" || Array.isArray(doc) || !("schema" in doc)) {
       backupNote("That file isn't a settings backup.");
+      return;
+    }
+    const body = JSON.stringify(doc);
+    if (new TextEncoder().encode(body).length > BACKUP_MAX) {
+      backupNote("That backup is too big for the panel to take.");
       return;
     }
     const other = !!S && doc.name !== S.name;
@@ -2152,7 +2161,7 @@
     if (!confirm("Replace this panel's settings with " + f.name + from + "? Wi-Fi networks and the WizMote pairing stay as they are" + own + ".")) return;
     let r, j;
     try {
-      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+      r = await fetch("/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body });
       j = await r.json().catch(() => ({}));
     } catch (_) {
       toast("Device did not respond. Try again.");
