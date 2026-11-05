@@ -4736,6 +4736,16 @@ static void test_auto_update() {
   CHECK(!version_newer("v1.5.6", "1.5.5"));
   CHECK(version_newer("1.5.5.1", "1.5.5"));
   CHECK(!version_newer("1.5.5-beta", "1.5.5"));
+  // Betas carry the next release's number: the release is newer than its
+  // own betas, so a panel that turns Follow beta off gets it.
+  CHECK(version_newer("2026.11.0", "2026.11.0-beta.812"));
+  CHECK(!version_newer("2026.11.0-beta.812", "2026.11.0"));
+  CHECK(version_newer("2026.11.0-beta.813", "2026.11.0-beta.812"));
+  CHECK(!version_newer("2026.11.0-beta.812", "2026.11.0-beta.812"));
+  CHECK(!version_newer("2026.11.0-beta.811", "2026.11.0-beta.812"));
+  CHECK(version_newer("2026.11.1-beta.5", "2026.11.0"));
+  CHECK(!version_newer("2026.11.0", "2026.11.1-beta.5"));
+  CHECK(version_newer("2026.12.0", "2026.11.1-beta.5"));
 
   CHECK(auto_update_slot(0, 0) == 0);
   CHECK(auto_update_slot(0xA9, 0x94) == (0xA994 % 60));
@@ -4810,7 +4820,10 @@ static void test_auto_update() {
   CHECK(version_newer("2026.10.0-beta.813", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.811", "2026.10.0-beta.812"));
-  CHECK(version_newer("2026.10.0-beta.812", "2026.10.0"));  // a hand-flashed bar panel takes the beta
+  // A bar panel hand-flashed with a release takes the next release's betas,
+  // never a beta of the release it already runs (older code).
+  CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0"));
+  CHECK(version_newer("2026.10.1-beta.812", "2026.10.0"));
   CHECK(version_newer("2026.10.1-beta.900", "2026.10.0-beta.950"));
   CHECK(version_newer("2026.10.0-beta.1000", "2026.10.0-beta.999"));
   CHECK(!version_newer("2026.10.0-beta.", "2026.10.0"));
@@ -4973,10 +4986,13 @@ static void test_update_mark() {
   // the new version still means it took.
   CHECK(update_mark_boot(m, "2026.10.1", true) == UpdateOutcome::PENDING);
 
-  // Rolled back: the old firmware boots and remembers the version.
+  // Rolled back: the image was written and the panel restarted into it,
+  // and the old firmware boots and remembers the version.
   m = UpdateMark{};
   update_mark_set(m.installing, "2026.10.1");
+  m.written = 1;
   CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.written == 0);
   CHECK(m.installing[0] == '\0');
   CHECK_EQ(std::string(m.failed), std::string("2026.10.1"));
   CHECK(update_failed_here(m, "2026.10.1"));
@@ -4997,8 +5013,17 @@ static void test_update_mark() {
   // A later release that rolls back too replaces it.
   k = m;
   update_mark_set(k.installing, "2026.10.2");
+  k.written = 1;
   CHECK(update_mark_boot(k, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
   CHECK_EQ(std::string(k.failed), std::string("2026.10.2"));
+
+  // A crash partway through a download on a panel whose bootloader still
+  // flags an old rollback: the image was never written, so it isn't this
+  // release's failure.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.10.1");
+  CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::NOT_INSTALLED);
+  CHECK(m.failed[0] == 0);
 
   // Still on the old firmware with no rollback (power cut mid-download): not a failure.
   m = UpdateMark{};
@@ -5011,12 +5036,14 @@ static void test_update_mark() {
   // nothing automatic installs anyway.
   m = UpdateMark{};
   update_mark_set(m.installing, "1.5.5");
+  m.written = 1;
   CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
   CHECK(m.failed[0] == '\0');
 
   // Beta versions fit, a longer string is cut and still ends.
   m = UpdateMark{};
   update_mark_set(m.installing, "2026.10.0-beta.812");
+  m.written = 1;
   CHECK(update_mark_boot(m, "2026.10.0-beta.811", true) == UpdateOutcome::ROLLED_BACK);
   CHECK(update_failed_here(m, "2026.10.0-beta.812"));
   CHECK(!update_failed_here(m, "2026.10.0-beta.813"));

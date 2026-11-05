@@ -25,6 +25,7 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 
 Building your own? [Runs on your own panel](https://install.gameday-scoreboard.com/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
 
+- The [Waveshare ESP32-S3-RGB-Matrix](https://www.waveshare.com/esp32-s3-rgb-matrix.htm), the board in ready-made Game Day Scoreboards (build `gameday-waveshare.yaml`; not yet run on hardware), or
 - An ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
 
@@ -36,11 +37,11 @@ The MoonHub75 pinout, under the names ESPHome uses (that board's README calls th
 
 ## Install
 
-1. Open the [installer page](https://install.gameday-scoreboard.com/), pick whether yours drives one 64x64 panel or a 128x64 display (or two 64x64 side by side), plug the controller in over USB, and click Install. It's for the Game Day Scoreboard controller and any board on the MoonHub75 pinout. An early test controller on the scoreboard75 pinout has its own [scoreboard75 installer](https://install.gameday-scoreboard.com/install/scoreboard75/).
+1. Open the [installer page](https://install.gameday-scoreboard.com/), plug the controller in over USB and pick your board: **Waveshare ESP32-S3-RGB-Matrix** (the board in ready-made scoreboards) or **MoonHub75 pinout**. On a MoonHub75-pinout board, also pick whether it drives one 64x64 panel or a 128x64 display (or two 64x64 side by side). Then click Install. An early test controller on the scoreboard75 pinout has its own [scoreboard75 installer](https://install.gameday-scoreboard.com/install/scoreboard75/).
 2. Click Next when the install finishes and enter your WiFi details when the dialog asks. If you skip it, the panel shows a QR code for the Game Day app and starts a hotspot named Game Day plus six letters and numbers, like Game Day 2f6a70; join it and a setup page opens.
 3. Once it's on WiFi the panel shows a QR code for the Game Day app, then the `gameday-xxxxxx.local` name of its own page. Pick your teams in the app, or open that name on your phone and add them there as favorites. Until you pick a team or a mode, from that page, the Game Day app or Home Assistant, the ticker asks you to and gives the panel's IP address for phones that can't resolve `.local` names. Holding the controller's boot button for 1.5 seconds shows the name and the IP address again any time.
 
-Team changes take effect immediately and survive reboots. Wrong panel size? Click the matching picture in the Setup card. Nothing needs reflashing to change teams or layouts.
+Team changes take effect immediately and survive reboots. Wrong panel size? On the device page's Device tab, open Matrix and click the matching picture. Nothing needs reflashing to change teams or layouts.
 
 ## The device page
 

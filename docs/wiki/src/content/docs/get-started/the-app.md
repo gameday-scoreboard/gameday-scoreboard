@@ -66,6 +66,8 @@ In the chooser's **On now** tab, a search that matches none of today's games lis
 On iPhone and Android, each playlist has **Options** under its teams, with the device page's playlist options: **Plays on** (tap the days, then set **From** and **To**), **Only this list's games**, and **Only today's games** (**Same as Favorites**, **On** or **Off**). The playlist's row shows its schedule, like "Weekends 8:00 PM to 2:00 AM". **Options** shows once the panel runs firmware with playlist options. See [Playlists](/using/favorites/#playlists).
 
 On Android, when your favorites cover more than one sport, **Playing** also lists **All football**, **All basketball** and the rest, one for each sport, between **All favorites** and your playlists. **Playlists** no longer has **One per sport**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
+
+On Android, **Color** and **Icon** at the bottom of **Options** give the playlist its look, as on the device page: tap one, or **None**. The playlist's row shows its icon in its color (white with no color), or a dot of the color, before its name. So does **Playing**, beside the playing playlist's name and on each playlist in its picker.
 :::
 
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
@@ -116,6 +118,15 @@ The panel list is **Settings > Panels**, and it's what the Board shows until you
 
 - **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
 - **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
+
+## The Live score widget
+
+Both apps have a **Live score** widget for your Home Screen with your panel's game: the teams, the score, and the clock or the start time. Between games it shows the panel's next game, or what the panel says when there's nothing on. Tap it to open the app on that panel.
+
+- **iPhone**: a small and a medium size for the Home Screen, and two for the Lock Screen. With more than one panel, touch and hold the widget, choose **Edit Widget** and pick the **Panel**.
+- **Android**: a 2 by 2 widget, and a wider look when you stretch it to 4 by 2. With more than one panel, the app asks which one when you place it. To change it later, touch and hold the widget and open its settings (Android 12 and newer).
+
+The widget reads your panel over your home Wi-Fi: about every 10 minutes while a game is on, less often between games, and straight away while the app is open on that panel. Away from home it keeps the last score for a few minutes, then says it can't reach the panel. Open the app on your home Wi-Fi and it catches up.
 
 ## Try the app before your panel arrives
 

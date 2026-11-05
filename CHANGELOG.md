@@ -44,6 +44,17 @@ through `update_important` in the panel's state.
 - 🏀 Halftime and final leaders with accented names, like Dončić, show their letters instead of empty boxes
 - 📱 The team picker's league tabs fit on a phone, with Done always in reach
 - 🎮 Unpair remote stays unpaired after a restart
+- 🧪 Turning Follow beta off gets you the release your beta was building toward, instead of waiting for the one after it
+- 🔄 A restart partway through a download no longer marks that release as one that "didn't take", so the panel still installs it on its own
+- 🔄 The device page says when an install fails instead of showing "Installing" for five minutes
+- 💾 The device page restores its own settings backups again once you have several playlists; it used to call them too big
+- 💾 Restoring a backup saved in Live games keeps Live games, instead of switching the panel to Favorite teams
+- 💾 A backup with the same team in two favorite slots restores, with the second slot left empty
+- 📶 Tapping Save on the setup hotspot page without picking a network no longer forgets every saved network at the next restart
+- 🗓️ Moving or deleting playlists while a schedule is playing one no longer brings back the wrong playlist when it ends, or wipes every playlist's schedule after a restart
+- 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
+- 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
+- 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
 
 ## v2026.11.0
 

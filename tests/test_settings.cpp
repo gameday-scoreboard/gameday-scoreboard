@@ -186,7 +186,13 @@ void test_favs() {
   in = import(R"({"schema":1,"favs":[]})");
   f = find(in, SetKind::FAVS);
   SCHECK(in.error.empty() && f != nullptr && f->teams.empty(), "an empty list doesn't clear the favorites");
-  refused(R"({"schema":1,"favs":["nfl:6","nfl:6"]})", "a favorite listed twice");
+  // One team in two slots (older pages and fav1..fav4 allowed it): the
+  // panel's own backup still restores, with the second slot empty.
+  in = import(R"({"schema":1,"favs":["nfl:6","mlb:15","nfl:6"]})");
+  f = find(in, SetKind::FAVS);
+  SCHECK(in.error.empty() && f != nullptr && f->teams.size() == 3 && f->teams[0].id == 6 && f->teams[1].id == 15 &&
+             f->teams[2].id == 0,
+         "a favorite listed twice didn't restore with the second slot empty");
   refused(R"({"schema":1,"favs":["dallas"]})", "a favorite that isn't a team");
   refused(R"({"schema":1,"favs":"nfl:6"})", "favs as text");
   refused(R"({"schema":1,"favs":[6]})", "favs as numbers");
@@ -413,6 +419,19 @@ void test_playlists() {
   deserializeJson(st, R"({"sport":"hockey"})");
   settings_from_state(st.as<JsonObjectConst>(), 0, -1, -1, out);
   SCHECK(std::string(out["sport"] | "") == "hockey", "the export left the sport row out");
+  // A sport row only plays in Favorite teams, and restoring one switches the
+  // panel to that mode: a Live games backup has none, and an older Live games
+  // backup that has one restores without it.
+  JsonDocument live_st, live_out;
+  deserializeJson(live_st, R"({"mode":5,"sport":"hockey"})");
+  settings_from_state(live_st.as<JsonObjectConst>(), 0, -1, -1, live_out);
+  SCHECK(live_out["sport"].isNull(), "a Live games export kept the sport row");
+  in = import(R"({"schema":1,"mode":5,"sport":"hockey"})");
+  SCHECK(in.error.empty() && find(in, SetKind::SPORT) == nullptr && find(in, SetKind::MODE) != nullptr &&
+             find(in, SetKind::MODE)->value == 5,
+         "a Live games backup's sport row would switch the mode");
+  in = import(R"({"schema":1,"mode":4,"sport":"hockey"})");
+  SCHECK(in.error.empty() && find(in, SetKind::SPORT) != nullptr, "a Favorite teams backup lost its sport row");
   // Each playlist's options come back as their tokens (playlists.h ListOpt).
   in = import(R"({"schema":1,"lists":[{"n":"Sundays","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":false},
     {"n":"Late","t":[],"days":"60","only":false},{"n":"Plain","t":["nfl:6"]}]})");

@@ -20,7 +20,7 @@ These pages are for makers who build their own. If you bought a Game Day Scorebo
 
 ## The path
 
-1. Choose a board. [Boards](/diy/boards/) covers the MoonHub75, a bare ESP32-S3 wired to the same pins, and other boards.
+1. Choose a board. [Boards](/diy/boards/) covers the MoonHub75, a bare ESP32-S3 wired to the same pins, the Waveshare ESP32-S3-RGB-Matrix and other boards.
 2. Wire the panel and power it. [Panels and power](/diy/panels/) covers sizes, chaining two panels and the supply.
 3. Install from the browser installer. [Install the firmware](/diy/install/) walks through it and explains how updates reach your board.
 4. Set it up like any owner. Joining Wi-Fi, picking a team and the Game Day app work the same as on a Game Day Scoreboard. Follow [Set up your scoreboard](/get-started/setup/).

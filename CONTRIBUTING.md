@@ -22,8 +22,7 @@ furthest right now:
   basketball game in progress, saved as a fixture with a test for what
   the panel should show, stays covered from then on. This one needs only
   curl, g++ and some C++.
-- Get it running on a board we haven't tested, like the Waveshare
-  ESP32-S3 RGB Matrix. A pin map in `firmware/controllers/` and a line on
+- Get it running on a board we haven't tested. A pin map in `firmware/controllers/` and a line on
   the [DIY page](docs/site/diy/index.html) make a good first pull
   request. Say which panel you used and how long it ran.
 - The device page is plain HTML and JavaScript in `firmware/web`, with
