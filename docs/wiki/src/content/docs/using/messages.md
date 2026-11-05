@@ -32,7 +32,7 @@ Use your panel's own name or address. Leaving `text` empty takes the banner down
 
 ## A message card
 
-On the same tab, under **Message card**, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
+On the same tab, under **Message card**, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two). Emoji, and anything that isn't text, like a stray byte from a file saved in an old encoding, are left out.
 
 **Show it** sets how often the card takes the board between games:
 

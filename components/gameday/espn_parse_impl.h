@@ -561,7 +561,8 @@ template<typename TInput> bool parse_team(TInput &input, Schedule &out) {
   return true;
 }
 
-// Parses an AP poll from ESPN's core API (rankings.h), at most kTop25Max
+// Parses an AP poll from ESPN's core API (rankings.h): the ranks to
+// kTop25Max, every team of a tie at the last one, at most kTop25RowsMax
 // rows. The rest of the document (the season's types and weeks, the teams
 // that got votes) is skipped as it streams.
 template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
@@ -586,13 +587,13 @@ template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
   p.date = parse_iso8601_z(detail::str_or_empty(doc["date"]));
   top25_when(doc["occurrence"]["displayValue"] | "", doc["occurrence"]["last"] | false, p.when);
   for (JsonObjectConst r : ranks) {
-    if (p.rows.size() >= kTop25Max)
+    if (p.rows.size() >= kTop25RowsMax)
       break;
     RankRow row;
     int cur = r["current"] | 0;
     int prev = r["previous"] | 0;
     row.id = top25_ref_id(r["team"]["$ref"] | "");
-    if (cur < 1 || cur > 99 || row.id == 0)
+    if (cur < 1 || cur > kTop25Max || row.id == 0)
       continue;
     row.rank = (uint8_t) cur;
     row.prev = prev > 0 && prev < 100 ? (uint8_t) prev : 0;
