@@ -5,8 +5,8 @@ sidebar:
   order: 12.2
 ---
 
-:::note[Coming in the next release]
-Brand files are new in the bar build. Release firmware for homes doesn't read them.
+:::note[Bar panels only]
+Brand files work on the bar build. Panels running the home firmware don't read them.
 :::
 
 A panel in a bar can wear the bar's own look. Everything about it comes from one small brand file at a web address: your logo, your colors, the name of your club and wall, and the address of your plate list. We set the file up with you, and you put its address into the panel once. When the file changes, the panel picks up the change on its own, with no reflash.

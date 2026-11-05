@@ -6670,6 +6670,19 @@ void GamedayComponent::run_brand_logo_(const ::espn::BrandPack &p) {
     j.brand_logo.url = url;
 }
 
+// A logo read on the fetch task becomes the one on hand: its pixels (PSRAM)
+// move, its address is copied into the string already on hand.
+void GamedayComponent::take_brand_logo_(BrandLogo &read) {
+  this->brand_logo_.pixels.swap(read.pixels);
+  this->brand_logo_.w = read.w;
+  this->brand_logo_.h = read.h;
+  this->brand_logo_.url = read.url;
+  this->brand_logo_.tint = read.tint;
+  this->brand_logo_.fg = read.fg;
+  this->brand_logo_.bg = read.bg;
+  read.clear();
+}
+
 void GamedayComponent::apply_brand_job_() {
   Job &j = this->job_;
   if (j.brand_url != this->brand_url_)
@@ -6685,7 +6698,7 @@ void GamedayComponent::apply_brand_job_() {
     if (this->brand_ok_ && j.brand_logo_read) {
       // The kept pack's logo, read alongside the failed file.
       if (j.brand_logo_error.empty())
-        this->brand_logo_ = std::move(j.brand_logo);
+        this->take_brand_logo_(j.brand_logo);
       this->brand_logo_error_ = j.brand_logo_error;
       if (this->brand_card_up())
         this->fire_action_("msg");
@@ -6699,7 +6712,10 @@ void GamedayComponent::apply_brand_job_() {
   this->brand_read_ms_ = now == 0 ? 1 : now;
   this->brand_error_.clear();
   const std::string old_list = this->msg_src_();
-  this->brand_ = std::move(j.brand_pack);
+  // Copied, not moved: the strings on hand keep their memory when the file
+  // is the same, so a read every half hour leaves no new allocations behind
+  // (the job's, made on the fetch task, are freed with the next job).
+  this->brand_ = j.brand_pack;
   this->brand_ok_ = true;
   const uint32_t hash = fnv1_hash(j.brand_doc);
   if (hash != this->brand_doc_hash_) {
@@ -6721,7 +6737,7 @@ void GamedayComponent::apply_brand_job_() {
     this->brand_logo_error_.clear();
   } else if (j.brand_logo_read) {
     if (j.brand_logo_error.empty()) {
-      this->brand_logo_ = std::move(j.brand_logo);
+      this->take_brand_logo_(j.brand_logo);
       this->brand_logo_error_.clear();
     } else {
       // A logo that didn't read leaves the card with words alone, unless
