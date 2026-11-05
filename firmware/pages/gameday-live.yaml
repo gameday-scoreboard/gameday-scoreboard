@@ -146,7 +146,10 @@ script:
             const int acx = 18, hcx = W - 18;
             for (int i = 0; i < 3; i++) {
               // Timeout pips are football's (gd_update keeps them in step).
-              if (id(gd_sport) == 0) {
+              // Not while the field strip has their row: its end zones
+              // carry the timeouts, and this runs again on every return to
+              // the scoreboard, up to a poll before gd_update hides them.
+              if (id(gd_sport) == 0 && lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN)) {
                 lv_obj_clear_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
               } else {
@@ -634,7 +637,10 @@ script:
           // The bar is football's and basketball's: baseball's row is the diamond's.
           const bool winbar = wide && live && (sport == 0 || sport == 2) && (viz & ::espn::VIZ_WINBAR) != 0 &&
                               win_pct >= 1 && win_pct <= 99;
-          const bool spark = wide && !field && (viz & ::espn::VIZ_SPARK) != 0;
+          // A playoff series ("NY lead 2-1") has the row in a basketball
+          // game (the lambda above), so the margin chart gives way to it.
+          const bool series = sport == 2 && live && !situation.empty();
+          const bool spark = wide && !field && !series && (viz & ::espn::VIZ_SPARK) != 0;
           lv_obj_t *bars[3] = {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)};
           if (winbar) {
             // Our color from the left for our chance, theirs for the rest, a
@@ -802,6 +808,15 @@ script:
           // (components/gameday/line_score.h); the Spleen fonts are monospaced,
           // so a character is 6 px in spleen_12 and 5 px in spleen_8.
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          // Another game on the board (Live games or two favorites taking
+          // turns) starts on its board, not on the card the last one was at.
+          // The leaders lambda below reads the turn too.
+          static std::string shown_game;
+          const std::string game = team_abbr + "/" + opponent_abbr;
+          if (game != shown_game) {
+            shown_game = game;
+            id(gd_card_turn) = 0;
+          }
           ::espn::LineScoreText ls = id(gameday_ctl).line_score(W);
           if (ls.font == 0 || clock_card || (game_state != "IN" && game_state != "POST")) {
             id(gd_line_ready) = false;
@@ -1149,7 +1164,10 @@ script:
           lv_image_set_src(id(gd_wx_icon), big[u.wx_icon % 8]);
           lv_image_set_src(id(gd_wx_d1_icon), small[u.wx_d1_icon % 8]);
           lv_image_set_src(id(gd_wx_d2_icon), small[u.wx_d2_icon % 8]);
-          put(id(gd_wx_temp_lbl), ::espn::wx_temp_text(u.wx_temp));
+          // A wide board's 16 px digits fit three to the 54 px before Hi and
+          // Lo: "100" and "-10" leave the degree sign off rather than clip it.
+          const std::string digits = std::to_string(u.wx_temp);
+          put(id(gd_wx_temp_lbl), wide && digits.size() >= 3 ? digits : ::espn::wx_temp_text(u.wx_temp));
           put(id(gd_wx_words_lbl), u.wx_words);
           put(id(gd_wx_d1_lbl), u.wx_d1);
           put(id(gd_wx_d1_hilo_lbl), u.wx_d1_hilo);

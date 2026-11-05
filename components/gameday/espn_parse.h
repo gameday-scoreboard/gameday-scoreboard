@@ -449,6 +449,9 @@ bool baseball_home_run(const GameSnapshot &s);
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);
 Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// A W-L-OTL record for the label under a logo (7 characters wide): as is when
+// it fits, else the NHL points, two a win and one an overtime loss ("70 pts").
+std::string hockey_board_record(const std::string &wlo);
 
 // Soccer (sport_soccer.cpp).
 std::string soccer_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);

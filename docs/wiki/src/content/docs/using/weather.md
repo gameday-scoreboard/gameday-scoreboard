@@ -23,7 +23,7 @@ Setting a town turns the **Weather** switch in the **Between games** list on. Tu
 
 The weather card takes 10 seconds of every minute, from 40 to 49 seconds past the minute, so every panel in the house shows it at the same moment, right before [your own countdown](/using/countdowns/#your-own-countdown)'s turn. It comes up wherever the board is between games: the next game's board, the [off-season clock](/using/brightness-and-clock/#the-off-season-clock), Favorite teams' cards, and the finals Live games shows. It never covers a live game, a favorite that has taken the panel, or the panel's own trouble messages. The ticker keeps running along the bottom.
 
-On a wide board the temperature is big, with **Hi** and **Lo** beside it, the sky in words under it, and the next two days side by side at the bottom. A single 64x64 panel stacks the same things in smaller letters.
+On a wide board the temperature is big, with **Hi** and **Lo** beside it, the sky in words under it, and the next two days side by side at the bottom. A temperature of 100 or more, or -10 or below, leaves off the degree sign there so the number fits. A single 64x64 panel stacks the same things in smaller letters.
 
 At night a clear sky shows a moon instead of a sun.
 

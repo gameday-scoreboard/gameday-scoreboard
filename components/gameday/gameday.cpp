@@ -4005,6 +4005,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.team_record = ::espn::soccer_board_record(g.team_record);
     f.opponent_record = ::espn::soccer_board_record(g.opp_record);
   }
+  if (g.valid && g.sport == ::espn::Sport::HOCKEY) {
+    // "30-12-10" is a character too wide for the label under a logo.
+    f.team_record = ::espn::hockey_board_record(g.team_record);
+    f.opponent_record = ::espn::hockey_board_record(g.opp_record);
+  }
   if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::BASKETBALL)
     f.situation = ::espn::basketball_series(g);
   // The pictures on a wide board's situation row (game_viz.h). The margin

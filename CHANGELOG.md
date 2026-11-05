@@ -44,6 +44,14 @@ through `update_important` in the panel's state.
 - 🏀 Halftime and final leaders with accented names, like Dončić, show their letters instead of empty boxes
 - 📱 The team picker's league tabs fit on a phone, with Done always in reach
 - 🎮 Unpair remote stays unpaired after a restart
+- 🎮 The press that pairs a WizMote does nothing else (pairing with OFF used to turn the panel off), and pressing the paired remote turns Discovery off
+- 🏀 In a playoff game the series no longer draws over the score margin chart on a wide board: the series has the row
+- 🏒 A hockey record too long for the space under the logo, like 30-12-10, shows as points instead of wrapping
+- 🌡️ 100 degrees and up, or -10 and below, fits on a wide weather card instead of losing the degree sign to the edge
+- 🏈 Going back to the Scoreboard during a football game no longer draws timeout pips over the field strip
+- 📊 A board that switches games at halftime or the final starts the new game on its board, not on the last game's line score
+- ✨ Effects no longer starts over the heat or power mark or a Wi-Fi sign-in message, or leaves the panel black when effects could not start
+- 🔘 The countdown for a Wi-Fi or factory reset shows in front of a banner or the heat mark while you hold the button
 - 🧪 Turning Follow beta off gets you the release your beta was building toward, instead of waiting for the one after it
 - 🔄 A restart partway through a download no longer marks that release as one that "didn't take", so the panel still installs it on its own
 - 🔄 The device page says when an install fails instead of showing "Installing" for five minutes

@@ -154,8 +154,9 @@ script:
                 ESP_LOGI("effects", "Effects off: %s", reason.c_str());
                 id(page_manager).show_page("gameday_live");
 
-  # The Effects page just loaded. A wled_fx that failed setup (no canvas)
-  # must not take the screen: the select goes back to Scoreboard on the next
+  # The Effects page just loaded. A wled_fx that failed setup (no canvas),
+  # a heat or power mark, or Wi-Fi that wants a sign-in must not lose the
+  # screen to an effect: the select goes back to Scoreboard on the next
   # loop (this runs inside LVGL's screen-loaded event). Picking Effects while
   # the night schedule has the panel dim or dark skips the rest of the night,
   # as Power on or a team pick does (night_skip, components/gameday), or the
@@ -167,9 +168,18 @@ script:
           id(gd_fx_arm) = false;
           if (!id(gd_fx_boot_done) || id(gd_fx_on))
             return;
-          if (id(gd_fx).is_failed()) {
-            ESP_LOGI("effects", "Effects stays off: wled_fx did not set up");
-            App.scheduler.set_timeout(id(gd_fx), "gd_fx_back", 0, []() { id(page_manager).show_page("gameday_live"); });
+          // The yields below only fire when one of these comes up, so one
+          // already up has to keep Effects off here.
+          const char *refuse = id(gd_fx).is_failed()                ? "wled_fx did not set up"
+                               : id(gameday_ctl).guard_mark() != 0 ? "the heat or power mark is up"
+                               : id(gameday_ctl).captive()         ? "Wi-Fi needs a sign-in"
+                                                                   : nullptr;
+          if (refuse != nullptr) {
+            ESP_LOGI("effects", "Effects stays off: %s", refuse);
+            // On gameday_ctl, not gd_fx: the scheduler skips a failed
+            // component's timers, which left the black page up.
+            App.scheduler.set_timeout(id(gameday_ctl), "gd_fx_back", 0,
+                                      []() { id(page_manager).show_page("gameday_live"); });
             return;
           }
           id(gameday_ctl).night_skip("the Effects page");
