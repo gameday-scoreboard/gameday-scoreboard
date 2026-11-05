@@ -14,6 +14,7 @@
 #include <string>
 
 #include "espn_parse.h"
+#include "game_leaders.h"
 
 using namespace espn;
 namespace fs = std::filesystem;
@@ -49,6 +50,27 @@ int main(int argc, char **argv) {
       [](JsonDocument &f) { espn::detail::fill_scan_filter(f, true, true); },
       [](JsonDocument &f) { espn::detail::fill_team_filter(f); },
       [](JsonDocument &f) { espn::detail::fill_upcoming_filter(f); },
+      [](JsonDocument &f) { espn::detail::fill_season_filter(f); },
+      // parse_rankings' and parse_news' filters, which they build inline.
+      [](JsonDocument &f) {
+        f["date"] = true;
+        f["occurrence"]["displayValue"] = true;
+        f["occurrence"]["last"] = true;
+        JsonObject rank = f["ranks"][0].to<JsonObject>();
+        rank["current"] = true;
+        rank["previous"] = true;
+        rank["record"]["summary"] = true;
+        rank["team"]["$ref"] = true;
+      },
+      [](JsonDocument &f) { f["articles"][0]["headline"] = true; },
+      // The game summary, with the header's teams so the fuzzer finds the
+      // event and team ids parse_summary checks.
+      [](JsonDocument &f) {
+        JsonObject o = f.to<JsonObject>();
+        espn::detail::fill_summary_filter(o, Sport::FOOTBALL);
+        espn::detail::fill_summary_filter(o, Sport::BASEBALL);
+        o["header"]["competitions"][0]["competitors"][0]["team"]["id"] = true;
+      },
   };
   std::set<std::string> seen;
   size_t espn_seeds = 0;
