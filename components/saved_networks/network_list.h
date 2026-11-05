@@ -120,11 +120,17 @@ inline bool remove(NetworkList &list, const char *ssid) {
 // left that way has no Wi-Fi to take an update over.) A slot that hashes as
 // it did when the list last looked is left alone, so a network forgotten
 // since stays forgotten. A changed slot is a new setup, or a panel updating
-// from firmware that kept one network: that network goes to the front,
-// unless the list already has it with the same password, which keeps the
-// order.
+// from firmware that kept one network: a network the list does not have
+// goes to the front. One the list has with the same password keeps the
+// order. One the list has with another password keeps the password that
+// worked: the new one may be mistyped. It comes back in *pending instead,
+// for the caller to try first this boot; wifi: on_connect stores it once it
+// connects. The hash is recorded either way, so a wrong one is tried for one
+// boot only.
 // Returns true when the list changed and needs saving.
-inline bool merge_slot(NetworkList &list, const char *ssid, const char *password) {
+inline bool merge_slot(NetworkList &list, const char *ssid, const char *password, Network *pending = nullptr) {
+  if (pending != nullptr)
+    memset(pending, 0, sizeof(Network));
   if (ssid == nullptr || ssid[0] == '\0')
     return false;
   if (password == nullptr)
@@ -134,8 +140,13 @@ inline bool merge_slot(NetworkList &list, const char *ssid, const char *password
     return false;
   list.slot_hash = h;
   const int at = find(list, ssid);
-  if (at < 0 || strncmp(list.nets[at].password, password, PASSWORD_SIZE) != 0)
+  if (at < 0) {
     put_front(list, ssid, password);
+  } else if (strncmp(list.nets[at].password, password, PASSWORD_SIZE) != 0 && pending != nullptr &&
+             strlen(password) < PASSWORD_SIZE) {
+    strncpy(pending->ssid, ssid, SSID_SIZE - 1);
+    strncpy(pending->password, password, PASSWORD_SIZE - 1);
+  }
   return true;
 }
 

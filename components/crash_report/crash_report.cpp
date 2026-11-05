@@ -11,6 +11,7 @@
 #include "esphome/components/esp32/crash_handler.h"
 #endif
 
+#include <esp_attr.h>
 #include <esp_system.h>
 
 #include <cinttypes>
@@ -28,8 +29,17 @@ static constexpr time_t CLOCK_VALID = 1700000000;
 
 CrashReport *global_crash_report = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-static bool crashed(esp_reset_reason_t r) {
-  return r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || r == ESP_RST_WDT;
+// Written by on_shutdown() on the way down from a restart the firmware asked
+// for, read and cleared at the next boot. RTC memory a power cut scrambles,
+// so only this exact value counts.
+static constexpr uint32_t PLANNED_MARK = 0x43525031;  // "CRP1"
+RTC_NOINIT_ATTR static uint32_t planned_restart;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+// planned: the firmware marked this restart on its way down. On the S3 with
+// PSRAM esp_restart() can come back as ESP_RST_WDT, so that one is only a
+// watchdog when nothing asked for the restart (components/gameday/health.h).
+static bool crashed(esp_reset_reason_t r, bool planned) {
+  return r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || (r == ESP_RST_WDT && !planned);
 }
 
 static const char *reason_name(uint8_t r) {
@@ -68,7 +78,19 @@ void CrashReport::setup() {
   this->record_->version[VERSION_SIZE - 1] = '\0';
 
   const esp_reset_reason_t reason = esp_reset_reason();
-  if (crashed(reason) || reason == ESP_RST_BROWNOUT) {
+  const bool planned = planned_restart == PLANNED_MARK;
+  planned_restart = 0;
+  const bool crash = crashed(reason, planned);
+  if (reason == ESP_RST_BROWNOUT && this->record_->count > 0 && this->record_->report[0] != '\0') {
+    // A brownout over a saved backtrace counts, but keeps the backtrace,
+    // which is what there is to decode. Without this a dip right after a
+    // crash, a common pair on a weak supply, erased it.
+    this->record_->count++;
+    this->save_();
+    global_preferences->sync();
+    ESP_LOGW(TAG, "Restarted after a brownout (%" PRIu32 " since cleared); kept the saved %s report",
+             this->record_->count, reason_name(this->record_->reason));
+  } else if (crash || reason == ESP_RST_BROWNOUT) {
     Record &r = *this->record_;
     r.count++;
     r.reason = (uint8_t) reason;
@@ -84,10 +106,13 @@ void CrashReport::setup() {
     r.report[0] = '\0';
     this->report_len_ = 0;
 #ifdef USE_ESP32_CRASH_HANDLER
-    if (crashed(reason) && esp32::crash_handler_has_data()) {
+    if (crash && esp32::crash_handler_has_data()) {
       this->capturing_ = true;
       esp32::crash_handler_log();
       this->capturing_ = false;
+      // Saved below. Left in RAM it outlives the soft restarts that follow,
+      // and the next watchdog would save this backtrace again as its own.
+      esp32::crash_handler_clear();
     }
 #endif
     this->save_();
@@ -135,6 +160,8 @@ void CrashReport::loop() {
   if (!this->need_time_ && !this->clear_pending_)
     this->disable_loop();
 }
+
+void CrashReport::on_shutdown() { planned_restart = PLANNED_MARK; }
 
 void CrashReport::dump_config() {
   ESP_LOGCONFIG(TAG, "Crash report:");
