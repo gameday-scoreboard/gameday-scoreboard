@@ -1439,6 +1439,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_brand_job_();
   void run_brand_logo_(const ::espn::BrandPack &p);
   void apply_brand_job_();
+  void take_brand_logo_(BrandLogo &read);
   // The pack on hand, none read yet when brand_ok_ is false.
   ::espn::BrandPack brand_;
   bool brand_ok_{false};
