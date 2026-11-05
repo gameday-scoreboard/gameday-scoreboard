@@ -576,11 +576,11 @@ jobs:
           BETA: ${{ needs.build-bar.outputs.version }}
         run: |
           set -euo pipefail
+          mkdir -p stage/firmware/beta
           # Waveshare has a Follow beta build but no bar build.
           for v in moonhub75 scoreboard75 waveshare; do
             mv "stage/release/$v" "stage/firmware/$v-beta"
           done
-          mkdir -p stage/firmware/beta
           for v in moonhub75 scoreboard75; do
             mv "stage/bar/$v-bar" "stage/firmware/beta/$v"
           done
