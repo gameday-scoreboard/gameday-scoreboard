@@ -1626,26 +1626,32 @@ test("follow beta: off by default, posts 0 and 1, hidden when the firmware has n
   await expect(page.locator("#betaRow")).toBeHidden();
 });
 
-test("a beta is newer than its release number, and a release is behind the beta before it", async ({ page, request }) => {
+test("a beta carries the next release's number: newer than the last release, older than its own", async ({ page, request }) => {
   await reset(request, { beta: true });
   const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
-  let entity = { ...fw, value: "1.5.5-beta.812", current_version: "1.5.5" };
+  let entity = { ...fw, value: "1.5.6-beta.812", current_version: "1.5.5" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.goto("/");
   await tab(page, "device");
-  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.5-beta.812");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.812");
   await expect(page.locator("#fwInstall")).toBeVisible();
 
-  // Beta turned off on a beta build: the release it was built from is not an update.
-  entity = { ...fw, value: "1.5.5", current_version: "1.5.5-beta.812" };
+  // Beta turned off on a beta build: the release it was building toward is an update.
+  entity = { ...fw, value: "1.5.6", current_version: "1.5.6-beta.812" };
   await page.reload();
-  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.5-beta.812");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+
+  // A beta of a release the panel already runs is behind it.
+  entity = { ...fw, value: "1.5.6-beta.812", current_version: "1.5.6" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.6");
   await expect(page.locator("#fwInstall")).toBeHidden();
 
   // The next beta is newer than the last.
-  entity = { ...fw, value: "1.5.6-beta.3", current_version: "1.5.5-beta.812" };
+  entity = { ...fw, value: "1.5.6-beta.813", current_version: "1.5.6-beta.812" };
   await page.reload();
-  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.813");
 });
 
 test("an update that rolled back says so and still offers Install", async ({ page, request }) => {

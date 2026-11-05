@@ -1526,7 +1526,19 @@ void GamedayComponent::dump_config() {
 #endif
 }
 
-void GamedayComponent::on_shutdown() { ::espn::boot_log_planned(boot_log); }
+void GamedayComponent::on_shutdown() {
+  ::espn::boot_log_planned(boot_log);
+#if defined(USE_UPDATE) && defined(ESPHOME_PROJECT_VERSION)
+  // An install that gets to a clean restart has written the new image (the
+  // update restarts the panel with App.safe_reboot() once it is in place).
+  // A crash or power cut partway through never gets here.
+  if (this->update_installing_) {
+    this->update_mark_.written = 1;
+    this->update_mark_pref_.save(&this->update_mark_);
+    global_preferences->sync();
+  }
+#endif
+}
 
 void GamedayComponent::loop() {
   if (this->power_dip_.tick(millis()))
@@ -2491,7 +2503,8 @@ void GamedayComponent::settle_update_mark_() {
 #if defined(USE_UPDATE) && defined(ESPHOME_PROJECT_VERSION)
   if (App.get_updates().empty())
     return;
-  this->update_mark_pref_ = global_preferences->make_preference<::espn::UpdateMark>(fnv1_hash("gameday_update_mark_v1"));
+  // v2 added `written`; a v1 mark just starts over.
+  this->update_mark_pref_ = global_preferences->make_preference<::espn::UpdateMark>(fnv1_hash("gameday_update_mark_v2"));
   if (!this->update_mark_pref_.load(&this->update_mark_))
     this->update_mark_ = ::espn::UpdateMark{};
   const ::espn::UpdateMark before = this->update_mark_;
@@ -2539,6 +2552,7 @@ void GamedayComponent::update_state_changed_() {
     // this firmware may do is restart into the new one.
     this->update_installing_ = true;
     ::espn::update_mark_set(this->update_mark_.installing, u->update_info.latest_version);
+    this->update_mark_.written = 0;
     this->update_mark_pref_.save(&this->update_mark_);
     global_preferences->sync();
   } else if (this->update_installing_) {
