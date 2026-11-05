@@ -63,6 +63,11 @@ through `update_important` in the panel's state.
 - 🌙 Night mode turned off for a night that ends between 1 and 2 AM stays off through the repeated hour when the clocks go back
 - 🖼️ A looping GIF's first frame keeps its own timing on every pass
 - 🖼️ A picture half saved or half deleted when the power went out no longer takes up room after a restart
+- 🏈 Field strip, Win bar and Margin spark stay the way you set them when no game is on, instead of switching back in Home Assistant and in backups
+- 🌙 The kickoff forecast shows a moon for evening games in fall and winter, from 5 PM in December, instead of a sun until 7 PM
+- 🌡️ After midnight the weather card shows the new day's high and low instead of yesterday's
+- 🏒 Hockey's ticker shows the records in the regular season instead of ESPN's season series line
+- 🕰️ The device page picks US Central for a browser in Ojinaga, Mexico, and US Mountain for one in Ciudad Juárez
 
 ## v2026.11.0
 

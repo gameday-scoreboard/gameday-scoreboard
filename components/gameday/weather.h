@@ -68,6 +68,9 @@ struct WxForecast {
   uint8_t code{0};  // WMO weather code now
   WxDay today;      // the high and low, today's code
   WxDay next[2];    // tomorrow and the day after
+  WxDay later;      // the day after those, for the move past midnight (wx_roll_day)
+  bool has_later{false};
+  int32_t day0{0};  // today's date in the reply, as days since 1970-01-01; 0 when it had none
 };
 
 // The town as the panel keeps it: one line, printable, no emoji, at most
@@ -118,7 +121,7 @@ inline std::string forecast_url(float lat, float lon, const char *tz_iana) {
   return std::string("https://api.open-meteo.com/v1/forecast?") + buf +
          "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min"
          "&temperature_unit=fahrenheit&timezone=" +
-         url_encode(tz_iana) + "&forecast_days=3";
+         url_encode(tz_iana) + "&forecast_days=4";
 }
 
 namespace detail {
@@ -163,6 +166,24 @@ inline uint8_t wx_code(JsonVariantConst v) {
 }
 
 }  // namespace detail
+
+// Days since 1970-01-01 of a civil date (Howard Hinnant's days_from_civil).
+inline int32_t wx_days_from_civil(int y, unsigned m, unsigned d) {
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = (unsigned) (y - era * 400);
+  const unsigned doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + (int32_t) doe - 719468;
+}
+
+// "2026-11-05" as days since 1970-01-01; 0 when it isn't a date.
+inline int32_t wx_days_from_date(const char *date) {
+  int y = 0, m = 0, d = 0;
+  if (date == nullptr || sscanf(date, "%4d-%2d-%2d", &y, &m, &d) != 3 || m < 1 || m > 12 || d < 1 || d > 31)
+    return 0;
+  return wx_days_from_civil(y, (unsigned) m, (unsigned) d);
+}
 
 // The day of the week of "2026-10-29", 0 Sunday. 0 for a date that doesn't read.
 inline uint8_t weekday_of(const char *date) {
@@ -246,15 +267,42 @@ template<typename TInput> bool parse_forecast(TInput &input, WxForecast &out) {
                  time = daily["time"];
   if (hi.size() < 3 || lo.size() < 3)
     return false;
-  for (size_t i = 0; i < 3; i++) {
-    WxDay &d = i == 0 ? f.today : f.next[i - 1];
-    if (!detail::wx_degrees(hi[i], d.hi10) || !detail::wx_degrees(lo[i], d.lo10))
-      return false;
+  for (size_t i = 0; i < 4; i++) {
+    WxDay &d = i == 0 ? f.today : i < 3 ? f.next[i - 1] : f.later;
+    if (!detail::wx_degrees(hi[i], d.hi10) || !detail::wx_degrees(lo[i], d.lo10)) {
+      if (i < 3)
+        return false;
+      d = WxDay{};
+      break;
+    }
     d.code = detail::wx_code(code[i]);
     d.wday = weekday_of(time[i].as<const char *>());
+    f.has_later = i == 3;
   }
+  f.day0 = wx_days_from_date(time[0].as<const char *>());
   f.valid = true;
   out = f;
+  return true;
+}
+
+// After midnight, until the next read lands, the forecast's first day is
+// yesterday. Moves it on a day, so today's high and low are today's; drops
+// it (valid false) when it is more than a day behind or has no fourth day.
+// today is the panel's date in days since 1970-01-01. True when it changed
+// the forecast.
+inline bool wx_roll_day(WxForecast &f, int32_t today) {
+  if (!f.valid || f.day0 == 0 || today <= f.day0)
+    return false;
+  if (today - f.day0 > 1 || !f.has_later) {
+    f.valid = false;
+    return true;
+  }
+  f.today = f.next[0];
+  f.next[0] = f.next[1];
+  f.next[1] = f.later;
+  f.later = WxDay{};
+  f.has_later = false;
+  f.day0 = today;
   return true;
 }
 
@@ -646,12 +694,16 @@ inline uint8_t wx_icon_at(uint8_t icon, bool night) {
   return icon;
 }
 
-// Dark at this local hour, roughly: after 8 PM from May to August, after 7 PM
-// the rest of the year, and before 6 AM. month 1 to 12.
+// Dark at this local hour (daylight time in summer), roughly: from about the
+// end of dusk at 40 degrees north, the middle of the US, and before 6 AM.
+// 5 PM in December, 9 PM in June. month 1 to 12.
 inline bool wx_dark_at(int month, int hour) {
+  static const int8_t kDarkFrom[12] = {17, 18, 19, 20, 20, 21, 21, 20, 19, 18, 17, 17};
   if (hour < 6)
     return true;
-  return hour >= (month >= 5 && month <= 8 ? 20 : 19);
+  if (month < 1 || month > 12)
+    return false;
+  return hour >= kDarkFrom[month - 1];
 }
 
 // A US venue's standard UTC offset in hours, from the state in its place
@@ -696,17 +748,37 @@ inline int wx_state_offset(const std::string &place, bool &dst) {
   return 0;
 }
 
+// Whether US daylight time is on at this moment, given as the local standard
+// time read as if it were UTC: from 2 AM on the second Sunday in March to
+// 2 AM daylight (1 AM standard) on the first Sunday in November.
+inline bool wx_us_dst(int64_t local_std) {
+  const WxCivil c = wx_civil(local_std);
+  if (c.month < 3 || c.month > 11)
+    return false;
+  if (c.month > 3 && c.month < 11)
+    return true;
+  const int64_t days = local_std >= 0 ? local_std / 86400 : (local_std - 86399) / 86400;
+  const int wday = (int) (((days + 4) % 7 + 7) % 7);  // 1970-01-01 was a Thursday; 0 Sunday
+  const int first_wday = ((wday - (int) (c.day - 1)) % 7 + 7) % 7;
+  const unsigned first_sunday = 1 + (unsigned) ((7 - first_wday) % 7);
+  if (c.month == 3) {
+    const unsigned second_sunday = first_sunday + 7;
+    return c.day > second_sunday || (c.day == second_sunday && c.hour >= 2);
+  }
+  return c.day < first_sunday || (c.day == first_sunday && c.hour < 1);
+}
+
 // Whether a kickoff is after dark at a US venue, by the venue's own clock:
-// 1 dark, 0 light, -1 when the venue's time zone isn't known. Daylight time
-// from the second Sunday in March to the first in November, to within a week.
+// 1 dark, 0 light, -1 when the venue's time zone isn't known.
 inline int wx_venue_dark(int64_t kickoff, const std::string &place) {
   bool dst;
   int off = wx_state_offset(place, dst);
   if (off == 0 || kickoff <= 0)
     return -1;
-  WxCivil c = wx_civil(kickoff + (int64_t) off * 3600);
-  if (dst && ((c.month > 3 && c.month < 11) || (c.month == 3 && c.day >= 8) || (c.month == 11 && c.day < 7)))
-    c = wx_civil(kickoff + (int64_t) (off + 1) * 3600);
+  const int64_t local = kickoff + (int64_t) off * 3600;
+  WxCivil c = wx_civil(local);
+  if (dst && wx_us_dst(local))
+    c = wx_civil(local + 3600);
   return wx_dark_at((int) c.month, c.hour) ? 1 : 0;
 }
 

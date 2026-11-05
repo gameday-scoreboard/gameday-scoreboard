@@ -15,12 +15,17 @@ namespace detail {
 
 void fill_hockey_filter(JsonObject ev) {
   ev["season"]["type"] = true;
+  ev["competitions"][0]["series"]["type"] = true;
   ev["competitions"][0]["series"]["summary"] = true;
 }
 
 void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
   s.nhl.playoffs = (ev["season"]["type"] | 0) == 3;
-  s.nhl.series = str_or_empty(ev["competitions"][0]["series"]["summary"]);
+  // A playoff series only, as basketball: in the regular season ESPN's
+  // series is the season series, and the records stay.
+  JsonObjectConst series = ev["competitions"][0]["series"];
+  if (s.nhl.playoffs || str_or_empty(series["type"]) == "playoff")
+    s.nhl.series = str_or_empty(series["summary"]);
 }
 
 }  // namespace detail
