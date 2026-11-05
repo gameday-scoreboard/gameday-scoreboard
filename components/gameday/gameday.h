@@ -685,14 +685,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct SeasonEntry {
     League league{League::NFL};
     uint32_t id{0};
-    bool results{false};  // a soccer team's results, read between seasons, not its fixtures
+    bool off{false};      // read between seasons (a soccer team's results, not its fixtures)
     uint32_t read_ms{0};  // millis() of the last good read, 0 = none
     uint32_t fail_ms{0};  // millis() of the last failed read, 0 = none since
+    uint16_t reads{0};    // good reads since boot, for the log
     ::espn::SeasonRead read;
   };
   std::vector<SeasonEntry, PsramAllocator<SeasonEntry>> season_;
-  // A team the cards follow now: Favorite teams' football and soccer teams
-  // in the playlist playing, and whether each is between seasons.
+  // A team the cards follow now: Favorite teams' teams in the playlist
+  // playing, MLB's aside (season_cards), and whether each is between seasons.
   struct SeasonTeam {
     const ::espn::Team *team;
     bool off_season;
@@ -705,6 +706,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   League season_read_league_{League::NFL};
   uint32_t season_read_id_{0};
   bool season_read_results_{false};
+  bool season_read_off_{false};
   std::string season_head_, season_body_;
   bool season_shown_{false};
   uint32_t season_since_ms_{0};  // when the card last went up or down
@@ -778,7 +780,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs {
     uint8_t old_league;
     uint32_t old_team_id;
-    uint8_t tz_index;
+    uint8_t tz_index;  // a position in kTimezones, which only ever grows at the end (timezones.h)
     uint8_t flags;
   } __attribute__((packed));
   // Kept separate so adding fields never invalidates the original blob.
@@ -877,6 +879,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int wx_lookup_status_{-1};  // the last lookup's HTTP status, 0 no answer, -1 waiting or none yet
   int wx_status_{-1};         // the last forecast read's status, 0 no answer, -1 none yet
   uint32_t wx_read_ms_{0};    // millis() of the last good forecast read, 0 = none this boot
+  bool wx_reread_{false};     // read the forecast again now: a new day, or a new time zone
   uint32_t wx_fail_ms_{0};    // millis() of the last failed read or lookup, 0 = none since
   uint32_t wx_backoff_ms_{0}; // the wait that failure started (poll_timing.h, the weather's own run)
   ::espn::Backoff wx_fail_;
@@ -886,6 +889,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_wx_job_();
   void apply_wx_job_();
   void wx_fields_(UpdateFields &f);
+  void wx_day_tick_();
   bool wx_fahrenheit_() const;
   std::string wx_country_() const;
   // The kickoff forecast (weather.h): the board's next game's, when ESPN's
@@ -1116,9 +1120,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     League season_league{League::NFL};
     uint32_t season_id{0};
     bool season_results{false};
+    bool season_off{false};
     ::espn::SeasonRead season_read;
     bool season_ok{false};
     uint32_t season_bytes{0};
+    uint32_t season_ms{0};  // how long the read took
     // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
     // 3 looks the next game's venue up, 4 reads its kickoff hour, on this
     // task so it never runs alongside an ESPN read.
@@ -1197,7 +1203,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Mode 4 with at least one favorite set; with none it runs as Live games
   // (no_team_default).
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
-  uint32_t our_id_() const;  // team id the snapshot is oriented around
+  uint32_t our_id_() const;     // worker: the job's team id the snapshot is oriented around
+  uint32_t orient_id_() const;  // main loop: works that id out for start_job_
   std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
@@ -1641,7 +1648,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t generation_{0};
   bool busy_{false};
   bool selects_published_{false};
-  volatile bool job_done_{false};
+  // Set by the fetch task once its Job is filled in. Atomic, so the main
+  // loop that sees it set also sees the Job.
+  std::atomic<bool> job_done_{false};
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};

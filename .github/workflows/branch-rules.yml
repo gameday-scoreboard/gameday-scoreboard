@@ -1,0 +1,34 @@
+name: Branch rules on edit
+
+# build.yml runs "Branch rules" when a PR opens or gets a push, not when its
+# base branch changes. A dev-to-beta PR that went green and was then retargeted
+# at main kept that green check and could merge dev straight into main. This
+# runs the same promotion check under the same job name on an edit, so the
+# latest "Branch rules" on the PR's head is the one for its new base. An edit
+# to the title or description passes in seconds.
+on:
+  pull_request:
+    types: [edited]
+    branches: [beta, main]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-rules:
+    name: Branch rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: PRs into beta come from dev, PRs into main from beta
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          want=dev
+          [ "$BASE_REF" = main ] && want=beta
+          if [ "$HEAD_REF" != "$want" ] || [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::$BASE_REF only takes PRs from $want (this one is from $HEAD_REPO:$HEAD_REF). Target $( [ "$BASE_REF" = main ] && echo beta || echo dev ) instead."
+            exit 1
+          fi
+          echo "$BASE_REF from $want: fine."

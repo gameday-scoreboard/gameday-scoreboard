@@ -1,8 +1,13 @@
 name: Docs
 
-# Build the documentation site (docs/wiki, Astro + Starlight) on a pull
-# request that touches it or CHANGELOG.md, so a broken page or link fails
-# the PR. The changelog page is generated from CHANGELOG.md at build time.
+# Build the documentation site (docs/wiki, Astro + Starlight) so a broken
+# page or link fails the PR, and again after a merge into dev, beta or main.
+# The changelog page is generated from CHANGELOG.md at build time.
+#
+# Every PR runs the job, and one that touches neither docs/wiki nor
+# CHANGELOG.md passes with the build steps skipped. A path filter on the
+# workflow would leave no check at all on those PRs, so the check couldn't
+# be made required.
 #
 # Publishing is not done here. The gameday-scoreboard/docs repo's Publish
 # workflow builds this repo's main every 15 minutes and deploys it to
@@ -11,6 +16,8 @@ name: Docs
 
 on:
   pull_request:
+  push:
+    branches: [dev, beta, main]
     paths:
       - "docs/wiki/**"
       - "CHANGELOG.md"
@@ -23,16 +30,38 @@ jobs:
   build:
     name: Build docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
+      - name: Docs changed
+        id: changed
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          if grep -qE '^docs/wiki/|^CHANGELOG\.md$' <<< "$files"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing under docs/wiki and no CHANGELOG.md change, so the build is skipped."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v5
+        if: steps.changed.outputs.run != 'false'
+      - uses: actions/setup-node@v7
+        if: steps.changed.outputs.run != 'false'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: docs/wiki/package-lock.json
       - name: Install
+        if: steps.changed.outputs.run != 'false'
         working-directory: docs/wiki
         run: npm ci
       - name: Build
+        if: steps.changed.outputs.run != 'false'
         working-directory: docs/wiki
         run: npm run build

@@ -9,7 +9,8 @@
 # instead: its versions end in -beta.<build>, the same for both bar variants
 # (there is no two-panel bar build). --follow-beta checks the beta for panels
 # with "Follow beta" on (site/firmware/<variant>-beta/) the same way, and
-# against the given version if there is one.
+# against the given version if there is one. Set VARIANTS to check only some
+# of a mode's folders (add_beta_channel.sh checks each Follow beta board alone).
 set -euo pipefail
 
 case "$1" in
@@ -23,18 +24,19 @@ case "$1" in
   --follow-beta)
     site=$2
     dir="$site/firmware"
-    variants="moonhub75-beta scoreboard75-beta"
+    variants="moonhub75-beta scoreboard75-beta waveshare-beta"
     beta_mode=1
     want=${3:-}
     ;;
   *)
     site=$1
     dir="$site/firmware"
-    variants="moonhub75 moonhub75-2panel scoreboard75"
+    variants="moonhub75 moonhub75-2panel scoreboard75 waveshare"
     beta_mode=0
     want=${2#v}
     ;;
 esac
+variants=${VARIANTS:-$variants}
 fail=0
 
 for v in $variants; do

@@ -27,6 +27,8 @@
 #include "esphome/components/output/binary_output.h"
 #endif
 
+#include <atomic>
+#include <functional>
 #include <span>
 #include <vector>
 
@@ -47,9 +49,11 @@ using namespace esp32_ble_server;
 // GAMEDAY: begin (scan results listener base)
 class ImprovBLEComponent final : public Component,
                                  public improv_base::ImprovBase,
-                                 public wifi::WiFiScanResultsListener {
+                                 public wifi::WiFiScanResultsListener,
+                                 public wifi::WiFiConnectStateListener {
  public:
   void on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) override;
+  void on_wifi_connect_state(StringRef ssid, std::span<const uint8_t, 6> bssid) override;  // GAMEDAY
   // GAMEDAY: end
   ImprovBLEComponent();
   void dump_config() override;
@@ -100,6 +104,9 @@ class ImprovBLEComponent final : public Component,
   static uint16_t open_links();
   // Hang up on every phone connected to the BLE server.
   static void hang_up();
+  // Called after a failed handover to hand the Wi-Fi component every saved
+  // network again (components/saved_networks), not just the one put back.
+  void set_restore_networks(std::function<void()> &&restore) { this->restore_networks_ = std::move(restore); }
   // GAMEDAY: end
   void set_wifi_timeout(uint32_t wifi_timeout) { this->wifi_timeout_ = wifi_timeout; }
   uint32_t get_wifi_timeout() const { return this->wifi_timeout_; }
@@ -135,6 +142,15 @@ class ImprovBLEComponent final : public Component,
   bool handover_failed_{false};      // see handover_failed()
   uint32_t failed_ms_{0};            // see failed_ms()
   std::string failed_ssid_;          // see failed_ssid()
+  std::function<void()> restore_networks_;  // see set_restore_networks()
+  // The panel joined a network since the handover began. Until then a
+  // connection is the one it already had, still up for a moment.
+  bool joined_since_handover_{false};
+  // stop() took the service down. BLEService only restarts from CREATED by
+  // itself, so loop() starts a stopped one again (service_stopped_ms_ is
+  // when it was stopped).
+  bool service_stopped_{false};
+  uint32_t service_stopped_ms_{0};
   // GAMEDAY: end
 
   BLEService *service_{nullptr};
@@ -183,6 +199,10 @@ class ImprovBLEComponent final : public Component,
   bool networks_wait_scan_{false};   // 0x04 received, waiting for a scan to finish
   uint32_t networks_scan_start_{0};  // when we started waiting for that scan
   uint32_t networks_last_sent_{0};
+  // A scan ended with no results, which the Wi-Fi component does not pass to
+  // its listeners. Set on the event task, read in loop().
+  std::atomic<bool> networks_scan_empty_{false};
+  bool networks_scan_handler_{false};  // the event handler is registered
   // GAMEDAY: end
 #if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_DEBUG
   const char *state_to_string_(improv::State state);

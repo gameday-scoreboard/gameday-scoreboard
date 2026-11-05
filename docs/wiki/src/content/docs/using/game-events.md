@@ -56,7 +56,7 @@ And each kind adds its own:
 | `pregame` | `minutes`: to the start. |
 | `score`, `test` | `play`: `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and for any other football score. `points`: since the panel's last look, which in basketball can be more than one basket. |
 | `lead_change` | `change`: `took_lead` from a level score, `lead_change` when it changes hands, `tied` when the score comes level. `leader` and `previous_leader`: the sides, empty when level. |
-| `period` | `period`: the number of the one that ended. `period_name`: `1st quarter`, `2nd half`, `3rd period`, `7th inning`, `overtime`. |
+| `period` | `period`: the number of the one that ended. `period_name`: `1st quarter`, `2nd half`, `3rd period`, `7th inning`, `overtime`, and in hockey `shootout`, in soccer `1st half of extra time`, `2nd half of extra time` and `penalties`. |
 | `final` | `result`: `win`, `loss` or `draw` for `team`. `winner`: empty on a draw. |
 
 A touchdown that puts your team ahead looks like this in **Developer tools**, then **Events**, listening to `esphome.gameday_score`:
@@ -167,6 +167,7 @@ Each event is a `POST` with a small JSON body, the same fields as above with `ev
 ```
 
 - The address starts with `http://`. The panel doesn't post over `https://`: it is meant for something on your home network, and a second secure connection beside ESPN's would cost the panel memory it needs for the board.
+- The address is plain letters, numbers and symbols, with no spaces. The device page says so when it has an accented letter or a curly quote; copy it from the browser's address bar, which writes those out in a form the panel takes.
 - Each event gets one try, with a few seconds to answer. A listener that is down misses the event; the panel never holds up the board waiting for it, and never retries. Events wait while the panel's Wi-Fi is down, up to the last six.
 - The card says how the last post went: delivered, an error code from your listener, or no answer.
 - Home Assistant has webhooks of its own: an automation with a **Webhook** trigger gives you an address like `http://homeassistant.local:8123/api/webhook/<id>` that works here too. A name ending in `.local` is looked up on your network the way your phone does it; if the card says the last post got no answer, use the IP address instead.

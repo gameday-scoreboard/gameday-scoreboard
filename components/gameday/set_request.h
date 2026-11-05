@@ -362,8 +362,9 @@ inline bool parse_whole_int(const std::string &v, int &out) {
 
 // Decodes one key=value from the request. False when the key is unknown or
 // the value is refused: the firmware logs it and changes nothing. Switches
-// are on for "1" only. The mode and the minute and second settings take a
-// whole number only (parse_whole_int); the other numbers read like atoi.
+// are on for "1" only. The mode, panel count, night level and the minute and
+// second settings take a whole number only (parse_whole_int); the other
+// numbers read like atoi.
 inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, size_t fav_max) {
   op = SetOp{};
   auto on = [&](SetKind kind) {
@@ -400,9 +401,9 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return true;
   }
   if (k == "panels") {
+    // 1 and up; the panel layout refuses a count past its own limit.
     op.kind = SetKind::PANELS;
-    op.value = atoi(v.c_str());
-    return true;
+    return parse_whole_int(v, op.value) && op.value >= 1 && op.value <= 255;
   }
   if (k == "tz") {
     op.kind = SetKind::TZ;
@@ -478,8 +479,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
   }
   if (k == "nightlevel") {
+    // A whole number, held to 1..255; text is refused.
     op.kind = SetKind::NIGHT_LEVEL;
-    int level = atoi(v.c_str());
+    int level = 0;
+    if (!parse_whole_int(v, level))
+      return false;
     op.value = level < 1 ? 1 : level > 255 ? 255 : level;
     return true;
   }

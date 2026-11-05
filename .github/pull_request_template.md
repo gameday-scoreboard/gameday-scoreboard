@@ -10,11 +10,11 @@
 
 - [ ] `make -C tests` passes
 - [ ] Device page tests pass (`npm test` in tests/web)
-- [ ] `esphome compile` for both firmware/gameday.yaml and firmware/gameday-scoreboard75.yaml
+- [ ] `esphome compile` for firmware/gameday-waveshare.yaml, firmware/gameday.yaml and firmware/gameday-scoreboard75.yaml
 - [ ] Ran on a panel: which controller and layout, how long, what it showed
 
 ## Checklist
 
-- [ ] Edited firmware/web/app.js or app.css? Ran `python scripts/build_web.py` and committed bundle.js
+- [ ] Edited firmware/web/app.js or app.css? Ran `python scripts/build_web.py` and committed bundle.js and bundle-demo.js
 - [ ] Changed what an owner or DIY builder sees or does? Updated the page under docs/wiki/src/content/docs/ (or, if nothing visible changed, a line in this description: `No owner-visible change, no docs: <why>`)
 - [ ] No secrets.yaml, Wi-Fi details, notes or plans in the diff

@@ -1,6 +1,6 @@
-# Game Day Scoreboard for a HUB75 matrix on the Game Day Scoreboard controller
-# board (scoreboard75 pinout). Same firmware as gameday.yaml, which targets the
-# MoonHub75 pinout; only the controller package differs.
+# Game Day Scoreboard for a HUB75 matrix on the early scoreboard75 test
+# controller boards (not a product). Same firmware as gameday.yaml, which
+# targets the MoonHub75 pinout; only the controller package differs.
 substitutions:
   variant: "scoreboard75"
   # Ships with a single 128x64 panel, so boot (and Factory Reset) as 128 wide.

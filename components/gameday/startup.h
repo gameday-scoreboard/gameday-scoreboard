@@ -46,19 +46,19 @@ static const int64_t TEAM_CACHE_MAX_AGE = 24 * 3600;
 // A cached game that kicked off longer ago than this is over: read again.
 static const int64_t TEAM_CACHE_GAME_OVER = 4 * 3600;
 
-// Fills `out` from the schedule just read for this team. False when there is
-// nothing worth keeping: no next game, or an event id too long for the record.
-// A cup game, or one with no kickoff time yet, saves a blank record, which
-// never loads. The record has no room for the cup or the TBD flag, and an
-// older game must not load in its place.
+// Fills `out` from the schedule just read for this team. False when the read
+// had nothing to say (no schedule, or no clock yet). A cup game, one with no
+// kickoff time yet, no next game at all, or an event id too long for the
+// record saves a blank record, which never loads: the record has no room
+// for them, and an older game must not load in their place.
 inline bool team_cache_save(const Schedule &s, League league, uint32_t team_id, int64_t now_epoch,
                             TeamCache &out) {
-  if (s.valid && (s.comp_slug != nullptr || s.time_tbd)) {
+  if (!s.valid || now_epoch <= 0)
+    return false;
+  if (s.comp_slug != nullptr || s.time_tbd || s.event_id.empty() || s.event_id.size() >= sizeof(out.event_id)) {
     out = TeamCache{};
     return true;
   }
-  if (!s.valid || s.event_id.empty() || s.event_id.size() >= sizeof(out.event_id) || now_epoch <= 0)
-    return false;
   out = TeamCache{};
   out.league = (uint8_t) league;
   out.team_id = team_id;

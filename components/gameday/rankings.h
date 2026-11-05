@@ -18,7 +18,9 @@
 
 namespace espn {
 
-constexpr uint8_t kTop25Max = 25;
+constexpr uint8_t kTop25Max = 25;  // the lowest rank kept
+// Rows kept: a tie at 25 lists more than 25 teams.
+constexpr uint8_t kTop25RowsMax = 30;
 constexpr uint32_t kTop25ReadMs = 24u * 60 * 60 * 1000;  // a good poll is read again after a day
 constexpr uint32_t kTop25RetryMs = 30u * 60 * 1000;      // after a failed read
 constexpr uint32_t kTop25EveryMs = 10u * 60 * 1000;      // from the end of one turn to the next

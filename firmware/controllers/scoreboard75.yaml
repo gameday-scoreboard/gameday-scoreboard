@@ -1,4 +1,4 @@
-# Game Day Scoreboard controller board (scoreboard75): ESP32-S3-WROOM-1
+# Early scoreboard75 test controller board (not a product): ESP32-S3-WROOM-1
 # N16R8, 16MB flash, octal PSRAM, a button on GPIO0 and no microphone. Pin map
 # (ESPHome names):
 #   R1 4, G1 5, B1 6, R2 7, G2 15, B2 16, A 9, B 10, C 11, D 12, E 17,

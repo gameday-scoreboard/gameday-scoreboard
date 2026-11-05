@@ -18,7 +18,9 @@ SITE = "https://site.api.espn.com/apis/site/v2/sports/football"
 ROOT = Path(__file__).resolve().parent.parent
 TEAMS_H = ROOT / "components" / "gameday" / "teams.h"
 OUT = ROOT / "components" / "gameday" / "team_colors.h"
-TEAM_RE = re.compile(r'\{League::(NFL|NCAA),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
+# Names may hold an escaped quote, like build_teams.py writes them.
+TEAM_RE = re.compile(r'\{League::(NFL|NCAA),\s*(\d+),\s*"((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)",\s*(\d+)\}')
+HEX_RE = re.compile(r"[0-9A-F]{6}")
 PATH = {"NFL": "nfl", "NCAA": "college-football"}
 
 
@@ -40,9 +42,13 @@ def listed_colors(league):
 
 
 def main():
-    teams = TEAM_RE.findall(TEAMS_H.read_text(encoding="utf-8"))
+    text = TEAMS_H.read_text(encoding="utf-8")
+    teams = TEAM_RE.findall(text)
     if len(teams) < 100:
         raise SystemExit("teams.h looks truncated")
+    rows_nfl_ncaa = len(re.findall(r"\{League::(?:NFL|NCAA),", text))
+    if rows_nfl_ncaa != len(teams):
+        raise SystemExit(f"teams.h has {rows_nfl_ncaa} football rows but only {len(teams)} parsed")
     listed = {lg: listed_colors(lg) for lg in PATH}
     rows = []
     for league, tid, abbr, _name, _group in teams:
@@ -53,8 +59,10 @@ def main():
                 color = (get(f"{SITE}/{PATH[league]}/teams/{tid}")["team"].get("color") or "").upper()
             except Exception as ex:
                 print(f"{abbr}: {ex}", file=sys.stderr)
-        if not color:
-            print(f"{abbr}: no color, using white", file=sys.stderr)
+        # Six hex digits or the header won't compile ("#FFF", "", "red").
+        color = (color or "").lstrip("#")
+        if not HEX_RE.fullmatch(color):
+            print(f"{abbr}: no usable color ({color!r}), using white", file=sys.stderr)
             color = "FFFFFF"
         rows.append(f"    {{League::{league}, {tid}, 0x{color}}},")
     OUT.write_text(
