@@ -38,44 +38,61 @@ inline int auto_update_slot(uint8_t mac4, uint8_t mac5) {
 // A number that changes once per local calendar day, for "tried tonight".
 inline int32_t auto_update_day(int year, int day_of_year) { return (int32_t) year * 1000 + day_of_year; }
 
-// The beta channel's versions are the release number plus "-beta.<build>"
-// ("2026.10.0-beta.812"), and the build number counts as the next part, so
-// each beta is newer than the one before and than the plain number.
+// The beta channel's versions are the next release's number plus
+// "-beta.<build>" ("2026.11.1-beta.812", scripts/beta_version.py), so a
+// beta sits just below the release of the same number: 2026.11.1 is newer
+// than every 2026.11.1 beta, and each beta than the one before it.
 static const char kBetaTag[] = "-beta.";
 
-// Past the separator after a version part: a dot or the beta tag.
-inline const char *next_version_part(const char *p) {
-  if (*p == '.')
-    return p + 1;
-  if (strncmp(p, kBetaTag, sizeof(kBetaTag) - 1) == 0)
-    return p + sizeof(kBetaTag) - 1;
-  return p;
-}
+struct VersionParts {
+  long n[4];
+  bool beta;   // a "-beta.<build>" version
+  long build;  // its build number
+};
 
-// True when `latest` is a higher version than `current`. Both are dotted
-// numbers ("1.5.5", "2026.10.0"); anything after the numbers other than the
-// beta tag ("-dev") is ignored. A panel on a test build newer than the
-// release never "updates" down to it, and a malformed version never installs.
-inline bool version_newer(const std::string &latest, const std::string &current) {
-  const char *a = latest.c_str();
-  const char *b = current.c_str();
-  if (*a < '0' || *a > '9' || *b < '0' || *b > '9')
+// The dotted numbers (up to four) and the beta build of a version that
+// starts with a digit; false otherwise. Anything else after the numbers
+// ("-dev", "-beta" with no build) is ignored.
+inline bool parse_version_parts(const char *p, VersionParts &v) {
+  v = VersionParts{};
+  if (*p < '0' || *p > '9')
     return false;
   for (int part = 0; part < 4; part++) {
-    char *ea;
-    char *eb;
-    long x = strtol(a, &ea, 10);
-    long y = strtol(b, &eb, 10);
-    if (ea == a)
-      x = 0;
-    if (eb == b)
-      y = 0;
-    if (x != y)
-      return x > y;
-    a = next_version_part(ea);
-    b = next_version_part(eb);
+    char *e;
+    long x = strtol(p, &e, 10);
+    if (e == p)
+      break;
+    v.n[part] = x;
+    p = e;
+    if (*p != '.')
+      break;
+    p++;
   }
-  return false;
+  if (strncmp(p, kBetaTag, sizeof(kBetaTag) - 1) == 0) {
+    p += sizeof(kBetaTag) - 1;
+    char *e;
+    long b = strtol(p, &e, 10);
+    if (e != p) {
+      v.beta = true;
+      v.build = b;
+    }
+  }
+  return true;
+}
+
+// True when `latest` is a higher version than `current`. A panel on a test
+// build newer than the release never "updates" down to it, and a malformed
+// version never installs.
+inline bool version_newer(const std::string &latest, const std::string &current) {
+  VersionParts a, b;
+  if (!parse_version_parts(latest.c_str(), a) || !parse_version_parts(current.c_str(), b))
+    return false;
+  for (int part = 0; part < 4; part++)
+    if (a.n[part] != b.n[part])
+      return a.n[part] > b.n[part];
+  if (a.beta != b.beta)
+    return !a.beta;  // the release is newer than its own betas
+  return a.beta && a.build > b.build;
 }
 
 // An update that rolled back. The new image only counts once it has run a
@@ -90,6 +107,11 @@ static const size_t kUpdateVersionLen = 24;  // "2026.10.0-beta.812" with room t
 struct UpdateMark {
   char installing[kUpdateVersionLen];  // the install under way, "" = none
   char failed[kUpdateVersionLen];      // the version that rolled back here, "" = none
+  // The new image was written: the panel shut down cleanly into it. Only
+  // then can a rollback be this install's. The bootloader's invalid-image
+  // flag outlives the rollback that set it, so a crash partway through a
+  // later download would otherwise blame that release.
+  uint8_t written;
 } __attribute__((packed));
 
 inline void update_mark_set(char *dst, const std::string &version) {
@@ -114,10 +136,12 @@ inline UpdateOutcome update_mark_boot(UpdateMark &m, const std::string &running,
     if (running == m.installing) {
       out = UpdateOutcome::PENDING;
     } else {
+      rolled_back = rolled_back && m.written != 0;
       out = rolled_back ? UpdateOutcome::ROLLED_BACK : UpdateOutcome::NOT_INSTALLED;
       if (rolled_back)
         update_mark_set(m.failed, m.installing);
       m.installing[0] = '\0';
+      m.written = 0;
     }
   }
   m.failed[kUpdateVersionLen - 1] = '\0';

@@ -29,7 +29,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 ## What's in the file
 
 - The panel's **Nickname**. A backup loaded onto a second panel gives it the same nickname, so rename that one afterwards.
-- What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out.
+- What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out. A backup saved in Live games comes back in Live games.
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
 - The Live games leagues, **Switch every** and **Pick the best game**
@@ -38,18 +38,18 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - **Celebrations** (Off, Subtle or Full)
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
-- Game-day wake, its **Turns on** time and **After the game** (coming in the next release)
+- Game-day wake, its **Turns on** time and **After the game**
 - The message card's text, list address and timing
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
-The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (coming in the next release: or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. Coming in the next release: the [news card](/using/news/)'s **News headlines** switch too, and the [weather card](/using/weather/)'s town and switch, and every switch in the **Between games** list. A restored town is looked up again only if the panel doesn't have it already, and a backup from older firmware leaves the cards it doesn't name as they are.
+The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. It also keeps the [news card](/using/news/)'s **News headlines** switch, and the [weather card](/using/weather/)'s town and switch, and every switch in the **Between games** list. A restored town is looked up again only if the panel doesn't have it already, and a backup from older firmware leaves the cards it doesn't name as they are.
 
 ## What isn't
 
 - **Wi-Fi networks.** Passwords never leave the panel. A new or reset panel joins Wi-Fi through the Game Day app or its own setup hotspot first, then you restore. See [Wi-Fi](/using/wifi/).
 - **The WizMote pairing.** Pair the remote again. See [WizMote remote](/using/remote/).
-- **Your pictures** (coming in the next release). Add them again from your own files. See [Pictures](/using/pictures/).
+- **Your pictures**. Add them again from your own files. See [Pictures](/using/pictures/).
 
 ## When it won't restore
 
@@ -57,11 +57,13 @@ The panel checks the whole file before it changes anything. If a setting in it h
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 
+**That backup is too big for the panel to take** means the settings in it add up to more than the panel holds, about 8 KB. Only a panel with nearly every favorite and playlist slot full gets there.
+
 **This backup is from newer firmware** means the file came from a panel on a release that saves backups differently. [Update the panel](/using/updates/), then restore it.
 
 ## When something is left out
 
-A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons.
+A backup from a panel on a later release usually restores fine. If it has something this panel's firmware doesn't have yet, like a team, a league, a timezone or a setting, or a number past what this panel takes, the page lists what it left out, like **This panel's firmware doesn't have: favs=epl:9999** or **mode=6**, and restores everything else. A favorite it leaves out leaves its slot empty, so the teams after it keep their remote buttons. A team listed in two favorite slots comes back once, in the first, with the second slot empty.
 
 A message list address this panel's firmware can't read, like one from a later release that takes another kind of address, is left out and listed the same way instead of stopping the whole restore.
 

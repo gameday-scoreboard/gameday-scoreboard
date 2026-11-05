@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-The prebuilt firmware for DIY builds targets one pinout, the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75)'s. Any board wired to those pins runs it. A board with different pins needs its own build.
+The prebuilt firmware for DIY builds targets two boards: the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, which any board wired to those pins runs, and the Waveshare ESP32-S3-RGB-Matrix, the board in a Game Day Scoreboard. A board with different pins needs its own build.
 
 ## MoonHub75
 
@@ -47,9 +47,13 @@ The board settings come from `firmware/controllers/moonhub75.yaml`:
 
 The firmware leans on PSRAM. It runs code from PSRAM (`execute_from_psram`), and `firmware/gameday-common.yaml` moves the Bluetooth stack and the HTTPS buffers there to keep internal RAM free for the ESPN and update downloads. The build is set for octal PSRAM and 16 MB of flash, so pick a board that has both. An N16R8 module does.
 
+## Waveshare ESP32-S3 RGB Matrix
+
+The Waveshare ESP32-S3 RGB Matrix has its own pin map, `firmware/controllers/waveshare.yaml`, and its own build, `firmware/gameday-waveshare.yaml`. It's the board in a Game Day Scoreboard, and the installer offers it. It hasn't run on a panel yet, so tell us how it goes. The board has no fuse and no reverse-polarity protection, so check the power leads before you plug them in.
+
 ## Other boards
 
-Any other ESP32-S3 HUB75 board with at least 16 MB of flash and octal PSRAM, the Waveshare ESP32-S3 RGB Matrix among them, needs its own build. There's no prebuilt firmware for these boards and they haven't been tested. To make one:
+Any other ESP32-S3 HUB75 board with at least 16 MB of flash and octal PSRAM needs its own build. There's no prebuilt firmware for these boards and they haven't been tested. To make one:
 
 1. Copy `firmware/controllers/moonhub75.yaml` and put your board's pins in it.
 2. Copy `firmware/gameday.yaml` and point it at your controller file.
