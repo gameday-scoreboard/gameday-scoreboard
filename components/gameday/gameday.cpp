@@ -2208,13 +2208,15 @@ void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
   ESP_LOGI(TAG, "Night schedule: %s, %s to %s, %s", p.on ? "on" : "off", ::espn::night_clock12(p.start).c_str(),
            ::espn::night_clock12(p.end).c_str(), p.screen_off ? "screen off" : "dimmed");
   // A skipped night runs to the new end time. Hours that leave now outside
-  // the night end the skip at the tick below.
+  // the night end the skip.
   if (this->night_skip_until_ != 0 && this->time_ != nullptr) {
     ESPTime now = this->time_->now();
     if (now.is_valid()) {
+      const int minute = now.hour * 60 + now.minute;
       this->night_skip_until_ =
-          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second,
-                                   utc_offset_at);
+          p.on && ::espn::night_window(p.start, p.end, minute)
+              ? ::espn::night_skip_until(p, (int64_t) now.timestamp, minute, now.second, utc_offset_at)
+              : 0;
       this->save_night_skip_();
     }
   }
@@ -2260,10 +2262,9 @@ void GamedayComponent::night_tick_() {
                           ::espn::night_window(this->night_.start, this->night_.end, minute) &&
                           this->owner_game_live_();
   // A skip lasts to the end of the night it was made in; outside the hours,
-  // or with the schedule off, it is over.
+  // or with the schedule off, it is over (night_skip_over).
   if (this->night_skip_until_ != 0 && valid &&
-      (!this->night_.on || !::espn::night_window(this->night_.start, this->night_.end, minute) ||
-       (int64_t) now.timestamp >= this->night_skip_until_)) {
+      ::espn::night_skip_over(this->night_, minute, (int64_t) now.timestamp, this->night_skip_until_)) {
     this->night_skip_until_ = 0;
     this->save_night_skip_();
   }
@@ -4086,7 +4087,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.status_text = ::espn::status_text(g, opts, kickoff);
   // Halftime and the final: ESPN's headline (a final only) and the scores the
   // panel saw, behind the same switch as the last play.
-  this->score_log_.update(g);
+  this->score_log_.update(g, millis());
   if (opts.last_play && g.valid && (::espn::at_halftime(g) || (g.state == GameState::POST && g.completed)))
     f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
                                            this->score_log_.lines(g.event_id));
@@ -5753,7 +5754,8 @@ void GamedayComponent::load_msg_() {
     return;  // nothing set: no card
   p.text[sizeof(p.text) - 1] = '\0';
   p.url[sizeof(p.url) - 1] = '\0';
-  this->msg_text_ = p.text;
+  // Saved before the message was cleaned of bytes that aren't UTF-8.
+  this->msg_text_ = ::espn::message_clean(p.text, ::espn::kMsgTextMax, true);
   this->msg_url_ = ::espn::msg_url_ok(p.url) ? p.url : "";
   this->msg_every_ = (uint8_t) ::espn::clamp_msg_every(p.every);
   this->msg_reset_();
@@ -5845,7 +5847,7 @@ void GamedayComponent::ha_track_() {
   ctx.league = this->ha_league_();
   ctx.now_epoch = this->clock_set_() ? (int64_t) this->time_->timestamp_now() : 0;
   ctx.pregame_minutes = this->pregame_min_;
-  ctx.mono_s = millis() / 1000;
+  ctx.mono_ms = millis();
 #ifdef GAMEDAY_DEMO
   // The scripted game: each run has an id of its own (demo.cpp), so it
   // starts, scores and ends like a real one, once. Demo builds are never

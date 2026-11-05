@@ -56,7 +56,7 @@ And each kind adds its own:
 | `pregame` | `minutes`: to the start. |
 | `score`, `test` | `play`: `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and for any other football score. `points`: since the panel's last look, which in basketball can be more than one basket. |
 | `lead_change` | `change`: `took_lead` from a level score, `lead_change` when it changes hands, `tied` when the score comes level. `leader` and `previous_leader`: the sides, empty when level. |
-| `period` | `period`: the number of the one that ended. `period_name`: `1st quarter`, `2nd half`, `3rd period`, `7th inning`, `overtime`. |
+| `period` | `period`: the number of the one that ended. `period_name`: `1st quarter`, `2nd half`, `3rd period`, `7th inning`, `overtime`, and in hockey `shootout`, in soccer `1st half of extra time`, `2nd half of extra time` and `penalties`. |
 | `final` | `result`: `win`, `loss` or `draw` for `team`. `winner`: empty on a draw. |
 
 A touchdown that puts your team ahead looks like this in **Developer tools**, then **Events**, listening to `esphome.gameday_score`:

@@ -20,9 +20,9 @@ inline bool hook_url_ok(const std::string &url) {
     return true;
   if (url.size() > kHookUrlMax || url.compare(0, 7, "http://") != 0)
     return false;
-  size_t host_end = url.find_first_of("/?#", 7);
+  size_t host_end = url.find_first_of(":/?#", 7);
   if (host_end == 7 || url.size() == 7)
-    return false;  // no host
+    return false;  // no host, "http://:8080/hook" among them
   for (unsigned char c : url)
     if (c <= ' ' || c >= 0x7F)
       return false;

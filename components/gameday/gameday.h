@@ -1648,7 +1648,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t generation_{0};
   bool busy_{false};
   bool selects_published_{false};
-  volatile bool job_done_{false};
+  // Set by the fetch task once its Job is filled in. Atomic, so the main
+  // loop that sees it set also sees the Job.
+  std::atomic<bool> job_done_{false};
   // Written by the fetch task, read by the main loop.
   std::atomic<uint64_t> espn_bytes_{0};
   std::atomic<uint32_t> espn_requests_{0};

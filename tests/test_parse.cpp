@@ -650,7 +650,7 @@ static void test_ha_events() {
   // document would go back the same way, ha_events_stale below.)
   HaContext later;
   CHECK(t.update(live(10, 8), later).empty());
-  later.mono_s = kHaStepBackHoldS;
+  later.mono_ms = kHaStepBackHoldS * 1000;
   CHECK(t.update(live(10, 8), later).empty());
   // A score on the last play comes with the final.
   e = sf(t.update(live(13, 8, GameState::POST), false));
@@ -795,10 +795,10 @@ static std::string kinds(const std::vector<HaEvent> &v) {
   return out;
 }
 
-static HaContext ha_ctx(uint32_t mono = 0) {
+static HaContext ha_ctx(uint32_t mono_s = 0) {
   HaContext c;
   c.league = "nfl";
-  c.mono_s = mono;
+  c.mono_ms = mono_s * 1000;
   return c;
 }
 
@@ -903,8 +903,15 @@ static void test_ha_game_events() {
   w.sport = Sport::HOCKEY;
   CHECK_EQ(ha_period_name(w, 3), std::string("3rd period"));
   CHECK_EQ(ha_period_name(w, 4), std::string("overtime"));
+  CHECK_EQ(ha_period_name(w, 5), std::string("shootout"));  // regular season
+  w.nhl.playoffs = true;
+  CHECK_EQ(ha_period_name(w, 5), std::string("2nd overtime"));
   w.sport = Sport::SOCCER;
   CHECK_EQ(ha_period_name(w, 1), std::string("1st half"));
+  CHECK_EQ(ha_period_name(w, 2), std::string("2nd half"));
+  CHECK_EQ(ha_period_name(w, 3), std::string("1st half of extra time"));
+  CHECK_EQ(ha_period_name(w, 4), std::string("2nd half of extra time"));
+  CHECK_EQ(ha_period_name(w, 5), std::string("penalties"));
   w.sport = Sport::BASKETBALL;
   w.nba.regulation = 2;
   CHECK_EQ(ha_period_name(w, 2), std::string("2nd half"));
@@ -1101,6 +1108,19 @@ static void test_ha_events_stale() {
   w.update(s, ha_ctx(10 + kHaStepBackHoldS));
   s.team_score = 7;
   CHECK(w.update(s, ha_ctx(11 + kHaStepBackHoldS)).empty());
+  // The hold keeps counting across the millis() wrap after 49.7 days.
+  HaTracker wr;
+  GameSnapshot x = live(7, 0);
+  HaContext at = ha_ctx();
+  at.mono_ms = 0xFFFFFFFFu - 10000;
+  wr.update(x, at);
+  x.team_score = 0;
+  CHECK(wr.update(x, at).empty());
+  at.mono_ms = 5000;  // 15 s on, past the wrap: still held
+  CHECK(wr.update(x, at).empty());
+  x.team_score = 7;
+  at.mono_ms = 6000;
+  CHECK(wr.update(x, at).empty());  // the old copy went away, the 7 never counted twice
 }
 
 // The fields Home Assistant and the webhook get, and the sensors' words.
@@ -1167,6 +1187,7 @@ static void test_ha_fields() {
   CHECK(!hook_url_ok("https://example.com/hook"));
   CHECK(!hook_url_ok("http://"));
   CHECK(!hook_url_ok("http:///path"));
+  CHECK(!hook_url_ok("http://:8080/hook"));
   CHECK(!hook_url_ok("ftp://192.168.1.20/"));
   CHECK(!hook_url_ok("192.168.1.20/hook"));
   CHECK(!hook_url_ok("http://exa mple.com/"));
@@ -3519,12 +3540,14 @@ int run_set_tests(int &checks);  // test_set.cpp
 static void test_logo_lru() {
   using espn::LogoSlot;
   // Oldest idle, off-screen slot goes first.
-  CHECK_EQ(espn::pick_evict({{300, false, false}, {100, false, false}, {200, false, false}}), 1);
+  CHECK_EQ(espn::pick_evict({{300, false, false}, {100, false, false}, {200, false, false}}, 400), 1);
+  // Across the millis() wrap: the slot used just before it is the oldest.
+  CHECK_EQ(espn::pick_evict({{0xFFFFFF00u, false, false}, {50, false, false}, {10, false, false}}, 100), 0);
   // On screen or still downloading: never dropped, even when oldest.
-  CHECK_EQ(espn::pick_evict({{100, false, true}, {150, true, false}, {200, false, false}}), 2);
+  CHECK_EQ(espn::pick_evict({{100, false, true}, {150, true, false}, {200, false, false}}, 300), 2);
   // Nothing droppable.
-  CHECK_EQ(espn::pick_evict({{100, true, false}, {200, false, true}}), -1);
-  CHECK_EQ(espn::pick_evict({}), -1);
+  CHECK_EQ(espn::pick_evict({{100, true, false}, {200, false, true}}, 300), -1);
+  CHECK_EQ(espn::pick_evict({}, 0), -1);
   // A failed logo is due once its wait has passed, including across the millis() wrap.
   CHECK(!espn::logo_retry_due(1000, 30000, 1000 + 30000 - 1));
   CHECK(espn::logo_retry_due(1000, 30000, 1000 + 30000));
@@ -4023,8 +4046,8 @@ static void test_recap_walk() {
   CHECK(!back.back_due(mon, 5, day));
   CHECK_EQ(back.step, RecapWalk::kDone);
 
-  // A week back with nothing: it stops after kRecapMaxDays reads, stays
-  // stopped for the rest of the day, and walks again the next day.
+  // A week back with nothing: it stops after the six days recap_trim keeps,
+  // stays stopped for the rest of the day, and walks again the next day.
   back = RecapWalk{};
   int reads = 0;
   while (back.back_due(mon, 0, day)) {
@@ -4032,7 +4055,7 @@ static void test_recap_walk() {
     back.back_read(mon, 0);
     reads++;
   }
-  CHECK_EQ(reads, kRecapMaxDays);
+  CHECK_EQ(reads, kRecapMaxDays - 1);
   CHECK(!back.back_due(mon, 0, day));
   CHECK(back.back_due(mon + 1, 0, day) && day == mon);
 
@@ -5476,7 +5499,7 @@ static void test_rankings() {
   CHECK_EQ(top25_header(League::NCAA, none), std::string("CFB AP TOP 25"));
 
   // A record that isn't digits and dashes, or is too long, is left off;
-  // a row without a rank or a team is skipped; past 25 rows are dropped.
+  // a row without a rank or a team is skipped; ranks past 25 are dropped.
   std::string odd = R"({"date":"2026-10-25T07:00Z","occurrence":{"displayValue":"Week 9"},"ranks":[)"
                     R"J({"current":1,"record":{"summary":"7-0 (5-0)"},"team":{"$ref":"x/teams/2390?a"}},)J"
                     R"({"current":0,"team":{"$ref":"x/teams/194"}},)"
@@ -5496,6 +5519,17 @@ static void test_rankings() {
   Poll m;
   CHECK(parse_rankings(many, m));
   CHECK_EQ(m.rows.size(), (size_t) kTop25Max);
+  // A tie at 25 keeps both teams.
+  std::string tie = R"({"date":"2026-10-25T07:00Z","ranks":[)";
+  for (int i = 1; i <= 27; i++)
+    tie += std::string(i > 1 ? "," : "") + R"({"current":)" + std::to_string(i > 25 ? 25 + (i - 26) * 2 : i) +
+           R"(,"team":{"$ref":"x/teams/2390"}})";
+  tie += "]}";
+  Poll t25;
+  CHECK(parse_rankings(tie, t25));
+  CHECK_EQ(t25.rows.size(), (size_t) 26);
+  if (t25.rows.size() == 26)
+    CHECK_EQ((int) t25.rows[25].rank, 25);
   Poll keep = f;
   std::string empty = R"({"date":"2026-10-25T07:00Z","ranks":[]})";
   CHECK(!parse_rankings(empty, keep));
@@ -5657,12 +5691,27 @@ static void test_night_skip_clock_change(NightPrefs p) {
   CHECK_EQ(skip("2027-03-14T07:30Z"), seven_cdt);  // 1:30 AM CST
   CHECK_EQ(skip("2027-03-14T09:00Z"), seven_cdt);  // 4:00 AM CDT
   // An end of 2:30 AM, which Mar 14 never reaches: not before 3 AM CDT, and
-  // by then the hours check has ended the skip.
+  // by then the clock is outside the hours.
   p.end = 2 * 60 + 30;
   CHECK(skip("2027-03-14T05:00Z") >= parse_iso8601_z("2027-03-14T08:00Z"));
-  // An end of 1:30 AM on Nov 1 is the first 1:30, in daylight time.
+  // An end of 1:30 AM on Nov 1 comes twice: the skip runs to the second,
+  // in standard time, from either pass of the hour before it.
   p.end = 60 + 30;
-  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T06:30Z"));
+  const int64_t second_130 = parse_iso8601_z("2026-11-01T07:30Z");
+  CHECK_EQ(skip("2026-11-01T04:00Z"), second_130);  // 11:00 PM CDT
+  CHECK_EQ(skip("2026-11-01T06:10Z"), second_130);  // 1:10 AM CDT
+  CHECK_EQ(skip("2026-11-01T07:10Z"), second_130);  // 1:10 AM CST
+  // Between the two passes the clock reads 1:30 to 1:59, outside the hours,
+  // and the skip holds through to the second 1:30.
+  CHECK(!night_skip_over(p, 60 + 45, parse_iso8601_z("2026-11-01T06:45Z"), second_130));
+  CHECK(!night_skip_over(p, 60 + 15, parse_iso8601_z("2026-11-01T07:15Z"), second_130));
+  CHECK(night_skip_over(p, 60 + 30, second_130, second_130));
+  // An end of 1:00 AM is the first moment the clock goes back to.
+  p.end = 60;
+  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T07:00Z"));
+  // An end of 12:59 AM comes once.
+  p.end = 59;
+  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T05:59Z"));
   if (saved.empty())
     unsetenv("TZ");
   else
@@ -5737,6 +5786,17 @@ static void test_night() {
   CHECK(night_state(p, true, late, true, true) == Night::SKIPPED);
   CHECK(night_state(p, true, 12 * 60, false, true) == Night::DAY);
   CHECK(night_state(p, false, late, false, true) == Night::DAY);
+  // A skip is over at its end, with the schedule off, or outside the hours
+  // with more than an hour to go (new hours that leave the night).
+  {
+    const int64_t t = 1792000000;
+    CHECK(!night_skip_over(p, late, t, t + 3600 * 5));
+    CHECK(night_skip_over(p, late, t + 3600 * 5, t + 3600 * 5));
+    NightPrefs off = p;
+    off.on = 0;
+    CHECK(night_skip_over(off, late, t, t + 3600 * 5));
+    CHECK(night_skip_over(p, 12 * 60, t, t + 3600 * 5));
+  }
   CHECK(night_holding(Night::DIM));
   CHECK(night_holding(Night::DARK));
   CHECK(!night_holding(Night::GAME));
@@ -6790,8 +6850,18 @@ static void test_message() {
   CHECK_EQ(message_clean("abc\xC3\xA9", 4, true), std::string("abc"));
   CHECK_EQ(message_clean("ab cd", 3, true), std::string("ab"));
   CHECK_EQ(message_clean(std::string(300, 'x'), kMsgTextMax, true).size(), kMsgTextMax);
-  // A broken byte is kept for panel_text() to turn into '?'.
-  CHECK_EQ(message_clean("a\x80" "b", kMsgTextMax, true), std::string("a\x80" "b"));
+  // A byte that isn't UTF-8 is left out: the state document carries the
+  // message, and the apps' JSON readers refuse one with such a byte.
+  CHECK_EQ(message_clean("a\x80" "b", kMsgTextMax, true), std::string("ab"));
+  CHECK_EQ(message_clean("Caf\xE9", kMsgTextMax, true), std::string("Caf"));
+  CHECK_EQ(message_clean("A\xE0\x81\x81" "B\xED\xA0\x80" "C", kMsgTextMax, true), std::string("ABC"));
+  // A list line cut inside a character, with an emoji dropped so it ends up
+  // under the cap: the cut-off lead byte goes too.
+  {
+    std::string line = "\xF0\x9F\x8E\x82" + std::string(kMsgLineMax - 1, 'x') + "\xC3\xA9\n";
+    auto r = read_list(line, 0, 4, 64);
+    CHECK_EQ(r.list(), std::string(kMsgLineMax - 1, 'x'));
+  }
 
   CHECK(msg_url_ok(""));
   CHECK(msg_url_ok("http://192.168.1.20/names.txt"));
@@ -7815,6 +7885,54 @@ static void test_score_log() {
   n.team_score = 2;
   nl.update(n);
   CHECK(nl.lines("401").empty());
+
+  // An old copy of the document with a lower score logs nothing, and the
+  // score after it isn't logged twice. A lower score that holds is a
+  // correction, and the log counts on from it.
+  ScoreLog st;
+  st.update(log_read(0, 0, 1, "15:00"), 1000);
+  st.update(log_read(7, 0, 1, "10:00", "Rushing Touchdown", 7, 6, "J. Williams", 3), 2000);
+  st.update(log_read(0, 0, 1, "15:00"), 3000);
+  st.update(log_read(7, 0, 1, "9:50", "Kickoff", 0, 21), 4000);
+  CHECK_EQ(st.lines("401").size(), (size_t) 1);
+  st.update(log_read(0, 0, 1, "9:00"), 5000);
+  st.update(log_read(0, 0, 1, "8:00"), 5000 + kScoreBackHoldMs - 1);
+  st.update(log_read(7, 0, 1, "8:00"), 5000 + kScoreBackHoldMs);
+  CHECK_EQ(st.lines("401").size(), (size_t) 1);  // never taken: the old copy went away
+  st.update(log_read(0, 0, 1, "7:00"), 200000);
+  st.update(log_read(0, 0, 1, "7:00"), 200000 + kScoreBackHoldMs);
+  st.update(log_read(3, 0, 1, "6:00", "Field Goal Good", 3, 6, "B. Aubrey", 40), 300000);
+  l = st.lines("401");
+  CHECK_EQ(l.size(), (size_t) 2);
+  if (l.size() == 2)
+    CHECK_EQ(l[1], std::string("Q1 6:00 Aubrey 40 yd FG, DAL 3-0"));
+  // Held across the millis() wrap too.
+  ScoreLog wrap;
+  wrap.update(log_read(0, 0, 1, "15:00"), 0xFFFFFFFFu - 5000);
+  wrap.update(log_read(7, 0, 1, "10:00"), 0xFFFFFFFFu - 4000);
+  wrap.update(log_read(0, 0, 1, "15:00"), 0xFFFFFFFFu - 3000);
+  wrap.update(log_read(0, 0, 1, "15:00"), 10000);
+  wrap.update(log_read(7, 0, 1, "9:50"), 11000);
+  CHECK_EQ(wrap.lines("401").size(), (size_t) 1);
+
+  // A missed extra point: once the clock has moved on, a safety the reads
+  // missed is a line of its own. A try a read missed still finishes its
+  // touchdown's line.
+  ScoreLog pt;
+  pt.update(log_read(0, 0, 1, "15:00"));
+  pt.update(log_read(6, 0, 1, "7:12", "Rushing Touchdown", 6, 6, "J. Williams", 1));
+  pt.update(log_read(6, 0, 1, "7:12", "Extra Point No Good", 0, 6));
+  pt.update(log_read(6, 0, 1, "7:05", "Kickoff", 0, 6));
+  pt.update(log_read(8, 0, 2, "12:00", "Pass Incompletion", 0, 21));
+  pt.update(log_read(14, 0, 3, "5:00", "Passing Touchdown", 6, 6, "B. Smith", 12));
+  pt.update(log_read(15, 0, 3, "4:55", "Kickoff", 0, 6));
+  l = pt.lines("401");
+  CHECK_EQ(l.size(), (size_t) 3);
+  if (l.size() == 3) {
+    CHECK_EQ(l[0], std::string("Q1 7:12 Williams 1 yd run, DAL 6-0"));
+    CHECK_EQ(l[1], std::string("Q2 12:00 DAL safety, DAL 8-0"));
+    CHECK_EQ(l[2], std::string("Q3 5:00 Smith 12 yd pass, DAL 15-0"));
+  }
 
   // The ticker: headline and log after the first part
   CHECK_EQ(with_score_log("Final | DAL 5-2, PHI 4-3", "Cowboys win it", {"Q1 DAL TD, DAL 7-0"}),
