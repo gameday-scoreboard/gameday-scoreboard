@@ -44,6 +44,14 @@ through `update_important` in the panel's state.
 - 🏀 Halftime and final leaders with accented names, like Dončić, show their letters instead of empty boxes
 - 📱 The team picker's league tabs fit on a phone, with Done always in reach
 - 🎮 Unpair remote stays unpaired after a restart
+- 🎮 The press that pairs a WizMote does nothing else (pairing with OFF used to turn the panel off), and pressing the paired remote turns Discovery off
+- 🏀 In a playoff game the series no longer draws over the score margin chart on a wide board: the series has the row
+- 🏒 A hockey record too long for the space under the logo, like 30-12-10, shows as points instead of wrapping
+- 🌡️ 100 degrees and up, or -10 and below, fits on a wide weather card instead of losing the degree sign to the edge
+- 🏈 Going back to the Scoreboard during a football game no longer draws timeout pips over the field strip
+- 📊 A board that switches games at halftime or the final starts the new game on its board, not on the last game's line score
+- ✨ Effects no longer starts over the heat or power mark or a Wi-Fi sign-in message, or leaves the panel black when effects could not start
+- 🔘 The countdown for a Wi-Fi or factory reset shows in front of a banner or the heat mark while you hold the button
 - 🧪 Turning Follow beta off gets you the release your beta was building toward, instead of waiting for the one after it
 - 🔄 A restart partway through a download no longer marks that release as one that "didn't take", so the panel still installs it on its own
 - 🔄 The device page says when an install fails instead of showing "Installing" for five minutes
@@ -55,6 +63,19 @@ through `update_important` in the panel's state.
 - 🏒 A slow connection can no longer restart the panel while it reads a basketball or hockey favorite's season schedule
 - 🔁 Changing favorites or the mode while the panel reads a game can no longer crash it
 - 🧪 Follow beta works on Waveshare boards: they used to find no update at all with it on, stable releases included
+- 📋 The scoring plays on the halftime and final ticker no longer list a score twice when ESPN briefly sends an older copy of the game
+- 🏈 A safety after a missed extra point gets its own line in the scoring plays instead of joining the touchdown's
+- 🏠 Home Assistant's period events name an NHL shootout and soccer's extra time and penalties, instead of calling them overtime
+- 🏆 Two teams tied for 25th both show on the Top 25 card
+- 💬 A message with a character that isn't valid text no longer keeps the apps from reading the panel
+- 🌙 Night mode turned off for a night that ends between 1 and 2 AM stays off through the repeated hour when the clocks go back
+- 🖼️ A looping GIF's first frame keeps its own timing on every pass
+- 🖼️ A picture half saved or half deleted when the power went out no longer takes up room after a restart
+- 🏈 Field strip, Win bar and Margin spark stay the way you set them when no game is on, instead of switching back in Home Assistant and in backups
+- 🌙 The kickoff forecast shows a moon for evening games in fall and winter, from 5 PM in December, instead of a sun until 7 PM
+- 🌡️ After midnight the weather card shows the new day's high and low instead of yesterday's
+- 🏒 Hockey's ticker shows the records in the regular season instead of ESPN's season series line
+- 🕰️ The device page picks US Central for a browser in Ojinaga, Mexico, and US Mountain for one in Ciudad Juárez
 - 📶 A new password for a saved network, typed on the setup hotspot page, no longer replaces the one that worked until the panel joins with it
 - 📶 At start-up the panel looks for all its saved networks on its first Wi-Fi scan, not only the last one set up
 - 📶 Forgetting a network, or a failed setup from the app, no longer leaves the panel trying just one saved network until it restarts

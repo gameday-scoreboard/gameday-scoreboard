@@ -34,6 +34,8 @@ When the panel has something to tell you, or you ask it for the screen, it switc
 - A firmware install, so the panel sits on the board, not a pattern, until it restarts.
 - The night schedule's screen-off, and turning **Panel on** off. Picking Effects while the panel is dim or dark for the night turns night mode off for the rest of the night, the same as **Panel on** or a team pick.
 
+Picking Effects while the heat or power mark is up, or while the panel says its Wi-Fi wants a sign-in, leaves **Showing** on **Scoreboard**, and the panel's log says why.
+
 ## The effects
 
 The 52 patterns in the list. Some, like **Scrolling Text** (it says GAME DAY) and **Halloween Eyes**, suit a particular night; most look best with a palette that fits the room.

@@ -16,6 +16,9 @@ struct Timezone {
   const char *iana;
 };
 
+// Panels save their zone as a position in this list (Prefs.tz_index), so a
+// new zone goes at the end and none is ever removed or moved: test_parse.cpp
+// pins every position.
 constexpr Timezone kTimezones[] = {
     {"US Eastern", "EST5EDT,M3.2.0,M11.1.0", "America/New_York"},
     {"US Central", "CST6CDT,M3.2.0,M11.1.0", "America/Chicago"},

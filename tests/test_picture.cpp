@@ -104,6 +104,25 @@ static void test_gif_transparent_still() {
   CHECK(c[25 * 40 + 35] == 0);
 }
 
+static void test_gif_trailing_control() {
+  // One white pixel with no control block of its own, and a control block
+  // after it (a 5 s delay, color 0 transparent) that belongs to no frame.
+  const uint8_t gif[] = {'G',  'I',  'F',  '8',  '9',  'a',  1,    0,    1,    0,    0x80, 0,    0,
+                         0xFF, 0xFF, 0xFF, 0,    0,    0,    0x2C, 0,    0,    0,    0,    1,    0,
+                         1,    0,    0,    2,    2,    0x44, 0x01, 0,    0x21, 0xF9, 4,    1,    0xF4,
+                         1,    0,    0,    0x3B};
+  GifPlayer g;
+  CHECK(g.open(gif, sizeof gif));
+  uint16_t c = 0;
+  CHECK(g.next(&c) == (int32_t) kGifDefaultDelayMs);
+  CHECK(c == 0xFFFF);
+  // Round again: the stray block doesn't carry over to the first frame.
+  c = 0;
+  CHECK(g.next(&c) == (int32_t) kGifDefaultDelayMs);
+  CHECK(g.looped());
+  CHECK(c == 0xFFFF);
+}
+
 static void test_gif_broken() {
   std::vector<uint8_t> d = load("box_d2.gif");
   GifPlayer g;
@@ -210,6 +229,7 @@ int main() {
   test_gif_noise();
   test_gif_disposal();
   test_gif_transparent_still();
+  test_gif_trailing_control();
   test_gif_broken();
   test_check();
   test_turns();

@@ -72,6 +72,8 @@ void PictureCard::setup() {
   nvs_handle_t h;
   if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK)
     return;  // nothing uploaded yet
+  bool stale[kPicSlots] = {};
+  bool any_stale = false;
   for (int s = 0; s < kPicSlots; s++) {
     char ik[4], fk[4];
     info_key(s, ik);
@@ -79,17 +81,36 @@ void PictureCard::setup() {
     PicInfo info;
     size_t len = sizeof(info);
     size_t file_len = 0;
-    if (nvs_get_blob(h, ik, &info, &len) != ESP_OK || len != sizeof(info))
+    const bool has_info = nvs_get_blob(h, ik, &info, &len) == ESP_OK && len == sizeof(info);
+    const bool has_file = nvs_get_blob(h, fk, nullptr, &file_len) == ESP_OK;
+    // The info is written after the file and deleted before it, so a power
+    // cut between the two leaves a file with no info, never the other way
+    // round. That file, or a slot that doesn't add up, is taking flash a
+    // new picture needs: it goes.
+    if (!has_info || !has_file || file_len != info.bytes ||
+        (info.kind != (uint8_t) PicKind::PNG && info.kind != (uint8_t) PicKind::GIF)) {
+      stale[s] = has_info || has_file;
+      any_stale = any_stale || stale[s];
       continue;
-    // The info is written after the file, so a power cut between the two
-    // leaves a file with no info, never the other way round.
-    if (nvs_get_blob(h, fk, nullptr, &file_len) != ESP_OK || file_len != info.bytes ||
-        (info.kind != (uint8_t) PicKind::PNG && info.kind != (uint8_t) PicKind::GIF))
-      continue;
+    }
     this->slots_[s] = info;
     ESP_LOGI(TAG, "Picture %d: %s %ux%u, %u frames, %u bytes", s + 1, ::espn::pic_kind_name((PicKind) info.kind),
              info.w, info.h, info.frames, (unsigned) info.bytes);
   }
+  nvs_close(h);
+  if (!any_stale || nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK)
+    return;
+  for (int s = 0; s < kPicSlots; s++) {
+    if (!stale[s])
+      continue;
+    char ik[4], fk[4];
+    info_key(s, ik);
+    file_key(s, fk);
+    nvs_erase_key(h, ik);
+    nvs_erase_key(h, fk);
+    ESP_LOGW(TAG, "Picture %d was half saved or half deleted: cleared", s + 1);
+  }
+  nvs_commit(h);
   nvs_close(h);
 }
 

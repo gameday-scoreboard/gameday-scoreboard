@@ -71,6 +71,14 @@ inline uint32_t utf8_cp(const std::string &s, size_t i, size_t n) {
   return cp;
 }
 
+// False for a byte that isn't part of a valid UTF-8 character: a stray or
+// cut-off byte, an overlong form, a surrogate.
+inline bool utf8_ok(uint32_t cp, size_t n) {
+  return n == 1 ? cp < 0x80
+                : !((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
+                    (cp >= 0xD800 && cp <= 0xDFFF));
+}
+
 // Emoji and the characters that build them. The fonts have none, and a
 // birthday cake is better left out than drawn as '?'.
 inline bool emoji(uint32_t cp) {
@@ -80,9 +88,10 @@ inline bool emoji(uint32_t cp) {
 
 }  // namespace detail
 
-// What the panel keeps of text from outside: emoji and control characters
-// out, tabs as spaces, CR LF as one line break, each line trimmed and blank
-// lines dropped, and no more than max bytes, never cut inside a character.
+// What the panel keeps of text from outside: emoji, control characters and
+// bytes that aren't UTF-8 out, tabs as spaces, CR LF as one line break, each
+// line trimmed and blank lines dropped, and no more than max bytes, never cut
+// inside a character.
 // lines false makes it one line (a line break becomes a space). The board
 // still runs it through panel_text() for the rest.
 inline std::string message_clean(const std::string &in, size_t max, bool lines) {
@@ -106,8 +115,8 @@ inline std::string message_clean(const std::string &in, size_t max, bool lines) 
       flush();
     } else if (cp == '\t') {
       line += ' ';
-    } else if (cp < 0x20 || cp == 0x7F || detail::emoji(cp)) {
-      // dropped (a CR before LF among them)
+    } else if (cp < 0x20 || cp == 0x7F || detail::emoji(cp) || !detail::utf8_ok(cp, n)) {
+      // dropped (a CR before LF among them, and bytes that aren't UTF-8)
     } else {
       line.append(in, i, n);
     }
@@ -140,10 +149,7 @@ inline std::string utf8_only(const std::string &in) {
   for (size_t i = 0; i < in.size();) {
     size_t n = detail::utf8_len(in, i);
     uint32_t cp = detail::utf8_cp(in, i, n);
-    bool ok = n == 1 ? cp < 0x80
-                     : !((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
-                         (cp >= 0xD800 && cp <= 0xDFFF));
-    if (ok)
+    if (detail::utf8_ok(cp, n))
       out.append(in, i, n);
     i += n;
   }
