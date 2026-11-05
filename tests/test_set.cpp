@@ -645,6 +645,15 @@ void test_parse_set() {
   SCHECK(parse_set("mode", "5", op, kFavMax) && op.value == 5, "mode 5");
   SCHECK(!parse_set("mode", "6", op, kFavMax), "mode 6");
   SCHECK(parse_set("panels", "7", op, kFavMax) && op.value == 7, "panels passes the count through");
+  SCHECK(!parse_set("panels", "257", op, kFavMax), "panels 257 is refused, not 1");
+  SCHECK(!parse_set("panels", "0", op, kFavMax), "panels 0 is refused");
+  SCHECK(!parse_set("panels", "two", op, kFavMax), "panels text is refused");
+  SCHECK(!parse_set("panels", "99999999999", op, kFavMax), "panels past int is refused");
+  SCHECK(parse_set("nightlevel", "40", op, kFavMax) && op.value == 40, "nightlevel 40");
+  SCHECK(parse_set("nightlevel", "0", op, kFavMax) && op.value == 1, "nightlevel 0 is held at 1");
+  SCHECK(parse_set("nightlevel", "999", op, kFavMax) && op.value == 255, "nightlevel 999 is held at 255");
+  SCHECK(!parse_set("nightlevel", "dim", op, kFavMax), "nightlevel text is refused");
+  SCHECK(!parse_set("nightlevel", "99999999999", op, kFavMax), "nightlevel past int is refused");
   SCHECK(parse_set("tz", "America/Chicago", op, kFavMax) && op.value == 1, "tz IANA");
   SCHECK(!parse_set("tz", "-1", op, kFavMax), "tz -1");
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
@@ -669,6 +678,8 @@ void test_parse_set() {
   SCHECK(parse_set("msg", "Happy birthday", op, kFavMax) && op.kind == SetKind::MSG && op.text == "Happy birthday",
          "msg");
   SCHECK(parse_set("msg", std::string(300, 'x'), op, kFavMax) && op.text.size() == kMsgTextMax, "msg is capped");
+  SCHECK(parse_set("msg", "Caf\xE9 \xC3\xA9t\xC3", op, kFavMax) && op.text == "Caf \xC3\xA9t",
+         "bytes that aren't UTF-8 are left out of a message");
   SCHECK(parse_set("nick", "Garage", op, kFavMax) && op.kind == SetKind::NICK && op.text == "Garage", "nick");
   SCHECK(parse_set("nick", std::string(100, 'x'), op, kFavMax) && op.text.size() == kNickMax, "nick is capped");
   SCHECK(parse_set("nick", "a\nb", op, kFavMax) && op.text == "a b", "nick is one line");
@@ -805,6 +816,7 @@ void test_playlists() {
   SCHECK(list_renamed({"A", "B"}, {"A"}, "B").empty(), "a removed playlist is gone, not renamed");
   SCHECK(list_renamed({"A", "B"}, {"A", "B", "C"}, "B").empty(), "an added one renames nothing");
   SCHECK(list_renamed({"A", "B"}, {"B", "C"}, "A").empty(), "a name taken from another playlist is not a rename");
+  SCHECK(list_name_clean("Hoops\xff\xc3") == "Hoops", "bytes that aren't UTF-8 go");
 
   std::vector<TeamRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 25}};
   SCHECK(list_mask({{(uint8_t) League::NHL, 25}, {(uint8_t) League::NFL, 6}}, favs) == 0b101, "mask by favorite");

@@ -92,13 +92,19 @@ static constexpr uint32_t kLeadersRetryMs = 60 * 1000;
 
 namespace detail {
 
-// "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix. Folded to
-// what the panel's fonts draw (panel_text.h), so "L. Dončić" is "Doncic".
-inline std::string leader_surname(const std::string &short_name) {
+// "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix. The ticker's
+// season leaders (espn_parse.cpp) use it as it is.
+inline std::string leader_short_surname(const std::string &short_name) {
   std::string name = short_name;
   while (name.size() > 3 && name[1] == '.' && name[2] == ' ')
     name.erase(0, 3);
-  return ::esphome::gameday::panel_text(name);
+  return name;
+}
+
+// The same, folded to what the panel's fonts draw (panel_text.h), so
+// "L. Dončić" is "Doncic".
+inline std::string leader_surname(const std::string &short_name) {
+  return ::esphome::gameday::panel_text(leader_short_surname(short_name));
 }
 
 // Characters, not bytes: a Latin-1 letter the fonts keep ("Peña") is two
@@ -124,11 +130,12 @@ inline std::string glyph_prefix(const std::string &s, size_t n) {
   return s.substr(0, i);
 }
 
-// A football game line from ESPN's displayValue, "15/27, 212 YDS, 3 TD, 1
-// INT" or "25 CAR, 155 YDS, 1 TD": the yards and the touchdowns, "212 yds 3
-// TD", "62 yds" with none. "" when the line has no yards.
-inline std::string football_game_stat(const std::string &display_value) {
-  std::string yards, tds;
+// The yards and touchdowns in ESPN's football displayValue, "15/27, 212
+// YDS, 3 TD, 1 INT" or "25 CAR, 155 YDS, 1 TD", as written. tds is "" for
+// "0 TD" as for none.
+inline void football_yards_tds(const std::string &display_value, std::string &yards, std::string &tds) {
+  yards.clear();
+  tds.clear();
   size_t start = 0;
   while (start <= display_value.size()) {
     size_t comma = display_value.find(", ", start);
@@ -145,6 +152,13 @@ inline std::string football_game_stat(const std::string &display_value) {
       break;
     start = comma + 2;
   }
+}
+
+// A football game line: "212 yds 3 TD", "62 yds" with no touchdowns. ""
+// when the line has no yards.
+inline std::string football_game_stat(const std::string &display_value) {
+  std::string yards, tds;
+  football_yards_tds(display_value, yards, tds);
   if (yards.empty())
     return "";
   return tds.empty() ? yards + " yds" : yards + " yds " + tds + " TD";

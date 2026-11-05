@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -251,6 +252,30 @@ static void test_event_live() {
   CHECK_EQ((int) s.team_win_pct, 4);
   CHECK_EQ(win_chance(s), std::string("JXST 96% to win"));
   CHECK(s.drive.empty());
+
+  // A score past int's range is held at 999 and a negative one at 0, and a
+  // win probability outside 0 to 1 is dropped: no undefined casts.
+  auto swap = [](std::string j, const std::string &from, const std::string &to) {
+    size_t at = j.find(from);
+    CHECK(at != std::string::npos);
+    if (at != std::string::npos)
+      j.replace(at, from.size(), to);
+    return j;
+  };
+  std::string wild = swap(swap(swap(json, "\"score\":\"24\"", "\"score\":\"99999999999999999999\""), "\"score\":\"27\"",
+                                 "\"score\":\"-5\""),
+                            "\"awayWinPercentage\":0.043300000000000005", "\"awayWinPercentage\":1e30");
+  GameSnapshot w;
+  CHECK(parse_event_str(wild, Sport::FOOTBALL, 2229, w, "401871053"));
+  CHECK_EQ(w.team_score, 999);
+  CHECK_EQ(w.opp_score, 0);
+  CHECK_EQ((int) w.team_win_pct, -1);
+  wild = swap(json, "\"awayWinPercentage\":0.043300000000000005", "\"awayWinPercentage\":-1e30");
+  CHECK(parse_event_str(wild, Sport::FOOTBALL, 2229, w, "401871053"));
+  CHECK_EQ((int) w.team_win_pct, -1);
+  wild = swap(json, "\"score\":\"24\"", "\"score\":24");  // a number, not a string
+  CHECK(parse_event_str(wild, Sport::FOOTBALL, 2229, w, "401871053"));
+  CHECK_EQ(w.team_score, 24);
 
   GameSnapshot x;
   CHECK(!parse_event_str(json, Sport::FOOTBALL, kSeahawks, x, "401871053"));  // not our game
@@ -625,7 +650,7 @@ static void test_ha_events() {
   // document would go back the same way, ha_events_stale below.)
   HaContext later;
   CHECK(t.update(live(10, 8), later).empty());
-  later.mono_s = kHaStepBackHoldS;
+  later.mono_ms = kHaStepBackHoldS * 1000;
   CHECK(t.update(live(10, 8), later).empty());
   // A score on the last play comes with the final.
   e = sf(t.update(live(13, 8, GameState::POST), false));
@@ -770,10 +795,10 @@ static std::string kinds(const std::vector<HaEvent> &v) {
   return out;
 }
 
-static HaContext ha_ctx(uint32_t mono = 0) {
+static HaContext ha_ctx(uint32_t mono_s = 0) {
   HaContext c;
   c.league = "nfl";
-  c.mono_s = mono;
+  c.mono_ms = mono_s * 1000;
   return c;
 }
 
@@ -878,8 +903,15 @@ static void test_ha_game_events() {
   w.sport = Sport::HOCKEY;
   CHECK_EQ(ha_period_name(w, 3), std::string("3rd period"));
   CHECK_EQ(ha_period_name(w, 4), std::string("overtime"));
+  CHECK_EQ(ha_period_name(w, 5), std::string("shootout"));  // regular season
+  w.nhl.playoffs = true;
+  CHECK_EQ(ha_period_name(w, 5), std::string("2nd overtime"));
   w.sport = Sport::SOCCER;
   CHECK_EQ(ha_period_name(w, 1), std::string("1st half"));
+  CHECK_EQ(ha_period_name(w, 2), std::string("2nd half"));
+  CHECK_EQ(ha_period_name(w, 3), std::string("1st half of extra time"));
+  CHECK_EQ(ha_period_name(w, 4), std::string("2nd half of extra time"));
+  CHECK_EQ(ha_period_name(w, 5), std::string("penalties"));
   w.sport = Sport::BASKETBALL;
   w.nba.regulation = 2;
   CHECK_EQ(ha_period_name(w, 2), std::string("2nd half"));
@@ -1076,6 +1108,19 @@ static void test_ha_events_stale() {
   w.update(s, ha_ctx(10 + kHaStepBackHoldS));
   s.team_score = 7;
   CHECK(w.update(s, ha_ctx(11 + kHaStepBackHoldS)).empty());
+  // The hold keeps counting across the millis() wrap after 49.7 days.
+  HaTracker wr;
+  GameSnapshot x = live(7, 0);
+  HaContext at = ha_ctx();
+  at.mono_ms = 0xFFFFFFFFu - 10000;
+  wr.update(x, at);
+  x.team_score = 0;
+  CHECK(wr.update(x, at).empty());
+  at.mono_ms = 5000;  // 15 s on, past the wrap: still held
+  CHECK(wr.update(x, at).empty());
+  x.team_score = 7;
+  at.mono_ms = 6000;
+  CHECK(wr.update(x, at).empty());  // the old copy went away, the 7 never counted twice
 }
 
 // The fields Home Assistant and the webhook get, and the sensors' words.
@@ -1142,6 +1187,7 @@ static void test_ha_fields() {
   CHECK(!hook_url_ok("https://example.com/hook"));
   CHECK(!hook_url_ok("http://"));
   CHECK(!hook_url_ok("http:///path"));
+  CHECK(!hook_url_ok("http://:8080/hook"));
   CHECK(!hook_url_ok("ftp://192.168.1.20/"));
   CHECK(!hook_url_ok("192.168.1.20/hook"));
   CHECK(!hook_url_ok("http://exa mple.com/"));
@@ -1287,6 +1333,7 @@ static void test_status_text() {
   CHECK_EQ(espn::detail::leader_line("M. Penix Jr.", "52/77, 719 YDS, 3 TD, 1 INT"), std::string("Penix Jr. 719 yds 3 TD"));
   CHECK_EQ(espn::detail::leader_line("B. Robinson", "102 CAR, 580 YDS, 4 TD"), std::string("Robinson 580 yds 4 TD"));
   CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS"), std::string("London 488 yds"));
+  CHECK_EQ(espn::detail::leader_line("D. London", "27 REC, 488 YDS, 0 TD"), std::string("London 488 yds"));  // as the game card
   CHECK_EQ(espn::detail::leader_line("C. Gauthier", "2"), std::string(""));  // no yards: nothing to say
   CHECK_EQ(espn::detail::leader_line("", "100 YDS"), std::string(""));
   // ESPN writes the yards with no thousands separator today (pinned from the
@@ -1923,14 +1970,20 @@ static void test_team_cache() {
   CHECK_EQ(sc.group, (uint32_t) 1);
   CHECK_EQ(sc.league, (uint8_t) League::NCAA);
 
-  // Nothing to keep: no next game, an id too long for the record, no clock.
+  // No next game, or an id too long for the record: the saved game goes, so
+  // a game ESPN no longer lists can't come back at the next boot.
   Schedule none;
   none.valid = true;
-  TeamCache n;
-  CHECK(!team_cache_save(none, League::NFL, 6, saved, n));
+  TeamCache n = c;
+  CHECK(team_cache_save(none, League::NFL, 6, saved, n));
+  CHECK(!team_cache_load(n, League::NFL, 6, saved + 60, s));
   Schedule longid = d;
   longid.event_id = "1234567890123456";  // 16 characters, no room for the end
-  CHECK(!team_cache_save(longid, League::NFL, 6, saved, n));
+  n = c;
+  CHECK(team_cache_save(longid, League::NFL, 6, saved, n));
+  CHECK(!team_cache_load(n, League::NFL, 6, saved + 60, s));
+  // Nothing read, or no clock: the saved record stays as it is.
+  CHECK(!team_cache_save(Schedule{}, League::NFL, 6, saved, n));
   CHECK(!team_cache_save(d, League::NFL, 6, 0, n));
 
   // A blank record (nothing saved yet reads back as zeros) is never used.
@@ -2570,6 +2623,11 @@ static void test_soccer_text_helpers() {
   CHECK_EQ(soccer_board_record("999-999-999"), std::string("3996 pts"));
   // A count past three digits (the fuzzer's 1068893704 overflowed 3 * w).
   CHECK_EQ(soccer_board_record("1068893704-1-1"), std::string("1068893704-1-1"));
+  CHECK_EQ(hockey_board_record("30-12-5"), std::string("30-12-5"));
+  CHECK_EQ(hockey_board_record("30-12-10"), std::string("70 pts"));  // too wide under a logo
+  CHECK_EQ(hockey_board_record("44-30"), std::string("44-30"));
+  CHECK_EQ(hockey_board_record(""), std::string(""));
+  CHECK_EQ(hockey_board_record("1068893704-1-1"), std::string("1068893704-1-1"));
   CHECK_EQ(soccer_board_record("12-2147483648-1"), std::string("12-2147483648-1"));
 }
 
@@ -3255,6 +3313,23 @@ static void test_nhl_pre_post() {
   CHECK(po.team_winner);
   CHECK_EQ(po.nhl.series, std::string("CAR leads series 2-0"));
   CHECK_EQ(status_text(po, o, ""), std::string("Final/2OT | CAR leads series 2-0"));
+  // ESPN's regular season series ("Season series tied 1-1") leaves the records in place.
+  {
+    std::string reg = slurp("fixtures/event_nhl_final_2ot.json");
+    const std::pair<std::string, std::string> swaps[] = {
+        {"\"type\":3,\"slug\":\"post-season\"", "\"type\":2,\"slug\":\"regular-season\""},
+        {"\"type\":\"playoff\"", "\"type\":\"season\""}};
+    for (const auto &sw : swaps) {
+      size_t at = reg.find(sw.first);
+      CHECK(at != std::string::npos);
+      if (at != std::string::npos)
+        reg.replace(at, sw.first.size(), sw.second);
+    }
+    GameSnapshot rs;
+    CHECK(parse_event_str(reg, Sport::HOCKEY, kHurricanes, rs, root_id(reg)));
+    CHECK(!rs.nhl.playoffs);
+    CHECK_EQ(rs.nhl.series, std::string(""));
+  }
   GameSnapshot pre = po;
   pre.state = GameState::PRE;
   pre.odds = pre.over_under = pre.tv = "";
@@ -3470,12 +3545,14 @@ int run_set_tests(int &checks);  // test_set.cpp
 static void test_logo_lru() {
   using espn::LogoSlot;
   // Oldest idle, off-screen slot goes first.
-  CHECK_EQ(espn::pick_evict({{300, false, false}, {100, false, false}, {200, false, false}}), 1);
+  CHECK_EQ(espn::pick_evict({{300, false, false}, {100, false, false}, {200, false, false}}, 400), 1);
+  // Across the millis() wrap: the slot used just before it is the oldest.
+  CHECK_EQ(espn::pick_evict({{0xFFFFFF00u, false, false}, {50, false, false}, {10, false, false}}, 100), 0);
   // On screen or still downloading: never dropped, even when oldest.
-  CHECK_EQ(espn::pick_evict({{100, false, true}, {150, true, false}, {200, false, false}}), 2);
+  CHECK_EQ(espn::pick_evict({{100, false, true}, {150, true, false}, {200, false, false}}, 300), 2);
   // Nothing droppable.
-  CHECK_EQ(espn::pick_evict({{100, true, false}, {200, false, true}}), -1);
-  CHECK_EQ(espn::pick_evict({}), -1);
+  CHECK_EQ(espn::pick_evict({{100, true, false}, {200, false, true}}, 300), -1);
+  CHECK_EQ(espn::pick_evict({}, 0), -1);
   // A failed logo is due once its wait has passed, including across the millis() wrap.
   CHECK(!espn::logo_retry_due(1000, 30000, 1000 + 30000 - 1));
   CHECK(espn::logo_retry_due(1000, 30000, 1000 + 30000));
@@ -3634,6 +3711,38 @@ static void test_timezone_index() {
     CHECK_EQ(espn::timezone_index(espn::kTimezones[i].name), (int) i);
     CHECK_EQ(espn::timezone_index(espn::kTimezones[i].iana), (int) i);
   }
+  // Panels save the position, so no row moves: a new zone goes at the end.
+  static const char *const kSaved[] = {"US Eastern",  "US Central",      "US Mountain",         "US Arizona",
+                                       "US Pacific",  "US Alaska",       "US Hawaii",           "Canada Atlantic",
+                                       "Canada Newfoundland", "Mexico City", "UK and Ireland", "Central Europe",
+                                       "Australia Eastern", "UTC"};
+  CHECK(espn::kTimezoneCount >= sizeof(kSaved) / sizeof(kSaved[0]));
+  for (size_t i = 0; i < sizeof(kSaved) / sizeof(kSaved[0]) && i < espn::kTimezoneCount; i++)
+    CHECK_EQ(std::string(espn::kTimezones[i].name), std::string(kSaved[i]));
+  // The device page's browser-zone aliases each point at a zone in the list.
+  std::string js = slurp("../firmware/web/app.js");
+  size_t a = js.find("const TZ_ALIASES = {"), b = js.find("};", a);
+  CHECK(a != std::string::npos && b != std::string::npos);
+  std::map<std::string, std::string> aliases;
+  if (a != std::string::npos && b != std::string::npos) {
+    const std::string block = js.substr(a, b - a);
+    for (size_t i = block.find('"'); i != std::string::npos; i = block.find('"', i)) {
+      size_t e1 = block.find('"', i + 1), s2 = block.find('"', e1 + 1), e2 = block.find('"', s2 + 1);
+      if (e2 == std::string::npos)
+        break;
+      aliases[block.substr(i + 1, e1 - i - 1)] = block.substr(s2 + 1, e2 - s2 - 1);
+      i = e2 + 1;
+    }
+  }
+  CHECK(aliases.size() > 20);
+  for (const auto &kv : aliases) {
+    if (espn::timezone_index(kv.second.c_str()) < 0)
+      printf("alias %s points at %s, not in kTimezones\n", kv.first.c_str(), kv.second.c_str());
+    CHECK(espn::timezone_index(kv.second.c_str()) >= 0);
+  }
+  // Ojinaga keeps US Central time since tzdata 2022g; Ciudad Juarez keeps Mountain.
+  CHECK_EQ(aliases["America/Ojinaga"], std::string("America/Chicago"));
+  CHECK_EQ(aliases["America/Ciudad_Juarez"], std::string("America/Denver"));
 }
 
 // Recorded 2026-10-08 from the 2025-26 postseason, see fixtures/README.md
@@ -3942,8 +4051,8 @@ static void test_recap_walk() {
   CHECK(!back.back_due(mon, 5, day));
   CHECK_EQ(back.step, RecapWalk::kDone);
 
-  // A week back with nothing: it stops after kRecapMaxDays reads, stays
-  // stopped for the rest of the day, and walks again the next day.
+  // A week back with nothing: it stops after the six days recap_trim keeps,
+  // stays stopped for the rest of the day, and walks again the next day.
   back = RecapWalk{};
   int reads = 0;
   while (back.back_due(mon, 0, day)) {
@@ -3951,7 +4060,7 @@ static void test_recap_walk() {
     back.back_read(mon, 0);
     reads++;
   }
-  CHECK_EQ(reads, kRecapMaxDays);
+  CHECK_EQ(reads, kRecapMaxDays - 1);
   CHECK(!back.back_due(mon, 0, day));
   CHECK(back.back_due(mon + 1, 0, day) && day == mon);
 
@@ -5395,7 +5504,7 @@ static void test_rankings() {
   CHECK_EQ(top25_header(League::NCAA, none), std::string("CFB AP TOP 25"));
 
   // A record that isn't digits and dashes, or is too long, is left off;
-  // a row without a rank or a team is skipped; past 25 rows are dropped.
+  // a row without a rank or a team is skipped; ranks past 25 are dropped.
   std::string odd = R"({"date":"2026-10-25T07:00Z","occurrence":{"displayValue":"Week 9"},"ranks":[)"
                     R"J({"current":1,"record":{"summary":"7-0 (5-0)"},"team":{"$ref":"x/teams/2390?a"}},)J"
                     R"({"current":0,"team":{"$ref":"x/teams/194"}},)"
@@ -5415,6 +5524,17 @@ static void test_rankings() {
   Poll m;
   CHECK(parse_rankings(many, m));
   CHECK_EQ(m.rows.size(), (size_t) kTop25Max);
+  // A tie at 25 keeps both teams.
+  std::string tie = R"({"date":"2026-10-25T07:00Z","ranks":[)";
+  for (int i = 1; i <= 27; i++)
+    tie += std::string(i > 1 ? "," : "") + R"({"current":)" + std::to_string(i > 25 ? 25 + (i - 26) * 2 : i) +
+           R"(,"team":{"$ref":"x/teams/2390"}})";
+  tie += "]}";
+  Poll t25;
+  CHECK(parse_rankings(tie, t25));
+  CHECK_EQ(t25.rows.size(), (size_t) 26);
+  if (t25.rows.size() == 26)
+    CHECK_EQ((int) t25.rows[25].rank, 25);
   Poll keep = f;
   std::string empty = R"({"date":"2026-10-25T07:00Z","ranks":[]})";
   CHECK(!parse_rankings(empty, keep));
@@ -5576,12 +5696,27 @@ static void test_night_skip_clock_change(NightPrefs p) {
   CHECK_EQ(skip("2027-03-14T07:30Z"), seven_cdt);  // 1:30 AM CST
   CHECK_EQ(skip("2027-03-14T09:00Z"), seven_cdt);  // 4:00 AM CDT
   // An end of 2:30 AM, which Mar 14 never reaches: not before 3 AM CDT, and
-  // by then the hours check has ended the skip.
+  // by then the clock is outside the hours.
   p.end = 2 * 60 + 30;
   CHECK(skip("2027-03-14T05:00Z") >= parse_iso8601_z("2027-03-14T08:00Z"));
-  // An end of 1:30 AM on Nov 1 is the first 1:30, in daylight time.
+  // An end of 1:30 AM on Nov 1 comes twice: the skip runs to the second,
+  // in standard time, from either pass of the hour before it.
   p.end = 60 + 30;
-  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T06:30Z"));
+  const int64_t second_130 = parse_iso8601_z("2026-11-01T07:30Z");
+  CHECK_EQ(skip("2026-11-01T04:00Z"), second_130);  // 11:00 PM CDT
+  CHECK_EQ(skip("2026-11-01T06:10Z"), second_130);  // 1:10 AM CDT
+  CHECK_EQ(skip("2026-11-01T07:10Z"), second_130);  // 1:10 AM CST
+  // Between the two passes the clock reads 1:30 to 1:59, outside the hours,
+  // and the skip holds through to the second 1:30.
+  CHECK(!night_skip_over(p, 60 + 45, parse_iso8601_z("2026-11-01T06:45Z"), second_130));
+  CHECK(!night_skip_over(p, 60 + 15, parse_iso8601_z("2026-11-01T07:15Z"), second_130));
+  CHECK(night_skip_over(p, 60 + 30, second_130, second_130));
+  // An end of 1:00 AM is the first moment the clock goes back to.
+  p.end = 60;
+  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T07:00Z"));
+  // An end of 12:59 AM comes once.
+  p.end = 59;
+  CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T05:59Z"));
   if (saved.empty())
     unsetenv("TZ");
   else
@@ -5656,6 +5791,17 @@ static void test_night() {
   CHECK(night_state(p, true, late, true, true) == Night::SKIPPED);
   CHECK(night_state(p, true, 12 * 60, false, true) == Night::DAY);
   CHECK(night_state(p, false, late, false, true) == Night::DAY);
+  // A skip is over at its end, with the schedule off, or outside the hours
+  // with more than an hour to go (new hours that leave the night).
+  {
+    const int64_t t = 1792000000;
+    CHECK(!night_skip_over(p, late, t, t + 3600 * 5));
+    CHECK(night_skip_over(p, late, t + 3600 * 5, t + 3600 * 5));
+    NightPrefs off = p;
+    off.on = 0;
+    CHECK(night_skip_over(off, late, t, t + 3600 * 5));
+    CHECK(night_skip_over(p, 12 * 60, t, t + 3600 * 5));
+  }
   CHECK(night_holding(Night::DIM));
   CHECK(night_holding(Night::DARK));
   CHECK(!night_holding(Night::GAME));
@@ -6316,7 +6462,7 @@ static void test_weather() {
   CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
            std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
                        "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
-                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=3"));
+                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=4"));
   // The town as kept: one line, no emoji, at most kTownMax bytes.
   CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
   CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);
@@ -6383,6 +6529,45 @@ static void test_weather() {
   CHECK_EQ(wx_deg(f.next[1].hi10, true), 68);
   CHECK_EQ(f.next[1].code, 63);
   CHECK_EQ(std::string(weekday_text(f.next[1].wday)), std::string("Sat"));
+  CHECK_EQ(f.day0, wx_days_from_civil(2026, 10, 29));
+  CHECK(!f.has_later);  // recorded with three days
+  // After midnight the first day is yesterday's: a three-day forecast can't
+  // move on, so it goes; a four-day one moves on a day; two days behind goes.
+  WxForecast old3 = f;
+  CHECK(!wx_roll_day(old3, f.day0));
+  CHECK(old3.valid && old3.today.hi10 == f.today.hi10);
+  CHECK(wx_roll_day(old3, f.day0 + 1));
+  CHECK(!old3.valid);
+  CHECK_EQ(wx_days_from_civil(1970, 1, 1), 0);
+  CHECK_EQ(wx_days_from_civil(2026, 11, 5), 20762);
+  CHECK_EQ(wx_days_from_civil(2000, 3, 1), 11017);
+  CHECK_EQ(wx_days_from_date("2026-11-05"), 20762);
+  CHECK_EQ(wx_days_from_date("not a date"), 0);
+  CHECK_EQ(wx_days_from_date(nullptr), 0);
+  json = "{\"current\":{\"temperature_2m\":50,\"weather_code\":0,\"is_day\":0},\"daily\":{\"time\":[\"2026-11-05\","
+         "\"2026-11-06\",\"2026-11-07\",\"2026-11-08\"],\"weather_code\":[0,3,61,71],\"temperature_2m_max\":[60,61,62,63],"
+         "\"temperature_2m_min\":[40,41,42,43]}}";
+  WxForecast f4;
+  CHECK(parse_forecast(json, f4));
+  CHECK(f4.has_later && f4.later.hi10 == 630 && f4.later.code == 71);
+  CHECK_EQ(std::string(weekday_text(f4.later.wday)), std::string("Sun"));
+  WxForecast rolled = f4;
+  CHECK(wx_roll_day(rolled, f4.day0 + 1));
+  CHECK(rolled.valid);
+  CHECK_EQ(rolled.day0, f4.day0 + 1);
+  CHECK_EQ(rolled.today.hi10, 610);  // Friday's high, not Thursday's
+  CHECK_EQ(rolled.next[0].hi10, 620);
+  CHECK_EQ(rolled.next[1].hi10, 630);
+  CHECK_EQ(std::string(weekday_text(rolled.next[1].wday)), std::string("Sun"));
+  CHECK(!wx_roll_day(rolled, f4.day0 + 1));  // once a day
+  CHECK(wx_roll_day(rolled, f4.day0 + 2));   // no fifth day to move to
+  CHECK(!rolled.valid);
+  rolled = f4;
+  CHECK(wx_roll_day(rolled, f4.day0 + 2));
+  CHECK(!rolled.valid);
+  rolled = f4;
+  CHECK(!wx_roll_day(rolled, f4.day0 - 1));  // a time zone to the west: the read again fixes it
+  CHECK(rolled.valid && rolled.day0 == f4.day0);
   // Below zero rounds away from it; night comes from is_day.
   json = "{\"current\":{\"temperature_2m\":-3.5,\"weather_code\":0,\"is_day\":0},\"daily\":{\"time\":[\"2027-01-03\","
          "\"2027-01-04\",\"2027-01-05\"],\"weather_code\":[71,73,0],\"temperature_2m_max\":[1,2,3],"
@@ -6540,9 +6725,25 @@ static void test_kickoff_weather() {
   CHECK(wx_icon_at((uint8_t) WxIcon::MOON, false) == (uint8_t) WxIcon::SUN);  // NU's 11 AM kickoff, read at night
   CHECK(wx_icon_at((uint8_t) WxIcon::SUN, true) == (uint8_t) WxIcon::MOON);
   CHECK(wx_icon_at((uint8_t) WxIcon::RAIN, true) == (uint8_t) WxIcon::RAIN);
-  CHECK(wx_dark_at(10, 19) && !wx_dark_at(10, 18));
-  CHECK(!wx_dark_at(7, 19) && wx_dark_at(7, 20));
+  CHECK(wx_dark_at(10, 18) && !wx_dark_at(10, 17));
+  CHECK(!wx_dark_at(7, 20) && wx_dark_at(7, 21));
+  CHECK(wx_dark_at(12, 17) && !wx_dark_at(12, 16));  // a December 5 PM kickoff is after sunset
   CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
+  CHECK(!wx_dark_at(0, 20) && !wx_dark_at(13, 20));
+  // US daylight time, given the local standard time: the second Sunday in
+  // March at 2 AM to the first Sunday in November at 2 AM daylight.
+  CHECK(!wx_us_dst(1804681800));  // 2027-03-10 12:30, before the 14th
+  CHECK(!wx_us_dst(1804987800));  // 2027-03-14 01:30
+  CHECK(wx_us_dst(1804991400));   // 2027-03-14 02:30
+  CHECK(!wx_us_dst(1772933400));  // 2026-03-08 01:30
+  CHECK(wx_us_dst(1772937000));   // 2026-03-08 02:30
+  CHECK(wx_us_dst(1825504200));   // 2027-11-06 12:30, before the 7th
+  CHECK(wx_us_dst(1825547400));   // 2027-11-07 00:30 standard, 01:30 daylight
+  CHECK(!wx_us_dst(1825551000));  // 2027-11-07 01:30 standard
+  CHECK(wx_us_dst(1793493000));   // 2026-11-01 00:30
+  CHECK(!wx_us_dst(1793496600));  // 2026-11-01 01:30
+  CHECK(!wx_us_dst(1772281800));  // February
+  CHECK(!wx_us_dst(1796128200));  // December
 
   // The sun or the moon by the venue's own clock, not the panel's. NU's
   // 11 AM kickoff (16:00 UTC, CDT) is daytime; Sunday night in Green Bay
@@ -6559,7 +6760,12 @@ static void test_kickoff_weather() {
   CHECK_EQ(wx_venue_dark(1792857600, "Evanston, IL"), 0);         // 2026-10-24 16:00 UTC
   CHECK_EQ(wx_venue_dark(1793582400, "Green Bay, WI"), 1);        // 2026-11-02 01:20 UTC
   CHECK_EQ(wx_venue_dark(1794961800, "East Rutherford, NJ"), 1);  // 2026-11-18 00:30 UTC
-  CHECK_EQ(wx_venue_dark(1794961800, "Glendale, AZ"), 0);         // 5:30 PM there
+  CHECK_EQ(wx_venue_dark(1794961800, "Glendale, AZ"), 1);         // 5:30 PM there, after sunset in November
+  CHECK_EQ(wx_venue_dark(1794961800 - 3600, "Glendale, AZ"), 0);  // 4:30 PM
+  CHECK_EQ(wx_venue_dark(1796602500, "Green Bay, WI"), 1);        // 2026-12-06 6:15 PM CST
+  CHECK_EQ(wx_venue_dark(1793484000, "Evanston, IL"), 0);         // 2026-10-31 5 PM CDT
+  CHECK_EQ(wx_venue_dark(1793491200, "Evanston, IL"), 1);         // 7 PM CDT
+  CHECK_EQ(wx_venue_dark(1812849300, "Chicago, IL"), 0);          // 2027-06-12 8:15 PM CDT, still light
   CHECK_EQ(wx_venue_dark(1794961800, "London, England"), -1);     // abroad: ESPN's icon as it is
   CHECK_EQ(wx_venue_dark(1783393200, "Chicago, IL"), 1);          // 2026-07-07 03:00 UTC, 10 PM CDT
   CHECK_EQ(wx_venue_dark(1783447200, "Chicago, IL"), 0);          // 1 PM CDT
@@ -6649,8 +6855,18 @@ static void test_message() {
   CHECK_EQ(message_clean("abc\xC3\xA9", 4, true), std::string("abc"));
   CHECK_EQ(message_clean("ab cd", 3, true), std::string("ab"));
   CHECK_EQ(message_clean(std::string(300, 'x'), kMsgTextMax, true).size(), kMsgTextMax);
-  // A broken byte is kept for panel_text() to turn into '?'.
-  CHECK_EQ(message_clean("a\x80" "b", kMsgTextMax, true), std::string("a\x80" "b"));
+  // A byte that isn't UTF-8 is left out: the state document carries the
+  // message, and the apps' JSON readers refuse one with such a byte.
+  CHECK_EQ(message_clean("a\x80" "b", kMsgTextMax, true), std::string("ab"));
+  CHECK_EQ(message_clean("Caf\xE9", kMsgTextMax, true), std::string("Caf"));
+  CHECK_EQ(message_clean("A\xE0\x81\x81" "B\xED\xA0\x80" "C", kMsgTextMax, true), std::string("ABC"));
+  // A list line cut inside a character, with an emoji dropped so it ends up
+  // under the cap: the cut-off lead byte goes too.
+  {
+    std::string line = "\xF0\x9F\x8E\x82" + std::string(kMsgLineMax - 1, 'x') + "\xC3\xA9\n";
+    auto r = read_list(line, 0, 4, 64);
+    CHECK_EQ(r.list(), std::string(kMsgLineMax - 1, 'x'));
+  }
 
   CHECK(msg_url_ok(""));
   CHECK(msg_url_ok("http://192.168.1.20/names.txt"));
@@ -7674,6 +7890,54 @@ static void test_score_log() {
   n.team_score = 2;
   nl.update(n);
   CHECK(nl.lines("401").empty());
+
+  // An old copy of the document with a lower score logs nothing, and the
+  // score after it isn't logged twice. A lower score that holds is a
+  // correction, and the log counts on from it.
+  ScoreLog st;
+  st.update(log_read(0, 0, 1, "15:00"), 1000);
+  st.update(log_read(7, 0, 1, "10:00", "Rushing Touchdown", 7, 6, "J. Williams", 3), 2000);
+  st.update(log_read(0, 0, 1, "15:00"), 3000);
+  st.update(log_read(7, 0, 1, "9:50", "Kickoff", 0, 21), 4000);
+  CHECK_EQ(st.lines("401").size(), (size_t) 1);
+  st.update(log_read(0, 0, 1, "9:00"), 5000);
+  st.update(log_read(0, 0, 1, "8:00"), 5000 + kScoreBackHoldMs - 1);
+  st.update(log_read(7, 0, 1, "8:00"), 5000 + kScoreBackHoldMs);
+  CHECK_EQ(st.lines("401").size(), (size_t) 1);  // never taken: the old copy went away
+  st.update(log_read(0, 0, 1, "7:00"), 200000);
+  st.update(log_read(0, 0, 1, "7:00"), 200000 + kScoreBackHoldMs);
+  st.update(log_read(3, 0, 1, "6:00", "Field Goal Good", 3, 6, "B. Aubrey", 40), 300000);
+  l = st.lines("401");
+  CHECK_EQ(l.size(), (size_t) 2);
+  if (l.size() == 2)
+    CHECK_EQ(l[1], std::string("Q1 6:00 Aubrey 40 yd FG, DAL 3-0"));
+  // Held across the millis() wrap too.
+  ScoreLog wrap;
+  wrap.update(log_read(0, 0, 1, "15:00"), 0xFFFFFFFFu - 5000);
+  wrap.update(log_read(7, 0, 1, "10:00"), 0xFFFFFFFFu - 4000);
+  wrap.update(log_read(0, 0, 1, "15:00"), 0xFFFFFFFFu - 3000);
+  wrap.update(log_read(0, 0, 1, "15:00"), 10000);
+  wrap.update(log_read(7, 0, 1, "9:50"), 11000);
+  CHECK_EQ(wrap.lines("401").size(), (size_t) 1);
+
+  // A missed extra point: once the clock has moved on, a safety the reads
+  // missed is a line of its own. A try a read missed still finishes its
+  // touchdown's line.
+  ScoreLog pt;
+  pt.update(log_read(0, 0, 1, "15:00"));
+  pt.update(log_read(6, 0, 1, "7:12", "Rushing Touchdown", 6, 6, "J. Williams", 1));
+  pt.update(log_read(6, 0, 1, "7:12", "Extra Point No Good", 0, 6));
+  pt.update(log_read(6, 0, 1, "7:05", "Kickoff", 0, 6));
+  pt.update(log_read(8, 0, 2, "12:00", "Pass Incompletion", 0, 21));
+  pt.update(log_read(14, 0, 3, "5:00", "Passing Touchdown", 6, 6, "B. Smith", 12));
+  pt.update(log_read(15, 0, 3, "4:55", "Kickoff", 0, 6));
+  l = pt.lines("401");
+  CHECK_EQ(l.size(), (size_t) 3);
+  if (l.size() == 3) {
+    CHECK_EQ(l[0], std::string("Q1 7:12 Williams 1 yd run, DAL 6-0"));
+    CHECK_EQ(l[1], std::string("Q2 12:00 DAL safety, DAL 8-0"));
+    CHECK_EQ(l[2], std::string("Q3 5:00 Smith 12 yd pass, DAL 15-0"));
+  }
 
   // The ticker: headline and log after the first part
   CHECK_EQ(with_score_log("Final | DAL 5-2, PHI 4-3", "Cowboys win it", {"Q1 DAL TD, DAL 7-0"}),

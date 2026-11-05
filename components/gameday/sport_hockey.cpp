@@ -3,6 +3,8 @@
 // penalties, because offsetting and coincidental minors would make it wrong.
 #include "espn_parse.h"
 
+#include <cstdio>
+
 namespace espn {
 
 using detail::add_last_play;
@@ -15,12 +17,17 @@ namespace detail {
 
 void fill_hockey_filter(JsonObject ev) {
   ev["season"]["type"] = true;
+  ev["competitions"][0]["series"]["type"] = true;
   ev["competitions"][0]["series"]["summary"] = true;
 }
 
 void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
   s.nhl.playoffs = (ev["season"]["type"] | 0) == 3;
-  s.nhl.series = str_or_empty(ev["competitions"][0]["series"]["summary"]);
+  // A playoff series only, as basketball: in the regular season ESPN's
+  // series is the season series, and the records stay.
+  JsonObjectConst series = ev["competitions"][0]["series"];
+  if (s.nhl.playoffs || str_or_empty(series["type"]) == "playoff")
+    s.nhl.series = str_or_empty(series["summary"]);
 }
 
 }  // namespace detail
@@ -135,6 +142,17 @@ Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opp
   if (cur.opp_score > prev.opp_score && opponent_splashes)
     return Splash{cur.opp_abbr + " GOAL", parse_color(cur.opp_color)};
   return none;
+}
+
+std::string hockey_board_record(const std::string &wlo) {
+  if (wlo.size() <= 7)
+    return wlo;
+  // Three digits a count at most, as soccer_board_record: a longer one shows
+  // the record as it came.
+  int w = 0, l = 0, otl = 0;
+  if (sscanf(wlo.c_str(), "%3d-%3d-%3d", &w, &l, &otl) != 3)
+    return wlo;
+  return std::to_string(2 * w + otl) + " pts";
 }
 
 }  // namespace espn

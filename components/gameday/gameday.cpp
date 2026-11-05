@@ -98,6 +98,10 @@ struct WakeRtc {
   uint8_t state[sizeof(::espn::WakeState)];
 };
 static_assert(std::is_trivially_copyable<::espn::WakeState>::value, "WakeState is copied to RTC memory as bytes");
+// The mark stands for this layout. An update that changes WakeState changes
+// the mark too, or the first boot after it reads the old bytes as the new
+// layout; the size check catches most such changes.
+static_assert(sizeof(::espn::WakeState) == 24, "WakeState changed: change WAKE_MARK and this size");
 static const uint32_t WAKE_MARK = 0x57414B31;
 RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -1854,6 +1858,8 @@ void GamedayComponent::select_timezone(const std::string &option) {
     this->save_prefs_();
     this->sync_prefs_();
     this->apply_timezone_();
+    // The forecast's days are the time zone's days.
+    this->wx_reread_ = this->wx_forecast_.valid;
     if (this->timezone_select_ != nullptr)
       this->timezone_select_->publish_state(::espn::kTimezones[i].name);
     // Re-render so a PRE ticker picks up the new kickoff time.
@@ -1910,6 +1916,8 @@ void GamedayComponent::set_viz8_(uint8_t f, bool set) {
   this->sync_prefs_();
   if (this->game_.valid)
     this->emit_({});
+  else
+    this->rebuild_state_(&this->last_fields_);
 }
 
 void GamedayComponent::set_celebrations(::espn::CelebLevel level) {
@@ -2219,13 +2227,15 @@ void GamedayComponent::set_night_(const ::espn::NightPrefs &p) {
   ESP_LOGI(TAG, "Night schedule: %s, %s to %s, %s", p.on ? "on" : "off", ::espn::night_clock12(p.start).c_str(),
            ::espn::night_clock12(p.end).c_str(), p.screen_off ? "screen off" : "dimmed");
   // A skipped night runs to the new end time. Hours that leave now outside
-  // the night end the skip at the tick below.
+  // the night end the skip.
   if (this->night_skip_until_ != 0 && this->time_ != nullptr) {
     ESPTime now = this->time_->now();
     if (now.is_valid()) {
+      const int minute = now.hour * 60 + now.minute;
       this->night_skip_until_ =
-          ::espn::night_skip_until(p, (int64_t) now.timestamp, now.hour * 60 + now.minute, now.second,
-                                   utc_offset_at);
+          p.on && ::espn::night_window(p.start, p.end, minute)
+              ? ::espn::night_skip_until(p, (int64_t) now.timestamp, minute, now.second, utc_offset_at)
+              : 0;
       this->save_night_skip_();
     }
   }
@@ -2271,10 +2281,9 @@ void GamedayComponent::night_tick_() {
                           ::espn::night_window(this->night_.start, this->night_.end, minute) &&
                           this->owner_game_live_();
   // A skip lasts to the end of the night it was made in; outside the hours,
-  // or with the schedule off, it is over.
+  // or with the schedule off, it is over (night_skip_over).
   if (this->night_skip_until_ != 0 && valid &&
-      (!this->night_.on || !::espn::night_window(this->night_.start, this->night_.end, minute) ||
-       (int64_t) now.timestamp >= this->night_skip_until_)) {
+      ::espn::night_skip_over(this->night_, minute, (int64_t) now.timestamp, this->night_skip_until_)) {
     this->night_skip_until_ = 0;
     this->save_night_skip_();
   }
@@ -4024,6 +4033,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.team_record = ::espn::soccer_board_record(g.team_record);
     f.opponent_record = ::espn::soccer_board_record(g.opp_record);
   }
+  if (g.valid && g.sport == ::espn::Sport::HOCKEY) {
+    // "30-12-10" is a character too wide for the label under a logo.
+    f.team_record = ::espn::hockey_board_record(g.team_record);
+    f.opponent_record = ::espn::hockey_board_record(g.opp_record);
+  }
   if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::BASKETBALL)
     f.situation = ::espn::basketball_series(g);
   // The pictures on a wide board's situation row (game_viz.h). The margin
@@ -4097,7 +4111,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.status_text = ::espn::status_text(g, opts, kickoff);
   // Halftime and the final: ESPN's headline (a final only) and the scores the
   // panel saw, behind the same switch as the last play.
-  this->score_log_.update(g);
+  this->score_log_.update(g, millis());
   if (opts.last_play && g.valid && (::espn::at_halftime(g) || (g.state == GameState::POST && g.completed)))
     f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
                                            this->score_log_.lines(g.event_id));
@@ -4546,7 +4560,18 @@ bool GamedayComponent::wx_due_() const {
   if (!this->weather_on() || !this->wx_place_known_() || !this->clock_set_() || this->demo_playing_() ||
       this->followed_game_live_())
     return false;
-  return this->wx_read_ms_ == 0 || now - this->wx_read_ms_ >= ::espn::kWxReadMs;
+  return this->wx_reread_ || this->wx_read_ms_ == 0 || now - this->wx_read_ms_ >= ::espn::kWxReadMs;
+}
+
+// After midnight the forecast's first day is yesterday's: move it on a day,
+// so the card's high and low are today's, and read it again.
+void GamedayComponent::wx_day_tick_() {
+  const struct tm now = this->time_->now().to_c_tm();
+  const int32_t today = ::espn::wx_days_from_civil(now.tm_year + 1900, (unsigned) now.tm_mon + 1, (unsigned) now.tm_mday);
+  if (!::espn::wx_roll_day(this->wx_forecast_, today))
+    return;
+  ESP_LOGI(TAG, "Weather: a new day, %s", this->wx_forecast_.valid ? "moved the forecast on" : "forecast too old");
+  this->wx_reread_ = true;
 }
 
 bool GamedayComponent::wx_card_ready_() const {
@@ -4556,7 +4581,7 @@ bool GamedayComponent::wx_card_ready_() const {
 }
 
 void GamedayComponent::start_wx_job_() {
-  this->job_ = Job{};
+  ::espn::reset_in_place(this->job_);
   this->job_.generation = this->generation_;
   if (this->wx_lookup_due_) {
     this->wx_lookup_due_ = false;
@@ -4657,6 +4682,7 @@ void GamedayComponent::apply_wx_job_() {
   this->wx_status_ = 200;
   this->wx_forecast_ = j.wx_forecast;
   this->wx_read_ms_ = now == 0 ? 1 : now;
+  this->wx_reread_ = false;
   ESP_LOGI(TAG, "Weather: %.1f F now, %.1f/%.1f today, code %u", this->wx_forecast_.t10 / 10.0,
            this->wx_forecast_.today.hi10 / 10.0, this->wx_forecast_.today.lo10 / 10.0,
            (unsigned) this->wx_forecast_.code);
@@ -4787,7 +4813,7 @@ const GamedayComponent::KickSlot *GamedayComponent::kick_slot_(const GameSnapsho
 
 void GamedayComponent::start_kick_job_(uint8_t kind) {
   const GameSnapshot &g = this->game_;
-  this->job_ = Job{};
+  ::espn::reset_in_place(this->job_);
   this->job_.generation = this->generation_;
   this->job_.need_wx = kind;
   this->job_.wx_event = g.event_id;
@@ -4898,6 +4924,7 @@ void GamedayComponent::countdown_tick_() {
     return;
   if (this->countdown_card_((int64_t) this->time_->timestamp_now()) != this->countdown_shown_)
     this->emit_({});
+  this->wx_day_tick_();
   this->day_tick_();
 }
 
@@ -5751,7 +5778,8 @@ void GamedayComponent::load_msg_() {
     return;  // nothing set: no card
   p.text[sizeof(p.text) - 1] = '\0';
   p.url[sizeof(p.url) - 1] = '\0';
-  this->msg_text_ = p.text;
+  // Saved before the message was cleaned of bytes that aren't UTF-8.
+  this->msg_text_ = ::espn::message_clean(p.text, ::espn::kMsgTextMax, true);
   this->msg_url_ = ::espn::msg_url_ok(p.url) ? p.url : "";
   this->msg_every_ = (uint8_t) ::espn::clamp_msg_every(p.every);
   this->msg_reset_();
@@ -5843,15 +5871,13 @@ void GamedayComponent::ha_track_() {
   ctx.league = this->ha_league_();
   ctx.now_epoch = this->clock_set_() ? (int64_t) this->time_->timestamp_now() : 0;
   ctx.pregame_minutes = this->pregame_min_;
-  ctx.mono_s = millis() / 1000;
+  ctx.mono_ms = millis();
 #ifdef GAMEDAY_DEMO
-  // The scripted game has no ESPN id; each run is a game of its own, so it
+  // The scripted game: each run has an id of its own (demo.cpp), so it
   // starts, scores and ends like a real one, once. Demo builds are never
   // released, so these reach only a bench or a show floor's automations.
   if (this->demo_playing_()) {
-    GameSnapshot g = this->game_;
-    g.event_id = "demo-" + std::to_string(this->demo_run_);
-    for (const auto &e : this->ha_tracker_.update(g, ctx))
+    for (const auto &e : this->ha_tracker_.update(this->game_, ctx))
       this->send_game_event_(e);
     return;
   }
@@ -6300,11 +6326,8 @@ void GamedayComponent::top25_tick_() {
   const uint8_t slots = this->top25_on() ? this->top25_slots_() : 0;
   // Between games only, as the message card (msg_tick_), and not over it,
   // the news card, the picture card or the season card.
-  const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
-                                           ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
-  const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && !this->demo_playing_() &&
-                       this->last_fields_.game_state != "IN" && !trouble && !this->msg_shown_ && !this->news_shown_ &&
-                       !this->pic_shown_ && !this->season_shown_ && (this->splash_ms_ == 0 || now - this->splash_ms_ >= this->splash_hold_ms_);
+  const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && this->card_between_(now) &&
+                       !this->msg_shown_ && !this->news_shown_ && !this->pic_shown_ && !this->season_shown_;
   if (!between) {
     this->top25_hide_();
     return;
@@ -6943,8 +6966,7 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       else if (name == "demo_stop")
         this->stop_demo();
 #endif
-      for (auto &cb : this->action_callbacks_)
-        cb(name);
+      this->fire_action_(name);
     });
     request->send(200, "application/json", "{\"ok\":true}");
     return;
