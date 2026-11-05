@@ -1060,6 +1060,7 @@ script:
     then:
       - lambda: |-
           const std::string &page = id(gameday_ctl).msg_card();
+          #ifdef GAMEDAY_BAR
           if (id(gameday_ctl).brand_card_up()) {
             // The bar build's opening card (components/gameday/brand.h).
             lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
@@ -1069,6 +1070,7 @@ script:
             id(gameday_ctl).set_msg_roll_ms(0);
             return;
           }
+          #endif
           lv_obj_add_flag(id(tt_brand), LV_OBJ_FLAG_HIDDEN);
           if (page.empty()) {
             lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);

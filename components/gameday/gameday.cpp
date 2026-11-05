@@ -6439,8 +6439,12 @@ void GamedayComponent::start_brand_job_() {
   if (this->brand_logo_.empty())
     this->job_.logo_have_url.clear();
   this->job_.brand_keep_ok = this->brand_ok_;
-  if (this->brand_ok_)
-    this->job_.brand_keep = this->brand_;
+  if (this->brand_ok_) {
+    this->job_.keep_logo = this->brand_.logo;
+    this->job_.keep_logo_color = this->brand_.logo_color;
+    this->job_.keep_rim = this->brand_.rim;
+    this->job_.keep_bg = this->brand_.background;
+  }
   this->start_worker_();
 }
 
@@ -6484,7 +6488,13 @@ void GamedayComponent::run_brand_job_() {
     j.brand_doc = std::move(doc);
     this->run_brand_logo_(j.brand_pack);
   } else if (j.brand_keep_ok) {
-    this->run_brand_logo_(j.brand_keep);  // the last good pack's logo, if it isn't on hand
+    // The last good pack's logo, if it isn't on hand.
+    ::espn::BrandPack keep;
+    keep.logo = j.keep_logo;
+    keep.logo_color = j.keep_logo_color;
+    keep.rim = j.keep_rim;
+    keep.background = j.keep_bg;
+    this->run_brand_logo_(keep);
   }
 }
 
@@ -6564,7 +6574,6 @@ void GamedayComponent::apply_brand_job_() {
                                                               : this->brand_.name.c_str());
   }
   std::string().swap(j.brand_doc);  // the job lives on until the next one: no copy kept
-  j.brand_keep = ::espn::BrandPack{};
   const bool tint = this->brand_.logo_color.empty();
   const std::string &logo_url = tint ? this->brand_.logo : this->brand_.logo_color;
   if (logo_url.empty()) {

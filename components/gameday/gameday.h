@@ -498,8 +498,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The message card's page is the bar build's opening card (brand.h): the
   // pack's logo, title and wall name, drawn by brand_card_draw().
   bool brand_card_up() const { return this->msg_shown_ && this->msg_card_ == ::espn::kBrandPage; }
+#ifdef GAMEDAY_BAR
   const ::espn::BrandPack &brand_pack() const { return this->brand_; }
   const BrandLogo &brand_logo() const { return this->brand_logo_; }
+#endif
   // The board game's line score at halftime and the final, laid out for a
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
@@ -1109,6 +1111,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool msg_eof{false};
     bool msg_ok{false};
     int msg_status{0};  // HTTP status, 0 for no answer
+#ifdef GAMEDAY_BAR
     // The bar build's brand pack (brand.h) and its logo, on this task too.
     // logo_have is what the panel has on hand, so the same logo isn't read
     // twice.
@@ -1125,10 +1128,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     std::string logo_have_url;
     bool logo_have_tint{false};
     uint32_t logo_have_fg{0}, logo_have_bg{0};
-    // The pack on hand, whose logo is read when this read fails (after a
+    // The logo of the pack on hand, read when this read fails (after a
     // restart the logo isn't kept, only the pack).
     bool brand_keep_ok{false};
-    ::espn::BrandPack brand_keep;
+    std::string keep_logo, keep_logo_color;
+    uint32_t keep_rim{0}, keep_bg{0};
+#endif
     // The Top 25 card's poll for one league (rankings.h), on this task too.
     bool need_top25{false};
     uint8_t top25_slot{0};
@@ -1434,18 +1439,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_brand_job_();
   void run_brand_logo_(const ::espn::BrandPack &p);
   void apply_brand_job_();
-#endif
-  // The pack on hand, empty off the bar build or with none read.
+  // The pack on hand, none read yet when brand_ok_ is false.
   ::espn::BrandPack brand_;
   bool brand_ok_{false};
   BrandLogo brand_logo_;
+#else
+  static constexpr bool brand_ok_ = false;  // only the bar build reads packs
+#endif
   // The opening card went up for this pass through the list; it goes up
   // again when the list comes back round to the top.
   bool brand_opened_{false};
   // The list the message card reads: the panel's own address, else the
   // pack's plate list on the bar build.
   const std::string &msg_src_() const {
-    return !this->msg_url_.empty() || !this->brand_ok_ ? this->msg_url_ : this->brand_.list;
+#ifdef GAMEDAY_BAR
+    if (this->msg_url_.empty() && this->brand_ok_)
+      return this->brand_.list;
+#endif
+    return this->msg_url_;
   }
 #ifdef GAMEDAY_BETA_CHANNEL
   http_request::HttpRequestUpdate *beta_update_{nullptr};
