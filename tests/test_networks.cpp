@@ -385,8 +385,41 @@ static void test_setup_window() {
   CHECK(restart_at([](uint32_t) { return true; }, 120) == 25 * 60);
 }
 
+// A name that starts another one, or differs from it only in case, is a
+// network of its own: a router's 2.4 GHz and 5 GHz names often share a start.
+static void test_names_that_share_a_start() {
+  NetworkList l;
+  clear(l);
+  CHECK(put_front(l, "Home-5G", "pw-5g"));
+  CHECK(find(l, "Home") == -1);
+  CHECK(put_front(l, "Home", "pw-home"));
+  CHECK(names(l) == "Home,Home-5G");
+  CHECK(find(l, "Home-5G") == 1);
+  CHECK(put_front(l, "home", "pw-lower"));
+  CHECK(names(l) == "home,Home,Home-5G");
+  CHECK(find(l, "Home-5G-2") == -1);
+  CHECK(strcmp(l.nets[2].password, "pw-5g") == 0);
+  // Forgetting the short name keeps the longer one, and the other way round.
+  bool removed = false;
+  const Network *slot = forget(l, "Home", &removed);
+  CHECK(removed && names(l) == "home,Home-5G");
+  CHECK(slot != nullptr && strcmp(slot->ssid, "home") == 0);
+  CHECK(remove(l, "Home-5G"));
+  CHECK(names(l) == "home");
+  CHECK(!remove(l, "hom"));
+  // A changed slot under the longer name is that network, not the shorter one.
+  clear(l);
+  put_front(l, "Home", "pw-home");
+  Network pending;
+  CHECK(merge_slot(l, "Home-5G", "pw-5g", &pending));
+  CHECK(names(l) == "Home-5G,Home");
+  CHECK(pending.ssid[0] == '\0');
+  CHECK(strcmp(l.nets[1].password, "pw-home") == 0);
+}
+
 int main() {
   test_put_front_and_order();
+  test_names_that_share_a_start();
   test_cap_at_max();
   test_remove();
   test_blank_and_long_names();

@@ -26,6 +26,8 @@ const test = base.test.extend({
 // mock's default, null is firmware without the list.
 const reset = (request, state, fail, wifi) =>
   request.post("/_reset", { data: wifi === undefined ? { state, fail } : { state, fail, wifi } });
+// The panel's next board update: Game Status on every open event stream.
+const push = (request, name = "Game Status") => request.post("/_push?name=" + encodeURIComponent(name));
 // Playlists post to the settings import (app.js setRequest); a post of only
 // them reads back as the lists= text it stands for, so tests check it like a set.
 const playlistsPost = (p) => {
@@ -1720,6 +1722,89 @@ test("an update that rolled back says so and still offers Install", async ({ pag
   await expect(page.locator("#fwSub")).toContainText("It installs on its own between 3 and 5 AM.");
 });
 
+test("Install, once confirmed, installs, says so, and reloads when the panel runs the new version", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await tab(page, "device");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.1");
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.locator("#fwInstall").click();
+  expect(asked).toBe("Install v2026.10.1 now? The panel will reboot.");
+  await expect.poll(async () => (await entityPosts(request)).map((p) => p.path)).toContain("/update/Firmware/install");
+  await expect(page.locator("#toast")).toHaveText("Installing v2026.10.1");
+  await expect(page.locator("#gone")).toHaveText("Installing v2026.10.1. This page reloads when the panel is back.");
+  await expect(page.locator("#fwText")).toHaveText("Installing v2026.10.1");
+  await expect(page.locator("#fwInstall")).toBeHidden();
+  // Back on the new version: the page reloads by itself.
+  const reloaded = page.waitForEvent("load", { timeout: 15000 });
+  entity = { ...fw, state: "NO UPDATE", value: "2026.10.1", current_version: "2026.10.1" };
+  await reloaded;
+  await expect(page.locator("#gone")).toBeHidden();
+});
+
+test("Install, dismissed, does nothing", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: { ...fw, value: "2026.10.1", current_version: "2026.10.0" } }));
+  await page.goto("/");
+  await tab(page, "device");
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator("#fwInstall").click();
+  await sleep(500);
+  expect((await entityPosts(request)).map((p) => p.path)).not.toContain("/update/Firmware/install");
+  await expect(page.locator("#gone")).toBeHidden();
+  await expect(page.locator("#fwInstall")).toBeVisible();
+});
+
+test("Check for updates presses the button, then shows what the panel found", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "NO UPDATE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "2026.10.0", current_version: "2026.10.0" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await tab(page, "device");
+  await expect(page.locator("#fwText")).toHaveText("You're up to date, v2026.10.0");
+  entity = { ...fw, state: "UPDATE AVAILABLE", value: "2026.10.1", current_version: "2026.10.0" };
+  const check = page.locator("#actions button");
+  await expect(check).toHaveText("Check for updates");
+  await check.click();
+  await expect(check).toBeDisabled();
+  await expect(check).toHaveText("Checking");
+  await expect(page.locator("#fwText")).toHaveText("Checking for updates");
+  await expect.poll(async () => (await entityPosts(request)).map((p) => p.path)).toContain("/button/Check%20for%20Updates/press");
+  await expect(page.locator("#toast")).toHaveText("Update available: v2026.10.1", { timeout: 8000 });
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.1");
+  await expect(check).toBeEnabled();
+  await expect(check).toHaveText("Check for updates");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+});
+
+test("the remote card's Discovery switch and Unpair remote reach the panel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const paths = async () => (await entityPosts(request)).map((p) => p.path);
+  const discovery = page.locator("#remoteCtls .sw");
+  await expect(discovery).toHaveAttribute("aria-checked", "false");
+  await discovery.click();
+  await expect(discovery).toHaveAttribute("aria-checked", "true");
+  await expect.poll(paths).toContain("/switch/WizMote%20Auto-Discovery/turn_on");
+  // Unpair asks first; no is no.
+  const unpair = page.locator("#remoteActions button", { hasText: "Unpair remote" });
+  page.once("dialog", (d) => d.dismiss());
+  await unpair.click();
+  await sleep(300);
+  expect(await paths()).not.toContain("/button/Clear%20WizMote%20Pairing/press");
+  page.once("dialog", (d) => d.accept());
+  await unpair.click();
+  await expect.poll(paths).toContain("/button/Clear%20WizMote%20Pairing/press");
+});
+
 test("an important release says so in the Firmware box", async ({ page, request }) => {
   await reset(request, { update_important: true });
   const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", release_url: "",
@@ -2494,6 +2579,8 @@ test("the nickname keeps the tab title when something else renames it, and the b
   await page.locator("#nick").fill("Gar");
   await request.post("/gameday/set?nick=Den");
   await expect.poll(async () => (await deviceState(request)).nick).toBe("Den");
+  // The page hears of it from the panel's next board update, not its 15 s poll.
+  await push(request);
   await expect(page).toHaveTitle("Den · Game Day Scoreboard");
   await expect(page.locator("#nick")).toHaveValue("Gar");
 });

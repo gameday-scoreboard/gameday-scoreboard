@@ -39,7 +39,10 @@ the panel starts paired. "settings" is firmware without the backup: /gameday/set
 answers 404. GET /_log lists the /gameday/set, /gameday/action,
 /gameday/wifi and /gameday/settings requests seen since the last reset, and
 the entity posts (/select/Effect/set and the like), which change the entity
-and go out on every open /events stream as the panel's do.
+and go out on every open /events stream as the panel's do. POST
+/_push?name=<entity> sends that entity's state on every open stream; with no
+name it is Game Status, which the panel sends on every board update and the
+page takes as its cue to re-read the state.
 
 Started by playwright.config.js. Run by hand with `python mock_device.py 8765`
 and open http://127.0.0.1:8765/.
@@ -225,6 +228,10 @@ ENTITIES = [
     {"id": "text_sensor/IP", "domain": "text_sensor", "name": "IP", "state": "10.10.10.97", "value": "10.10.10.97"},
     {"id": "text_sensor/WizMote Status", "domain": "text_sensor", "name": "WizMote Status",
      "state": "Paired: 7C:DF:A1:00:00:01", "value": "Paired: 7C:DF:A1:00:00:01"},
+    {"id": "switch/WizMote Auto-Discovery", "domain": "switch", "name": "WizMote Auto-Discovery", "state": "OFF",
+     "value": False},
+    {"id": "button/Clear WizMote Pairing", "domain": "button", "name": "Clear WizMote Pairing", "state": ""},
+    {"id": "button/Check for Updates", "domain": "button", "name": "Check for Updates", "state": ""},
     {"id": "button/Refresh Now", "domain": "button", "name": "Refresh Now", "state": ""},
     {"id": "button/Reboot", "domain": "button", "name": "Reboot", "state": ""},
     {"id": "button/Reset Wi-Fi", "domain": "button", "name": "Reset Wi-Fi", "state": ""},
@@ -1184,10 +1191,11 @@ def selftest():
     # The names the mock takes are the firmware's, so renaming one there fails here.
     yaml = (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8")
     yaml += (REPO / "firmware/pages/effects.yaml").read_text(encoding="utf-8")
+    yaml += (REPO / "firmware/pages/wizmote.yaml").read_text(encoding="utf-8")
     for e in ENTITIES:
         if e["domain"] in ENTITY_ACTIONS and f'name: "{e["name"]}"' not in yaml:
             bad += 1
-            print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml or pages/effects.yaml")
+            print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml, pages/effects.yaml or pages/wizmote.yaml")
     # Control posts change the entity and are pushed to the event stream.
     entity_post("/select/Select%20Page/set", {"option": "Effects"})
     entity_post("/number/Effect%20Speed/set", {"value": "40"})
@@ -1259,7 +1267,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _gone(self, path):
         """True when the panel is set to not answer this path; the connection closes unanswered."""
-        if path in ("/_reset", "/_log"):
+        if path in ("/_reset", "/_log", "/_push"):
             return False
         if "down" in FAIL or ("events" in FAIL and path == "/events"):
             self.close_connection = True
@@ -1314,8 +1322,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         try:
+            # ESPHome's first ping sets the browser's reconnect wait to 30 s, so
+            # a page that waits for the browser to reopen a dropped stream waits
+            # that long here too.
             ping = {"title": "Game Day Scoreboard", "comment": STATE["version"]}
-            self.wfile.write(("event: ping\ndata: " + json.dumps(ping) + "\n\n").encode())
+            self.wfile.write(("retry: 30000\nevent: ping\ndata: " + json.dumps(ping) + "\n\n").encode())
             for e in ENTITIES:
                 self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
             self.wfile.flush()
@@ -1356,6 +1367,14 @@ class Handler(BaseHTTPRequestHandler):
                 wiz = entity("WizMote Status")
                 wiz["state"] = wiz["value"] = body["wizmote"]
             PUSHED.clear()
+            return self._json(200, {"ok": True})
+        if u.path == "/_push":
+            # The panel's next board update, which publishes Game Status
+            # (gameday-common.yaml on_update) whether or not its text changed.
+            e = copy.deepcopy(entity(pairs.get("name", ["Game Status"])[0]))
+            if e["name"] == "Game Status":
+                e["state"] = e["value"] = STATE.get("status", e["value"])
+            PUSHED.append(e)
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":
             q = {k: v[0] for k, v in pairs.items()}

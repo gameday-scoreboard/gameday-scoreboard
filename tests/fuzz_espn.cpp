@@ -1,8 +1,9 @@
-// Fuzz target: one input goes through every ESPN parser the panel runs, the
-// text built from what they read, and the finals rotation (recap.h). ESPN's
-// documents share one shape (events, competitions, competitors), so a
-// mutated scoreboard also reaches the event and team parsers. See
-// fuzz_main.cpp and the fuzz targets in the Makefile.
+// Fuzz target: one input goes through every ESPN parser the panel runs (the
+// scoreboards, team, schedule, season, event, summary, Top 25 and news
+// reads), the text built from what they read, and the finals rotation
+// (recap.h). ESPN's documents share one shape (events, competitions,
+// competitors), so a mutated scoreboard also reaches the event and team
+// parsers. See fuzz_main.cpp and the fuzz targets in the Makefile.
 #include <cstdint>
 #include <cstring>
 #include <ctime>
@@ -39,6 +40,14 @@ class ChunkReader {
   size_t size_, chunk_, pos_{0};
 };
 
+// The same reader behind the ByteSource the season read takes.
+struct ChunkSource : ByteSource {
+  ChunkReader r;
+  ChunkSource(const uint8_t *data, size_t size, size_t chunk) : r(data, size, chunk) {}
+  int read() override { return this->r.read(); }
+  size_t readBytes(char *dst, size_t n) override { return this->r.readBytes(dst, n); }
+};
+
 // Which teams and events the input names, so the parsers that look for "our"
 // team find one. Read with its own permissive filter.
 struct Pick {
@@ -60,6 +69,13 @@ std::vector<Pick> find_picks(const uint8_t *data, size_t size) {
   filter["team"]["id"] = true;
   filter["competitions"][0]["competitors"][0]["id"] = true;
   filter["competitions"][0]["competitors"][0]["team"]["id"] = true;
+  // A game summary: its event id is header.id, its teams in the header,
+  // the leaders and the box score.
+  filter["header"]["id"] = true;
+  filter["header"]["competitions"][0]["competitors"][0]["id"] = true;
+  filter["header"]["competitions"][0]["competitors"][0]["team"]["id"] = true;
+  filter["leaders"][0]["team"]["id"] = true;
+  filter["boxscore"]["players"][0]["team"]["id"] = true;
   JsonObject ev = filter["events"].add<JsonObject>();
   ev["id"] = true;
   ev["competitions"][0]["competitors"][0]["id"] = true;
@@ -76,6 +92,15 @@ std::vector<Pick> find_picks(const uint8_t *data, size_t size) {
     add_pick(picks, root_id, c["id"]);
     add_pick(picks, root_id, c["team"]["id"]);
   }
+  std::string summary_id = espn::detail::str_or_empty(doc["header"]["id"]);
+  for (JsonObjectConst c : doc["header"]["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+    add_pick(picks, summary_id, c["id"]);
+    add_pick(picks, summary_id, c["team"]["id"]);
+  }
+  for (JsonObjectConst side : doc["leaders"].as<JsonArrayConst>())
+    add_pick(picks, summary_id, side["team"]["id"]);
+  for (JsonObjectConst side : doc["boxscore"]["players"].as<JsonArrayConst>())
+    add_pick(picks, summary_id, side["team"]["id"]);
   for (JsonObjectConst e : doc["events"].as<JsonArrayConst>()) {
     std::string id = espn::detail::str_or_empty(e["id"]);
     for (JsonObjectConst c : e["competitions"][0]["competitors"].as<JsonArrayConst>()) {
@@ -187,6 +212,20 @@ size_t recap(FinalList finals, PendingList pending, int64_t next_kickoff, int64_
 
 const Sport kSports[] = {Sport::FOOTBALL, Sport::BASEBALL, Sport::BASKETBALL, Sport::HOCKEY, Sport::SOCCER};
 
+// The schedule and season recap cards from one season read (season.h).
+size_t season(const SeasonRead &r, int64_t now) {
+  size_t n = season_post_line(r).size() + recap_header("DAL", r.year).size();
+  for (Sport sport : kSports)
+    for (const char *record : {"", "10-2", "8-3-1"}) {
+      n += season_record(r, sport, record).size() + recap_body(r, sport, record).size();
+      n += season_recap_ready(r, record) ? 1 : 0;
+    }
+  for (const SeasonGame &g : season_upcoming(r, now))
+    for (bool wide : {false, true})
+      n += schedule_line(panel_tm(g.kickoff_epoch), g, wide).size();
+  return n;
+}
+
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
@@ -235,8 +274,23 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         sink = sink + top25_column(League::NCAA, poll, pg, 2, 1).size() + top25_header(League::MCBB, poll).size();
   }
 
+  {
+    // The news card's headlines (news.h).
+    std::string list;
+    ChunkReader r(data, size, chunk);
+    sink = sink + (size_t) (parse_news(r, list) + 1) + list.size();
+  }
+
   GameSnapshot prev;
   for (const Pick &p : picks) {
+    {
+      // The team's season schedule (season.h), read the way the panel reads it.
+      SeasonRead s;
+      ChunkSource src(data, size, chunk);
+      if (parse_season_from(src, p.team_id, s))
+        sink = sink + season(s, now);
+    }
+
     std::vector<Upcoming> up;
     ChunkReader r1(data, size, chunk);
     if (parse_upcoming(r1, p.team_id, 5, up))
