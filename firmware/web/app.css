@@ -313,9 +313,13 @@ button { font: inherit; color: inherit; }
   width: min(760px, 94vw); max-height: 92vh; overflow: auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px;
 }
-.sheet .head { display: flex; gap: 10px; align-items: center; position: sticky; top: -14px; background: var(--panel); padding: 6px 0 10px; z-index: 1; }
+/* Search and Done on one row, the league tabs under them in a row of their
+   own that scrolls sideways: ten tabs never fit beside the search box. */
+.sheet .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; position: sticky; top: -14px; background: var(--panel); padding: 6px 0 10px; z-index: 1; }
+.sheet .head .tabs { order: 1; flex-basis: 100%; overflow-x: auto; padding-bottom: 2px; }
+.sheet .head .tabs button { flex: none; white-space: nowrap; }
 .sheet input[type=search] {
-  flex: 1; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
   border-radius: 10px; padding: 10px 12px; font-size: 15px; outline: none;
 }
 .sheet input[type=search]:focus { border-color: var(--accent); }

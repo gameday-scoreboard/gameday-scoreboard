@@ -1236,7 +1236,13 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
       const FavEntry &e = this->fav_[i];
       if (this->fav_in_list_(e.slot - 1) != (pass == 0))
         continue;
-      bool missing = !e.sched.valid || e.stale;
+      // A team read that worked with a game read that failed leaves a
+      // schedule but no game for it. Nothing else reads that game again (side
+      // polls skip a favorite with no game, and the board's own poll needs it
+      // locked), so it counts as missing and gets the short retry, not the
+      // six-hour refresh.
+      bool missing = !e.sched.valid || e.stale ||
+                     (!e.sched.event_id.empty() && e.game.event_id != e.sched.event_id);
       uint32_t age = now - e.fetched_ms;
       if ((missing && (e.fetched_ms == 0 || age >= RETRY_INTERVAL)) || (!missing && age >= SCHEDULE_INTERVAL)) {
         refresh = (int) i;

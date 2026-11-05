@@ -172,6 +172,20 @@ static void test_win() {
   CHECK_EQ(p.text, "BUF WINS!");
   CHECK_EQ(p.line2, "1-1 (4-3)");
   CHECK_EQ(p.color, celeb_bright(0x00338D));
+  // The second leg of a two-legged tie: ESPN's score is this leg's (1-2),
+  // level on aggregate, and the shootout decides it, not the leg.
+  GameSnapshot leg = live(Sport::SOCCER, 1, 2);
+  GameSnapshot legf = final_(Sport::SOCCER, 1, 2);
+  legf.soc.team_shootout = 4;
+  legf.soc.opp_shootout = 3;
+  Splash legs = decide_splash(leg, legf, true, false);
+  CHECK_EQ(legs.text, "KC WINS!");
+  p = decide_celebration(leg, legf, legs, CelebLevel::FULL, false);
+  CHECK(p.kind == CelebKind::WIN);
+  CHECK_EQ(p.line2, "1-2 (4-3)");
+  legf.soc.team_shootout = 3;
+  legf.soc.opp_shootout = 4;
+  CHECK(plan(leg, legf, CelebLevel::FULL).kind == CelebKind::NONE);  // their win: no splash for us
   // UPSET ALERT is not a score: the plain flash, even with a touchdown in
   // the same read for the silent side.
   GameSnapshot u = live(Sport::FOOTBALL, 7, 3);

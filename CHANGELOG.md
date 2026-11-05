@@ -39,6 +39,11 @@ through `update_important` in the panel's state.
 ### 🐛 Fixes
 
 - 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
+- ⚽ A cup tie won on penalties after losing the second leg celebrates the right team, on the panel and in Home Assistant
+- ⭐ A favorite whose game didn't load comes back within minutes instead of staying off the board for up to six hours
+- 🏀 Halftime and final leaders with accented names, like Dončić, show their letters instead of empty boxes
+- 📱 The team picker's league tabs fit on a phone, with Done always in reach
+- 🎮 Unpair remote stays unpaired after a restart
 - 🧪 Turning Follow beta off gets you the release your beta was building toward, instead of waiting for the one after it
 - 🔄 A restart partway through a download no longer marks that release as one that "didn't take", so the panel still installs it on its own
 - 🔄 The device page says when an install fails instead of showing "Installing" for five minutes
