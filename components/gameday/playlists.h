@@ -282,13 +282,14 @@ inline SchedStep schedule_step(int want, int applied, int active, bool locked) {
 }
 
 // One line of printable text, at most kListNameMax bytes cut at a character
-// boundary. ';' and '=' separate playlists in a set request, so they go too.
+// boundary. ';' and '=' separate playlists in a set request, so they go too,
+// and so do bytes that aren't UTF-8, which the state and backups can't carry.
 inline std::string list_name_clean(const std::string &in) {
   std::string kept;
   for (char c : in)
     if (c != ';' && c != '=')
       kept += c;
-  return message_clean(kept, kListNameMax, false);
+  return message_clean(utf8_only(kept), kListNameMax, false);
 }
 
 // "Football=nfl:6,ncaa:251;Hoops=nba:6" -> playlists in order. "" clears

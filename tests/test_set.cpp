@@ -629,6 +629,15 @@ void test_parse_set() {
   SCHECK(parse_set("mode", "5", op, kFavMax) && op.value == 5, "mode 5");
   SCHECK(!parse_set("mode", "6", op, kFavMax), "mode 6");
   SCHECK(parse_set("panels", "7", op, kFavMax) && op.value == 7, "panels passes the count through");
+  SCHECK(!parse_set("panels", "257", op, kFavMax), "panels 257 is refused, not 1");
+  SCHECK(!parse_set("panels", "0", op, kFavMax), "panels 0 is refused");
+  SCHECK(!parse_set("panels", "two", op, kFavMax), "panels text is refused");
+  SCHECK(!parse_set("panels", "99999999999", op, kFavMax), "panels past int is refused");
+  SCHECK(parse_set("nightlevel", "40", op, kFavMax) && op.value == 40, "nightlevel 40");
+  SCHECK(parse_set("nightlevel", "0", op, kFavMax) && op.value == 1, "nightlevel 0 is held at 1");
+  SCHECK(parse_set("nightlevel", "999", op, kFavMax) && op.value == 255, "nightlevel 999 is held at 255");
+  SCHECK(!parse_set("nightlevel", "dim", op, kFavMax), "nightlevel text is refused");
+  SCHECK(!parse_set("nightlevel", "99999999999", op, kFavMax), "nightlevel past int is refused");
   SCHECK(parse_set("tz", "America/Chicago", op, kFavMax) && op.value == 1, "tz IANA");
   SCHECK(!parse_set("tz", "-1", op, kFavMax), "tz -1");
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
@@ -783,6 +792,7 @@ void test_playlists() {
   SCHECK(list_name_clean("  Sunday   Football Crew  ") == "Sunday Football", "cut to 16 bytes, spaces squeezed");
   SCHECK(list_name_clean("a\tb\x01" "c") == "a bc", "tabs to spaces, control characters out");
   SCHECK(list_name_clean("ÉÉÉÉÉÉÉÉÉ").size() == 16, "cut at a character boundary");
+  SCHECK(list_name_clean("Hoops\xff\xc3") == "Hoops", "bytes that aren't UTF-8 go");
 
   std::vector<TeamRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 25}};
   SCHECK(list_mask({{(uint8_t) League::NHL, 25}, {(uint8_t) League::NFL, 6}}, favs) == 0b101, "mask by favorite");
