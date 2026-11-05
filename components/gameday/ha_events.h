@@ -566,9 +566,9 @@ class HaTracker {
     e.kind = HaKind::FINAL;
     e.play = "final";
     e.my_team = !ctx.neutral;
-    // A shootout decides a level soccer game, as on the board.
+    // A shootout decides a soccer game, as on the board (shootout_decides).
     int us = cur.team_score, them = cur.opp_score;
-    if (us == them && cur.sport == Sport::SOCCER && cur.soc.team_shootout >= 0 && cur.soc.opp_shootout >= 0) {
+    if (shootout_decides(cur)) {
       us = cur.soc.team_shootout;
       them = cur.soc.opp_shootout;
     }

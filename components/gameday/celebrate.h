@@ -120,20 +120,19 @@ inline bool celeb_three_play(const GameSnapshot &cur, bool ours) {
 }
 
 // Who won, the way each sport's splash decides it: more points, or in soccer
-// the shootout when the score is level.
+// a shootout (shootout_decides).
 inline bool celeb_team_won(const GameSnapshot &cur) {
-  if (cur.team_score != cur.opp_score)
-    return cur.team_score > cur.opp_score;
-  return cur.sport == Sport::SOCCER && cur.soc.team_shootout > cur.soc.opp_shootout;
+  if (shootout_decides(cur))
+    return cur.soc.team_shootout > cur.soc.opp_shootout;
+  return cur.team_score > cur.opp_score;
 }
 
 // The win's second line: the winner's points first, and a shootout in
-// brackets after a level score, "1-1 (4-3)".
+// brackets after the score, "1-1 (4-3)", or "1-2 (4-3)" after a second leg.
 inline std::string celeb_final_line(const GameSnapshot &cur, bool team_won) {
   int a = team_won ? cur.team_score : cur.opp_score, b = team_won ? cur.opp_score : cur.team_score;
   std::string line = std::to_string(a) + "-" + std::to_string(b);
-  if (cur.sport == Sport::SOCCER && cur.team_score == cur.opp_score && cur.soc.team_shootout >= 0 &&
-      cur.soc.opp_shootout >= 0) {
+  if (shootout_decides(cur)) {
     int sa = team_won ? cur.soc.team_shootout : cur.soc.opp_shootout;
     int sb = team_won ? cur.soc.opp_shootout : cur.soc.team_shootout;
     line += " (" + std::to_string(sa) + "-" + std::to_string(sb) + ")";

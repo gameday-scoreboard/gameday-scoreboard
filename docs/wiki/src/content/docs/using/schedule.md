@@ -15,7 +15,7 @@ Both cards work for your teams in every league but MLB: basketball (NBA, WNBA an
 
 ## Turn them on or off
 
-Both are on to start. **Schedule** and **Season recap** are under **Between games** on the [device page](/using/device-page/). Without a football or soccer team in the playlist that's playing, they're grey and say so.
+Both are on to start. **Schedule** and **Season recap** are under **Between games** on the [device page](/using/device-page/), and in the iPhone app under **Settings > Display > Between games**, with a line on what each shows. Without a football or soccer team in the playlist that's playing, they're grey and say so.
 
 ## What they show
 
