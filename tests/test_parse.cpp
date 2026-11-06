@@ -3026,6 +3026,86 @@ static void test_mcbb() {
   CHECK_EQ(clock_text(live), std::string("End 2nd"));
 }
 
+// Women's college basketball, recorded 2026-11-06: UConn's team document
+// with the season just started, a game scheduled that night, the day's
+// full Division I scoreboard and a final from 2026-01-10 (see
+// fixtures/README.md). The women's game plays quarters, not halves: the
+// documents say so (format.regulation.periods is 4, the men's say 2).
+static const uint32_t kUConnW = 41, kTexasTechW = 2641, kNotreDameW = 87;
+
+static void test_wcbb_urls() {
+  CHECK_EQ(team_url(League::WCBB, 41),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/41"));
+  CHECK_EQ(event_url(League::WCBB, "401919954"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard/401919954"));
+  CHECK_EQ(team_logo_url(League::WCBB, 41, "CONN"),
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/41.png&w=64&h=64"));
+  const LeagueInfo *l = league_by_key("wcbb");
+  CHECK(l != nullptr && !l->season_list && l->logo_by_id && l->sport == Sport::BASKETBALL);
+  CHECK_EQ(std::string(league_path(League::WCBB)), std::string("womens-college-basketball"));
+  int n = 0;
+  for (size_t i = 0; i < kTeamCount; i++) {
+    const Team &t = kTeams[i];
+    if (t.league != League::WCBB)
+      continue;
+    n++;
+    if (t.espn_id == kUConnW)
+      CHECK_EQ(team_option(t), std::string("NCAAW: UConn Huskies"));
+  }
+  CHECK(n >= 350);
+  // Like the men's scan, the women's day scan needs the Division I group,
+  // or it sees only the ranked teams' games (2 of 45 on 2026-11-06).
+  CHECK_EQ(scan_url(League::WCBB, parse_iso8601_z("2026-02-14T20:00Z")),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard"
+                       "?groups=50&limit=300&dates=20260214"));
+}
+
+static void test_wcbb() {
+  Schedule s;
+  CHECK(parse_team_str(slurp("fixtures/team_wcbb_uconn.json"), s));
+  CHECK_EQ(s.event_id, std::string("401911738"));
+  CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-11-08T19:00Z"));
+  CHECK_EQ(s.team_color, std::string("0c2340"));
+  CHECK_EQ(s.group, 4u);
+  CHECK_EQ(team_day_url(League::WCBB, s.group, parse_iso8601_z("2026-11-07T01:30Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=4&dates=20261106"));
+
+  GameSnapshot p = hoops_event("fixtures/event_wcbb_pre.json", kNotreDameW);
+  CHECK(p.state == GameState::PRE);
+  CHECK_EQ((int) p.nba.regulation, 4);
+  CHECK_EQ(p.opp_abbr, std::string("STO"));
+  TickerOptions o;
+  CHECK_EQ(status_text(p, o, "Nov 6 7:00 PM"),
+           std::string("Nov 6 7:00 PM | ND -45.5 | O/U 146.5 | ACCNX | Hidalgo 32.0 PPG | Paquette 21.0 PPG | Purcell Pavilion"));
+
+  // Texas Tech's 71-60 win at Cincinnati: four quarters, no series.
+  GameSnapshot f = hoops_event("fixtures/event_wcbb_final.json", kTexasTechW);
+  CHECK(f.state == GameState::POST);
+  CHECK_EQ((int) f.nba.regulation, 4);
+  CHECK_EQ(f.team_score, 71);
+  CHECK_EQ(f.opp_score, 60);
+  CHECK_EQ(status_text(f, o, ""), std::string("Final | TTU 18-0 | CIN 6-11"));
+  CHECK_EQ(basketball_series(f), std::string(""));
+
+  // The day's Division I scoreboard names Notre Dame's game that night.
+  Schedule day;
+  CHECK(parse_team_game_str(slurp("fixtures/day_wcbb_20261106.json"), kNotreDameW, day));
+  CHECK_EQ(day.event_id, std::string("401919954"));
+
+  // A live copy of the final for the clock: quarters, then overtime.
+  GameSnapshot live = f;
+  live.state = GameState::IN;
+  live.nba.phase = Phase::PLAY;
+  live.period = 3;
+  live.display_clock = "4:56";
+  CHECK_EQ(clock_text(live), std::string("4:56 3rd"));
+  live.period = 5;
+  CHECK_EQ(clock_text(live), std::string("4:56 OT"));
+  live.nba.phase = Phase::HALFTIME;
+  live.period = 2;
+  CHECK_EQ(clock_text(live), std::string("Halftime"));
+}
+
 // A real home run (TB @ NYY, 2026-10-07, Top 6th): ESPN types the play
 // "Play Result", so the splash relies on the play text.
 static void test_mlb_home_run() {
@@ -8564,6 +8644,8 @@ int main() {
   test_nba_splash();
   test_mcbb_urls();
   test_mcbb();
+  test_wcbb_urls();
+  test_wcbb();
   test_logo_url_matches_game();
   checks++;
   failures += run_football_golden();

@@ -11,7 +11,7 @@
 namespace espn {
 
 // Saved in prefs and the boot cache: append, never renumber.
-enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8 };
+enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8, WCBB = 9 };
 
 enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
 
@@ -57,6 +57,10 @@ constexpr LeagueInfo kLeagues[] = {
     // A college season schedule is ~570 KB. Its teams are left out of Home
     // Assistant's team select (__init__.py).
     {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
+    // Women's college basketball: the same Division I list shape as the
+    // men's (build_teams.py reads it the same way), and a season schedule
+    // runs to a few hundred KB, so no Up next list either.
+    {League::WCBB, "wcbb", "basketball/womens-college-basketball", "NCAAW", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
     {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
 };

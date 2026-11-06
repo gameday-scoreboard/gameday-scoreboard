@@ -39,7 +39,7 @@ Every event has these fields. Every value is text, so match `"true"` and `"7"` i
 | Field | What it is |
 | --- | --- |
 | `kind` | `pregame`, `start`, `score`, `lead_change`, `period`, `final` or `test`. |
-| `league` | `nfl`, `ncaa`, `mlb`, `nba`, `wnba`, `mcbb`, `nhl`, `mls` or `epl`. |
+| `league` | `nfl`, `ncaa`, `mlb`, `nba`, `wnba`, `mcbb`, `wcbb`, `nhl`, `mls` or `epl`. |
 | `sport` | `football`, `baseball`, `basketball`, `hockey` or `soccer`. |
 | `team`, `opponent` | The two sides, like `DAL` and `PHI`. `team` is the side the event is about: the side that scored, the side that leads now, or for the rest, the side on the left of the board. |
 | `team_score`, `opponent_score` | The score now, `team`'s first. |
