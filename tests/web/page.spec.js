@@ -2569,6 +2569,31 @@ test("the nickname names the page and the header, and saving it posts nick", asy
   await expect(page.locator("#devname")).not.toHaveText("Living room");
 });
 
+test("fantasy football takes a league and a team, and shows the matchup the panel read", async ({ page, request }) => {
+  await reset(request, {
+    ffleague: "123456", ffteam: 1,
+    ff: { week: 10, s: "IN", ta: "ABC", tn: "Alphabet Soup", tr: "7-2", tp: 104.18, oa: "XYZ", on: "Xylophone Yetis", or: "5-4", op: 96.2, playoffs: false },
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  await expect(page.locator("#ffLeague")).toHaveValue("123456");
+  await expect(page.locator("#ffTeam")).toHaveValue("1");
+  await expect(page.locator("#ffRead")).toHaveText("Week 10: Alphabet Soup 104.18 — Xylophone Yetis 96.2");
+
+  await page.locator("#ffLeague").fill("987654");
+  await page.locator("#ffTeam").fill("3");
+  await page.locator("#ffSave").click();
+  await expectSet(request, { ffleague: "987654", ffteam: "3" });
+  await expect(page.locator("#toast")).toHaveText("Fantasy league saved");
+  await expect.poll(async () => (await deviceState(request)).ffleague).toBe("987654");
+  await expect.poll(async () => (await deviceState(request)).ffteam).toBe(3);
+
+  // A league id that isn't the number from the address is refused on the page.
+  await page.locator("#ffLeague").fill("12a34");
+  await page.locator("#ffSave").click();
+  await expect(page.locator("#toast")).toHaveText("The league ID is the number in the league's web address");
+});
+
 test("the nickname keeps the tab title when something else renames it, and the box while it is being typed in", async ({ page, request }) => {
   await reset(request, { nick: "Garage" });
   await page.goto("/");
