@@ -19,6 +19,8 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_ncaa_live.json` | `.../college-football/scoreboard/401871053`, one game on its own: FIU @ JXST, 0:33 left in the 4th (recorded 2026-10-13) |
 | `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
+| `event_nfl_ot.json` | `.../football/nfl/scoreboard/401772834`, NYG @ DAL, Final/OT 37-40, period 5 (recorded 2026-11-06) |
+| `event_nfl_ot_tie.json` | `.../football/nfl/scoreboard/401772921`, GB @ DAL, Final/OT 40-40: overtime ran out, no winner on either side (recorded 2026-11-06) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
 | `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
 | `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
@@ -79,6 +81,15 @@ MLB, recorded 2026-10-07 (postseason) from the single-event endpoint
 | `event_mlb_end.json` | 401908016, End 5th (stale count left in the situation) |
 | `event_mlb_final.json` | 401907992 CLE @ CHW, Final 9-3, series line |
 | `event_mlb_pre.json` | 401908005 MIL @ SD, pre-game with probable pitchers and odds |
+| `event_mlb_final_12.json` | 401908045 MIL @ TB, Final/12 (recorded 2026-11-06) |
+| `event_mlb_suspended_final.json` | 401696561 ATL @ CIN, the 2025 Speedway Classic: suspended by rain in the 1st inning and finished the next day, so the document reads Final with `wasSuspended` on the competition (recorded 2026-11-06) |
+
+A document carrying a live rain-delay or suspended status cannot be
+recorded after the fact: ESPN re-serves a finished game as Final (the
+Speedway Classic above is the proof), and a scan of every 2026 day
+scoreboard on 2026-11-06 found no event still carrying a delayed or
+suspended status. Capturing one still needs a `curl` while a game is
+sitting in the delay.
 | `event_mlb_hr_before.json`, `event_mlb_hr.json` | 401907987 TB @ NYY, the polls either side of a two-run home run (Top 6th) |
 | `team_mlb_atl.json` | `.../baseball/mlb/teams/15` (next event is the game in progress) |
 
