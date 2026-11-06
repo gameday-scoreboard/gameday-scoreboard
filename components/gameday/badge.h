@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace espn {
 
@@ -29,6 +30,31 @@ inline int badge_luminance(uint32_t rgb) {
 constexpr int kBadgeDarkTextLum = 600;   // lighter fills take black text
 constexpr int kBadgeNearBlackLum = 120;  // fills this dark need the gray ring
 constexpr uint32_t kBadgeNeutralRing = 0x808080;
+
+constexpr uint32_t kBadgeNoColorFill = 0x808080;
+
+// The fill for a team whose color ESPN gives as hex with no #: that color,
+// or the app's neutral gray when there is none or it is plain black.
+inline uint32_t badge_fill(const std::string &hex) {
+  if (hex.size() != 6 || hex == "000000")
+    return kBadgeNoColorFill;
+  uint32_t v = 0;
+  for (char c : hex) {
+    int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+    if (d < 0)
+      return kBadgeNoColorFill;
+    v = (v << 4) | (uint32_t) d;
+  }
+  return v;
+}
+
+// The panel's badge glows its fill from the board's outer edge, like the
+// device page's board. Full strength is harsh on an LED panel, so the glow
+// starts at 60% and fades to black.
+inline uint32_t badge_glow(uint32_t fill) {
+  uint32_t r = ((fill >> 16) & 0xFF) * 153 / 255, g = ((fill >> 8) & 0xFF) * 153 / 255, b = (fill & 0xFF) * 153 / 255;
+  return (r << 16) | (g << 8) | b;
+}
 
 inline BadgeStyle badge_style(uint32_t fill, uint32_t alt) {
   BadgeStyle s{fill, alt, alt != fill, badge_luminance(fill) > kBadgeDarkTextLum};

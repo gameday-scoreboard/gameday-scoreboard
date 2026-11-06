@@ -59,8 +59,9 @@ constexpr uint32_t kDemoGapMs = 10000;
 
 // Invented teams for filming and for any footage that gets posted: no logos,
 // and abbreviations no real team in teams.h uses (the host tests check).
-// Each side's logo slot shows its abbreviation badge instead (badge.h): rgb
-// is the fill and the splash color, alt the badge's ring.
+// Each side's logo slot shows its abbreviation over a glow of rgb instead
+// (badge.h), rgb also the splash color; alt is the second color the app's
+// badge rings with.
 struct MadeUpTeam {
   const char *abbr;
   const char *name;

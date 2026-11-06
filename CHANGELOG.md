@@ -48,6 +48,7 @@ Fixes from a full review of the firmware: Wi-Fi and setup, backups, updates, the
 
 ### 🐛 Fixes
 
+- 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation over a glow of its color instead of an empty space
 - 🌙 On the night the clocks go back, turning night mode off for the night lasts until the real end time, instead of the panel going dark again an hour early
 - ⚽ A cup tie won on penalties after losing the second leg celebrates the right team, on the panel and in Home Assistant
 - ⭐ A favorite whose game didn't load comes back within minutes instead of staying off the board for up to six hours

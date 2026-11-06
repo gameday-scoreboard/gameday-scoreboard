@@ -3917,6 +3917,18 @@ static void test_badge() {
   // A light fill takes black text and keeps its own ring.
   b = badge_style(0xF4F6F8, 0x1E5AA8);
   CHECK(b.dark_text && b.has_ring && b.ring == 0x1E5AA8);
+  // The fill from ESPN's hex color: the color, or gray when ESPN has none,
+  // gives plain black or sends something that is not a color.
+  CHECK_EQ(badge_fill("005730"), 0x005730u);
+  CHECK_EQ(badge_fill("c8102e"), 0xC8102Eu);
+  CHECK_EQ(badge_fill(""), kBadgeNoColorFill);
+  CHECK_EQ(badge_fill("000000"), kBadgeNoColorFill);
+  CHECK_EQ(badge_fill("12345"), kBadgeNoColorFill);
+  CHECK_EQ(badge_fill("GG0000"), kBadgeNoColorFill);
+  // The panel's glow starts at 60% of the fill.
+  CHECK_EQ(badge_glow(0xFFFFFF), 0x999999u);
+  CHECK_EQ(badge_glow(0x000000), 0x000000u);
+  CHECK_EQ(badge_glow(kBadgeNoColorFill), 0x4C4C4Cu);
 }
 
 // The demo build's matchups, made-up teams and script (demo.h).
