@@ -34,13 +34,13 @@ CONF_ON_GAME_EVENT = "on_game_event"
 # The demo build (firmware/gameday-demo.yaml): a looping scripted game the
 # remote and the device page start and stop. Off in release firmware.
 CONF_DEMO = "demo"
-# The bar build (firmware/gameday-bar.yaml): real firmware that installs from
-# the beta channel on its own. Off in release firmware.
+# The bar build (firmware/gameday-bar.yaml): real firmware that installs bar
+# releases on its own at night. Off in release firmware.
 CONF_BAR = "bar"
 CONF_REPORT_EMAIL = "report_email"
-# "Follow beta" on the device page (release builds): points the update entity
-# at the beta manifest instead of the release one. The bar build is always on
-# the bar channel and the demo build never updates, so neither has it.
+# "Follow beta" on the device page (release and bar builds): points the
+# update entity at the beta manifest instead of the release one. The demo
+# build never updates, so it has none.
 CONF_BETA_CHANNEL = "beta_channel"
 CONF_UPDATE_ID = "update_id"
 CONF_STABLE = "stable"
@@ -102,8 +102,8 @@ def _esphome_at_least(year, month):
 def _not_demo_and_bar(config):
     if config[CONF_DEMO] and CONF_BAR in config:
         raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
-    if CONF_BETA_CHANNEL in config and (config[CONF_DEMO] or CONF_BAR in config):
-        raise cv.Invalid("beta_channel is for release builds; remove it in the demo and bar builds")
+    if CONF_BETA_CHANNEL in config and config[CONF_DEMO]:
+        raise cv.Invalid("the demo build never updates itself; remove beta_channel")
     return config
 
 

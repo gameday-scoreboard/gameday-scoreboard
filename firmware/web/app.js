@@ -380,7 +380,7 @@
             <button class="sw" data-set="beta" aria-label="Follow beta"></button>
           </div>
           <div class="ctl" id="barRow" hidden>
-            <label>Bar beta<small>Auto-installs beta firmware overnight.</small></label>
+            <label>Bar build<small>Installs bar updates on its own overnight, never during a live game.</small></label>
             <a class="btn" id="barReport" href="#">Something wrong?</a>
           </div>
         </div>
@@ -2829,7 +2829,7 @@
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
     $("#hEspn").textContent = h.espn == null ? "None yet"
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
-    const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
+    const chan = { stable: "stable", beta: "beta", bar: "bar" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
     const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");

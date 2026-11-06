@@ -1560,7 +1560,7 @@ void GamedayComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Weather: %s, town %s, place %s", this->weather_on() ? "on" : "off",
                 this->wx_.town[0] ? this->wx_.town : "(none)", this->wx_.place[0] ? this->wx_.place : "(none)");
 #ifdef GAMEDAY_BAR
-  ESP_LOGCONFIG(TAG, "  Bar beta: installs from the beta channel");
+  ESP_LOGCONFIG(TAG, "  Bar build: installs bar updates on its own at night");
 #endif
 #ifdef GAMEDAY_BETA_CHANNEL
   ESP_LOGCONFIG(TAG, "  Follow beta: %s", this->follow_beta() ? "on" : "off");
@@ -2708,7 +2708,7 @@ void GamedayComponent::auto_update_tick_() {
       // Same as above, but the try is for this version, not tonight: a
       // failed one is left to the nightly rule, which tries once in the
       // next 3 to 5 AM window (the same night, if it failed inside one).
-      ESP_LOGI(TAG, "Auto update: installing %s now, as the beta channel asks (running %s)",
+      ESP_LOGI(TAG, "Auto update: installing %s now, as the bar beta channel asks (running %s)",
                u->update_info.latest_version.c_str(), u->update_info.current_version.c_str());
       this->now_tried_ = fnv1_hash(u->update_info.latest_version);
       this->bar_pref_.save(&this->now_tried_);
@@ -5419,7 +5419,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["autoupd"] = this->auto_update();
 #endif
 #ifdef GAMEDAY_BETA_CHANNEL
-  // Left out in builds with no beta channel (bar, demo), which hides the switch.
+  // Left out in the demo build, which has no beta channel; that hides the switch.
   doc["beta"] = this->follow_beta();
 #endif
 #ifdef USE_UPDATE
@@ -5439,7 +5439,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     doc["update_shown"] = this->nudge_day_.since;
 #endif
 #ifdef GAMEDAY_BAR
-  // The device page shows the bar beta note and a "Something wrong?" link.
+  // The device page shows the bar build note and a "Something wrong?" link.
   doc["bar"]["report"] = this->report_email_;
   // The brand pack (brand.h): its address, and brandread once a pack is on
   // hand or a read has answered: the last read's HTTP status (0 for no
@@ -5739,7 +5739,8 @@ std::string GamedayComponent::health_json_() {
 #endif
   h.built = (int64_t) App.get_build_time();
 #if defined(GAMEDAY_BAR)
-  h.channel = "bar";
+  // A bar panel with Follow beta on reads the bar betas.
+  h.channel = this->follow_beta() ? "beta" : "bar";
 #elif defined(GAMEDAY_BETA_CHANNEL)
   h.channel = this->follow_beta() ? "beta" : "stable";
 #elif defined(USE_UPDATE)
