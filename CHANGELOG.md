@@ -34,6 +34,8 @@ through `update_important` in the panel's state.
 
 ### ✨ New
 
+- ⚽ Soccer: La Liga, Bundesliga, Serie A, Ligue 1 and Liga MX clubs can be favorites too, and the European leagues' clubs are followed into the Champions League, Europa League and Conference League like Premier League ones
+
 - 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
 - 🍻 Bar panels show the plate list as a plate wall, one member a page with their quote, throw a plate party for each new plate, and count down to the bar's next event
 - 🍺 Panels in bars run the bar build of each release, and install it on their own overnight

@@ -102,7 +102,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 ### Choosing teams
 
-**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
+**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **La Liga**, **Bundesliga**, **Serie A**, **Ligue 1**, **Liga MX**, **NBA**, **WNBA**, **NCAAM** (men's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 

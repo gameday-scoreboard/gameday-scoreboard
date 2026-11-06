@@ -2,7 +2,7 @@
 
 ![A final score on the panel: HBR 24, IRN 10, HBR WINS!](docs/wiki/src/assets/final-hbr-irn.jpg)
 
-A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League.
+A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS, the Premier League, La Liga, the Bundesliga, Serie A, Ligue 1 and Liga MX.
 
 Watch the [full demo](https://install.gameday-scoreboard.com/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
 
@@ -50,7 +50,7 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 | Setting | What it does |
 | --- | --- |
 | Show | Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every minute unless you change Switch every (1 to 30 minutes) |
-| Favorites | Up to 16 teams in your order, from all 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
+| Favorites | Up to 16 teams in your order, from all 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS, Premier League, La Liga, Bundesliga, Serie A, Ligue 1 and Liga MX team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
 | Ticker: Down and distance, Count and at-bat, Match stats, Last play, "Odds, TV and win chance", Pre-game season leaders | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. Before kickoff in football, each team's passing leader, and during the game who is favored to win. The page shows only the ones for sports your panel follows |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
