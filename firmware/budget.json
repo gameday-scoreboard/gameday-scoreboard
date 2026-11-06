@@ -25,6 +25,10 @@
     }
   },
   "host": {
+    "poll_curling_match": {
+      "heap": 1024,
+      "json": 6818
+    },
     "poll_mlb_event": {
       "heap": 1581,
       "json": 14817

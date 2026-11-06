@@ -192,8 +192,8 @@ std::string team_logo_url(League league, uint32_t espn_id, const char *abbr) {
   for (auto &c : a)
     c = (char) tolower((unsigned char) c);
   const LeagueInfo *l = league_info(league);
-  if (l == nullptr)
-    return "";
+  if (l == nullptr || l->logo_dir[0] == '\0')
+    return "";  // no ESPN logos to fetch (curling): the board draws the badge
   std::string file = l->logo_by_id ? std::to_string(espn_id) : a;
   bool scoreboard = league == League::NFL || league == League::MLB || league == League::NBA || league == League::NHL;
   return dark_logo(std::string("https://a.espncdn.com/i/teamlogos/") + l->logo_dir +
@@ -332,6 +332,8 @@ Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opp
     return basketball_splash(prev, cur, opponent_splashes, neutral);
   if (cur.sport == Sport::HOCKEY)
     return hockey_splash(prev, cur, opponent_splashes, neutral);
+  if (cur.sport == Sport::CURLING)
+    return curling_splash(prev, cur, opponent_splashes, neutral);
   Splash none;
   if (!prev.valid || !cur.valid || prev.event_id != cur.event_id)
     return none;
@@ -505,6 +507,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     return basketball_status_text(s, o, kickoff_local);
   if (s.sport == Sport::HOCKEY)
     return hockey_status_text(s, o, kickoff_local);
+  if (s.sport == Sport::CURLING)
+    return curling_status_text(s, o, kickoff_local);
   std::string out;
   switch (s.state) {
     case GameState::NOT_FOUND:
@@ -766,6 +770,8 @@ std::string clock_text(const GameSnapshot &s) {
     return basketball_clock_text(s);
   if (s.sport == Sport::HOCKEY)
     return hockey_clock_text(s);
+  if (s.sport == Sport::CURLING)
+    return curling_clock_text(s);
   bool has_clock = s.display_clock.find(':') != std::string::npos && s.period > 0;
   bool special = s.short_detail.find(':') == std::string::npos;  // Halftime, End of 3rd, Delayed, Final
   if (!has_clock || special) {

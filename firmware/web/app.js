@@ -34,7 +34,11 @@
   // order. prefix: team list label; tab: picker tab; name: the long name;
   // path: ESPN's; byId: logo files named by team id; scan: extra query for
   // today's scoreboard. scripts/build_web.py checks prefix, path, logo and
-  // byId against leagues.h and stops the build when they differ.
+  // byId against leagues.h and stops the build when they differ. Curling is
+  // the exception: ESPN has no curling, so its path names the side of its
+  // own feed, its logo is empty (no logos exist; the panel and this page
+  // show the abbreviation) and espn is false, so no ESPN scoreboard is
+  // fetched for it below.
   const LEAGUES = {
     nfl: { prefix: "NFL", tab: "NFL", name: "NFL", path: "football/nfl", logo: "nfl", byId: false, scan: "" },
     ncaa: { prefix: "NCAAF", tab: "NCAAF", name: "College football", path: "football/college-football", logo: "ncaa", byId: true, scan: "groups=80&limit=300&" },
@@ -45,10 +49,13 @@
     wnba: { prefix: "WNBA", tab: "WNBA", name: "WNBA", path: "basketball/wnba", logo: "wnba", byId: false, scan: "" },
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
+    curlingm: { prefix: "CURLM", tab: "Curling M", name: "Men's curling", path: "curling/men", logo: "", byId: false, scan: "", espn: false },
+    curlingw: { prefix: "CURLW", tab: "Curling W", name: "Women's curling", path: "curling/women", logo: "", byId: false, scan: "", espn: false },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
   const logoUrl = (league, id, abbr) => {
     const l = lgInfo(league);
+    if (!l.logo) return "";  // a league with no logos: the abbreviation shows
     return `https://a.espncdn.com/i/teamlogos/${l.logo}/500-dark/${l.byId ? id : String(abbr).toLowerCase()}.png`;
   };
   const keyOf = (t) => t[0] + ":" + t[1];
@@ -2433,7 +2440,8 @@
     return gamesLoad;
   };
   const fetchGames = async () => {
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
+    const urls = Object.keys(LEAGUES).filter((lg) => LEAGUES[lg].espn !== false)
+      .map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       const ctl = new AbortController();

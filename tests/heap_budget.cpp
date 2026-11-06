@@ -188,6 +188,16 @@ int main() {
       return parse_scoreboard(json, std::string("401858433"), 68, g);
     });
   }
+  {
+    // Curling's game poll (sport_curling.cpp): a live match document from
+    // its own feed, the biggest document curling reads (the rinks' squads
+    // ride along and are filtered out).
+    std::string json = slurp("fixtures/curling_match_live.json");
+    measure("poll_curling_match", [&] {
+      GameSnapshot g;
+      return parse_curling_match(json, 48, g, std::string("1561"));
+    });
+  }
   event("poll_nfl_event", "event_nfl_pre.json", Sport::FOOTBALL);
   event("poll_mlb_event", "event_mlb_top.json", Sport::BASEBALL);
   event("poll_nba_event", "event_nba_live.json", Sport::BASKETBALL);

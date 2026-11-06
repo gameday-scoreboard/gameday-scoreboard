@@ -6382,9 +6382,10 @@ static void test_season() {
   CHECK(!season_read_due(t, 0, t - kSeasonRetryMs, true, true));
   CHECK(season_read_due(t, 0, t - kSeasonBigRetryMs, true, true));
 
-  // Which leagues have the cards, and which read once a day.
+  // Which leagues have the cards, and which read once a day. Curling has
+  // none: its feed has no season schedule to read.
   for (const auto &l : kLeagues) {
-    CHECK_EQ(season_cards(l), l.league != League::MLB);
+    CHECK_EQ(season_cards(l), l.league != League::MLB && l.sport != Sport::CURLING);
     CHECK_EQ(season_big(l), !l.season_list);
   }
   CHECK(season_big(*league_info(League::NHL)) && season_cards(*league_info(League::NHL)));
@@ -8500,6 +8501,161 @@ static void test_game_leaders() {
   CHECK_EQ((int) leaders_card_text(GameLeaders{}, 128).font, 0);
 }
 
+// Curling (sport_curling.cpp): not an ESPN sport. Its fixtures are real
+// documents from the Grand Slam of Curling site's data feed, recorded
+// 2026-11-06 during the GSOC Masters in Medicine Hat (tests/fixtures/
+// README.md has the URLs): the series list, the Masters standings, a men's
+// and a women's final, a live match in its first end, and one upcoming.
+static void test_curling() {
+  // The feed's URLs.
+  CHECK_EQ(curling_series_url(), std::string("https://thegrandslamofcurling.com/curling/static/json/series_list.json"));
+  CHECK_EQ(curling_standings_url(20),
+           std::string("https://thegrandslamofcurling.com/curling/live/json/20_standings.json"));
+  CHECK_EQ(curling_match_url(1512), std::string("https://thegrandslamofcurling.com/curling/live/json/1512.json"));
+  // Curling has no ESPN logos: the board draws the abbreviation badge.
+  CHECK_EQ(team_logo_url(League::CURLING_M, 14, "DUN"), std::string(""));
+  CHECK_EQ(std::string(kSportKeys[(int) Sport::CURLING]), std::string("curling"));
+  CHECK_EQ((int) sport_row_from_key("curling"), 6);
+
+  // The series the panel follows: the Masters, under way on 2026-11-06.
+  CurlingSeries series;
+  CHECK(parse_curling_series_str(slurp("fixtures/curling_series_list.json"),
+                                 parse_iso8601_z("2026-11-06T12:00:00Z"), series));
+  CHECK_EQ(series.id, 20);
+  CHECK_EQ(series.match_count, 80);
+  // Nothing within six weeks of a June day: the off-season.
+  CHECK(!parse_curling_series_str(slurp("fixtures/curling_series_list.json"),
+                                  parse_iso8601_z("2027-06-01T12:00:00Z"), series));
+  CHECK(!parse_curling_series_str("{not json", parse_iso8601_z("2026-11-06T12:00:00Z"), series));
+
+  // The standings: our rink's next match, its record, and the id range.
+  const std::string standings = slurp("fixtures/curling_standings_masters.json");
+  Schedule s;
+  CurlingRange range;
+  CHECK(parse_curling_schedule_str(standings, 14, s, range));  // Dunstone
+  CHECK(s.valid);
+  CHECK_EQ(s.event_id, std::string("1567"));
+  CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-11-07T00:00:00Z"));  // the GMT date; the match read refines it
+  CHECK_EQ((int) s.opp_id, 16);
+  CHECK_EQ(s.opp_abbr, std::string("CAS"));
+  CHECK_EQ(s.team_record, std::string("3-0"));
+  CHECK_EQ(range.first_id, 1506);
+  CHECK_EQ(range.last_id, 1569);
+  Schedule w;
+  CurlingRange wrange;
+  CHECK(parse_curling_schedule_str(standings, 63, w, wrange));  // Homan, the women's side
+  CHECK(w.valid);
+  CHECK_EQ(w.event_id, std::string("1568"));
+  CHECK_EQ(w.opp_abbr, std::string("WRA"));
+  CHECK_EQ(w.team_record, std::string("2-1"));
+  // A rink that is not in the series: no schedule, but the range still reads.
+  Schedule none;
+  CurlingRange nrange;
+  CHECK(!parse_curling_schedule_str(standings, 999999, none, nrange));
+  CHECK(!none.valid);
+  CHECK_EQ(nrange.first_id, 1506);
+
+  // A men's final: Dunstone 14, Hlushak 1 in five ends (the feed's own
+  // result line said 11-1; the ends, and the published score, say 14-1).
+  GameSnapshot g;
+  CHECK(parse_curling_match_str(slurp("fixtures/curling_match_men_final.json"), 14, g, "1512"));
+  CHECK(g.valid);
+  CHECK(g.sport == Sport::CURLING);
+  CHECK(g.state == GameState::POST);
+  CHECK(g.completed);
+  CHECK_EQ(g.team_score, 14);
+  CHECK_EQ(g.opp_score, 1);
+  CHECK(g.team_winner);
+  CHECK(!g.cur.shootout);
+  CHECK_EQ(g.team_abbr, std::string("DUN"));
+  CHECK_EQ(g.opp_abbr, std::string("HLU"));
+  CHECK_EQ(g.game_name, std::string("GSOC Masters"));
+  CHECK_EQ(g.cur.stage, std::string("Round Robin"));
+  CHECK_EQ(g.cur.draw, std::string("Draw 2"));
+  CHECK_EQ(g.venue, std::string("Co-op Place"));
+  CHECK_EQ(g.kickoff_epoch, parse_iso8601_z("2026-11-03T17:00:00Z"));
+  CHECK_EQ((int) g.team_line_count, 8);
+  CHECK_EQ((int) g.cur.regulation, 8);  // a Grand Slam game; the Brier and Scotties play 10
+  CHECK_EQ((int) g.team_lines[0], 4);
+  CHECK_EQ((int) g.team_lines[2], 4);
+  CHECK_EQ((int) g.team_lines[4], 3);
+  CHECK_EQ((int) g.opp_lines[1], 1);
+  CHECK_EQ(g.period, 8);
+  CHECK_EQ(g.short_detail, std::string("Final"));
+  CHECK_EQ(clock_text(g), std::string("Final"));
+  // The hammer after the last end: Dunstone had it in the first and scored,
+  // so it changed hands; Hlushak's point in the second brought it back, and
+  // Dunstone's scores in the third, fourth and fifth left it with Hlushak.
+  CHECK(g.cur.hammer_known);
+  CHECK(!g.cur.hammer_ours);
+  // The wrong match, and a rink that is not in it, do not parse.
+  CHECK(!parse_curling_match_str(slurp("fixtures/curling_match_men_final.json"), 14, g, "9999"));
+  CHECK(!parse_curling_match_str(slurp("fixtures/curling_match_men_final.json"), 999999, g));
+  // No game leaders card reads a summary for curling.
+  CHECK(leaders_stage(g) == LeadersStage::NONE);
+  // The line score at the final, the ends and the total.
+  LineScoreText lst = line_score_text(g, 128);
+  CHECK(lst.font != 0);
+  CHECK_EQ(lst.title, std::string("Final"));
+  CHECK(lst.body.find("14") != std::string::npos);
+  LineScoreText narrow = line_score_text(g, 64);
+  CHECK(narrow.columns);
+  CHECK(narrow.body.find("1H") != std::string::npos);
+
+  // A women's final: Fujisawa 8, Hasselborg 7. Hasselborg had the hammer
+  // in the first end; the blank first end kept it with her.
+  GameSnapshot wg;
+  CHECK(parse_curling_match_str(slurp("fixtures/curling_match_women_final.json"), 60, wg, "1513"));
+  CHECK(wg.state == GameState::POST);
+  CHECK_EQ(wg.team_score, 8);
+  CHECK_EQ(wg.opp_score, 7);
+  CHECK(wg.team_winner);
+  CHECK_EQ((int) wg.team_lines[2], 5);
+  CHECK_EQ((int) wg.opp_lines[3], 3);
+  CHECK(wg.cur.hammer_known);
+  CHECK(wg.cur.hammer_ours);  // Hasselborg's point in the eighth leaves it with Fujisawa
+
+  // An upcoming match: no score, no ends, the draw for a short detail, and
+  // no hammer yet (the feed names neither side lsfe before the toss).
+  GameSnapshot pre;
+  CHECK(parse_curling_match_str(slurp("fixtures/curling_match_upcoming.json"), 14, pre, "1567"));
+  CHECK(pre.state == GameState::PRE);
+  CHECK_EQ(pre.team_score, 0);
+  CHECK_EQ((int) pre.team_line_count, 0);
+  CHECK_EQ(pre.short_detail, std::string("Draw 16"));
+  CHECK_EQ(pre.kickoff_epoch, parse_iso8601_z("2026-11-07T01:00:00Z"));
+  CHECK(!pre.cur.hammer_known);
+  TickerOptions to;
+  CHECK(status_text(pre, to, "").find("GSOC Masters") != std::string::npos);
+
+  // A live match in its first end (Paetz against Kitazawa, Draw 14): the
+  // feed's own current_end, and Paetz with the hammer.
+  GameSnapshot live;
+  CHECK(parse_curling_match_str(slurp("fixtures/curling_match_live.json"), 48, live, "1561"));
+  CHECK(live.state == GameState::IN);
+  CHECK_EQ(live.period, 1);
+  CHECK_EQ(live.short_detail, std::string("End 1"));
+  CHECK_EQ(clock_text(live), std::string("End 1"));
+  CHECK(live.cur.hammer_known);
+  CHECK(!live.cur.hammer_ours);  // ours is Kitazawa; Paetz throws last
+  CHECK_EQ(curling_situation(live), std::string("PAE hammer"));
+  GameSnapshot live2;
+  CHECK(parse_curling_match_str(slurp("fixtures/curling_match_live.json"), 289, live2, "1561"));
+  CHECK(live2.cur.hammer_ours);
+
+  // Splashes: an end's points land at once, and a win at the final.
+  GameSnapshot scored = live;
+  scored.team_score = 3;
+  CHECK_EQ(decide_splash(live, scored, false).text, std::string("SCORES 3!"));
+  GameSnapshot won = live;
+  won.state = GameState::POST;
+  won.completed = true;
+  won.team_score = 6;
+  won.opp_score = 4;
+  won.team_winner = true;
+  CHECK_EQ(decide_splash(live, won, false).text, std::string("KIT WINS!"));
+}
+
 int main() {
   test_urls();
   test_iso();
@@ -8611,6 +8767,7 @@ int main() {
   test_ha_fields();
   test_line_score();
   test_game_leaders();
+  test_curling();
   test_score_log();
   test_best_game();
   failures += run_set_tests(checks);

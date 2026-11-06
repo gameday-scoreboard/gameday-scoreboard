@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate components/gameday/teams.h from ESPN.
 
+Curling's two leagues are the exception: their rinks come from the Grand
+Slam of Curling site's data feed (curling_teams below).
+
 Run this at release time. The header is committed so firmware builds never
 need network access.
 
@@ -29,6 +32,9 @@ from pathlib import Path
 
 SITE_ROOT = "https://site.api.espn.com/apis/site/v2/sports"
 STANDINGS_ROOT = "https://site.api.espn.com/apis/v2/sports"
+# Curling is not on ESPN: its rinks come from the Grand Slam of Curling
+# site's data feed, the same one the firmware reads (sport_curling.cpp).
+GSOC_ROOT = "https://thegrandslamofcurling.com"
 D1_GROUP = "50"  # NCAA Division I, the parent of every D1 basketball conference
 SITE = f"{SITE_ROOT}/football"
 
@@ -53,7 +59,8 @@ sys.path.insert(0, str(COMPONENT))
 from leagues_table import leagues  # noqa: E402
 
 # Fewest teams a fresh list may have before the run is treated as a bad read.
-MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350}
+MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350,
+             "CURLING_M": 16, "CURLING_W": 16}
 
 
 # ESPN returns 403 to most unfamiliar agents but accepts ones that start with "curl/".
@@ -121,6 +128,47 @@ def mcbb_teams(path):
     return list(found.values())
 
 
+def curling_teams(league, gender):
+    """The rinks of one side (gender "M" or "F") from the Grand Slam feed.
+
+    Team ids are global across the feed's events and seasons, so the list
+    is the union of the per-series team lists of the last two seasons:
+    a rink that only plays the Scotties or the Brier is pickable there,
+    not just the Grand Slam regulars. A series with no team list (the
+    feed answers 403) is skipped.
+    """
+    from datetime import datetime, timedelta
+
+    data = get(f"{GSOC_ROOT}/curling/static/json/series_list.json")
+    series = []
+    for s in data["data"]:
+        if str(s.get("parent_name", "")).startswith("Test"):
+            continue
+        try:
+            start = datetime.strptime(s["start_date"], "%m/%d/%Y")
+        except (KeyError, ValueError):
+            continue
+        series.append((start, int(s["series_id"])))
+    if not series:
+        return []
+    newest = max(start for start, _ in series)
+    found = {}
+    for start, sid in sorted(series, reverse=True):
+        if newest - start > timedelta(days=730):
+            continue
+        try:
+            teams = get(f"{GSOC_ROOT}/curling/static/json/{sid}_team_list.json")
+        except Exception as ex:  # a series without a team list is not fatal
+            print(f"curling series {sid}: {ex}", file=sys.stderr)
+            continue
+        for t in teams.get("data") or []:
+            if t.get("gender") != gender:
+                continue
+            tid = int(t["team_id"])
+            found.setdefault(tid, (league, tid, t["team_short_code"], t["team_name"], 0))
+    return list(found.values())
+
+
 def cstr(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
@@ -164,6 +212,8 @@ def main():
             fresh = ncaa_teams()
         elif lg == "MCBB":
             fresh = mcbb_teams(paths[lg])
+        elif lg in ("CURLING_M", "CURLING_W"):
+            fresh = curling_teams(lg, "M" if lg == "CURLING_M" else "F")
         else:
             fresh = pro_teams(lg, paths[lg])
         print(f"{lg}: {len(fresh)} teams")

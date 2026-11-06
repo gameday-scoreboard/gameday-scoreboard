@@ -93,6 +93,8 @@ inline uint8_t line_regulation(const GameSnapshot &g) {
       return 3;
     case Sport::BASKETBALL:
       return g.nba.regulation;
+    case Sport::CURLING:
+      return g.cur.regulation;  // ends: 8 or 10, from the match document
     default:
       return 4;
   }
@@ -102,6 +104,8 @@ inline uint8_t line_regulation(const GameSnapshot &g) {
 inline const char *line_extra_name(const GameSnapshot &g, uint8_t periods) {
   if (g.sport == Sport::HOCKEY && !g.nhl.playoffs && periods >= 5)
     return "SO";
+  if (g.sport == Sport::CURLING)
+    return "EE";  // the extra end
   return "OT";
 }
 
@@ -126,6 +130,40 @@ inline std::vector<LineCol> line_period_cols(const GameSnapshot &g) {
     c.a = line_sum(g.team_lines, g.team_line_count, reg, GameSnapshot::kLinesMax);
     c.b = line_sum(g.opp_lines, g.opp_line_count, reg, GameSnapshot::kLinesMax);
     c.width = 2;
+    cols.push_back(c);
+  }
+  LineCol t;
+  t.head = "T";
+  t.a = std::to_string(g.team_score);
+  t.b = std::to_string(g.opp_score);
+  t.gap = 2;
+  cols.push_back(t);
+  return cols;
+}
+
+// Curling's ends in the compact shape: one character an end and no gaps,
+// for a board too narrow for eight two-character columns. The caller only
+// asks when every end was a single digit (line_single_digits), which is
+// nearly every game ever played; a bigger end falls back to
+// line_period_cols. The extra end keeps its "EE" head and the total its "T".
+inline std::vector<LineCol> line_end_cols(const GameSnapshot &g) {
+  std::vector<LineCol> cols;
+  uint8_t reg = line_regulation(g);
+  uint8_t periods = std::max(g.team_line_count, g.opp_line_count);
+  for (uint8_t p = 0; p < periods && p < reg; p++) {
+    LineCol c;
+    c.head = std::to_string(p + 1);
+    c.a = p < g.team_line_count ? std::to_string(g.team_lines[p]) : "";
+    c.b = p < g.opp_line_count ? std::to_string(g.opp_lines[p]) : "";
+    c.width = 1;
+    c.gap = 0;
+    cols.push_back(c);
+  }
+  if (periods > reg) {
+    LineCol c;
+    c.head = line_extra_name(g, periods);
+    c.a = line_sum(g.team_lines, g.team_line_count, reg, GameSnapshot::kLinesMax);
+    c.b = line_sum(g.opp_lines, g.opp_line_count, reg, GameSnapshot::kLinesMax);
     cols.push_back(c);
   }
   LineCol t;
@@ -217,6 +255,10 @@ inline std::vector<LineRow> line_rows(const GameSnapshot &g) {
   if (g.sport == Sport::HOCKEY) {
     for (uint8_t p = 0; p < reg; p++)
       add(std::to_string(p + 1), p, p + 1);
+  } else if (g.sport == Sport::CURLING) {
+    // Ends by halves, around the mid-game break: ten rows don't fit.
+    add("1H", 0, reg / 2);
+    add("2H", reg / 2, reg);
   } else if (reg == 4) {
     // Quarters by halves: six rows don't fit over the ticker
     add("1H", 0, 2);
@@ -268,6 +310,10 @@ inline LineScoreText line_score_text(const GameSnapshot &g, int width_px) {
     tries.push_back(detail::line_inning_cols(g, 2, true));
     tries.push_back(detail::line_inning_cols(g, 2, false));
     tries.push_back(detail::line_inning_cols(g, 3, true));
+  } else if (g.sport == Sport::CURLING) {
+    if (detail::line_single_digits(g))
+      tries.push_back(detail::line_end_cols(g));
+    tries.push_back(detail::line_period_cols(g));
   } else {
     tries.push_back(detail::line_period_cols(g));
   }

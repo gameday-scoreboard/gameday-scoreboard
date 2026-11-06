@@ -3077,6 +3077,8 @@ uint32_t GamedayComponent::back_off_() {
 }
 
 bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug) {
+  if (::espn::league_sport(team->league) == ::espn::Sport::CURLING)
+    return this->fetch_curling_schedule_(team, out);
   std::string url = comp_slug != nullptr ? ::espn::team_url(team->league, team->espn_id, comp_slug)
                                          : ::espn::team_url(team->league, team->espn_id);
   ESP_LOGD(TAG, "Fetching schedule: %s", url.c_str());
@@ -3097,9 +3099,89 @@ bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out, 
   return true;
 }
 
+// Curling's schedule read: the series the panel follows from the feed's
+// list (picked at most every six hours), then our rink's next match in
+// that series' standings. True with out invalid is a good read that found
+// no game: the off-season, a series our rink is not in, or its event over.
+// False is a failed read, retried like the other sports'.
+bool GamedayComponent::fetch_curling_schedule_(const ::espn::Team *team, Schedule &out) {
+  const uint32_t now = millis();
+  if (this->curl_series_ms_ == 0 || now - this->curl_series_ms_ >= 6 * 3600 * 1000) {
+    std::string url = ::espn::curling_series_url();
+    ESP_LOGD(TAG, "Fetching curling series list: %s", url.c_str());
+    auto container = this->open_(url);
+    if (container == nullptr)
+      return false;
+    ContainerReader reader(container, this->espn_bytes_);
+    ::espn::CurlingSeries series;
+    bool ok = ::espn::parse_curling_series(reader, (int64_t) this->time_->timestamp_now(), series);
+    container->end();
+    // The pick stands for six hours either way, so the off-season does not
+    // re-read the whole list on every schedule cycle.
+    this->curl_series_ms_ = now == 0 ? 1 : now;
+    this->curl_series_id_ = ok ? series.id : 0;
+    this->curl_match_count_ = ok ? series.match_count : 0;
+    if (!ok) {
+      out.valid = false;
+      return true;  // no series near: the off-season
+    }
+    ESP_LOGI(TAG, "Curling series %d, %d matches", series.id, series.match_count);
+  }
+  if (this->curl_series_id_ == 0) {
+    out.valid = false;
+    return true;  // the off-season pick above
+  }
+  std::string url = ::espn::curling_standings_url(this->curl_series_id_);
+  ESP_LOGD(TAG, "Fetching curling standings: %s", url.c_str());
+  auto container = this->open_(url);
+  if (container == nullptr)
+    return false;
+  ContainerReader reader(container, this->espn_bytes_);
+  Schedule s;
+  ::espn::CurlingRange range;
+  bool in_series = ::espn::parse_curling_schedule(reader, team->espn_id, s, range);
+  container->end();
+  if (!in_series && range.first_id == 0)
+    return false;  // nothing read at all: a failed read, not an empty series
+  if (!in_series || s.valid || range.first_id == 0) {
+    out = s;
+    return true;
+  }
+  // Our rink's round robin is over: its next match is a playoff one, which
+  // the standings do not list. Playoff match ids run on from the round
+  // robin's, up to the series' match count; walk them (a handful of small
+  // documents) for one of our rink's that is not over. A 404 stops the
+  // walk: the playoffs are not published yet.
+  const int last = range.first_id + this->curl_match_count_ - 1;
+  for (int id = range.last_id + 1; id <= last && id - range.last_id <= 48; id++) {
+    auto mc = this->open_(::espn::curling_match_url(id));
+    if (mc == nullptr) {
+      if (this->espn_status_ == 404)
+        break;
+      return false;
+    }
+    ContainerReader mr(mc, this->espn_bytes_);
+    GameSnapshot g;
+    bool ok = ::espn::parse_curling_match(mr, team->espn_id, g, std::to_string(id));
+    mc->end();
+    if (!ok || g.state == GameState::POST)
+      continue;  // not our rink's, or one it already played
+    out.valid = true;
+    out.event_id = g.event_id;
+    out.kickoff_epoch = g.kickoff_epoch;
+    ESP_LOGI(TAG, "Curling playoff match %s for %s", g.event_id.c_str(), team->abbr);
+    return true;
+  }
+  out.valid = false;
+  return true;
+}
+
 bool GamedayComponent::needs_lookahead_(League league) const {
   const ::espn::LeagueInfo *info = ::espn::league_info(league);
-  return info != nullptr && info->sport != ::espn::Sport::FOOTBALL && !info->season_list;
+  // Curling needs none: its standings name the match on now (a live match's
+  // result stays empty until it ends), and the feed has no day scoreboard.
+  return info != nullptr && info->sport != ::espn::Sport::FOOTBALL && info->sport != ::espn::Sport::CURLING &&
+         !info->season_list;
 }
 
 int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, int64_t day_epoch,
@@ -3126,6 +3208,8 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
 // (team_names_game_on_now), so it skips the read.
 void GamedayComponent::take_game_on_now_(const ::espn::Team *team, Schedule &s, const std::string &done_event,
                                          const char *comp_slug) {
+  if (::espn::league_sport(team->league) == ::espn::Sport::CURLING)
+    return;  // the standings read already named the match on now
   if (::espn::team_names_game_on_now(team->league))
     return;
   int64_t now = (int64_t) this->time_->timestamp_now();
@@ -3167,6 +3251,10 @@ bool GamedayComponent::fetch_live_games_(League league, ::espn::LiveList &out, i
                                          ::espn::FinalList *finals, ::espn::PendingList *pending,
                                          int64_t epoch, bool top25, const std::vector<uint32_t> *watch,
                                          int64_t *watch_kickoff) {
+  // Curling's feed has no day scoreboard to scan: the live modes skip it
+  // (a curling rink is followed as a favorite, not scanned for).
+  if (::espn::league_sport(league) == ::espn::Sport::CURLING)
+    return true;
   std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now(), top25);
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
   auto container = this->open_(url);
@@ -3205,7 +3293,9 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
   const ::espn::LeagueInfo *info = ::espn::league_info(league);
   if (info == nullptr)
     return false;
-  std::string url = ::espn::event_url(league, schedule.event_id, schedule.comp_slug);
+  const bool curling = info->sport == ::espn::Sport::CURLING;
+  std::string url = curling ? ::espn::curling_match_url(atoi(schedule.event_id.c_str()))
+                            : ::espn::event_url(league, schedule.event_id, schedule.comp_slug);
   ESP_LOGD(TAG, "Fetching game: %s", url.c_str());
   auto container = this->open_(url);
   if (container == nullptr) {
@@ -3216,13 +3306,25 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
   ContainerReader reader(container, this->espn_bytes_);
   // parse_event writes out only once the whole document parsed, so no copy of
   // its own is needed here.
-  bool ok = ::espn::parse_event(reader, info->sport, this->our_id_(), out, schedule.event_id);
+  bool ok = curling ? ::espn::parse_curling_match(reader, this->our_id_(), out, schedule.event_id)
+                    : ::espn::parse_event(reader, info->sport, this->our_id_(), out, schedule.event_id);
   container->end();
   if (!ok) {
     ESP_LOGW(TAG, "Game %s not parsed (%u bytes)", schedule.event_id.c_str(),
              (unsigned) reader.total());
     this->job_.game_gone = true;
     return false;
+  }
+  if (curling) {
+    // The registry's code for our rink (the document's is derived from its
+    // name), the standings' code for the other side, and our rink's record
+    // from the standings the schedule read saw.
+    if (team != nullptr && team->espn_id == out.team_id)
+      out.team_abbr = team->abbr;
+    if (!schedule.opp_abbr.empty())
+      out.opp_abbr = schedule.opp_abbr;
+    if (out.team_record.empty())
+      out.team_record = schedule.team_record;
   }
   ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%u bytes)", ::espn::state_name(out.state), out.team_abbr.c_str(),
            out.team_score, out.opp_abbr.c_str(), out.opp_score, out.short_detail.c_str(), (unsigned) reader.total());
@@ -4129,6 +4231,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   }
   if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::BASKETBALL)
     f.situation = ::espn::basketball_series(g);
+  if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::CURLING)
+    f.situation = ::espn::curling_situation(g);
   // The pictures on a wide board's situation row (game_viz.h). The margin
   // samples follow the board game read by read while it is on; a redraw of
   // the same read adds nothing. The bits say what the page draws now.
@@ -7008,13 +7112,15 @@ std::vector<::espn::NewsSource> GamedayComponent::news_sources_() const {
   std::vector<::espn::NewsSource> out;
   if (this->favorites_mode_()) {
     for (const auto &e : this->fav_)
-      if (e.team != nullptr && this->fav_in_list_(e.slot - 1))
+      if (e.team != nullptr && ::espn::league_sport(e.team->league) != ::espn::Sport::CURLING &&
+          this->fav_in_list_(e.slot - 1))
         out.push_back({e.team->league, e.team->espn_id, e.team->abbr});
     if (!out.empty())
       return out;
   }
   for (League l : this->scan_leagues_())
-    out.push_back({l, 0, ""});
+    if (::espn::league_sport(l) != ::espn::Sport::CURLING)  // ESPN has no curling news
+      out.push_back({l, 0, ""});
   return out;
 }
 

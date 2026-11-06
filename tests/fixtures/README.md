@@ -36,6 +36,22 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nhl_ana_inseason.json` | `.../hockey/nhl/teams/25/schedule` in season: 14 finals (6-7-1, one overtime loss) and 70 games ahead (recorded 2026-11-03) |
 | `schedule_nhl_ana_2026.json` | `.../hockey/nhl/teams/25/schedule?season=2026&seasontype=2`: 82 finals, 15 in overtime and 8 in a shootout, 43-33-6 (recorded 2026-11-03) |
 | `schedule_mcbb_ala_2026_post.json` | `.../basketball/mens-college-basketball/teams/333/schedule?season=2026&seasontype=3`: three NCAA tournament games, "Midwest Region - Sweet 16" last (recorded 2026-11-03) |
+| `curling_series_list.json` | **Not ESPN** — see the curling note below: `thegrandslamofcurling.com/curling/static/json/series_list.json`, every series the feed carries (recorded 2026-11-06) |
+| `curling_standings_masters.json` | `thegrandslamofcurling.com/curling/live/json/20_standings.json`, the GSOC Masters (series 20): both groups, every rink's round-robin matches, 52 of 80 matches complete (recorded 2026-11-06) |
+| `curling_match_men_final.json` | `thegrandslamofcurling.com/curling/live/json/1512.json`, men's round robin: Dunstone 14, Hlushak 1 (recorded 2026-11-06) |
+| `curling_match_women_final.json` | `thegrandslamofcurling.com/curling/live/json/1513.json`, women's round robin: Fujisawa 8, Hasselborg 7 (recorded 2026-11-06) |
+| `curling_match_live.json` | `thegrandslamofcurling.com/curling/live/json/1561.json`, women's round robin live in its first end: Paetz against Kitazawa, Draw 14 (recorded 2026-11-06) |
+| `curling_match_upcoming.json` | `thegrandslamofcurling.com/curling/live/json/1567.json`, men's round robin still to come: Dunstone against Casper, Draw 16 (recorded 2026-11-06) |
+
+The six `curling_*` files are the exception to the ESPN line above: ESPN
+has no curling, so they were recorded the same day from the Grand Slam of
+Curling site's data feed (the Sportsnet curling data), which needs no key
+or login. They are kept exactly as the feed sent them. One caution the
+tests pin down: a match document's `result.matchresult` line can disagree
+with its per-end scores (match 1512's says 11-1; the ends, and the
+published score, say 14-1), so the parser reads the ends and the total,
+never that line. The standings' per-match scores are 0-0 placeholders;
+only a match document's are real.
 
 The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`), and the four recorded on 2026-11-03, keep only the fields a schedule parse reads
 (every event, each cut to its date, season type, week, status, notes,

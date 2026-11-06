@@ -35,8 +35,8 @@ inline const char *leaders_stage_name(LeadersStage s) {
 // summary's leaders there are shots and passes, and the goal scorers are
 // already on the ticker.
 inline LeadersStage leaders_stage(const GameSnapshot &g) {
-  if (!g.valid || g.sport == Sport::SOCCER)
-    return LeadersStage::NONE;
+  if (!g.valid || g.sport == Sport::SOCCER || g.sport == Sport::CURLING)
+    return LeadersStage::NONE;  // neither feed has a summary document
   if (g.state == GameState::POST)
     return g.completed ? LeadersStage::FINAL : LeadersStage::NONE;
   if (g.state != GameState::IN)

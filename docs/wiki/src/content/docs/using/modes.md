@@ -15,7 +15,7 @@ The panel cycles through up to 16 favorite teams, and a favorite's game takes th
 
 ### How a team's game is shown
 
-- **Before the game** the board shows both logos and the matchup, and the ticker gives the kickoff day and time in the panel's timezone, plus the line, over/under, TV channel and venue when ESPN has them. Each sport has its own details; see [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
+- **Before the game** the board shows both logos and the matchup, and the ticker gives the kickoff day and time in the panel's timezone, plus the line, over/under, TV channel and venue when ESPN has them. Each sport has its own details; see [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/), [Soccer](/using/soccer/) and [Curling](/using/curling/).
 - **During the game** the panel reads ESPN every 10 seconds, about as often as ESPN updates.
 - **After the final** the score stays up for a while, then the panel moves on to the team's next game.
 

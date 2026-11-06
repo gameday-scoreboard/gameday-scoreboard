@@ -223,7 +223,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
-//                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
+//                                    sport=football|baseball|basketball|hockey|soccer|curling|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
 //                                    remote1..remote4=fav|team:nfl:6|list:Name|sport:football|all|none
 //                                    (what a WizMote button does, set_request.h RemoteTarget)
@@ -1215,6 +1215,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void run_season_job_();
   void apply_season_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
+  // Curling's schedule read: the feed's series list (cached six hours),
+  // the series' standings for our rink's next match, and the playoff walk
+  // when the round robin is over (fetch_schedule_ branches here).
+  bool fetch_curling_schedule_(const ::espn::Team *team, Schedule &out);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);
   bool fetch_upcoming_(const ::espn::Team *team, std::vector<::espn::Upcoming> &out);
@@ -1700,6 +1704,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool leaders_half_shown_{false};
   Schedule schedule_;
   uint32_t schedule_fetched_ms_{0};
+  // Curling: the feed series the panel follows, picked from its list at
+  // most every six hours, and how many matches the series holds (the
+  // playoff walk's bound).
+  int curl_series_id_{0};
+  int curl_match_count_{0};
+  uint32_t curl_series_ms_{0};
   // Soccer: the fallback team's reads per competition (as Job::comps), the cup
   // read due next (-1 when none) and the last game seen to finish.
   std::vector<Schedule> comps_;
