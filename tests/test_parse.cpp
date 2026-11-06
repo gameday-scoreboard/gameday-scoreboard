@@ -5523,7 +5523,7 @@ static void test_golf() {
   CHECK(parse_golf(fin, League::PGA, hfavs, 1, gb));
   CHECK(gb.state == GolfState::POST);
   CHECK_EQ((int) gb.round, 4);
-  CHECK_EQ(std::string(gb.detail), std::string("Final"));
+  CHECK_EQ(std::string(gb.detail), std::string("Complete"));
   CHECK_EQ(gb.rows[0].id, 11332u);
   CHECK_EQ(std::string(gb.rows[0].score), std::string("-25"));
   CHECK_EQ(golf_header(gb), std::string("PGA FINAL"));
@@ -5550,14 +5550,20 @@ static void test_golf() {
   std::string empty = "{}";
   CHECK(!parse_golf(empty, League::PGA, nullptr, 0, no));
 
-  // A golfer favorite is a known favorite (set_request.h), a Live games
-  // scan never names a golf league, and the tours take turns in slot order.
+  // A golfer favorite is a known favorite (set_request.h). Golf leagues
+  // sit in the Live games lists like any other, but a scan never reads a
+  // tour (scan_leagues leaves them out: a leaderboard is not a game), and
+  // the tours take turns in slot order.
   CHECK(known_team((uint8_t) League::PGA, 5077389));
   CHECK(known_team((uint8_t) League::LPGA, 10484));
   CHECK(!known_team((uint8_t) League::PGA, 0));
   std::vector<League> live = live_leagues(0, {(uint8_t) League::PGA, (uint8_t) League::NFL});
-  CHECK_EQ(live.size(), (size_t) 1);
-  CHECK(live[0] == League::NFL);
+  CHECK_EQ(live.size(), (size_t) 2);
+  CHECK(live[0] == League::NFL && live[1] == League::PGA);
+  // But a Live games scan never reads a tour: scan_leagues leaves golf out.
+  std::vector<League> scan = scan_leagues((uint8_t) Mode::LIVE, live);
+  CHECK_EQ(scan.size(), (size_t) 1);
+  CHECK(scan[0] == League::NFL);
   CHECK_EQ(golf_next(0b101, 0), 2);
   CHECK_EQ(golf_next(0b101, 2), 0);
   CHECK_EQ(golf_next(0, -1), -1);
@@ -6517,9 +6523,10 @@ static void test_season() {
   CHECK(!season_read_due(t, 0, t - kSeasonRetryMs, true, true));
   CHECK(season_read_due(t, 0, t - kSeasonBigRetryMs, true, true));
 
-  // Which leagues have the cards, and which read once a day.
+  // Which leagues have the cards, and which read once a day. Golf has no
+  // season schedule to recap, like MLB's is too big to read.
   for (const auto &l : kLeagues) {
-    CHECK_EQ(season_cards(l), l.league != League::MLB);
+    CHECK_EQ(season_cards(l), l.league != League::MLB && !golf_league(l.league));
     CHECK_EQ(season_big(l), !l.season_list);
   }
   CHECK(season_big(*league_info(League::NHL)) && season_cards(*league_info(League::NHL)));

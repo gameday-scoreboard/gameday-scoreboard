@@ -399,10 +399,9 @@ def timezone_index(v):
 
 
 def live_auto_leagues():
-    """live_leagues() with a mask of 0: the favorites' leagues, NFL with none.
-    Golf leagues are never live leagues: a tour has no games."""
+    """live_leagues() with a mask of 0: the favorites' leagues, NFL with none."""
     used = {t["l"] for t in STATE["favs"] if t}
-    return [lg for lg in LEAGUES if lg in used and LEAGUE_SPORT.get(lg) != "golf"] or ["nfl"]
+    return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
 def no_team_default():
@@ -426,8 +425,7 @@ def state_doc():
         if STATE["sport"] not in STATE["sports"]:
             STATE["sport"] = ""
     if no_team_default():
-        # no_team_leagues(): every league but golf, which has no games.
-        STATE["live"] = [lg for lg in LEAGUES if LEAGUE_SPORT.get(lg) != "golf"]
+        STATE["live"] = list(LEAGUES)
     elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
     else:

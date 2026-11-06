@@ -106,8 +106,8 @@
     {"name": "an explicit list ignores the favorites", "start": {"favs": ["mlb:15", "", "", ""]}, "set": [["live", "nhl"]], "expect": {"live": ["nhl"], "live_auto": false}},
 
     {"name": "no favorite keeps every league over a saved list", "start": {"mode": 4, "live": ["mlb"], "live_auto": false}, "set": [["rotate", "5"]],
-     "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"], "live_auto": false}},
-    {"name": "Favorites with none set reports every league", "start": {"mode": 4}, "set": [["rotate", "5"]], "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"]}},
+     "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl", "pga", "lpga", "eur"], "live_auto": false}},
+    {"name": "Favorites with none set reports every league", "start": {"mode": 4}, "set": [["rotate", "5"]], "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl", "pga", "lpga", "eur"]}},
     {"name": "a favorite in Favorites ends the no-team set", "start": {"mode": 4}, "set": [["fav1", "nhl:25"]], "expect": {"live": ["nhl"]}},
     {"name": "Live games ends the no-team set", "start": {"mode": 4}, "set": [["mode", "5"]], "expect": {"mode": 5, "live": ["nfl"]}},
 

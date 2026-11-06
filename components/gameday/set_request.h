@@ -127,7 +127,7 @@ inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t
   }
   std::vector<League> out;
   for (const auto &l : kLeagues)
-    if (!golf_league(l.league) && (mask & (1u << (uint8_t) l.league)))
+    if (mask & (1u << (uint8_t) l.league))
       out.push_back(l.league);
   if (out.empty())
     out.push_back(League::NFL);
@@ -147,15 +147,16 @@ inline bool no_team_default(uint8_t mode, bool have_favorite) {
 inline std::vector<League> no_team_leagues() {
   std::vector<League> out;
   for (const auto &l : kLeagues)
-    if (!golf_league(l.league))  // golf has no games for Live games to run over
-      out.push_back(l.league);
+    out.push_back(l.league);
   return out;
 }
 
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
 // (live_leagues above, or no_team_leagues for the no-team default). A mode
-// that follows teams (Favorites) scans none.
+// that follows teams (Favorites) scans none. Golf leagues are never
+// scanned: a tour's scoreboard is a leaderboard, and the scan would read
+// its first golfers as a game's two teams.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
     case Mode::LIVE_NFL:
@@ -164,8 +165,13 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
       return {League::NCAA};
     case Mode::LIVE_ANY:
       return {League::NFL, League::NCAA};
-    case Mode::LIVE:
-      return live;
+    case Mode::LIVE: {
+      std::vector<League> out;
+      for (League l : live)
+        if (!golf_league(l))
+          out.push_back(l);
+      return out;
+    }
     default:
       return {};
   }

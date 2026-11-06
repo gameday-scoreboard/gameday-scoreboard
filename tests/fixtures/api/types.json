@@ -303,6 +303,7 @@
     "cards.countdown": "bool",
     "cards.custom": "bool",
     "cards.gameleaders": "bool",
+    "cards.golf": "bool",
     "cards.message": "bool",
     "cards.news": "bool",
     "cards.picture": "bool",
