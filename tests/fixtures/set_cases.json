@@ -106,8 +106,8 @@
     {"name": "an explicit list ignores the favorites", "start": {"favs": ["mlb:15", "", "", ""]}, "set": [["live", "nhl"]], "expect": {"live": ["nhl"], "live_auto": false}},
 
     {"name": "no favorite keeps every league over a saved list", "start": {"mode": 4, "live": ["mlb"], "live_auto": false}, "set": [["rotate", "5"]],
-     "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"], "live_auto": false}},
-    {"name": "Favorites with none set reports every league", "start": {"mode": 4}, "set": [["rotate", "5"]], "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"]}},
+     "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl", "curlingm", "curlingw"], "live_auto": false}},
+    {"name": "Favorites with none set reports every league", "start": {"mode": 4}, "set": [["rotate", "5"]], "expect": {"live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl", "curlingm", "curlingw"]}},
     {"name": "a favorite in Favorites ends the no-team set", "start": {"mode": 4}, "set": [["fav1", "nhl:25"]], "expect": {"live": ["nhl"]}},
     {"name": "Live games ends the no-team set", "start": {"mode": 4}, "set": [["mode", "5"]], "expect": {"mode": 5, "live": ["nfl"]}},
 
@@ -302,7 +302,7 @@
      "expect": {"remote": [{"v": "sport:basketball", "gone": false}, {"v": "fav", "gone": false}, {"v": "all", "gone": false}, {"v": "none", "gone": false}]}},
     {"name": "a remote button's sport row with no favorites is gone", "start": {"favs": ["nfl:6", "nba:6", "", ""], "remote": [{"v": "sport:hockey"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}]}, "set": [["rotate", "5"]],
      "expect": {"remote": [{"v": "sport:hockey", "gone": true}, {"v": "fav", "gone": false}, {"v": "fav", "gone": false}, {"v": "fav", "gone": false}]}},
-    {"name": "a remote value the panel can't read is refused", "start": {"remote": [{"v": "all"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}]}, "set": [["remote1", "team:dallas"], ["remote2", "sport:curling"]],
+    {"name": "a remote value the panel can't read is refused", "start": {"remote": [{"v": "all"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}]}, "set": [["remote1", "team:dallas"], ["remote2", "sport:lacrosse"]],
      "expect": {"remote": [{"v": "all", "gone": false}, {"v": "fav", "gone": false}, {"v": "fav", "gone": false}, {"v": "fav", "gone": false}]}},
     {"name": "reordered favorites keep their playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 2]}]}, "set": [["favs", "nhl:25,mlb:15,nfl:6"]], "expect": {"lists": [{"n": "A", "f": [0, 2], "days": "", "start": "00:00", "end": "00:00", "only": false, "color": "", "icon": ""}]}},
     {"name": "a favorite taken out leaves its playlists", "start": {"favs": ["nfl:6", "nba:6", "nhl:25", "mlb:15"], "lists": [{"n": "A", "f": [0, 1]}]}, "set": [["favs", "nba:6,nhl:25"]], "expect": {"lists": [{"n": "A", "f": [0], "days": "", "start": "00:00", "end": "00:00", "only": false, "color": "", "icon": ""}]}},

@@ -636,7 +636,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(tabs.getByRole("tab", { name: "NCAAF" })).toBeFocused();
   await expect(page.getByRole("tabpanel").locator(".tile .a").first()).toContainText("NCAAF");
   await page.keyboard.press("End");
-  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NHL");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("Curling W");
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("On now");
   await expect(tabs.locator('[tabindex="0"]')).toHaveText("On now");
@@ -1132,7 +1132,7 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   await page.goto("/");
   await expect(page.locator("#livebar")).toBeVisible();
   await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
-  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
+  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL", "Curling M", "Curling W"]);
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NHL"]);
   await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
   await expectSet(request, { live: "mlb,nhl,nba" });
@@ -2034,7 +2034,7 @@ test("the picker has a tab per league and adds a team from another sport", async
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
-  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
+  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL", "Curling M", "Curling W"]);
   await page.locator(".tabs button", { hasText: "NHL" }).click();
   await expect(page.locator(".tabs button.on")).toHaveText("NHL");
   await expect(page.locator("#tiles .tile")).toHaveCount(32);

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdlib>
 
 #include "message.h"
@@ -1013,6 +1014,324 @@ bool parse_scoreboard(TInput &input, const std::string &event_id, uint32_t our_t
     return detail::snapshot_from_event(ev, our_team_id, out);
   }
   return false;
+}
+
+namespace detail {
+
+// Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm), the
+// inverse of the civil_from_epoch the kickoff formatting uses.
+inline int64_t days_from_civil(int y, int m, int d) {
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = (unsigned) (y - era * 400);
+  const unsigned doy = (153u * (unsigned) (m + (m > 2 ? -3 : 9)) + 2) / 5 + (unsigned) d - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return (int64_t) era * 146097 + (int64_t) doe - 719468;
+}
+
+// The curling feed's dates are "MM/DD/YYYY" and its times "HH:MM", both GMT
+// in the fields the parsers read (matchdate_gmt, start_time_gmt). The epoch
+// of the date (and time, when given), or 0 for anything else.
+inline int64_t curling_gmt_epoch(const std::string &date, const std::string &time = "") {
+  if (date.size() != 10 || date[2] != '/' || date[5] != '/')
+    return 0;
+  auto num = [&date](size_t at, size_t len) { return atoi(date.substr(at, len).c_str()); };
+  const int mo = num(0, 2), d = num(3, 2), y = num(6, 4);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 2020 || y > 2099)
+    return 0;
+  int64_t epoch = days_from_civil(y, mo, d) * 86400;
+  if (time.size() == 5 && time[2] == ':') {
+    const int hh = atoi(time.substr(0, 2).c_str()), mm = atoi(time.substr(3, 2).c_str());
+    if (hh >= 0 && hh < 24 && mm >= 0 && mm < 60)
+      epoch += hh * 3600 + mm * 60;
+  }
+  return epoch;
+}
+
+// A rink's board abbreviation from the name the feed gives it: the first
+// three letters, upper case ("Dunstone" -> "DUN", "X. Schwaller" -> "XSC"),
+// which is the code the feed's own standings use. The component replaces
+// our side's with the registry's code; this is what a document alone says.
+inline std::string curling_abbr(const std::string &name) {
+  std::string out;
+  for (char c : name) {
+    if (!isalpha((unsigned char) c))
+      continue;
+    out += (char) toupper((unsigned char) c);
+    if (out.size() == 3)
+      break;
+  }
+  return out;
+}
+
+}  // namespace detail
+
+// The series in the curling feed's list (curling_series_url) the panel
+// follows at now_epoch: one under way (the latest to start when events
+// overlap), else the next to start within six weeks. The feed's test series
+// (parent_name "Test Series...") are left out, as are finished ones.
+template<typename TInput>
+bool parse_curling_series(TInput &input, int64_t now_epoch, CurlingSeries &out) {
+  JsonDocument filter(detail::json_allocator());
+  JsonObject row = filter["data"].template add<JsonObject>();
+  row["series_id"] = true;
+  row["start_date"] = true;
+  row["end_date"] = true;
+  row["parent_name"] = true;
+  row["match_count"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                             DeserializationOption::NestingLimit(40));
+  if (err)
+    return false;
+  int64_t live_start = 0, next_start = INT64_MAX;
+  CurlingSeries live, next;
+  for (JsonObjectConst s : doc["data"].as<JsonArrayConst>()) {
+    if (detail::str_or_empty(s["parent_name"]).rfind("Test", 0) == 0)
+      continue;
+    const int64_t start = detail::curling_gmt_epoch(detail::str_or_empty(s["start_date"]));
+    const int64_t end = detail::curling_gmt_epoch(detail::str_or_empty(s["end_date"]));
+    if (start == 0 || end == 0)
+      continue;
+    CurlingSeries cand;
+    cand.id = s["series_id"] | 0;
+    cand.match_count = s["match_count"] | 0;
+    if (cand.id == 0)
+      continue;
+    if (start <= now_epoch && now_epoch <= end + 86399) {
+      if (start > live_start) {
+        live_start = start;
+        live = cand;
+      }
+    } else if (start > now_epoch && start - now_epoch <= 42 * 86400 && start < next_start) {
+      next_start = start;
+      next = cand;
+    }
+  }
+  out = live.id != 0 ? live : next;
+  return out.id != 0;
+}
+
+// Our rink in one series' standings (curling_standings_url): the document
+// lists every rink's round-robin matches under standings.groups[].teams.
+// first_id and last_id bound the match ids it names; the series' playoff
+// matches continue from first_id (the component walks them by the series
+// list's match_count). Returns true when our rink is in the series, with
+// out valid when it still has a match with no result — the earliest is also
+// the one on now, since the feed leaves a live match's result empty. The
+// per-end scores in this document are placeholders (0-0); only the match
+// document's are real.
+template<typename TInput>
+bool parse_curling_schedule(TInput &input, uint32_t our_team_id, Schedule &out, CurlingRange &range) {
+  JsonDocument filter(detail::json_allocator());
+  JsonObject team = filter["standings"]["groups"][0]["teams"]["team"].template add<JsonObject>();
+  team["team_id"] = true;
+  team["matches_won"] = true;
+  team["matches_lost"] = true;
+  JsonObject m = team["match_result"]["match"].template add<JsonObject>();
+  m["id"] = true;
+  m["result"] = true;
+  m["date"] = true;
+  m["teama_id"] = true;
+  m["teama_short_name"] = true;
+  m["teamb_id"] = true;
+  m["teamb_short_name"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                             DeserializationOption::NestingLimit(40));
+  if (err)
+    return false;
+  bool in_series = false;
+  int64_t best_epoch = INT64_MAX;
+  int best_id = INT_MAX;
+  for (JsonObjectConst g : doc["standings"]["groups"].as<JsonArrayConst>())
+    for (JsonObjectConst t : g["teams"]["team"].as<JsonArrayConst>()) {
+      const bool ours = (uint32_t) (t["team_id"] | 0) == our_team_id;
+      if (ours) {
+        in_series = true;
+        out.team_record = std::to_string(t["matches_won"] | 0) + "-" + std::to_string(t["matches_lost"] | 0);
+      }
+      for (JsonObjectConst match : t["match_result"]["match"].as<JsonArrayConst>()) {
+        const int id = match["id"] | 0;
+        if (id == 0)
+          continue;
+        if (range.first_id == 0 || id < range.first_id)
+          range.first_id = id;
+        if (id > range.last_id)
+          range.last_id = id;
+        if (!ours || !detail::str_or_empty(match["result"]).empty())
+          continue;
+        const int64_t at = detail::curling_gmt_epoch(detail::str_or_empty(match["date"]));
+        if (at == 0 || at > best_epoch || (at == best_epoch && id >= best_id))
+          continue;
+        best_epoch = at;
+        best_id = id;
+        out.event_id = std::to_string(id);
+        out.kickoff_epoch = at;
+        const bool a = (uint32_t) (match["teama_id"] | 0) == our_team_id;
+        out.opp_id = (uint32_t) (a ? (match["teamb_id"] | 0) : (match["teama_id"] | 0));
+        out.opp_abbr = detail::str_or_empty(a ? match["teamb_short_name"] : match["teama_short_name"]);
+      }
+    }
+  out.valid = best_id != INT_MAX;
+  return in_series;
+}
+
+// One curling match document (curling_match_url), resolved to our rink and
+// the other. The score that counts is each side's per-end score and its
+// total; the document's result.matchresult line is not read (it has been
+// seen stale against the ends). Returns false on a JSON error, when our
+// rink is not in the match, or when event_id is given and the document is
+// some other match.
+template<typename TInput>
+bool parse_curling_match(TInput &input, uint32_t our_team_id, GameSnapshot &out, const std::string &event_id = "") {
+  JsonDocument filter(detail::json_allocator());
+  JsonObject md = filter["match_detail"].to<JsonObject>();
+  md["match_id"] = true;
+  md["stage"] = true;
+  md["match_draw"] = true;
+  md["current_end"] = true;
+  md["matchdate_gmt"] = true;
+  md["start_time_gmt"] = true;
+  md["is_live"] = true;
+  md["is_completed"] = true;
+  md["is_upcoming"] = true;
+  md["matchstatus_id"] = true;
+  md["series"]["short_name"] = true;
+  md["series"]["name"] = true;
+  md["venue"]["name"] = true;
+  md["result"]["winning_team_id"] = true;
+  JsonObject team = filter["teams"]["team"].template add<JsonObject>();
+  team["id"] = true;
+  team["name"] = true;
+  team["lsfe"] = true;
+  team["score"]["total"] = true;
+  JsonObject end = team["score"]["ends"].template add<JsonObject>();
+  end["id"] = true;
+  end["score"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                             DeserializationOption::NestingLimit(40));
+  if (err)
+    return false;
+  JsonObjectConst detail = doc["match_detail"];
+  const int match_id = detail["match_id"] | 0;
+  if (match_id == 0 || (!event_id.empty() && std::to_string(match_id) != event_id))
+    return false;
+  JsonObjectConst mine, other;
+  for (JsonObjectConst t : doc["teams"]["team"].as<JsonArrayConst>()) {
+    if ((uint32_t) (t["id"] | 0) == our_team_id)
+      mine = t;
+    else if (other.isNull())
+      other = t;
+  }
+  if (mine.isNull() || other.isNull())
+    return false;
+  GameSnapshot s;
+  s.valid = true;
+  s.sport = Sport::CURLING;
+  s.event_id = std::to_string(match_id);
+  s.game_name = detail::str_or_empty(detail["series"]["short_name"]);
+  if (s.game_name.empty())
+    s.game_name = detail::str_or_empty(detail["series"]["name"]);
+  s.cur.stage = detail::str_or_empty(detail["stage"]);
+  s.cur.draw = detail::str_or_empty(detail["match_draw"]);
+  s.venue = detail::str_or_empty(detail["venue"]["name"]);
+  s.kickoff_epoch = detail::curling_gmt_epoch(detail::str_or_empty(detail["matchdate_gmt"]),
+                                              detail::str_or_empty(detail["start_time_gmt"]));
+  s.team_id = our_team_id;
+  s.opp_id = (uint32_t) (other["id"] | 0);
+  s.team_abbr = detail::curling_abbr(detail::str_or_empty(mine["name"]));
+  s.opp_abbr = detail::curling_abbr(detail::str_or_empty(other["name"]));
+  s.team_score = detail::score_value(mine["score"]["total"]);
+  s.opp_score = detail::score_value(other["score"]["total"]);
+  // The ends, in the document's order: the numbered ones are the line
+  // score, "EE" the extra end. An end past kLinesMax adds into the last one,
+  // as everywhere else.
+  auto read_ends = [&s](JsonObjectConst t, bool ours) {
+    int reg = 0, ee = -1;
+    for (JsonObjectConst e : t["score"]["ends"].as<JsonArrayConst>()) {
+      const std::string id = detail::str_or_empty(e["id"]);
+      const int v = detail::score_value(e["score"]);
+      if (id == "EE") {
+        ee = v;
+        continue;
+      }
+      const int at = reg < (int) GameSnapshot::kLinesMax ? reg : (int) GameSnapshot::kLinesMax - 1;
+      (ours ? s.team_lines[at] : s.opp_lines[at]) += (uint8_t) (v > 255 ? 255 : v);
+      reg++;
+    }
+    return std::pair<int, int>(reg, ee);
+  };
+  const auto mt = read_ends(mine, true);
+  const auto ot = read_ends(other, false);
+  const int reg_ends = std::max(mt.first, ot.first);
+  if (reg_ends > 0)
+    s.cur.regulation = (uint8_t) std::min(reg_ends, (int) GameSnapshot::kLinesMax);
+  const bool ee_played = (mt.second > 0 || ot.second > 0);
+  if (ee_played) {
+    const int at = reg_ends < (int) GameSnapshot::kLinesMax ? reg_ends : (int) GameSnapshot::kLinesMax - 1;
+    s.team_lines[at] = (uint8_t) (mt.second > 0 ? mt.second : 0);
+    s.opp_lines[at] = (uint8_t) (ot.second > 0 ? ot.second : 0);
+  }
+  const bool completed = detail["is_completed"] | false;
+  const bool live = detail["is_live"] | false;
+  const bool upcoming = detail["is_upcoming"] | false;
+  if (completed || (detail["matchstatus_id"] | 0) == 3) {
+    s.state = GameState::POST;
+    s.completed = true;
+  } else if (live) {
+    s.state = GameState::IN;
+  } else if (upcoming || (detail["matchstatus_id"] | 0) == 1) {
+    s.state = GameState::PRE;
+  } else {
+    return false;  // no state the feed will stand behind
+  }
+  if (s.state == GameState::POST) {
+    const uint32_t winner = (uint32_t) (detail["result"]["winning_team_id"] | 0);
+    s.team_winner = winner != 0 && winner == our_team_id;
+    s.cur.shootout = winner != 0 && s.team_score == s.opp_score;
+    s.period = reg_ends + (ee_played ? 1 : 0);
+    s.short_detail = s.cur.shootout ? "Final/SO" : ee_played ? "Final/EE" : "Final";
+    s.team_line_count = s.opp_line_count = (uint8_t) s.period;
+  } else if (s.state == GameState::IN) {
+    // The end on now: the feed's own current_end when it names one (a JSON
+    // number while a match is live, "" before and after), else one past
+    // the last end with a score in it.
+    JsonVariantConst ce = detail["current_end"];
+    int cur_end = ce.is<const char *>() ? atoi(ce.as<const char *>()) : (ce | 0);
+    if (cur_end <= 0) {
+      cur_end = 1;
+      for (int i = 0; i < reg_ends && i < (int) GameSnapshot::kLinesMax; i++)
+        if (s.team_lines[i] > 0 || s.opp_lines[i] > 0)
+          cur_end = i + 1;
+      if (ee_played)
+        cur_end = reg_ends + 1;
+    }
+    s.period = cur_end;
+    s.short_detail = cur_end > reg_ends ? "Extra end" : "End " + std::to_string(cur_end);
+  } else {
+    s.short_detail = !s.cur.draw.empty() ? s.cur.draw : s.cur.stage;
+  }
+  // The hammer (who throws last). The feed names the first end's (lsfe);
+  // every later end's goes to the side that did not score the end before,
+  // and a blank end keeps it. Worked out through the ends already finished:
+  // all of them at a final, the ones before the end on now in a live match.
+  const bool mine_first = mine["lsfe"] | false;
+  const bool other_first = other["lsfe"] | false;
+  if (mine_first != other_first) {
+    s.cur.hammer_known = true;
+    bool ours = mine_first;
+    const int finished = s.state == GameState::POST ? s.period : s.state == GameState::IN ? s.period - 1 : 0;
+    for (int i = 0; i < finished && i < (int) GameSnapshot::kLinesMax; i++) {
+      if (s.team_lines[i] == s.opp_lines[i])
+        continue;  // a blank end: the hammer stays
+      ours = s.team_lines[i] < s.opp_lines[i];
+    }
+    s.cur.hammer_ours = ours;
+  }
+  out = s;
+  return true;
 }
 
 // Parses a news feed (news_url) into its headlines, up to kNewsMax, each one

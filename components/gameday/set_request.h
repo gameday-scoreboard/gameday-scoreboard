@@ -177,7 +177,7 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 //   fav              the button's own favorite (its default)
 //   team:nfl:6       a favorite team, followed wherever it moves in the list
 //   list:<name>      one of the owner's playlists, by name
-//   sport:football   a sport row (playlists.h), football to soccer
+//   sport:football   a sport row (playlists.h), football to curling
 //   all              All favorites
 //   none             nothing
 // A button whose team, playlist or sport row is gone does what its default
@@ -193,8 +193,8 @@ struct RemoteTarget {
 } __attribute__((packed));
 
 inline const char *remote_sport_key(uint8_t sport) {
-  static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
-  return sport < 5 ? kWords[sport] : "";
+  // leagues.h's words, in Sport order: the same table, not a copy of it.
+  return sport < kSportCount ? kSportKeys[sport] : "";
 }
 
 inline std::string remote_name(const RemoteTarget &t) {
@@ -230,7 +230,7 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     return true;
   }
   if (v.compare(0, 6, "sport:") == 0) {
-    for (uint8_t s = 0; s < 5; s++)
+    for (uint8_t s = 0; s < kSportCount; s++)
       if (v.substr(6) == remote_sport_key(s)) {
         t.kind = (uint8_t) RemoteKind::SPORT;
         t.sport = s;

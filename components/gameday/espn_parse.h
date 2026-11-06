@@ -93,6 +93,30 @@ struct Hockey {
   std::string series;    // "CAR leads series 2-0", playoffs
 };
 
+// Curling's extras. Curling is not an ESPN sport: its documents come from
+// the Grand Slam of Curling site's data feed (sport_curling.cpp), and ends
+// are its periods, so team_lines holds the points of each end, the extra
+// end last. The feed's own series name ("GSOC Masters", "Brier") is the
+// game_name; these are what only curling has.
+struct Curling {
+  std::string stage;  // "Round Robin", "Quarter Final", "Final"
+  std::string draw;   // "Draw 14"
+  // Ends before the extra end: 8 at Grand Slam events, 10 at the Brier,
+  // the Scotties and the championships. The match document's ends list
+  // names them, so the parser counts them (like Basketball::regulation).
+  uint8_t regulation{8};
+  // The hammer: which side throws last in the end on now (or the next one).
+  // The feed names only the first end's (lsfe); the rest follow the scoring,
+  // worked out by the parser. hammer_known is false when the feed named
+  // neither side for the first end.
+  bool hammer_ours{false};
+  bool hammer_known{false};
+  // A level game settled by a draw to the button after the last end (the
+  // Grand Slam's round-robin tiebreak): the feed's total stays level, and
+  // the winner is its own field.
+  bool shootout{false};
+};
+
 // One scoreboard event, resolved to "us" and "them".
 constexpr int16_t kNoWeatherF = INT16_MIN;
 
@@ -170,6 +194,7 @@ struct GameSnapshot {
   Soccer soc;
   Basketball nba;  // every basketball league
   Hockey nhl;
+  Curling cur;
   std::string game_name;  // "Rose Bowl", "Super Bowl LX"; empty for most games
 };
 
@@ -350,6 +375,39 @@ bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id,
 // parse_news into a std::string, for the host tests.
 int parse_news_str(const std::string &json, std::string &list);
 
+// Curling's documents, from the Grand Slam of Curling site's data feed (no
+// key, no login; sport_curling.cpp has the feed's shape). The series list
+// names every event the feed carries, men's and women's; a series'
+// standings carry every rink's round-robin matches; a match document has
+// the ends.
+std::string curling_series_url();
+std::string curling_standings_url(int series_id);
+std::string curling_match_url(int match_id);
+// Bench only, like set_site_root: only the pointer is kept.
+void set_curling_root(const char *root);
+// The series in the list the panel follows at now_epoch: one under way, else
+// the next to start within six weeks. Test series are left out. False when
+// none is near (the off-season).
+struct CurlingSeries {
+  int id{0};
+  int match_count{0};
+};
+bool parse_curling_series_str(const std::string &json, int64_t now_epoch, CurlingSeries &out);
+// Our rink in a series' standings: first_id and last_id bound the series'
+// match ids (the component's playoff scan walks them). True when our rink
+// is in the series; out is then its earliest match with no result yet —
+// which is also the one on now, since the feed leaves a live match's result
+// empty — or invalid when only playoff matches are left.
+struct CurlingRange {
+  int first_id{0};
+  int last_id{0};
+};
+bool parse_curling_schedule_str(const std::string &json, uint32_t our_team_id, Schedule &out, CurlingRange &range);
+// One match document, resolved to our rink and the other. event_id, when
+// given, is the match id the document must name.
+bool parse_curling_match_str(const std::string &json, uint32_t our_team_id, GameSnapshot &out,
+                             const std::string &event_id = "");
+
 // neutral = nobody is "our" team (live-game modes): both sides splash with their abbreviation.
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
@@ -449,6 +507,13 @@ bool baseball_home_run(const GameSnapshot &s);
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);
 Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// Curling (sport_curling.cpp).
+std::string curling_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+std::string curling_clock_text(const GameSnapshot &s);
+Splash curling_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// The hammer for the situation row, at most `max` characters: "DUN hammer".
+// "" before the match, after it, and when the feed named neither side.
+std::string curling_situation(const GameSnapshot &s, size_t max = 12);
 // A W-L-OTL record for the label under a logo (7 characters wide): as is when
 // it fits, else the NHL points, two a win and one an overtime loss ("70 pts").
 std::string hockey_board_record(const std::string &wlo);

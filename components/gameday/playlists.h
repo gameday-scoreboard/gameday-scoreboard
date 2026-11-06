@@ -389,7 +389,7 @@ inline bool list_has(uint16_t mask, bool chosen, size_t i) {
 // are leagues.h's kSportKeys). "All ..." beside All favorites, so an owner's
 // own playlist named Football never shares a name with one.
 constexpr const char *kSportRowNames[kSportCount] = {"All football", "All baseball", "All basketball", "All hockey",
-                                                     "All soccer"};
+                                                     "All soccer", "All curling"};
 
 // The bit of a favorite's sport (bit s = Sport s), 0 for a league byte this
 // firmware doesn't know.

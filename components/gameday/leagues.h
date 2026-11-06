@@ -11,14 +11,26 @@
 namespace espn {
 
 // Saved in prefs and the boot cache: append, never renumber.
-enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8 };
+enum class League : uint8_t {
+  NFL = 0,
+  NCAA = 1,
+  NBA = 2,
+  NHL = 3,
+  MLB = 4,
+  WNBA = 5,
+  MLS = 6,
+  EPL = 7,
+  MCBB = 8,
+  CURLING_M = 9,
+  CURLING_W = 10
+};
 
-enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
+enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4, CURLING = 5 };
 
 // The state document's and /gameday/set's word for each, in Sport order.
-constexpr int kSportCount = 5;
-constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer"};
-static_assert((int) Sport::SOCCER + 1 == kSportCount, "a key per Sport");
+constexpr int kSportCount = 6;
+constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer", "curling"};
+static_assert((int) Sport::CURLING + 1 == kSportCount, "a key per Sport");
 
 // A sport row in Playing (playlists.h) is numbered 1 + its Sport; 0 is none.
 // "football" -> 1, and 0 for a word that names no sport.
@@ -59,6 +71,13 @@ constexpr LeagueInfo kLeagues[] = {
     {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
     {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
+    // Curling is not an ESPN sport: these two follow the men's and women's
+    // sides of the Grand Slam of Curling site's data feed (sport_curling.cpp),
+    // so the path names that feed's side, not an ESPN path, and no ESPN fetch
+    // is ever built from it. The feed carries no team logos, so the board
+    // draws the abbreviation badge (logo_dir empty).
+    {League::CURLING_M, "curlingm", "curling/men", "CURLM", "", Sport::CURLING, false, false, 30},
+    {League::CURLING_W, "curlingw", "curling/women", "CURLW", "", Sport::CURLING, false, false, 30},
 };
 
 constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);

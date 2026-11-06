@@ -758,7 +758,8 @@ void test_scan_leagues() {
 
 // A panel in Favorites with none set runs Live games over every league.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl,curlingm,curlingw",
+         "every league, kLeagues order");
   SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
          "the no-team default's scan reads every league");
@@ -845,7 +846,7 @@ void test_playlists() {
   SCHECK(sport_rows(0) == 0 && sport_rows(football) == 0, "one sport or none: no rows");
   SCHECK(sport_rows(football | hoops) == (football | hoops), "two sports: a row each");
   SCHECK(sport_row_has(football | hoops, 1) && sport_row_has(football | hoops, 3) &&
-             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && !sport_row_has(0xff, 6),
+             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && !sport_row_has(0xff, 7),
          "rows by number");
   for (int s = 0; s < kSportCount; s++)
     SCHECK(std::string(kSportRowNames[s]).size() <= kListNameMax, "%s is longer than a playlist name", kSportRowNames[s]);
@@ -1021,7 +1022,9 @@ void test_remote() {
   SCHECK(remote_parse("sport:hockey", t) && t.kind == (uint8_t) RemoteKind::SPORT && t.sport == (uint8_t) Sport::HOCKEY &&
              remote_text(t) == "sport:hockey",
          "a sport row");
-  SCHECK(!remote_parse("sport:Hockey", t) && !remote_parse("sport:curling", t), "an unknown sport is refused");
+  SCHECK(!remote_parse("sport:Hockey", t) && !remote_parse("sport:lacrosse", t), "an unknown sport is refused");
+  SCHECK(remote_parse("sport:curling", t) && t.sport == (uint8_t) Sport::CURLING && remote_text(t) == "sport:curling",
+         "a curling sport row");
   SCHECK(remote_parse("all", t) && remote_text(t) == "all" && remote_parse("none", t) && remote_text(t) == "none", "all, none");
   SCHECK(!remote_parse("", t) && !remote_parse("nfl:6", t) && !remote_parse("favorite", t), "anything else is refused");
   SetOp op;

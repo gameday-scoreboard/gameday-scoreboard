@@ -543,8 +543,8 @@ void test_remote() {
   SCHECK(in.error.empty() && in.ops.size() == 4 && in.ops[1].kind == SetKind::REMOTE && in.ops[1].slot == 2 &&
              in.ops[1].text == "list:Sundays",
          "remote keys came back wrong: %s", in.error.c_str());
-  in = import(R"({"schema":1,"remote1":"team:xfl:5","remote2":"sport:curling","remote3":"fav"})");
-  SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:curling") &&
+  in = import(R"({"schema":1,"remote1":"team:xfl:5","remote2":"sport:lacrosse","remote3":"fav"})");
+  SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:lacrosse") &&
              in.ops.size() == 1,
          "an unknown team or sport isn't left out and listed");
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");

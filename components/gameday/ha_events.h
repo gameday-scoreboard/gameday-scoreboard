@@ -184,6 +184,13 @@ inline std::string ha_period_name(const GameSnapshot &g, int p) {
       regulation = g.nba.regulation;
       word = regulation == 2 ? "half" : "quarter";
       break;
+    case Sport::CURLING:
+      // Past the last end is the extra end, never an overtime.
+      if (p > (int) g.cur.regulation)
+        return "extra end";
+      regulation = g.cur.regulation;
+      word = "end";
+      break;
     default:
       break;
   }
