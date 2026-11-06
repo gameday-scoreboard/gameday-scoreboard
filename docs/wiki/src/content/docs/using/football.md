@@ -9,7 +9,11 @@ NFL and college football games share one board. What you see depends on your pan
 
 ## Before the game
 
-The next-game card shows both team logos, your team on the left, with each team's abbreviation in its own color and the season records under the logos. A team ESPN has no logo for, like a small-division school on a college schedule, shows its abbreviation in the logo's place over a glow of its team color fading in from the edge of the board (a soft silver glow when ESPN has no color for it either).
+The next-game card shows both team logos, your team on the left, with each team's abbreviation in its own color and the season records under the logos.
+
+:::note[Coming in the next release]
+A team ESPN has no logo for, like a small-division school on a college schedule, shows its abbreviation in the logo's place over a glow of its team color fading in from the edge of the board (a soft silver glow when ESPN has no color for it either).
+:::
 
 A college team in the AP Top 25 has its rank on the outer top corner of its logo, small white digits on a black patch, like **6** for the sixth-ranked team. It stays there during the game and at the final, and it's on the Later today and final score cards [Live games](/using/modes/#when-nothing-is-live) shows when nothing is live. An unranked team's logo is untouched. The rank comes from ESPN with the game, so it changes when the poll does. It is always drawn; the **College Top 25** switch on the device page is for the [Top 25 card](/using/top-25/) between games, not for this.
 
