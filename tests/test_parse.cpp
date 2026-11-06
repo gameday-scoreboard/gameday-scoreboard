@@ -4952,6 +4952,21 @@ static void test_auto_update() {
   CHECK(!install_now_listed("gameday-aba970", me));  // named, but not in the list
   CHECK(!install_now_listed("Install now: all", ""));
 
+  // Follow beta switched while a check ran: its result names the other
+  // channel's folder (the updater joins the manifest's relative ota path to
+  // the folder it read). The two folders don't share a prefix either way.
+  const char *bar = "https://install.gameday-scoreboard.com/firmware/moonhub75-bar/manifest.json";
+  const char *beta = "https://install.gameday-scoreboard.com/firmware/beta/moonhub75/manifest.json";
+  const std::string bar_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75-bar/gameday-esp32s3.ota.bin";
+  const std::string beta_bin = "https://install.gameday-scoreboard.com/firmware/beta/moonhub75/gameday-esp32s3.ota.bin";
+  CHECK(firmware_from_source(bar_bin, bar));
+  CHECK(firmware_from_source(beta_bin, beta));
+  CHECK(!firmware_from_source(beta_bin, bar));
+  CHECK(!firmware_from_source(bar_bin, beta));
+  CHECK(!firmware_from_source("https://install.gameday-scoreboard.com/firmware/moonhub75/gameday-esp32s3.ota.bin", bar));
+  CHECK(firmware_from_source("", bar));  // nothing read yet
+  CHECK(firmware_from_source(bar_bin, nullptr));
+
   // Listed: installs at any hour, even off, unless a game is live.
   t = in;
   t.hour = 15;

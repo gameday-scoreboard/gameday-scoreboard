@@ -226,4 +226,17 @@ inline AutoUpdateStep auto_update_step(const AutoUpdateInputs &in) {
   return AutoUpdateStep::INSTALL;
 }
 
+// Whether a manifest result came from the manifest at `source`. Our
+// manifests give the ota path relative to their folder, so the updater's
+// firmware URL starts with that folder; one read from the other channel
+// (a check still running when Follow beta switched) starts with the other
+// folder. A result with no firmware URL counts as matching.
+inline bool firmware_from_source(const std::string &firmware_url, const char *source) {
+  if (firmware_url.empty() || source == nullptr)
+    return true;
+  const char *slash = strrchr(source, '/');
+  size_t n = slash != nullptr ? (size_t) (slash - source) + 1 : 0;
+  return firmware_url.compare(0, n, source, n) == 0;
+}
+
 }  // namespace espn

@@ -1506,7 +1506,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const char *beta_source_{nullptr};
   ESPPreferenceObject beta_pref_;
   uint8_t follow_beta_{0};  // 1 = read the beta manifest
+  bool channel_switched_{false};  // Follow beta switched; no manifest result since
   void apply_channel_();
+  void forget_update_();
+  void check_channel_result_();
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;
