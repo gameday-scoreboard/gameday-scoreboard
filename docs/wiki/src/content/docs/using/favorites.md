@@ -64,7 +64,7 @@ A playlist is a group of your favorites with a name, like your football teams or
 
 When your favorites cover more than one sport, **Playing** has a row for each of them after **All favorites**, then your own playlists:
 
-- **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
+- **All football**, **All baseball**, **All basketball**, **All hockey**, **All soccer** and **All curling**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
 - Picking one plays every favorite in that sport, with the same rules as a playlist: **Only today's games**, **Take over** and the rest.
 - You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
 - They aren't playlists: they don't show under **Playlists**, don't count toward the 16, and a remote button plays one only when you set it to (see [The numbered buttons](/using/remote/#the-numbered-buttons)). A playlist of your own named Football sits beside **All football**.

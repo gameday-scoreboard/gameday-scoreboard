@@ -61,10 +61,10 @@ The panel sends Home Assistant an event every time either side scores in the gam
 | --- | --- |
 | `team` | The team that scored, like `DAL`. |
 | `opponent` | The other team. |
-| `play` | `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and for any other football score. |
+| `play` | `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and curling and for any other football score. |
 | `points` | The points since the panel's last check. In basketball that can be more than one basket. |
 | `team_score`, `opponent_score` | The score now, the scoring team's first. |
-| `sport` | `football`, `baseball`, `basketball`, `hockey` or `soccer`. |
+| `sport` | `football`, `baseball`, `basketball`, `hockey`, `soccer` or `curling`. |
 | `my_team` | `true` when your team scored. Always `false` in Live games, where neither side is yours. |
 
 `esphome.gameday_final` carries `team` and `opponent` (the left and right sides of the board), both scores, `result` (`win`, `loss` or `draw` for `team`), `winner` (empty on a draw), `sport` and `my_team` (`true` when `team` is your team).
