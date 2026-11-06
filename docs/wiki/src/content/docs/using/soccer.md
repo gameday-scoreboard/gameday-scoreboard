@@ -1,15 +1,15 @@
 ---
-title: "Soccer: MLS and the Premier League"
-description: "What the panel shows for an MLS or Premier League match: the minute and stoppage time, the latest goal, red cards, cup games and the next three fixtures."
+title: "Soccer: MLS, the Premier League and more"
+description: "What the panel shows for a soccer match in MLS, the Premier League, La Liga, the Bundesliga, Serie A, Ligue 1 or Liga MX: the minute and stoppage time, the latest goal, red cards, cup games and the next three fixtures."
 sidebar:
   order: 9
 ---
 
-MLS and Premier League matches share one board. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
+Soccer matches share one board, whichever league your club plays in: MLS, the Premier League, La Liga, the Bundesliga, Serie A, Ligue 1 and Liga MX. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
 
 ## Cup games
 
-The panel follows your club into its cup competitions too: Premier League clubs into the Champions League, Europa League and Conference League, and MLS clubs into the CONCACAF Champions Cup. Whichever game comes first, league or cup, is the one on the board. A cup game's ticker names its stage, like "UEFA Champions League, League Phase".
+The panel follows your club into its cup competitions too: clubs in the Premier League, La Liga, the Bundesliga, Serie A and Ligue 1 into the Champions League, Europa League and Conference League, and MLS clubs into the CONCACAF Champions Cup. Whichever game comes first, league or cup, is the one on the board. A cup game's ticker names its stage, like "UEFA Champions League, League Phase".
 
 ## Before the match
 

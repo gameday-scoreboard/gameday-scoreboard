@@ -37,8 +37,13 @@ Lost the address? Hold the button on the controller for about 1.5 seconds and th
 | NHL | Every team |
 | MLS | Every team |
 | Premier League (EPL) | Every team |
+| La Liga | Every team |
+| Bundesliga | Every team |
+| Serie A | Every team |
+| Ligue 1 | Every team |
+| Liga MX | Every team |
 
-Soccer clubs are followed into their cup competitions too: Premier League clubs into the Champions League, Europa League and Conference League, and MLS clubs into the CONCACAF Champions Cup.
+Soccer clubs are followed into their cup competitions too: clubs in the Premier League, La Liga, the Bundesliga, Serie A and Ligue 1 into the Champions League, Europa League and Conference League, and MLS clubs into the CONCACAF Champions Cup.
 
 Each sport has its own board. See [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
 
