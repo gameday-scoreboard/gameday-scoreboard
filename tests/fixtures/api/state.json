@@ -1,6 +1,8 @@
 {
   "name": "gameday-a1b2c3",
   "nick": "Living room",
+  "ffleague": "123456",
+  "ffteam": 1,
   "version": "v2026.10.1",
   "setup": true,
   "panels": 2,
@@ -278,6 +280,19 @@
     "sit": "",
     "outs": -1,
     "bases": 0
+  },
+  "ff": {
+    "week": 10,
+    "s": "IN",
+    "ta": "ABC",
+    "tn": "Alphabet Soup",
+    "tr": "7-2",
+    "tp": 104.18,
+    "oa": "XYZ",
+    "on": "Xylophone Yetis",
+    "or": "5-4",
+    "op": 96.2,
+    "playoffs": false
   },
   "status": "2nd & 7 at PHI 34",
   "clock": false,

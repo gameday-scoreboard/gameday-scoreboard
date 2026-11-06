@@ -8500,8 +8500,136 @@ static void test_game_leaders() {
   CHECK_EQ((int) leaders_card_text(GameLeaders{}, 128).font, 0);
 }
 
+// Fantasy football (fantasy.h), against the constructed fixture (see
+// fixtures/README.md: invented league, teams and scores, in the documented
+// shape of the mMatchupScore + mTeam document).
+static void test_fantasy() {
+  CHECK_EQ(fantasy_url("123456", 2026),
+           std::string("https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2026/segments/0/"
+                       "leagues/123456?view=mMatchupScore&view=mTeam"));
+  CHECK_EQ(fantasy_season_year(2026, 8), 2026);
+  CHECK_EQ(fantasy_season_year(2026, 12), 2026);
+  CHECK_EQ(fantasy_season_year(2027, 1), 2026);
+  CHECK_EQ(fantasy_season_year(2026, 7), 2025);
+  CHECK(fantasy_league_id_ok("123456"));
+  CHECK(fantasy_league_id_ok("1"));
+  CHECK(!fantasy_league_id_ok(""));
+  CHECK(!fantasy_league_id_ok("0123"));
+  CHECK(!fantasy_league_id_ok("12345678901"));
+  CHECK(!fantasy_league_id_ok("12a34"));
+  CHECK(fantasy_team_id_ok(0) && fantasy_team_id_ok(1) && fantasy_team_id_ok(999));
+  CHECK(!fantasy_team_id_ok(1000) && !fantasy_team_id_ok(-1));
+  CHECK_EQ(fantasy_record(7, 2, 0), std::string("7-2"));
+  CHECK_EQ(fantasy_record(4, 4, 1), std::string("4-4-1"));
+  CHECK_EQ(fantasy_record(-1, -1, 0), std::string(""));
+  CHECK_EQ(fantasy_points_text(108.42f), std::string("108.42"));
+  CHECK_EQ(fantasy_points_text(96.2f), std::string("96.2"));
+  CHECK_EQ(fantasy_points_text(100.0f), std::string("100"));
+  CHECK_EQ(fantasy_points_text(-1), std::string(""));
+
+  // Week 10, live: the owner's team (1) is away at team 2.
+  FantasyMatchup m;
+  CHECK(parse_fantasy_str(slurp("fixtures/fantasy_ffl_matchup.json"), 1, m));
+  CHECK(m.valid && !m.bye && !m.playoffs);
+  CHECK_EQ(m.week, 10);
+  CHECK_EQ(m.season, 2026);
+  CHECK(m.state == FantasyState::IN);
+  CHECK_EQ(m.team.abbr, std::string("ABC"));
+  CHECK_EQ(m.team.name, std::string("Alphabet Soup"));
+  CHECK_EQ(m.team.record, std::string("7-2"));
+  CHECK_EQ(fantasy_points_text(m.team.shown()), std::string("104.18"));
+  CHECK_EQ(fantasy_points_text(m.team.points_live), std::string("108.42"));
+  CHECK_EQ(m.opp.abbr, std::string("XYZ"));
+  CHECK_EQ(m.opp.record, std::string("5-4"));
+  CHECK_EQ(fantasy_points_text(m.opp.shown()), std::string("96.2"));
+  CHECK(!m.team.winner && !m.opp.winner);
+  CHECK_EQ(fantasy_ticker(m), std::string("Fantasy Week 10 | ABC 104.18 | XYZ 96.2"));
+
+  // The card data: whole points, the week, football.
+  GameSnapshot g = fantasy_snapshot(m);
+  CHECK(g.valid);
+  CHECK(g.sport == Sport::FOOTBALL);
+  CHECK(g.state == GameState::IN);
+  CHECK_EQ(g.week, 10);
+  CHECK_EQ(g.team_abbr, std::string("ABC"));
+  CHECK_EQ(g.opp_abbr, std::string("XYZ"));
+  CHECK_EQ(g.team_score, 104);
+  CHECK_EQ(g.opp_score, 96);
+  CHECK_EQ(g.short_detail, std::string("Week 10"));
+  CHECK(!fantasy_snapshot(FantasyMatchup{}).valid);
+
+  // Another owner's view of the same document: team 3, with a tie on its record.
+  FantasyMatchup q;
+  CHECK(parse_fantasy_str(slurp("fixtures/fantasy_ffl_matchup.json"), 3, q));
+  CHECK(q.valid && q.state == FantasyState::IN);
+  CHECK_EQ(q.team.record, std::string("4-4-1"));
+  CHECK_EQ(q.opp.abbr, std::string("ZZZ"));
+  CHECK_EQ(fantasy_points_text(q.team.shown()), std::string("52.14"));
+
+  // A team that isn't in the league, and a document that doesn't parse.
+  FantasyMatchup bad;
+  CHECK(!parse_fantasy_str(slurp("fixtures/fantasy_ffl_matchup.json"), 99, bad));
+  CHECK(!parse_fantasy_str("{not json", 1, bad));
+  CHECK(!parse_fantasy_str("{}", 1, bad));
+
+  // Before the week starts: an entry with no points is a pre-game matchup.
+  FantasyMatchup pre;
+  CHECK(parse_fantasy_str(
+      R"({"seasonId":2026,"scoringPeriodId":3,"status":{"currentMatchupPeriod":3},)"
+      R"("teams":[{"id":1,"abbrev":"ABC","name":"Alphabet Soup","record":{"overall":{"wins":2,"losses":0,"ties":0}}},)"
+      R"({"id":2,"abbrev":"XYZ","name":"Xylophone Yetis","record":{"overall":{"wins":1,"losses":1,"ties":0}}}],)"
+      R"("schedule":[{"matchupPeriodId":3,"winner":"UNDECIDED","home":{"teamId":1},"away":{"teamId":2}}]})",
+      1, pre));
+  CHECK(pre.valid && pre.state == FantasyState::PRE);
+  CHECK(pre.team.shown() < 0);
+
+  // A final: the winner word names the side, from the home team's view.
+  FantasyMatchup post;
+  CHECK(parse_fantasy_str(
+      R"({"seasonId":2026,"scoringPeriodId":9,"status":{"currentMatchupPeriod":9},)"
+      R"("teams":[{"id":1,"abbrev":"ABC","name":"Alphabet Soup","record":{"overall":{"wins":7,"losses":2,"ties":0}}},)"
+      R"({"id":2,"abbrev":"XYZ","name":"Xylophone Yetis","record":{"overall":{"wins":5,"losses":4,"ties":0}}}],)"
+      R"("schedule":[{"matchupPeriodId":9,"winner":"HOME","playoffTierType":"WINNERS_BRACKET",)"
+      R"("home":{"teamId":1,"totalPoints":121.5},"away":{"teamId":2,"totalPoints":110.86}}]})",
+      1, post));
+  CHECK(post.valid && post.state == FantasyState::POST && post.playoffs);
+  CHECK(post.team.winner && !post.opp.winner);
+  GameSnapshot pg = fantasy_snapshot(post);
+  CHECK(pg.completed && pg.team_winner);
+  CHECK_EQ(pg.short_detail, std::string("Final"));
+  CHECK_EQ(fantasy_ticker(post), std::string("Fantasy Week 9 | ABC 121.5 | XYZ 110.86 | Final"));
+
+  // No entry for the team at or before the current period: a bye week, the
+  // document still parses and the team's name and record come through.
+  FantasyMatchup bye;
+  CHECK(parse_fantasy_str(
+      R"({"seasonId":2026,"scoringPeriodId":5,"status":{"currentMatchupPeriod":5},)"
+      R"("teams":[{"id":1,"abbrev":"ABC","name":"Alphabet Soup","record":{"overall":{"wins":3,"losses":1,"ties":0}}},)"
+      R"({"id":2,"abbrev":"XYZ","name":"Xylophone Yetis","record":{"overall":{"wins":2,"losses":2,"ties":0}}}],)"
+      R"("schedule":[{"matchupPeriodId":6,"winner":"UNDECIDED","home":{"teamId":1},"away":{"teamId":2}}]})",
+      1, bye));
+  CHECK(bye.bye && !bye.valid);
+  CHECK_EQ(bye.week, 5);
+  CHECK_EQ(bye.team.name, std::string("Alphabet Soup"));
+
+  // The current period has no entry for the team but an earlier one does:
+  // the latest final stands in rather than a blank.
+  FantasyMatchup late;
+  CHECK(parse_fantasy_str(
+      R"({"seasonId":2026,"scoringPeriodId":10,"status":{"currentMatchupPeriod":10},)"
+      R"("teams":[{"id":1,"abbrev":"ABC","name":"Alphabet Soup"},)"
+      R"({"id":2,"abbrev":"XYZ","name":"Xylophone Yetis"}],)"
+      R"("schedule":[{"matchupPeriodId":9,"winner":"AWAY",)"
+      R"("home":{"teamId":2,"totalPoints":90.0},"away":{"teamId":1,"totalPoints":99.5}}]})",
+      1, late));
+  CHECK(late.valid && late.state == FantasyState::POST);
+  CHECK_EQ(late.week, 9);
+  CHECK(late.team.winner);
+}
+
 int main() {
   test_urls();
+  test_fantasy();
   test_iso();
   test_team_parse();
   test_scoreboard_live();

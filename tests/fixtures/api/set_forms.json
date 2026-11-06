@@ -63,5 +63,7 @@
   "wake": {"form": "1 turns Game-day wake on, anything else off", "ok": ["1", "0"]},
   "wakelead": {"form": "minutes before the start the wake turns the panel on, a whole number, clamped to 5 to 120", "ok": ["5", "15", "120"], "bad": ["", "15m"]},
   "after": {"form": "what the panel does once a final has lingered: scoreboard, off or clock; any other word is refused", "ok": ["scoreboard", "off", "clock"], "bad": ["effects", "", "Off"]},
-  "cards": {"form": "the Between games list: id:1 turns a card on and id:0 off, comma separated, ids from the state's cards list; the cards it doesn't name stay as they are; an id the panel doesn't have is skipped; countdown, top25, news and gameleaders are the same switches as those keys, and weather is wxon", "ok": ["next:0", "clock:1,custom:0", "message:1,standings:0"], "bad": ["", "standings:1", "next", "next:yes"]}
+  "cards": {"form": "the Between games list: id:1 turns a card on and id:0 off, comma separated, ids from the state's cards list; the cards it doesn't name stay as they are; an id the panel doesn't have is skipped; countdown, top25, news and gameleaders are the same switches as those keys, and weather is wxon", "ok": ["next:0", "clock:1,custom:0", "message:1,standings:0"], "bad": ["", "standings:1", "next", "next:yes"]},
+  "ffleague": {"form": "the ESPN fantasy league id, digits only, as it appears in the league's web address; empty clears it", "ok": ["123456", "1", ""], "bad": ["abc", "0123", "12345678901", "12 34"]},
+  "ffteam": {"form": "the owner's team id in that league, a whole number from 0 to 999; 0 clears it", "ok": ["0", "1", "12", "999"], "bad": ["", "-1", "1000", "abc", "1.5"]}
 }
