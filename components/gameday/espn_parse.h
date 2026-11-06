@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "golf.h"
 #include "psram.h"
 #include "rankings.h"
 #include "season.h"
@@ -389,6 +390,8 @@ void set_site_root(const char *root);
 void set_core_root(const char *root);
 // The league's AP poll, this week's.
 std::string rankings_url(League league);
+// A golf tour's scoreboard: its current tournament's leaderboard (golf.h).
+std::string golf_url(League league);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.

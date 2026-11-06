@@ -243,3 +243,14 @@ companion app's tests read them, so a firmware change to the API updates
 them in the same PR. `GET /gameday/heap` (a bench reading) and
 `/gameday/demo` (demo builds only) are not part of the API the apps use and
 have no fixture.
+
+Golf, from the tours' scoreboard documents (`.../golf/<tour>/scoreboard`),
+recorded 2026-11-06 at about 16:55 UTC while all three events were in
+their second round, and a final read back with `?dates=20261101`:
+
+| File | Source |
+| --- | --- |
+| `scoreboard_pga_20261106.json` | `.../golf/pga/scoreboard`, World Wide Technology Championship, round 2 in progress: Ben James leads at -11, through 9 of round 2 (the PGA document carries hole-by-hole linescores) |
+| `scoreboard_lpga_20261106.json` | `.../golf/lpga/scoreboard`, TOTO Japan Classic, round 2 complete for the day: Nasa Hataoka leads at -12 (no hole-by-hole linescores in this document) |
+| `scoreboard_eur_20261106.json` | `.../golf/eur/scoreboard`, Abu Dhabi Aldar Championship, round 2 complete for the day: Tyrrell Hatton leads at -12 |
+| `scoreboard_pga_final_20261101.json` | `.../golf/pga/scoreboard?dates=20261101`, VidantaWorld Mexico Open, Final: Andrew Novak won at -25; 52 of the 120 competitors have only two rounds (the cut) |
