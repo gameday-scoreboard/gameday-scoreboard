@@ -1,0 +1,5 @@
+# Names wall spike (backlog #152) for the MoonHub75 pinout: gameday.yaml plus
+# pages/names-wall.yaml. Throwaway test firmware, never released.
+packages:
+  base: !include gameday.yaml
+  names: !include pages/names-wall.yaml
