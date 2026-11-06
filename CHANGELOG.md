@@ -34,6 +34,15 @@ through `update_important` in the panel's state.
 
 ### ✨ New
 
+- 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
+- 🍻 Bar panels show the plate list as a plate wall, one member a page with their quote, throw a plate party for each new plate, and count down to the bar's next event
+
+## v2026.11.1
+
+Fixes from a full review of the firmware: Wi-Fi and setup, backups, updates, the scoreboard and the device page. Schedule and Season recap come to basketball and hockey.
+
+### ✨ New
+
 - 🗓️ Schedule and season recap cards now work for NBA, WNBA, NHL and college basketball favorites too, every league but MLB
 - 🍺 Panels in bars run the bar build of each release, and install it on their own overnight
 

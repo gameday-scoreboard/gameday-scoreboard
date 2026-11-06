@@ -1060,6 +1060,31 @@ script:
     then:
       - lambda: |-
           const std::string &page = id(gameday_ctl).msg_card();
+          #ifdef GAMEDAY_BAR
+          if (id(gameday_ctl).plate_card_up()) {
+            // The plate wall (components/gameday/plate_wall.h): one canvas
+            // over the scoreboard, which says how long the page needs.
+            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(tt_brand), LV_OBJ_FLAG_HIDDEN);
+            const gameday::PlateWallFonts fonts{id(spleen_8)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                                id(spleen_16)->get_lv_font()};
+            id(gameday_ctl).set_msg_roll_ms(gameday::plate_wall_show(
+                lv_obj_get_parent(id(tt_brand)), page, id(gameday_ctl).brand_pack(), id(gameday_ctl).brand_sprite(),
+                fonts));
+            return;
+          }
+          gameday::plate_wall_hide();
+          if (id(gameday_ctl).brand_card_up()) {
+            // The bar build's opening card (components/gameday/brand.h).
+            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            gameday::brand_card_draw(id(tt_brand), id(tt_brand_img), id(tt_brand_title_lbl), id(tt_brand_wall_lbl),
+                                     id(gameday_ctl).brand_pack(), id(gameday_ctl).brand_logo(),
+                                     id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font());
+            id(gameday_ctl).set_msg_roll_ms(0);
+            return;
+          }
+          #endif
+          lv_obj_add_flag(id(tt_brand), LV_OBJ_FLAG_HIDDEN);
           if (page.empty()) {
             lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
             return;
@@ -2179,6 +2204,52 @@ lvgl:
                   long_mode: WRAP
                   text: ""
                   text_color: 0xFFFFFF
+
+        # The bar build's opening card, the brand pack's logo and words in its
+        # colors, as the message card's first page (gd_msg_card). Unused, and
+        # never shown, on the other builds.
+        - obj:
+            id: tt_brand
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - image:
+                  id: tt_brand_img
+                  src: gd_logo_blank
+                  x: 0
+                  y: 0
+                  hidden: true
+              - label:
+                  id: tt_brand_title_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_12
+                  text_color: 0xFFFFFF
+                  hidden: true
+              - label:
+                  id: tt_brand_wall_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+                  hidden: true
 
         # The college Top 25, over the board between games (gd_top25_card):
         # the poll's name, then five rows a column, one column on a single
