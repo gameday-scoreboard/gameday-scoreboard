@@ -13,6 +13,7 @@
 
 #include "cards.h"
 #include "countdown.h"
+#include "golf.h"
 #include "hook.h"
 #include "leagues.h"
 #include "message.h"
@@ -87,6 +88,12 @@ inline bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id) 
 }
 
 inline bool known_team(uint8_t league, uint32_t id) {
+  // A golf favorite is a golfer, by ESPN athlete id. A tour's field changes
+  // every week, so golfers are not a table the firmware can check against:
+  // any athlete id counts, and the leaderboard read simply never pins one
+  // who is not in this week's field.
+  if (league < kLeagueCount && golf_league((League) league))
+    return id != 0;
   for (size_t t = 0; t < kTeamCount; t++)
     if ((uint8_t) kTeams[t].league == league && kTeams[t].espn_id == id)
       return true;
@@ -110,7 +117,8 @@ inline uint16_t live_mask_from_keys(const std::string &keys) {
 }
 
 // The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: each
-// favorite's league, NFL when there are none.
+// favorite's league, NFL when there are none. Golf is never scanned: a
+// tournament has no games between two teams for Live games to follow.
 inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t> &fav_leagues) {
   if (mask == 0) {
     for (uint8_t l : fav_leagues)
@@ -146,7 +154,9 @@ inline std::vector<League> no_team_leagues() {
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
 // (live_leagues above, or no_team_leagues for the no-team default). A mode
-// that follows teams (Favorites) scans none.
+// that follows teams (Favorites) scans none. Golf leagues are never
+// scanned: a tour's scoreboard is a leaderboard, and the scan would read
+// its first golfers as a game's two teams.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
     case Mode::LIVE_NFL:
@@ -155,8 +165,13 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
       return {League::NCAA};
     case Mode::LIVE_ANY:
       return {League::NFL, League::NCAA};
-    case Mode::LIVE:
-      return live;
+    case Mode::LIVE: {
+      std::vector<League> out;
+      for (League l : live)
+        if (!golf_league(l))
+          out.push_back(l);
+      return out;
+    }
     default:
       return {};
   }
@@ -193,8 +208,7 @@ struct RemoteTarget {
 } __attribute__((packed));
 
 inline const char *remote_sport_key(uint8_t sport) {
-  static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
-  return sport < 5 ? kWords[sport] : "";
+  return sport < kSportCount ? kSportKeys[sport] : "";
 }
 
 inline std::string remote_name(const RemoteTarget &t) {

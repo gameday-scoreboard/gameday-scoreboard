@@ -30,6 +30,8 @@ static std::string site_base(League league) {
   return std::string(site_root.load(std::memory_order_relaxed)) + (l != nullptr ? l->path : "football/nfl");
 }
 
+std::string golf_url(League league) { return site_base(league) + "/scoreboard"; }
+
 const char *league_path(League league) {
   const LeagueInfo *l = league_info(league);
   if (l == nullptr)

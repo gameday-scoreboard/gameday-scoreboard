@@ -34,6 +34,7 @@ through `update_important` in the panel's state.
 
 ### ✨ New
 
+- ⛳ Golf joins the panel: follow golfers on the PGA Tour, the LPGA and the DP World Tour by their ESPN athlete id, and the tournament leaderboard takes a turn between games with your golfers pinned in wherever they stand
 - 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
 - 🍻 Bar panels show the plate list as a plate wall, one member a page with their quote, throw a plate party for each new plate, and count down to the bar's next event
 - 🍺 Panels in bars run the bar build of each release, and install it on their own overnight

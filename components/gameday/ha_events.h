@@ -82,6 +82,8 @@ inline const char *ha_sport(Sport s) {
       return "hockey";
     case Sport::SOCCER:
       return "soccer";
+    case Sport::GOLF:
+      return "golf";
     default:
       return "football";
   }

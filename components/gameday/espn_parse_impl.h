@@ -628,6 +628,126 @@ template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
   return true;
 }
 
+// Parses a tour's scoreboard document (golf.h): the first event with a
+// field, its state and round, and the leaderboard rows the panel keeps —
+// the top kGolfTopRows, plus the followed golfers (fav_ids, this tour's
+// athlete ids) wherever they stand, up to kGolfFavRows more. The document
+// is 90-350 KB, most of it statistics and hole-by-hole linescores for the
+// whole field; the filter keeps only what a row needs, and a golfer's thru
+// is the count of hole linescores the filter lets through for the current
+// round (the PGA Tour document carries them, the LPGA and DP World Tour
+// ones do not, so their rows have no thru — the document's own limit, not
+// an invented one). Competitors arrive in leaderboard order.
+template<typename TInput>
+bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fav_count, GolfBoard &out) {
+  JsonDocument filter(detail::json_allocator());
+  JsonObject ev = filter["events"].add<JsonObject>();
+  ev["name"] = true;
+  ev["date"] = true;
+  ev["endDate"] = true;
+  ev["status"]["type"]["state"] = true;
+  JsonObject comp = ev["competitions"].add<JsonObject>();
+  comp["status"]["period"] = true;
+  comp["status"]["type"]["state"] = true;
+  comp["status"]["type"]["detail"] = true;
+  comp["status"]["type"]["shortDetail"] = true;
+  JsonObject c = comp["competitors"].add<JsonObject>();
+  c["id"] = true;
+  c["order"] = true;
+  c["score"] = true;
+  c["athlete"]["shortName"] = true;
+  c["athlete"]["displayName"] = true;
+  JsonObject ls = c["linescores"].add<JsonObject>();
+  ls["period"] = true;
+  ls["displayValue"] = true;
+  ls["linescores"].add<JsonObject>()["period"] = true;
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                             DeserializationOption::NestingLimit(20));
+  if (err)
+    return false;
+  // The event to show: an in-progress one wins, else the first with a field.
+  JsonObjectConst pick;
+  for (JsonObjectConst e : doc["events"].as<JsonArrayConst>()) {
+    JsonObjectConst cp = e["competitions"][0];
+    if (cp["competitors"].as<JsonArrayConst>().size() == 0)
+      continue;
+    if (pick.isNull())
+      pick = e;
+    if (detail::str_or_empty(e["status"]["type"]["state"]) == "in") {
+      pick = e;
+      break;
+    }
+  }
+  if (pick.isNull())
+    return false;
+  JsonObjectConst comp0 = pick["competitions"][0];
+  GolfBoard b;
+  b.league = league;
+  const std::string estate = detail::str_or_empty(pick["status"]["type"]["state"]);
+  b.state = estate == "in" ? GolfState::IN : estate == "post" ? GolfState::POST : GolfState::PRE;
+  snprintf(b.event, sizeof(b.event), "%s", detail::str_or_empty(pick["name"]).c_str());
+  std::string detail = detail::str_or_empty(comp0["status"]["type"]["shortDetail"]);
+  if (detail.empty())
+    detail = detail::str_or_empty(comp0["status"]["type"]["detail"]);
+  snprintf(b.detail, sizeof(b.detail), "%s", detail.c_str());
+  b.round = (uint8_t) (comp0["status"]["period"] | 0);
+  b.start_epoch = parse_iso8601_z(detail::str_or_empty(pick["date"]));
+  b.end_epoch = parse_iso8601_z(detail::str_or_empty(pick["endDate"]));
+  auto fav = [&](uint32_t id) {
+    for (size_t i = 0; i < fav_count; i++)
+      if (fav_ids[i] == id)
+        return true;
+    return false;
+  };
+  size_t fav_kept = 0;
+  for (JsonObjectConst gc : comp0["competitors"].as<JsonArrayConst>()) {
+    b.field++;
+    GolfRow r;
+    r.pos = (uint16_t) (gc["order"] | 0);
+    r.id = (uint32_t) atol(detail::str_or_empty(gc["id"]).c_str());
+    const bool is_fav = fav(r.id);
+    if (r.pos > kGolfTopRows && !is_fav)
+      continue;
+    if (r.pos > kGolfTopRows && fav_kept >= kGolfFavRows)
+      continue;
+    if (r.pos > kGolfTopRows)
+      fav_kept++;
+    r.favorite = is_fav;
+    snprintf(r.name, sizeof(r.name), "%s", ascii_fold(detail::str_or_empty(gc["athlete"]["shortName"])).c_str());
+    // The surname from the full name, for a narrow panel: the last word.
+    std::string full = ascii_fold(detail::str_or_empty(gc["athlete"]["displayName"]));
+    size_t sp = full.rfind(' ');
+    snprintf(r.last, sizeof(r.last), "%s", (sp == std::string::npos ? full : full.substr(sp + 1)).c_str());
+    // A competitor with no athlete is not a golfer (a team game's document
+    // read by mistake): it counts in the field but is never a row.
+    if (r.name[0] == '\0' && r.last[0] == '\0')
+      continue;
+    int total = 0;
+    const std::string score = detail::str_or_empty(gc["score"]);
+    if (golf_score(score.c_str(), total))
+      snprintf(r.score, sizeof(r.score), "%s", score.c_str());
+    // The current round's line: its score to par and how many holes of it
+    // the document shows. A round not started yet reads "-".
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
+      if ((gl["period"] | 0) != (int) b.round)
+        continue;
+      const std::string dv = detail::str_or_empty(gl["displayValue"]);
+      int round_score = 0;
+      if (golf_score(dv.c_str(), round_score))
+        snprintf(r.today, sizeof(r.today), "%s", dv.c_str());
+      size_t holes = gl["linescores"].as<JsonArrayConst>().size();
+      r.thru = (uint8_t) (holes > 18 ? 18 : holes);
+    }
+    b.rows.push_back(r);
+  }
+  if (b.rows.empty())
+    return false;
+  b.valid = true;
+  out = std::move(b);
+  return true;
+}
+
 // Games that have not started yet, in the order ESPN lists them (by date).
 template<typename TInput>
 bool parse_upcoming(TInput &input, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out) {

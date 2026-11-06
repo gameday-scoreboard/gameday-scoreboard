@@ -636,7 +636,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(tabs.getByRole("tab", { name: "NCAAF" })).toBeFocused();
   await expect(page.getByRole("tabpanel").locator(".tile .a").first()).toContainText("NCAAF");
   await page.keyboard.press("End");
-  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NHL");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("DPWT");
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("On now");
   await expect(tabs.locator('[tabindex="0"]')).toHaveText("On now");
@@ -2034,7 +2034,7 @@ test("the picker has a tab per league and adds a team from another sport", async
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
-  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL"]);
+  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NHL", "PGA", "LPGA", "DPWT"]);
   await page.locator(".tabs button", { hasText: "NHL" }).click();
   await expect(page.locator(".tabs button.on")).toHaveText("NHL");
   await expect(page.locator("#tiles .tile")).toHaveCount(32);

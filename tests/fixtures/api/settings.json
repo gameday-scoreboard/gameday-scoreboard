@@ -53,7 +53,8 @@
     "schedule": true,
     "seasonrecap": true,
     "news": false,
-    "weather": true
+    "weather": true,
+    "golf": true
   },
   "countdown": true,
   "top25": true,

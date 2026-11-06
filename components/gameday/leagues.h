@@ -11,14 +11,27 @@
 namespace espn {
 
 // Saved in prefs and the boot cache: append, never renumber.
-enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8 };
+enum class League : uint8_t {
+  NFL = 0,
+  NCAA = 1,
+  NBA = 2,
+  NHL = 3,
+  MLB = 4,
+  WNBA = 5,
+  MLS = 6,
+  EPL = 7,
+  MCBB = 8,
+  PGA = 9,
+  LPGA = 10,
+  EUR = 11
+};
 
-enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
+enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4, GOLF = 5 };
 
 // The state document's and /gameday/set's word for each, in Sport order.
-constexpr int kSportCount = 5;
-constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer"};
-static_assert((int) Sport::SOCCER + 1 == kSportCount, "a key per Sport");
+constexpr int kSportCount = 6;
+constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer", "golf"};
+static_assert((int) Sport::GOLF + 1 == kSportCount, "a key per Sport");
 
 // A sport row in Playing (playlists.h) is numbered 1 + its Sport; 0 is none.
 // "football" -> 1, and 0 for a word that names no sport.
@@ -59,6 +72,12 @@ constexpr LeagueInfo kLeagues[] = {
     {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
     {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
+    // Golf has no teams: a favorite in one of these leagues is a golfer, by
+    // ESPN athlete id, and the board is the tour's leaderboard (golf.h). The
+    // logo dir names no team logo; a golfer has none on the panel.
+    {League::PGA, "pga", "golf/pga", "PGA", "golf", Sport::GOLF, false, true, 30},
+    {League::LPGA, "lpga", "golf/lpga", "LPGA", "golf", Sport::GOLF, false, true, 30},
+    {League::EUR, "eur", "golf/eur", "DPWT", "golf", Sport::GOLF, false, true, 30},
 };
 
 constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);

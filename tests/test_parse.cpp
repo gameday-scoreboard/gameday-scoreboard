@@ -34,6 +34,7 @@
 #include "recap.h"
 #include "regulatory.h"
 #include "score_log.h"
+#include "set_request.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
 #include "startup.h"
@@ -5428,6 +5429,146 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"temp\":80.0,\"heat\":1,\"brownouts\":0,\"power\":\"ok\""));
 }
 
+// Golf (golf.h): the tours' leaderboards, recorded live on 2026-11-06 and
+// as a final on 2026-11-01 (fixtures/README.md). Steven Fisk (4426182) is
+// the followed golfer: 97th in the live PGA document, 3rd in the final.
+static void test_golf() {
+  CHECK_EQ(golf_url(League::PGA), std::string("https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"));
+  CHECK_EQ(golf_url(League::LPGA), std::string("https://site.api.espn.com/apis/site/v2/sports/golf/lpga/scoreboard"));
+  CHECK_EQ(golf_url(League::EUR), std::string("https://site.api.espn.com/apis/site/v2/sports/golf/eur/scoreboard"));
+  CHECK_EQ((int) golf_slot(League::PGA), 0);
+  CHECK_EQ((int) golf_slot(League::LPGA), 1);
+  CHECK_EQ((int) golf_slot(League::EUR), 2);
+  CHECK_EQ((int) golf_slot(League::NFL), -1);
+  CHECK(golf_league(League::LPGA) && !golf_league(League::NBA));
+
+  // The scores ESPN writes: under par, level, over, and none yet.
+  int s = 99;
+  CHECK(golf_score("-11", s) && s == -11);
+  CHECK(golf_score("E", s) && s == 0);
+  CHECK(golf_score("+4", s) && s == 4);
+  CHECK(!golf_score("-", s));
+  CHECK(!golf_score("", s));
+  CHECK(!golf_score(nullptr, s));
+
+  // The PGA Tour, round 2 in progress: Ben James leads at -11, four under
+  // for the round and through 9 (he started on the back nine).
+  std::string pga = slurp("fixtures/scoreboard_pga_20261106.json");
+  GolfBoard b;
+  CHECK(parse_golf(pga, League::PGA, nullptr, 0, b));
+  CHECK(b.valid && b.state == GolfState::IN);
+  CHECK_EQ(std::string(b.event), std::string("World Wide Technology Championship"));
+  CHECK_EQ((int) b.round, 2);
+  CHECK_EQ((int) b.field, 120);
+  CHECK_EQ(b.rows.size(), (size_t) kGolfTopRows);
+  CHECK_EQ(b.rows[0].id, 5077389u);
+  CHECK_EQ((int) b.rows[0].pos, 1);
+  CHECK_EQ(std::string(b.rows[0].name), std::string("B. James"));
+  CHECK_EQ(std::string(b.rows[0].last), std::string("James"));
+  CHECK_EQ(std::string(b.rows[0].score), std::string("-11"));
+  CHECK_EQ(std::string(b.rows[0].today), std::string("-4"));
+  CHECK_EQ((int) b.rows[0].thru, 9);
+  CHECK(!b.rows[0].favorite);
+  CHECK_EQ(golf_header(b), std::string("PGA R2"));
+  CHECK_EQ(golf_row(b.rows[0]), std::string(" 1 James      -11"));
+  CHECK(golf_row_wide(b, b.rows[0]).find("-11 -4 9") != std::string::npos);
+  // Ten rows: two pages of a single column, one of two columns.
+  CHECK_EQ(golf_pages(b, 1), 2u);
+  CHECK_EQ(golf_pages(b, 2), 1u);
+  CHECK_EQ(golf_column(b, 1, 1, 0, false), golf_column(b, 0, 2, 1, false));
+
+  // A followed golfer past the top is pinned in, in position order, and
+  // one inside the top is only marked.
+  const uint32_t favs[] = {4426182, 5077389};
+  GolfBoard fb;
+  CHECK(parse_golf(pga, League::PGA, favs, 2, fb));
+  CHECK_EQ(fb.rows.size(), (size_t) kGolfTopRows + 1);
+  CHECK(fb.rows[0].favorite);
+  const GolfRow &fisk = fb.rows.back();
+  CHECK_EQ(fisk.id, 4426182u);
+  CHECK_EQ((int) fisk.pos, 97);
+  CHECK(fisk.favorite);
+  CHECK_EQ(std::string(fisk.score), std::string("E"));
+  CHECK_EQ(std::string(fisk.today), std::string("-1"));
+
+  // The LPGA in Japan: Nasa Hataoka leads at -12. The document has no
+  // hole-by-hole linescores, so no thru — the rows say what ESPN said.
+  std::string lpga = slurp("fixtures/scoreboard_lpga_20261106.json");
+  GolfBoard lb;
+  CHECK(parse_golf(lpga, League::LPGA, nullptr, 0, lb));
+  CHECK(lb.state == GolfState::IN);
+  CHECK_EQ(std::string(lb.event), std::string("TOTO Japan Classic"));
+  CHECK_EQ((int) lb.field, 78);
+  CHECK_EQ(lb.rows[0].id, 10484u);
+  CHECK_EQ(std::string(lb.rows[0].score), std::string("-12"));
+  CHECK_EQ(std::string(lb.rows[0].today), std::string("-8"));
+  CHECK_EQ((int) lb.rows[0].thru, 0);
+  CHECK_EQ(golf_header(lb), std::string("LPGA R2"));
+
+  // The DP World Tour in Abu Dhabi: Tyrrell Hatton leads at -12.
+  std::string eur = slurp("fixtures/scoreboard_eur_20261106.json");
+  GolfBoard eb;
+  CHECK(parse_golf(eur, League::EUR, nullptr, 0, eb));
+  CHECK_EQ(std::string(eb.event), std::string("Abu Dhabi Aldar Championship"));
+  CHECK_EQ(eb.rows[0].id, 5553u);
+  CHECK_EQ(std::string(eb.rows[0].today), std::string("-7"));
+  CHECK_EQ(golf_header(eb), std::string("DPWT R2"));
+
+  // A final, from the week before: Andrew Novak won at -25. Billy Horschel
+  // (1651) is last at E with no linescore for the weekend (he missed the
+  // cut): pinned in as a favorite, he has no round score for round 4.
+  std::string fin = slurp("fixtures/scoreboard_pga_final_20261101.json");
+  const uint32_t hfavs[] = {1651};
+  GolfBoard gb;
+  CHECK(parse_golf(fin, League::PGA, hfavs, 1, gb));
+  CHECK(gb.state == GolfState::POST);
+  CHECK_EQ((int) gb.round, 4);
+  CHECK_EQ(std::string(gb.detail), std::string("Complete"));
+  CHECK_EQ(gb.rows[0].id, 11332u);
+  CHECK_EQ(std::string(gb.rows[0].score), std::string("-25"));
+  CHECK_EQ(golf_header(gb), std::string("PGA FINAL"));
+  const GolfRow &billy = gb.rows.back();
+  CHECK_EQ(billy.id, 1651u);
+  CHECK_EQ((int) billy.pos, 120);
+  CHECK_EQ(std::string(billy.score), std::string("E"));
+  CHECK_EQ(std::string(billy.today), std::string(""));
+  CHECK_EQ((int) billy.thru, 0);
+  // Fresh through the week after the final, not a month later, not with
+  // no clock.
+  CHECK(golf_fresh(gb, gb.end_epoch + 3600));
+  CHECK(golf_fresh(gb, gb.end_epoch + kGolfStaleSecs));
+  CHECK(!golf_fresh(gb, gb.end_epoch + kGolfStaleSecs + 1));
+  CHECK(!golf_fresh(gb, 0));
+  // A live board is read again in minutes, a finished one in a day.
+  CHECK_EQ(golf_read_ms(b), kGolfLiveReadMs);
+  CHECK_EQ(golf_read_ms(gb), kGolfIdleReadMs);
+
+  // Not golf: a team game's document and an empty one both refuse.
+  GolfBoard no;
+  std::string nfl = slurp("fixtures/event_nfl_pre.json");
+  CHECK(!parse_golf(nfl, League::PGA, nullptr, 0, no));
+  std::string empty = "{}";
+  CHECK(!parse_golf(empty, League::PGA, nullptr, 0, no));
+
+  // A golfer favorite is a known favorite (set_request.h). Golf leagues
+  // sit in the Live games lists like any other, but a scan never reads a
+  // tour (scan_leagues leaves them out: a leaderboard is not a game), and
+  // the tours take turns in slot order.
+  CHECK(known_team((uint8_t) League::PGA, 5077389));
+  CHECK(known_team((uint8_t) League::LPGA, 10484));
+  CHECK(!known_team((uint8_t) League::PGA, 0));
+  std::vector<League> live = live_leagues(0, {(uint8_t) League::PGA, (uint8_t) League::NFL});
+  CHECK_EQ(live.size(), (size_t) 2);
+  CHECK(live[0] == League::NFL && live[1] == League::PGA);
+  // But a Live games scan never reads a tour: scan_leagues leaves golf out.
+  std::vector<League> scan = scan_leagues((uint8_t) Mode::LIVE, live);
+  CHECK_EQ(scan.size(), (size_t) 1);
+  CHECK(scan[0] == League::NFL);
+  CHECK_EQ(golf_next(0b101, 0), 2);
+  CHECK_EQ(golf_next(0b101, 2), 0);
+  CHECK_EQ(golf_next(0, -1), -1);
+}
+
 static void test_rankings() {
   CHECK_EQ(rankings_url(League::NCAA),
            std::string("https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1"));
@@ -6382,9 +6523,10 @@ static void test_season() {
   CHECK(!season_read_due(t, 0, t - kSeasonRetryMs, true, true));
   CHECK(season_read_due(t, 0, t - kSeasonBigRetryMs, true, true));
 
-  // Which leagues have the cards, and which read once a day.
+  // Which leagues have the cards, and which read once a day. Golf has no
+  // season schedule to recap, like MLB's is too big to read.
   for (const auto &l : kLeagues) {
-    CHECK_EQ(season_cards(l), l.league != League::MLB);
+    CHECK_EQ(season_cards(l), l.league != League::MLB && !golf_league(l.league));
     CHECK_EQ(season_big(l), !l.season_list);
   }
   CHECK(season_big(*league_info(League::NHL)) && season_cards(*league_info(League::NHL)));
@@ -8595,6 +8737,7 @@ int main() {
   test_offseason();
   test_countdown();
   test_rankings();
+  test_golf();
   test_panel_text();
   test_prefs_sync();
   test_message();

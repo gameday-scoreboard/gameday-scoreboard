@@ -532,6 +532,17 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &top25_head() const { return this->top25_head_; }
   const std::string &top25_col(int i) const { return this->top25_col_[i == 1 ? 1 : 0]; }
   void set_top25_cols(uint32_t cols) { this->top25_cols_ = cols >= 2 ? 2 : 1; }
+  // The golf card's page (gd_golf_card in firmware/pages/gameday-live.yaml):
+  // its header, "" while the card is down, and up to two columns of rows.
+  const std::string &golf_head() const { return this->golf_head_; }
+  const std::string &golf_col(int i) const { return this->golf_col_[i == 1 ? 1 : 0]; }
+  // cols counts narrow columns; wide says the display has room for the
+  // wide rows (today's score and thru) in one full-width column instead.
+  void set_golf_layout(uint32_t cols, bool wide) {
+    this->golf_cols_ = cols >= 2 ? 2 : 1;
+    this->golf_wide_ = wide;
+  }
+  bool golf_on() const { return this->card_on(::espn::Card::GOLF); }
   // The news card's headline on the scoreboard page now, "" while it is
   // down, and its top line ("DAL NEWS"); gd_news_card draws them and says
   // how long a headline too tall for the panel takes to roll.
@@ -681,6 +692,26 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void top25_tick_();
   void top25_show_();
   void top25_hide_();
+  // The golf card: one leaderboard per tour (golf.h slots), read while the
+  // panel follows a golfer in that tour.
+  ::espn::GolfBoard golf_[::espn::kGolfSlots];
+  uint32_t golf_read_ms_[::espn::kGolfSlots]{};  // millis() of the last good read, 0 = none
+  uint32_t golf_fail_ms_[::espn::kGolfSlots]{};  // millis() of the last failed read, 0 = none since
+  bool golf_read_due_{false};
+  uint8_t golf_read_slot_{0};
+  int golf_slot_{-1};  // the tour up now, or the last one shown
+  uint32_t golf_page_{0};
+  uint32_t golf_pages_{0};
+  uint32_t golf_cols_{1};
+  bool golf_wide_{false};
+  bool golf_shown_{false};
+  uint32_t golf_since_ms_{0};  // when the page went up, or the card last came down
+  uint32_t golf_tick_ms_{0};
+  std::string golf_head_, golf_col_[2];
+  uint8_t golf_slots_() const;  // bit per slot: the tours with a followed golfer
+  void golf_tick_();
+  void golf_show_();
+  void golf_hide_();
   // The news card (news.h): the last read's headlines, one per line (PSRAM),
   // where they came from, and the card's turns. It and the message card take
   // turns with the board, never both up at once.
@@ -1161,6 +1192,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     ::espn::Poll top25_poll;
     bool top25_ok{false};
     uint32_t top25_bytes{0};
+    // The golf card's leaderboard for one tour (golf.h), on this task too.
+    // golf_favs is the tour's followed golfers, by ESPN athlete id.
+    bool need_golf{false};
+    uint8_t golf_slot{0};
+    std::vector<uint32_t> golf_favs;
+    ::espn::GolfBoard golf_board;
+    bool golf_ok{false};
+    uint32_t golf_bytes{0};
     // The news card's headlines (news.h), from news_src, read on this task
     // like the message list.
     bool need_news{false};
@@ -1208,6 +1247,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_top25_job_();
   void run_top25_job_();
   void apply_top25_job_();
+  void start_golf_job_();
+  void run_golf_job_();
+  void apply_golf_job_();
   void start_news_job_();
   void run_news_job_();
   void apply_news_job_();

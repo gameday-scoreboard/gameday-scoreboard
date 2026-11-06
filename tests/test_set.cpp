@@ -758,10 +758,10 @@ void test_scan_leagues() {
 
 // A panel in Favorites with none set runs Live games over every league.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl,pga,lpga,eur", "every league, kLeagues order");
   SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
-         "the no-team default's scan reads every league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl",
+         "the no-team default's scan reads every league with games, golf left out");
   const uint8_t favs = (uint8_t) Mode::FAVORITES;
   SCHECK(no_team_default(favs, false), "Favorites with none set");
   SCHECK(!no_team_default(favs, true), "Favorites with one set");
@@ -845,7 +845,8 @@ void test_playlists() {
   SCHECK(sport_rows(0) == 0 && sport_rows(football) == 0, "one sport or none: no rows");
   SCHECK(sport_rows(football | hoops) == (football | hoops), "two sports: a row each");
   SCHECK(sport_row_has(football | hoops, 1) && sport_row_has(football | hoops, 3) &&
-             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && !sport_row_has(0xff, 6),
+             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && sport_row_has(0xff, 6) &&
+             !sport_row_has(0xff, 7),
          "rows by number");
   for (int s = 0; s < kSportCount; s++)
     SCHECK(std::string(kSportRowNames[s]).size() <= kListNameMax, "%s is longer than a playlist name", kSportRowNames[s]);

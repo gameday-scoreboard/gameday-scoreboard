@@ -33,6 +33,7 @@ enum class Card : uint8_t {
   WEATHER = 9,
   SCHEDULE = 10,
   RECAP = 11,
+  GOLF = 12,
 };
 
 constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
@@ -40,7 +41,8 @@ constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
 // The bits cards_off keeps; a saved blob's other bits are cleared on load.
 constexpr uint16_t kCardsOffBits = card_bit(Card::LEADERS) | card_bit(Card::NEXT) | card_bit(Card::CLOCK) |
                                    card_bit(Card::CUSTOM) | card_bit(Card::MESSAGE) | card_bit(Card::TOP25) |
-                                   card_bit(Card::PICTURE) | card_bit(Card::SCHEDULE) | card_bit(Card::RECAP);
+                                   card_bit(Card::PICTURE) | card_bit(Card::SCHEDULE) | card_bit(Card::RECAP) |
+                                   card_bit(Card::GOLF);
 
 struct CardRow {
   Card card;
@@ -64,6 +66,7 @@ constexpr CardRow kCards[] = {
     {Card::RECAP,     "seasonrecap", "Season recap",               true,  "Only for teams in Favorite teams, not baseball"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},
     {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
+    {Card::GOLF,      "golf",        "Golf leaderboard",           true,  "Follow a golfer in Favorite teams first"},
 };
 // clang-format on
 constexpr size_t kCardCount = sizeof(kCards) / sizeof(kCards[0]);
