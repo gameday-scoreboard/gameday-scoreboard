@@ -2543,6 +2543,12 @@ void GamedayComponent::set_follow_beta(bool on) {
   this->sync_prefs_();
   ESP_LOGI(TAG, "Follow beta: %s", on ? "on" : "off");
   this->apply_channel_();
+  // The updater keeps the last manifest it read when a read fails, so the
+  // old channel's release would stay on offer (and install at night) when
+  // the new channel's manifest is missing: a bar panel's stable folder
+  // before the first bar release. Start the new channel from nothing.
+  this->forget_update_();
+  this->channel_switched_ = true;
   // Read the new manifest now, so the page shows what this channel offers.
   if (this->beta_update_ != nullptr)
     this->beta_update_->update();
@@ -2556,6 +2562,46 @@ void GamedayComponent::set_follow_beta(bool on) {
 void GamedayComponent::apply_channel_() {
   if (this->beta_update_ != nullptr)
     this->beta_update_->set_source_url(this->follow_beta() ? this->beta_source_ : this->stable_source_);
+}
+
+// UpdateEntity keeps its state and info protected, and HttpRequestUpdate is
+// final, so these member pointers are taken through a subclass that is never
+// built (the standard way to reach a protected member of a base object).
+struct UpdateEntityAccess : update::UpdateEntity {
+  static constexpr update::UpdateInfo update::UpdateEntity::*kInfo = &UpdateEntityAccess::update_info_;
+  static constexpr update::UpdateState update::UpdateEntity::*kState = &UpdateEntityAccess::state_;
+};
+
+// Back to "not checked yet" on the running version, as at boot. Left alone
+// mid-install, which ends in a restart or a failure either way.
+void GamedayComponent::forget_update_() {
+  update::UpdateEntity *u = this->beta_update_;
+  if (u == nullptr || u->state == update::UPDATE_STATE_INSTALLING)
+    return;
+  update::UpdateInfo &info = u->*UpdateEntityAccess::kInfo;
+  info = update::UpdateInfo{};
+#ifdef ESPHOME_PROJECT_VERSION
+  info.current_version = ESPHOME_PROJECT_VERSION;
+#endif
+  u->*UpdateEntityAccess::kState = update::UPDATE_STATE_UNKNOWN;
+  u->publish_state();
+}
+
+// After a switch, the first manifest result: a check that was already
+// running when Follow beta switched read the old channel, and lands after
+// forget_update_(). Dropped, and the new channel read again.
+void GamedayComponent::check_channel_result_() {
+  update::UpdateEntity *u = this->beta_update_;
+  if (!this->channel_switched_ || u == nullptr || u->state == update::UPDATE_STATE_INSTALLING ||
+      u->update_info.firmware_url.empty())
+    return;
+  this->channel_switched_ = false;
+  if (::espn::firmware_from_source(u->update_info.firmware_url, this->beta_update_->get_source_url()))
+    return;
+  ESP_LOGI(TAG, "Follow beta: dropped %s, read from the other channel before the switch",
+           u->update_info.latest_version.c_str());
+  this->forget_update_();
+  this->defer([this]() { this->beta_update_->update(); });
 }
 #endif
 
@@ -2625,6 +2671,9 @@ void GamedayComponent::update_state_changed_() {
     this->update_mark_.installing[0] = '\0';
     this->update_mark_pref_.save(&this->update_mark_);
   }
+#ifdef GAMEDAY_BETA_CHANNEL
+  this->check_channel_result_();
+#endif
 #endif
 }
 
