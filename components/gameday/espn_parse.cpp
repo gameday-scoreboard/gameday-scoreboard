@@ -293,6 +293,37 @@ bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead 
 }
 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
+
+bool parse_fantasy_str(const std::string &json, uint32_t team_id, FantasyMatchup &out) {
+  return parse_fantasy(json, team_id, out);
+}
+
+// The fantasy matchup as a football card: the owner's side is the card's
+// team, the score is the points rounded to whole (a scoreboard has no room
+// for the decimals; fantasy_points_text has them for the state and ticker).
+GameSnapshot fantasy_snapshot(const FantasyMatchup &m) {
+  GameSnapshot g;
+  if (!m.valid)
+    return g;
+  g.valid = true;
+  g.sport = Sport::FOOTBALL;
+  g.state = m.state == FantasyState::POST ? GameState::POST
+            : m.state == FantasyState::IN ? GameState::IN
+                                          : GameState::PRE;
+  g.completed = m.state == FantasyState::POST;
+  g.week = (uint8_t) m.week;
+  g.team_id = m.team.id;
+  g.opp_id = m.opp.id;
+  g.team_abbr = m.team.abbr;
+  g.opp_abbr = m.opp.abbr;
+  g.team_record = m.team.record;
+  g.opp_record = m.opp.record;
+  g.team_score = m.team.shown() >= 0 ? (int) (m.team.shown() + 0.5f) : 0;
+  g.opp_score = m.opp.shown() >= 0 ? (int) (m.opp.shown() + 0.5f) : 0;
+  g.team_winner = m.team.winner;
+  g.short_detail = m.state == FantasyState::POST ? "Final" : "Week " + std::to_string(m.week);
+  return g;
+}
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
 bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
 
