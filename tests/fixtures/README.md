@@ -133,6 +133,21 @@ past game only in its final state, so there is no live college fixture:
 | `event_mcbb_ot.json` | 401851437 PENN @ YALE, Ivy League final, Final/OT 88-84 |
 | `event_mcbb_pre.json` | 401925733 OAK @ MICH, 2026-27 opener, pre-game |
 | `team_mcbb_mich.json` | `.../basketball/mens-college-basketball/teams/130` (next event is the opener) |
+
+Women's college basketball, recorded 2026-11-06 with the season just
+started, from `.../basketball/womens-college-basketball`. The women's game
+plays quarters: the event documents' `format.regulation.periods` is 4
+(the men's say 2), and the final's line scores have four entries a side.
+Like the men's, the ungrouped scoreboard lists only the ranked teams'
+games (2 of the day's 45), so the day document was recorded with the
+Division I group:
+
+| File | Source |
+| --- | --- |
+| `team_wcbb_uconn.json` | `.../basketball/womens-college-basketball/teams/41` (next event is Iowa at UConn on 2026-11-08) |
+| `event_wcbb_pre.json` | `.../scoreboard/401919954`, Stonehill at Notre Dame, scheduled for that night |
+| `event_wcbb_final.json` | `.../scoreboard/401827322`, Texas Tech at Cincinnati, Final 71-60 on 2026-01-10 |
+| `day_wcbb_20261106.json` | `.../scoreboard?groups=50&limit=300&dates=20261106`, all 45 Division I games: 42 scheduled, one live, one at halftime, one at the end of a period |
 NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 `.../hockey/nhl/scoreboard/<event id>`:
 
