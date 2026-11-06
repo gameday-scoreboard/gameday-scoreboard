@@ -420,6 +420,7 @@ void GamedayComponent::setup() {
       b = ::espn::RemoteTarget{};
   this->load_msg_();
   this->load_nick_();
+  this->load_fantasy_();
   this->load_hook_();
   this->load_wx_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
@@ -1619,6 +1620,7 @@ void GamedayComponent::loop() {
   this->top25_tick_();
   this->news_tick_();
   this->season_tick_();
+  this->fantasy_tick_();
   this->picture_tick_();
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
@@ -1670,6 +1672,8 @@ void GamedayComponent::loop() {
 #endif
         if (this->job_.need_top25)
           this->top25_fail_ms_[this->job_.top25_slot] = this->gave_up_ms_;
+        if (this->job_.need_fantasy)
+          this->fantasy_fail_ms_ = this->gave_up_ms_;
         if (this->job_.need_news)
           this->news_fail_ms_ = this->gave_up_ms_;
         if (this->job_.need_season)
@@ -1735,6 +1739,12 @@ void GamedayComponent::loop() {
   if (this->season_read_due_ && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_season_job_();
+    return;
+  }
+  // The fantasy matchup, the same way.
+  if (this->fantasy_read_due_ && network::is_connected() && this->clock_set_() &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
+    this->start_fantasy_job_();
     return;
   }
   // The weather's lookup and forecast reads, the same way: between ESPN
@@ -3526,6 +3536,10 @@ void GamedayComponent::run_job_() {
     this->run_season_job_();
     return;
   }
+  if (j.need_fantasy) {
+    this->run_fantasy_job_();
+    return;
+  }
   if (j.need_wx != 0) {
     this->run_wx_job_();
     return;
@@ -3667,6 +3681,10 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_season) {
     this->apply_season_job_();  // kept per team, whatever the board follows
+    return;
+  }
+  if (j.need_fantasy) {
+    this->apply_fantasy_job_();  // the owner's matchup, whatever the board follows
     return;
   }
   if (j.need_wx != 0) {
@@ -5309,6 +5327,26 @@ static void put_team(JsonObject o, uint8_t league, uint32_t id) {
   }
 }
 
+// The fantasy matchup (fantasy.h) as the state's ff object: the week, both
+// sides by abbreviation and name, their records and their exact points (the
+// card rounds; the page and the apps show the decimals). Written only from a
+// read that found a matchup or a bye.
+static void put_fantasy(JsonObject o, const ::espn::FantasyMatchup &m) {
+  o["week"] = m.week;
+  o["s"] = m.state == ::espn::FantasyState::POST ? "POST" : m.state == ::espn::FantasyState::IN ? "IN" : "PRE";
+  o["ta"] = m.team.abbr;
+  o["tn"] = m.team.name;
+  o["tr"] = m.team.record;
+  if (m.team.shown() >= 0)
+    o["tp"] = m.team.shown();
+  o["oa"] = m.opp.abbr;
+  o["on"] = m.opp.name;
+  o["or"] = m.opp.record;
+  if (m.opp.shown() >= 0)
+    o["op"] = m.opp.shown();
+  o["playoffs"] = m.playoffs;
+}
+
 // Serialises everything the page shows into state_json_. Main loop only; the
 // HTTP task copies the finished string under the mutex.
 void GamedayComponent::rebuild_state_(const UpdateFields *f) {
@@ -5316,6 +5354,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   const GameSnapshot &g = this->game_;
   doc["name"] = this->hostname();
   doc["nick"] = this->nick_;  // "" until the owner names the panel
+  doc["ffleague"] = this->ff_league_;  // "" until the owner sets a fantasy league
+  doc["ffteam"] = this->ff_team_;
   doc["version"] = App.get_comment();
   doc["setup"] = this->flag_(FLAG_SETUP);
   doc["panels"] = this->panels_ != nullptr ? this->panels_->cols() : 0;
@@ -5634,6 +5674,12 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     put_team(favlock, (uint8_t) this->fav_[this->live_fav_].team->league, this->fav_[this->live_fav_].team->espn_id);
   }
 
+  // The fantasy matchup, once a read has brought one (or a bye) back.
+  if (this->fantasy_.valid || this->fantasy_.bye) {
+    JsonObject ff = doc["ff"].to<JsonObject>();
+    put_fantasy(ff, this->fantasy_);
+  }
+
   JsonObject game = doc["game"].to<JsonObject>();
   game["s"] = g.valid ? ::espn::state_name(g.state) : "NOT_FOUND";
   // The board's reason for being empty ("Can't reach ESPN"), so the page and
@@ -5923,6 +5969,39 @@ void GamedayComponent::set_nick_(const std::string &nick) {
   this->nick_pref_.save(&p);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Nickname: %s", nick.empty() ? "(none)" : nick.c_str());
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::load_fantasy_() {
+  this->fantasy_pref_ = global_preferences->make_preference<PrefsFantasy>(fnv1_hash("gameday_fantasy_v1"));
+  PrefsFantasy p{};
+  if (!this->fantasy_pref_.load(&p))
+    return;  // never set: no fantasy matchup
+  p.league[sizeof(p.league) - 1] = '\0';
+  if (::espn::fantasy_league_id_ok(p.league) && ::espn::fantasy_team_id_ok(p.team)) {
+    this->ff_league_ = p.league;
+    this->ff_team_ = p.team;
+  }
+}
+
+void GamedayComponent::set_fantasy_(const std::string &league, int team) {
+  if (league == this->ff_league_ && team == this->ff_team_)
+    return;
+  this->ff_league_ = league;
+  this->ff_team_ = team;
+  PrefsFantasy p{};
+  strncpy(p.league, league.c_str(), sizeof(p.league) - 1);
+  p.team = (uint16_t) team;
+  this->fantasy_pref_.save(&p);
+  this->sync_prefs_();
+  // A new league or team: the old matchup is another league's, and the new
+  // one is read as soon as the worker is free.
+  this->fantasy_ = ::espn::FantasyMatchup{};
+  this->fantasy_status_ = -1;
+  this->fantasy_read_ms_ = 0;
+  this->fantasy_fail_ms_ = 0;
+  this->fantasy_read_due_ = this->fantasy_configured_();
+  ESP_LOGI(TAG, "Fantasy: league %s, team %d", league.empty() ? "(none)" : league.c_str(), team);
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -7002,6 +7081,66 @@ void GamedayComponent::apply_top25_job_() {
            (unsigned) this->top25_[s].rows.size(), (unsigned) j.top25_bytes);
 }
 
+// ---- Fantasy football (fantasy.h) -------------------------------------------
+
+void GamedayComponent::fantasy_tick_() {
+  const uint32_t now = millis();
+  if (now - this->fantasy_tick_ms_ < 250)
+    return;
+  this->fantasy_tick_ms_ = now;
+  if (!this->fantasy_configured_() || !this->clock_set_()) {
+    this->fantasy_read_due_ = false;
+    return;
+  }
+  if (this->fantasy_read_due_ || (this->busy_ && this->job_.need_fantasy))
+    return;
+  const bool may_read = this->fantasy_fail_ms_ == 0 || now - this->fantasy_fail_ms_ >= ::espn::kFantasyRetryMs;
+  if (may_read && (this->fantasy_read_ms_ == 0 || now - this->fantasy_read_ms_ >= ::espn::kFantasyReadMs))
+    this->fantasy_read_due_ = true;
+}
+
+void GamedayComponent::start_fantasy_job_() {
+  this->fantasy_read_due_ = false;
+  ::espn::reset_in_place(this->job_);
+  this->job_.generation = this->generation_;
+  this->job_.need_fantasy = true;
+  struct tm now = this->time_->now().to_c_tm();
+  this->job_.fantasy_url = ::espn::fantasy_url(this->ff_league_, ::espn::fantasy_season_year(now.tm_year + 1900, now.tm_mon + 1));
+  this->job_.fantasy_team = (uint32_t) this->ff_team_;
+  this->start_worker_();
+}
+
+// Worker task. The league document with only the matchup and team views
+// asked for runs about 10 to 30 KB, streamed through the parse's filter.
+void GamedayComponent::run_fantasy_job_() {
+  Job &j = this->job_;
+  auto container = this->open_(j.fantasy_url);
+  j.fantasy_status = this->espn_status_;
+  if (container == nullptr)
+    return;
+  ContainerReader reader(container, this->espn_bytes_);
+  j.fantasy_ok = ::espn::parse_fantasy(reader, j.fantasy_team, j.fantasy);
+  container->end();
+  j.fantasy_bytes = (uint32_t) reader.total();
+  if (!j.fantasy_ok)
+    ESP_LOGW(TAG, "Fantasy: parse failed after %u bytes", (unsigned) reader.total());
+}
+
+void GamedayComponent::apply_fantasy_job_() {
+  Job &j = this->job_;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  this->fantasy_status_ = j.fantasy_status;
+  if (!j.fantasy_ok) {
+    this->fantasy_fail_ms_ = now;
+    return;
+  }
+  this->fantasy_fail_ms_ = 0;
+  this->fantasy_read_ms_ = now;
+  this->fantasy_ = std::move(j.fantasy);
+  ESP_LOGI(TAG, "Fantasy: %s (%u bytes)", ::espn::fantasy_ticker(this->fantasy_).c_str(), (unsigned) j.fantasy_bytes);
+  this->rebuild_state_(&this->last_fields_);
+}
+
 // ---- The news card (news.h) -------------------------------------------------
 
 std::vector<::espn::NewsSource> GamedayComponent::news_sources_() const {
@@ -7875,6 +8014,12 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         break;
       case ::espn::SetKind::NICK:
         this->set_nick_(op.text);
+        break;
+      case ::espn::SetKind::FF_LEAGUE:
+        this->set_fantasy_(op.text, this->ff_team_);
+        break;
+      case ::espn::SetKind::FF_TEAM:
+        this->set_fantasy_(this->ff_league_, op.value);
         break;
       case ::espn::SetKind::HOOK:
         hook_url = op.text;

@@ -100,6 +100,8 @@
   "remote2": "team:ncaa:2294",
   "remote3": "list:College",
   "remote4": "sport:basketball",
+  "ffleague": "123456",
+  "ffteam": 1,
   "panels": 2,
   "brightness": 128,
   "scroll": 5

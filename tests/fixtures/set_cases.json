@@ -13,7 +13,8 @@
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "field": true, "winbar": true, "spark": true, "opp": true, "celebrate": 2, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0,
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
-    "wake": false, "wakelead": 15, "after": "scoreboard"
+    "wake": false, "wakelead": 15, "after": "scoreboard",
+    "ffleague": "", "ffteam": 0
   },
   "cases": [
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
@@ -189,6 +190,12 @@
     {"name": "a nickname is cut at 32 bytes", "set": [["nick", "0123456789012345678901234567890123456789"]], "expect": {"nick": "01234567890123456789012345678901"}},
     {"name": "a nickname is never cut inside a character", "set": [["nick", "ééééééééééééééééé"]], "expect": {"nick": "éééééééééééééééé"}},
     {"name": "an empty nickname clears it", "start": {"nick": "Garage"}, "set": [["nick", ""]], "expect": {"nick": ""}},
+    {"name": "a fantasy league and team", "set": [["ffleague", "123456"], ["ffteam", "3"]], "expect": {"ffleague": "123456", "ffteam": 3}},
+    {"name": "a fantasy league id with letters is refused", "start": {"ffleague": "123456"}, "set": [["ffleague", "12a34"]], "expect": {"ffleague": "123456"}},
+    {"name": "a fantasy league id with a leading zero is refused", "set": [["ffleague", "0123"]], "expect": {"ffleague": ""}},
+    {"name": "an empty fantasy league clears it", "start": {"ffleague": "123456", "ffteam": 3}, "set": [["ffleague", ""]], "expect": {"ffleague": ""}},
+    {"name": "fantasy team 0 clears it", "start": {"ffleague": "123456", "ffteam": 3}, "set": [["ffteam", "0"]], "expect": {"ffteam": 0}},
+    {"name": "a fantasy team past 999 is refused", "start": {"ffteam": 3}, "set": [["ffteam", "1000"]], "expect": {"ffteam": 3}},
     {"name": "a list address", "set": [["msgurl", "http://192.168.1.20/names.txt"]], "expect": {"msgurl": "http://192.168.1.20/names.txt"}},
     {"name": "a list address that isn't http is refused", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", "file:///etc/passwd"]], "expect": {"msgurl": "https://example.com/a.txt"}},
     {"name": "an empty list address clears it", "start": {"msgurl": "https://example.com/a.txt"}, "set": [["msgurl", ""]], "expect": {"msgurl": ""}},

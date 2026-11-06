@@ -31,6 +31,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_ncaa_ala_2025_post.json` | `.../college-football/teams/333/schedule?season=2025&seasontype=3`: two playoff games, the second "at the Rose Bowl Presented by Prudential" (recorded 2026-10-31) |
 | `schedule_nba_phi_2026_post.json` | `.../basketball/nba/teams/20/schedule?season=2026&seasontype=3`: two playoff series, "East Semifinals - Game 4" last (recorded 2026-10-31) |
 | `schedule_mlb_col_missed.json` | `.../baseball/mlb/teams/27/schedule` during the playoffs, for a team that missed them: the season's year and an empty `events` list, as ESPN sent it (recorded 2026-10-31) |
+| `fantasy_ffl_matchup.json` | **Constructed, not recorded**: built by hand to the documented shape of the fantasy API's league document (`apis/v3/games/ffl/seasons/<year>/segments/0/leagues/<id>?view=mMatchupScore&view=mTeam`), with an invented league, teams and scores. Week 10 is live (the owner's team away, `totalPoints` and `totalPointsLive` both present), week 9 is final, week 11 has no points yet. No real league's document or id is in it. |
 
 | `schedule_nba_dal_inseason.json` | `.../basketball/nba/teams/6/schedule` in season: seven finals (4-3) and 73 games ahead, NBA Cup notes (recorded 2026-11-03) |
 | `schedule_nhl_ana_inseason.json` | `.../hockey/nhl/teams/25/schedule` in season: 14 finals (6-7-1, one overtime loss) and 70 games ahead (recorded 2026-11-03) |

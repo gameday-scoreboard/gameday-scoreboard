@@ -261,6 +261,17 @@ int main() {
       return parse_season_str(json, 25, r);
     });
   }
+  {
+    // The fantasy matchup read (fantasy.h), against the constructed fixture:
+    // the filter keeps the schedule table and the team list only. A real
+    // league document with more teams and a full season of matchups runs
+    // larger; the kept part grows with the schedule, not the rosters.
+    std::string json = slurp("fixtures/fantasy_ffl_matchup.json");
+    measure("fantasy_matchup", [&] {
+      FantasyMatchup m;
+      return parse_fantasy_str(json, 1, m) && m.valid;
+    });
+  }
 
   printf("\n}\n");
   set_json_allocator(nullptr);

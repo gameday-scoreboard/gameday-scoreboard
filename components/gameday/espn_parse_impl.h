@@ -1043,4 +1043,125 @@ template<typename TInput, typename S> int parse_news(TInput &input, S &list) {
   return n;
 }
 
+// The fantasy matchup document (fantasy.h), filtered to the fields the panel
+// keeps: the teams' names and records and the schedule's points. The whole
+// document for a league runs to hundreds of KB with the roster views; with
+// just mMatchupScore and mTeam asked for and this filter over it, the parse
+// keeps only the schedule table and the team list as it streams.
+namespace detail {
+inline void fill_fantasy_filter(JsonDocument &f) {
+  f["scoringPeriodId"] = true;
+  f["seasonId"] = true;
+  f["status"]["currentMatchupPeriod"] = true;
+  JsonObject t = f["teams"].add<JsonObject>();
+  t["id"] = true;
+  t["abbrev"] = true;
+  t["name"] = true;
+  t["record"]["overall"]["wins"] = true;
+  t["record"]["overall"]["losses"] = true;
+  t["record"]["overall"]["ties"] = true;
+  t["record"]["overall"]["pointsFor"] = true;
+  JsonObject e = f["schedule"].add<JsonObject>();
+  e["matchupPeriodId"] = true;
+  e["winner"] = true;
+  e["playoffTierType"] = true;
+  for (const char *side : {"home", "away"}) {
+    e[side]["teamId"] = true;
+    e[side]["totalPoints"] = true;
+    e[side]["totalPointsLive"] = true;
+  }
+}
+inline void fill_fantasy_side(JsonObjectConst src, FantasySide &dst) {
+  dst.id = (uint32_t) (src["teamId"] | 0);
+  dst.points = src["totalPoints"] | -1.0f;
+  dst.points_live = src["totalPointsLive"] | -1.0f;
+}
+}  // namespace detail
+
+// Parses the fantasy document into the owner's matchup for the current
+// period: the schedule entry for status.currentMatchupPeriod (the root
+// scoringPeriodId when the status is absent) that has the owner's team in
+// it, falling back to that team's latest entry at or before the period.
+// False when the document doesn't parse or the team isn't in the league; a
+// parsed document where the team has no entry this period returns true with
+// out.bye set and out.valid clear.
+template<typename TInput> bool parse_fantasy(TInput &input, uint32_t team_id, FantasyMatchup &out) {
+  JsonDocument filter(detail::json_allocator());
+  detail::fill_fantasy_filter(filter);
+  JsonDocument doc(detail::json_allocator());
+  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
+                                              DeserializationOption::NestingLimit(40));
+  if (err)
+    return false;
+  JsonArrayConst teams = doc["teams"].as<JsonArrayConst>();
+  JsonArrayConst schedule = doc["schedule"].as<JsonArrayConst>();
+  if (teams.isNull() || schedule.isNull())
+    return false;
+  out = FantasyMatchup{};
+  out.season = doc["seasonId"] | 0;
+  int current = doc["status"]["currentMatchupPeriod"] | 0;
+  if (current <= 0)
+    current = doc["scoringPeriodId"] | 0;
+  // The owner's team has to be in the league at all.
+  JsonObjectConst mine;
+  for (JsonObjectConst t : teams)
+    if ((uint32_t) (t["id"] | 0) == team_id)
+      mine = t;
+  if (mine.isNull())
+    return false;
+  auto fill_team = [&teams](FantasySide &s) {
+    for (JsonObjectConst t : teams) {
+      if ((uint32_t) (t["id"] | 0) != s.id)
+        continue;
+      s.abbr = detail::str_or_empty(t["abbrev"]);
+      s.name = detail::str_or_empty(t["name"]);
+      JsonObjectConst o = t["record"]["overall"];
+      s.record = fantasy_record(o["wins"] | -1, o["losses"] | -1, o["ties"] | 0);
+      return;
+    }
+  };
+  JsonObjectConst exact, latest;
+  int latest_period = -1;
+  for (JsonObjectConst e : schedule) {
+    uint32_t home = (uint32_t) (e["home"]["teamId"] | 0);
+    uint32_t away = (uint32_t) (e["away"]["teamId"] | 0);
+    if (home != team_id && away != team_id)
+      continue;
+    int period = e["matchupPeriodId"] | 0;
+    if (period == current)
+      exact = e;
+    if ((current <= 0 || period <= current) && period > latest_period) {
+      latest = e;
+      latest_period = period;
+    }
+  }
+  JsonObjectConst entry = !exact.isNull() ? exact : latest;
+  if (entry.isNull()) {
+    out.bye = true;
+    out.week = current;
+    out.team.id = team_id;
+    fill_team(out.team);
+    return true;
+  }
+  out.valid = true;
+  out.week = entry["matchupPeriodId"] | 0;
+  std::string tier = detail::str_or_empty(entry["playoffTierType"]);
+  out.playoffs = !tier.empty() && tier != "NONE";
+  JsonObjectConst home = entry["home"], away = entry["away"];
+  bool ours_home = (uint32_t) (home["teamId"] | 0) == team_id;
+  detail::fill_fantasy_side(ours_home ? home : away, out.team);
+  detail::fill_fantasy_side(ours_home ? away : home, out.opp);
+  fill_team(out.team);
+  fill_team(out.opp);
+  std::string winner = detail::str_or_empty(entry["winner"]);
+  if (winner == "HOME" || winner == "AWAY") {
+    out.state = FantasyState::POST;
+    FantasySide &w = winner == "HOME" ? (ours_home ? out.team : out.opp) : (ours_home ? out.opp : out.team);
+    w.winner = true;
+  } else if (out.team.points_live >= 0 || out.opp.points_live >= 0 || out.team.points > 0 || out.opp.points > 0) {
+    out.state = FantasyState::IN;
+  }
+  return true;
+}
+
 }  // namespace espn

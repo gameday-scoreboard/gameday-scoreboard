@@ -197,6 +197,16 @@
           </div>
         </div>
       </div>
+      <div class="card" id="ffCard" hidden>
+        <h2>Fantasy football</h2>
+        <div class="cbody">
+          <p class="hint">Your ESPN fantasy matchup, read by the panel every few minutes. Public leagues only: a private league needs a login, and the panel never asks for one.</p>
+          <div class="ctl"><label for="ffLeague">League ID<small>The number in your league's web address, after leagueId=.</small></label><input type="text" id="ffLeague" class="field" inputmode="numeric" maxlength="10" placeholder="123456" autocomplete="off"></div>
+          <div class="ctl"><label for="ffTeam">Your team ID<small>The number in your team page's address, after teamId=.</small></label><input type="number" id="ffTeam" class="field" min="0" max="999" step="1"></div>
+          <div class="actions"><button class="btn" id="ffSave">Save</button></div>
+          <p class="hint" id="ffRead" hidden></p>
+        </div>
+      </div>
     </div>
     </section>
 
@@ -664,6 +674,7 @@
     remote1: String, remote2: String, remote3: String, remote4: String,
     msg: String, msgurl: String, msgevery: Number, nick: String, brand: String,
     hook: String, pregame: Number,
+    ffleague: String, ffteam: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
     wake: (v) => v === "1", wakelead: Number, after: String,
   };
@@ -2182,6 +2193,45 @@
     toast(nick ? "Nickname saved" : "Nickname cleared");
   };
 
+  // ---- fantasy football: the league and team, and the matchup read -----------
+  let ffSeen = null;
+  const renderFantasy = () => {
+    // Firmware from before fantasy sends no ffleague; the card stays away.
+    const card = $("#ffCard");
+    if (!S || S.ffleague === undefined) { card.hidden = true; return; }
+    card.hidden = false;
+    const key = (S.ffleague || "") + ":" + (S.ffteam || 0);
+    if (key !== ffSeen && document.activeElement !== $("#ffLeague") && document.activeElement !== $("#ffTeam")) {
+      ffSeen = key;
+      $("#ffLeague").value = S.ffleague || "";
+      $("#ffTeam").value = S.ffteam || "";
+    }
+    const read = $("#ffRead");
+    const ff = S.ff;
+    if (!S.ffleague) {
+      read.hidden = true;
+    } else if (ff && ff.tn) {
+      read.hidden = false;
+      read.textContent = !ff.oa
+        ? `Week ${ff.week}: ${ff.tn} is on a bye`
+        : `Week ${ff.week}: ${ff.tn} ${ff.tp ?? ""} — ${ff.on} ${ff.op ?? ""}` + (ff.s === "POST" ? " · Final" : "");
+    } else {
+      read.hidden = false;
+      read.textContent = "No read yet: the panel reads the matchup every few minutes.";
+    }
+  };
+  const saveFantasy = () => {
+    const league = $("#ffLeague").value.trim();
+    const team = $("#ffTeam").value.trim();
+    if (league && !/^[1-9][0-9]{0,9}$/.test(league)) return toast("The league ID is the number in the league's web address");
+    if (team && !/^[0-9]{1,3}$/.test(team)) return toast("The team ID is the number in your team page's address");
+    ffSeen = null;
+    setGD({ ffleague: league, ffteam: team || "0" });
+    toast(league ? "Fantasy league saved" : "Fantasy football off");
+  };
+  $("#ffSave").onclick = saveFantasy;
+  $("#ffLeague").onkeydown = $("#ffTeam").onkeydown = (e) => { if (e.key === "Enter") saveFantasy(); };
+
   // ---- panel picker ------------------------------------------------------------
   // Picking a layout restarts the device; the page waits it out.
   const renderPanels = () => {
@@ -2773,6 +2823,7 @@
     renderTime();
     if (S && S.name) $("#hostname").textContent = S.name + ".local";
     renderNick();
+    renderFantasy();
     renderData();
     renderHealth();
     renderWifi();

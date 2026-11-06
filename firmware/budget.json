@@ -25,6 +25,10 @@
     }
   },
   "host": {
+    "fantasy_matchup": {
+      "heap": 1024,
+      "json": 6330
+    },
     "poll_mlb_event": {
       "heap": 1581,
       "json": 14817

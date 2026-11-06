@@ -63,10 +63,10 @@ inline SettingType setting_type(const char *k) {
                                       "field",   "winbar", "spark"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
-                                     "wakelead", "celebrate", "wxunit"};
+                                     "wakelead", "celebrate", "wxunit", "ffteam"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "brand", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
-                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
+                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4", "ffleague"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -120,7 +120,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "brand",       "autoupd",     "beta",
-                                      "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
+                                      "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4",
+                                      "ffleague", "ffteam"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;

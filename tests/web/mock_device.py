@@ -162,6 +162,8 @@ INITIAL = {
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.
     "cards": [{"id": cid, "on": on} for cid, _name, on, _hint in CARDS],
     "msg": "", "msgurl": "", "msgevery": 2, "nick": "",
+    # Fantasy football (fantasy.h): the league id and the owner's team id in it.
+    "ffleague": "", "ffteam": 0,
     # The picture card (picture.h): what each kept file is, and how big the next upload can be.
     "pics": [], "picroom": 65536,
     # The game events (ha_events.h, hook.h): the webhook and the reminder's lead.
@@ -814,6 +816,13 @@ def apply_set(kv):
         elif k == "celebrate":
             if v in ("0", "1", "2"):
                 STATE["celebrate"] = int(v)
+        elif k == "ffleague":
+            # fantasy_league_id_ok(): digits, no leading zero, at most ten; "" clears it.
+            if v == "" or (v.isdigit() and len(v) <= 10 and not v.startswith("0")):
+                STATE["ffleague"] = v
+        elif k == "ffteam":
+            if whole_int(v) and 0 <= int(v) <= 999:
+                STATE["ffteam"] = int(v)
     # The same start and end keeps the hours it had (night_keep_hours).
     if STATE["nightstart"] == STATE["nightend"]:
         STATE["nightstart"], STATE["nightend"] = hours

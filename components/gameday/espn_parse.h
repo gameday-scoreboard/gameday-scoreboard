@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "fantasy.h"
 #include "psram.h"
 #include "rankings.h"
 #include "season.h"
@@ -337,6 +338,10 @@ struct ByteSource {
 // parse_season (season.h) from a stream, and from a string for the host tests.
 bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out);
 bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out);
+// The fantasy matchup (fantasy.h) as a football card, for the scoreboard
+// pages: the card shows whole points; the exact decimals ride in the state
+// document and the ticker line (fantasy_ticker).
+GameSnapshot fantasy_snapshot(const FantasyMatchup &m);
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);
 // The team's next game that is not over yet in a day's scoreboard

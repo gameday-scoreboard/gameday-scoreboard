@@ -76,6 +76,8 @@ struct Settings {
   RemoteTarget remote[4];  // the WizMote's buttons (Prefs11)
   uint16_t live_mask{0};
   std::string msg, msgurl, nick, hook;
+  std::string ff_league;  // the ESPN fantasy league id (fantasy.h); "" is unset
+  int ff_team{0};         // the owner's team id in it; 0 is unset
   std::string town;
   bool wxon{false};
   int wxunit{0};
@@ -195,6 +197,10 @@ void load(Settings &s, JsonObjectConst o) {
     s.msgurl = o["msgurl"].as<const char *>();
   if (o["nick"].is<const char *>())
     s.nick = o["nick"].as<const char *>();
+  if (o["ffleague"].is<const char *>())
+    s.ff_league = o["ffleague"].as<const char *>();
+  if (o["ffteam"].is<int>())
+    s.ff_team = o["ffteam"].as<int>();
   int collide = s.collide ? 1 : 0;
   num("collide", collide);
   s.collide = collide != 0;
@@ -396,6 +402,8 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
     case SetKind::BRAND: break;  // the bar build only; these cases are a home build's
     case SetKind::NICK: s.nick = op.text; break;
+    case SetKind::FF_LEAGUE: s.ff_league = op.text; break;
+    case SetKind::FF_TEAM: s.ff_team = op.value; break;
     case SetKind::HOOK: s.hook = op.text; break;
     case SetKind::PREGAME: s.pregame = op.value; break;
     // set_town(): a new town turns the card on, "" turns it off, the same
@@ -518,6 +526,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["msgurl"] = s.msgurl;
   doc["msgevery"] = s.msgevery;
   doc["nick"] = s.nick;
+  doc["ffleague"] = s.ff_league;
+  doc["ffteam"] = s.ff_team;
   doc["hook"] = s.hook;
   doc["pregame"] = s.pregame;
   doc["town"] = s.town;
@@ -681,6 +691,17 @@ void test_parse_set() {
   SCHECK(parse_set("msg", std::string(300, 'x'), op, kFavMax) && op.text.size() == kMsgTextMax, "msg is capped");
   SCHECK(parse_set("msg", "Caf\xE9 \xC3\xA9t\xC3", op, kFavMax) && op.text == "Caf \xC3\xA9t",
          "bytes that aren't UTF-8 are left out of a message");
+  SCHECK(parse_set("ffleague", "123456", op, kFavMax) && op.kind == SetKind::FF_LEAGUE && op.text == "123456",
+         "ffleague takes a league id");
+  SCHECK(parse_set("ffleague", "", op, kFavMax) && op.kind == SetKind::FF_LEAGUE && op.text.empty(),
+         "ffleague empty clears it");
+  SCHECK(!parse_set("ffleague", "0123", op, kFavMax), "ffleague refuses a leading zero");
+  SCHECK(!parse_set("ffleague", "12345678901", op, kFavMax), "ffleague refuses eleven digits");
+  SCHECK(!parse_set("ffleague", "12a34", op, kFavMax), "ffleague refuses letters");
+  SCHECK(parse_set("ffteam", "12", op, kFavMax) && op.kind == SetKind::FF_TEAM && op.value == 12, "ffteam takes a team id");
+  SCHECK(parse_set("ffteam", "0", op, kFavMax) && op.value == 0, "ffteam 0 clears it");
+  SCHECK(!parse_set("ffteam", "1000", op, kFavMax), "ffteam refuses 1000");
+  SCHECK(!parse_set("ffteam", "-1", op, kFavMax), "ffteam refuses a negative");
   SCHECK(parse_set("nick", "Garage", op, kFavMax) && op.kind == SetKind::NICK && op.text == "Garage", "nick");
   SCHECK(parse_set("nick", std::string(100, 'x'), op, kFavMax) && op.text.size() == kNickMax, "nick is capped");
   SCHECK(parse_set("nick", "a\nb", op, kFavMax) && op.text == "a b", "nick is one line");

@@ -281,6 +281,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     sink = sink + (size_t) (parse_news(r, list) + 1) + list.size();
   }
 
+  {
+    // The fantasy matchup (fantasy.h) and the card it makes.
+    for (uint32_t id = 1; id <= 3; id++) {
+      FantasyMatchup m;
+      ChunkReader r(data, size, chunk);
+      if (parse_fantasy(r, id, m)) {
+        GameSnapshot g = fantasy_snapshot(m);
+        sink = sink + fantasy_ticker(m).size() + g.team_abbr.size() + g.opp_abbr.size();
+      }
+    }
+  }
+
   GameSnapshot prev;
   for (const Pick &p : picks) {
     {

@@ -13,6 +13,7 @@
 
 #include "cards.h"
 #include "countdown.h"
+#include "fantasy.h"
 #include "hook.h"
 #include "leagues.h"
 #include "message.h"
@@ -37,7 +38,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
-                                    "field",   "winbar",  "spark"};
+                                    "field",   "winbar",  "spark", "ffleague", "ffteam"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -324,6 +325,8 @@ enum class SetKind : uint8_t {
   WINBAR,       // on, the win chance bar on the board
   SPARK,        // on, the score margin sparkline on the board
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
+  FF_LEAGUE,    // text, the ESPN fantasy league id (fantasy.h); "" clears it
+  FF_TEAM,      // value, the owner's team id in that league; 0 clears it
 };
 
 struct TeamRef {
@@ -484,6 +487,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     // 0 off, 1 subtle, 2 full; anything else is refused.
     op.kind = SetKind::CELEBRATE;
     return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
+  }
+  if (k == "ffleague") {
+    // The league id is a number too long for parse_whole_int's six digits;
+    // fantasy.h holds its shape (digits, no leading zero). "" clears it.
+    op.kind = SetKind::FF_LEAGUE;
+    op.text = v;
+    return v.empty() || fantasy_league_id_ok(v);
+  }
+  if (k == "ffteam") {
+    // The owner's team id in the league; 0 clears it.
+    op.kind = SetKind::FF_TEAM;
+    return parse_whole_int(v, op.value) && fantasy_team_id_ok(op.value);
   }
   if (k == "nightlevel") {
     // A whole number, held to 1..255; text is refused.
