@@ -49,6 +49,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     wnba: { prefix: "WNBA", tab: "WNBA", name: "WNBA", path: "basketball/wnba", logo: "wnba", byId: false, scan: "" },
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
+    // Golf has no teams: a favorite is a golfer, by ESPN athlete id (golf:
+    // the picker asks for the id instead of showing team tiles, and the
+    // On now list skips these leagues — a tournament is not a game).
+    pga: { prefix: "PGA", tab: "PGA", name: "PGA Tour", path: "golf/pga", logo: "golf", byId: true, scan: "", golf: true },
+    lpga: { prefix: "LPGA", tab: "LPGA", name: "LPGA", path: "golf/lpga", logo: "golf", byId: true, scan: "", golf: true },
+    eur: { prefix: "DPWT", tab: "DPWT", name: "DP World Tour", path: "golf/eur", logo: "golf", byId: true, scan: "", golf: true },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
   const logoUrl = (league, id, abbr) => {
@@ -1342,9 +1348,11 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       img.alt = "";
       if (t) img.src = logoUrl(t[0], t[1], t[2]);
       row.appendChild(img);
-      const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
+      const golf = !t && LEAGUES[key.split(":")[0]] && LEAGUES[key.split(":")[0]].golf;
+      const name = el("label", null, (i + 1) + ". " + (t ? t[3] : golf ? "Golfer " + key.split(":")[1] : key));
       const btn = remoteButtonFor(key, favSlots.indexOf(key));
       if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
+      if (golf) name.appendChild(el("small", null, lgInfo(key.split(":")[0]).name + " golfer" + (btn && remotePaired ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -2437,7 +2445,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     return gamesLoad;
   };
   const fetchGames = async () => {
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
+    const urls = Object.keys(LEAGUES).filter((lg) => !LEAGUES[lg].golf)
+      .map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       const ctl = new AbortController();
@@ -2447,6 +2456,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         for (const ev of j.events || []) {
           const c = ev.competitions?.[0];
           if (!c) continue;
+          // Not a two-team game (a golf leaderboard, say): no sides to show.
+          if (!(c.competitors || []).some((k) => k.homeAway)) continue;
           const side = (ha) => {
             const x = c.competitors.find((k) => k.homeAway === ha) || {};
             return { id: Number(x.team?.id), abbr: x.team?.abbreviation || "", score: x.score || "0", name: x.team?.shortDisplayName || x.team?.displayName || "" };
@@ -2567,8 +2578,46 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     tile.onclick = () => toggleFav(t);
     return tile;
   };
+  // A golf tour's picker: no team tiles — a box for the golfer's ESPN
+  // athlete id (the number in his leaderboard or profile link), and the
+  // golfers already followed in this tour, each removable.
+  const renderGolfTiles = () => {
+    $("#tiles").className = "tiles";
+    const tiles = $("#tiles");
+    tiles.innerHTML = "";
+    tiles.appendChild(el("p", "hint", "Follow a golfer by his ESPN athlete id — the number at the end of his page on espn.com/golf/player. He is pinned on the panel's leaderboard wherever he stands."));
+    const form = el("div", "golfadd");
+    const input = el("input");
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.placeholder = "Athlete id";
+    input.setAttribute("aria-label", "ESPN athlete id");
+    const add = el("button", null, "Add golfer");
+    const go = () => {
+      const id = input.value.trim();
+      if (!/^\d+$/.test(id) || Number(id) === 0) return toast("That doesn't look like an athlete id");
+      const key = league + ":" + Number(id);
+      if (favKeys.includes(key)) return toast("Already following that golfer");
+      if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
+      postFavs(favKeys.concat([key]));
+      toast("Added the golfer");
+    };
+    add.onclick = go;
+    input.onkeydown = (ev) => { if (ev.key === "Enter") go(); };
+    form.appendChild(input);
+    form.appendChild(add);
+    tiles.appendChild(form);
+    for (const key of favKeys.filter((k) => k.split(":")[0] === league)) {
+      const chip = el("button", "tile on", "Golfer " + key.split(":")[1]);
+      chip.dataset.key = key;
+      chip.setAttribute("aria-pressed", "true");
+      chip.onclick = () => { postFavs(favKeys.filter((k) => k !== key)); toast("Removed the golfer"); };
+      tiles.appendChild(chip);
+    }
+  };
   const renderTiles = () => {
     if (league === "now") return renderGames();
+    if (LEAGUES[league] && LEAGUES[league].golf) return renderGolfTiles();
     $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
@@ -2600,9 +2649,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       if (league === opened && !$("#q").value.trim() && $("#modal").classList.contains("open") && live(list)) showTab(tabButtons.find((b) => b.dataset.lg === "now"));
     });
   };
-  // One tab per league that has teams in this firmware's list.
+  // One tab per league that has teams in this firmware's list, and one per
+  // golf tour: golfers are picked by athlete id, not from a team list.
   for (const lg of Object.keys(LEAGUES)) {
-    if (!TEAMS.some((t) => t[0] === lg)) continue;
+    if (!LEAGUES[lg].golf && !TEAMS.some((t) => t[0] === lg)) continue;
     const b = el("button", null, LEAGUES[lg].tab);
     b.dataset.lg = lg;
     b.setAttribute("role", "tab");
