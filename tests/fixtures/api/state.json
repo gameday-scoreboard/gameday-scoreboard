@@ -86,7 +86,7 @@
   "jump": false,
   "banner": true,
   "favtake": true,
-  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"],
+  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "laliga", "bundesliga", "seriea", "ligue1", "ligamx", "nba", "wnba", "mcbb", "nhl"],
   "live_auto": true,
   "tz": 1,
   "tz_name": "US Central",

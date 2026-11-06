@@ -11,7 +11,22 @@
 namespace espn {
 
 // Saved in prefs and the boot cache: append, never renumber.
-enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8 };
+enum class League : uint8_t {
+  NFL = 0,
+  NCAA = 1,
+  NBA = 2,
+  NHL = 3,
+  MLB = 4,
+  WNBA = 5,
+  MLS = 6,
+  EPL = 7,
+  MCBB = 8,
+  LALIGA = 9,
+  BUNDESLIGA = 10,
+  SERIEA = 11,
+  LIGUE1 = 12,
+  LIGAMX = 13
+};
 
 enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
 
@@ -51,6 +66,11 @@ constexpr LeagueInfo kLeagues[] = {
     // list (~100-280 KB); cup games come from the kCups reads below.
     {League::MLS, "mls", "soccer/usa.1", "MLS", "soccer", Sport::SOCCER, true, true, 30},
     {League::EPL, "epl", "soccer/eng.1", "EPL", "soccer", Sport::SOCCER, true, true, 30},
+    {League::LALIGA, "laliga", "soccer/esp.1", "LALIGA", "soccer", Sport::SOCCER, true, true, 30},
+    {League::BUNDESLIGA, "bundesliga", "soccer/ger.1", "BUNDESLIGA", "soccer", Sport::SOCCER, true, true, 30},
+    {League::SERIEA, "seriea", "soccer/ita.1", "SERIEA", "soccer", Sport::SOCCER, true, true, 30},
+    {League::LIGUE1, "ligue1", "soccer/fra.1", "LIGUE1", "soccer", Sport::SOCCER, true, true, 30},
+    {League::LIGAMX, "ligamx", "soccer/mex.1", "LIGAMX", "soccer", Sport::SOCCER, true, true, 30},
     // An 82-game NBA season schedule is ~1 MB (WNBA ~840 KB): no Up next list.
     {League::NBA, "nba", "basketball/nba", "NBA", "nba", Sport::BASKETBALL, false, false, 30},
     {League::WNBA, "wnba", "basketball/wnba", "WNBA", "wnba", Sport::BASKETBALL, false, false, 30},
@@ -116,6 +136,18 @@ constexpr CupInfo kCups[] = {
     {"uefa.europa", League::EPL},
     {"uefa.europa.conf", League::EPL},
     {"concacaf.champions", League::MLS},
+    {"uefa.champions", League::LALIGA},
+    {"uefa.europa", League::LALIGA},
+    {"uefa.europa.conf", League::LALIGA},
+    {"uefa.champions", League::BUNDESLIGA},
+    {"uefa.europa", League::BUNDESLIGA},
+    {"uefa.europa.conf", League::BUNDESLIGA},
+    {"uefa.champions", League::SERIEA},
+    {"uefa.europa", League::SERIEA},
+    {"uefa.europa.conf", League::SERIEA},
+    {"uefa.champions", League::LIGUE1},
+    {"uefa.europa", League::LIGUE1},
+    {"uefa.europa.conf", League::LIGUE1},
 };
 
 // The n-th cup of a league (0-based), nullptr past the last one.

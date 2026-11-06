@@ -499,6 +499,8 @@ static void test_best_game() {
   CHECK_EQ(game_progress(League::MCBB, 2, 600), 750);
   CHECK_EQ(game_progress(League::MLB, 7, 0), 777);
   CHECK_EQ(game_progress(League::EPL, 1, 1500), 277);
+  CHECK_EQ(game_progress(League::LALIGA, 1, 1500), 277);
+  CHECK_EQ(game_progress(League::LIGAMX, 1, 1500), 277);
   CHECK_EQ(game_progress(League::NHL, 4, 300), 1000);
   CHECK_EQ(game_progress(League::NFL, 0, 0), 0);
   CHECK(in_overtime(League::NFL, 5));
@@ -2302,7 +2304,8 @@ static void test_favorites_filters() {
 // Champions League final on penalties and a World Cup game after extra time.
 static const uint32_t kArsenal = 359, kLeeds = 357, kSunderland = 366, kMiami = 20232, kDcUnited = 193,
                       kInter = 1936, kCorinthians = 874, kVasco = 3454, kMirassol = 9169, kBragantino = 6079,
-                      kPsg = 160, kArgentina = 202, kCruzeiro = 2022;
+                      kPsg = 160, kArgentina = 202, kCruzeiro = 2022, kRealMadrid = 86, kBayern = 132, kMilan = 103,
+                      kAmerica = 227;
 
 static GameSnapshot soccer_event(const char *file, uint32_t team) {
   GameSnapshot s;
@@ -2330,18 +2333,61 @@ static void test_soccer_urls() {
   CHECK(league_by_key("mls") != nullptr && league_by_key("mls")->logo_by_id);
   CHECK(league_sport(League::EPL) == Sport::SOCCER);
   CHECK(league_sport(League::MLS) == Sport::SOCCER);
-  int epl = 0, mls = 0;
+  // The five leagues added after EPL and MLS read the same way: a team URL,
+  // a key, the fixture list for Up next, logos by id and the soccer sport.
+  CHECK_EQ(team_url(League::LALIGA, kRealMadrid),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/teams/86"));
+  CHECK_EQ(team_url(League::BUNDESLIGA, kBayern),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams/132"));
+  CHECK_EQ(team_url(League::SERIEA, kMilan),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/teams/103"));
+  CHECK_EQ(team_url(League::LIGUE1, kPsg),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/teams/160"));
+  CHECK_EQ(team_url(League::LIGAMX, kAmerica),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/teams/227"));
+  CHECK_EQ(std::string(league_key(League::LALIGA)), std::string("laliga"));
+  CHECK_EQ(std::string(league_key(League::BUNDESLIGA)), std::string("bundesliga"));
+  CHECK_EQ(std::string(league_key(League::SERIEA)), std::string("seriea"));
+  CHECK_EQ(std::string(league_key(League::LIGUE1)), std::string("ligue1"));
+  CHECK_EQ(std::string(league_key(League::LIGAMX)), std::string("ligamx"));
+  for (League l : {League::LALIGA, League::BUNDESLIGA, League::SERIEA, League::LIGUE1, League::LIGAMX}) {
+    const LeagueInfo *info = league_info(l);
+    CHECK(info != nullptr && info->season_list && info->logo_by_id);
+    CHECK(league_sport(l) == Sport::SOCCER);
+    CHECK(league_by_key(league_key(l)) == info);
+  }
+  int epl = 0, mls = 0, laliga = 0, bundesliga = 0, seriea = 0, ligue1 = 0, ligamx = 0;
   for (size_t i = 0; i < kTeamCount; i++) {
     const Team &t = kTeams[i];
     epl += t.league == League::EPL;
     mls += t.league == League::MLS;
+    laliga += t.league == League::LALIGA;
+    bundesliga += t.league == League::BUNDESLIGA;
+    seriea += t.league == League::SERIEA;
+    ligue1 += t.league == League::LIGUE1;
+    ligamx += t.league == League::LIGAMX;
     if (t.league == League::EPL && t.espn_id == kArsenal)
       CHECK_EQ(team_option(t), std::string("EPL: Arsenal"));
     if (t.league == League::MLS && t.espn_id == kMiami)
       CHECK_EQ(team_option(t), std::string("MLS: Inter Miami CF"));
+    if (t.league == League::LALIGA && t.espn_id == kRealMadrid)
+      CHECK_EQ(team_option(t), std::string("LALIGA: Real Madrid"));
+    if (t.league == League::BUNDESLIGA && t.espn_id == kBayern)
+      CHECK_EQ(team_option(t), std::string("BUNDESLIGA: Bayern Munich"));
+    if (t.league == League::SERIEA && t.espn_id == kMilan)
+      CHECK_EQ(team_option(t), std::string("SERIEA: AC Milan"));
+    if (t.league == League::LIGUE1 && t.espn_id == kPsg)
+      CHECK_EQ(team_option(t), std::string("LIGUE1: Paris Saint-Germain"));
+    if (t.league == League::LIGAMX && t.espn_id == kAmerica)
+      CHECK_EQ(team_option(t), std::string("LIGAMX: América"));
   }
   CHECK_EQ(epl, 20);
   CHECK_EQ(mls, 30);
+  CHECK_EQ(laliga, 20);
+  CHECK_EQ(bundesliga, 18);
+  CHECK_EQ(seriea, 20);
+  CHECK_EQ(ligue1, 18);
+  CHECK_EQ(ligamx, 18);
 }
 
 static void test_soccer_team() {
@@ -2366,6 +2412,52 @@ static void test_soccer_team() {
   CHECK_EQ(up[0].tv, std::string("Apple TV"));
   CHECK_EQ(up[1].opp_abbr, std::string("NYC"));
   CHECK_EQ(up[1].kickoff_epoch, parse_iso8601_z("2026-10-14T23:30Z"));
+}
+
+// The five leagues added after MLS and the Premier League, from the team
+// and single-event documents recorded live on 2026-11-06 (see
+// fixtures/README.md). Each league's own document parses as a soccer
+// pre-game with its two clubs, and a club's team document names its next
+// game in that league.
+static void test_soccer_new_leagues() {
+  struct Case {
+    const char *file;
+    uint32_t team;     // the home club's ESPN id
+    const char *team_abbr;
+    const char *opp_abbr;
+  };
+  const Case cases[] = {
+      {"fixtures/event_laliga_pre.json", 243, "SEV", "ALA"},
+      {"fixtures/event_bundesliga_pre.json", 127, "HSV", "BMG"},
+      {"fixtures/event_seriea_pre.json", 17530, "VEN", "UDI"},
+      {"fixtures/event_ligue1_pre.json", 179, "TOU", "STR"},
+      {"fixtures/event_ligamx_pre.json", 15720, "ASL", "JUA"},
+  };
+  for (const auto &c : cases) {
+    GameSnapshot s = soccer_event(c.file, c.team);
+    CHECK(s.valid);
+    CHECK(s.sport == Sport::SOCCER);
+    CHECK(s.state == GameState::PRE);
+    CHECK(s.team_home);
+    CHECK_EQ(s.team_abbr, std::string(c.team_abbr));
+    CHECK_EQ(s.opp_abbr, std::string(c.opp_abbr));
+  }
+  struct TeamCase {
+    const char *file;
+    const char *next_event;
+  };
+  const TeamCase teams[] = {
+      {"fixtures/team_laliga_rma.json", "401882808"},
+      {"fixtures/team_bundesliga_mun.json", "401884740"},
+      {"fixtures/team_seriea_mil.json", "401875018"},
+      {"fixtures/team_ligue1_psg.json", "401876407"},
+      {"fixtures/team_ligamx_ame.json", "401876904"},
+  };
+  for (const auto &c : teams) {
+    Schedule s;
+    CHECK(parse_team_str(slurp(c.file), s));
+    CHECK_EQ(s.event_id, std::string(c.next_event));
+  }
 }
 
 static void test_soccer_pre() {
@@ -2649,6 +2741,14 @@ static void test_soccer_cups() {
   CHECK_EQ(std::string(league_cup(League::MLS, 0)), std::string("concacaf.champions"));
   CHECK_EQ(league_cup_count(League::EPL), (size_t) 3);
   CHECK_EQ(league_cup_count(League::MLS), (size_t) 1);
+  // The four European leagues added with EPL's cup set read the same three.
+  for (League l : {League::LALIGA, League::BUNDESLIGA, League::SERIEA, League::LIGUE1}) {
+    CHECK_EQ(league_cup_count(l), (size_t) 3);
+    CHECK_EQ(std::string(league_cup(l, 0)), std::string("uefa.champions"));
+    CHECK_EQ(std::string(league_cup(l, 2)), std::string("uefa.europa.conf"));
+    CHECK(league_cup(l, 3) == nullptr);
+  }
+  CHECK_EQ(league_cup_count(League::LIGAMX), (size_t) 0);
   CHECK_EQ(league_cup_count(League::NFL), (size_t) 0);
   CHECK_EQ(league_cup_count(League::MLB), (size_t) 0);
 
@@ -8541,6 +8641,7 @@ int main() {
   test_favorites_filters();
   test_soccer_urls();
   test_soccer_team();
+  test_soccer_new_leagues();
   test_soccer_pre();
   test_soccer_live();
   test_soccer_finals();

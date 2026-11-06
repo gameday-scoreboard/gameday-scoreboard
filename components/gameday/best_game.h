@@ -46,6 +46,11 @@ inline Regulation regulation(League league) {
       return {9, 0};
     case League::MLS:
     case League::EPL:
+    case League::LALIGA:
+    case League::BUNDESLIGA:
+    case League::SERIEA:
+    case League::LIGUE1:
+    case League::LIGAMX:
       return {2, 2700};
   }
   return {4, 900};
