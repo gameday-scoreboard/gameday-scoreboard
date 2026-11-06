@@ -758,6 +758,27 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string nick_;
   void load_nick_();
   void set_nick_(const std::string &nick);
+  // Fantasy football (fantasy.h): the owner's ESPN league id and their team
+  // id in it, plain settings like a team choice — a public league needs no
+  // login, and nothing else is stored. The matchup the reads bring back.
+  struct PrefsFantasy {
+    char league[11];
+    uint16_t team;
+    uint8_t spare[2];
+  } __attribute__((packed));
+  ESPPreferenceObject fantasy_pref_;
+  std::string ff_league_;
+  int ff_team_{0};
+  ::espn::FantasyMatchup fantasy_;
+  int fantasy_status_{-1};  // the last read's HTTP status, -1 for none yet
+  uint32_t fantasy_read_ms_{0};
+  uint32_t fantasy_fail_ms_{0};
+  uint32_t fantasy_tick_ms_{0};
+  bool fantasy_read_due_{false};
+  bool fantasy_configured_() const { return !ff_league_.empty() && ff_team_ > 0; }
+  void load_fantasy_();
+  void set_fantasy_(const std::string &league, int team);
+  void fantasy_tick_();
   ::espn::HeatGuard heat_;
   ::espn::PowerLog power_log_{};
   ::espn::PowerDip power_dip_;
@@ -1179,6 +1200,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool season_ok{false};
     uint32_t season_bytes{0};
     uint32_t season_ms{0};  // how long the read took
+    // The fantasy matchup (fantasy.h), read on this task like the season.
+    bool need_fantasy{false};
+    std::string fantasy_url;
+    uint32_t fantasy_team{0};
+    ::espn::FantasyMatchup fantasy;
+    bool fantasy_ok{false};
+    int fantasy_status{0};  // HTTP status, 0 for no answer
+    uint32_t fantasy_bytes{0};
     // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
     // 3 looks the next game's venue up, 4 reads its kickoff hour, on this
     // task so it never runs alongside an ESPN read.
@@ -1214,6 +1243,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_season_job_();
   void run_season_job_();
   void apply_season_job_();
+  void start_fantasy_job_();
+  void run_fantasy_job_();
+  void apply_fantasy_job_();
   bool fetch_schedule_(const ::espn::Team *team, Schedule &out, const char *comp_slug = nullptr);
   void run_cup_job_();
   void apply_cup_job_(uint32_t now);
