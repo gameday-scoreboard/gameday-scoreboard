@@ -82,6 +82,9 @@ script:
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
           const bool wide = W >= 128;
           id(gameday_ctl).set_top25_cols(wide ? 2 : 1);  // gd_top25_card's columns
+          // The golf card: surname rows on a single panel, one full-width
+          // column of wide rows (with today's score and thru) from 128 up.
+          id(gameday_ctl).set_golf_layout(1, wide);
           lv_obj_set_size(id(tt_game_container), W, 64);
           lv_obj_set_size(id(tt_no_game_container), W, 64);
           lv_obj_set_size(id(tt_splash), W, 64);
@@ -1122,6 +1125,25 @@ script:
           }
           lv_obj_move_foreground(id(tt_top25));
           lv_obj_clear_flag(id(tt_top25), LV_OBJ_FLAG_HIDDEN);
+
+  # The golf card (components/gameday/golf.h): a page of the leaderboard,
+  # or nothing. The component turns the pages and sends "golf" for each.
+  - id: gd_golf_card
+    then:
+      - lambda: |-
+          const std::string &head = id(gameday_ctl).golf_head();
+          if (head.empty()) {
+            lv_obj_add_flag(id(tt_golf), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          lv_obj_set_size(id(tt_golf), W, 64);
+          lv_obj_set_width(id(tt_golf_head_lbl), W);
+          lv_label_set_text(id(tt_golf_head_lbl), head.c_str());
+          lv_obj_set_width(id(tt_golf_col0_lbl), W - 2);
+          lv_label_set_text(id(tt_golf_col0_lbl), id(gameday_ctl).golf_col(0).c_str());
+          lv_obj_move_foreground(id(tt_golf));
+          lv_obj_clear_flag(id(tt_golf), LV_OBJ_FLAG_HIDDEN);
 
   # The news card (components/gameday/news.h): its top line ("DAL NEWS")
   # and one headline under it, or nothing. Sent as "news", like "msg".
@@ -2295,6 +2317,44 @@ lvgl:
                   width: 62
                   long_mode: CLIP
                   hidden: true
+                  text: ""
+                  text_color: 0xFFFFFF
+                  text_font: spleen_8
+                  text_line_space: 3
+
+        # The golf leaderboard, over the board between games (gd_golf_card):
+        # the tour and round, then five rows in one column the width of the
+        # display.
+        - obj:
+            id: tt_golf
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - label:
+                  id: tt_golf_head_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0xFFB000
+                  text_font: spleen_8
+              - label:
+                  id: tt_golf_col0_lbl
+                  x: 1
+                  y: 10
+                  width: 62
+                  long_mode: CLIP
                   text: ""
                   text_color: 0xFFFFFF
                   text_font: spleen_8
