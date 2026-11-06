@@ -5,10 +5,6 @@ sidebar:
   order: 12.6
 ---
 
-:::note[Coming in the next release]
-The picture card is new in the next release.
-:::
-
 Between games the panel can show your own pictures: a fan photo, a piece of pixel art, your family's name in your team's colors. An animated GIF plays.
 
 ## Add a picture
@@ -16,7 +12,7 @@ Between games the panel can show your own pictures: a fan photo, a piece of pixe
 1. Open the [device page](/using/device-page/) and find **Pictures** on the Customize tab.
 2. Tap **Add a picture** and pick a file.
 
-On Android, the app has it too: **Settings > Customize > Pictures**, then **Add a picture** picks one from your phone's photos. The app treats each file the same way as the device page, below.
+The app has it too, on iPhone and Android: **Settings > Customize > Pictures** (on iPhone, **Customize** on the Board gets you there too), then **Add a picture** picks one from your phone's photos. The app treats each file the same way as the device page, below.
 
 The panel keeps up to 4 pictures, and they stay through a restart and through updates. Nothing shows until you add one.
 

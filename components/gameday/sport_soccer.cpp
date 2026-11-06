@@ -475,8 +475,8 @@ int pick_schedule(const std::vector<Schedule> &comps, int64_t now_epoch, const s
 // ---- splashes ------------------------------------------------------------------
 
 // A goal for us is "GOAL!", theirs "LEE GOAL" (with opponent splashes on). The
-// win splashes at full time; a draw gets none. A shootout decides a level
-// game.
+// win splashes at full time; a draw gets none. A shootout decides the game
+// (shootout_decides).
 Splash soccer_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral) {
   Splash none;
   if (!prev.valid || !cur.valid || prev.event_id != cur.event_id)
@@ -485,7 +485,7 @@ Splash soccer_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opp
     if (!cur.completed)
       return none;
     int us = cur.team_score, them = cur.opp_score;
-    if (us == them && cur.soc.team_shootout >= 0 && cur.soc.opp_shootout >= 0) {
+    if (shootout_decides(cur)) {
       us = cur.soc.team_shootout;
       them = cur.soc.opp_shootout;
     }

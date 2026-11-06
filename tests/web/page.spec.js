@@ -26,6 +26,8 @@ const test = base.test.extend({
 // mock's default, null is firmware without the list.
 const reset = (request, state, fail, wifi) =>
   request.post("/_reset", { data: wifi === undefined ? { state, fail } : { state, fail, wifi } });
+// The panel's next board update: Game Status on every open event stream.
+const push = (request, name = "Game Status") => request.post("/_push?name=" + encodeURIComponent(name));
 // Playlists post to the settings import (app.js setRequest); a post of only
 // them reads back as the lists= text it stands for, so tests check it like a set.
 const playlistsPost = (p) => {
@@ -651,13 +653,15 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(chips.getByRole("button", { pressed: true })).toHaveText(["MLB", "NBA", "NHL"]);
 });
 
-test("bar build: no switch, a bar beta note and an email with the panel's name", async ({ page, request }) => {
+test("bar build: no auto-install switch, Follow beta, a bar note and an email with the panel's name", async ({ page, request }) => {
   await reset(request, { autoupd: null, bar: { report: "support@gameday-scoreboard.com" } });
   await page.goto("/");
   await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#autoupdRow")).toBeHidden();
+  await expect(page.locator("#betaRow")).toBeVisible();
   await expect(page.locator("#barRow")).toBeVisible();
+  await expect(page.locator("#barRow label")).toContainText("Bar build");
   const href = await page.locator("#barReport").getAttribute("href");
   expect(href).toMatch(/^mailto:support@gameday-scoreboard\.com\?subject=Bar%20panel%20gameday-2f6a70&body=/);
   expect(decodeURIComponent(href.split("body=")[1])).toContain("Panel: gameday-2f6a70");
@@ -910,6 +914,43 @@ test("a remote button whose target is gone falls back to its own favorite and th
   await btns.nth(0).locator("select").selectOption("team:nfl:34");
   await expectSet(request, { remote1: "team:nfl:34" });
   await expect(rows.nth(1).locator("small")).toHaveText("NFL · remote button 1, 2");
+});
+
+test("a remote button set to a playlist follows it through a rename", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("nfl", 34, "HOU", "Houston Texans"), {}, {}],
+    lists: [{ n: "Sundays", f: [0] }, { n: "Texans", f: [1] }],
+    remote: [{ v: "list:Sundays" }, { v: "fav" }, { v: "fav" }, { v: "fav" }],
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  const name = page.locator("#listCtls .plist").nth(0).locator(".pname");
+  await name.fill("Game day");
+  await name.press("Enter");
+  await expectSet(request, { lists: "Game day=nfl:6;Texans=nfl:34" });
+  await expect.poll(async () => (await deviceState(request)).remote[0]).toEqual({ v: "list:Game day", gone: false });
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  await expect(page.locator("#remoteBtns .rbtn").nth(0).locator("select")).toHaveValue("list:Game day");
+});
+
+// A restored backup or fav1=none leaves an empty slot ahead of the teams;
+// playlists count places in the slot list, gaps and all.
+test("a gap in the favorites keeps each playlist's teams", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [{}, t("nfl", 6, "DAL", "Dallas Cowboys"), t("nfl", 34, "HOU", "Houston Texans"), {}],
+    lists: [{ n: "Both", f: [1, 2] }],
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  const chips = page.locator("#listCtls .plist").nth(0).locator(".pteams .chip");
+  await expect(chips).toHaveText(["DAL", "HOU"]);
+  await expect(page.locator("#listCtls .plist .pteams .chip.on")).toHaveText(["DAL", "HOU"]);
+  await chips.filter({ hasText: "HOU" }).click();
+  await expectSet(request, { lists: "Both=nfl:6" });
+  await expect(page.locator("#listCtls .plist .pteams .chip.on")).toHaveText(["DAL"]);
 });
 
 // All 16 playlists with every favorite are about 3 KB, far past the panel's
@@ -1626,26 +1667,32 @@ test("follow beta: off by default, posts 0 and 1, hidden when the firmware has n
   await expect(page.locator("#betaRow")).toBeHidden();
 });
 
-test("a beta is newer than its release number, and a release is behind the beta before it", async ({ page, request }) => {
+test("a beta carries the next release's number: newer than the last release, older than its own", async ({ page, request }) => {
   await reset(request, { beta: true });
   const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
-  let entity = { ...fw, value: "1.5.5-beta.812", current_version: "1.5.5" };
+  let entity = { ...fw, value: "1.5.6-beta.812", current_version: "1.5.5" };
   await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
   await page.goto("/");
   await tab(page, "device");
-  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.5-beta.812");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.812");
   await expect(page.locator("#fwInstall")).toBeVisible();
 
-  // Beta turned off on a beta build: the release it was built from is not an update.
-  entity = { ...fw, value: "1.5.5", current_version: "1.5.5-beta.812" };
+  // Beta turned off on a beta build: the release it was building toward is an update.
+  entity = { ...fw, value: "1.5.6", current_version: "1.5.6-beta.812" };
   await page.reload();
-  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.5-beta.812");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+
+  // A beta of a release the panel already runs is behind it.
+  entity = { ...fw, value: "1.5.6-beta.812", current_version: "1.5.6" };
+  await page.reload();
+  await expect(page.locator("#fwText")).toHaveText("You're ahead of the latest release, v1.5.6");
   await expect(page.locator("#fwInstall")).toBeHidden();
 
   // The next beta is newer than the last.
-  entity = { ...fw, value: "1.5.6-beta.3", current_version: "1.5.5-beta.812" };
+  entity = { ...fw, value: "1.5.6-beta.813", current_version: "1.5.6-beta.812" };
   await page.reload();
-  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.3");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v1.5.6-beta.813");
 });
 
 test("an update that rolled back says so and still offers Install", async ({ page, request }) => {
@@ -1675,6 +1722,89 @@ test("an update that rolled back says so and still offers Install", async ({ pag
   await page.reload();
   await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.2");
   await expect(page.locator("#fwSub")).toContainText("It installs on its own between 3 and 5 AM.");
+});
+
+test("Install, once confirmed, installs, says so, and reloads when the panel runs the new version", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "2026.10.1", current_version: "2026.10.0" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await tab(page, "device");
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.1");
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.locator("#fwInstall").click();
+  expect(asked).toBe("Install v2026.10.1 now? The panel will reboot.");
+  await expect.poll(async () => (await entityPosts(request)).map((p) => p.path)).toContain("/update/Firmware/install");
+  await expect(page.locator("#toast")).toHaveText("Installing v2026.10.1");
+  await expect(page.locator("#gone")).toHaveText("Installing v2026.10.1. This page reloads when the panel is back.");
+  await expect(page.locator("#fwText")).toHaveText("Installing v2026.10.1");
+  await expect(page.locator("#fwInstall")).toBeHidden();
+  // Back on the new version: the page reloads by itself.
+  const reloaded = page.waitForEvent("load", { timeout: 15000 });
+  entity = { ...fw, state: "NO UPDATE", value: "2026.10.1", current_version: "2026.10.1" };
+  await reloaded;
+  await expect(page.locator("#gone")).toBeHidden();
+});
+
+test("Install, dismissed, does nothing", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "UPDATE AVAILABLE", summary: "", release_url: "" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: { ...fw, value: "2026.10.1", current_version: "2026.10.0" } }));
+  await page.goto("/");
+  await tab(page, "device");
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator("#fwInstall").click();
+  await sleep(500);
+  expect((await entityPosts(request)).map((p) => p.path)).not.toContain("/update/Firmware/install");
+  await expect(page.locator("#gone")).toBeHidden();
+  await expect(page.locator("#fwInstall")).toBeVisible();
+});
+
+test("Check for updates presses the button, then shows what the panel found", async ({ page, request }) => {
+  await reset(request);
+  const fw = { id: "update/Firmware", domain: "update", name: "Firmware", state: "NO UPDATE", summary: "", release_url: "" };
+  let entity = { ...fw, value: "2026.10.0", current_version: "2026.10.0" };
+  await page.route("**/update/Firmware*", (route) => route.fulfill({ json: entity }));
+  await page.goto("/");
+  await tab(page, "device");
+  await expect(page.locator("#fwText")).toHaveText("You're up to date, v2026.10.0");
+  entity = { ...fw, state: "UPDATE AVAILABLE", value: "2026.10.1", current_version: "2026.10.0" };
+  const check = page.locator("#actions button");
+  await expect(check).toHaveText("Check for updates");
+  await check.click();
+  await expect(check).toBeDisabled();
+  await expect(check).toHaveText("Checking");
+  await expect(page.locator("#fwText")).toHaveText("Checking for updates");
+  await expect.poll(async () => (await entityPosts(request)).map((p) => p.path)).toContain("/button/Check%20for%20Updates/press");
+  await expect(page.locator("#toast")).toHaveText("Update available: v2026.10.1", { timeout: 8000 });
+  await expect(page.locator("#fwText")).toHaveText("Update available: v2026.10.1");
+  await expect(check).toBeEnabled();
+  await expect(check).toHaveText("Check for updates");
+  await expect(page.locator("#fwInstall")).toBeVisible();
+});
+
+test("the remote card's Discovery switch and Unpair remote reach the panel", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const paths = async () => (await entityPosts(request)).map((p) => p.path);
+  const discovery = page.locator("#remoteCtls .sw");
+  await expect(discovery).toHaveAttribute("aria-checked", "false");
+  await discovery.click();
+  await expect(discovery).toHaveAttribute("aria-checked", "true");
+  await expect.poll(paths).toContain("/switch/WizMote%20Auto-Discovery/turn_on");
+  // Unpair asks first; no is no.
+  const unpair = page.locator("#remoteActions button", { hasText: "Unpair remote" });
+  page.once("dialog", (d) => d.dismiss());
+  await unpair.click();
+  await sleep(300);
+  expect(await paths()).not.toContain("/button/Clear%20WizMote%20Pairing/press");
+  page.once("dialog", (d) => d.accept());
+  await unpair.click();
+  await expect.poll(paths).toContain("/button/Clear%20WizMote%20Pairing/press");
 });
 
 test("an important release says so in the Firmware box", async ({ page, request }) => {
@@ -2451,6 +2581,8 @@ test("the nickname keeps the tab title when something else renames it, and the b
   await page.locator("#nick").fill("Gar");
   await request.post("/gameday/set?nick=Den");
   await expect.poll(async () => (await deviceState(request)).nick).toBe("Den");
+  // The page hears of it from the panel's next board update, not its 15 s poll.
+  await push(request);
   await expect(page).toHaveTitle("Den · Game Day Scoreboard");
   await expect(page.locator("#nick")).toHaveValue("Gar");
 });
@@ -2704,7 +2836,10 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   await expect(page.locator("#backup")).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#bkExport")]);
   expect(download.suggestedFilename()).toMatch(/^gameday-2f6a70-settings-\d{4}-\d\d-\d\d\.json$/);
-  const doc = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
+  const saved = fs.readFileSync(await download.path(), "utf8");
+  const doc = JSON.parse(saved);
+  // Saved compact, the size the panel takes back.
+  expect(saved).toBe(JSON.stringify(doc) + "\n");
   expect(doc).toMatchObject({ schema: 1, name: "gameday-2f6a70", mode: 4,
                               favs: ["nfl:6", "nfl:34", "ncaa:145"], live: [], down: true, panels: 2, brightness: 128, scroll: 5 });
   await expect(page.locator("#bkNote")).toHaveText(/^Saved gameday-2f6a70-settings-/);
@@ -2744,6 +2879,16 @@ test("Export downloads the settings, and Import restores a backup checked whole"
   await sleep(300);
   expect((await posts()).length).toBe(sent);
   expect((await deviceState(request)).favs[0].abbr).toBe("ATL");
+
+  // An indented file over 4 KB (older pages saved them that way) goes in,
+  // sent compact.
+  const roomy = JSON.stringify(doc, null, 2).replace(/\n/g, "\n" + " ".repeat(40));
+  expect(roomy.length).toBeGreaterThan(4096);
+  page.once("dialog", (d) => d.accept());
+  await page.setInputFiles("#bkFile", file("roomy.json", roomy));
+  await expect(page.locator("#bkNote")).toHaveText(/^Restored\./);
+  expect((await posts()).at(-1).body).toBe(JSON.stringify(doc));
+  expect((await deviceState(request)).favs[0].abbr).toBe("DAL");
 });
 
 test("Import of this panel's own backup with another layout waits out the restart", async ({ page, request }) => {
@@ -2785,4 +2930,58 @@ test("the backup section hides on firmware without it", async ({ page, request }
   await expect(page.locator("#tzline")).toBeVisible();
   await sleep(300);
   await expect(page.locator("#backup")).toBeHidden();
+});
+
+// These five were missing from the page's list of settings it holds while a
+// post is out, so a tap showed only when a read came back.
+test("Live pictures and update switches hold their tap through a slow read", async ({ page, request }) => {
+  await reset(request, { autoupd: false, beta: false });
+  await page.goto("/");
+  await slowReads(page, 1000);
+  await tab(page, "display");
+  const field = page.locator('.sw[data-set="field"]');
+  await expect(field).toHaveAttribute("aria-checked", "true");
+  await field.click();
+  // At once, not when the slow read lands.
+  await expect(field).toHaveAttribute("aria-checked", "false", { timeout: 300 });
+  for (const end = Date.now() + 2500; Date.now() < end; await sleep(100))
+    expect(await field.getAttribute("aria-checked")).toBe("false");
+  await expectSet(request, { field: "0" });
+  await tab(page, "device");
+  const beta = page.locator('.sw[data-set="beta"]');
+  await beta.click();
+  await expect(beta).toHaveAttribute("aria-checked", "true", { timeout: 300 });
+  for (const end = Date.now() + 2500; Date.now() < end; await sleep(100))
+    expect(await beta.getAttribute("aria-checked")).toBe("true");
+});
+
+test("a Power tap the panel never gets goes back", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const power = page.locator("#quickCtls .sw");
+  await expect(power).toHaveAttribute("aria-checked", "true");
+  await page.route("**/switch/**", (route) => route.abort());
+  await power.click();
+  await expect(page.locator("#toast")).toContainText("Device did not respond");
+  await expect(power).toHaveAttribute("aria-checked", "true");
+});
+
+test("a mode tap says the mode's name alone", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await page.locator('#modes button[data-mode="5"]').click();
+  await expect(page.locator("#toast")).toHaveText("Live games");
+});
+
+test("a settings save the panel never answers gives up after 8 seconds and the switch goes back", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "display");
+  const sw = page.locator('.sw[data-set="play"]');
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await page.route("**/gameday/set?*", () => {});  // never answered
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#toast")).toHaveText("Device did not respond (no answer). Try again.", { timeout: 10000 });
+  await expect(sw).toHaveAttribute("aria-checked", "true");
 });

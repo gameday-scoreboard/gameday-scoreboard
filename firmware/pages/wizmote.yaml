@@ -6,7 +6,9 @@
 # a playlist, a sport row, all favorites or nothing; its own favorite until
 # then, set_request.h RemoteTarget), brightness up/down, NIGHT = dim to the
 # night level. In the demo build 1-4 run the demo instead (remote_number in
-# components/gameday/demo.cpp).
+# components/gameday/demo.cpp). On the bar build, 4 throws the plate party
+# while the message card shows the brand pack's plate list (remote_number in
+# components/gameday/gameday.cpp).
 #
 # While the night schedule has the panel dim or dark, ON, Brighter, NIGHT and
 # 1-4 turn it off for the rest of the night (night_skip in the gameday
@@ -133,13 +135,17 @@ espnow:
             return;
           if (id(wizmote_discovery_mode).state) {
             std::string current_mac = id(wizmote_mac_address).state;
+            // The remote repeats each press. Once it is paired the repeats
+            // reach on_broadcast, and the press that paired it must not act
+            // too (OFF would turn the panel off): take its sequence now.
+            id(wizmote_last_sequence) = (data[4] << 24) | (data[3] << 16) | (data[2] << 8) | data[1];
             if (current_mac != sender_mac) {
               ESP_LOGI("wizmote", "Discovered WizMote %s", sender_mac.c_str());
               auto call = id(wizmote_mac_address).make_call();
               call.set_value(sender_mac);
               call.perform();
-              id(wizmote_discovery_mode).turn_off();
             }
+            id(wizmote_discovery_mode).turn_off();
             return;
           }
           ESP_LOGI("wizmote", "Unpaired WizMote %s pressed a button (turn on discovery to pair)", sender_mac.c_str());
@@ -163,6 +169,13 @@ espnow:
           if ((int) sequence == id(wizmote_last_sequence))
             return;
           id(wizmote_last_sequence) = sequence;
+          // Discovery on and the paired remote pressed: it is already paired,
+          // so that press ends discovery and does nothing else.
+          if (id(wizmote_discovery_mode).state) {
+            ESP_LOGI("wizmote", "WizMote %s is already paired", sender_mac.c_str());
+            id(wizmote_discovery_mode).turn_off();
+            return;
+          }
           ESP_LOGI("wizmote", "Button %d", button);
           id(process_wizmote_button).execute(button);
 
@@ -228,7 +241,11 @@ button:
                        &mac_bytes[0], &mac_bytes[1], &mac_bytes[2], &mac_bytes[3], &mac_bytes[4], &mac_bytes[5]) == 6)
               id(espnow_component).del_peer(mac_bytes.data());
           }
-          id(wizmote_mac_address).publish_state("00:00:00:00:00:00");
+          // A call, not publish_state(): only a call saves the value, and an
+          // unsaved one brings the old remote back at the next restart.
+          auto call = id(wizmote_mac_address).make_call();
+          call.set_value("00:00:00:00:00:00");
+          call.perform();
       - lambda: 'id(wizmote_status).update();'
 
 esphome:

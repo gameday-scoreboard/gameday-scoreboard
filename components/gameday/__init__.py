@@ -34,13 +34,13 @@ CONF_ON_GAME_EVENT = "on_game_event"
 # The demo build (firmware/gameday-demo.yaml): a looping scripted game the
 # remote and the device page start and stop. Off in release firmware.
 CONF_DEMO = "demo"
-# The bar build (firmware/gameday-bar.yaml): real firmware that installs from
-# the beta channel on its own. Off in release firmware.
+# The bar build (firmware/gameday-bar.yaml): real firmware that installs bar
+# releases on its own at night. Off in release firmware.
 CONF_BAR = "bar"
 CONF_REPORT_EMAIL = "report_email"
-# "Follow beta" on the device page (release builds): points the update entity
-# at the beta manifest instead of the release one. The bar build is always on
-# the bar channel and the demo build never updates, so neither has it.
+# "Follow beta" on the device page (release and bar builds): points the
+# update entity at the beta manifest instead of the release one. The demo
+# build never updates, so it has none.
 CONF_BETA_CHANNEL = "beta_channel"
 CONF_UPDATE_ID = "update_id"
 CONF_STABLE = "stable"
@@ -74,18 +74,24 @@ COMPONENT_DIR = Path(__file__).resolve().parent
 _TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
 
 
-def timezone_options():
+def _timezone_rows():
     text = (COMPONENT_DIR / "timezones.h").read_text(encoding="utf-8")
     text = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
-    opts = [name for name, _posix, _iana in _TZ_RE.findall(text)]
+    return [(name, posix) for name, posix, _iana in _TZ_RE.findall(text)]
+
+
+def timezone_options():
+    opts = [name for name, _posix in _timezone_rows()]
     if not opts:
         raise cv.Invalid("timezones.h has no entries")
     return opts
 
 
-def _parsed_timezone_count():
+def _parsed_timezone_rows():
+    # Each row's comment names the zone and the POSIX string it was made from,
+    # so a changed string is caught as well as an added or removed zone.
     text = (COMPONENT_DIR / "timezones_parsed.h").read_text(encoding="utf-8")
-    return len(re.findall(r"^\s*\{-?\d+, -?\d+, \{", text, re.M))
+    return re.findall(r"^\s*\{-?\d+, -?\d+, \{.*//\s*([^:]+): (\S+)\s*$", text, re.M)
 
 
 def _esphome_at_least(year, month):
@@ -96,8 +102,8 @@ def _esphome_at_least(year, month):
 def _not_demo_and_bar(config):
     if config[CONF_DEMO] and CONF_BAR in config:
         raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
-    if CONF_BETA_CHANNEL in config and (config[CONF_DEMO] or CONF_BAR in config):
-        raise cv.Invalid("beta_channel is for release builds; remove it in the demo and bar builds")
+    if CONF_BETA_CHANNEL in config and config[CONF_DEMO]:
+        raise cv.Invalid("the demo build never updates itself; remove beta_channel")
     return config
 
 
@@ -147,7 +153,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
-    if _parsed_timezone_count() != len(timezone_options()):
+    if _parsed_timezone_rows() != _timezone_rows():
         raise cv.Invalid(
             "timezones_parsed.h is out of date; run scripts/build_timezones.py"
         )

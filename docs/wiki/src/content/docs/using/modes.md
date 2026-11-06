@@ -77,9 +77,7 @@ What the panel shows depends on whether you have favorites:
 - **With favorites**, it shows your first favorite's card, as in [How a team's game is shown](#how-a-teams-game-is-shown), with a line like "No live NFL games, showing DAL" at the front of the ticker. It keeps looking, and switches to a live game when one starts.
 - **With no favorites**, it rotates through the games still to come today under **Later today**, each with both logos, the start time and the TV channel, then the latest final scores for every league it follows, under headers like "Yesterday's NHL scores". When no game is left today, a "Next" card names the next matchup and its time, like "Next: BOS at NYR Thu 6:00 PM". A game drops off the Later today list once it starts.
 
-:::note[Coming in the next release]
 A ranked college team has its AP rank on the corner of its logo on the Later today and final score cards too, the same as on the [game board](/using/football/#before-the-game).
-:::
 
 The panel waits for the next kickoff before it checks again, instead of checking every few minutes, and never waits more than 3 hours.
 

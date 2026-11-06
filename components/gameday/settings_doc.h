@@ -65,7 +65,7 @@ inline SettingType setting_type(const char *k) {
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
                                      "wakelead", "celebrate", "wxunit"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "msgurl", "brand", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
                                       "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
@@ -119,7 +119,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
-                                      "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
+                                      "msg",      "msgurl",   "msgevery", "brand",       "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
@@ -200,8 +200,9 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
       if (s["tz_auto"].is<bool>())
         out["tzauto"] = s["tz_auto"];
     } else if (strcmp(k, "sport") == 0) {
-      // The sport row playing, or none: list then says what plays.
-      if (s["sport"].is<const char *>())
+      // The sport row playing, or none: list then says what plays. Only in
+      // Favorite teams: on a restore the row would switch the mode to it.
+      if (s["sport"].is<const char *>() && (s["mode"] | (int) Mode::FAVORITES) == (int) Mode::FAVORITES)
         out["sport"] = *s["sport"].as<const char *>() != '\0' ? s["sport"].as<const char *>() : "none";
     } else if (!s[k].isNull()) {
       out[k] = s[k];
@@ -280,12 +281,18 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     return detail::settings_fail(out, "This backup is from newer firmware. Update the panel, then restore it.");
   // Saved from this panel (after a factory reset, say), not from another one.
   bool same_panel = !target.name.empty() && doc["name"].is<const char *>() && target.name == doc["name"].as<const char *>();
+  // A sport row only plays in Favorite teams, and putting one on switches
+  // the panel to that mode, so a backup of another mode (firmware before
+  // this one wrote the row for every mode) restores without it.
+  const bool favorites = !doc["mode"].is<int>() || doc["mode"].as<int>() == (int) Mode::FAVORITES;
 
   for (const char *key : kSetKeys) {
     JsonVariantConst v = doc[key];
     if (v.isNull())
       continue;
     std::string k = key;
+    if (k == "sport" && !favorites)
+      continue;
     SettingType type = setting_type(key);
     SetOp op;
     switch (type) {
@@ -347,7 +354,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         }
         // A sport this firmware has no row for (newer firmware may have more)
         // is left out and listed, like a team it doesn't know.
-        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
+        if ((k == "tz" && timezone_index(text.c_str()) < 0) || ((k == "msgurl" || k == "brand") && !msg_url_ok(text)) ||
             (k == "hook" && !hook_url_ok(text)) ||
             (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0) ||
             (k == "after" && after_parse(text) < 0)) {
@@ -408,10 +415,13 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             out.skipped.push_back("favs=" + text);
             t = TeamRef{};
           }
+          // A team already in an earlier slot leaves this one empty. Older
+          // pages and fav1..fav4 could put one team in two slots, and that
+          // panel's own backup has to restore.
           if (t.id != 0)
             for (const auto &f : op.teams)
               if (f == t)
-                return detail::settings_fail(out, "favs lists " + text + " twice.");
+                t = TeamRef{};
           op.teams.push_back(t);
         }
         break;

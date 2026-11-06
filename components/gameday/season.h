@@ -4,8 +4,7 @@
 // while the team is between seasons, is its regular-season record and how
 // its playoffs ended ("11-6, lost NFC Wild Card"). They share one turn,
 // over the board between games like the news card (news.h), and each turn
-// is the next favorite's. Only the leagues whose season schedule is small
-// enough to read (LeagueInfo::season_list) have them.
+// is the next favorite's. Every league but MLB has them (season_cards).
 // Pure, with no ESPHome includes, so the host tests compile it directly.
 #pragma once
 
@@ -26,8 +25,22 @@ constexpr size_t kSeasonGames = 4;  // games kept: three to show, and one to spa
 constexpr size_t kSeasonShown = 3;
 constexpr uint32_t kSeasonReadMs = 6u * 60 * 60 * 1000;  // a read is good this long
 constexpr uint32_t kSeasonRetryMs = 15u * 60 * 1000;     // after a failed read of that team
+// A big schedule's (season_big): once a day, and an hour after a failure.
+constexpr uint32_t kSeasonBigReadMs = 24u * 60 * 60 * 1000;
+constexpr uint32_t kSeasonBigRetryMs = 60u * 60 * 1000;
 constexpr int kSeasonEveryMin = 5;                       // minutes between the cards' turns
 constexpr size_t kSeasonRoundMax = 28;                   // "NFC Wild Card", in bytes
+
+// The leagues with the cards. Football's and soccer's season schedule is
+// 200 to 400 KB (LeagueInfo::season_list). Basketball's and hockey's is
+// bigger (on 11/3: NBA 873 KB, NHL 1.3 MB with 70 games to go and 1.9 MB
+// for a whole season, college 280 to 545 KB, WNBA 809 KB after its
+// season), so those are read once a day a team. Not MLB: its regular
+// season is 2.8 MB.
+inline bool season_big(const LeagueInfo &l) { return !l.season_list; }
+inline bool season_cards(const LeagueInfo &l) {
+  return l.season_list || l.sport == Sport::BASKETBALL || l.sport == Sport::HOCKEY;
+}
 
 // One game still ahead.
 struct SeasonGame {
@@ -44,6 +57,9 @@ struct SeasonGame {
 struct SeasonRead {
   uint16_t year{0};           // the season's, from requestedSeason
   uint8_t wins{0}, losses{0}, ties{0};  // regular-season finals; ties are a soccer draw
+  // Of the losses, those that went past a third period: in hockey an
+  // overtime or shootout loss, its record's third number.
+  uint8_t late_losses{0};
   bool post{false};           // a playoff game was played to the end
   bool post_won{false};       // and the team won the last one
   char round[kSeasonRoundMax + 1]{};  // that game's round, "NFC Wild Card", or ""
@@ -60,10 +76,15 @@ struct SeasonRead {
 // - Game 7" is "East 1st Round", "NFC Wild Card Playoffs" is "NFC Wild
 // Card", "College Football Playoff Quarterfinal at the Rose Bowl Presented
 // by Prudential" is "CFP Quarterfinal", "Eastern Conference Playoffs -
-// Semifinals" is "East Semifinals". "" when neither says more than
-// "Postseason".
+// Semifinals" is "East Semifinals", "NCAA Men's Basketball Championship -
+// Midwest Region - Sweet 16" is "NCAA Sweet 16". "" when neither says more
+// than "Postseason".
 inline std::string season_round(const std::string &headline, const std::string &type_name) {
   std::string s = headline.empty() ? type_name : headline;
+  // The tournament's name and region left off: its round alone.
+  static const char kNcaa[] = "NCAA Men's Basketball Championship - ";
+  if (s.compare(0, sizeof(kNcaa) - 1, kNcaa) == 0)
+    s = "NCAA " + s.substr(s.rfind(" - ") + 3);
   auto cut = [&s](const char *at) {
     size_t p = s.find(at);
     if (p != std::string::npos)
@@ -79,6 +100,7 @@ inline std::string season_round(const std::string &headline, const std::string &
   cut(" at the ");
   cut(" at ");
   swap("College Football Playoff", "CFP");
+  swap("College Basketball Crown", "Crown");
   swap("Eastern Conference", "East");
   swap("Western Conference", "West");
   swap(" Playoffs - ", " ");
@@ -96,16 +118,20 @@ inline std::string season_round(const std::string &headline, const std::string &
 }
 
 // "11-6", "10-6-1" with a tie, a soccer record "20-5-9" (wins, draws,
-// losses, the way soccer writes it). record is the team read's own, for a
-// schedule that holds only the playoffs (an MLB team's in the fall, or any
-// team's while the playoffs are on): used when the read counted no
-// regular-season finals.
-inline std::string season_record(const SeasonRead &r, bool soccer, const std::string &record) {
+// losses, the way soccer writes it), a hockey one "43-33-6" (wins, losses,
+// overtime and shootout losses, always all three). record is the team
+// read's own, for a schedule that holds only the playoffs (an MLB team's
+// in the fall, or any team's while the playoffs are on): used when the
+// read counted no regular-season finals.
+inline std::string season_record(const SeasonRead &r, Sport sport, const std::string &record) {
   if (r.finals() == 0)
     return record;
   char buf[24];
-  if (soccer)
+  if (sport == Sport::SOCCER)
     snprintf(buf, sizeof(buf), "%u-%u-%u", (unsigned) r.wins, (unsigned) r.ties, (unsigned) r.losses);
+  else if (sport == Sport::HOCKEY)
+    snprintf(buf, sizeof(buf), "%u-%u-%u", (unsigned) r.wins, (unsigned) (r.losses - r.late_losses),
+             (unsigned) r.late_losses);
   else if (r.ties != 0)
     snprintf(buf, sizeof(buf), "%u-%u-%u", (unsigned) r.wins, (unsigned) r.losses, (unsigned) r.ties);
   else
@@ -133,8 +159,8 @@ inline bool season_recap_ready(const SeasonRead &r, const std::string &record) {
 inline std::string recap_header(const std::string &abbr, uint16_t year) {
   return abbr + " " + std::to_string((unsigned) year);
 }
-inline std::string recap_body(const SeasonRead &r, bool soccer, const std::string &record) {
-  std::string out = season_record(r, soccer, record);
+inline std::string recap_body(const SeasonRead &r, Sport sport, const std::string &record) {
+  std::string out = season_record(r, sport, record);
   std::string post = season_post_line(r);
   if (!post.empty())
     out += (out.empty() ? "" : "\n") + post;
@@ -200,14 +226,20 @@ inline SeasonCard season_card(bool off_season, bool schedule_on, bool recap_on, 
 }
 
 // Whether a team's season read is due before its turn: never read, older
-// than kSeasonReadMs, or read for the other half of the season (a soccer
-// team's fixture list has no results for the recap, its results no
-// fixtures). After a failed read, not before kSeasonRetryMs. Times are
-// millis(), 0 = never.
-inline bool season_read_due(uint32_t now, uint32_t read_ms, uint32_t fail_ms, bool same_kind) {
-  if (fail_ms != 0 && now - fail_ms < kSeasonRetryMs)
+// than kSeasonReadMs, or read in the other half of the season (before a
+// team's last game the recap could miss it; a soccer team's fixture list
+// has no results for the recap, its results no fixtures). That last one
+// waits kSeasonRetryMs after the read, so a team flipping between the two
+// halves can't be read every turn. After a failed read, not before
+// kSeasonRetryMs. big (season_big) is once a day and kSeasonBigRetryMs.
+// Times are millis(), 0 = never.
+inline bool season_read_due(uint32_t now, uint32_t read_ms, uint32_t fail_ms, bool same_kind, bool big) {
+  const uint32_t retry = big ? kSeasonBigRetryMs : kSeasonRetryMs;
+  if (fail_ms != 0 && now - fail_ms < retry)
     return false;
-  return read_ms == 0 || !same_kind || now - read_ms >= kSeasonReadMs;
+  if (read_ms == 0)
+    return true;
+  return now - read_ms >= (same_kind ? (big ? kSeasonBigReadMs : kSeasonReadMs) : retry);
 }
 
 }  // namespace espn

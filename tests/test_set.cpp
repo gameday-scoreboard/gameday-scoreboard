@@ -298,9 +298,25 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       // set_lists_: the one being played stays chosen by its name, or by
       // list= in the same request.
       std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
+      std::vector<ListDef> defs = parse_lists(op.text, kFavMax);
+      // A WizMote button on a renamed playlist follows it.
+      std::vector<std::string> old_names, new_names;
+      for (const auto &l : s.lists)
+        old_names.push_back(l.first);
+      for (const auto &d : defs)
+        new_names.push_back(d.name);
+      for (auto &b : s.remote) {
+        if (b.kind != (uint8_t) RemoteKind::LIST)
+          continue;
+        std::string to = list_renamed(old_names, new_names, remote_name(b));
+        if (to.empty())
+          continue;
+        memset(b.name, 0, sizeof(b.name));
+        memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+      }
       s.lists.clear();
       s.list = 0;
-      for (const auto &d : parse_lists(op.text, kFavMax)) {
+      for (const auto &d : defs) {
         s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
@@ -378,6 +394,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::MSG: s.msg = op.text; break;
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
+    case SetKind::BRAND: break;  // the bar build only; these cases are a home build's
     case SetKind::NICK: s.nick = op.text; break;
     case SetKind::HOOK: s.hook = op.text; break;
     case SetKind::PREGAME: s.pregame = op.value; break;
@@ -629,6 +646,15 @@ void test_parse_set() {
   SCHECK(parse_set("mode", "5", op, kFavMax) && op.value == 5, "mode 5");
   SCHECK(!parse_set("mode", "6", op, kFavMax), "mode 6");
   SCHECK(parse_set("panels", "7", op, kFavMax) && op.value == 7, "panels passes the count through");
+  SCHECK(!parse_set("panels", "257", op, kFavMax), "panels 257 is refused, not 1");
+  SCHECK(!parse_set("panels", "0", op, kFavMax), "panels 0 is refused");
+  SCHECK(!parse_set("panels", "two", op, kFavMax), "panels text is refused");
+  SCHECK(!parse_set("panels", "99999999999", op, kFavMax), "panels past int is refused");
+  SCHECK(parse_set("nightlevel", "40", op, kFavMax) && op.value == 40, "nightlevel 40");
+  SCHECK(parse_set("nightlevel", "0", op, kFavMax) && op.value == 1, "nightlevel 0 is held at 1");
+  SCHECK(parse_set("nightlevel", "999", op, kFavMax) && op.value == 255, "nightlevel 999 is held at 255");
+  SCHECK(!parse_set("nightlevel", "dim", op, kFavMax), "nightlevel text is refused");
+  SCHECK(!parse_set("nightlevel", "99999999999", op, kFavMax), "nightlevel past int is refused");
   SCHECK(parse_set("tz", "America/Chicago", op, kFavMax) && op.value == 1, "tz IANA");
   SCHECK(!parse_set("tz", "-1", op, kFavMax), "tz -1");
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
@@ -653,6 +679,8 @@ void test_parse_set() {
   SCHECK(parse_set("msg", "Happy birthday", op, kFavMax) && op.kind == SetKind::MSG && op.text == "Happy birthday",
          "msg");
   SCHECK(parse_set("msg", std::string(300, 'x'), op, kFavMax) && op.text.size() == kMsgTextMax, "msg is capped");
+  SCHECK(parse_set("msg", "Caf\xE9 \xC3\xA9t\xC3", op, kFavMax) && op.text == "Caf \xC3\xA9t",
+         "bytes that aren't UTF-8 are left out of a message");
   SCHECK(parse_set("nick", "Garage", op, kFavMax) && op.kind == SetKind::NICK && op.text == "Garage", "nick");
   SCHECK(parse_set("nick", std::string(100, 'x'), op, kFavMax) && op.text.size() == kNickMax, "nick is capped");
   SCHECK(parse_set("nick", "a\nb", op, kFavMax) && op.text == "a b", "nick is one line");
@@ -666,6 +694,12 @@ void test_parse_set() {
   SCHECK(!parse_set("msgurl", "ftp://example.com/names.txt", op, kFavMax), "msgurl ftp");
   SCHECK(!parse_set("msgurl", "https://exa mple.com", op, kFavMax), "msgurl with a space");
   SCHECK(!parse_set("msgurl", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "msgurl too long");
+  SCHECK(parse_set("brand", "https://example.com/brand/taproom.json", op, kFavMax) && op.kind == SetKind::BRAND &&
+             op.text == "https://example.com/brand/taproom.json",
+         "brand");
+  SCHECK(parse_set("brand", "", op, kFavMax) && op.kind == SetKind::BRAND && op.text.empty(), "brand cleared");
+  SCHECK(!parse_set("brand", "file:///brand.json", op, kFavMax), "brand that isn't http");
+  SCHECK(!parse_set("brand", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "brand too long");
   SCHECK(parse_set("msgevery", "0", op, kFavMax) && op.value == 0, "msgevery 0 holds the board");
   SCHECK(parse_set("msgevery", "99", op, kFavMax) && op.value == kMsgEveryMax, "msgevery 99");
   SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");
@@ -783,6 +817,13 @@ void test_playlists() {
   SCHECK(list_name_clean("  Sunday   Football Crew  ") == "Sunday Football", "cut to 16 bytes, spaces squeezed");
   SCHECK(list_name_clean("a\tb\x01" "c") == "a bc", "tabs to spaces, control characters out");
   SCHECK(list_name_clean("ÉÉÉÉÉÉÉÉÉ").size() == 16, "cut at a character boundary");
+  SCHECK(list_renamed({"A", "B"}, {"A", "C"}, "B") == "C", "a rename in place carries the name");
+  SCHECK(list_renamed({"A", "B"}, {"A", "C"}, "A").empty(), "a kept playlist is not renamed");
+  SCHECK(list_renamed({"A", "B"}, {"B", "A"}, "A").empty(), "a move is not a rename");
+  SCHECK(list_renamed({"A", "B"}, {"A"}, "B").empty(), "a removed playlist is gone, not renamed");
+  SCHECK(list_renamed({"A", "B"}, {"A", "B", "C"}, "B").empty(), "an added one renames nothing");
+  SCHECK(list_renamed({"A", "B"}, {"B", "C"}, "A").empty(), "a name taken from another playlist is not a rename");
+  SCHECK(list_name_clean("Hoops\xff\xc3") == "Hoops", "bytes that aren't UTF-8 go");
 
   std::vector<TeamRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 25}};
   SCHECK(list_mask({{(uint8_t) League::NHL, 25}, {(uint8_t) League::NFL, 6}}, favs) == 0b101, "mask by favorite");

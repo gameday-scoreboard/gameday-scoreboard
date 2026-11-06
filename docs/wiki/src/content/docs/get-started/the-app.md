@@ -20,6 +20,14 @@ Both apps have three tabs: **Board**, **Teams** and **Settings**. They show the 
 
 A few things are on iPhone only for now: the night schedule, and the **Pick the best game** and **Favorites take over** switches. They're marked below. On Android, use the [device page](/using/device-page/) for them.
 
+:::note[Coming in the next release]
+The Android app gets the night schedule and **Favorites take over** too, so only **Pick the best game** stays on iPhone:
+
+- **Settings > Display > Screen** has the night schedule: **Night schedule**, **Starts at**, **Ends at**, **Screen at night** and **Night brightness**. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+- The Board's night line below, with **Turn on for tonight** and **Back to night mode**, is on Android too.
+- **Teams > Live games** has **Favorites take over**, with **Two favorites at once** while it's on.
+:::
+
 ### Board
 
 What you reach for during a game:
@@ -31,34 +39,41 @@ What you reach for during a game:
 
 The panel's name is at the top. Tap it to switch to another panel, to add one, or, with two or more, to manage them.
 
-:::note[Coming in the next release]
 In both apps the Board follows the device page's Home tab:
 
 - The modes read **Favorite teams** ("Only the teams you pick") and **Live games** ("Games on right now, in leagues you pick"). The line under them says why the panel shows what it does, like "None of your teams are playing. Showing their next games." With no favorites it offers **Add a team**. On iPhone, with playlists, it has **Playing**; on Android **Playing** stays in **Teams > Favorites**.
 - **Panel on**, **Brightness** and **Showing** sit together, with **Refresh scores**. When **Showing** is on **Effects**, the effect, palette, speed and intensity show under it.
 - **Customize** takes the place of **Message**. On Android it's in **Settings**, next to **Display** and **Device**.
-:::
 
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
 
-:::note[Coming in the next release]
 When the panel shows its thermometer or plug in the corner, the Board shows the same words under the game, **Running warm** or **Power dipped**, with what to do. There's nothing to press: it goes when the panel's icon does. See [Icons in the corner](/help/panel-messages/#icons-in-the-corner).
+
+On iPhone, while the night schedule has the panel dimmed or dark, the Board says so under the game, like **Night mode until 7:00 AM**, with what brings the panel back. See [Night schedule](/using/brightness-and-clock/#night-schedule).
+
+:::note[Coming in the next release]
+Under **Night mode until**, **Turn on for tonight** puts the panel back at its normal brightness for the rest of the night. Turning **Panel on** back on during the night does the same. The Board then says **Night mode off until** the next start time, like **Night mode off until 11:00 PM**, and **Back to night mode** goes back to the schedule. During a live game of yours there's no button, since the game already has the panel lit. The next night the schedule runs as usual.
 :::
 
 ### Teams
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
 
-:::note[Coming in the next release]
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
-:::
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
+
+:::note[Coming in the next release]
+On iPhone and Android, each playlist has **Options** under its teams, with the device page's playlist options: **Plays on** (tap the days, then set **From** and **To**), **Only this list's games**, and **Only today's games** (**Same as Favorites**, **On** or **Off**). The playlist's row shows its schedule, like "Weekends 8:00 PM to 2:00 AM". **Options** shows once the panel runs firmware with playlist options. See [Playlists](/using/favorites/#playlists).
+
+On Android, when your favorites cover more than one sport, **Playing** also lists **All football**, **All basketball** and the rest, one for each sport, between **All favorites** and your playlists. **Playlists** no longer has **One per sport**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
+
+On Android, **Color** and **Icon** at the bottom of **Options** give the playlist its look, as on the device page: tap one, or **None**. The playlist's row shows its icon in its color (white with no color), or a dot of the color, before its name. So does **Playing**, beside the playing playlist's name and on each playlist in its picker.
+:::
+
 - **When favorites play**: how early a favorite's game takes the panel, how long it stays after the final, and what happens when two play at once.
 - **Live games**: the leagues it follows and **Switch every**, and on iPhone **Pick the best game** and **Favorites take over**. Choosing leagues here doesn't change the panel's mode. See [Modes](/using/modes/).
 
-:::note[Coming in the next release]
 In both apps, **Only today's games**, **Jump to the action** and **Score banner** are at the top of **Favorites**, as on the device page. A favorite shows which remote button lands on it only while a WizMote is paired.
-:::
 
 ### Settings
 
@@ -67,39 +82,35 @@ In both apps, **Only today's games**, **Jump to the action** and **Score banner*
 - **Panels**: every panel saved in the app, and new ones nearby.
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
 
-:::note[Coming in the next release]
 In both apps, Settings has three pages for the panel, like the device page's tabs:
 
 - **Display**: ticker speed, the night schedule (iPhone), the ticker, celebrations and **Between games**. **Showing** moved to the Board. On Android, the **Celebrations** card also has a **Celebrations** choice, **Full**, **Subtle** or **Off**, for how big the show is (see [Celebrations](/using/device-page/#celebrations)). It shows once the panel runs firmware with that setting.
-- **Customize**: the banner, the message card and the date countdown.
+- **Customize**: the banner, the message card, your pictures and the date countdown.
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
 Each setting has one short line saying what it does. The longer rules are on these pages.
-:::
 
-:::note[Coming in the next release]
 On Android, **Display** has a **Live pictures** card after the ticker, with the device page's **Field strip**, **Win chance bar** and **Score margin** switches for the pictures a 128-wide board draws under the clock during a game. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
-:::
 
-:::note[Coming in the next release]
-On Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
-:::
+On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
 
-:::note[Coming in the next release]
-On Android, **Display** has a **Weather** card after **Between games**, with the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
-:::
+On iPhone, **Between games** under **Display** has a **College Top 25** switch after **Game leaders**. While the panel follows a college football or basketball team, the AP poll takes a turn with the board every 10 minutes, a page at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with the card.
 
-:::note[Coming in the next release]
-On Android, the **Screen** card in **Display** has the device page's **Game-day wake** and **After the game**, under ticker speed: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
-:::
+On iPhone, **Between games** also has a **News headlines** switch after **College Top 25**. Every 3 minutes between games, one of ESPN's latest headlines for your teams, or for your leagues on **Live games**, takes a turn with the board (see [News headlines](/using/news/)). It's off until you turn it on, and the switch shows once the panel runs firmware with the card.
 
-:::note[Coming in the next release]
-On Android, **Customize** has a **Pictures** card after the message card, like the device page's: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF goes as it is (see [Pictures](/using/pictures/)). The card shows once the panel runs firmware with pictures.
-:::
+On iPhone, once the panel runs firmware with the list of cards, **Between games** under **Display** shows every card the panel has, in the order they take turns, each with its own switch, like the device page's [Between games](/using/device-page/#between-games) list. The switches above are in that list. A card with nothing to show yet, like **Your own countdown** before you pick its day, is greyed with what it needs under its name. Your own countdown, the message card and your pictures are still made under **Customize**.
 
-:::note[Coming in the next release]
+On iPhone and Android, **Display** has a **Weather** section after **Between games**, like the device page's: type your town or a US ZIP code in **Town or ZIP code** and tap **Look up**. The line under the box says what the panel found, like **Found: Coppell, Texas**, and the last line says when the forecast was last read (see [Set your town](/using/weather/#set-your-town)). The section has its own **Weather card** switch until the panel runs firmware with the list of cards; then the switch is the list's **Weather** row. To forget the town, clear the box and tap **Look up**. The section shows once the panel runs firmware with the weather card.
+
+On Android, the **Weather** section also has the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
+
+On iPhone and Android, **Display** has the device page's **Game-day wake** and **After the game**, under the night schedule in **Screen** on iPhone and under ticker speed in the **Screen** card on Android: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
+
+On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
+
+On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
+
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
-:::
 
 ## Your panels
 
@@ -107,6 +118,15 @@ The panel list is **Settings > Panels**, and it's what the Board shows until you
 
 - **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
 - **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
+
+## The Live score widget
+
+Both apps have a **Live score** widget for your Home Screen with your panel's game: the teams, the score, and the clock or the start time. Between games it shows the panel's next game, or what the panel says when there's nothing on. Tap it to open the app on that panel.
+
+- **iPhone**: a small and a medium size for the Home Screen, and two for the Lock Screen. With more than one panel, touch and hold the widget, choose **Edit Widget** and pick the **Panel**.
+- **Android**: a 2 by 2 widget, and a wider look when you stretch it to 4 by 2. With more than one panel, the app asks which one when you place it. To change it later, touch and hold the widget and open its settings (Android 12 and newer).
+
+The widget reads your panel over your home Wi-Fi: about every 10 minutes while a game is on, less often between games, and straight away while the app is open on that panel. Away from home it keeps the last score for a few minutes, then says it can't reach the panel. Open the app on your home Wi-Fi and it catches up.
 
 ## Try the app before your panel arrives
 

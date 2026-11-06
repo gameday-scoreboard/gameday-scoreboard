@@ -17,10 +17,13 @@
 // empties it (gameday.cpp). scripts/crash_report.py fetches it and decodes
 // the addresses against the release's ELF.
 //
-// Only a crash or watchdog boot reads the crash handler: its report also
-// survives the soft restarts that follow (OTA, the Reboot button), and those
-// must not save it a second time. A brownout saves the reason alone, since
-// any report still in RAM then is from an earlier crash.
+// Only a crash or watchdog boot reads the crash handler, and it clears the
+// handler's report once saved: that report also survives the soft restarts
+// that follow (OTA, the Reboot button), and those must not save it a second
+// time. A restart the firmware asked for that comes back as a watchdog reset
+// (esp_restart() on the S3 with PSRAM) is not one: on_shutdown() marks it. A
+// brownout saves the reason alone, since any report still in RAM then is
+// from an earlier crash, and over a saved backtrace it only adds to the count.
 
 #include <atomic>
 #include <mutex>
@@ -51,6 +54,7 @@ class CrashReport : public Component {
   void setup() override;
   void loop() override;
   void dump_config() override;
+  void on_shutdown() override;
   // After the preferences are ready and before the API, so a log client
   // that connects and clears the crash handler's report can't beat us to it.
   float get_setup_priority() const override { return setup_priority::BUS; }

@@ -12,6 +12,7 @@
 
 #include "espn_parse.h"
 #include "line_score.h"
+#include "panel_text.h"
 
 namespace espn {
 
@@ -91,19 +92,50 @@ static constexpr uint32_t kLeadersRetryMs = 60 * 1000;
 
 namespace detail {
 
-// "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix.
-inline std::string leader_surname(const std::string &short_name) {
+// "D. Prescott" to "Prescott"; "M. Penix Jr." keeps the suffix. The ticker's
+// season leaders (espn_parse.cpp) use it as it is.
+inline std::string leader_short_surname(const std::string &short_name) {
   std::string name = short_name;
   while (name.size() > 3 && name[1] == '.' && name[2] == ' ')
     name.erase(0, 3);
   return name;
 }
 
-// A football game line from ESPN's displayValue, "15/27, 212 YDS, 3 TD, 1
-// INT" or "25 CAR, 155 YDS, 1 TD": the yards and the touchdowns, "212 yds 3
-// TD", "62 yds" with none. "" when the line has no yards.
-inline std::string football_game_stat(const std::string &display_value) {
-  std::string yards, tds;
+// The same, folded to what the panel's fonts draw (panel_text.h), so
+// "L. Dončić" is "Doncic".
+inline std::string leader_surname(const std::string &short_name) {
+  return ::esphome::gameday::panel_text(leader_short_surname(short_name));
+}
+
+// Characters, not bytes: a Latin-1 letter the fonts keep ("Peña") is two
+// bytes and one glyph.
+inline size_t glyph_count(const std::string &s) {
+  size_t n = 0;
+  for (unsigned char c : s)
+    if ((c & 0xC0) != 0x80)
+      n++;
+  return n;
+}
+
+// The first n characters, never cutting one in half.
+inline std::string glyph_prefix(const std::string &s, size_t n) {
+  size_t i = 0, g = 0;
+  for (; i < s.size(); i++) {
+    if (((unsigned char) s[i] & 0xC0) != 0x80) {
+      if (g == n)
+        break;
+      g++;
+    }
+  }
+  return s.substr(0, i);
+}
+
+// The yards and touchdowns in ESPN's football displayValue, "15/27, 212
+// YDS, 3 TD, 1 INT" or "25 CAR, 155 YDS, 1 TD", as written. tds is "" for
+// "0 TD" as for none.
+inline void football_yards_tds(const std::string &display_value, std::string &yards, std::string &tds) {
+  yards.clear();
+  tds.clear();
   size_t start = 0;
   while (start <= display_value.size()) {
     size_t comma = display_value.find(", ", start);
@@ -120,6 +152,13 @@ inline std::string football_game_stat(const std::string &display_value) {
       break;
     start = comma + 2;
   }
+}
+
+// A football game line: "212 yds 3 TD", "62 yds" with no touchdowns. ""
+// when the line has no yards.
+inline std::string football_game_stat(const std::string &display_value) {
+  std::string yards, tds;
+  football_yards_tds(display_value, yards, tds);
   if (yards.empty())
     return "";
   return tds.empty() ? yards + " yds" : yards + " yds " + tds + " TD";
@@ -205,7 +244,7 @@ static constexpr size_t kLeaderNameMin = 3;
 
 // Does the line fit max_chars whole, its name cut to no fewer than three?
 inline bool leader_fits(const LeaderLine &l, size_t max_chars) {
-  return std::min(l.name.size(), kLeaderNameMin) + 1 + l.stat.size() <= max_chars;
+  return std::min(glyph_count(l.name), kLeaderNameMin) + 1 + l.stat.size() <= max_chars;
 }
 
 // The line as the card draws it, at most max_chars: the name is cut first,
@@ -214,10 +253,11 @@ inline bool leader_fits(const LeaderLine &l, size_t max_chars) {
 // its first pair always stays.
 inline std::string fit_leader(const LeaderLine &l, size_t max_chars) {
   std::string line = l.name + " " + l.stat;
-  if (line.size() <= max_chars)
+  if (glyph_count(line) <= max_chars)
     return line;
-  std::string stat = l.stat;
-  const size_t name_min = std::min(l.name.size(), kLeaderNameMin);
+  std::string stat = l.stat;  // digits and units: one byte a character
+  const size_t name_len = glyph_count(l.name);
+  const size_t name_min = std::min(name_len, kLeaderNameMin);
   while (name_min + 1 + stat.size() > max_chars) {
     // The last two words: a number and its unit ("3 TD", "6 K").
     size_t cut = stat.rfind(' ');
@@ -229,7 +269,7 @@ inline std::string fit_leader(const LeaderLine &l, size_t max_chars) {
   size_t room = max_chars > stat.size() + 1 ? max_chars - stat.size() - 1 : 0;
   if (room < name_min)
     room = name_min;
-  return l.name.substr(0, std::min(room, l.name.size())) + " " + stat;
+  return glyph_prefix(l.name, std::min(room, name_len)) + " " + stat;
 }
 
 }  // namespace detail

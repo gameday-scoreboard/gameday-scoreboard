@@ -154,12 +154,18 @@ inline std::string score_period(const GameSnapshot &g) {
 
 }  // namespace detail
 
+// A lower score is usually an old copy of the document from ESPN's cache;
+// counting from it would log the next read's score a second time. One that
+// holds this long is a real correction, a score taken off on review.
+constexpr uint32_t kScoreBackHoldMs = 90 * 1000;
+
 class ScoreLog {
  public:
   // Takes one read of the board's game. A read repeats on every redraw; only
   // a change in the score adds a line. The first read of a game logs
   // nothing: the panel just picked it up and did not see the scores before.
-  void update(const GameSnapshot &cur) {
+  // now_ms is millis(), for how long a lower score has held.
+  void update(const GameSnapshot &cur, uint32_t now_ms = 0) {
     if (!cur.valid || cur.event_id.empty() || cur.sport == Sport::BASKETBALL || cur.sport == Sport::SOCCER)
       return;
     if (cur.state != GameState::IN && cur.state != GameState::POST)
@@ -185,11 +191,28 @@ class ScoreLog {
     bool same_side = g->team_abbr == cur.team_abbr;
     int was_team = same_side ? g->team_score : g->opp_score;
     int was_opp = same_side ? g->opp_score : g->team_score;
+    if (cur.team_score < was_team || cur.opp_score < was_opp) {
+      if (!g->back_since_set) {
+        g->back_since_set = true;
+        g->back_since = now_ms;
+      }
+      if (now_ms - g->back_since < kScoreBackHoldMs)
+        return;
+    }
+    g->back_since_set = false;
     bool both = cur.team_score > was_team && cur.opp_score > was_opp;
     if (cur.team_score > was_team)
       this->add_(*g, cur, true, cur.team_score - was_team, both);
     if (cur.opp_score > was_opp)
       this->add_(*g, cur, false, cur.opp_score - was_opp, both);
+    // The try comes with the clock stopped where the touchdown left it. A
+    // read with the clock moved on is past it, so 1 or 2 points after that
+    // (a safety the read missed) are a score of their own.
+    if (cur.sport == Sport::FOOTBALL && !g->entries.empty()) {
+      Entry &last = g->entries.back();
+      if (last.try_due && (cur.period != last.period || cur.display_clock != last.clock))
+        last.try_due = false;
+    }
     g->team_abbr = cur.team_abbr;
     g->team_score = cur.team_score;
     g->opp_score = cur.opp_score;
@@ -216,11 +239,15 @@ class ScoreLog {
     std::string abbr;  // the side that scored
     int score{0}, other{0};
     bool try_due{false};  // football: a touchdown whose extra point or two-point try is still to come
+    int period{0};        // and the touchdown's period and clock, to tell when the try is past
+    std::string clock;
   };
   struct Game {
     std::string event_id;
     std::string team_abbr;  // the side team_score is
     int team_score{0}, opp_score{0};
+    bool back_since_set{false};
+    uint32_t back_since{0};  // now_ms when the score started reading lower
     std::vector<Entry> entries;
   };
 
@@ -269,6 +296,8 @@ class ScoreLog {
         if (what.empty())
           what = abbr + (points >= 6 ? " TD" : points == 3 ? " FG" : points == 2 ? " safety" : " scores");
         e.try_due = points == 6;
+        e.period = cur.period;
+        e.clock = cur.display_clock;
         clock = cur.display_clock;
         break;
       case Sport::HOCKEY: {

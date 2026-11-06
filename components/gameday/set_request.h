@@ -32,7 +32,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "countdown", "top25", "cdname", "cddate", "gameleaders", "msg",
                                     "msgurl",
-                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
+                                    "msgevery", "brand", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
@@ -294,6 +294,7 @@ enum class SetKind : uint8_t {
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
+  BRAND,     // text, the bar build's brand pack address (brand.h); "" clears it
   BEST,      // on, Live games picks the best game (best_game.h)
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
@@ -362,8 +363,9 @@ inline bool parse_whole_int(const std::string &v, int &out) {
 
 // Decodes one key=value from the request. False when the key is unknown or
 // the value is refused: the firmware logs it and changes nothing. Switches
-// are on for "1" only. The mode and the minute and second settings take a
-// whole number only (parse_whole_int); the other numbers read like atoi.
+// are on for "1" only. The mode, panel count, night level and the minute and
+// second settings take a whole number only (parse_whole_int); the other
+// numbers read like atoi.
 inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, size_t fav_max) {
   op = SetOp{};
   auto on = [&](SetKind kind) {
@@ -400,9 +402,9 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return true;
   }
   if (k == "panels") {
+    // 1 and up; the panel layout refuses a count past its own limit.
     op.kind = SetKind::PANELS;
-    op.value = atoi(v.c_str());
-    return true;
+    return parse_whole_int(v, op.value) && op.value >= 1 && op.value <= 255;
   }
   if (k == "tz") {
     op.kind = SetKind::TZ;
@@ -460,6 +462,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.text = v;
     return msg_url_ok(v);
   }
+  if (k == "brand") {
+    // Taken on every build; only the bar build reads the pack.
+    op.kind = SetKind::BRAND;
+    op.text = v;
+    return msg_url_ok(v);
+  }
   if (k == "msgevery") {
     // 0 means something here, so text isn't read as 0 like the other numbers.
     op.kind = SetKind::MSGEVERY;
@@ -478,8 +486,11 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
   }
   if (k == "nightlevel") {
+    // A whole number, held to 1..255; text is refused.
     op.kind = SetKind::NIGHT_LEVEL;
-    int level = atoi(v.c_str());
+    int level = 0;
+    if (!parse_whole_int(v, level))
+      return false;
     op.value = level < 1 ? 1 : level > 255 ? 255 : level;
     return true;
   }

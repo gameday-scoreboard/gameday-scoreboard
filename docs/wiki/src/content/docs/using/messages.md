@@ -32,7 +32,7 @@ Use your panel's own name or address. Leaving `text` empty takes the banner down
 
 ## A message card
 
-On the same tab, under **Message card**, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two).
+On the same tab, under **Message card**, type your message and press **Save**. Each line is its own entry, so a list of specials can go one per line. The card holds about 200 characters (an accented letter counts as two). Emoji, and anything that isn't text, like a stray byte from a file saved in an old encoding, are left out.
 
 **Show it** sets how often the card takes the board between games:
 
@@ -49,15 +49,13 @@ The card makes way for the panel's own trouble line. When three reads from ESPN 
 
 **Clear** empties the text and the address, and the card stops.
 
-:::note[Coming in the next release]
 **Message card** in the **Between games** list on the [device page](/using/device-page/#between-games) turns the card's turns off and on without clearing it, so your text or list is there when you turn it back on.
-:::
 
 ### A list from a web address
 
 For a long list, like every member of a club, put a plain text file somewhere the panel can read it and give the card its address under **Or a list from a web address**. The file has one entry per line: names, specials, anything. Blank lines are skipped, and a line longer than 64 characters is cut.
 
-The address starts with `http://` or `https://`. A file on a computer at home works over `http://`, and so does a file on the web, like a "raw" link to a GitHub Gist or a shared text file. An `https://` address needs a certificate from a public authority, as web hosts have; a home server with its own certificate can't be read, and the device page says "The panel couldn't reach that address".
+The address starts with `http://` or `https://`, and has no spaces, accented letters or curly quotes (the device page says so when it does; copying it from the browser's address bar gives a form the panel takes). A file on a computer at home works over `http://`, and so does a file on the web, like a "raw" link to a GitHub Gist or a shared text file. An `https://` address needs a certificate from a public authority, as web hosts have; a home server with its own certificate can't be read, and the device page says "The panel couldn't reach that address".
 
 The panel never holds the whole list. It reads 100 entries at a time and fetches the next 100 when it gets to them, so the list can be as long as you like, up to about 128 KB of text (several thousand names). It reads the file again from the top every so often, so a name you add shows up the same day.
 

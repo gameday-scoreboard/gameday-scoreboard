@@ -1,28 +1,29 @@
-# The bar build: the real scoreboard firmware for the free panels in bars,
-# plus the beta channel. Included only by the *-bar.yaml top-level files,
-# which point the updater at install.gameday-scoreboard.com/firmware/beta/<variant>/
-# (published from the beta branch, see .github/workflows/build.yml).
+# The bar build: the real scoreboard firmware for panels in bars. Included
+# only by the *-bar.yaml top-level files, which point the updater at the bar
+# releases, install.gameday-scoreboard.com/firmware/<variant>-bar/ (published
+# with every release), and Follow beta at the bar betas,
+# install.gameday-scoreboard.com/firmware/beta/<variant>/ (published from the
+# beta branch, see .github/workflows/build.yml).
 #
 # Unlike release firmware it installs updates on its own, with no setting:
-# between 3 and 5 AM panel time, never while a game it follows is live, and
-# right away when the beta's summary names the panel ("Install now:",
-# components/gameday/auto_update.h). A failed install leaves the old
-# firmware running and tries again the next night. Release builds keep D4:
-# nothing installs unless the owner turns on "Install updates automatically".
+# between 3 and 5 AM panel time, never while a game it follows is live, and,
+# with Follow beta on, right away when the beta's summary names the panel
+# ("Install now:", components/gameday/auto_update.h). A failed install leaves
+# the old firmware running and tries again the next night. Release builds
+# keep D4: nothing installs unless the owner turns on "Install updates
+# automatically".
 
 esphome:
-  comment: "v${version} bar beta"
+  comment: "v${version} bar"
   # Its own build folder, so a bar compile never throws away the release cache.
   build_path: build/gameday-${variant}-bar
 
 gameday:
   bar:
     report_email: "${bar_report_email}"
-  # Always on the bar channel; there is no "Follow beta".
-  beta_channel: !remove
 
-# Read the beta manifest every 15 minutes instead of every 6 hours, so an
-# "Install now" reaches the bar within a quarter hour.
+# Read the manifest every 15 minutes instead of every 6 hours, so an
+# "Install now" on the bar betas reaches the bar within a quarter hour.
 update:
   - id: !extend gd_firmware_update
     update_interval: 15min

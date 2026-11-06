@@ -9,24 +9,27 @@ is the short version.
 
 ## Layout
 
-- `firmware/gameday.yaml` (MoonHub75 pinout) and
-  `firmware/gameday-scoreboard75.yaml` (the early scoreboard75 test boards) are the two
-  release builds. Each only names itself and picks a pin map from
-  `firmware/controllers/`; everything else is in
-  `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
-  gameday.yaml booting two panels wide, offered by the installer.
-  `firmware/gameday-waveshare.yaml` is the Waveshare ESP32-S3 RGB Matrix
-  build: CI builds it, the installer doesn't offer it yet.
+- `firmware/gameday-waveshare.yaml` (the Waveshare ESP32-S3-RGB-Matrix,
+  the board ready-made scoreboards ship on), `firmware/gameday.yaml`
+  (MoonHub75 pinout, for DIY boards) and `firmware/gameday-scoreboard75.yaml`
+  (the early scoreboard75 test boards) are the three release builds. Each
+  only names itself and picks a pin map from `firmware/controllers/`;
+  everything else is in `firmware/gameday-common.yaml`.
+  `firmware/gameday-2panel.yaml` is gameday.yaml booting two panels wide.
+  The installer offers the Waveshare and both MoonHub75 builds; the
+  Waveshare build hasn't run on hardware yet.
   `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.
 - `firmware/gameday-bar.yaml` and `firmware/gameday-scoreboard75-bar.yaml`
-  are the bar builds, for the free panels in bars: the same firmware plus
-  `firmware/pages/bar.yaml`, which reads the beta channel
-  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`) and installs from it
-  on its own at night. CI publishes them only from `beta`. Release
-  firmware never installs anything unless the owner turns on "Install
-  updates automatically".
+  are the bar builds, for panels in bars: the same firmware plus
+  `firmware/pages/bar.yaml`, which reads the bar releases
+  (`install.gameday-scoreboard.com/firmware/<variant>-bar/`, published with
+  every release) and installs from them on its own at night. With Follow
+  beta on they read the bar betas
+  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`), published from
+  `beta`. Release firmware never installs anything unless the owner turns
+  on "Install updates automatically".
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.
@@ -126,6 +129,6 @@ is the short version.
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
   `firmware/` or `components/` without one, unless the PR description
   has a line `No owner-visible change, no docs: <why>` (the reviewer checks
-  that claim). Describe behavior `main` doesn't have yet in a
-  `:::note[Coming in the next release]` aside. `npm run build` in
-  `docs/wiki` must pass.
+  that claim). Describe the behavior as it is on `dev`, in the present
+  tense: the docs site publishes from `main`, so the page goes live with
+  the release. `npm run build` in `docs/wiki` must pass.

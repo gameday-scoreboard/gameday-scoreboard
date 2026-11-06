@@ -146,7 +146,10 @@ script:
             const int acx = 18, hcx = W - 18;
             for (int i = 0; i < 3; i++) {
               // Timeout pips are football's (gd_update keeps them in step).
-              if (id(gd_sport) == 0) {
+              // Not while the field strip has their row: its end zones
+              // carry the timeouts, and this runs again on every return to
+              // the scoreboard, up to a poll before gd_update hides them.
+              if (id(gd_sport) == 0 && lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN)) {
                 lv_obj_clear_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
               } else {
@@ -634,7 +637,10 @@ script:
           // The bar is football's and basketball's: baseball's row is the diamond's.
           const bool winbar = wide && live && (sport == 0 || sport == 2) && (viz & ::espn::VIZ_WINBAR) != 0 &&
                               win_pct >= 1 && win_pct <= 99;
-          const bool spark = wide && !field && (viz & ::espn::VIZ_SPARK) != 0;
+          // A playoff series ("NY lead 2-1") has the row in a basketball
+          // game (the lambda above), so the margin chart gives way to it.
+          const bool series = sport == 2 && live && !situation.empty();
+          const bool spark = wide && !field && !series && (viz & ::espn::VIZ_SPARK) != 0;
           lv_obj_t *bars[3] = {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)};
           if (winbar) {
             // Our color from the left for our chance, theirs for the rest, a
@@ -802,6 +808,15 @@ script:
           // (components/gameday/line_score.h); the Spleen fonts are monospaced,
           // so a character is 6 px in spleen_12 and 5 px in spleen_8.
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          // Another game on the board (Live games or two favorites taking
+          // turns) starts on its board, not on the card the last one was at.
+          // The leaders lambda below reads the turn too.
+          static std::string shown_game;
+          const std::string game = team_abbr + "/" + opponent_abbr;
+          if (game != shown_game) {
+            shown_game = game;
+            id(gd_card_turn) = 0;
+          }
           ::espn::LineScoreText ls = id(gameday_ctl).line_score(W);
           if (ls.font == 0 || clock_card || (game_state != "IN" && game_state != "POST")) {
             id(gd_line_ready) = false;
@@ -1045,6 +1060,31 @@ script:
     then:
       - lambda: |-
           const std::string &page = id(gameday_ctl).msg_card();
+          #ifdef GAMEDAY_BAR
+          if (id(gameday_ctl).plate_card_up()) {
+            // The plate wall (components/gameday/plate_wall.h): one canvas
+            // over the scoreboard, which says how long the page needs.
+            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(tt_brand), LV_OBJ_FLAG_HIDDEN);
+            const gameday::PlateWallFonts fonts{id(spleen_8)->get_lv_font(), id(spleen_12)->get_lv_font(),
+                                                id(spleen_16)->get_lv_font()};
+            id(gameday_ctl).set_msg_roll_ms(gameday::plate_wall_show(
+                lv_obj_get_parent(id(tt_brand)), page, id(gameday_ctl).brand_pack(), id(gameday_ctl).brand_sprite(),
+                fonts));
+            return;
+          }
+          gameday::plate_wall_hide();
+          if (id(gameday_ctl).brand_card_up()) {
+            // The bar build's opening card (components/gameday/brand.h).
+            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            gameday::brand_card_draw(id(tt_brand), id(tt_brand_img), id(tt_brand_title_lbl), id(tt_brand_wall_lbl),
+                                     id(gameday_ctl).brand_pack(), id(gameday_ctl).brand_logo(),
+                                     id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font());
+            id(gameday_ctl).set_msg_roll_ms(0);
+            return;
+          }
+          #endif
+          lv_obj_add_flag(id(tt_brand), LV_OBJ_FLAG_HIDDEN);
           if (page.empty()) {
             lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
             return;
@@ -1149,7 +1189,10 @@ script:
           lv_image_set_src(id(gd_wx_icon), big[u.wx_icon % 8]);
           lv_image_set_src(id(gd_wx_d1_icon), small[u.wx_d1_icon % 8]);
           lv_image_set_src(id(gd_wx_d2_icon), small[u.wx_d2_icon % 8]);
-          put(id(gd_wx_temp_lbl), ::espn::wx_temp_text(u.wx_temp));
+          // A wide board's 16 px digits fit three to the 54 px before Hi and
+          // Lo: "100" and "-10" leave the degree sign off rather than clip it.
+          const std::string digits = std::to_string(u.wx_temp);
+          put(id(gd_wx_temp_lbl), wide && digits.size() >= 3 ? digits : ::espn::wx_temp_text(u.wx_temp));
           put(id(gd_wx_words_lbl), u.wx_words);
           put(id(gd_wx_d1_lbl), u.wx_d1);
           put(id(gd_wx_d1_hilo_lbl), u.wx_d1_hilo);
@@ -2161,6 +2204,52 @@ lvgl:
                   long_mode: WRAP
                   text: ""
                   text_color: 0xFFFFFF
+
+        # The bar build's opening card, the brand pack's logo and words in its
+        # colors, as the message card's first page (gd_msg_card). Unused, and
+        # never shown, on the other builds.
+        - obj:
+            id: tt_brand
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - image:
+                  id: tt_brand_img
+                  src: gd_logo_blank
+                  x: 0
+                  y: 0
+                  hidden: true
+              - label:
+                  id: tt_brand_title_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_12
+                  text_color: 0xFFFFFF
+                  hidden: true
+              - label:
+                  id: tt_brand_wall_lbl
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+                  hidden: true
 
         # The college Top 25, over the board between games (gd_top25_card):
         # the poll's name, then five rows a column, one column on a single

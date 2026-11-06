@@ -141,8 +141,8 @@
     {"id": "picture", "name": "Pictures", "on": true, "ok": true, "hint": "Add a picture in the Pictures card first"},
     {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
     {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
-    {"id": "schedule", "name": "Schedule", "on": true, "ok": true, "hint": "Only for football and soccer teams in Favorite teams"},
-    {"id": "seasonrecap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for football and soccer teams in Favorite teams"},
+    {"id": "schedule", "name": "Schedule", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
+    {"id": "seasonrecap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
     {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
     {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"}
   ],
@@ -195,6 +195,22 @@
   "update_shown": 1793142120,
   "bar": {
     "report": "support@gameday-scoreboard.com"
+  },
+  "brand": "http://192.168.1.20/brand/taproom.json",
+  "brandread": {
+    "status": 200,
+    "ok": true,
+    "error": "The brand file isn't JSON.",
+    "name": "Main Street Taproom",
+    "title": "MUG CLUB",
+    "wall": "WALL OF FAME",
+    "logo": "http://192.168.1.20/brand/taproom-logo.png",
+    "logo_ok": false,
+    "list": "http://192.168.1.20/brand/plates.txt",
+    "sprite_ok": true,
+    "warning": "colors.rim isn't a color like #D4A017",
+    "logo_error": "The logo has to be a PNG file.",
+    "sprite_error": "The sprite can be up to 64 by 32 pixels."
   },
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",

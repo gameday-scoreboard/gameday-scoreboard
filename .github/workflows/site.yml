@@ -2,8 +2,8 @@ name: Site
 
 # Republish install.gameday-scoreboard.com when only docs/site changed, without a
 # firmware release. The firmware files come from the latest release tag's
-# firmware-moonhub75.zip asset, so panels see the same manifest and binaries
-# they saw before. Falls back to the tag's Build artifact for a release that
+# firmware-<variant>.zip assets (the bar releases' too, when it has them),
+# so panels see the same manifest and binaries they saw before. Falls back to the tag's Build artifact for a release that
 # predates that asset (v1.4.3 and earlier); Build artifacts expire after 90
 # days, so that fallback is only good for 90 days after such a release.
 #
@@ -95,7 +95,15 @@ jobs:
           python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json
           ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           RUN=""
-          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare; do
+          CHECK=""
+          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare moonhub75-bar scoreboard75-bar; do
+            # Releases before the bar releases have no bar zip and no bar
+            # Build artifact to fall back on; the site goes out without them.
+            if [[ "$v" == *-bar ]] && ! echo "$ASSETS" | grep -qx "firmware-$v.zip"; then
+              echo "::warning::$TAG has no firmware-$v.zip, so the site has no $v release until the next one."
+              continue
+            fi
+            CHECK="$CHECK $v"
             if echo "$ASSETS" | grep -qx "firmware-$v.zip"; then
               echo "$v firmware from the $TAG release asset firmware-$v.zip"
               gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p "firmware-$v.zip" -O "/tmp/firmware-$v.zip"
@@ -109,7 +117,7 @@ jobs:
               gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "firmware-$v" -D site/firmware || echo "no $v firmware for $TAG"
             fi
           done
-          bash scripts/check_site_firmware.sh site "$TAG"
+          VARIANTS="$CHECK" bash scripts/check_site_firmware.sh site "$TAG"
           bash scripts/add_beta_channel.sh site
           # Releases up to v2026.10.0 carry the ESPHome project name.
           ./scripts/set_manifest_name.sh site/firmware

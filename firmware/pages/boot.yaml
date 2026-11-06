@@ -678,6 +678,9 @@ script:
               id(boot_hold_stage) = 1;
               // A panel switched off with a click would show none of this.
               if (!id(power).state) id(power).turn_on();
+              // In front of whatever else is up (a banner, the heat mark), or
+              // the countdown would run where nobody can read it.
+              lv_obj_move_foreground(id(boot_overlay));
               id(boot_show_address).execute();
             }
             return;
@@ -705,6 +708,8 @@ script:
             // is not squeezed into half a chain.
             id(boot_qr_cycle).execute(0, false);
             id(boot_view).execute(false, false);
+            // Anything that came up since stage 1 goes behind it again.
+            lv_obj_move_foreground(id(boot_overlay));
           }
           if (stage != id(boot_hold_stage)) {
             static const char *const LOG[] = {"keep holding for a Wi-Fi reset", "release to reset Wi-Fi",
@@ -925,6 +930,9 @@ binary_sensor:
             return;
           }
           id(boot_hold_stage) = 0;
+          // Back to the bottom of the top layer, where it sits otherwise, so
+          // a banner or the heat mark shows over the address screen again.
+          lv_obj_move_background(id(boot_overlay));
           if (stage == 2 || stage == 5) {
             // Back out of the warning: restore the address screen and its bar.
             ESP_LOGI("boot", "Button released: nothing reset");
