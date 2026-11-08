@@ -80,7 +80,7 @@ constexpr uint32_t kCelebThreeMs = 3000;
 constexpr uint32_t kCelebWinMs = 10000;
 // The big plays: each art's frames / fps, so the last frame holds to the end.
 constexpr uint32_t kCelebDunkMs = 2500;
-constexpr uint32_t kCelebAlleyOopMs = 3000;
+constexpr uint32_t kCelebAlleyOopMs = 3500;
 constexpr uint32_t kCelebInterceptionMs = 5000;
 constexpr uint32_t kCelebPickSixMs = 6000;
 constexpr uint32_t kCelebFumbleMs = 4000;

@@ -58,7 +58,7 @@ struct Settings {
   int celebrate{2};  // celebrate.h CelebLevel
   bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, top25{true}, news{false}, gameleaders{true};
   uint16_t cards_off{0};  // the Between games list's other cards (cards.h)
-  bool field{true}, winbar{true}, spark{true};
+  bool field{true}, winbar{true}, spark{true}, bigplays{true};
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
@@ -214,6 +214,7 @@ void load(Settings &s, JsonObjectConst o) {
   flag("field", s.field);
   flag("winbar", s.winbar);
   flag("spark", s.spark);
+  flag("bigplays", s.bigplays);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
@@ -377,6 +378,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::FIELD: s.field = op.on; break;
     case SetKind::WINBAR: s.winbar = op.on; break;
     case SetKind::SPARK: s.spark = op.on; break;
+    case SetKind::BIGPLAYS: s.bigplays = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
@@ -500,6 +502,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["field"] = s.field;
   doc["winbar"] = s.winbar;
   doc["spark"] = s.spark;
+  doc["bigplays"] = s.bigplays;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
