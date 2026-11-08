@@ -348,6 +348,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Celebrations (celebrate.h): off, subtle or full. Full is the default.
   ::espn::CelebLevel celebrations() const { return ::espn::celeb_level_from_stored(this->prefs8_.celeb); }
   void set_celebrations(::espn::CelebLevel level);
+  // Big plays (celeb_<sport>.h): a dunk or an alley-oop gets its own show on
+  // Full. Stored as an "off" bit so panels from before it have it on.
+  bool big_plays() const { return (this->prefs8_.viz & VIZ8_NOBIGPLAYS) == 0; }
+  void set_big_plays(bool on) { this->set_viz8_(VIZ8_NOBIGPLAYS, !on); }
   bool setup_done() const { return this->flag_(FLAG_SETUP); }
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
@@ -659,7 +663,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
-  ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
+  ::espn::CelebLatch celeb_latch_;  // the read a THREE or a big play was shown for, so a redraw never repeats it
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];
@@ -855,6 +859,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
   static constexpr uint8_t VIZ8_NOWIN = 2;     // the win chance line off (was the win bar's)
   // 4 was the score margin chart's, now gone; a panel may still have it set.
+  static constexpr uint8_t VIZ8_NOBIGPLAYS = 8;  // the big plays' shows off (a celebration, not a picture)
   void set_viz8_(uint8_t f, bool set);
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
