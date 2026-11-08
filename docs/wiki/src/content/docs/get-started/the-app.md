@@ -106,6 +106,10 @@ On Android, **Display** has a **Live pictures** card after the ticker, with the 
 With the next firmware, **Win chance bar** turns the win chance line under the clock on or off ("ND 84% to win") and **Score margin** does nothing, since the chart is gone. An app update renames the first to **Win chance** and drops the second.
 :::
 
+:::note[Coming in the next release]
+On iPhone, **Celebrations** under **Display** has a **Big plays** switch after **Opponent scores too**. On **Full**, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). It's on until you turn it off, and the switch shows once the panel runs firmware with it.
+:::
+
 On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
 
 On iPhone, **Between games** under **Display** has a **College Top 25** switch after **Game leaders**. While the panel follows a college football or basketball team, the AP poll takes a turn with the board every 10 minutes, a page at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with the card.
