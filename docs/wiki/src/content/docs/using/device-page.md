@@ -106,6 +106,10 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
+:::note[Coming in the next release]
+Each league tab starts with that league's games today, under the same headings, and lists all of its teams under a **Teams** heading after them. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count; tap the heading to open one. A league with no games today shows just its teams.
+:::
+
 On **On now**, a search that matches none of today's games lists the teams it matches under a **Teams** heading instead, with their league, so a team that isn't playing today still turns up.
 
 The chooser is for favorites only.
