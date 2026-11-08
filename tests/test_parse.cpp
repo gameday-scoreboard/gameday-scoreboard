@@ -336,8 +336,7 @@ static bool same_snapshot(const GameSnapshot &a, const GameSnapshot &b) {
          a.period == b.period && a.team_abbr == b.team_abbr && a.opp_abbr == b.opp_abbr && a.team_id == b.team_id &&
          a.opp_id == b.opp_id && a.team_score == b.team_score && a.opp_score == b.opp_score &&
          a.team_record == b.team_record && a.opp_record == b.opp_record && a.team_color == b.team_color &&
-         a.opp_color == b.opp_color && a.team_alt == b.team_alt && a.opp_alt == b.opp_alt &&
-         a.team_logo == b.team_logo && a.opp_logo == b.opp_logo &&
+         a.opp_color == b.opp_color && a.team_logo == b.team_logo && a.opp_logo == b.opp_logo &&
          a.team_winner == b.team_winner && a.possession == b.possession && a.team_timeouts == b.team_timeouts &&
          a.opp_timeouts == b.opp_timeouts && a.last_play == b.last_play && a.down_distance == b.down_distance &&
          a.short_down_distance == b.short_down_distance && a.is_red_zone == b.is_red_zone && a.odds == b.odds &&
