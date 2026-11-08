@@ -83,6 +83,10 @@ In both apps, **Only today's games**, **Jump to the action** and **Score banner*
 - **Panels**: every panel saved in the app, and new ones nearby.
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
 
+:::note[Coming in the next release]
+On Android, **Setup** has **Walk through the settings again** too. It opens the walkthrough from setup: your teams, what the panel shows, the ticker and switching, and the timezone.
+:::
+
 In both apps, Settings has three pages for the panel, like the device page's tabs:
 
 - **Display**: ticker speed, the night schedule (iPhone), the ticker, celebrations and **Between games**. **Showing** moved to the Board. On Android, the **Celebrations** card also has a **Celebrations** choice, **Full**, **Subtle** or **Off**, for how big the show is (see [Celebrations](/using/device-page/#celebrations)). It shows once the panel runs firmware with that setting.
