@@ -36,6 +36,7 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "game_leaders.h"
+#include "row_text.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
@@ -114,11 +115,11 @@ struct UpdateFields {
   std::string clock_text;  // "5:36 - 3rd" while the game is live, else empty
   std::string down_distance;  // "3rd & 10" while live, else empty
   bool is_red_zone{false};
-  // The pictures on a wide board's situation row (game_viz.h): which the
-  // page draws now (VIZ_* bits, the owner's switches already applied) and
-  // our side's win chance (1 to 99, -1 when ESPN gave none).
+  // The picture on a wide board's situation row (game_viz.h): which the
+  // page draws now (VIZ_* bits, the owner's switch already applied).
   uint8_t viz{0};
-  int win_pct{-1};
+  // The text lines the situation row takes turns showing (row_text.h).
+  ::espn::RowLines row;
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
   // A side with no logo shows its abbreviation in the logo slot, in this
@@ -132,7 +133,6 @@ struct UpdateFields {
   // Other sports (football leaves these at their defaults).
   uint8_t sport{0};        // ::espn::Sport
   std::string situation;   // baseball: the count "2-1" while a half inning is on
-                           // basketball: the playoff series "NY lead 2-1"
   int outs{-1};            // baseball: outs in the half inning, -1 when none
   uint8_t bases{0};        // baseball: 1 first, 2 second, 4 third
   bool highlight{false};   // the situation row stands out (bases loaded)
@@ -335,14 +335,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
   bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
-  // The pictures on the board (game_viz.h), each on unless the owner turns it
-  // off. Stored as "off" bits so panels from before them keep all three.
+  // Football's field strip (game_viz.h) and the win chance line on the
+  // situation row (row_text.h), each on unless the owner turns it off.
+  // Stored as "off" bits so panels from before them keep both.
   bool field_strip_on() const { return (this->prefs8_.viz & VIZ8_NOFIELD) == 0; }
-  bool win_bar_on() const { return (this->prefs8_.viz & VIZ8_NOWINBAR) == 0; }
-  bool margin_spark_on() const { return (this->prefs8_.viz & VIZ8_NOSPARK) == 0; }
+  bool win_chance_on() const { return (this->prefs8_.viz & VIZ8_NOWIN) == 0; }
   void set_field_strip(bool on) { this->set_viz8_(VIZ8_NOFIELD, !on); }
-  void set_win_bar(bool on) { this->set_viz8_(VIZ8_NOWINBAR, !on); }
-  void set_margin_spark(bool on) { this->set_viz8_(VIZ8_NOSPARK, !on); }
+  void set_win_chance(bool on) { this->set_viz8_(VIZ8_NOWIN, !on); }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
@@ -521,10 +520,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   // The board game's field strip for a strip width_px wide (game_viz.h),
-  // valid only while football is on, and the margin samples the panel has
-  // seen of the board game. Read by gd_update in firmware/pages/gameday-live.yaml.
+  // valid only while football is on. Read by gd_update in
+  // firmware/pages/gameday-live.yaml.
   ::espn::FieldStrip field_strip(int width_px) const { return ::espn::field_strip(this->game_, width_px); }
-  const ::espn::MarginTrack &margin_track() const { return this->margin_tracks_.current(); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
@@ -855,8 +853,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
   static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
-  static constexpr uint8_t VIZ8_NOWINBAR = 2;  // the win chance bar off
-  static constexpr uint8_t VIZ8_NOSPARK = 4;   // the score margin sparkline off
+  static constexpr uint8_t VIZ8_NOWIN = 2;     // the win chance line off (was the win bar's)
+  // 4 was the score margin chart's, now gone; a panel may still have it set.
   void set_viz8_(uint8_t f, bool set);
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
@@ -1392,7 +1390,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
-  ::espn::MarginTracks margin_tracks_;  // the board game's margin by read, and the last game's (game_viz.h)
+  // The board game's last basket, held until the next (row_text.h), and
+  // the row's news so far: the page jumps to the lead line when it changes.
+  ::espn::RowHold row_hold_;
+  std::string row_news_;
+  uint32_t row_news_n_{0};
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};

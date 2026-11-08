@@ -245,13 +245,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="vizCard">
         <h2>Live pictures</h2>
-        <p class="hint">Drawn under the clock during a game. Not on a single 64x64 panel.</p>
+        <p class="hint">Under the clock during a game. Not on a single 64x64 panel.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
-          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: each side's chance to win, as a thin bar.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
-          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game, as a small chart.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", in turn with the rest of the row.</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
         </div>
       </div>
       <div class="card">
@@ -647,7 +646,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
-    field: (v) => v === "1", winbar: (v) => v === "1", spark: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
+    field: (v) => v === "1", winbar: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
     // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
     cards: (v) => {
       const pairs = new Map(v.split(",").map((p) => p.split(":")));
@@ -1741,6 +1740,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
+    // Hockey, baseball or soccer alone: nothing here to turn off.
+    $("#vizCard").hidden = [...document.querySelectorAll("#vizCtls .ctl")].every((row) => row.hidden);
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = $("#cdOwnCard").hidden = S.countdown === undefined;
     // The Between games list; firmware from before it has a switch per card.

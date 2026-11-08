@@ -48,6 +48,14 @@ Accented letters in names, like the é in Atlético or the ñ in Peña, show in 
 
 In football, **Last play** also adds how the drive went after a touchdown or field goal, like "Drive: 4 plays, 58 yards, 1:36", once, with the scoring play. **Odds, TV and win chance** shows ESPN's win chance during the game, like "KC 72% to win", for the side it favors, when ESPN has one.
 
+:::note[Coming in the next release]
+On a 128-wide board the row under the clock says some things itself, so the ticker leaves them out instead of saying them twice:
+
+- In football, while **Win chance** under **Live pictures** is on, the win chance is on the row and not in the ticker. With it off, or on a single 64x64 panel, the ticker keeps it.
+- In football, the down and distance, like "3rd & 4 at FIU 31", is on the field strip (or the row under the clock with **Field strip** off), so the ticker leaves it out and goes straight to the last play. A single 64x64 panel keeps it in the ticker.
+- In basketball, a timeout as the last play, like "Official TV Timeout", isn't shown: the stopped clock already says it, and the ticker shows the two records until the next play. A single 64x64 panel keeps it in the ticker.
+:::
+
 A **Pre-game season leaders** switch, on to start, adds the season leaders before the game. Like the situation switches, it shows only on a panel that follows a sport it covers: football, baseball, basketball or hockey.
 
 These three, Down and distance, Count and at-bat and Match stats, are the game situation for their sport. Hockey and basketball have no situation line, so they have no switch of their own. The card only shows the switches for sports your panel follows, from your team, your favorites and the leagues you picked for Live games, so turning off football's line leaves baseball's count alone.

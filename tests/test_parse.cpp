@@ -19,6 +19,7 @@
 #include "favorites.h"
 #include "game_leaders.h"
 #include "game_viz.h"
+#include "row_text.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -7404,8 +7405,7 @@ static void test_wifi_history() {
 
 // The line score at halftime and the final (line_score.h), from the recorded
 // single-event documents.
-// The pictures on the situation row (game_viz.h): the field strip's
-// geometry, the win bar's split and the margin sparkline's samples.
+// Football's field strip on the situation row (game_viz.h): its geometry.
 static void test_game_viz() {
   // The recorded FIU @ JXST read: FIU (away) has the ball at its own 31,
   // 3rd & 4. ESPN's yardLine 69 counts from the home goal line.
@@ -7427,8 +7427,9 @@ static void test_game_viz() {
   CHECK(f.to_right);  // we have it, so we attack the right end zone
   CHECK_EQ((int) f.gain_x, field_col(35, 128, 6));
   CHECK(!f.red_zone);
-  CHECK_EQ((int) f.left_timeouts, 0);   // FIU, away, 0 left
-  CHECK_EQ((int) f.right_timeouts, 1);  // JXST, home, 1 left
+  // The timeouts left show as the pips under the records, from the snapshot.
+  CHECK_EQ((int) g.team_timeouts, 0);  // FIU, away, 0 left
+  CHECK_EQ((int) g.opp_timeouts, 1);   // JXST, home, 1 left
   CHECK(!f.text_left);  // the ball is on the left half, so the text goes right
   // The same read from the home side: the ball sits 69 from our end zone,
   // and the offense (them) attacks our end zone on the left.
@@ -7442,8 +7443,8 @@ static void test_game_viz() {
   CHECK(!fh.to_right);
   CHECK_EQ((int) fh.gain_x, field_col(65, 128, 6));
   CHECK(fh.text_left);
-  CHECK_EQ((int) fh.left_timeouts, 1);
-  CHECK_EQ((int) fh.right_timeouts, 0);
+  CHECK_EQ((int) h.team_timeouts, 1);
+  CHECK_EQ((int) h.opp_timeouts, 0);
   // DEL @ WKU on 2026-10-27 (trimmed from a live read): WKU, home, has the
   // ball, 4th & 11 at the DEL 45 (ESPN yardLine 55, 55 from WKU's goal line);
   // Delaware is 94.8% to win with 3 timeouts to WKU's 2.
@@ -7459,9 +7460,8 @@ static void test_game_viz() {
   CHECK_EQ((int) fd.ball_x, field_col(45, 128, 6));  // 45 from Delaware's end zone on the left
   CHECK(!fd.to_right);                                // WKU drives at it
   CHECK_EQ((int) fd.gain_x, field_col(34, 128, 6));
-  CHECK_EQ((int) fd.left_timeouts, 3);
-  CHECK_EQ((int) fd.right_timeouts, 2);
-  CHECK_EQ(win_bar_split(del.team_win_pct, 128), 122);
+  CHECK_EQ((int) del.team_timeouts, 3);
+  CHECK_EQ((int) del.opp_timeouts, 2);
   GameSnapshot wku;
   CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 98, wku));
   CHECK_EQ((int) wku.team_win_pct, 5);
@@ -7479,8 +7479,10 @@ static void test_game_viz() {
   CHECK(fg.valid);
   CHECK_EQ((int) fg.gain_x, -1);
   CHECK(fg.red_zone);
-  CHECK_EQ((int) fg.red_from, fg.ball_x + 2);
+  // The whole last 20 yards, not only the 4 to go: at the 1 that was a column or two.
+  CHECK_EQ((int) fg.red_from, field_col(80, 128, 6));
   CHECK_EQ((int) fg.red_to, 121);
+  CHECK(fg.red_to - fg.red_from + 1 >= 20);
   CHECK_EQ((int) fg.ball_x, field_col(96, 128, 6));
   CHECK(fg.text_left);
   // At the goal line the marker still fits inside the field.
@@ -7488,7 +7490,16 @@ static void test_game_viz() {
   fg = field_strip(gl, 128);
   CHECK(fg.valid);
   CHECK_EQ((int) fg.ball_x, 120);
-  CHECK(fg.red_from <= fg.red_to);
+  CHECK_EQ((int) fg.red_from, field_col(80, 128, 6));
+  // Driving left, the zone is the 20 to our goal line.
+  GameSnapshot hl = gl;
+  hl.yard_line = 4;
+  hl.possession = 2;
+  FieldStrip fl = field_strip(hl, 128);
+  CHECK(fl.red_zone);
+  CHECK(!fl.to_right);
+  CHECK_EQ((int) fl.red_from, 6);
+  CHECK_EQ((int) fl.red_to, field_col(20, 128, 6));
   // Nobody has the ball (between plays after a score): no tip, no line, no red zone.
   GameSnapshot np = g;
   np.possession = 0;
@@ -7498,6 +7509,82 @@ static void test_game_viz() {
   CHECK(!fn.has_offense);
   CHECK_EQ((int) fn.gain_x, -1);
   CHECK(!fn.red_zone);
+  // The row's text sits in the clear part of the strip: between an end zone
+  // and the nearest marker (ball, tip, line to gain), one column clear of it.
+  {
+    // Every marker column of a strip, to check the text span against.
+    auto clear = [](const FieldStrip &s) {
+      int lo = s.ball_x, hi = s.ball_x + 1;
+      if (s.has_offense) {
+        if (s.to_right)
+          hi = s.ball_x + 2;
+        else
+          lo = s.ball_x - 1;
+      }
+      if (s.gain_x >= 0) {
+        lo = std::min(lo, (int) s.gain_x);
+        hi = std::max(hi, (int) s.gain_x);
+      }
+      const int x0 = s.text_x, x1 = s.text_x + s.text_w - 1;
+      if (s.text_w == 0)
+        return true;
+      if (x0 < s.ez + 2 || x1 > 128 - s.ez - 3)
+        return false;
+      return x1 < lo - 1 || x0 > hi + 1;
+    };
+    // FIU at its 31, 3rd & 4 driving right: the text goes right of the line to gain.
+    CHECK(clear(f));
+    CHECK_EQ((int) f.text_x, f.gain_x + 2);
+    CHECK_EQ((int) f.text_w, 128 - 6 - 3 - (f.gain_x + 2) + 1);
+    // JXST driving left from the FIU 31: left of the line to gain, up to it.
+    CHECK(clear(fh));
+    CHECK_EQ((int) fh.text_x, 8);
+    CHECK_EQ((int) fh.text_w, fh.gain_x - 2 - 8 + 1);
+    // The Miami at Notre Dame read from the mockup: ND, home, at its own 38,
+    // 2nd & 17 driving right, so the line to gain sits at the 55, across
+    // midfield on the half the text used to take. The text now ends short
+    // of the line, or takes the left side when that is roomier.
+    GameSnapshot nd = g;
+    nd.team_home = true;
+    nd.possession = 1;
+    nd.yard_line = 38;
+    nd.distance = 17;
+    nd.is_red_zone = false;
+    FieldStrip fnd = field_strip(nd, 128);
+    CHECK(fnd.valid);
+    CHECK_EQ((int) fnd.gain_x, field_col(55, 128, 6));
+    CHECK(fnd.gain_x >= 64);  // across midfield
+    CHECK(clear(fnd));
+    CHECK(!fnd.text_left);  // right of the line to gain: 128 - 9 - 2 - col(55) px, the most room
+    CHECK_EQ((int) fnd.text_x, fnd.gain_x + 2);
+    // Every ball spot and distance, both ways: never across a marker, and
+    // always the roomier side.
+    int fails = 0;
+    for (int yl = 1; yl <= 99; yl++)
+      for (int dist = 1; dist <= 25; dist++)
+        for (int poss = 0; poss <= 2; poss++) {
+          GameSnapshot t = g;
+          t.team_home = true;
+          t.yard_line = (uint8_t) yl;
+          t.distance = (uint8_t) dist;
+          t.possession = poss;
+          t.is_red_zone = false;
+          FieldStrip ft = field_strip(t, 128);
+          if (!ft.valid || !clear(ft) || ft.text_w < 20)
+            fails++;
+        }
+    CHECK_EQ(fails, 0);
+    // The ball near midfield driving left, the line to gain 25 yards back:
+    // the roomier side wins, here the right, past the ball.
+    GameSnapshot mid = nd;
+    mid.yard_line = 52;
+    mid.possession = 2;
+    mid.distance = 25;
+    FieldStrip fm = field_strip(mid, 128);
+    CHECK(clear(fm));
+    CHECK(!fm.text_left);
+    CHECK_EQ((int) fm.text_x, fm.ball_x + 3);  // the ball is two columns, then one clear
+  }
   // Nothing without a yard line, before the start, in another sport, or on a
   // board too narrow for it.
   GameSnapshot none = g;
@@ -7516,146 +7603,157 @@ static void test_game_viz() {
   CHECK_EQ((int) pre.down, 0);
   CHECK_EQ((int) pre.distance, 0);
 
-  // The win bar: our columns of 128 for our chance, never the whole bar.
-  CHECK_EQ(win_bar_split(50, 128), 64);
-  CHECK_EQ(win_bar_split(1, 128), 1);
-  CHECK_EQ(win_bar_split(99, 128), 127);
-  CHECK_EQ(win_bar_split(72, 128), 92);
-  CHECK_EQ(win_bar_split(0, 128), -1);
-  CHECK_EQ(win_bar_split(100, 128), -1);
-  CHECK_EQ(win_bar_split(-1, 128), -1);
+}
 
-  // The margin track: one sample per read, a redraw adds nothing, and a new
-  // game starts over.
-  MarginTrack t;
-  CHECK(t.read("1", 10, 0, "12:00", 1));
-  CHECK(!t.read("1", 10, 0, "12:00", 1));  // the same read drawn again
-  CHECK(t.read("1", 10, 0, "11:40", 1));   // the clock moved
-  CHECK(t.read("1", 10, 3, "11:40", 1));   // a basket
-  CHECK_EQ((int) t.n, 3);
-  CHECK_EQ((int) t.margin[2], 3);
-  CHECK(t.read("2", 10, -2, "20:00", 1));
-  CHECK_EQ((int) t.n, 1);
-  CHECK_EQ(t.event_id, std::string("2"));
-  CHECK_EQ((int) t.margin[0], -2);
-  // The same game from the other side (two favorites playing each other):
-  // every sample flips with it, as the scoring log does.
-  MarginTrack side;
-  side.read("7", 10, 3, "9:00", 1);
-  side.read("7", 10, 5, "8:00", 1);
-  CHECK(side.read("7", 20, -5, "8:00", 1));
-  CHECK_EQ((int) side.n, 3);
-  CHECK_EQ((int) side.margin[0], -3);
-  CHECK_EQ((int) side.margin[1], -5);
-  CHECK_EQ((int) side.margin[2], -5);
-  CHECK_EQ(side.last_margin, -5);
-  CHECK_EQ((int) side.team_id, 20);
-  // A read with no team id (the demo's made-up teams) never flips.
-  side.read("7", 0, -7, "7:00", 1);
-  CHECK_EQ((int) side.margin[3], -7);
-  CHECK_EQ((int) side.team_id, 20);
-  // Full: pairs merge and every second read makes a sample from then on.
-  MarginTrack m;
-  for (int i = 0; i < MarginTrack::kMax; i++)
-    m.add("g", 1, i - 64);
-  CHECK_EQ((int) m.n, (int) MarginTrack::kMax);
-  CHECK_EQ((int) m.stride, 1);
-  m.add("g", 1, 100);  // the 129th read: the pairs merge and it is sample 65
-  CHECK_EQ((int) m.n, 65);
-  CHECK_EQ((int) m.stride, 2);
-  CHECK_EQ((int) m.pending, 0);
-  CHECK_EQ((int) m.margin[0], -63);  // the second of each pair stays
-  CHECK_EQ((int) m.margin[63], 63);
-  CHECK_EQ((int) m.margin[64], 100);
-  CHECK_EQ(m.last_margin, 100);
-  m.add("g", 1, 90);  // every second read is a sample now
-  CHECK_EQ((int) m.n, 65);
-  CHECK_EQ((int) m.pending, 1);
-  CHECK_EQ(m.last_margin, 90);
-  // Clamped to what fits the slot.
-  m.add("g", 1, 300);
-  CHECK_EQ((int) m.n, 66);
-  CHECK_EQ((int) m.margin[65], 127);
-  // 4096 reads (a long game polled often) still fit.
-  for (int i = 0; i < 4096; i++)
-    m.add("g", 1, 5);
-  CHECK(m.n <= MarginTrack::kMax);
-  CHECK(m.stride >= 32);
-  // Two games' tracks: leaving a game and coming back keeps its samples; a
-  // third game takes the older slot.
-  MarginTracks tracks;
-  tracks.pick("a").read("a", 1, 4, "5:00", 1);
-  tracks.pick("a").read("a", 1, 6, "4:00", 1);
-  CHECK_EQ((int) tracks.current().n, 2);
-  tracks.pick("b").read("b", 2, -1, "19:00", 1);
-  CHECK_EQ(tracks.current().event_id, std::string("b"));
-  CHECK_EQ((int) tracks.current().n, 1);
-  tracks.pick("a").read("a", 1, 8, "3:00", 1);
-  CHECK_EQ(tracks.current().event_id, std::string("a"));
-  CHECK_EQ((int) tracks.current().n, 3);
-  CHECK_EQ((int) tracks.current().margin[0], 4);
-  tracks.pick("c").read("c", 3, 0, "20:00", 1);
-  CHECK_EQ(tracks.current().event_id, std::string("c"));
-  tracks.pick("b");
-  CHECK_EQ(tracks.current().event_id, std::string("b"));
-  CHECK_EQ((int) tracks.current().n, 0);  // b was the older slot, c took it
+// The situation row's text lines (row_text.h), from the recorded reads.
+static void test_row_text() {
+  RowOptions on;
+  // Football, FIU @ JXST: 3rd & 4, then JXST's win chance in its color.
+  GameSnapshot fb;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, fb));
+  RowHold none;
+  none.read(fb);
+  CHECK_EQ(none.basket, std::string(""));
+  RowLines r = row_lines(fb, none, on, true);
+  CHECK_EQ((int) r.n, 2);
+  CHECK_EQ(r.line[0].form(0), std::string("3rd & 4"));
+  CHECK_EQ((int) r.line[0].secs, 8);
+  // Shorter forms for a narrow clear span: no spaces, then no ordinal.
+  CHECK_EQ(r.line[0].form(1), std::string("3rd&4"));
+  CHECK_EQ(r.line[0].form(2), std::string("3&4"));
+  CHECK_EQ(r.line[0].form(3), std::string(""));
+  {
+    GameSnapshot goal = fb;
+    goal.short_down_distance = "2nd & Goal";
+    RowLines rg = row_lines(goal, none, on, true);
+    CHECK_EQ(rg.line[0].form(1), std::string("2nd&Goal"));
+    CHECK_EQ(rg.line[0].form(2), std::string("2&Goal"));
+    GameSnapshot odd = fb;
+    odd.short_down_distance = "Kickoff";
+    CHECK_EQ(row_lines(odd, none, on, true).line[0].form(1), std::string(""));
+  }
+  CHECK_EQ(r.line[0].rgb, (uint32_t) 0xFFFFFF);
+  CHECK_EQ(r.line[1].form(0), std::string("JXST 96% to win"));
+  CHECK_EQ(r.line[1].form(1), std::string("JXST 96% win"));
+  CHECK_EQ(r.line[1].form(2), std::string("JXST 96%"));
+  CHECK_EQ(r.line[1].rgb, (uint32_t) 0xFFFFFF);  // white, like the down
+  CHECK_EQ(row_news(fb, none), std::string("3rd & 4"));
+  // The switch off leaves the down alone; halftime leaves nothing.
+  RowOptions off;
+  off.win_chance = false;
+  CHECK_EQ((int) row_lines(fb, none, off, true).n, 1);
+  CHECK_EQ((int) row_lines(fb, none, on, false).n, 0);
+  // The red zone turns the down red.
+  GameSnapshot rz = fb;
+  rz.is_red_zone = true;
+  CHECK_EQ(row_lines(rz, none, on, true).line[0].rgb, (uint32_t) 0xFF3030);
+  // Not live, nothing.
+  GameSnapshot post = fb;
+  post.state = GameState::POST;
+  CHECK_EQ((int) row_lines(post, none, on, true).n, 0);
 
-  // The sparkline's columns: stretched across the width, scaled to the peak.
-  int8_t cols[128];
-  MarginTrack e;
-  CHECK_EQ(margin_columns(e, 128, 4, 3, cols), 0);
-  MarginTrack one;
-  one.add("g", 1, 2);
-  CHECK_EQ(margin_columns(one, 128, 4, 3, cols), 1);
-  CHECK_EQ((int) cols[0], 4);  // the only point is the peak
-  CHECK_EQ((int) cols[127], 4);
-  // With a floor on the scale, a 1-0 hockey lead is a sliver.
-  MarginTrack goal;
-  goal.add("g", 1, 1);
-  CHECK_EQ(margin_columns(goal, 128, 4, 3, cols, margin_min_peak(Sport::HOCKEY)), 1);
-  CHECK_EQ((int) cols[0], 2);  // ceil(1 * 4 / 3)
-  MarginTrack basket;
-  basket.add("g", 1, 2);
-  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 1);
-  CHECK_EQ((int) cols[0], 1);  // ceil(2 * 4 / 10)
-  basket.add("g", 1, -20);
-  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 2);
-  CHECK_EQ((int) cols[127], -3);  // past the floor the peak rules again
-  MarginTrack two;
-  two.add("g", 1, 0);
-  two.add("g", 1, 8);
-  CHECK_EQ(margin_columns(two, 128, 4, 3, cols), 2);
-  CHECK_EQ((int) cols[0], 0);
-  CHECK_EQ((int) cols[127], 4);
-  CHECK_EQ((int) cols[64], 2);  // halfway is 4 of 8, so 2 of 4 px
-  MarginTrack swing;
-  swing.add("g", 1, 10);
-  swing.add("g", 1, -10);
-  swing.add("g", 1, 10);
-  CHECK_EQ(margin_columns(swing, 128, 4, 3, cols), 3);
-  CHECK_EQ((int) cols[0], 4);
-  CHECK_EQ((int) cols[127], 4);
-  // A deficit fills down to 3 at most.
-  int low = 0;
-  for (int x = 0; x < 128; x++)
-    low = std::min(low, (int) cols[x]);
-  CHECK_EQ(low, -3);
-  // A 1-point lead against a 20-point peak still shows a pixel.
-  MarginTrack tiny;
-  tiny.add("g", 1, 20);
-  tiny.add("g", 1, 1);
-  CHECK_EQ(margin_columns(tiny, 128, 4, 3, cols), 2);
-  CHECK_EQ((int) cols[127], 1);
-  // A pending read (after a merge) is the last point.
-  MarginTrack pend;
-  pend.add("g", 1, 0);  // the sample
-  pend.stride = 2;      // as after a merge
-  pend.add("g", 1, 6);  // pending, not a sample yet
-  CHECK_EQ((int) pend.n, 1);
-  CHECK_EQ((int) pend.pending, 1);
-  CHECK_EQ(margin_columns(pend, 128, 4, 3, cols), 2);
-  CHECK_EQ((int) cols[0], 0);
-  CHECK_EQ((int) cols[127], 4);
+  // Basketball, IND 74 MIN 73 in the 3rd, as IND: McDaniels' two held, each
+  // side's points leader, IND's win chance.
+  GameSnapshot g = hoops_event("fixtures/event_nba_live.json", kPacers);
+  CHECK_EQ(g.nba.team_scorer, std::string("Nesmith 19"));
+  CHECK_EQ(g.nba.opp_scorer, std::string("Edwards 19"));
+  RowHold hold;
+  hold.read(g);
+  CHECK_EQ(hold.basket, std::string("McDaniels 2"));
+  RowLines b = row_lines(g, hold, on, true);
+  CHECK_EQ((int) b.n, 4);
+  CHECK_EQ(b.line[0].form(0), std::string("McDaniels 2"));
+  CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
+  CHECK_EQ(b.line[1].form(0), std::string("Nesmith 19"));
+  CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
+  CHECK_EQ(b.line[2].form(0), std::string("Edwards 19"));
+  CHECK_EQ(b.line[3].form(0), std::string("MIN 56% to win"));  // home 0.444
+  // The basket stays through the plays after it, until the next one.
+  GameSnapshot reb = g;
+  reb.play_value = 0;
+  reb.play_athlete = "R. Gobert";
+  reb.play_type = "Defensive Rebound";
+  hold.read(reb);
+  CHECK_EQ(hold.basket, std::string("McDaniels 2"));
+  GameSnapshot ft = reb;
+  ft.play_value = 1;
+  ft.play_athlete = "A. Nesmith";
+  ft.play_type = "Free Throw - 1 of 2";
+  ft.play_team = kPacers;
+  hold.read(ft);
+  CHECK_EQ(hold.basket, std::string("Nesmith FT"));
+  CHECK_EQ(row_news(ft, hold), std::string("Nesmith FT"));
+  // The last play switch off drops the basket only.
+  RowOptions quiet;
+  quiet.last_play = false;
+  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("Nesmith 19"));
+  // Another game starts the hold over.
+  GameSnapshot other = g;
+  other.event_id = "999";
+  other.play_value = 0;
+  hold.read(other);
+  CHECK_EQ(hold.basket, std::string(""));
+  // A TV timeout as the last play: no timeout line, the row keeps its
+  // usual turns (the stopped clock shows the break).
+  GameSnapshot to = reb;
+  to.last_play = "Official TV Timeout";
+  to.play_team = 0;
+  RowLines t = row_lines(to, hold, on, true);
+  CHECK_EQ((int) t.n, 3);  // the two leaders and the win chance; the held basket went with the other game
+  for (int i = 0; i < t.n; i++)
+    for (int k = 0; k < 3; k++)
+      CHECK(t.line[i].form(k).find("imeout") == std::string::npos);
+  // The ticker doesn't say it again on a wide board: the row already does.
+  TickerOptions tick;
+  tick.clock = false;
+  CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
+  tick.row_timeout = true;
+  CHECK(status_text(to, tick, "").find("Timeout") == std::string::npos);
+  // Nor the clock, which has its own row: the records, as in a break.
+  CHECK_EQ(status_text(to, tick, ""), espn::detail::records_line(to));
+  CHECK(!espn::detail::records_line(to).empty());
+  // A basket is still the ticker's.
+  CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
+  // Football's win chance: in the ticker on a single panel, on the row only
+  // on a wide board.
+  TickerOptions ft_tick;
+  ft_tick.clock = false;
+  CHECK(status_text(fb, ft_tick, "").find("JXST 96% to win") != std::string::npos);
+  ft_tick.row_win = true;
+  CHECK(status_text(fb, ft_tick, "").find("% to win") == std::string::npos);
+  // Nor the down and distance, which the strip (or the row's text) shows;
+  // the play itself stays.
+  CHECK(!fb.down_distance.empty());
+  CHECK(status_text(fb, ft_tick, "").find(fb.down_distance) != std::string::npos);
+  ft_tick.row_down = true;
+  CHECK(status_text(fb, ft_tick, "").find(fb.down_distance) == std::string::npos);
+  if (!fb.last_play.empty())
+    CHECK(status_text(fb, ft_tick, "").find(fb.last_play.substr(0, 10)) != std::string::npos);
+  GameSnapshot team_to = reb;
+  team_to.last_play = "Timberwolves Full Timeout";
+  team_to.play_team = kWolves;
+  RowLines tt = row_lines(team_to, hold, on, true);
+  CHECK_EQ((int) tt.n, 3);  // a team timeout adds no line either
+  for (int i = 0; i < tt.n; i++)
+    CHECK(tt.line[i].form(0).find("imeout") == std::string::npos);
+  // At halftime only the series is left, and only in the playoffs.
+  CHECK_EQ((int) row_lines(g, hold, on, false).n, 0);
+  GameSnapshot po = g;
+  po.nba.team_wins = 2;
+  po.nba.opp_wins = 1;
+  RowLines half = row_lines(po, hold, on, false);
+  CHECK_EQ((int) half.n, 1);
+  CHECK_EQ(half.line[0].form(0), std::string("IND lead 2-1"));
+  // A pregame document's leaders are the season's: no scorers from it.
+  GameSnapshot pre = hoops_event("fixtures/event_nba_pre_leaders.json", 14);  // MIA at CHA
+  CHECK_EQ(pre.nba.team_scorer, std::string(""));
+
+  // Soccer keeps its latest goal as its one line.
+  GameSnapshot sc = soccer_event("fixtures/event_soccer_halftime.json", kVasco);
+  RowLines so = row_lines(sc, hold, on, false);
+  CHECK_EQ((int) so.n, 1);
+  CHECK_EQ(so.line[0].form(0), std::string("28' Lescano"));
+
 }
 
 static void test_line_score() {
@@ -8561,6 +8659,7 @@ int main() {
   test_schedule_due();
   test_no_live_rescan();
   test_game_viz();
+  test_row_text();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();

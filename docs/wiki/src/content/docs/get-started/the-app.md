@@ -97,6 +97,10 @@ Each setting has one short line saying what it does. The longer rules are on the
 
 On Android, **Display** has a **Live pictures** card after the ticker, with the device page's **Field strip**, **Win chance bar** and **Score margin** switches for the pictures a 128-wide board draws under the clock during a game. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
+:::note[Coming in the next release]
+With the next firmware, **Win chance bar** turns the win chance line under the clock on or off ("ND 84% to win") and **Score margin** does nothing, since the chart is gone. An app update renames the first to **Win chance** and drops the second.
+:::
+
 On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
 
 On iPhone, **Between games** under **Display** has a **College Top 25** switch after **Game leaders**. While the panel follows a college football or basketball team, the AP poll takes a turn with the board every 10 minutes, a page at a time (see [College Top 25](/using/top-25/)). The switch shows once the panel runs firmware with the card.

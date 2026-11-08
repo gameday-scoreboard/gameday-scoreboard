@@ -893,8 +893,6 @@ gameday:
         opponent_score: !lambda 'return x.opponent_score;'
         status_text: !lambda 'return gameday::panel_text(x.status_text);'
         clock_text: !lambda 'return gameday::panel_text(x.clock_text);'
-        down_distance: !lambda 'return gameday::panel_text(x.down_distance);'
-        is_red_zone: !lambda 'return x.is_red_zone;'
         team_color: !lambda 'return (int) x.team_color;'
         opponent_color: !lambda 'return (int) x.opponent_color;'
         team_badge: !lambda 'return x.team_badge;'
@@ -926,7 +924,6 @@ gameday:
         countdown_card: !lambda 'return x.countdown_at != 0;'
         weather_card: !lambda 'return x.wx_card;'
         viz: !lambda 'return (int) x.viz;'
-        win_pct: !lambda 'return x.win_pct;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'

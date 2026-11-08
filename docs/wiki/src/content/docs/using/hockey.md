@@ -28,6 +28,10 @@ NHL teams have no Up next list on the device page: their season schedules are to
 
 On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started showing the game. Your team's lead fills up from the middle in your color, the other team's fills down in theirs, and a white pixel marks the latest read. A three-goal lead fills the row. The chart keeps the last two games the board showed, so Live games switching away and back picks up where it left off; a restart starts over. Between periods nothing changes, and after the final the row is left to the line score and leaders cards. **Score margin** under **Live pictures** on the device page's Display tab turns it off. ESPN publishes no win chance for hockey, so there is no win chance bar.
 
+:::note[Coming in the next release]
+The score margin chart goes, and so does its switch.
+:::
+
 The board doesn't show power plays. ESPN's NHL data has no power play field, and working one out from the penalties would be wrong when penalties offset.
 
 On a single 64x64 panel the clock takes the abbreviations' place during play, and there is no room for the records.

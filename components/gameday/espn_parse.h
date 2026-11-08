@@ -84,6 +84,9 @@ struct Basketball {
   Phase phase{Phase::OTHER};
   std::string series;                  // ESPN's line: "ATL leads series 1-0"
   int8_t team_wins{-1}, opp_wins{-1};  // series wins so far, -1 outside a series
+  // Each side's points leader in this game, "Edwards 24", while it is on;
+  // "" before anyone scores or when ESPN lists none.
+  std::string team_scorer, opp_scorer;
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
@@ -276,6 +279,15 @@ struct TickerOptions {
   bool last_play{true};
   bool odds{true};
   bool leaders{true};  // each side's season leader before the start
+  // A wide board's row under the clock already says these (row_text.h), so
+  // the ticker leaves them out rather than say them twice: the win chance
+  // and the down and distance (football; the field strip, or the row's text
+  // with the strip off). row_timeout: a wide board shows no timeout line at
+  // all in basketball, the stopped clock says it, so the ticker leaves a
+  // timeout as the last play out too.
+  bool row_win{false};
+  bool row_down{false};
+  bool row_timeout{false};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -360,6 +372,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 // "KC 72% to win" for the side ESPN's model favors, "" when it gives no
 // number (football's last play only).
 std::string win_chance(const GameSnapshot &s);
+// ESPN's last play is a timeout ("Official TV Timeout", "Full timeout").
+bool timeout_play(const std::string &text);
 // Whether ESPN has said the board has no game, for no_game_text. In Favorites
 // (favs > 0) only once every favorite's team read has answered (`read` of
 // them): one answered favorite says nothing of the others.
