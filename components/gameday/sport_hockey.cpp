@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <initializer_list>
+#include <algorithm>
 
 namespace espn {
 
@@ -18,17 +18,12 @@ using detail::records_line;
 
 static bool shootout(const GameSnapshot &s) { return s.period >= 5 && !s.nhl.playoffs; }
 
-// "B. Saka" -> "Saka", as soccer's
-static std::string player_name(const std::string &short_name) {
-  size_t dot = short_name.find(". ");
-  if (dot != std::string::npos && dot <= 2)
-    return short_name.substr(dot + 2);
-  return short_name;
-}
-
-// Into one of Hockey's fixed fields, cut to fit
-template<size_t N> static void put(char (&dst)[N], const std::string &src) {
-  snprintf(dst, N, "%s", src.c_str());
+// Into one of Hockey's fixed fields, cut to fit. C strings here and in the
+// row below: std::string building costs kilobytes of flash on the panel.
+template<size_t N> static void put(char (&dst)[N], const char *src, size_t len) {
+  size_t n = len < N - 1 ? len : N - 1;
+  memcpy(dst, src, n);
+  dst[n] = '\0';
 }
 
 namespace detail {
@@ -46,7 +41,8 @@ void fill_hockey_filter(JsonObject ev) {
 // One of a side's stats ("saves", "goals") as a count, -1 when it has none
 static int stat_count(JsonObjectConst competitor, const char *name) {
   for (JsonObjectConst st : competitor["statistics"].as<JsonArrayConst>()) {
-    if (str_or_empty(st["name"]) != name)
+    const char *k = st["name"].as<const char *>();
+    if (k == nullptr || strcmp(k, name) != 0)
       continue;
     const char *v = st["displayValue"].as<const char *>();
     if (v == nullptr || *v < '0' || *v > '9')
@@ -57,15 +53,29 @@ static int stat_count(JsonObjectConst competitor, const char *name) {
   return -1;
 }
 
-// The scorer from a goal's text, "Connor McDavid (5) Wrist Shot, assists: ..."
-// -> "McDavid". A goal ESPN has not named yet starts ", assists:".
-static std::string scorer_from_text(const std::string &text) {
-  size_t paren = text.find(" (");
-  if (paren == std::string::npos || paren == 0 || text.rfind(",", 0) == 0)
-    return "";
-  std::string name = text.substr(0, paren);
-  size_t space = name.rfind(' ');
-  return space == std::string::npos ? name : name.substr(space + 1);
+// The scorer: ESPN's short name without the initial ("C. McDavid" ->
+// "McDavid", as soccer's), else the last word before " (" in the goal's text
+// ("Connor McDavid (5) Wrist Shot, assists: ..."). A goal ESPN has not named
+// yet starts ", assists:" and gives none.
+static void scorer(const std::string &short_name, const std::string &text, char (&out)[sizeof(Hockey::goal_name)]) {
+  const char *n = short_name.c_str();
+  const char *dot = strstr(n, ". ");
+  if (dot != nullptr && dot - n <= 2)
+    n = dot + 2;
+  if (*n) {
+    put(out, n, strlen(n));
+    return;
+  }
+  const char *t = text.c_str();
+  const char *paren = strstr(t, " (");
+  if (paren == nullptr || paren == t || *t == ',') {
+    out[0] = '\0';
+    return;
+  }
+  const char *start = paren;
+  while (start > t && start[-1] != ' ')
+    start--;
+  put(out, start, paren - start);
 }
 
 void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
@@ -81,7 +91,8 @@ void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
   // goals. ESPN's goals stat leaves out the shootout, unlike its score.
   int saves[2] = {-1, -1}, goals[2] = {-1, -1};
   for (JsonObjectConst c : comp["competitors"].as<JsonArrayConst>()) {
-    int i = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id ? 0 : 1;
+    const char *id = c["id"].as<const char *>();
+    int i = id != nullptr && (uint32_t) atol(id) == s.team_id ? 0 : 1;
     saves[i] = stat_count(c, "saves");
     goals[i] = stat_count(c, "goals");
   }
@@ -100,10 +111,10 @@ void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
   h.goal_period = (uint8_t) (s.period > 0 && s.period < 255 ? s.period : 0);
   // The clock stops after a goal until the faceoff, so the read's clock is
   // the goal's.
-  if (s.display_clock.find(':') != std::string::npos && s.display_clock.size() <= 5)
-    put(h.goal_clock, s.display_clock);
-  std::string name = player_name(s.play_athlete);
-  put(h.goal_name, name.empty() ? scorer_from_text(s.last_play) : name);
+  const std::string &clock = s.display_clock;
+  if (clock.find(':') != std::string::npos && clock.size() < sizeof(h.goal_clock))
+    put(h.goal_clock, clock.c_str(), clock.size());
+  scorer(s.play_athlete, s.last_play, h.goal_name);
 }
 
 }  // namespace detail
@@ -113,21 +124,22 @@ static bool intermission(const GameSnapshot &s) {
   return s.state == GameState::IN && s.short_detail.rfind("End of", 0) == 0;
 }
 
+// "1st", "OT", "SO", or in the playoffs "2OT", "3OT"; "" before the start
+static const char *period_word(char (&buf)[16], int period, bool playoffs) {
+  static const char *const kNames[] = {"", "1st", "2nd", "3rd", "OT"};
+  if (period < 1)
+    return "";
+  if (period <= 4)
+    return kNames[period];
+  if (!playoffs)
+    return "SO";
+  snprintf(buf, sizeof(buf), "%dOT", period - 3);
+  return buf;
+}
+
 static std::string period_name(int period, bool playoffs) {
-  switch (period) {
-    case 1:
-      return "1st";
-    case 2:
-      return "2nd";
-    case 3:
-      return "3rd";
-    case 4:
-      return "OT";
-    default:
-      if (period < 1)
-        return "";
-      return period >= 5 && !playoffs ? "SO" : std::to_string(period - 3) + "OT";  // playoffs: 2OT, 3OT
-  }
+  char buf[16];
+  return period_word(buf, period, playoffs);
 }
 
 // "12:34 2nd", "3:10 OT", "SO", or ESPN's own words between periods ("End of 1st")
@@ -235,39 +247,36 @@ std::string hockey_situation(const GameSnapshot &s, size_t max) {
   if (!s.valid || s.state != GameState::IN || intermission(s))
     return "";
   const Hockey &h = s.nhl;
-  std::string sog;
+  char sog[24] = "";
   if (h.team_shots >= 0 && h.opp_shots >= 0)
-    sog = "SOG " + std::to_string(h.team_shots) + "-" + std::to_string(h.opp_shots);
-  if (sog.size() > max)
-    sog.clear();
+    snprintf(sog, sizeof(sog), "SOG %d-%d", h.team_shots, h.opp_shots);
+  size_t sl = strlen(sog);
+  if (sl > max)
+    sog[0] = '\0', sl = 0;
   if (h.goal_score == 0)
     return sog;
   // The goal's period, its clock and its scorer; the period gives way first
   // when it is the one on the clock row above, else the clock does.
-  const std::string per = period_name(h.goal_period, h.playoffs);
-  const std::string name = h.goal_name[0] ? h.goal_name : "Goal";
-  const std::string clock = h.goal_clock;
+  char pbuf[16];
+  const char *per = period_word(pbuf, h.goal_period, h.playoffs);
+  const char *name = h.goal_name[0] ? h.goal_name : "Goal";
+  const char *clock = h.goal_clock;
   const bool same = h.goal_period == s.period;
-  auto join = [](std::initializer_list<const std::string *> parts) {
-    std::string t;
-    for (const std::string *p : parts) {
-      if (p->empty())
-        continue;
-      if (!t.empty())
-        t += ' ';
-      t += *p;
-    }
-    return t;
-  };
-  const std::string tries[] = {join({&per, &clock, &name}), same ? join({&clock, &name}) : join({&per, &name}),
-                               name};
-  const size_t room = sog.empty() ? max : max >= sog.size() + 2 ? max - sog.size() - 2 : 0;
-  for (const std::string &t : tries)
-    if (t.size() <= room)
-      return sog.empty() ? t : sog + "  " + t;
-  if (!sog.empty())
+  const char *tries[3][3] = {{per, clock, name}, {same ? "" : per, same ? clock : "", name}, {"", "", name}};
+  const size_t room = sl == 0 ? max : max >= sl + 2 ? max - sl - 2 : 0;
+  char t[sizeof(sog) + 2 + sizeof(pbuf) + sizeof(h.goal_clock) + sizeof(h.goal_name) + 2];
+  for (const auto &parts : tries) {
+    size_t n = sl == 0 ? 0 : (size_t) snprintf(t, sizeof(t), "%s  ", sog);
+    const size_t start = n;
+    for (const char *p : parts)
+      if (*p)
+        n += snprintf(t + n, sizeof(t) - n, n > start ? " %s" : "%s", p);
+    if (n - start <= room)
+      return t;
+  }
+  if (sl > 0)
     return sog;
-  return name.substr(0, max);
+  return std::string(name, std::min(strlen(name), max));
 }
 
 void hockey_hold_goal(const GameSnapshot &prev, GameSnapshot &cur) {
