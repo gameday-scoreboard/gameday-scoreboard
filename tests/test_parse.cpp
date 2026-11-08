@@ -3342,6 +3342,175 @@ static void test_nhl_pre_post() {
   CHECK(!parse_event_str("{nope", Sport::HOCKEY, kJets, x));
 }
 
+// One edit to a fixture's text, checked to apply
+static std::string swapped(std::string json, const std::string &from, const std::string &to) {
+  size_t at = json.find(from);
+  CHECK(at != std::string::npos);
+  if (at != std::string::npos)
+    json.replace(at, from.size(), to);
+  return json;
+}
+
+// Hockey's row under the clock on a 128-wide board: shots on goal and the
+// latest goal, held from read to read.
+static void test_nhl_row() {
+  // Shots are the other goalie's saves plus the side's goals: COL @ WPG,
+  // WPG's goalie 16 saves, COL's 6, no goals yet.
+  GameSnapshot g = nhl_event("fixtures/event_nhl_live.json", kJets);
+  CHECK_EQ((int) g.nhl.team_shots, 6);
+  CHECK_EQ((int) g.nhl.opp_shots, 16);
+  CHECK_EQ((int) g.nhl.goal_score, 0);  // the last play is a penalty
+  CHECK_EQ(hockey_situation(g), std::string("SOG 6-16"));
+  GameSnapshot c = nhl_event("fixtures/event_nhl_live.json", kAvalanche);
+  CHECK_EQ(hockey_situation(c), std::string("SOG 16-6"));  // ours first, as the scores
+  // Between periods the row is the line score's and the leaders' (PIT 4
+  // shots, WSH 14 after the 1st: ESPN's .750 and .857 save percentages agree)
+  GameSnapshot e = nhl_event("fixtures/event_nhl_end.json", kPenguins);
+  CHECK_EQ((int) e.nhl.team_shots, 4);
+  CHECK_EQ((int) e.nhl.opp_shots, 14);
+  CHECK_EQ(hockey_situation(e), std::string(""));
+  // After the final, nothing
+  GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
+  CHECK_EQ((int) f.nhl.team_shots, 27);
+  CHECK_EQ((int) f.nhl.opp_shots, 30);
+  CHECK_EQ(hockey_situation(f), std::string(""));
+  // A shootout's attempts stay out: ESPN's goals stat has CAR on 4 though
+  // its score says 5 (PIT 28 shots, CAR 44: .857 and .909)
+  GameSnapshot so = nhl_event("fixtures/event_nhl_final_so.json", kPenguins);
+  CHECK_EQ((int) so.nhl.team_shots, 28);
+  CHECK_EQ((int) so.nhl.opp_shots, 44);
+  GameSnapshot ot2 = nhl_event("fixtures/event_nhl_final_2ot.json", kHurricanes);
+  CHECK_EQ((int) ot2.nhl.team_shots, 49);
+  CHECK_EQ((int) ot2.nhl.opp_shots, 39);
+  // No stats in the document: no shots line
+  {
+    std::string bare = swapped(slurp("fixtures/event_nhl_live.json"), "\"name\":\"saves\"", "\"name\":\"x\"");
+    GameSnapshot b;
+    CHECK(parse_event_str(bare, Sport::HOCKEY, kJets, b, root_id(bare)));
+    CHECK_EQ((int) b.nhl.opp_shots, -1);
+    CHECK_EQ(hockey_situation(b), std::string(""));
+  }
+
+  // A goal: COL scores at 3:21 of the 1st. ESPN's text names the scorer
+  // first; athletesInvolved, when it comes, wins.
+  const std::string penalty =
+      R"j({"id":"401892455000004540","type":{"id":"109","text":"Delaying Game - Puck over Glass","abbreviation":"Delaying Game-Puck over glass","penaltyMinutes":"2","penaltyType":"Minor"},"text":"Delaying Game - Puck over glass served by Fedor Svechkov","scoreValue":0,"team":{"id":"17"}})j";
+  const std::string goal =
+      R"j({"id":"401892455000004600","type":{"id":"505","text":"Goal"},"text":"Nathan MacKinnon (4) Wrist Shot, assists: Cale Makar (6)","scoreValue":1,"team":{"id":"17"}})j";
+  std::string doc = slurp("fixtures/event_nhl_live.json");
+  // WPG is listed first, so COL's is the second score
+  size_t first = doc.find("\"score\":\"0\"");
+  size_t second = doc.find("\"score\":\"0\"", first + 1);
+  CHECK(second != std::string::npos);
+  if (second != std::string::npos)
+    doc.replace(second, 11, "\"score\":\"1\"");
+  std::string scored = swapped(doc, penalty, goal);
+  GameSnapshot gl;
+  CHECK(parse_event_str(scored, Sport::HOCKEY, kJets, gl, root_id(scored)));
+  CHECK_EQ(gl.opp_score, 1);
+  CHECK_EQ((int) gl.nhl.goal_score, 1);
+  CHECK_EQ((int) gl.nhl.goal_period, 1);
+  CHECK_EQ(gl.nhl.goal_clock, std::string("3:21"));
+  CHECK_EQ(gl.nhl.goal_name, std::string("MacKinnon"));
+  CHECK_EQ(hockey_situation(gl), std::string("SOG 6-16  3:21 MacKinnon"));
+  {
+    std::string named = swapped(scored, R"j("scoreValue":1,)j",
+                                R"j("scoreValue":1,"athletesInvolved":[{"shortName":"N. MacKinnon"}],)j");
+    GameSnapshot n;
+    CHECK(parse_event_str(named, Sport::HOCKEY, kJets, n, root_id(named)));
+    CHECK_EQ(n.nhl.goal_name, std::string("MacKinnon"));
+  }
+  // Seen live: the goal before ESPN had its scorer
+  {
+    std::string nameless = swapped(scored, "Nathan MacKinnon (4) Wrist Shot, assists: Cale Makar (6)",
+                                   ", assists: Cale Makar (6)");
+    GameSnapshot n;
+    CHECK(parse_event_str(nameless, Sport::HOCKEY, kJets, n, root_id(nameless)));
+    CHECK_EQ(n.nhl.goal_name, std::string(""));
+    CHECK_EQ(hockey_situation(n), std::string("SOG 6-16  1st 3:21 Goal"));
+    // The next read names him, and keeps the first read's clock
+    GameSnapshot later = gl;
+    later.display_clock = "2:58";
+    later.nhl.goal_clock = "2:58";
+    hockey_hold_goal(n, later);
+    CHECK_EQ(later.nhl.goal_clock, std::string("3:21"));
+    CHECK_EQ(later.nhl.goal_name, std::string("MacKinnon"));
+    GameSnapshot still = n;
+    hockey_hold_goal(gl, still);
+    CHECK_EQ(still.nhl.goal_name, std::string("MacKinnon"));
+  }
+
+  // Held: the next play is a faceoff, and the row keeps the goal
+  GameSnapshot next = g;  // the penalty document, with COL's goal on the score
+  next.opp_score = 1;
+  next.display_clock = "1:10";
+  CHECK_EQ((int) next.nhl.goal_score, 0);
+  hockey_hold_goal(gl, next);
+  CHECK_EQ((int) next.nhl.goal_score, 1);
+  CHECK_EQ(next.nhl.goal_name, std::string("MacKinnon"));
+  CHECK_EQ(hockey_situation(next), std::string("SOG 6-16  3:21 MacKinnon"));
+  // Into the 2nd: the period stays with the goal, the clock gives way
+  GameSnapshot p2 = next;
+  p2.period = 2;
+  p2.display_clock = "18:40";
+  p2.short_detail = "18:40 - 2nd";
+  p2.nhl.goal_score = 0;
+  hockey_hold_goal(next, p2);
+  CHECK_EQ(hockey_situation(p2), std::string("SOG 6-16  1st MacKinnon"));
+  p2.nhl.team_shots = 21;
+  p2.nhl.opp_shots = 19;
+  CHECK_EQ(hockey_situation(p2), std::string("SOG 21-19  1st MacKinnon"));
+  // In the goal's own period the period gives way first
+  GameSnapshot same = p2;
+  same.nhl.goal_period = 2;
+  same.nhl.goal_clock = "12:04";
+  CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  MacKinnon"));
+  same.nhl.goal_name = "Ekman-Larsson";
+  CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  Ekman-Larsson"));
+  same.nhl.goal_name = "Kane";
+  CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  2nd 12:04 Kane"));
+  CHECK_EQ(hockey_situation(same, 12), std::string("SOG 21-19"));  // no room: the shots stay
+  same.nhl.team_shots = -1;
+  CHECK_EQ(hockey_situation(same), std::string("2nd 12:04 Kane"));
+  // A goal taken back on review: the score falls below it and it drops
+  GameSnapshot back = g;
+  hockey_hold_goal(gl, back);
+  CHECK_EQ((int) back.nhl.goal_score, 0);
+  CHECK_EQ(hockey_situation(back), std::string("SOG 6-16"));
+  // Another game, or no game before: nothing to hold
+  GameSnapshot other = g;
+  other.opp_score = 1;
+  other.event_id = "401892456";
+  hockey_hold_goal(gl, other);
+  CHECK_EQ((int) other.nhl.goal_score, 0);
+  GameSnapshot none;
+  GameSnapshot fresh = next;
+  fresh.nhl.goal_score = 0;
+  hockey_hold_goal(none, fresh);
+  CHECK_EQ((int) fresh.nhl.goal_score, 0);
+  // A newer goal replaces the held one
+  GameSnapshot tie = gl;
+  tie.team_score = 1;
+  tie.nhl.goal_score = 2;
+  tie.nhl.goal_name = "Connor";
+  tie.nhl.goal_clock = "0:45";
+  hockey_hold_goal(gl, tie);
+  CHECK_EQ(tie.nhl.goal_name, std::string("Connor"));
+  CHECK_EQ(tie.nhl.goal_clock, std::string("0:45"));
+  // A shootout's goals don't move the held one
+  {
+    // The event's own status is the document's last one (the competition's comes first)
+    std::string shoot = scored;
+    size_t at = shoot.rfind("\"period\":1,");
+    CHECK(at != std::string::npos);
+    if (at != std::string::npos)
+      shoot.replace(at, 11, "\"period\":5,");
+    GameSnapshot sh;
+    CHECK(parse_event_str(shoot, Sport::HOCKEY, kJets, sh, root_id(shoot)));
+    CHECK_EQ((int) sh.nhl.goal_score, 0);
+  }
+}
+
 static void test_nhl_splash() {
   GameSnapshot prev = nhl_event("fixtures/event_nhl_live.json", kJets);
   auto after = [&](int us, int them) {
@@ -8587,6 +8756,7 @@ int main() {
   test_nhl_team();
   test_nhl_live();
   test_nhl_pre_post();
+  test_nhl_row();
   test_pregame_extras();
   test_nhl_splash();
   test_nba_urls();

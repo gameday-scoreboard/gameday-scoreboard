@@ -512,6 +512,14 @@ script:
             lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
             lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
           }
+          // Hockey (sport 3): shots on goal and the latest goal, "SOG 12-16
+          // 12:04 McDavid". It has no timeout pips, so the line has the
+          // row's whole width (the lambda below places it).
+          if (W >= 128 && sport == 3 && game_state == "IN" && !situation.empty()) {
+            lv_label_set_text(id(tt_down_lbl), situation.c_str());
+            lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
+            lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
+          }
           // Baseball (sport 1) during a half inning: bases lit gold (red with
           // the bases loaded), the count and outs beside them on a wide
           // display, out dots on a single panel. Timeout pips are football's.
@@ -634,8 +642,9 @@ script:
           const bool winbar = wide && live && (sport == 0 || sport == 2) && (viz & ::espn::VIZ_WINBAR) != 0 &&
                               win_pct >= 1 && win_pct <= 99;
           // A playoff series ("NY lead 2-1") has the row in a basketball
-          // game (the lambda above), so the margin chart gives way to it.
-          const bool series = sport == 2 && live && !situation.empty();
+          // game, and the shots and goal line in a hockey game (the lambda
+          // above), so the margin chart gives way to them.
+          const bool series = (sport == 2 || sport == 3) && live && !situation.empty();
           const bool spark = wide && !field && !series && (viz & ::espn::VIZ_SPARK) != 0;
           lv_obj_t *bars[3] = {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)};
           if (winbar) {
@@ -740,10 +749,12 @@ script:
           if (!drawn)
             lv_obj_add_flag(cv, LV_OBJ_FLAG_HIDDEN);
           if (!field && wide) {
-            // The situation row as the layout had it.
+            // The situation row as the layout had it, between the timeout
+            // pips; hockey has none, so its line spans the board.
+            const bool full = sport == 3;
             lv_obj_set_style_text_align(id(tt_down_lbl), LV_TEXT_ALIGN_CENTER, 0);
-            lv_obj_set_pos(id(tt_down_lbl), 32, 48);
-            lv_obj_set_width(id(tt_down_lbl), W - 64);
+            lv_obj_set_pos(id(tt_down_lbl), full ? 0 : 32, 48);
+            lv_obj_set_width(id(tt_down_lbl), full ? W : W - 64);
           }
       - lambda: |-
           // The kickoff forecast before the start of an outdoor game

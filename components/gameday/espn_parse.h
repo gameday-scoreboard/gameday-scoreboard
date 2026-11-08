@@ -91,6 +91,16 @@ struct Basketball {
 struct Hockey {
   bool playoffs{false};  // season type 3
   std::string series;    // "CAR leads series 2-0", playoffs
+  // Shots on goal: the other goalie's saves plus the side's goals, so a
+  // shootout's attempts stay out. -1 when ESPN sends no stats.
+  int16_t team_shots{-1}, opp_shots{-1};
+  // The latest goal. ESPN's situation keeps only the newest play, so the
+  // component holds it from read to read (hockey_hold_goal) until the next.
+  // goal_score is both sides' goals with it in, 0 for none.
+  uint8_t goal_period{0};
+  uint16_t goal_score{0};
+  std::string goal_clock;  // "12:04"
+  std::string goal_name;   // "McDavid"
 };
 
 // One scoreboard event, resolved to "us" and "them".
@@ -452,6 +462,14 @@ bool baseball_home_run(const GameSnapshot &s);
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);
 Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// The 128-wide row under the clock while the puck is in play, at most `max`
+// characters: shots on goal, ours first, then the latest goal
+// ("SOG 12-16  12:04 McDavid", "SOG 30-25  2nd Kane"). "" between periods,
+// after the final, and when ESPN has neither.
+std::string hockey_situation(const GameSnapshot &s, size_t max = 25);
+// Keeps the latest goal of `prev` on `cur` when `cur` is a later read of the
+// same game whose last play is no longer that goal.
+void hockey_hold_goal(const GameSnapshot &prev, GameSnapshot &cur);
 // A W-L-OTL record for the label under a logo (7 characters wide): as is when
 // it fits, else the NHL points, two a win and one an overtime loss ("70 pts").
 std::string hockey_board_record(const std::string &wlo);

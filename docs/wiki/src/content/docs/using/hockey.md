@@ -28,6 +28,10 @@ NHL teams have no Up next list on the device page: their season schedules are to
 
 On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started showing the game. Your team's lead fills up from the middle in your color, the other team's fills down in theirs, and a white pixel marks the latest read. A three-goal lead fills the row. The chart keeps the last two games the board showed, so Live games switching away and back picks up where it left off; a restart starts over. Between periods nothing changes, and after the final the row is left to the line score and leaders cards. **Score margin** under **Live pictures** on the device page's Display tab turns it off. ESPN publishes no win chance for hockey, so there is no win chance bar.
 
+:::note[Coming in the next release]
+The score margin chart goes. In its place the row under the clock spells out **shots on goal** and **the latest goal**, like "SOG 12-16  12:04 McDavid": your team's shots first, the way the scores sit, then when the last goal went in and who scored it. The goal's period shows when there's room, like "SOG 21-19  2nd 12:04 Kane". When a name leaves no room, a goal in this period drops the period (the clock row above says it) and a goal from an earlier period keeps its period and drops the clock, like "1st McDavid". The goal stays on the row until the next one; a goal taken back on review comes off. Shots come from ESPN's saves and goals, so shootout attempts don't count. Between periods and after the final the row is left to the line score and leaders cards, as before. A panel that starts mid-game shows the shots right away and the goal from the next one on.
+:::
+
 The board doesn't show power plays. ESPN's NHL data has no power play field, and working one out from the penalties would be wrong when penalties offset.
 
 On a single 64x64 panel the clock takes the abbreviations' place during play, and there is no room for the records.
