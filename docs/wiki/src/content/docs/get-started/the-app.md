@@ -61,6 +61,11 @@ Under **Night mode until**, **Turn on for tonight** puts the panel back at its n
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
 
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
+
+:::note[Coming in the next release]
+On iPhone, each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
+:::
+
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
 
 :::note[Coming in the next release]
