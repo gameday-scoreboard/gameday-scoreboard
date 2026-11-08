@@ -43,6 +43,7 @@ through `update_important` in the panel's state.
 ### 🐛 Fixes
 
 - 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation in its team color instead of an empty space
+- ⭐ A favorite you add shows within a few seconds, even when you take another favorite out right after or switch modes just before, instead of leaving the board empty for about a minute
 
 ## v2026.11.1
 

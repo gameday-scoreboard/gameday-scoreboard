@@ -1278,8 +1278,7 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
       // six-hour refresh.
       bool missing = !e.sched.valid || e.stale ||
                      (!e.sched.event_id.empty() && e.game.event_id != e.sched.event_id);
-      uint32_t age = now - e.fetched_ms;
-      if ((missing && (e.fetched_ms == 0 || age >= RETRY_INTERVAL)) || (!missing && age >= SCHEDULE_INTERVAL)) {
+      if (::espn::fav_read_due(missing, e.fetched_ms, now, RETRY_INTERVAL, SCHEDULE_INTERVAL)) {
         refresh = (int) i;
         break;
       }
@@ -3565,6 +3564,14 @@ void GamedayComponent::run_job_() {
     ::espn::PendingList *pending = j.want_finals ? &j.pending : nullptr;
     j.scan_ok = true;
     for (League l : j.scan_leagues) {
+      // The owner changed what the board follows (a mode, a team, the
+      // favorites): the main loop throws this scan away, so stop at the next
+      // league instead of reading the rest first. Nine leagues take about
+      // 9 s, and the new pick used to wait behind every one of them.
+      if (j.generation != this->generation_) {
+        ESP_LOGD(TAG, "Scan stopped at %s: the board follows something else now", ::espn::league_key(l));
+        return;
+      }
       // Favorites take over: this league's favorites, for their next kickoff.
       std::vector<uint32_t> watch;
       for (const auto &f : j.fav_watch)
@@ -3602,6 +3609,8 @@ void GamedayComponent::run_job_() {
       int64_t now = (int64_t) this->time_->timestamp_now();
       j.lookahead = 2;
       for (int d = 0; d < LOOKAHEAD_DAYS; d++) {
+        if (j.generation != this->generation_)
+          return;  // thrown away by the main loop, like the scan above
         Schedule next;
         int found = this->fetch_team_day_(j.team, j.schedule.group, now + (int64_t) d * 86400, j.done_event, next);
         if (found < 0) {
@@ -3679,6 +3688,17 @@ void GamedayComponent::apply_job_() {
   }
   if (j.generation != this->generation_) {
     ESP_LOGD(TAG, "Discarding a fetch for the previous team");
+    // A favorite's read took its stamps when it started (start_fav_job_).
+    // The list was rebuilt since and kept the entry, stamps and all, so give
+    // them back: the team is read again now, not after the retry wait.
+    if (j.fav_index >= 0 && j.team != nullptr) {
+      for (auto &e : this->fav_) {
+        if (e.team != j.team)
+          continue;
+        e.fetched_ms = ::espn::fav_stamp_after_drop(e.fetched_ms, j.need_schedule);
+        e.side_ms = ::espn::fav_stamp_after_drop(e.side_ms, j.fav_side);
+      }
+    }
     return;
   }
   uint32_t now = millis();

@@ -33,6 +33,24 @@ struct FavGame {
   bool in_list{true};
 };
 
+// Whether a favorite's team read is due. A favorite with no game yet (never
+// read, or its read failed) tries again after retry_ms; one with its game
+// re-reads every refresh_ms. fetched_ms is stamped when a read starts, 0 for
+// never.
+inline bool fav_read_due(bool missing, uint32_t fetched_ms, uint32_t now, uint32_t retry_ms, uint32_t refresh_ms) {
+  uint32_t age = now - fetched_ms;
+  return missing ? (fetched_ms == 0 || age >= retry_ms) : age >= refresh_ms;
+}
+
+// The stamp a favorite keeps when the answer to its read is thrown away,
+// because the owner changed the favorites or the mode while it ran. That read
+// never landed, so it doesn't count as a try: without this, adding a team and
+// removing another a moment later left the new team on the retry wait, a
+// full minute before its game showed.
+inline uint32_t fav_stamp_after_drop(uint32_t stamp, bool stamped_by_dropped_read) {
+  return stamped_by_dropped_read ? 0 : stamp;
+}
+
 struct FavRules {
   int64_t lockon_s{15 * 60};  // a game takes the panel this long before kickoff
   int64_t release_s{30};      // and keeps it this long after the final
