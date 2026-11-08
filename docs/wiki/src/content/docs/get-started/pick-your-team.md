@@ -51,7 +51,7 @@ Your browser reads this list from ESPN, so the tab needs your phone or computer 
 Search on **On now** finds a team that isn't playing today. When nothing on today's list matches what you typed, the teams that do match show under a **Teams** heading, with their league, and a tap adds one. Today's games still come first when one matches.
 
 :::note[Coming in the next release]
-On the device page, each league tab starts with that league's games today, the same way **On now** shows them, with all of its teams under them. **Final** and **Postponed or canceled** start folded; tap the heading to open one. A league with no games today shows just its teams. The iPhone app's league tabs do the same. On Android they still list only the teams.
+On the device page, each league tab starts with that league's games today, the same way **On now** shows them, with all of its teams under them. **Final** and **Postponed or canceled** start folded; tap the heading to open one. A league with no games today shows just its teams. The app's league tabs do the same.
 :::
 
 ## Changes take effect right away

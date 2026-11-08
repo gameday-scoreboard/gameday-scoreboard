@@ -145,6 +145,7 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | `event_nhl_pre.json` | 401892456 EDM @ ANA, pre-game with odds and O/U |
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |
 | `event_nhl_final_2ot.json` | 401869781 OTT @ CAR, 2026 playoffs, Final/2OT 3-2 CAR, series line (recorded after the fact) |
+| `event_nhl_goal.json` | 401892674 FLA @ BOS, 2026-11-08, 3:55 left in the 1st, 3-0 BOS, a goal as the last play (Geekie, with athletesInvolved; no period or clock on the play) |
 | `event_nhl_hattrick_final.json` | 401892640 DAL @ WSH, 2026-11-03, Final 6-5 DAL, Robertson's hat trick: the game's goal leaders list every scorer with the player's id and count (recorded 2026-11-08, after the fact). test_celeb_hockey.cpp puts it back in the 3rd period with his count at 1 to 4 for the reads around his third goal |
 | `team_nhl_edm.json` | `.../hockey/nhl/teams/6` (next event is the EDM @ ANA game above) |
 

@@ -61,9 +61,9 @@ inline CelebPlan big_play_hockey(const GameSnapshot &prev, const GameSnapshot &c
     const uint32_t side = ours ? cur.team_id : cur.opp_id;
     if (cur.play_type != "Goal" || cur.play_team != side)
       return none;
-    if (cur.nhl.goal_strength == "shorthanded")
+    if (cur.nhl.goal_strength == Hockey::Strength::SHORTHANDED)
       p.kind = CelebKind::SHORTHANDED;
-    else if (cur.nhl.goal_strength == "power-play")
+    else if (cur.nhl.goal_strength == Hockey::Strength::POWER_PLAY)
       p.kind = CelebKind::POWER_PLAY;
     else
       return none;
