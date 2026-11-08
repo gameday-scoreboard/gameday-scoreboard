@@ -271,7 +271,10 @@ GROUND = 60  # the feet's row
 
 def field(c, roar=0.0, seed=0):
     """The stands (rows of dim fans, a few in the team's colors, lighting up
-    as the crowd roars), the wall, the grass with leaning yard lines."""
+    as the crowd roars), the wall, the grass with leaning yard lines. The
+    roaring fans change every third frame: a sparkle that changes every
+    frame costs as many bytes again as the players."""
+    seed //= 3
     for y in range(26, HORIZON - 1, 3):
         for x in range((y // 3) % 2, c.w, 2):
             h = (x * 7919 + y * 104729) % 97
