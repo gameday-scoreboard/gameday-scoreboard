@@ -362,12 +362,16 @@ def late_goal(w):
             # up one after another, in the team's colors.
             cx, cy = w / 2, (37 if w >= 128 else 46)
             rx, ry = (30, 14) if w >= 128 else (24, 10)
-            for k in range(24):
-                a = k / 24 * 2 * math.pi - math.pi / 2
-                lit = (f - 24) * 2 % 24
-                col = IDX["team"] if (k - lit) % 24 < 4 else IDX["team_shade"]
+            ticks = 36
+            for k in range(ticks):
+                a = k / ticks * 2 * math.pi - math.pi / 2
+                lead = (f - 24) * 3 % ticks
+                behind = (lead - k) % ticks
+                col = IDX["alt"] if behind == 0 else IDX["team"] if behind < 9 else IDX["team_shade"]
                 if f >= 24:
                     c.put(cx + math.cos(a) * rx, cy + math.sin(a) * ry, col)
+                    if behind < 9:
+                        c.put(cx + math.cos(a) * (rx + 1), cy + math.sin(a) * (ry + 1), col)
         out.append(c)
     return out
 
