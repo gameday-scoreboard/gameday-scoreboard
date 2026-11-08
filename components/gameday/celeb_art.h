@@ -1,11 +1,13 @@
-// Frame-by-frame pixel art for the celebrations (bench pilot: the
-// interception). The frames are drawn as PNGs at 128x64 and packed by
-// tools/celeb_art/pack.py into celeb_art_intercept.h: 4-bit palette
+// Frame-by-frame pixel art for the big plays (a dunk, an alley-oop). Each
+// play's frames are drawn as PNGs at 128x64 and at 64x64 by a
+// tools/celeb_art/<sport>_frames.py script and packed by
+// tools/celeb_art/pack.py into celeb_art_<play>_<width>.h: 4-bit palette
 // indexes, run-length coded, each frame after the first only the pixels
 // that changed. The palette has slots for the team's colors, so one set of
-// frames plays in any team's colors. The arrays are const, so they stay in
-// flash; the only RAM is the 8 KB index buffer below, inside the
-// Celebration that already lives in PSRAM.
+// frames plays in any team's colors. celeb_art_index.h picks the set for
+// the board's width. The arrays are const, so they stay in flash; the only
+// RAM is the 8 KB index buffer below, inside the Celebration that already
+// lives in PSRAM.
 #pragma once
 #include <cstdint>
 #include <cstring>
