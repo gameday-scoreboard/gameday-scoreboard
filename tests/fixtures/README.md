@@ -144,6 +144,7 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | `event_nhl_pre.json` | 401892456 EDM @ ANA, pre-game with odds and O/U |
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |
 | `event_nhl_final_2ot.json` | 401869781 OTT @ CAR, 2026 playoffs, Final/2OT 3-2 CAR, series line (recorded after the fact) |
+| `event_nhl_goal.json` | 401892674 FLA @ BOS, 2026-11-08, 3:55 left in the 1st, 3-0 BOS, a goal as the last play (Geekie, with athletesInvolved; no period or clock on the play) |
 | `team_nhl_edm.json` | `.../hockey/nhl/teams/6` (next event is the EDM @ ANA game above) |
 
 `football_golden.txt` is written by the host tests (`GOLDEN_WRITE=1`) and

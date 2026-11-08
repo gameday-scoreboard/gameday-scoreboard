@@ -1395,6 +1395,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::RowHold row_hold_;
   std::string row_news_;
   uint32_t row_news_n_{0};
+  // Hockey's latest goal per game, for the row under the clock: four games,
+  // about 200 bytes (sport_hockey.cpp).
+  ::espn::GoalHolds goal_holds_;
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};
