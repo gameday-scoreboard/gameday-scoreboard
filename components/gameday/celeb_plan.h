@@ -80,7 +80,7 @@ constexpr uint32_t kCelebThreeMs = 3000;
 constexpr uint32_t kCelebWinMs = 10000;
 // The big plays: each art's frames / fps, so the last frame holds to the end.
 constexpr uint32_t kCelebDunkMs = 2500;
-constexpr uint32_t kCelebAlleyOopMs = 3000;
+constexpr uint32_t kCelebAlleyOopMs = 3500;
 
 // Dark team colors vanish on an LED panel: lift the brightest channel to 0xE0.
 inline uint32_t celeb_bright(uint32_t c) {

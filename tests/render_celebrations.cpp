@@ -42,6 +42,8 @@ int main(int argc, char **argv) {
       {"win", CelebKind::WIN, "KC WINS!", "24-17", 0xE31837},
       {"flash", CelebKind::FLASH, "EXTRA POINT!", "", 0xE31837},
       {"muted", CelebKind::MUTED, "BUF TOUCHDOWN", "", 0x00338D},
+      {"dunk", CelebKind::DUNK, "DUNK!", "", 0xC4CED4},
+      {"alley-oop", CelebKind::ALLEY_OOP, "ALLEY-OOP!", "", 0xE03A3E},
   };
   std::vector<uint16_t> buf((size_t) w * h);
   for (const Show &s : shows) {
@@ -64,6 +66,8 @@ int main(int argc, char **argv) {
       case CelebKind::HAT_TRICK: p.duration_ms = kCelebBraceMs; break;
       case CelebKind::PENALTY: p.duration_ms = kCelebPenaltyMs; break;
       case CelebKind::LATE_GOAL: p.duration_ms = kCelebLateGoalMs; break;
+      case CelebKind::DUNK: p.duration_ms = kCelebDunkMs; break;
+      case CelebKind::ALLEY_OOP: p.duration_ms = kCelebAlleyOopMs; break;
       default: p.duration_ms = kCelebFlashMs; break;
     }
     Celebration c;

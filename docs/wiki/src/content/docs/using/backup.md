@@ -35,7 +35,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - The Live games leagues, **Switch every** and **Pick the best game**
 - **Take over**, **After the final** and **Two games at once**
 - Every ticker switch and **Opponent scores too**
-- **Celebrations** (Off, Subtle or Full)
+- **Celebrations** (Off, Subtle or Full) and **Big plays**
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
 - Game-day wake, its **Turns on** time and **After the game**

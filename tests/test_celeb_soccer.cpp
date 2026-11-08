@@ -343,6 +343,30 @@ static void test_shows() {
       CHECK_EQ((int) art->w, w);
       CHECK_EQ((int) art->h, 64);
       CHECK_EQ((int) art->frames, 60);
+      // The show lasts the frames, and each frame's runs cover the board
+      // exactly; the first draws every pixel.
+      const uint32_t ms = (uint32_t) art->frames * 1000 / art->fps;
+      const uint32_t want_ms = k == CelebKind::PENALTY     ? kCelebPenaltyMs
+                            : k == CelebKind::LATE_GOAL ? kCelebLateGoalMs
+                                                        : kCelebBraceMs;
+      CHECK(ms <= want_ms && ms + 1000 / art->fps >= want_ms);
+      for (int n = 0; n < art->frames; n++) {
+        const uint8_t *q = art->data + art->offsets[n], *end = art->data + art->offsets[n + 1];
+        int px = 0;
+        bool keeps = false;
+        while (q < end) {
+          keeps |= (*q >> 4) == kArtKeep;
+          int len = (*q & 0x0F) + 1;
+          q++;
+          if (len == 16)
+            len = 16 + *q++;
+          px += len;
+        }
+        CHECK_EQ(px, (int) art->w * art->h);
+        CHECK(q == end);
+        if (n == 0)
+          CHECK(!keeps);
+      }
       CelebPlan p;
       p.kind = k;
       p.color = 0xEF0107;
