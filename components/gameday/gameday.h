@@ -121,13 +121,13 @@ struct UpdateFields {
   int win_pct{-1};
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
-  // A side with no logo shows its abbreviation in the logo slot over a glow
-  // of this color (badge.h): a team ESPN has no logo for (small schools), or
-  // the demo build's made-up teams.
+  // A side with no logo shows its abbreviation in the logo slot, in this
+  // color on black (badge.h, badge_text): a team ESPN has no logo for (small
+  // schools), or the demo build's made-up teams.
   bool team_badge{false};
   bool opponent_badge{false};
-  uint32_t team_fill{0};
-  uint32_t opponent_fill{0};
+  uint32_t team_badge_rgb{0xFFFFFF};
+  uint32_t opponent_badge_rgb{0xFFFFFF};
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty
   // Other sports (football leaves these at their defaults).
   uint8_t sport{0};        // ::espn::Sport

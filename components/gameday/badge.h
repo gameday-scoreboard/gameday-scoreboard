@@ -4,8 +4,9 @@
 // match: the ring is the team's second color unless it is the fill, and the
 // text is black on a light fill, white on anything else. The panel is black,
 // so a near-black fill with no ring (or a near-black ring) gets a neutral
-// gray ring instead, where the app draws its outline. Pure, with no ESPHome
-// includes, so the host tests compile it directly.
+// gray ring instead, where the app draws its outline. The panel itself draws
+// only the letters (badge_text below). Pure, with no ESPHome includes, so the
+// host tests compile it directly.
 #pragma once
 
 #include <cstdint>
@@ -31,29 +32,34 @@ constexpr int kBadgeDarkTextLum = 600;   // lighter fills take black text
 constexpr int kBadgeNearBlackLum = 120;  // fills this dark need the gray ring
 constexpr uint32_t kBadgeNeutralRing = 0x808080;
 
-constexpr uint32_t kBadgeNoColorFill = 0x808080;
-
-// The fill for a team whose color ESPN gives as hex with no #: that color,
-// or the app's neutral gray when there is none or it is plain black.
-inline uint32_t badge_fill(const std::string &hex) {
-  if (hex.size() != 6 || hex == "000000")
-    return kBadgeNoColorFill;
+// ESPN's hex color with no # as RGB, or 0 (black) when it is missing or not
+// a color.
+inline uint32_t badge_rgb(const std::string &hex) {
+  if (hex.size() != 6)
+    return 0;
   uint32_t v = 0;
   for (char c : hex) {
     int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
     if (d < 0)
-      return kBadgeNoColorFill;
+      return 0;
     v = (v << 4) | (uint32_t) d;
   }
   return v;
 }
 
-// The panel's badge glows its fill from the board's outer edge, like the
-// device page's board. Full strength is harsh on an LED panel, so the glow
-// starts at 60% and fades to black.
-inline uint32_t badge_glow(uint32_t fill) {
-  uint32_t r = ((fill >> 16) & 0xFF) * 153 / 255, g = ((fill >> 8) & 0xFF) * 153 / 255, b = (fill & 0xFF) * 153 / 255;
-  return (r << 16) | (g << 8) | b;
+// On the panel the badge is the abbreviation alone, in the team's color on
+// the black logo slot. A color this dark (navy 0C2340 is 126, maroon 7A0019
+// is 108) barely lights the LEDs, so the letters take the team's second
+// color, or white when that is dark too or ESPN has no color.
+constexpr int kBadgeTextMinLum = 150;
+constexpr uint32_t kBadgeNoColorText = 0xFFFFFF;
+
+inline uint32_t badge_text(uint32_t color, uint32_t alt) {
+  if (badge_luminance(color) >= kBadgeTextMinLum)
+    return color;
+  if (badge_luminance(alt) >= kBadgeTextMinLum)
+    return alt;
+  return kBadgeNoColorText;
 }
 
 inline BadgeStyle badge_style(uint32_t fill, uint32_t alt) {

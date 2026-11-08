@@ -40,7 +40,7 @@ through `update_important` in the panel's state.
 
 ### 🐛 Fixes
 
-- 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation over a glow of its color instead of an empty space
+- 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation in its team color instead of an empty space
 
 ## v2026.11.1
 

@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdlib>
 
+#include "badge.h"
 #include "message.h"
 #include "news.h"
 #include "season.h"
@@ -89,6 +90,7 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   c["curatedRank"]["current"] = true;
   c["team"]["abbreviation"] = true;
   c["team"]["color"] = true;
+  c["team"]["alternateColor"] = true;
   c["team"]["logo"] = true;
   comp["odds"].add<JsonObject>()["details"] = true;
   comp["odds"][0]["overUnder"] = true;
@@ -335,6 +337,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     (ours ? s.team_record : s.opp_record) = record;
     (ours ? s.team_rank : s.opp_rank) = rank;
     (ours ? s.team_color : s.opp_color) = color;
+    (ours ? s.team_alt : s.opp_alt) = badge_rgb(str_or_empty(c["team"]["alternateColor"]));
     (ours ? s.team_logo : s.opp_logo) = logo;
     (ours ? s.team_timeouts : s.opp_timeouts) = timeouts;
     uint8_t *lines = ours ? s.team_lines : s.opp_lines;

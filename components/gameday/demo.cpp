@@ -220,14 +220,17 @@ void GamedayComponent::demo_show_step_(bool splash) {
 }
 
 // With made-up teams there is no logo to fetch, so each logo slot shows the
-// side's abbreviation on its colors instead, the way the app shows every team.
+// side's abbreviation in its color instead.
 void GamedayComponent::demo_badges_(UpdateFields &f) const {
   if (!this->demo_playing_() || !this->demo_prefs_.madeup)
     return;
+  DemoKind kind = (DemoKind) this->demo_kind_;
+  const auto &home = ::espn::demo_made_up(kind, true);
+  const auto &away = ::espn::demo_made_up(kind, false);
   f.team_badge = true;
   f.opponent_badge = true;
-  f.team_fill = f.team_color;
-  f.opponent_fill = f.opponent_color;
+  f.team_badge_rgb = ::espn::badge_text(home.rgb, home.alt);
+  f.opponent_badge_rgb = ::espn::badge_text(away.rgb, away.alt);
 }
 
 ::espn::DemoMatchup GamedayComponent::demo_matchup_(uint8_t kind) const {

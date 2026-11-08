@@ -252,8 +252,8 @@ script:
       opponent_color: int
       team_badge: bool
       opponent_badge: bool
-      team_fill: int
-      opponent_fill: int
+      team_badge_rgb: int
+      opponent_badge_rgb: int
       possession: int
       team_timeouts: int
       opponent_timeouts: int
@@ -286,29 +286,26 @@ script:
           id(gd_sport) = sport;
           // A side with no team yet (just after a team change) shows no logo.
           // A side with no logo to fetch (a team ESPN has no logo for, or the
-          // demo build's made-up teams) shows its abbreviation in white in the
-          // logo's place, over a glow of its color that fades from the board's
-          // outer edge to black, like the device page's board.
+          // demo build's made-up teams) shows its abbreviation in the logo's
+          // place, in its team color on black (badge.h, badge_text).
           auto slot = [](lv_obj_t *img, lv_obj_t *box, lv_obj_t *lbl, const std::string &abbr, bool badge,
-                         uint32_t fill, bool left) {
+                         uint32_t rgb) {
             if (abbr.empty() || badge) lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
             if (abbr.empty() || !badge) {
               lv_obj_add_flag(box, LV_OBJ_FLAG_HIDDEN);
               return;
             }
-            lv_color_t glow = lv_color_hex(::espn::badge_glow(fill)), black = lv_color_hex(0x000000);
-            lv_obj_set_style_bg_color(box, left ? glow : black, 0);
-            lv_obj_set_style_bg_grad_color(box, left ? black : glow, 0);
+            lv_obj_set_style_text_color(lbl, lv_color_hex(rgb), 0);
             const char *cur = lv_label_get_text(lbl);
             if (cur == nullptr || abbr != cur)
               lv_label_set_text(lbl, abbr.c_str());
             lv_obj_clear_flag(box, LV_OBJ_FLAG_HIDDEN);
           };
           slot(id(gd_team_logo_img), id(gd_team_badge), id(gd_team_badge_lbl), team_abbr, team_badge,
-               (uint32_t) team_fill, true);
+               (uint32_t) team_badge_rgb);
           slot(id(gd_opp_logo_img), id(gd_opp_badge), id(gd_opp_badge_lbl), opponent_abbr, opponent_badge,
-               (uint32_t) opponent_fill, false);
+               (uint32_t) opponent_badge_rgb);
       - lvgl.label.update:
           id: tt_away_team_lbl
           text: !lambda 'return team_abbr;'
@@ -1480,9 +1477,9 @@ lvgl:
                   y: 0
 
               # Abbreviation badges, each in its logo's place when that side
-              # has no logo: the abbreviation over a glow of the team's color
-              # fading in from the board's edge (badge.h, badge_glow).
-              # Shown by gd_update; the glow and letters are set there.
+              # has no logo: the abbreviation in the team's color on black
+              # (badge.h, badge_text). Shown by gd_update; the letters and
+              # their color are set there.
               - obj:
                   id: gd_team_badge
                   scrollbar_mode: "OFF"
@@ -1495,8 +1492,6 @@ lvgl:
                   border_width: 0
                   bg_opa: COVER
                   bg_color: 0x000000
-                  bg_grad_color: 0x000000
-                  bg_grad_dir: HOR
                   hidden: true
                   widgets:
                     - label:
@@ -1517,8 +1512,6 @@ lvgl:
                   border_width: 0
                   bg_opa: COVER
                   bg_color: 0x000000
-                  bg_grad_color: 0x000000
-                  bg_grad_dir: HOR
                   hidden: true
                   widgets:
                     - label:
