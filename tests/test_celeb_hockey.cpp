@@ -1,8 +1,10 @@
-// Host tests for hockey's big plays (celeb_hockey.h) on recorded ESPN reads:
-// the hat trick from the game's goal leaders, the power play and shorthanded
-// goals from the goal's strength, both sides, the settings that quiet them,
-// and each one's frames at both board widths. Build with `make` in tests/.
+// Host tests for hockey's big play (celeb_hockey.h) on recorded ESPN reads:
+// the hat trick from the game's goal leaders, both sides, the settings that
+// quiet it, a power play goal read live (no strength in the read, so the
+// plain lamp), and the frames at both board widths. Build with `make` in
+// tests/.
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -143,11 +145,36 @@ static void test_hat_trick_other_side() {
   CHECK(plan(two, three, CelebLevel::FULL, true, false).kind != CelebKind::HAT_TRICK);
 }
 
-// Every hockey play's frames at both widths: something lit on every frame
+// FLA @ BOS, 11/8: Geekie's goal read live, the last play of the read. ESPN's
+// play-by-play has it as a power play goal; the read the panel makes has no
+// strength on the play, so it is a goal like any other.
+static void test_power_play_goal_live() {
+  const std::string cur_json = slurp("fixtures/event_nhl_goal.json");
+  JsonDocument doc;
+  CHECK(!deserializeJson(doc, cur_json, DeserializationOption::NestingLimit(40)));
+  CHECK(doc["competitions"][0]["situation"]["lastPlay"]["type"]["text"] == "Goal");
+  CHECK(doc["competitions"][0]["situation"]["lastPlay"]["strength"].isNull());
+  // The read before: BOS a goal fewer.
+  JsonArray sides = doc["competitions"][0]["competitors"];
+  for (JsonObject c : sides)
+    if (c["id"] == "1")
+      c["score"] = std::to_string(atoi(c["score"].as<const char *>()) - 1);
+  std::string prev_json;
+  serializeJson(doc, prev_json);
+  GameSnapshot prev, cur;
+  CHECK(parse_event_str(prev_json, Sport::HOCKEY, 1, prev, "401892674"));
+  CHECK(parse_event_str(cur_json, Sport::HOCKEY, 1, cur, "401892674"));
+  CHECK(cur.play_type == "Goal");
+  CHECK(plan(prev, cur, CelebLevel::FULL).kind == CelebKind::GOAL_LAMP);
+  CHECK(plan(prev, cur, CelebLevel::FULL, true).kind == CelebKind::GOAL_LAMP);
+}
+
+// The hat trick's frames at both widths: something lit on every frame
 // until the fade, and the show over when its time is up.
 static void test_art_runs() {
   static uint16_t buf[128 * 64];
-  for (CelebKind k : {CelebKind::HAT_TRICK, CelebKind::SHORTHANDED, CelebKind::POWER_PLAY}) {
+  {
+    const CelebKind k = CelebKind::HAT_TRICK;
     for (int w : {128, 64}) {
       const CelebArt *art = celeb_art_for(k, w);
       CHECK(art != nullptr);
@@ -158,9 +185,7 @@ static void test_art_runs() {
       p.kind = k;
       p.color = 0x006847;
       p.alt = 0xFFFFFF;
-      p.duration_ms = k == CelebKind::HAT_TRICK     ? kCelebHatTrickMs
-                      : k == CelebKind::SHORTHANDED ? kCelebShorthandedMs
-                                                    : kCelebPowerPlayMs;
+      p.duration_ms = kCelebHatTrickMs;
       // The duration is the art's own length.
       CHECK(p.duration_ms == (uint32_t) art->frames * 1000 / art->fps);
       CelebFrame f{buf, w, 64, w};
@@ -184,6 +209,7 @@ int main() {
   test_scorers_parse();
   test_hat_trick();
   test_hat_trick_other_side();
+  test_power_play_goal_live();
   test_art_runs();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

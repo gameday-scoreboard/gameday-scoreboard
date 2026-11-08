@@ -116,10 +116,6 @@ struct Hockey {
   static constexpr uint8_t kScorersMax = 3;
   Scorer team_scorers[kScorersMax]{}, opp_scorers[kScorersMax]{};
   uint8_t team_scorer_count{0}, opp_scorer_count{0};
-  // The strength of the goal in this read's last play, NONE when the last
-  // play isn't a goal or ESPN gives none.
-  enum class Strength : uint8_t { NONE = 0, EVEN, POWER_PLAY, SHORTHANDED };
-  Strength goal_strength{Strength::NONE};
 };
 
 // The latest goal of a hockey game, kept from read to read until the next

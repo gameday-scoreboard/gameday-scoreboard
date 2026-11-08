@@ -47,15 +47,13 @@ With **Celebrations** on **Full**, your goal lights the goal lamp: a red beam sp
 ### Big plays
 
 :::note[Coming in the next release]
-With **Celebrations** on **Full** and **Big plays** on (the default), three goals get their own pixel-art show in your team's colors, in place of the plain goal lamp. Each starts on the lamp, then:
+With **Celebrations** on **Full** and **Big plays** on (the default), a **hat trick**, one player's third goal of the game, gets a pixel-art show in your team's colors in place of the plain goal lamp: the lamp spins, "HAT TRICK!" drops in letter by letter and hats rain down onto the ice. 4.5 seconds.
 
-- **Hat trick**: one player's third goal of the game. "HAT TRICK!" drops in letter by letter and hats rain down onto the ice. 4.5 seconds.
-- **Shorthanded goal**: a goal while your team is a player down. Four of your skaters take on five, one carries the puck up the ice past them and scores, and "GOAL!" jumps up under "SHORTHANDED". 4.5 seconds.
-- **Power play goal**: a goal while the other team is a player down. Lightning in your color strikes the ice under "POWER PLAY GOAL!". 3.5 seconds.
+Your team's hat tricks show; in the Live games mode either team's do, the second team's only with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** on the device page to keep the plain goal lamp. On **Subtle** the goal flashes like any other.
 
-Your team's show; in the Live games mode either team's do, the second team's only with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** on the device page to keep the plain goal lamp for every goal. On **Subtle** these goals flash like any other.
+The panel counts goals from ESPN's goal count for each player during the game, so it can miss a hat trick when it started showing the game after the player's second goal, but it never shows one that isn't. When ESPN's count catches up a read after the goal, the goal lamp plays first and the hat trick on the next read, about 10 seconds later.
 
-The panel counts a hat trick from ESPN's goal count for each player during the game, so it can miss one when it started showing the game after the player's second goal, but it never shows one that isn't. A goal's strength (power play or shorthanded) comes with the goal itself; if the panel's next read lands after the faceoff that follows, the goal gets the plain lamp.
+Power play and shorthanded goals get the plain goal lamp: ESPN's live game data doesn't say which goals they are.
 :::
 
 ## The playoff series

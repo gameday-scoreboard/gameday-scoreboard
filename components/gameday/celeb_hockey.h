@@ -1,5 +1,9 @@
-// Hockey's big plays: a hat trick, a shorthanded goal and a power play goal.
-// Pure, no ESPHome includes; the host tests run it on recorded ESPN reads.
+// Hockey's big play: the hat trick. Pure, no ESPHome includes; the host
+// tests run it on recorded ESPN reads.
+//
+// No power play or shorthanded goal: ESPN's play-by-play marks each goal's
+// strength, but the live read the panel makes (scoreboard/<id>) leaves it
+// off the last play, a power play goal included (seen live 11/8).
 #pragma once
 #include <cstdint>
 
@@ -31,59 +35,28 @@ inline bool celeb_hat_trick(const GameSnapshot &prev, const GameSnapshot &cur, b
 // The big play in this read, or kind NONE. decide_celebration calls it only
 // on Full with Big plays on, for two reads of the same game in progress.
 // Ours, or either side's in the neutral modes (theirs with Opponent scores
-// too on). A hat trick goes first: a shorthanded third goal is a hat trick.
-// The strength needs the goal itself as the read's last play, one goal in
-// the read, by that side; ESPN moves the last play on to the faceoff within
-// a minute, so a read that lands after it shows the goal lamp as before.
+// too on). It takes over the goal's lamp when the third goal and the count
+// arrive in the same read, and plays on its own when ESPN's count catches
+// up a read later.
 inline CelebPlan big_play_hockey(const GameSnapshot &prev, const GameSnapshot &cur, const Splash &splash,
                                  bool neutral, bool opp_splashes) {
-  (void) splash;  // a goal's splash is the lamp these take over
+  (void) splash;  // a goal's splash is the lamp this takes over
   CelebPlan none;
   if (cur.period >= 5 && !cur.nhl.playoffs)
     return none;  // the shootout: its goals aren't goals
-  const int delta = cur.team_score - prev.team_score, odelta = cur.opp_score - prev.opp_score;
+  if (cur.team_score < prev.team_score || cur.opp_score < prev.opp_score)
+    return none;  // a goal taken back
+  bool ours;
+  if (celeb_hat_trick(prev, cur, true))
+    ours = true;
+  else if (neutral && opp_splashes && celeb_hat_trick(prev, cur, false))
+    ours = false;
+  else
+    return none;
   CelebPlan p;
-  bool ours = true;
-  if (delta >= 0 && odelta >= 0) {
-    if (celeb_hat_trick(prev, cur, true)) {
-      p.kind = CelebKind::HAT_TRICK;
-    } else if (neutral && opp_splashes && celeb_hat_trick(prev, cur, false)) {
-      p.kind = CelebKind::HAT_TRICK;
-      ours = false;
-    }
-  }
-  if (p.kind == CelebKind::NONE) {
-    const bool mine = delta == 1 && odelta == 0;
-    const bool theirs = neutral && opp_splashes && odelta == 1 && delta == 0;
-    if (!mine && !theirs)
-      return none;
-    ours = mine;
-    const uint32_t side = ours ? cur.team_id : cur.opp_id;
-    if (cur.play_type != "Goal" || cur.play_team != side)
-      return none;
-    if (cur.nhl.goal_strength == Hockey::Strength::SHORTHANDED)
-      p.kind = CelebKind::SHORTHANDED;
-    else if (cur.nhl.goal_strength == Hockey::Strength::POWER_PLAY)
-      p.kind = CelebKind::POWER_PLAY;
-    else
-      return none;
-  }
-  switch (p.kind) {
-    case CelebKind::HAT_TRICK:
-      p.text = "HAT TRICK!";
-      p.duration_ms = kCelebHatTrickMs;
-      break;
-    case CelebKind::SHORTHANDED:
-      p.text = "SHORTHANDED GOAL!";
-      p.duration_ms = kCelebShorthandedMs;
-      break;
-    default:
-      p.text = "POWER PLAY GOAL!";
-      p.duration_ms = kCelebPowerPlayMs;
-      break;
-  }
-  if (neutral)
-    p.text = (ours ? cur.team_abbr : cur.opp_abbr) + " " + p.text;
+  p.kind = CelebKind::HAT_TRICK;
+  p.text = neutral ? (ours ? cur.team_abbr : cur.opp_abbr) + " HAT TRICK!" : "HAT TRICK!";
+  p.duration_ms = kCelebHatTrickMs;
   p.color = celeb_bright(parse_color(ours ? cur.team_color : cur.opp_color));
   p.alt = celeb_alt_for(p.color);
   return p;

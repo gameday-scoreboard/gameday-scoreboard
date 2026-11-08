@@ -36,14 +36,13 @@ void fill_hockey_filter(JsonObject ev) {
   JsonObject stat = comp["competitors"][0]["statistics"].add<JsonObject>();
   stat["name"] = true;
   stat["displayValue"] = true;
-  // The big plays: who has how many goals (fill_leaders_filter keeps the
-  // leader lists; this adds the player's id), and a goal's strength.
+  // The hat trick: who has how many goals (fill_leaders_filter keeps the
+  // leader lists; this adds the player's id).
   JsonObject list = comp["competitors"][0]["leaders"][0];
   list["name"] = true;
   JsonObject top = list["leaders"][0];
   top["displayValue"] = true;
   top["athlete"]["id"] = true;
-  comp["situation"]["lastPlay"]["strength"]["abbreviation"] = true;
 }
 
 // Each side's players on two goals or more in this game, from ESPN's goal
@@ -69,13 +68,6 @@ static void big_play_scorers(JsonObjectConst comp, GameSnapshot &s) {
       }
     }
   }
-  if (s.play_type != "Goal")
-    return;
-  const std::string st = str_or_empty(comp["situation"]["lastPlay"]["strength"]["abbreviation"]);
-  h.goal_strength = st == "power-play"      ? Hockey::Strength::POWER_PLAY
-                    : st == "shorthanded"   ? Hockey::Strength::SHORTHANDED
-                    : st == "even-strength" ? Hockey::Strength::EVEN
-                                            : Hockey::Strength::NONE;
 }
 
 // One of a side's stats ("saves", "goals") as a count, -1 when it has none
