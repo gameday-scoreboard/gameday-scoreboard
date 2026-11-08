@@ -126,6 +126,39 @@ static void test_recorded_plays() {
   // DAL at IND, 11/8, 3rd quarter: Q.Williams strips J.Taylor and DAL's
   // S.James recovers. The read gives the ball (and the play) to DAL.
   check_both_sides("fumble", 6, 11, CelebKind::FUMBLE, "FUMBLE!", kCelebFumbleMs);
+  // GB at NE, 11/8: GB's X.McKinney intercepts D.Maye at midfield and is
+  // pushed out at the NE 14. The read gives the ball (and the play) to GB.
+  check_both_sides("interception", 9, 17, CelebKind::INTERCEPTION, "INTERCEPTION!", kCelebInterceptionMs);
+}
+
+// No live pick-six came up (1 in 25 games): the recorded interception, made
+// one. ESPN types it "Interception Return Touchdown" and the score goes up 6
+// in the same read, which decide_splash calls a touchdown.
+static void test_pick_six() {
+  Play gb = load("interception", 9), ne = load("interception", 17);
+  gb.with.play_type = ne.with.play_type = "Interception Return Touchdown";
+  gb.with.team_score += 6;
+  ne.with.opp_score += 6;
+  CelebPlan p = plan(gb.before, gb.with);
+  CHECK(p.kind == CelebKind::PICK_SIX);
+  CHECK_EQ(p.text, std::string("PICK SIX!"));
+  CHECK_EQ(p.duration_ms, kCelebPickSixMs);
+  // It takes over the touchdown; Subtle and Big plays off keep the touchdown.
+  CHECK(plan(gb.before, gb.with, CelebLevel::SUBTLE).kind == CelebKind::FLASH);
+  CHECK(plan(gb.before, gb.with, CelebLevel::FULL, false, true, false).kind == CelebKind::TOUCHDOWN);
+  // NE's panel: the other side's touchdown, dim as ever.
+  CHECK(plan(ne.before, ne.with).kind == CelebKind::MUTED);
+  // Neutral: GB's pick-six from either side.
+  CHECK(plan(ne.before, ne.with, CelebLevel::FULL, true).kind == CelebKind::PICK_SIX);
+  CHECK_EQ(plan(ne.before, ne.with, CelebLevel::FULL, true).text, std::string("GB PICK SIX!"));
+  // An interception with points but not six (a touchdown then the extra
+  // point in one read) is the touchdown's, not a pick-six's.
+  gb.with.team_score += 1;
+  CHECK(plan(gb.before, gb.with).kind == CelebKind::TOUCHDOWN);
+  // A plain interception read where a score moved anyway is no big play.
+  Play odd = load("interception", 9);
+  odd.with.opp_score += 3;
+  CHECK(plan(odd.before, odd.with).kind != CelebKind::INTERCEPTION);
 }
 
 static void test_other_sports_quiet() {
@@ -180,6 +213,7 @@ static void test_art() {
 int main() {
   test_types();
   test_recorded_plays();
+  test_pick_six();
   test_other_sports_quiet();
   test_art();
   printf("%d checks, %d failures\n", checks, failures);
