@@ -165,7 +165,7 @@ A **Celebrations** choice sets how big the show is:
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 
 :::note[Coming in the next release]
-**Big plays**, on by default, gives a basketball dunk or alley-oop a pixel-art scene of its own on **Full** (see [Basketball](/using/basketball/)). Off, every score and the win keep their show; only the big plays go.
+**Big plays**, on by default, gives a basketball dunk or alley-oop, and your football defense's interceptions, pick sixes, fumble recoveries and sacks, a pixel-art scene of its own on **Full** (see [Basketball](/using/basketball/) and [Football](/using/football/#big-plays)). Off, every score and the win keep their show; only the big plays go.
 :::
 
 The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side": the first team's scores always get the full show in its colors, and with **Opponent scores too** on the second team's do too.
