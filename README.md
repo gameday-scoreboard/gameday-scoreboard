@@ -54,6 +54,7 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
 | Ticker: Down and distance, Count and at-bat, Match stats, Last play, "Odds, TV and win chance", Pre-game season leaders | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. Before kickoff in football, each team's passing leader, and during the game who is favored to win. The page shows only the ones for sports your panel follows |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
+| Big plays | On Full celebrations, a dunk or an alley-oop gets its own pixel-art scene; turn it off to keep only the score and win splashes |
 | Favorites | Up to 16 teams in priority order. "Only today's games" keeps the playlist to the favorites playing today. The first four are the numbered buttons on a WizMote remote |
 | Remote | Pair a WizMote: turn discovery on, press any button on the remote. ON/OFF, brightness and NIGHT buttons control the panel |
 | Panels | One 64x64 panel, or one 128x64 panel or two 64x64 side by side. Changing it restarts the device |

@@ -48,9 +48,20 @@ On a single 64x64 panel the clock takes the abbreviations' place during play. Th
 
 ## Splashes
 
-Basketball only celebrates the win. A game has around a hundred scoring plays, so splashing each basket would keep the screen covered. When your team wins, a victory splash with fireworks says your abbreviation and "WINS". **Opponent scores too** makes no difference for basketball.
+Basketball doesn't splash every basket: a game has around a hundred scoring plays, so that would keep the screen covered. It celebrates the win, and on **Full** a three and the big plays below. When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
 
 With **Celebrations** on **Full**, a three gets 3 seconds: the ball arcs up and drops through the hoop, the net swings and sparks pop in your team's colors under "THREE!". It takes a made three that is the last play in ESPN's play-by-play and the only change between two reads, so an and-one, three free throws, or a three read together with another basket stay quiet, and so does a three that ESPN logs with another play after it (a missed shot, a foul) before the panel reads the game. The other side's threes stay quiet too. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. **Subtle** keeps the win to a quick flash and leaves baskets alone; **Off** shows no splash at all.
+
+### Big plays
+
+With **Celebrations** on **Full** and **Big plays** on (the default), two baskets get a pixel-art scene of their own, drawn in your team's colors:
+
+- **Dunk**: a player dribbles in, rises and slams it through. The rim bends and shakes, the net snaps, the crowd lights up and "DUNK!" drops in. 2.5 seconds.
+- **Alley-oop**: the lob floats high to the rim (thrown by a teammate on a two-panel board), the player catches it at the top of the leap and throws it down, then "ALLEY-OOP!" drops in. On a single 64x64 panel the words come one at a time, "ALLEY" then "OOP!". 3.5 seconds.
+
+The panel goes by the play type ESPN gives the basket: any dunk (running, cutting, driving, tip, putback) is a dunk, and an alley-oop, dunked or laid in, is an alley-oop. Like the three, it takes a made basket that is the last play ESPN lists and the only change between two reads, so a dunk with an and-one free throw read together, or one ESPN follows with another play before the panel reads the game, stays quiet. A team gets about four of these a game. Your team's show; in the Live games mode either team's do, the second team's only with **Opponent scores too** on.
+
+Turn **Big plays** off under **Celebrations** on the device page to keep every score's and the win's show and drop only these. **Subtle** and **Off** never show them.
 
 ## The final
 
