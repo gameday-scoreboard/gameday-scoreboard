@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "celeb_soccer.h"
+#include "celebrate.h"
+#include "celebrate_fx.h"
 
 using namespace espn;
 
@@ -233,7 +235,150 @@ static void test_made_up() {
   CHECK(big_play_soccer(og1, og2, Splash{}, false, true).kind == CelebKind::NONE);
 }
 
+// What the firmware does for one read: decide_splash, then the celebration.
+static CelebPlan plan(const GameSnapshot &prev, const GameSnapshot &cur, CelebLevel level, bool neutral = false,
+                      bool opp = true, bool big = true) {
+  Splash s = decide_splash(prev, cur, opp, neutral);
+  return decide_celebration(prev, cur, s, level, neutral, opp, big);
+}
+
+// The setting and the switch: Full shows the big play in place of the net
+// ripple's GOAL!; Subtle keeps the goal's flash, Off nothing, and Big plays
+// off keeps the net ripple. The other side's big play stays the muted flash
+// unless the panel follows a game with no side.
+static void test_levels() {
+  GameSnapshot g = recorded("fixtures/event_mls_final.json", 22529);
+  GameSnapshot prev = after_goals(g, 3, 2), cur = after_goals(g, 4, 2);
+  CelebPlan p = plan(prev, cur, CelebLevel::FULL);
+  CHECK(p.kind == CelebKind::BRACE);
+  CHECK(celeb_is_art(p.kind));
+  CHECK_EQ(p.text, std::string("BRACE!"));
+  CHECK_EQ(p.line2, std::string("DREYER"));
+  CHECK_EQ(p.duration_ms, kCelebBraceMs);
+  CHECK(plan(prev, cur, CelebLevel::SUBTLE).kind == CelebKind::FLASH);
+  CHECK_EQ(plan(prev, cur, CelebLevel::SUBTLE).text, std::string("GOAL!"));
+  CHECK(plan(prev, cur, CelebLevel::OFF).kind == CelebKind::NONE);
+  CHECK(plan(prev, cur, CelebLevel::FULL, false, true, false).kind == CelebKind::GOAL_NET);
+  // Miami's panel: San Diego's brace is the muted goal flash, as before.
+  GameSnapshot m = recorded("fixtures/event_mls_final.json", 20232);
+  GameSnapshot mp = after_goals(m, 3, 2), mc = after_goals(m, 4, 2);
+  CHECK(plan(mp, mc, CelebLevel::FULL).kind == CelebKind::MUTED);
+  CelebPlan n = plan(mp, mc, CelebLevel::FULL, true);
+  CHECK(n.kind == CelebKind::BRACE);
+  CHECK_EQ(n.color, celeb_bright(parse_color(m.opp_color)));
+  CHECK(plan(mp, mc, CelebLevel::FULL, true, false).kind == CelebKind::NONE);
+  // A plain goal keeps the net ripple.
+  CHECK(plan(after_goals(g, 0, 1), after_goals(g, 1, 1), CelebLevel::FULL).kind == CelebKind::GOAL_NET);
+  // The penalty and the late goal from the recorded games, on Full.
+  GameSnapshot a = recorded("fixtures/event_epl_final.json", 359);
+  CHECK(plan(after_goals(a, 1, 2), after_goals(a, 2, 2), CelebLevel::FULL).kind == CelebKind::PENALTY);
+  GameSnapshot arg = recorded("fixtures/event_soccer_aet.json", 202);
+  CelebPlan l = plan(after_goals(arg, 2, 2), after_goals(arg, 3, 2), CelebLevel::FULL);
+  CHECK(l.kind == CelebKind::LATE_GOAL);
+  CHECK_EQ(l.line2, std::string("92'"));
+}
+
+static int lit(const std::vector<uint16_t> &buf) {
+  int n = 0;
+  for (uint16_t v : buf)
+    n += v != 0;
+  return n;
+}
+
+// The caption: it fits the board, waits for its frame, blinks, and stays
+// in its own rows.
+static void test_caption() {
+  CHECK_EQ(celeb_caption_width("DREYER", 2), 58);
+  auto fit = [](const char *words, int scale, int fw) {
+    CelebCaptionFit f = celeb_caption_fit(words, scale, fw);
+    return f.words + "@" + std::to_string(f.scale);
+  };
+  CHECK_EQ(fit("DREYER", 2, 64), std::string("DREYER@2"));
+  CHECK_EQ(fit("ALAN PATRICK", 2, 128), std::string("ALAN PATRICK@2"));
+  CHECK_EQ(fit("ALAN PATRICK", 2, 64), std::string("ALAN PATRICK@1"));
+  CHECK_EQ(fit("LOPES CABRAL", 2, 64), std::string("CABRAL@2"));
+  CHECK_EQ(fit("HAALAND", 2, 64), std::string("HAALAND@1"));
+  CHECK_EQ(fit("ALEXANDER-ARNOLD", 2, 128), std::string("ALEXANDER-ARNOLD@1"));
+  CHECK_EQ(fit("TRENT ALEXANDER-ARNOLD", 1, 64), std::string("ALEXANDER-AR@1"));
+  CHECK_EQ(fit("89'", 3, 128), std::string("89'@3"));
+  const int w = 64, h = 64;
+  std::vector<uint16_t> buf((size_t) w * h, 0);
+  CelebCaption c{21, 27, 2, false};
+  celeb_caption_draw(buf.data(), w, h, w, c, "DREYER", 26, 2.0f, 0xEF0107, 0xFFFFFF, 1.0f);
+  CHECK_EQ(lit(buf), 0);  // before its frame
+  celeb_caption_draw(buf.data(), w, h, w, c, "DREYER", 27, 2.3f, 0xEF0107, 0xFFFFFF, 1.0f);
+  CHECK(lit(buf) > 100);
+  int outside = 0;
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
+      if (buf[y * w + x] && (y < 20 || y > 21 + 16))
+        outside++;
+  CHECK_EQ(outside, 0);
+  // Blinking: off half the time.
+  CelebCaption b{38, 27, 2, true};
+  int on = 0;
+  for (int k = 0; k < 12; k++) {
+    std::fill(buf.begin(), buf.end(), 0);
+    celeb_caption_draw(buf.data(), w, h, w, b, "89'", 30, 2.5f + k / 12.0f, 0xEF0107, 0xFFFFFF, 1.0f);
+    on += lit(buf) > 0;
+  }
+  CHECK(on >= 4 && on <= 8);
+}
+
+// Every soccer show plays at both widths, draws on every frame, puts its
+// caption over the art, and comes in under a few ms a frame on the host.
+static void test_shows() {
+  const CelebKind kinds[] = {CelebKind::BRACE, CelebKind::HAT_TRICK, CelebKind::PENALTY, CelebKind::LATE_GOAL};
+  for (int w : {128, 64}) {
+    for (CelebKind k : kinds) {
+      const CelebArt *art = celeb_art_for(k, w);
+      CHECK(art != nullptr);
+      if (art == nullptr)
+        continue;
+      CHECK_EQ((int) art->w, w);
+      CHECK_EQ((int) art->h, 64);
+      CHECK_EQ((int) art->frames, 60);
+      CelebPlan p;
+      p.kind = k;
+      p.color = 0xEF0107;
+      p.alt = 0xFFFFFF;
+      p.line2 = k == CelebKind::LATE_GOAL ? "89'" : k == CelebKind::PENALTY ? "" : "SAKA";
+      p.duration_ms = 5000;
+      static Celebration show;
+      std::vector<uint16_t> buf((size_t) w * 64, 0);
+      CelebFrame f;
+      f.px = buf.data();
+      f.w = w;
+      f.h = 64;
+      f.stride = w;
+      show.start(p, w, 64, 7);
+      int frames = 0, dark = 0, white_late = 0;
+      while (show.step(1.0f / 30)) {
+        show.render(f);
+        frames++;
+        if (lit(buf) == 0)
+          dark++;
+        // The caption's rows after its frame: some white (0xFFFF) there.
+        if (const CelebCaption *c = celeb_caption_for(k, w))
+          if (frames > 30 * 3 && frames < 30 * 4)
+            for (int y = c->y; y < c->y + 8 * c->scale; y++)
+              for (int x = 0; x < w; x++)
+                white_late += buf[y * w + x] == 0xFFFF;
+      }
+      CHECK(frames >= 140);
+      CHECK(dark <= 2);  // the fade's very end may be black
+      if (celeb_caption_for(k, w) != nullptr)
+        CHECK(white_late > 0);
+    }
+  }
+  CHECK(celeb_caption_for(CelebKind::PENALTY, 128) == nullptr);
+  CHECK(celeb_caption_for(CelebKind::GOAL_NET, 64) == nullptr);
+}
+
 int main() {
+  test_levels();
+  test_caption();
+  test_shows();
   test_minutes();
   test_brace();
   test_penalty();

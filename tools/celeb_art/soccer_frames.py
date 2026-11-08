@@ -21,9 +21,10 @@ import math
 import sys
 from pathlib import Path
 
-from PIL import Image
-
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import art  # noqa: E402
+
 H, FPS = 64, 12
 FRAMES = 60  # 5 s
 
@@ -45,7 +46,7 @@ PALETTE = [
     ("keeper", (90, 220, 40)),
     ("gold", (255, 208, 0)),
 ]
-IDX = {name: i for i, (name, _) in enumerate(PALETTE)}
+IDX = art.index_of(PALETTE)
 
 CHARS = {
     "T": "team", "t": "team_shade", "A": "alt", "a": "alt_shade", "L": "team_light",
@@ -108,63 +109,14 @@ WKK...SSS..........
 
 
 def sprite(text):
-    rows = [r for r in text.strip("\n").splitlines()]
-    return [[IDX[CHARS[c]] if c in CHARS else None for c in row] for row in rows]
+    return art.sprite(text, CHARS, IDX)
 
 
-def bdf(path):
-    glyphs, code, rows, inb = {}, None, [], False
-    for line in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
-        if line.startswith("ENCODING"):
-            code = int(line.split()[1])
-        elif line.startswith("BITMAP"):
-            inb, rows = True, []
-        elif line.startswith("ENDCHAR"):
-            if code is not None:
-                glyphs[code] = rows
-            inb = False
-        elif inb:
-            rows.append(int(line.strip(), 16))
-    return glyphs
+GLYPHS = art.bdf()
 
 
-GLYPHS = bdf(HERE.parents[1] / "firmware" / "fonts" / "spleen-5x8.bdf")
-
-
-class Canvas:
-    def __init__(self, w):
-        self.w = w
-        self.px = [[0] * w for _ in range(H)]
-
-    def put(self, x, y, i):
-        x, y = int(round(x)), int(round(y))
-        if 0 <= x < self.w and 0 <= y < H:
-            self.px[y][x] = i
-
-    def get(self, x, y):
-        return self.px[y][x] if 0 <= x < self.w and 0 <= y < H else 0
-
-    def blit(self, spr, x, y, flip=False):
-        x, y = int(round(x)), int(round(y))
-        for dy, row in enumerate(spr):
-            for dx, i in enumerate(row[::-1] if flip else row):
-                if i is not None:
-                    self.put(x + dx, y + dy, i)
-
-    def rect(self, x0, y0, x1, y1, i):
-        for y in range(int(y0), int(y1) + 1):
-            for x in range(int(x0), int(x1) + 1):
-                self.put(x, y, i)
-
-    def image(self):
-        img = Image.new("P", (self.w, H))
-        flat = []
-        for _, rgb in PALETTE:
-            flat.extend(rgb)
-        flat.extend([255, 0, 255])  # 15, unused in the frames
-        img.putpalette(flat + [0] * (768 - len(flat)))
-        img.putdata([i for row in self.px for i in row])
-        return img
+def Canvas(w):
+    return art.Canvas(w, H, PALETTE)
 
 
 def text(c, s, y, scale, fill, edge, drops=None):
@@ -309,7 +261,7 @@ def goal_shot(c, f, goal, impact, start_x, hit_frame, roar_from):
     """A shot into the net: the ball flies from (start_x, bottom) to impact,
     shrinking, and the net ripples from hit_frame."""
     roar = 0.0 if f < roar_from else min(1.0, (f - roar_from) / 4)
-    goal.stands(c, roar, f)
+    goal.stands(c, roar, f // 2)
     goal.grass(c)
     tt = (f - hit_frame) / FPS
     goal.net(c, impact if f >= hit_frame else None, tt)
@@ -432,7 +384,7 @@ def penalty(w):
     for f in range(FRAMES):
         c = Canvas(w)
         roar = 0.0 if f < hit else min(1.0, (f - hit) / 4)
-        goal.stands(c, roar, f)
+        goal.stands(c, roar, f // 2)
         goal.grass(c)
         # The spot.
         c.put(spot[0], spot[1] + (4 if wide else 3), IDX["white"])
@@ -496,12 +448,8 @@ def main():
     for name, make in PLAYS.items():
         for w in (128, 64):
             out = root / f"{name}_{w}"
-            out.mkdir(parents=True, exist_ok=True)
-            for old in out.glob("*.png"):
-                old.unlink()
             fr = make(w)
-            for n, c in enumerate(fr):
-                c.image().save(out / f"{n:03d}.png")
+            art.save_frames(fr, out)
             print(f"{name}_{w}: {len(fr)} frames at {FPS} fps into {out}")
 
 

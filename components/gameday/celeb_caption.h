@@ -25,20 +25,28 @@ inline int celeb_caption_width(const std::string &words, int scale) {
   return words.empty() ? 0 : ((int) words.size() * 5 - 1) * scale;
 }
 
-// The words that fit fw pixels: the whole name, else its last word, else as
-// many letters as fit.
-inline std::string celeb_caption_fit(const std::string &words, int scale, int fw) {
+struct CelebCaptionFit {
+  std::string words;
+  int scale;
+};
+
+// The words that fit fw pixels and their size: the whole name at the
+// caption's scale, else its last word, then the same a size smaller, and
+// only past the smallest size as many letters as fit.
+inline CelebCaptionFit celeb_caption_fit(const std::string &words, int scale, int fw) {
   const int room = fw - 2;  // a pixel of outline each side
-  if (celeb_caption_width(words, scale) <= room)
-    return words;
-  std::string w = words;
-  size_t sp = w.rfind(' ');
+  std::string last = words;
+  size_t sp = last.rfind(' ');
   if (sp != std::string::npos)
-    w = w.substr(sp + 1);
-  const int fit = (room / scale + 1) / 5;
-  if ((int) w.size() > fit)
-    w = w.substr(0, fit > 0 ? fit : 0);
-  return w;
+    last = last.substr(sp + 1);
+  for (int s = scale; s >= 1; s--) {
+    if (celeb_caption_width(words, s) <= room)
+      return {words, s};
+    if (celeb_caption_width(last, s) <= room)
+      return {last, s};
+  }
+  const int fit = (room + 1) / 5;
+  return {last.substr(0, fit > 0 ? (size_t) fit : 0), 1};
 }
 
 namespace detail {
@@ -70,10 +78,13 @@ inline void celeb_caption_draw(uint16_t *px, int fw, int fh, int stride, const C
     return;
   if (c.blink && ((int) (t * 6)) % 2 == 1)
     return;
-  const int s = c.scale < 1 ? 1 : c.scale > 3 ? 3 : c.scale;
-  const std::string w = celeb_caption_fit(words, s, fw);
+  const int want = c.scale < 1 ? 1 : c.scale > 3 ? 3 : c.scale;
+  const CelebCaptionFit fit = celeb_caption_fit(words, want, fw);
+  const std::string &w = fit.words;
+  const int s = fit.scale;
   const int tw = celeb_caption_width(w, s), th = 8 * s;
-  const int x0 = (fw - tw) / 2, y0 = c.y;
+  // A smaller size sits in the middle of the rows the caption has.
+  const int x0 = (fw - tw) / 2, y0 = c.y + (want - s) * 4;
   int k = (int) (fade * 256);
   k = k < 0 ? 0 : k > 256 ? 256 : k;
   const uint16_t fill = detail::caption565(0xFFFFFF, k), edge = detail::caption565(team, k);

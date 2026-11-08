@@ -44,6 +44,10 @@ enum class CelebKind : uint8_t {
   // at the end, so every kind from DUNK on is art.
   DUNK,       // basketball: the ball slams through the rim, the rim shakes
   ALLEY_OOP,  // basketball: the lob arcs high to the rim, then the finish
+  BRACE,      // soccer, a scorer's second goal: the net ripples, his name, two balls
+  HAT_TRICK,  // soccer, his third: the same with three balls
+  PENALTY,    // soccer: the ball on the spot, the keeper dives the wrong way
+  LATE_GOAL,  // soccer, a go-ahead goal from 85': the net ripples, the minute flashes
 };
 
 inline bool celeb_animated(CelebKind k) { return k >= CelebKind::TOUCHDOWN; }
