@@ -123,6 +123,9 @@ static void test_types() {
 static void test_recorded_plays() {
   // NYJ at KC, 11/8, 4th quarter: KC's C.Jones sacks G.Smith at the NYJ 14.
   check_both_sides("sack", 12, 20, CelebKind::SACK, "SACK!", kCelebSackMs);
+  // DAL at IND, 11/8, 3rd quarter: Q.Williams strips J.Taylor and DAL's
+  // S.James recovers. The read gives the ball (and the play) to DAL.
+  check_both_sides("fumble", 6, 11, CelebKind::FUMBLE, "FUMBLE!", kCelebFumbleMs);
 }
 
 static void test_other_sports_quiet() {
