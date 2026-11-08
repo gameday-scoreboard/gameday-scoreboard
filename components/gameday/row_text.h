@@ -4,13 +4,14 @@
 // (firmware/pages/gameday-live.yaml, gd_row_show): the lines the page takes
 // turns showing under the clock. Each line comes in up to three forms, the
 // longest first, and the page draws the longest that fits the room the row
-// has (half the field strip in football, the space between the logos'
+// has (the clear part of the field strip in football, the space between the logos'
 // marks in soccer, the full width in basketball). Pure, with no ESPHome
 // includes, so the host tests build it.
 //
 // Football: down and distance, then the win chance.
-// Basketball: the last basket, each side's points leader, a timeout, the
-// playoff series, the win chance.
+// Basketball: the last basket, each side's points leader, the playoff
+// series, the win chance. No timeout line: the stopped clock already shows
+// the break, and ESPN gives no count of basketball timeouts left.
 // Soccer: the latest goal.
 //
 // Every line is white (football's down turns red in the red zone): a team
@@ -136,25 +137,6 @@ inline void add_down(RowLines &r, const GameSnapshot &g, uint32_t rgb) {
     l->add_form(tight.substr(0, 1) + tight.substr(3));
 }
 
-// A timeout as the last play: "Official TV Timeout" as ESPN words it when
-// it fits, else "TV timeout" or "MIN timeout".
-inline void add_timeout(RowLines &r, const GameSnapshot &g) {
-  if (!timeout_play(g.last_play))
-    return;
-  std::string low = g.last_play;  // for the kind of timeout below
-  for (char &c : low)
-    c = (char) tolower((unsigned char) c);
-  RowLine *l = r.add(ascii_fold(g.last_play), 0xFFFFFF);
-  if (l == nullptr)
-    return;
-  const std::string &side = g.play_team == g.team_id ? g.team_abbr : g.play_team == g.opp_id ? g.opp_abbr : "";
-  if (low.find("official") != std::string::npos || low.find("tv timeout") != std::string::npos)
-    l->add_form("TV timeout");
-  else if (!side.empty())
-    l->add_form(::esphome::gameday::panel_text(side + " timeout"));
-  l->add_form("Timeout");
-}
-
 // The row's lines for the board game, into r (filled in place: the
 // component's loop stack has no room to spare for a copy). `playing` is a
 // game on and not at halftime (gameday.cpp emit_); `hold` has already read
@@ -184,7 +166,6 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
         r.add(hold.basket, white);
       r.add(g.nba.team_scorer, white);
       r.add(g.nba.opp_scorer, white);
-      add_timeout(r, g);
       r.add(series, white);
       if (o.win_chance)
         add_win_chance(r, g, 4);

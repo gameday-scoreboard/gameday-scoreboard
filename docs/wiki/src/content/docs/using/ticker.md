@@ -53,7 +53,7 @@ On a 128-wide board the row under the clock says some things itself, so the tick
 
 - In football, while **Win chance** under **Live pictures** is on, the win chance is on the row and not in the ticker. With it off, or on a single 64x64 panel, the ticker keeps it.
 - In football, the down and distance, like "3rd & 4 at FIU 31", is on the field strip (or the row under the clock with **Field strip** off), so the ticker leaves it out and goes straight to the last play. A single 64x64 panel keeps it in the ticker.
-- In basketball, when the last play is a timeout, like "Official TV Timeout", it's on the row, and the ticker shows the two records until the next play.
+- In basketball, a timeout as the last play, like "Official TV Timeout", isn't shown: the stopped clock already says it, and the ticker shows the two records until the next play. A single 64x64 panel keeps it in the ticker.
 :::
 
 A **Pre-game season leaders** switch, on to start, adds the season leaders before the game. Like the situation switches, it shows only on a panel that follows a sport it covers: football, baseball, basketball or hockey.

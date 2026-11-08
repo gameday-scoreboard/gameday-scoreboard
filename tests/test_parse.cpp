@@ -7693,19 +7693,16 @@ static void test_row_text() {
   other.play_value = 0;
   hold.read(other);
   CHECK_EQ(hold.basket, std::string(""));
-  // A TV timeout as the last play: ESPN's words fit the full row.
+  // A TV timeout as the last play: no timeout line, the row keeps its
+  // usual turns (the stopped clock shows the break).
   GameSnapshot to = reb;
   to.last_play = "Official TV Timeout";
   to.play_team = 0;
   RowLines t = row_lines(to, hold, on, true);
-  bool seen = false;
+  CHECK_EQ((int) t.n, 3);  // the two leaders and the win chance; the held basket went with the other game
   for (int i = 0; i < t.n; i++)
-    if (t.line[i].form(0) == "Official TV Timeout") {
-      seen = true;
-      CHECK_EQ(t.line[i].form(1), std::string("TV timeout"));
-      CHECK_EQ(t.line[i].form(2), std::string("Timeout"));
-    }
-  CHECK(seen);
+    for (int k = 0; k < 3; k++)
+      CHECK(t.line[i].form(k).find("imeout") == std::string::npos);
   // The ticker doesn't say it again on a wide board: the row already does.
   TickerOptions tick;
   tick.clock = false;
@@ -7736,7 +7733,9 @@ static void test_row_text() {
   team_to.last_play = "Timberwolves Full Timeout";
   team_to.play_team = kWolves;
   RowLines tt = row_lines(team_to, hold, on, true);
-  CHECK_EQ(tt.line[2].form(1), std::string("MIN timeout"));  // after the two leaders
+  CHECK_EQ((int) tt.n, 3);  // a team timeout adds no line either
+  for (int i = 0; i < tt.n; i++)
+    CHECK(tt.line[i].form(0).find("imeout") == std::string::npos);
   // At halftime only the series is left, and only in the playoffs.
   CHECK_EQ((int) row_lines(g, hold, on, false).n, 0);
   GameSnapshot po = g;

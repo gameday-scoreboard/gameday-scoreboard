@@ -281,8 +281,10 @@ struct TickerOptions {
   bool leaders{true};  // each side's season leader before the start
   // A wide board's row under the clock already says these (row_text.h), so
   // the ticker leaves them out rather than say them twice: the win chance
-  // (football), a timeout as the last play (basketball) and football's down
-  // and distance (the field strip, or the row's text with the strip off).
+  // and the down and distance (football; the field strip, or the row's text
+  // with the strip off). row_timeout: a wide board shows no timeout line at
+  // all in basketball, the stopped clock says it, so the ticker leaves a
+  // timeout as the last play out too.
   bool row_win{false};
   bool row_down{false};
   bool row_timeout{false};
