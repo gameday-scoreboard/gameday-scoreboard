@@ -38,6 +38,8 @@ int main(int argc, char **argv) {
       {"win", CelebKind::WIN, "KC WINS!", "24-17", 0xE31837},
       {"flash", CelebKind::FLASH, "EXTRA POINT!", "", 0xE31837},
       {"muted", CelebKind::MUTED, "BUF TOUCHDOWN", "", 0x00338D},
+      {"dunk", CelebKind::DUNK, "DUNK!", "", 0xC4CED4},
+      {"alley-oop", CelebKind::ALLEY_OOP, "ALLEY-OOP!", "", 0xE03A3E},
       {"grand-slam", CelebKind::GRAND_SLAM, "GRAND SLAM!", "", 0x002D72},
       {"walk-off", CelebKind::WALK_OFF, "WALK-OFF!", "", 0x005A9C},
   };
@@ -58,6 +60,8 @@ int main(int argc, char **argv) {
       case CelebKind::THREE: p.duration_ms = kCelebThreeMs; break;
       case CelebKind::WIN: p.duration_ms = kCelebWinMs; break;
       case CelebKind::MUTED: p.duration_ms = kCelebMutedMs; break;
+      case CelebKind::DUNK: p.duration_ms = kCelebDunkMs; break;
+      case CelebKind::ALLEY_OOP: p.duration_ms = kCelebAlleyOopMs; break;
       case CelebKind::GRAND_SLAM: p.duration_ms = kCelebGrandSlamMs; break;
       case CelebKind::WALK_OFF: p.duration_ms = kCelebWalkOffMs; break;
       default: p.duration_ms = kCelebFlashMs; break;
