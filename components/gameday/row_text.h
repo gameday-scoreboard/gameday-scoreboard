@@ -28,9 +28,31 @@
 namespace espn {
 
 struct RowLine {
-  std::string forms[3];  // longest first; an empty form is skipped
+  // Its forms, longest first, one per '\n'-separated piece. One string, not
+  // three: the component keeps the last update, these lines included, in
+  // internal RAM.
+  std::string forms;
   uint32_t rgb{0xFFFFFF};
   uint8_t secs{4};  // how long its turn lasts
+
+  // A shorter form, for when the longer ones don't fit.
+  void add_form(const std::string &f) {
+    if (f.empty())
+      return;
+    this->forms += '\n';
+    this->forms += f;
+  }
+  // Form i, "" past the last.
+  std::string form(int i) const {
+    size_t at = 0;
+    for (; i > 0; i--) {
+      at = this->forms.find('\n', at);
+      if (at == std::string::npos)
+        return "";
+      at++;
+    }
+    return this->forms.substr(at, this->forms.find('\n', at) - at);
+  }
 };
 
 struct RowLines {
@@ -46,7 +68,7 @@ struct RowLines {
       return nullptr;
     RowLine &l = line[n++];
     l = RowLine();
-    l.forms[0] = ::esphome::gameday::panel_text(text);
+    l.forms = ::esphome::gameday::panel_text(text);
     l.rgb = rgb;
     l.secs = secs;
     return &l;
@@ -93,27 +115,27 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   RowLine *l = r.add(num + " to win", 0xFFFFFF, secs);
   if (l == nullptr)
     return;
-  l->forms[1] = ::esphome::gameday::panel_text(num + " win");
-  l->forms[2] = ::esphome::gameday::panel_text(num);
+  l->add_form(::esphome::gameday::panel_text(num + " win"));
+  l->add_form(::esphome::gameday::panel_text(num));
 }
 
 // A timeout as the last play: "Official TV Timeout" as ESPN words it when
 // it fits, else "TV timeout" or "MIN timeout".
 inline void add_timeout(RowLines &r, const GameSnapshot &g) {
+  if (!timeout_play(g.last_play))
+    return;
   std::string low = g.last_play;
   for (char &c : low)
     c = (char) tolower((unsigned char) c);
-  if (low.find("timeout") == std::string::npos)
-    return;
   RowLine *l = r.add(ascii_fold(g.last_play), 0xFFFFFF);
   if (l == nullptr)
     return;
   const std::string &side = g.play_team == g.team_id ? g.team_abbr : g.play_team == g.opp_id ? g.opp_abbr : "";
   if (low.find("official") != std::string::npos || low.find("tv timeout") != std::string::npos)
-    l->forms[1] = "TV timeout";
+    l->add_form("TV timeout");
   else if (!side.empty())
-    l->forms[1] = ::esphome::gameday::panel_text(side + " timeout");
-  l->forms[2] = "Timeout";
+    l->add_form(::esphome::gameday::panel_text(side + " timeout"));
+  l->add_form("Timeout");
 }
 
 // The row's lines for the board game, into r (filled in place: the

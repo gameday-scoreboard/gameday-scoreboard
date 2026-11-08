@@ -36,7 +36,7 @@ The chart and the bar go. The row under the clock shows words instead, one line 
 
 - **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw. It stays until the next basket, and a new one shows right away. It follows **Last play**.
 - **Each team's points leader** in this game, like "Edwards 24".
-- **A timeout**, like "Official TV Timeout", while it is the last play.
+- **A timeout**, like "Official TV Timeout", while it is the last play. The ticker leaves it out, so it isn't said twice.
 - **The playoff series**, like "NY lead 2-1", in a playoff game.
 - **The win chance**, like "MIN 56% to win", for the team ESPN favors. **Win chance** under **Live pictures** turns it off.
 

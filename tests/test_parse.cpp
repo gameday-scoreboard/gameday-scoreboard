@@ -7539,12 +7539,12 @@ static void test_row_text() {
   CHECK_EQ(none.basket, std::string(""));
   RowLines r = row_lines(fb, none, on, true);
   CHECK_EQ((int) r.n, 2);
-  CHECK_EQ(r.line[0].forms[0], std::string("3rd & 4"));
+  CHECK_EQ(r.line[0].form(0), std::string("3rd & 4"));
   CHECK_EQ((int) r.line[0].secs, 8);
   CHECK_EQ(r.line[0].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(r.line[1].forms[0], std::string("JXST 96% to win"));
-  CHECK_EQ(r.line[1].forms[1], std::string("JXST 96% win"));
-  CHECK_EQ(r.line[1].forms[2], std::string("JXST 96%"));
+  CHECK_EQ(r.line[1].form(0), std::string("JXST 96% to win"));
+  CHECK_EQ(r.line[1].form(1), std::string("JXST 96% win"));
+  CHECK_EQ(r.line[1].form(2), std::string("JXST 96%"));
   CHECK_EQ(r.line[1].rgb, (uint32_t) 0xFFFFFF);  // white, like the down (Brandon, 11/8)
   CHECK_EQ(row_news(fb, none), std::string("3rd & 4"));
   // The switch off leaves the down alone; halftime leaves nothing.
@@ -7572,12 +7572,12 @@ static void test_row_text() {
   CHECK(!hold.ours);
   RowLines b = row_lines(g, hold, on, true);
   CHECK_EQ((int) b.n, 4);
-  CHECK_EQ(b.line[0].forms[0], std::string("McDaniels 2"));
+  CHECK_EQ(b.line[0].form(0), std::string("McDaniels 2"));
   CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[1].forms[0], std::string("Nesmith 19"));
+  CHECK_EQ(b.line[1].form(0), std::string("Nesmith 19"));
   CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[2].forms[0], std::string("Edwards 19"));
-  CHECK_EQ(b.line[3].forms[0], std::string("MIN 56% to win"));  // home 0.444
+  CHECK_EQ(b.line[2].form(0), std::string("Edwards 19"));
+  CHECK_EQ(b.line[3].form(0), std::string("MIN 56% to win"));  // home 0.444
   // The basket stays through the plays after it, until the next one.
   GameSnapshot reb = g;
   reb.play_value = 0;
@@ -7597,7 +7597,7 @@ static void test_row_text() {
   // The last play switch off drops the basket only.
   RowOptions quiet;
   quiet.last_play = false;
-  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].forms[0], std::string("Nesmith 19"));
+  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("Nesmith 19"));
   // Another game starts the hold over.
   GameSnapshot other = g;
   other.event_id = "999";
@@ -7611,17 +7611,34 @@ static void test_row_text() {
   RowLines t = row_lines(to, hold, on, true);
   bool seen = false;
   for (int i = 0; i < t.n; i++)
-    if (t.line[i].forms[0] == "Official TV Timeout") {
+    if (t.line[i].form(0) == "Official TV Timeout") {
       seen = true;
-      CHECK_EQ(t.line[i].forms[1], std::string("TV timeout"));
-      CHECK_EQ(t.line[i].forms[2], std::string("Timeout"));
+      CHECK_EQ(t.line[i].form(1), std::string("TV timeout"));
+      CHECK_EQ(t.line[i].form(2), std::string("Timeout"));
     }
   CHECK(seen);
+  // The ticker doesn't say it again on a wide board (Brandon, 11/8: "It showed
+  // official tv timeout on bottom bar and bar above it.. that's dumb").
+  TickerOptions tick;
+  tick.clock = false;
+  CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
+  tick.row_timeout = true;
+  CHECK(status_text(to, tick, "").find("Timeout") == std::string::npos);
+  CHECK(!status_text(to, tick, "").empty());
+  // A basket is still the ticker's.
+  CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
+  // Football's win chance: in the ticker on a single panel, on the row only
+  // on a wide board.
+  TickerOptions ft_tick;
+  ft_tick.clock = false;
+  CHECK(status_text(fb, ft_tick, "").find("JXST 96% to win") != std::string::npos);
+  ft_tick.row_win = true;
+  CHECK(status_text(fb, ft_tick, "").find("% to win") == std::string::npos);
   GameSnapshot team_to = reb;
   team_to.last_play = "Timberwolves Full Timeout";
   team_to.play_team = kWolves;
   RowLines tt = row_lines(team_to, hold, on, true);
-  CHECK_EQ(tt.line[2].forms[1], std::string("MIN timeout"));  // after the two leaders
+  CHECK_EQ(tt.line[2].form(1), std::string("MIN timeout"));  // after the two leaders
   // At halftime only the series is left, and only in the playoffs.
   CHECK_EQ((int) row_lines(g, hold, on, false).n, 0);
   GameSnapshot po = g;
@@ -7629,7 +7646,7 @@ static void test_row_text() {
   po.nba.opp_wins = 1;
   RowLines half = row_lines(po, hold, on, false);
   CHECK_EQ((int) half.n, 1);
-  CHECK_EQ(half.line[0].forms[0], std::string("IND lead 2-1"));
+  CHECK_EQ(half.line[0].form(0), std::string("IND lead 2-1"));
   // A pregame document's leaders are the season's: no scorers from it.
   GameSnapshot pre = hoops_event("fixtures/event_nba_pre_leaders.json", 14);  // MIA at CHA
   CHECK_EQ(pre.nba.team_scorer, std::string(""));
@@ -7638,7 +7655,7 @@ static void test_row_text() {
   GameSnapshot sc = soccer_event("fixtures/event_soccer_halftime.json", kVasco);
   RowLines so = row_lines(sc, hold, on, false);
   CHECK_EQ((int) so.n, 1);
-  CHECK_EQ(so.line[0].forms[0], std::string("28' Lescano"));
+  CHECK_EQ(so.line[0].form(0), std::string("28' Lescano"));
 
 }
 

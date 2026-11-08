@@ -96,23 +96,26 @@ script:
           }
           const ::espn::RowLine &l = r.line[id(gd_row_turn)];
           const lv_font_t *f = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
-          const std::string *pick = nullptr;
-          for (const std::string &form : l.forms) {
+          // The forms are '\n'-separated, longest first: the first that
+          // fits, else the shortest.
+          std::string pick;
+          for (int i = 0;; i++) {
+            std::string form = l.form(i);
             if (form.empty())
-              continue;
+              break;
+            pick = form;
             lv_point_t sz;
             lv_text_get_size(&sz, form.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-            pick = &form;
             if (sz.x <= id(gd_row_room))
               break;
           }
-          if (pick == nullptr) {
+          if (pick.empty()) {
             lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
             return;
           }
           const char *cur = lv_label_get_text(lbl);
-          if (cur == nullptr || *pick != cur)
-            lv_label_set_text(lbl, pick->c_str());
+          if (cur == nullptr || pick != cur)
+            lv_label_set_text(lbl, pick.c_str());
           lv_obj_set_style_text_color(lbl, lv_color_hex(l.rgb), 0);
           lv_obj_clear_flag(lbl, LV_OBJ_FLAG_HIDDEN);
 

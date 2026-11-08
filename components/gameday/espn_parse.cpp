@@ -541,11 +541,18 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     if (!s.drive.empty())
       add_part(out, "Drive: " + s.drive);
   }
-  if (o.odds)
+  if (o.odds && !o.row_win)
     add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+bool timeout_play(const std::string &text) {
+  std::string low = text;
+  for (char &c : low)
+    c = (char) tolower((unsigned char) c);
+  return low.find("timeout") != std::string::npos;
 }
 
 std::string win_chance(const GameSnapshot &s) {

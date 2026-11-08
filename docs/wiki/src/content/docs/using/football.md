@@ -54,7 +54,7 @@ Just above the strip, a one-pixel **win chance bar** runs the width of the board
 Both are on to start. **Field strip** and **Win chance bar** under **Live pictures** on the device page's Display tab turn them off; with the strip off, the row shows the down and distance and the timeout pips as before. A single 64x64 panel has no room for either.
 
 :::note[Coming in the next release]
-The one-pixel win chance bar goes. The win chance is in words instead, on the field strip where the down and distance sits: the down and distance for about 8 seconds, then the team ESPN favors for about 4, like "ND 84% to win", in white like the down and distance, shortened to "ND 84% win" or "ND 84%" when the half of the strip is too narrow. A new down shows right away. The switch is now called **Win chance**, and it turns that line on or off.
+The one-pixel win chance bar goes. The win chance is in words instead, on the field strip where the down and distance sits: the down and distance for about 8 seconds, then the team ESPN favors for about 4, like "ND 84% to win", in white like the down and distance, shortened to "ND 84% win" or "ND 84%" when the half of the strip is too narrow. A new down shows right away. The switch is now called **Win chance**, and it turns that line on or off. On a 128-wide board the ticker leaves the win chance out, so it isn't said twice; a single 64x64 panel keeps it in the ticker.
 
 In the red zone the whole last 20 yards glow red, from the 20 to the goal line, with the ball and the line to gain drawn on top, so it stands out even at the 1.
 :::

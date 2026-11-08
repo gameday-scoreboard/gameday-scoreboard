@@ -130,7 +130,7 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
   }
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play)
+  if (o.last_play && !(o.row_timeout && timeout_play(s.last_play)))
     add_last_play(out, s.last_play);
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
