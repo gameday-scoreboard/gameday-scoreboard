@@ -44,6 +44,20 @@ When your team wins, a victory splash with fireworks says your abbreviation and 
 
 With **Celebrations** on **Full**, your goal lights the goal lamp: a red beam spins from the middle of the board, the red glow pulses and the frame flashes, with "GOAL!" in white, for 4.5 seconds. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's goals are a dim 2-second flash. **Subtle** keeps every goal to the quick flash; **Off** shows no splash at all.
 
+### Big plays
+
+:::note[Coming in the next release]
+With **Celebrations** on **Full** and **Big plays** on (the default), three goals get their own pixel-art show in your team's colors, in place of the plain goal lamp. Each starts on the lamp, then:
+
+- **Hat trick**: one player's third goal of the game. "HAT TRICK!" drops in letter by letter and hats rain down onto the ice. 4.5 seconds.
+- **Shorthanded goal**: a goal while your team is a player down. Four of your skaters take on five, one carries the puck up the ice past them and scores, and "GOAL!" jumps up under "SHORTHANDED". 4.5 seconds.
+- **Power play goal**: a goal while the other team is a player down. Lightning in your color strikes the ice under "POWER PLAY GOAL!". 3.5 seconds.
+
+Your team's show; in the Live games mode either team's do, the second team's only with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** on the device page to keep the plain goal lamp for every goal. On **Subtle** these goals flash like any other.
+
+The panel counts a hat trick from ESPN's goal count for each player during the game, so it can miss one when it started showing the game after the player's second goal, but it never shows one that isn't. A goal's strength (power play or shorthanded) comes with the goal itself; if the panel's next read lands after the faceoff that follows, the goal gets the plain lamp.
+:::
+
 ## The playoff series
 
 In the playoffs the series, like "CAR leads series 2-0", is in the ticker before the game, and takes the records' place during intermissions and at the final. It isn't on the board itself.
