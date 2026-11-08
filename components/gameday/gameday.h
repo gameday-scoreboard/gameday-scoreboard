@@ -664,6 +664,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
   ::espn::CelebLatch celeb_latch_;  // the read a THREE or a big play was shown for, so a redraw never repeats it
+  // A walk-off ESPN posts with the final plays first; the win screen waits
+  // here for its show to end (loop()).
+  ::espn::CelebPlan walk_off_win_;
+  std::string walk_off_event_;
+  uint32_t walk_off_win_ms_{0};  // when the win goes up, 0 for none
+  bool walk_off_release_{false};
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];

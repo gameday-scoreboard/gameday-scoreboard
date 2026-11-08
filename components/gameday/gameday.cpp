@@ -1608,6 +1608,11 @@ void GamedayComponent::loop() {
       ::espn::boot_log_clock(boot_log, (int64_t) this->time_->now().timestamp - esp_timer_get_time() / 1000000);
     }
   }
+  if (this->walk_off_win_ms_ != 0 && (int32_t) (millis() - this->walk_off_win_ms_) >= 0) {
+    this->walk_off_win_ms_ = 0;
+    this->walk_off_release_ = true;
+    this->emit_({});  // the win screen the walk-off held back
+  }
   this->captive_tick_();
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the cards down.
@@ -4192,6 +4197,23 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // Only a fresh read shows a three or a big play; this emit_ also runs for redraws.
   if (::espn::celeb_latched(celeb.kind) && !this->celeb_latch_.take(g))
     celeb = ::espn::CelebPlan{};
+  // A walk-off in the same read as the final: the walk-off plays now and the
+  // win screen when it ends (loop() calls back with walk_off_release_ set).
+  if (this->walk_off_release_) {
+    this->walk_off_release_ = false;
+    if (celeb.kind == ::espn::CelebKind::NONE && g.event_id == this->walk_off_event_)
+      celeb = this->walk_off_win_;
+  } else if (celeb.kind == ::espn::CelebKind::WIN && this->celebrations() == ::espn::CelebLevel::FULL &&
+             this->big_plays()) {
+    ::espn::CelebPlan walk = ::espn::walk_off_before_win(this->prev_, g, celeb);
+    if (walk.kind != ::espn::CelebKind::NONE) {
+      this->walk_off_win_ = celeb;
+      this->walk_off_event_ = g.event_id;
+      const uint32_t at = millis() + walk.duration_ms;
+      this->walk_off_win_ms_ = at == 0 ? 1 : at;
+      celeb = walk;
+    }
+  }
   f.splash_text = celeb.kind == ::espn::CelebKind::NONE ? std::string() : celeb.text;
   f.splash_color = celeb.color;
   f.celeb_kind = (uint8_t) celeb.kind;
