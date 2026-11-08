@@ -125,7 +125,8 @@ struct GoalHolds {
   uint8_t next{0};  // the slot a new game takes, oldest first
   // Folds in one read: a new goal replaces the held one, the same goal read
   // again keeps its first clock and takes its scorer once ESPN has one, and
-  // a score that falls below the held goal (taken back on review) drops it.
+  // a score that moves without a goal play (a goal taken back, or one ESPN
+  // never showed as the last play) drops it.
   void update(const GameSnapshot &g);
   const GoalHold *find(const std::string &event_id) const;
 };

@@ -3538,6 +3538,36 @@ static void test_nhl_row() {
   quiet.event_id = "401892498";
   four.update(quiet);
   CHECK(four.find("401892498") == nullptr);
+
+  // A real goal read, FLA @ BOS on 11/8: Geekie's slap shot, ESPN's clock
+  // already at 3:55. BOS 10 shots (FLA's 7 saves, .700, and 3 goals), FLA 13.
+  const uint32_t kBruins = 1;
+  GameSnapshot gk = nhl_event("fixtures/event_nhl_goal.json", kBruins);
+  CHECK_EQ((int) gk.nhl.team_shots, 10);
+  CHECK_EQ((int) gk.nhl.opp_shots, 13);
+  CHECK_EQ((int) gk.nhl.goal_score, 3);
+  CHECK_EQ((int) gk.nhl.goal_period, 1);
+  CHECK_EQ(std::string(gk.nhl.goal_clock), std::string("3:55"));
+  CHECK_EQ(std::string(gk.nhl.goal_name), std::string("Geekie"));  // athletesInvolved's "M. Geekie"
+  {
+    // Without athletesInvolved, the name from the text: "Morgan Geekie Goal (5) Slap Shot, ..."
+    std::string json = swapped(slurp("fixtures/event_nhl_goal.json"), "\"shortName\":\"M. Geekie\"", "\"shortName\":\"\"");
+    GameSnapshot t;
+    CHECK(parse_event_str(json, Sport::HOCKEY, kBruins, t, root_id(json)));
+    CHECK_EQ(std::string(t.nhl.goal_name), std::string("Geekie"));
+  }
+  GoalHolds hk;
+  hk.update(gk);
+  CHECK_EQ(hockey_situation(gk, hk.find(gk.event_id)), std::string("Shots 10-13  3:55 Geekie"));
+  // A goal the board never saw as a last play (seen live: one under video
+  // review): the score moves on, and the older goal comes off the row
+  GameSnapshot after = gk;
+  after.team_score = 4;
+  after.nhl.goal_score = 0;
+  hk.update(after);
+  CHECK(hk.find(gk.event_id) == nullptr);
+  CHECK_EQ(hockey_situation(after, hk.find(after.event_id)), std::string("Shots on goal 10-13"));
+
   // A shootout's goals don't move the held one
   {
     // The event's own status is the document's last one (the competition's comes first)

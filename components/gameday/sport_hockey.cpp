@@ -53,10 +53,10 @@ static int stat_count(JsonObjectConst competitor, const char *name) {
   return -1;
 }
 
-// The scorer: ESPN's short name without the initial ("C. McDavid" ->
-// "McDavid", as soccer's), else the last word before " (" in the goal's text
-// ("Connor McDavid (5) Wrist Shot, assists: ..."). A goal ESPN has not named
-// yet starts ", assists:" and gives none.
+// The scorer: ESPN's short name without the initial ("M. Geekie" ->
+// "Geekie", as soccer's), else the last word of the name in the goal's text
+// ("Morgan Geekie Goal (5) Slap Shot, assists: ...", seen live 11/8). A goal
+// ESPN has not named yet starts ", assists:" and gives none.
 static void scorer(const std::string &short_name, const std::string &text, char (&out)[sizeof(Hockey::goal_name)]) {
   const char *n = short_name.c_str();
   const char *dot = strstr(n, ". ");
@@ -67,7 +67,9 @@ static void scorer(const std::string &short_name, const std::string &text, char 
     return;
   }
   const char *t = text.c_str();
-  const char *paren = strstr(t, " (");
+  const char *paren = strstr(t, " Goal (");
+  if (paren == nullptr)
+    paren = strstr(t, " (");
   if (paren == nullptr || paren == t || *t == ',') {
     out[0] = '\0';
     return;
@@ -321,8 +323,12 @@ void GoalHolds::update(const GameSnapshot &g) {
       h = &x;
   const Hockey &n = g.nhl;
   if (n.goal_score == 0) {
-    // A later play: the goal stays while the score still has it
-    if (h != nullptr && g.team_score + g.opp_score < h->score)
+    // A later play: the goal stays while the score is the one it made. A
+    // goal taken back on review takes it off; so does a goal the board
+    // never saw as a last play (one ESPN shows only as "Video Review", seen
+    // live 11/8), since the held one is no longer the latest. The next
+    // read that carries the new goal fills it in.
+    if (h != nullptr && g.team_score + g.opp_score != h->score)
       *h = GoalHold{};
     return;
   }
