@@ -19,6 +19,7 @@
 #include "favorites.h"
 #include "game_leaders.h"
 #include "game_viz.h"
+#include "row_text.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -7404,8 +7405,7 @@ static void test_wifi_history() {
 
 // The line score at halftime and the final (line_score.h), from the recorded
 // single-event documents.
-// The pictures on the situation row (game_viz.h): the field strip's
-// geometry, the win bar's split and the margin sparkline's samples.
+// Football's field strip on the situation row (game_viz.h): its geometry.
 static void test_game_viz() {
   // The recorded FIU @ JXST read: FIU (away) has the ball at its own 31,
   // 3rd & 4. ESPN's yardLine 69 counts from the home goal line.
@@ -7461,7 +7461,6 @@ static void test_game_viz() {
   CHECK_EQ((int) fd.gain_x, field_col(34, 128, 6));
   CHECK_EQ((int) fd.left_timeouts, 3);
   CHECK_EQ((int) fd.right_timeouts, 2);
-  CHECK_EQ(win_bar_split(del.team_win_pct, 128), 122);
   GameSnapshot wku;
   CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 98, wku));
   CHECK_EQ((int) wku.team_win_pct, 5);
@@ -7516,146 +7515,124 @@ static void test_game_viz() {
   CHECK_EQ((int) pre.down, 0);
   CHECK_EQ((int) pre.distance, 0);
 
-  // The win bar: our columns of 128 for our chance, never the whole bar.
-  CHECK_EQ(win_bar_split(50, 128), 64);
-  CHECK_EQ(win_bar_split(1, 128), 1);
-  CHECK_EQ(win_bar_split(99, 128), 127);
-  CHECK_EQ(win_bar_split(72, 128), 92);
-  CHECK_EQ(win_bar_split(0, 128), -1);
-  CHECK_EQ(win_bar_split(100, 128), -1);
-  CHECK_EQ(win_bar_split(-1, 128), -1);
+}
 
-  // The margin track: one sample per read, a redraw adds nothing, and a new
-  // game starts over.
-  MarginTrack t;
-  CHECK(t.read("1", 10, 0, "12:00", 1));
-  CHECK(!t.read("1", 10, 0, "12:00", 1));  // the same read drawn again
-  CHECK(t.read("1", 10, 0, "11:40", 1));   // the clock moved
-  CHECK(t.read("1", 10, 3, "11:40", 1));   // a basket
-  CHECK_EQ((int) t.n, 3);
-  CHECK_EQ((int) t.margin[2], 3);
-  CHECK(t.read("2", 10, -2, "20:00", 1));
-  CHECK_EQ((int) t.n, 1);
-  CHECK_EQ(t.event_id, std::string("2"));
-  CHECK_EQ((int) t.margin[0], -2);
-  // The same game from the other side (two favorites playing each other):
-  // every sample flips with it, as the scoring log does.
-  MarginTrack side;
-  side.read("7", 10, 3, "9:00", 1);
-  side.read("7", 10, 5, "8:00", 1);
-  CHECK(side.read("7", 20, -5, "8:00", 1));
-  CHECK_EQ((int) side.n, 3);
-  CHECK_EQ((int) side.margin[0], -3);
-  CHECK_EQ((int) side.margin[1], -5);
-  CHECK_EQ((int) side.margin[2], -5);
-  CHECK_EQ(side.last_margin, -5);
-  CHECK_EQ((int) side.team_id, 20);
-  // A read with no team id (the demo's made-up teams) never flips.
-  side.read("7", 0, -7, "7:00", 1);
-  CHECK_EQ((int) side.margin[3], -7);
-  CHECK_EQ((int) side.team_id, 20);
-  // Full: pairs merge and every second read makes a sample from then on.
-  MarginTrack m;
-  for (int i = 0; i < MarginTrack::kMax; i++)
-    m.add("g", 1, i - 64);
-  CHECK_EQ((int) m.n, (int) MarginTrack::kMax);
-  CHECK_EQ((int) m.stride, 1);
-  m.add("g", 1, 100);  // the 129th read: the pairs merge and it is sample 65
-  CHECK_EQ((int) m.n, 65);
-  CHECK_EQ((int) m.stride, 2);
-  CHECK_EQ((int) m.pending, 0);
-  CHECK_EQ((int) m.margin[0], -63);  // the second of each pair stays
-  CHECK_EQ((int) m.margin[63], 63);
-  CHECK_EQ((int) m.margin[64], 100);
-  CHECK_EQ(m.last_margin, 100);
-  m.add("g", 1, 90);  // every second read is a sample now
-  CHECK_EQ((int) m.n, 65);
-  CHECK_EQ((int) m.pending, 1);
-  CHECK_EQ(m.last_margin, 90);
-  // Clamped to what fits the slot.
-  m.add("g", 1, 300);
-  CHECK_EQ((int) m.n, 66);
-  CHECK_EQ((int) m.margin[65], 127);
-  // 4096 reads (a long game polled often) still fit.
-  for (int i = 0; i < 4096; i++)
-    m.add("g", 1, 5);
-  CHECK(m.n <= MarginTrack::kMax);
-  CHECK(m.stride >= 32);
-  // Two games' tracks: leaving a game and coming back keeps its samples; a
-  // third game takes the older slot.
-  MarginTracks tracks;
-  tracks.pick("a").read("a", 1, 4, "5:00", 1);
-  tracks.pick("a").read("a", 1, 6, "4:00", 1);
-  CHECK_EQ((int) tracks.current().n, 2);
-  tracks.pick("b").read("b", 2, -1, "19:00", 1);
-  CHECK_EQ(tracks.current().event_id, std::string("b"));
-  CHECK_EQ((int) tracks.current().n, 1);
-  tracks.pick("a").read("a", 1, 8, "3:00", 1);
-  CHECK_EQ(tracks.current().event_id, std::string("a"));
-  CHECK_EQ((int) tracks.current().n, 3);
-  CHECK_EQ((int) tracks.current().margin[0], 4);
-  tracks.pick("c").read("c", 3, 0, "20:00", 1);
-  CHECK_EQ(tracks.current().event_id, std::string("c"));
-  tracks.pick("b");
-  CHECK_EQ(tracks.current().event_id, std::string("b"));
-  CHECK_EQ((int) tracks.current().n, 0);  // b was the older slot, c took it
+// The situation row's text lines (row_text.h), from the recorded reads.
+static void test_row_text() {
+  RowOptions on;
+  // Football, FIU @ JXST: 3rd & 4, then JXST's win chance in its color.
+  GameSnapshot fb;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, fb));
+  RowHold none;
+  none.read(fb);
+  CHECK_EQ(none.basket, std::string(""));
+  RowLines r = row_lines(fb, none, on, true);
+  CHECK_EQ((int) r.n, 2);
+  CHECK_EQ(r.line[0].forms[0], std::string("3rd & 4"));
+  CHECK_EQ((int) r.line[0].secs, 8);
+  CHECK_EQ(r.line[0].rgb, (uint32_t) 0xFFFFFF);
+  CHECK_EQ(r.line[1].forms[0], std::string("JXST 96% to win"));
+  CHECK_EQ(r.line[1].forms[1], std::string("JXST 96% win"));
+  CHECK_EQ(r.line[1].forms[2], std::string("JXST 96%"));
+  CHECK_EQ(r.line[1].rgb, row_rgb(parse_color(fb.opp_color)));
+  CHECK_EQ(row_news(fb, none), std::string("3rd & 4"));
+  // The switch off leaves the down alone; halftime leaves nothing.
+  RowOptions off;
+  off.win_chance = false;
+  CHECK_EQ((int) row_lines(fb, none, off, true).n, 1);
+  CHECK_EQ((int) row_lines(fb, none, on, false).n, 0);
+  // The red zone turns the down red.
+  GameSnapshot rz = fb;
+  rz.is_red_zone = true;
+  CHECK_EQ(row_lines(rz, none, on, true).line[0].rgb, (uint32_t) 0xFF3030);
+  // Not live, nothing.
+  GameSnapshot post = fb;
+  post.state = GameState::POST;
+  CHECK_EQ((int) row_lines(post, none, on, true).n, 0);
 
-  // The sparkline's columns: stretched across the width, scaled to the peak.
-  int8_t cols[128];
-  MarginTrack e;
-  CHECK_EQ(margin_columns(e, 128, 4, 3, cols), 0);
-  MarginTrack one;
-  one.add("g", 1, 2);
-  CHECK_EQ(margin_columns(one, 128, 4, 3, cols), 1);
-  CHECK_EQ((int) cols[0], 4);  // the only point is the peak
-  CHECK_EQ((int) cols[127], 4);
-  // With a floor on the scale, a 1-0 hockey lead is a sliver.
-  MarginTrack goal;
-  goal.add("g", 1, 1);
-  CHECK_EQ(margin_columns(goal, 128, 4, 3, cols, margin_min_peak(Sport::HOCKEY)), 1);
-  CHECK_EQ((int) cols[0], 2);  // ceil(1 * 4 / 3)
-  MarginTrack basket;
-  basket.add("g", 1, 2);
-  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 1);
-  CHECK_EQ((int) cols[0], 1);  // ceil(2 * 4 / 10)
-  basket.add("g", 1, -20);
-  CHECK_EQ(margin_columns(basket, 128, 4, 3, cols, margin_min_peak(Sport::BASKETBALL)), 2);
-  CHECK_EQ((int) cols[127], -3);  // past the floor the peak rules again
-  MarginTrack two;
-  two.add("g", 1, 0);
-  two.add("g", 1, 8);
-  CHECK_EQ(margin_columns(two, 128, 4, 3, cols), 2);
-  CHECK_EQ((int) cols[0], 0);
-  CHECK_EQ((int) cols[127], 4);
-  CHECK_EQ((int) cols[64], 2);  // halfway is 4 of 8, so 2 of 4 px
-  MarginTrack swing;
-  swing.add("g", 1, 10);
-  swing.add("g", 1, -10);
-  swing.add("g", 1, 10);
-  CHECK_EQ(margin_columns(swing, 128, 4, 3, cols), 3);
-  CHECK_EQ((int) cols[0], 4);
-  CHECK_EQ((int) cols[127], 4);
-  // A deficit fills down to 3 at most.
-  int low = 0;
-  for (int x = 0; x < 128; x++)
-    low = std::min(low, (int) cols[x]);
-  CHECK_EQ(low, -3);
-  // A 1-point lead against a 20-point peak still shows a pixel.
-  MarginTrack tiny;
-  tiny.add("g", 1, 20);
-  tiny.add("g", 1, 1);
-  CHECK_EQ(margin_columns(tiny, 128, 4, 3, cols), 2);
-  CHECK_EQ((int) cols[127], 1);
-  // A pending read (after a merge) is the last point.
-  MarginTrack pend;
-  pend.add("g", 1, 0);  // the sample
-  pend.stride = 2;      // as after a merge
-  pend.add("g", 1, 6);  // pending, not a sample yet
-  CHECK_EQ((int) pend.n, 1);
-  CHECK_EQ((int) pend.pending, 1);
-  CHECK_EQ(margin_columns(pend, 128, 4, 3, cols), 2);
-  CHECK_EQ((int) cols[0], 0);
-  CHECK_EQ((int) cols[127], 4);
+  // Basketball, IND 74 MIN 73 in the 3rd, as IND: McDaniels' two held, each
+  // side's points leader, IND's win chance.
+  GameSnapshot g = hoops_event("fixtures/event_nba_live.json", kPacers);
+  CHECK_EQ(g.nba.team_scorer, std::string("Nesmith 19"));
+  CHECK_EQ(g.nba.opp_scorer, std::string("Edwards 19"));
+  RowHold hold;
+  hold.read(g);
+  CHECK_EQ(hold.basket, std::string("McDaniels 2"));
+  CHECK(!hold.ours);
+  RowLines b = row_lines(g, hold, on, true);
+  CHECK_EQ((int) b.n, 4);
+  CHECK_EQ(b.line[0].forms[0], std::string("McDaniels 2"));
+  CHECK_EQ(b.line[0].rgb, row_rgb(parse_color(g.opp_color)));
+  CHECK_EQ(b.line[1].forms[0], std::string("Nesmith 19"));
+  CHECK_EQ(b.line[1].rgb, row_rgb(parse_color(g.team_color)));
+  CHECK_EQ(b.line[2].forms[0], std::string("Edwards 19"));
+  CHECK_EQ(b.line[3].forms[0], std::string("MIN 56% to win"));  // home 0.444
+  // The basket stays through the plays after it, until the next one.
+  GameSnapshot reb = g;
+  reb.play_value = 0;
+  reb.play_athlete = "R. Gobert";
+  reb.play_type = "Defensive Rebound";
+  hold.read(reb);
+  CHECK_EQ(hold.basket, std::string("McDaniels 2"));
+  GameSnapshot ft = reb;
+  ft.play_value = 1;
+  ft.play_athlete = "A. Nesmith";
+  ft.play_type = "Free Throw - 1 of 2";
+  ft.play_team = kPacers;
+  hold.read(ft);
+  CHECK_EQ(hold.basket, std::string("Nesmith FT"));
+  CHECK(hold.ours);
+  CHECK_EQ(row_news(ft, hold), std::string("Nesmith FT"));
+  // The last play switch off drops the basket only.
+  RowOptions quiet;
+  quiet.last_play = false;
+  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].forms[0], std::string("Nesmith 19"));
+  // Another game starts the hold over.
+  GameSnapshot other = g;
+  other.event_id = "999";
+  other.play_value = 0;
+  hold.read(other);
+  CHECK_EQ(hold.basket, std::string(""));
+  // A TV timeout as the last play: ESPN's words fit the full row.
+  GameSnapshot to = reb;
+  to.last_play = "Official TV Timeout";
+  to.play_team = 0;
+  RowLines t = row_lines(to, hold, on, true);
+  bool seen = false;
+  for (int i = 0; i < t.n; i++)
+    if (t.line[i].forms[0] == "Official TV Timeout") {
+      seen = true;
+      CHECK_EQ(t.line[i].forms[1], std::string("TV timeout"));
+      CHECK_EQ(t.line[i].forms[2], std::string("Timeout"));
+    }
+  CHECK(seen);
+  GameSnapshot team_to = reb;
+  team_to.last_play = "Timberwolves Full Timeout";
+  team_to.play_team = kWolves;
+  RowLines tt = row_lines(team_to, hold, on, true);
+  CHECK_EQ(tt.line[2].forms[1], std::string("MIN timeout"));  // after the two leaders
+  // At halftime only the series is left, and only in the playoffs.
+  CHECK_EQ((int) row_lines(g, hold, on, false).n, 0);
+  GameSnapshot po = g;
+  po.nba.team_wins = 2;
+  po.nba.opp_wins = 1;
+  RowLines half = row_lines(po, hold, on, false);
+  CHECK_EQ((int) half.n, 1);
+  CHECK_EQ(half.line[0].forms[0], std::string("IND lead 2-1"));
+  // A pregame document's leaders are the season's: no scorers from it.
+  GameSnapshot pre = hoops_event("fixtures/event_nba_pre_leaders.json", 14);  // MIA at CHA
+  CHECK_EQ(pre.nba.team_scorer, std::string(""));
+
+  // Soccer keeps its latest goal as its one line.
+  GameSnapshot sc = soccer_event("fixtures/event_soccer_halftime.json", kVasco);
+  RowLines so = row_lines(sc, hold, on, false);
+  CHECK_EQ((int) so.n, 1);
+  CHECK_EQ(so.line[0].forms[0], std::string("28' Lescano"));
+
+  // Team colors on black: black turns white, navy is lifted, bright stays.
+  CHECK_EQ(row_rgb(0x000000), (uint32_t) 0xFFFFFF);
+  CHECK_EQ(row_rgb(0x0C2340), (uint32_t) ((0x0C * 0xC0 / 0x40) << 16 | (0x23 * 0xC0 / 0x40) << 8 | 0xC0));
+  CHECK_EQ(row_rgb(0xFFD000), (uint32_t) 0xFFD000);
 }
 
 static void test_line_score() {
@@ -8561,6 +8538,7 @@ int main() {
   test_schedule_due();
   test_no_live_rescan();
   test_game_viz();
+  test_row_text();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();

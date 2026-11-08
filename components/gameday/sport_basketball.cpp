@@ -1,6 +1,7 @@
 // Basketball's parse extras, ticker, clock row and splash (NBA, WNBA, men's
 // college). Pure, no ESPHome includes.
 #include "espn_parse.h"
+#include "game_leaders.h"
 
 namespace espn {
 
@@ -36,6 +37,19 @@ void basketball_from_event(JsonObjectConst ev, GameSnapshot &s) {
     b.phase = Phase::END_PERIOD;
   else if (name == "STATUS_HALFTIME")
     b.phase = Phase::HALFTIME;
+  // The game's points leaders, for the situation row (row_text.h). Before
+  // the start ESPN's list is the season's (points per game), so only now.
+  if (s.state == GameState::IN) {
+    for (JsonObjectConst c : comp["competitors"].as<JsonArrayConst>()) {
+      JsonObjectConst top = top_leader(c, "points");
+      std::string who = leader_short_surname(str_or_empty(top["athlete"]["shortName"]));
+      std::string pts = str_or_empty(top["displayValue"]);
+      if (who.empty() || pts.empty() || pts == "0")
+        continue;
+      bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+      (ours ? b.team_scorer : b.opp_scorer) = who + " " + pts;
+    }
+  }
   // Keep the series of a playoff game only
   JsonObjectConst series = comp["series"];
   if (str_or_empty(series["type"]) != "playoff")

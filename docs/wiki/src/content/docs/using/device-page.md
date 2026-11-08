@@ -146,6 +146,10 @@ Drawn in the row under the clock during a game, on a 128-wide board (not on a si
 | **Win chance bar** | Football and basketball: a thin bar split at ESPN's chance for each side to win. |
 | **Score margin** | Basketball and hockey: the lead over the game as a small chart. |
 
+:::note[Coming in the next release]
+Two switches here. **Win chance bar** becomes **Win chance**: in football and basketball the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win", and this switch turns that line on or off. **Score margin** goes with its chart. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer).
+:::
+
 ### Celebrations
 
 The panel fills the screen with a splash when someone scores, in the scoring team's color. On a white or pale team color the words are dark so they stay readable. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.

@@ -31,6 +31,18 @@ Basketball teams have no Up next list on the device page: their season schedules
 
 On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started showing the game. Your team's lead fills up from the middle in your color, the other team's lead fills down in theirs, and a white pixel marks the latest read. A 10-point lead fills the row; smaller leads are proportionally shorter. In a playoff game the row shows the series instead. The chart keeps the last two games the board showed, so Live games switching away and back, or two favorites alternating, picks up where it left off; a restart starts over. At halftime and after the final the row is left to the line score and leaders cards. A one-pixel **win chance bar** just above it shows ESPN's chance for each side, your color from the left. The panel samples both from the game document it already reads, so nothing extra is downloaded. **Score margin** and **Win chance bar** under **Live pictures** on the device page's Display tab turn them off.
 
+:::note[Coming in the next release]
+The chart and the bar go. The row under the clock shows words instead, one line at a time, about 4 seconds each, using the full width of the board:
+
+- **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw, in the scoring team's color. It stays until the next basket, and a new one shows right away. It follows **Last play**.
+- **Each team's points leader** in this game, like "Edwards 24", in that team's color.
+- **A timeout**, like "Official TV Timeout", while it is the last play.
+- **The playoff series**, like "NY lead 2-1", in a playoff game.
+- **The win chance**, like "MIN 56% to win", in the color of the team ESPN favors. **Win chance** under **Live pictures** turns it off.
+
+At halftime only the series stays, and the line score and leaders cards take their turns as before.
+:::
+
 Basketball has no game situation line, so there is no ticker switch for one. **Last play** under **Ticker** on the device page's Display tab turns the last play on or off. See [The ticker](/using/ticker/).
 
 On a single 64x64 panel the clock takes the abbreviations' place during play. There is no room for the series row or the records.

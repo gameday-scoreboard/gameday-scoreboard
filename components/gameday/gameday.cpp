@@ -4111,10 +4111,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.highlight = g.mlb.bases == (::espn::Baseball::FIRST | ::espn::Baseball::SECOND | ::espn::Baseball::THIRD);
   }
   if (g.valid && g.sport == ::espn::Sport::SOCCER) {
-    // The latest goal on the situation row, red cards under the logos, and
-    // records that fit the label under a logo.
-    if (g.state == GameState::IN)
-      f.situation = ::espn::soccer_situation(g);
+    // Red cards under the logos (the latest goal is on the situation row,
+    // below), and records that fit the label under a logo.
     if (g.state != GameState::PRE) {
       f.team_marks = g.soc.team_reds;
       f.opp_marks = g.soc.opp_reds;
@@ -4127,29 +4125,28 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.team_record = ::espn::hockey_board_record(g.team_record);
     f.opponent_record = ::espn::hockey_board_record(g.opp_record);
   }
-  if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::BASKETBALL)
-    f.situation = ::espn::basketball_series(g);
-  // The pictures on a wide board's situation row (game_viz.h). The margin
-  // samples follow the board game read by read while it is on; a redraw of
-  // the same read adds nothing. The bits say what the page draws now.
-  // Nothing at halftime or after the final: the line score and leaders
-  // cards take the row's turns then.
+  // The field strip on a wide board's situation row (game_viz.h), and the
+  // text lines the row takes turns showing (row_text.h). The strip is off at
+  // halftime and after the final: the line score and leaders cards take the
+  // row's turns then. A redraw of the same read holds the same basket.
   const bool playing = g.valid && g.state == GameState::IN && !::espn::at_halftime(g);
-  const bool spark_sport = g.sport == ::espn::Sport::BASKETBALL || g.sport == ::espn::Sport::HOCKEY;
-  const bool odds_sport = g.sport == ::espn::Sport::FOOTBALL || g.sport == ::espn::Sport::BASKETBALL;
-  if (g.valid && g.state == GameState::IN && !g.event_id.empty() && spark_sport)
-    this->margin_tracks_.pick(g.event_id).read(g.event_id, g.team_id, g.team_score - g.opp_score, g.display_clock,
-                                               g.period);
-  if (playing) {
-    f.win_pct = g.team_win_pct;
-    if (this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
-      f.viz |= ::espn::VIZ_FIELD;
-    // ESPN has a number for baseball too, but that row is the diamond's.
-    if (this->win_bar_on() && odds_sport && g.team_win_pct >= 1)
-      f.viz |= ::espn::VIZ_WINBAR;
-    if (this->margin_spark_on() && spark_sport && this->margin_tracks_.current().event_id == g.event_id &&
-        this->margin_tracks_.current().n > 0)
-      f.viz |= ::espn::VIZ_SPARK;
+  if (playing && this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
+    f.viz |= ::espn::VIZ_FIELD;
+  if (g.valid) {
+    this->row_hold_.read(g);
+    ::espn::RowOptions ro;
+    ro.win_chance = this->win_chance_on();
+    ro.last_play = this->ticker_last_play();
+    ::espn::fill_row_lines(f.row, g, this->row_hold_, ro, playing);
+    // Hockey's one line (shots and the last goal, sport_hockey.cpp) on the same row.
+    if (g.sport == ::espn::Sport::HOCKEY && g.state == GameState::IN && f.row.n == 0)
+      f.row.add(f.situation, 0xFFFFFF);
+    std::string news = ::espn::row_news(g, this->row_hold_);
+    if (news != this->row_news_) {
+      this->row_news_ = news;
+      this->row_news_n_++;
+    }
+    f.row.news = this->row_news_n_;
   }
   f.team_color = ::espn::parse_color(g.team_color);
   f.opponent_color = ::espn::parse_color(g.opp_color);
@@ -5410,8 +5407,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["odds"] = this->ticker_odds();
   doc["leaders"] = this->ticker_leaders();
   doc["field"] = this->field_strip_on();
-  doc["winbar"] = this->win_bar_on();
-  doc["spark"] = this->margin_spark_on();
+  doc["winbar"] = this->win_chance_on();
+  // The score margin chart is gone; apps from before still read the key.
+  doc["spark"] = false;
   doc["opp"] = this->opponent_splashes();
   doc["celebrate"] = (int) this->celebrations();
   doc["best"] = this->best_game();
@@ -7810,10 +7808,10 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         this->set_field_strip(op.on);
         break;
       case ::espn::SetKind::WINBAR:
-        this->set_win_bar(op.on);
+        this->set_win_chance(op.on);
         break;
       case ::espn::SetKind::SPARK:
-        this->set_margin_spark(op.on);
+        // The score margin chart is gone. Apps from before still send it.
         break;
       case ::espn::SetKind::OPP:
         this->set_opponent_splashes(op.on);

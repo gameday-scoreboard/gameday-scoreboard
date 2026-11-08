@@ -1945,46 +1945,40 @@ test("pre-game leaders switch: every sport but soccer, posts leaders", async ({ 
   await expect(sw).toBeHidden();
 });
 
-test("pictures switches: field strip, win chance bar and score margin, by sport", async ({ page, request }) => {
+test("pictures switches: field strip and win chance, by sport", async ({ page, request }) => {
   const sw = (name) => page.getByRole("switch", { name, exact: true });
-  // Nothing picked yet: all three, on.
+  // Nothing picked yet: both, on; the score margin chart is gone.
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
   await tab(page, "display");
   await expect(sw("Field strip")).toBeVisible();
-  await expect(sw("Win chance bar")).toBeVisible();
-  await expect(sw("Score margin")).toBeVisible();
+  await expect(sw("Win chance")).toBeVisible();
+  await expect(sw("Score margin")).toHaveCount(0);
   await expect(sw("Field strip")).toBeChecked();
   await sw("Field strip").click();
   await expectSet(request, { field: "0" });
   await expect(sw("Field strip")).not.toBeChecked();
-  await sw("Win chance bar").click();
+  await sw("Win chance").click();
   await expectSet(request, { winbar: "0" });
-  await sw("Score margin").click();
-  await expectSet(request, { spark: "0" });
   const st = await deviceState(request);
-  expect([st.field, st.winbar, st.spark]).toEqual([false, false, false]);
+  expect([st.field, st.winbar]).toEqual([false, false]);
 
-  // A football favorite: the strip and the bar, no margin chart.
+  // A football favorite: the strip and the win chance.
   await reset(request, { favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}] });
   await page.reload();
   await expect(sw("Field strip")).toBeVisible();
-  await expect(sw("Win chance bar")).toBeVisible();
-  await expect(sw("Score margin")).toBeHidden();
+  await expect(sw("Win chance")).toBeVisible();
 
-  // Hockey only: the margin chart alone (ESPN has no win chance for hockey).
+  // Hockey only: nothing to turn off, so no card (ESPN has no win chance for hockey).
   await reset(request, { favs: [{ l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, {}, {}, {}] });
   await page.reload();
-  await expect(sw("Field strip")).toBeHidden();
-  await expect(sw("Win chance bar")).toBeHidden();
-  await expect(sw("Score margin")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live pictures" })).toBeHidden();
 
-  // Basketball: the bar and the chart.
+  // Basketball: the win chance alone.
   await reset(request, { favs: [{ l: "nba", id: 25, abbr: "SA", name: "San Antonio Spurs" }, {}, {}, {}] });
   await page.reload();
   await expect(sw("Field strip")).toBeHidden();
-  await expect(sw("Win chance bar")).toBeVisible();
-  await expect(sw("Score margin")).toBeVisible();
+  await expect(sw("Win chance")).toBeVisible();
 });
 
 test("situation switches: one per sport the panel follows, each posting its own key", async ({ page, request }) => {

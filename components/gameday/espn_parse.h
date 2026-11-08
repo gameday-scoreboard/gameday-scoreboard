@@ -84,6 +84,9 @@ struct Basketball {
   Phase phase{Phase::OTHER};
   std::string series;                  // ESPN's line: "ATL leads series 1-0"
   int8_t team_wins{-1}, opp_wins{-1};  // series wins so far, -1 outside a series
+  // Each side's points leader in this game, "Edwards 24", while it is on;
+  // "" before anyone scores or when ESPN lists none.
+  std::string team_scorer, opp_scorer;
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
