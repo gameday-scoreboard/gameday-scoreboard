@@ -233,11 +233,43 @@ def figure(now, was):
     return {"now": now, "base": was, "growth": None if was is None or now is None else now - was}
 
 
+def tag_version(tag):
+    """v2026.11.0 -> (2026, 11, 0); None when the tag isn't a release tag."""
+    m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def retag_errors(old_tag, new_tag, rel_flash, release_sizes) -> list:
+    """A pull request that moves the release block to another tag resets the
+    flash allowance, so the new baseline must be what CI measured on that tag:
+    a later release tag with a Build run, and the same flash figure for every
+    build. Anything else is a plain failure, not something to approve."""
+    old_v, new_v = tag_version(old_tag), tag_version(new_tag)
+    if new_v is None:
+        return [f"release block tag {new_tag!r} is not a release tag (vYYYY.M.P)"]
+    if old_v is not None and new_v <= old_v:
+        return [f"release block tag {new_tag} is not newer than {old_tag}"]
+    measured = (release_sizes or {}).get("firmware", {})
+    if not measured:
+        return [f"release block moved to {new_tag}, but CI found no Build run figures for that tag; "
+                f"the tag must exist and its Build run must have finished"]
+    errors = []
+    for name, b in sorted(rel_flash.items()):
+        want = measured.get(name, {}).get("flash")
+        if want is None:
+            errors.append(f"release block lists {name} at {new_tag}, but {new_tag}'s Build run has no {name} figure")
+        elif b != want:
+            errors.append(f"release block gives {name} {b:,} B at {new_tag}, but {new_tag}'s Build run measured {want:,} B")
+    return errors
+
+
 def check(budget: dict, sizes: dict, base: dict, base_label: str, absent_ok: frozenset = frozenset(),
-          base_budget: dict = None, approvals: list = None) -> dict:
+          base_budget: dict = None, approvals: list = None, release_sizes: dict = None) -> dict:
     """The whole verdict as the report: errors (plain failures), needs_approval
     (with whether an approval covers each), and every figure. base_budget and
-    approvals are given on a pull request into dev only."""
+    approvals are given on a pull request into dev only. release_sizes are the
+    figures CI measured on the release block's tag, fetched only when a pull
+    request changes the tag."""
     errors, needs = [], []
     growth_cap = budget.get("max_growth", {})
     release = budget.get("release", {})
@@ -295,11 +327,13 @@ def check(budget: dict, sizes: dict, base: dict, base_label: str, absent_ok: fro
 
     if base_budget is not None:
         old_rel = base_budget.get("release", {})
+        old_allow = old_rel.get("allowance_flash", DEFAULT_ALLOWANCE)
+        if old_rel and allowance > old_allow:
+            need("flash", "release", "allowance_raise", allowance - old_allow,
+                 f"release flash allowance raised by {allowance - old_allow:,} B ({old_allow:,} to {allowance:,})")
+        if old_rel and old_rel.get("tag") != release.get("tag"):
+            errors.extend(retag_errors(old_rel.get("tag"), release.get("tag"), rel_flash, release_sizes))
         if old_rel and old_rel.get("tag") == release.get("tag"):
-            old_allow = old_rel.get("allowance_flash", DEFAULT_ALLOWANCE)
-            if allowance > old_allow:
-                need("flash", "release", "allowance_raise", allowance - old_allow,
-                     f"release flash allowance raised by {allowance - old_allow:,} B ({old_allow:,} to {allowance:,})")
             for name, b in sorted(rel_flash.items()):
                 a = old_rel.get("flash", {}).get(name)
                 if a is not None and b > a:
@@ -465,8 +499,10 @@ def run_check(args: list) -> int:
     if base_budget_file and base_budget_file.is_file():
         base_budget = json.loads(base_budget_file.read_text(encoding="utf-8"))
     sizes = load_sizes(sizes_dir)
+    release_dir = Path(arg(args, "--release-sizes")) if "--release-sizes" in args else None
+    release_sizes = load_sizes(release_dir) if release_dir and release_dir.is_dir() and any(release_dir.iterdir()) else None
     report = check(budget, sizes, base, base_label or "the base branch", absent_ok,
-                   base_budget, load_approvals(approvals_dir))
+                   base_budget, load_approvals(approvals_dir), release_sizes)
     report["base"] = base_label or None
     text = summary(report)
     if report_file:
@@ -632,7 +668,19 @@ def selftest() -> None:
     stretched = {**budget, "release": {"tag": "v1", "flash": {"a": 820_000}, "allowance_flash": 120_000}}
     assert [(n["rule"], n["needs"]) for n in pr(bud=stretched)["needs_approval"]] == \
         [("allowance_raise", 20_000), ("baseline_raise", 20_000)]
-    assert pr(bud={**stretched, "release": {**stretched["release"], "tag": "v2"}})["ok"]
+    # Moving the release block to another tag must match what CI measured on it.
+    def retag(tag, flash=820_000, allow=100_000, measured=820_000, old_tag="v1"):
+        bud = {**budget, "release": {"tag": tag, "flash": {"a": flash}, "allowance_flash": allow}}
+        base_bud = {**budget, "release": {**budget["release"], "tag": old_tag}}
+        rel = {"firmware": {"a": {"flash": measured}}} if measured is not None else None
+        return check(bud, sizes(850_000), sizes(840_000), "dev", frozenset(), base_bud, None, rel)
+    assert retag("v2026.12.0")["ok"]
+    assert "not a release tag" in retag("v2")["errors"][0]
+    assert "no Build run figures" in retag("v2026.12.0", measured=None)["errors"][0]
+    assert "measured 810,000 B" in retag("v2026.12.0", measured=810_000)["errors"][0]
+    assert "not newer" in retag("v2026.11.0", old_tag="v2026.12.0")["errors"][0]
+    moved = retag("v2026.12.0", allow=120_000)
+    assert [(n["rule"], n["needs"]) for n in moved["needs_approval"]] == [("allowance_raise", 20_000)] and not moved["ok"]
 
     # No base sections yet; no OTA slot anywhere.
     old = sizes(840_000)

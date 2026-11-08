@@ -444,6 +444,26 @@ jobs:
           done
           echo "Approval statuses on $n commits:"
           cat approvals/*.json
+          # A change that moves the release block to another tag resets the
+          # flash allowance, so the check compares its baseline with the
+          # figures that tag's own Build run measured.
+          old_tag=$(jq -r '.release.tag // ""' pr-base-budget.json)
+          new_tag=$(jq -r '.release.tag // ""' firmware/budget.json)
+          mkdir -p release-sizes
+          if [ -n "$new_tag" ] && [ "$new_tag" != "$old_tag" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$new_tag" > /dev/null; then
+              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&event=push&status=success&per_page=1" \
+                --jq '.workflow_runs[0].id // empty')
+              if [ -n "$id" ]; then
+                gh run download "$id" -p 'sizes-*' -D release-sizes || true
+                echo "Release figures for $new_tag from run $id"
+              else
+                echo "No finished Build run for $new_tag"
+              fi
+            else
+              echo "No tag $new_tag in this repository"
+            fi
+          fi
       - name: Check the budget
         if: needs.changes.outputs.firmware == 'true'
         env:
@@ -451,7 +471,8 @@ jobs:
           ABSENT_OK: ${{ github.event_name == 'pull_request' && github.base_ref == 'dev' && 'moonhub75-2panel' || '' }}
         run: |
           python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL" --absent-ok "$ABSENT_OK" \
-            --base-budget pr-base-budget.json --approvals approvals --report budget-report.json
+            --base-budget pr-base-budget.json --approvals approvals --release-sizes release-sizes \
+            --report budget-report.json
       - uses: actions/upload-artifact@v7
         if: always() && needs.changes.outputs.firmware == 'true'
         with:

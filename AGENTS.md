@@ -93,7 +93,9 @@ is the short version.
   `budget-report` artifact has the same figures as JSON.
   `python3 scripts/size_budget.py seed <sizes folder>` prints caps with
   10% headroom (at least 1 KB); `release-baseline <sizes folder> <tag>`
-  resets the release block when a release is cut.
+  resets the release block when a release is cut; CI checks that the new
+  tag is a later release tag and that the baseline matches what its Build
+  run measured.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run
