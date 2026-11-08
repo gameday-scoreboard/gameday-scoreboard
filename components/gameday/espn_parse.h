@@ -96,11 +96,13 @@ struct Hockey {
   int16_t team_shots{-1}, opp_shots{-1};
   // The latest goal. ESPN's situation keeps only the newest play, so the
   // component holds it from read to read (hockey_hold_goal) until the next.
-  // goal_score is both sides' goals with it in, 0 for none.
+  // goal_score is both sides' goals with it in, 0 for none. Plain arrays,
+  // not strings: the snapshot is copied in many places, and a string adds
+  // code to every copy.
   uint8_t goal_period{0};
   uint16_t goal_score{0};
-  std::string goal_clock;  // "12:04"
-  std::string goal_name;   // "McDavid"
+  char goal_clock[6]{};  // "12:04"
+  char goal_name[24]{};  // "McDavid", cut to fit
 };
 
 // One scoreboard event, resolved to "us" and "them".

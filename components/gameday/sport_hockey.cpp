@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 
 namespace espn {
@@ -23,6 +24,11 @@ static std::string player_name(const std::string &short_name) {
   if (dot != std::string::npos && dot <= 2)
     return short_name.substr(dot + 2);
   return short_name;
+}
+
+// Into one of Hockey's fixed fields, cut to fit
+template<size_t N> static void put(char (&dst)[N], const std::string &src) {
+  snprintf(dst, N, "%s", src.c_str());
 }
 
 namespace detail {
@@ -95,10 +101,9 @@ void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
   // The clock stops after a goal until the faceoff, so the read's clock is
   // the goal's.
   if (s.display_clock.find(':') != std::string::npos && s.display_clock.size() <= 5)
-    h.goal_clock = s.display_clock;
-  h.goal_name = player_name(s.play_athlete);
-  if (h.goal_name.empty())
-    h.goal_name = scorer_from_text(s.last_play);
+    put(h.goal_clock, s.display_clock);
+  std::string name = player_name(s.play_athlete);
+  put(h.goal_name, name.empty() ? scorer_from_text(s.last_play) : name);
 }
 
 }  // namespace detail
@@ -240,7 +245,8 @@ std::string hockey_situation(const GameSnapshot &s, size_t max) {
   // The goal's period, its clock and its scorer; the period gives way first
   // when it is the one on the clock row above, else the clock does.
   const std::string per = period_name(h.goal_period, h.playoffs);
-  const std::string name = h.goal_name.empty() ? "Goal" : h.goal_name;
+  const std::string name = h.goal_name[0] ? h.goal_name : "Goal";
+  const std::string clock = h.goal_clock;
   const bool same = h.goal_period == s.period;
   auto join = [](std::initializer_list<const std::string *> parts) {
     std::string t;
@@ -253,8 +259,8 @@ std::string hockey_situation(const GameSnapshot &s, size_t max) {
     }
     return t;
   };
-  const std::string tries[] = {join({&per, &h.goal_clock, &name}),
-                               same ? join({&h.goal_clock, &name}) : join({&per, &name}), name};
+  const std::string tries[] = {join({&per, &clock, &name}), same ? join({&clock, &name}) : join({&per, &name}),
+                               name};
   const size_t room = sog.empty() ? max : max >= sog.size() + 2 ? max - sog.size() - 2 : 0;
   for (const std::string &t : tries)
     if (t.size() <= room)
@@ -273,9 +279,9 @@ void hockey_hold_goal(const GameSnapshot &prev, GameSnapshot &cur) {
     // The same goal read again: the clock from its first read, which is
     // nearest the goal, and its scorer once ESPN has one.
     c.goal_period = p.goal_period;
-    c.goal_clock = p.goal_clock;
-    if (c.goal_name.empty())
-      c.goal_name = p.goal_name;
+    memcpy(c.goal_clock, p.goal_clock, sizeof(c.goal_clock));
+    if (!c.goal_name[0])
+      memcpy(c.goal_name, p.goal_name, sizeof(c.goal_name));
     return;
   }
   // A later play: keep the goal while the score still has it (a goal taken
@@ -283,8 +289,8 @@ void hockey_hold_goal(const GameSnapshot &prev, GameSnapshot &cur) {
   if (c.goal_score == 0 && cur.team_score + cur.opp_score >= p.goal_score) {
     c.goal_score = p.goal_score;
     c.goal_period = p.goal_period;
-    c.goal_clock = p.goal_clock;
-    c.goal_name = p.goal_name;
+    memcpy(c.goal_clock, p.goal_clock, sizeof(c.goal_clock));
+    memcpy(c.goal_name, p.goal_name, sizeof(c.goal_name));
   }
 }
 

@@ -3431,7 +3431,7 @@ static void test_nhl_row() {
     // The next read names him, and keeps the first read's clock
     GameSnapshot later = gl;
     later.display_clock = "2:58";
-    later.nhl.goal_clock = "2:58";
+    snprintf(later.nhl.goal_clock, sizeof(later.nhl.goal_clock), "%s", "2:58");
     hockey_hold_goal(n, later);
     CHECK_EQ(later.nhl.goal_clock, std::string("3:21"));
     CHECK_EQ(later.nhl.goal_name, std::string("MacKinnon"));
@@ -3463,11 +3463,11 @@ static void test_nhl_row() {
   // In the goal's own period the period gives way first
   GameSnapshot same = p2;
   same.nhl.goal_period = 2;
-  same.nhl.goal_clock = "12:04";
+  snprintf(same.nhl.goal_clock, sizeof(same.nhl.goal_clock), "%s", "12:04");
   CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  MacKinnon"));
-  same.nhl.goal_name = "Ekman-Larsson";
+  snprintf(same.nhl.goal_name, sizeof(same.nhl.goal_name), "%s", "Ekman-Larsson");
   CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  Ekman-Larsson"));
-  same.nhl.goal_name = "Kane";
+  snprintf(same.nhl.goal_name, sizeof(same.nhl.goal_name), "%s", "Kane");
   CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  2nd 12:04 Kane"));
   CHECK_EQ(hockey_situation(same, 12), std::string("SOG 21-19"));  // no room: the shots stay
   same.nhl.team_shots = -1;
@@ -3492,8 +3492,8 @@ static void test_nhl_row() {
   GameSnapshot tie = gl;
   tie.team_score = 1;
   tie.nhl.goal_score = 2;
-  tie.nhl.goal_name = "Connor";
-  tie.nhl.goal_clock = "0:45";
+  snprintf(tie.nhl.goal_name, sizeof(tie.nhl.goal_name), "%s", "Connor");
+  snprintf(tie.nhl.goal_clock, sizeof(tie.nhl.goal_clock), "%s", "0:45");
   hockey_hold_goal(gl, tie);
   CHECK_EQ(tie.nhl.goal_name, std::string("Connor"));
   CHECK_EQ(tie.nhl.goal_clock, std::string("0:45"));
