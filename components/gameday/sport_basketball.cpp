@@ -130,8 +130,13 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
   }
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play && !(o.row_timeout && timeout_play(s.last_play)))
+  // A timeout is the row's on a wide board (row_text.h). The ticker shows
+  // the records then, as in a break: the clock would repeat the clock row.
+  const bool row_has_it = o.row_timeout && timeout_play(s.last_play);
+  if (o.last_play && !row_has_it)
     add_last_play(out, s.last_play);
+  if (out.empty() && row_has_it)
+    out = records_line(s);
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;

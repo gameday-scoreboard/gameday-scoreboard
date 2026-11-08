@@ -7624,7 +7624,9 @@ static void test_row_text() {
   CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
   tick.row_timeout = true;
   CHECK(status_text(to, tick, "").find("Timeout") == std::string::npos);
-  CHECK(!status_text(to, tick, "").empty());
+  // Nor the clock, which has its own row: the records, as in a break.
+  CHECK_EQ(status_text(to, tick, ""), espn::detail::records_line(to));
+  CHECK(!espn::detail::records_line(to).empty());
   // A basket is still the ticker's.
   CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
   // Football's win chance: in the ticker on a single panel, on the row only
