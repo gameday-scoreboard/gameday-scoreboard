@@ -4158,8 +4158,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // the app does.
   f.team_badge = f.team_logo.empty() && !f.team_abbr.empty();
   f.opponent_badge = f.opponent_logo.empty() && !f.opponent_abbr.empty();
-  f.team_badge_rgb = ::espn::badge_text(::espn::badge_rgb(g.team_color), ::espn::badge_rgb(g.team_alt));
-  f.opponent_badge_rgb = ::espn::badge_text(::espn::badge_rgb(g.opp_color), ::espn::badge_rgb(g.opp_alt));
+  f.team_badge_rgb = ::espn::badge_text(::espn::badge_rgb(g.team_color), g.team_alt);
+  f.opponent_badge_rgb = ::espn::badge_text(::espn::badge_rgb(g.opp_color), g.opp_alt);
 #ifdef GAMEDAY_DEMO
   this->demo_badges_(f);
 #endif
