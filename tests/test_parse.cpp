@@ -3932,6 +3932,11 @@ static void test_badge() {
   CHECK_EQ(badge_text(0x0C2340, 0xC99700), 0xC99700u);  // navy: its gold
   CHECK_EQ(badge_text(0x7A0019, 0xFFFFFF), 0xFFFFFFu);  // maroon: its white
   CHECK_EQ(badge_text(0x7A0019, 0x041E42), kBadgeNoColorText);  // both dark
+  CHECK_EQ(badge_text(0x005730, 0xFFB81C), 0xFFB81Cu);  // dark green: its gold
+  CHECK_EQ(badge_text(0x33006F, 0x000000), kBadgeNoColorText);  // deep purple
+  CHECK_EQ(badge_text(0x4E2A84, 0x000000), 0x4E2A84u);  // purple
+  CHECK_EQ(badge_text(0x0000FF, 0x000000), 0x0000FFu);  // full blue lights well
+  CHECK_EQ(badge_peak(0x0C2340), 0x40);
   CHECK_EQ(badge_text(0, 0), kBadgeNoColorText);        // no color at all
   CHECK_EQ(badge_text(badge_rgb("000000"), 0), kBadgeNoColorText);
   // The second color comes from ESPN's alternateColor: FIU is navy 091f3f

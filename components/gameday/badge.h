@@ -48,16 +48,24 @@ inline uint32_t badge_rgb(const std::string &hex) {
 }
 
 // On the panel the badge is the abbreviation alone, in the team's color on
-// the black logo slot. A color this dark (navy 0C2340 is 126, maroon 7A0019
-// is 108) barely lights the LEDs, so the letters take the team's second
-// color, or white when that is dark too or ESPN has no color.
-constexpr int kBadgeTextMinLum = 150;
+// the black logo slot. How bright a letter looks on the LEDs follows its
+// brightest channel, not luminance: full blue reads fine, while dark green
+// 005730 (luminance 257) is dimmer than maroon. A color whose brightest
+// channel is under half (navy 0C2340 is 64, maroon 7A0019 is 122) barely
+// lights the LEDs, so the letters take the team's second color, or white
+// when that is dark too or ESPN has no color.
+constexpr int kBadgeTextMinPeak = 128;
 constexpr uint32_t kBadgeNoColorText = 0xFFFFFF;
 
+inline int badge_peak(uint32_t rgb) {
+  int r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
+  return r > g ? (r > b ? r : b) : (g > b ? g : b);
+}
+
 inline uint32_t badge_text(uint32_t color, uint32_t alt) {
-  if (badge_luminance(color) >= kBadgeTextMinLum)
+  if (badge_peak(color) >= kBadgeTextMinPeak)
     return color;
-  if (badge_luminance(alt) >= kBadgeTextMinLum)
+  if (badge_peak(alt) >= kBadgeTextMinPeak)
     return alt;
   return kBadgeNoColorText;
 }
