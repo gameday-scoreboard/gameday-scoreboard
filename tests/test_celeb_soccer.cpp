@@ -81,6 +81,10 @@ static void test_minutes() {
   CHECK_EQ(soccer_goal_minute("45'+3'"), 48);
   CHECK_EQ(soccer_goal_minute("120'+1'"), 121);
   CHECK_EQ(soccer_goal_minute(""), 0);
+  CHECK_EQ(soccer_minute_words("89'"), std::string("89'"));
+  CHECK_EQ(soccer_minute_words("90'+3'"), std::string("90+3'"));
+  CHECK_EQ(soccer_minute_words("120'+1'"), std::string("120+1'"));
+  CHECK_EQ(soccer_minute_words(""), std::string(""));
   CHECK(soccer_late_minute(85, 2));
   CHECK(soccer_late_minute(97, 2));
   CHECK(!soccer_late_minute(84, 2));
@@ -208,6 +212,7 @@ static void test_made_up() {
                               goal("90'+2'", "James", true, false, true)},
                              2);
   CHECK(soccer_big_play(level, ogl, false, true).play == SoccerPlay::LATE_GOAL);
+  CHECK_EQ(soccer_big_play(level, ogl, false, true).words, std::string("90+2'"));
   // A goal at 45'+3' in the first half is not late.
   GameSnapshot fh0 = made_up({goal("20'", "Palmer", false)}, 1);
   GameSnapshot fh1 = made_up({goal("20'", "Palmer", false), goal("45'+3'", "Saka", true)}, 1);

@@ -41,6 +41,16 @@ inline int soccer_goal_minute(const std::string &clock) {
   return any ? base + added : 0;
 }
 
+// The minute as the caption shows it, the way the clock row writes it
+// without the inner mark: "89'", "90+3'".
+inline std::string soccer_minute_words(const std::string &clock) {
+  std::string out;
+  for (char c : clock)
+    if ((c >= '0' && c <= '9') || c == '+')
+      out += c;
+  return out.empty() ? out : out + "'";
+}
+
 // Late: the last five minutes of normal time and its stoppage (period 2), or
 // of extra time (period 4). A first-half stoppage goal ("45'+3'") never is.
 inline bool soccer_late_minute(int minute, int period) {
@@ -124,7 +134,7 @@ inline SoccerBigPlay soccer_big_play(const GameSnapshot &prev, const GameSnapsho
     p.words = soccer_caption_name(goal->name, 20);
   } else if (late) {
     p.play = SoccerPlay::LATE_GOAL;
-    p.words = std::to_string(minute) + "'";
+    p.words = soccer_minute_words(goal->clock);
   } else if (same == 2) {
     p.play = SoccerPlay::BRACE;
     p.words = soccer_caption_name(goal->name, 20);
