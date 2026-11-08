@@ -81,7 +81,6 @@ struct RowLines {
 struct RowHold {
   std::string event_id;
   std::string basket;  // "McDaniels 3", "Burries FT"
-  bool ours{false};
 
   // One read of the board game.
   void read(const GameSnapshot &g) {
@@ -94,7 +93,6 @@ struct RowHold {
     std::string who = detail::leader_short_surname(g.play_athlete);
     bool ft = g.play_type.find("Free Throw") != std::string::npos;
     this->basket = who + " " + (ft ? std::string("FT") : std::to_string(g.play_value));
-    this->ours = g.play_team == g.team_id;
   }
 };
 
@@ -124,7 +122,7 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
 inline void add_timeout(RowLines &r, const GameSnapshot &g) {
   if (!timeout_play(g.last_play))
     return;
-  std::string low = g.last_play;
+  std::string low = g.last_play;  // for the kind of timeout below
   for (char &c : low)
     c = (char) tolower((unsigned char) c);
   RowLine *l = r.add(ascii_fold(g.last_play), 0xFFFFFF);

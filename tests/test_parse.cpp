@@ -7478,7 +7478,7 @@ static void test_game_viz() {
   CHECK(fg.valid);
   CHECK_EQ((int) fg.gain_x, -1);
   CHECK(fg.red_zone);
-  // The whole last 20 yards, not only the 4 to go (Brandon, 11/8: "a little blip").
+  // The whole last 20 yards, not only the 4 to go: at the 1 that was a column or two.
   CHECK_EQ((int) fg.red_from, field_col(80, 128, 6));
   CHECK_EQ((int) fg.red_to, 121);
   CHECK(fg.red_to - fg.red_from + 1 >= 20);
@@ -7545,7 +7545,7 @@ static void test_row_text() {
   CHECK_EQ(r.line[1].form(0), std::string("JXST 96% to win"));
   CHECK_EQ(r.line[1].form(1), std::string("JXST 96% win"));
   CHECK_EQ(r.line[1].form(2), std::string("JXST 96%"));
-  CHECK_EQ(r.line[1].rgb, (uint32_t) 0xFFFFFF);  // white, like the down (Brandon, 11/8)
+  CHECK_EQ(r.line[1].rgb, (uint32_t) 0xFFFFFF);  // white, like the down
   CHECK_EQ(row_news(fb, none), std::string("3rd & 4"));
   // The switch off leaves the down alone; halftime leaves nothing.
   RowOptions off;
@@ -7569,7 +7569,6 @@ static void test_row_text() {
   RowHold hold;
   hold.read(g);
   CHECK_EQ(hold.basket, std::string("McDaniels 2"));
-  CHECK(!hold.ours);
   RowLines b = row_lines(g, hold, on, true);
   CHECK_EQ((int) b.n, 4);
   CHECK_EQ(b.line[0].form(0), std::string("McDaniels 2"));
@@ -7592,7 +7591,6 @@ static void test_row_text() {
   ft.play_team = kPacers;
   hold.read(ft);
   CHECK_EQ(hold.basket, std::string("Nesmith FT"));
-  CHECK(hold.ours);
   CHECK_EQ(row_news(ft, hold), std::string("Nesmith FT"));
   // The last play switch off drops the basket only.
   RowOptions quiet;
@@ -7617,8 +7615,7 @@ static void test_row_text() {
       CHECK_EQ(t.line[i].form(2), std::string("Timeout"));
     }
   CHECK(seen);
-  // The ticker doesn't say it again on a wide board (Brandon, 11/8: "It showed
-  // official tv timeout on bottom bar and bar above it.. that's dumb").
+  // The ticker doesn't say it again on a wide board: the row already does.
   TickerOptions tick;
   tick.clock = false;
   CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
