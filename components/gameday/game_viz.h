@@ -29,7 +29,13 @@ struct FieldStrip {
   bool red_zone{false};
   uint8_t red_from{0}, red_to{0};  // the columns (inclusive) of the last 20 yards, the 20 to the goal line
   uint8_t left_timeouts{0}, right_timeouts{0};
-  bool text_left{false};  // "3rd & 4" goes on the left half, away from the ball
+  // The row's text ("3rd & 4", "ND 84% win") goes in the clear part of the
+  // strip: between an end zone and the nearest marker (the ball, its tip or
+  // the line to gain), so it never runs into one. text_left puts it against
+  // our end zone, left-aligned; else against theirs, right-aligned.
+  bool text_left{false};
+  uint8_t text_x{0};  // its first column
+  uint8_t text_w{0};  // its width in px, 0 when no room is clear
 };
 
 // The field column of a yard position measured from the left end zone (0 is
@@ -81,7 +87,26 @@ inline FieldStrip field_strip(const GameSnapshot &g, int width, int ez = 6) {
   }
   f.left_timeouts = (uint8_t) std::max(0, std::min(3, g.team_timeouts));
   f.right_timeouts = (uint8_t) std::max(0, std::min(3, g.opp_timeouts));
-  f.text_left = bx >= width / 2;
+  // The markers' columns: the ball (two wide), its tip, the line to gain.
+  int lo = bx, hi = bx + 1;
+  if (f.has_offense) {
+    if (f.to_right)
+      hi = bx + 2;
+    else
+      lo = bx - 1;
+  }
+  if (f.gain_x >= 0) {
+    lo = std::min(lo, (int) f.gain_x);
+    hi = std::max(hi, (int) f.gain_x);
+  }
+  // Two columns clear of each end zone (as before) and one clear of a marker.
+  const int lx = ez + 2, rx = width - ez - 3;  // the text's outermost columns
+  const int left_w = std::max(0, (lo - 2) - lx + 1);
+  const int right_w = std::max(0, rx - (hi + 2) + 1);
+  // The roomier side; on a tie, the half away from the ball.
+  f.text_left = left_w != right_w ? left_w > right_w : bx >= width / 2;
+  f.text_x = (uint8_t) (f.text_left ? lx : hi + 2);
+  f.text_w = (uint8_t) (f.text_left ? left_w : right_w);
   f.valid = true;
   return f;
 }

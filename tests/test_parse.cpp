@@ -7508,6 +7508,82 @@ static void test_game_viz() {
   CHECK(!fn.has_offense);
   CHECK_EQ((int) fn.gain_x, -1);
   CHECK(!fn.red_zone);
+  // The row's text sits in the clear part of the strip: between an end zone
+  // and the nearest marker (ball, tip, line to gain), one column clear of it.
+  {
+    // Every marker column of a strip, to check the text span against.
+    auto clear = [](const FieldStrip &s) {
+      int lo = s.ball_x, hi = s.ball_x + 1;
+      if (s.has_offense) {
+        if (s.to_right)
+          hi = s.ball_x + 2;
+        else
+          lo = s.ball_x - 1;
+      }
+      if (s.gain_x >= 0) {
+        lo = std::min(lo, (int) s.gain_x);
+        hi = std::max(hi, (int) s.gain_x);
+      }
+      const int x0 = s.text_x, x1 = s.text_x + s.text_w - 1;
+      if (s.text_w == 0)
+        return true;
+      if (x0 < s.ez + 2 || x1 > 128 - s.ez - 3)
+        return false;
+      return x1 < lo - 1 || x0 > hi + 1;
+    };
+    // FIU at its 31, 3rd & 4 driving right: the text goes right of the line to gain.
+    CHECK(clear(f));
+    CHECK_EQ((int) f.text_x, f.gain_x + 2);
+    CHECK_EQ((int) f.text_w, 128 - 6 - 3 - (f.gain_x + 2) + 1);
+    // JXST driving left from the FIU 31: left of the line to gain, up to it.
+    CHECK(clear(fh));
+    CHECK_EQ((int) fh.text_x, 8);
+    CHECK_EQ((int) fh.text_w, fh.gain_x - 2 - 8 + 1);
+    // The Miami at Notre Dame read from the mockup: ND, home, at its own 38,
+    // 2nd & 17 driving right, so the line to gain sits at the 55, across
+    // midfield on the half the text used to take. The text now ends short
+    // of the line, or takes the left side when that is roomier.
+    GameSnapshot nd = g;
+    nd.team_home = true;
+    nd.possession = 1;
+    nd.yard_line = 38;
+    nd.distance = 17;
+    nd.is_red_zone = false;
+    FieldStrip fnd = field_strip(nd, 128);
+    CHECK(fnd.valid);
+    CHECK_EQ((int) fnd.gain_x, field_col(55, 128, 6));
+    CHECK(fnd.gain_x >= 64);  // across midfield
+    CHECK(clear(fnd));
+    CHECK(!fnd.text_left);  // right of the line to gain: 128 - 9 - 2 - col(55) px, the most room
+    CHECK_EQ((int) fnd.text_x, fnd.gain_x + 2);
+    // Every ball spot and distance, both ways: never across a marker, and
+    // always the roomier side.
+    int fails = 0;
+    for (int yl = 1; yl <= 99; yl++)
+      for (int dist = 1; dist <= 25; dist++)
+        for (int poss = 0; poss <= 2; poss++) {
+          GameSnapshot t = g;
+          t.team_home = true;
+          t.yard_line = (uint8_t) yl;
+          t.distance = (uint8_t) dist;
+          t.possession = poss;
+          t.is_red_zone = false;
+          FieldStrip ft = field_strip(t, 128);
+          if (!ft.valid || !clear(ft) || ft.text_w < 20)
+            fails++;
+        }
+    CHECK_EQ(fails, 0);
+    // The ball near midfield driving left, the line to gain 25 yards back:
+    // the roomier side wins, here the right, past the ball.
+    GameSnapshot mid = nd;
+    mid.yard_line = 52;
+    mid.possession = 2;
+    mid.distance = 25;
+    FieldStrip fm = field_strip(mid, 128);
+    CHECK(clear(fm));
+    CHECK(!fm.text_left);
+    CHECK_EQ((int) fm.text_x, fm.ball_x + 3);  // the ball is two columns, then one clear
+  }
   // Nothing without a yard line, before the start, in another sport, or on a
   // board too narrow for it.
   GameSnapshot none = g;
@@ -7541,6 +7617,20 @@ static void test_row_text() {
   CHECK_EQ((int) r.n, 2);
   CHECK_EQ(r.line[0].form(0), std::string("3rd & 4"));
   CHECK_EQ((int) r.line[0].secs, 8);
+  // Shorter forms for a narrow clear span: no spaces, then no ordinal.
+  CHECK_EQ(r.line[0].form(1), std::string("3rd&4"));
+  CHECK_EQ(r.line[0].form(2), std::string("3&4"));
+  CHECK_EQ(r.line[0].form(3), std::string(""));
+  {
+    GameSnapshot goal = fb;
+    goal.short_down_distance = "2nd & Goal";
+    RowLines rg = row_lines(goal, none, on, true);
+    CHECK_EQ(rg.line[0].form(1), std::string("2nd&Goal"));
+    CHECK_EQ(rg.line[0].form(2), std::string("2&Goal"));
+    GameSnapshot odd = fb;
+    odd.short_down_distance = "Kickoff";
+    CHECK_EQ(row_lines(odd, none, on, true).line[0].form(1), std::string(""));
+  }
   CHECK_EQ(r.line[0].rgb, (uint32_t) 0xFFFFFF);
   CHECK_EQ(r.line[1].form(0), std::string("JXST 96% to win"));
   CHECK_EQ(r.line[1].form(1), std::string("JXST 96% win"));
@@ -7633,6 +7723,14 @@ static void test_row_text() {
   CHECK(status_text(fb, ft_tick, "").find("JXST 96% to win") != std::string::npos);
   ft_tick.row_win = true;
   CHECK(status_text(fb, ft_tick, "").find("% to win") == std::string::npos);
+  // Nor the down and distance, which the strip (or the row's text) shows;
+  // the play itself stays.
+  CHECK(!fb.down_distance.empty());
+  CHECK(status_text(fb, ft_tick, "").find(fb.down_distance) != std::string::npos);
+  ft_tick.row_down = true;
+  CHECK(status_text(fb, ft_tick, "").find(fb.down_distance) == std::string::npos);
+  if (!fb.last_play.empty())
+    CHECK(status_text(fb, ft_tick, "").find(fb.last_play.substr(0, 10)) != std::string::npos);
   GameSnapshot team_to = reb;
   team_to.last_play = "Timberwolves Full Timeout";
   team_to.play_team = kWolves;

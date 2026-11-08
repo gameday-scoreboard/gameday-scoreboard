@@ -117,6 +117,25 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   l->add_form(::esphome::gameday::panel_text(num));
 }
 
+// Down and distance, "2nd & 17", then "2nd&17" and "2&17" for when the
+// clear part of the field strip is narrower (the ball or the line to gain
+// near midfield).
+inline void add_down(RowLines &r, const GameSnapshot &g, uint32_t rgb) {
+  RowLine *l = r.add(g.short_down_distance, rgb, 8);
+  if (l == nullptr)
+    return;
+  std::string tight = l->form(0);
+  size_t amp = tight.find(" & ");
+  if (amp == std::string::npos)
+    return;
+  tight.replace(amp, 3, "&");
+  l->add_form(tight);
+  // "2nd&17" to "2&17": the ordinal's letters after the leading digit.
+  if (tight.size() > 3 && isdigit((unsigned char) tight[0]) && isalpha((unsigned char) tight[1]) &&
+      isalpha((unsigned char) tight[2]) && tight[3] == '&')
+    l->add_form(tight.substr(0, 1) + tight.substr(3));
+}
+
 // A timeout as the last play: "Official TV Timeout" as ESPN words it when
 // it fits, else "TV timeout" or "MIN timeout".
 inline void add_timeout(RowLines &r, const GameSnapshot &g) {
@@ -151,7 +170,7 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
       if (!playing)
         break;
       // Down and distance keeps most of the time; red in the red zone.
-      r.add(g.short_down_distance, g.is_red_zone ? 0xFF3030 : white, 8);
+      add_down(r, g, g.is_red_zone ? 0xFF3030 : white);
       if (o.win_chance)
         add_win_chance(r, g, 4);
       break;

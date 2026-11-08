@@ -281,8 +281,10 @@ struct TickerOptions {
   bool leaders{true};  // each side's season leader before the start
   // A wide board's row under the clock already says these (row_text.h), so
   // the ticker leaves them out rather than say them twice: the win chance
-  // (football) and a timeout as the last play (basketball).
+  // (football), a timeout as the last play (basketball) and football's down
+  // and distance (the field strip, or the row's text with the strip off).
   bool row_win{false};
+  bool row_down{false};
   bool row_timeout{false};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).

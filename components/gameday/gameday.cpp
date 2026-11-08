@@ -4189,11 +4189,12 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.leaders = this->ticker_leaders();
   // Changing the panel count restarts the panel, so this holds until then.
   opts.records = this->panels_ != nullptr && this->panels_->cols() == 1;
-  // A wide board's row under the clock says the win chance and a timeout,
-  // so the ticker doesn't repeat them.
+  // A wide board's row under the clock says the win chance, a timeout and
+  // football's down and distance, so the ticker doesn't repeat them.
   const bool wide = this->panels_ != nullptr && this->panels_->cols() >= 2;
   opts.row_win = wide && this->win_chance_on();
   opts.row_timeout = wide;
+  opts.row_down = wide;
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
     if (!s.valid || s.state != GameState::PRE || s.kickoff_epoch <= 0 || this->time_ == nullptr)

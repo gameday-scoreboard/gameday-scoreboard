@@ -52,6 +52,7 @@ In football, **Last play** also adds how the drive went after a touchdown or fie
 On a 128-wide board the row under the clock says some things itself, so the ticker leaves them out instead of saying them twice:
 
 - In football, while **Win chance** under **Live pictures** is on, the win chance is on the row and not in the ticker. With it off, or on a single 64x64 panel, the ticker keeps it.
+- In football, the down and distance, like "3rd & 4 at FIU 31", is on the field strip (or the row under the clock with **Field strip** off), so the ticker leaves it out and goes straight to the last play. A single 64x64 panel keeps it in the ticker.
 - In basketball, when the last play is a timeout, like "Official TV Timeout", it's on the row, and the ticker shows the two records until the next play.
 :::
 

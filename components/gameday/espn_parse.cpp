@@ -532,7 +532,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, records_line(s));
     return out;
   }
-  if (o.down_distance)
+  if (o.down_distance && !o.row_down)
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);

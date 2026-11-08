@@ -94,21 +94,34 @@ script:
             id(gd_row_turn) = 0;
             id(gd_row_left) = r.line[0].secs;
           }
-          const ::espn::RowLine &l = r.line[id(gd_row_turn)];
           const lv_font_t *f = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
           // The forms are '\n'-separated, longest first: the first that
-          // fits, else the shortest.
-          std::string pick;
-          for (int i = 0;; i++) {
-            std::string form = l.form(i);
-            if (form.empty())
-              break;
-            pick = form;
-            lv_point_t sz;
-            lv_text_get_size(&sz, form.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-            if (sz.x <= id(gd_row_room))
-              break;
+          // fits, else the shortest. On the field strip (gd_row_strict) a
+          // line that doesn't fit at all gives its turn to the lead line
+          // (the down and distance), and with neither the row stays empty:
+          // text there never crosses the ball or the line to gain.
+          auto fit = [&](const ::espn::RowLine &line, bool strict) -> std::string {
+            std::string pick;
+            for (int i = 0;; i++) {
+              std::string form = line.form(i);
+              if (form.empty())
+                break;
+              lv_point_t sz;
+              lv_text_get_size(&sz, form.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              if (sz.x <= id(gd_row_room))
+                return form;
+              if (!strict)
+                pick = form;
+            }
+            return pick;
+          };
+          int shown = id(gd_row_turn);
+          std::string pick = fit(r.line[shown], id(gd_row_strict));
+          if (pick.empty() && id(gd_row_strict) && shown != 0) {
+            shown = 0;
+            pick = fit(r.line[0], true);
           }
+          const ::espn::RowLine &l = r.line[shown];
           if (pick.empty()) {
             lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
             return;
@@ -700,11 +713,13 @@ script:
               // The pips' row is the strip's; the end zones carry the timeouts.
               for (lv_obj_t *o : pips)
                 lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
-              // "3rd & 4" on the half of the strip away from the ball.
+              // "3rd & 4" in the clear part of the strip, between an end
+              // zone and the nearest marker, never across one.
               lv_obj_set_style_text_align(id(tt_down_lbl), fs.text_left ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
-              lv_obj_set_pos(id(tt_down_lbl), fs.text_left ? ez + 2 : W / 2, 48);
-              lv_obj_set_width(id(tt_down_lbl), W / 2 - ez - 2);
-              id(gd_row_room) = W / 2 - ez - 2;
+              lv_obj_set_pos(id(tt_down_lbl), fs.text_x, 48);
+              lv_obj_set_width(id(tt_down_lbl), std::max(1, (int) fs.text_w));
+              id(gd_row_room) = fs.text_w;
+              id(gd_row_strict) = true;
             }
           }
           if (!drawn)
@@ -718,6 +733,7 @@ script:
             lv_obj_set_pos(id(tt_down_lbl), full ? 0 : 32, 48);
             lv_obj_set_width(id(tt_down_lbl), full ? W : W - 64);
             id(gd_row_room) = full ? W : W - 64;
+            id(gd_row_strict) = false;
           }
       - script.execute: gd_row_show
       - lambda: |-
@@ -1353,6 +1369,12 @@ globals:
     type: int
     restore_value: no
     initial_value: '64'
+  # The row is on the field strip, where a line that doesn't fit is left
+  # out rather than drawn across a marker.
+  - id: gd_row_strict
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 # The weather card's icons (scripts/build_weather_icons.py draws them): 16x16
 # for today, 8x8 for the next two days, in WxIcon's order (weather.h).
