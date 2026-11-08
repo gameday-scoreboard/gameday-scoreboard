@@ -64,7 +64,7 @@ CAPTIONS = {
     ("late_goal", 64): (38, 27, 2, True),
 }
 
-# The keeper, facing us: arms out with the gloves, then diving to his right
+# The keeper, facing us: arms out with the gloves, then diving to the right
 # (our left), stretched out flat.
 KEEPER = """
 ...SSS...
@@ -394,7 +394,7 @@ def penalty(w):
         c.put(spot[0], spot[1] + (4 if wide else 3), IDX["white"])
         c.put(spot[0] + 1, spot[1] + (4 if wide else 3), IDX["white"])
         goal.net(c, target if f >= hit else None, (f - hit) / FPS)
-        # The keeper: on his line, bouncing, set, then diving the wrong way.
+        # The keeper: on the line, bouncing, set, then diving the wrong way.
         feet = goal.line - 1
         if f < kick - 3:
             c.blit(stand, kx + (1 if (f // 3) % 2 else 0), feet - len(stand) + 1)

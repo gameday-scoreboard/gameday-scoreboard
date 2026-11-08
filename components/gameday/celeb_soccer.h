@@ -51,7 +51,7 @@ inline bool soccer_late_minute(int minute, int period) {
   return false;
 }
 
-// The scorer as the caption shows him: capitals, his last name when the
+// The scorer as the caption shows the name: capitals, the last name when the
 // whole name is longer than max.
 inline std::string soccer_caption_name(const std::string &name, size_t max) {
   std::string n = name;
