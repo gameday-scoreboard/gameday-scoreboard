@@ -2491,42 +2491,67 @@
     for (const g of shown) {
       if (g.state !== lastState) {
         lastState = g.state;
-        const heading = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
-        tiles.appendChild(el("div", "gh", heading[g.state] || "Final"));
+        tiles.appendChild(el("div", "gh", GAME_HEADING[g.state] || "Final"));
       }
-      const card = el("div", "game" + (g.state === "in" ? " live" : ""));
-      const mkSide = (s) => {
-        const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
-        b.disabled = !t;
-        b.title = t ? t[3] : "Not in the team list";
-        if (t) {
-          b.dataset.key = keyOf(t);
-          b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
-        }
-        const img = el("img");
-        img.loading = "lazy";
-        img.src = logoUrl(g.league, s.id, s.abbr);
-        img.alt = "";
-        b.appendChild(img);
-        const txt = el("div", "st");
-        txt.appendChild(el("div", "n", s.name));
-        txt.appendChild(el("div", "a", s.abbr));
-        b.appendChild(txt);
-        b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
-        b.onclick = () => {
-          if (t) toggleFav(t);
-        };
-        return b;
-      };
-      card.appendChild(mkSide(g.away));
-      const mid = el("div", "gm");
-      mid.appendChild(el("div", "at", "@"));
-      mid.appendChild(el("div", "det", g.detail));
-      card.appendChild(mid);
-      card.appendChild(mkSide(g.home));
-      tiles.appendChild(card);
+      tiles.appendChild(gameCard(g));
     }
+  };
+  const GAME_HEADING = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
+  // One game: a button per side that adds or takes out that team.
+  const gameCard = (g) => {
+    const card = el("div", "game" + (g.state === "in" ? " live" : ""));
+    const mkSide = (s) => {
+      const t = teamById(g.league, s.id);
+      const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
+      b.disabled = !t;
+      b.title = t ? t[3] : "Not in the team list";
+      if (t) {
+        b.dataset.key = keyOf(t);
+        b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+      }
+      const img = el("img");
+      img.loading = "lazy";
+      img.src = logoUrl(g.league, s.id, s.abbr);
+      img.alt = "";
+      b.appendChild(img);
+      const txt = el("div", "st");
+      txt.appendChild(el("div", "n", s.name));
+      txt.appendChild(el("div", "a", s.abbr));
+      b.appendChild(txt);
+      b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
+      b.onclick = () => {
+        if (t) toggleFav(t);
+      };
+      return b;
+    };
+    card.appendChild(mkSide(g.away));
+    const mid = el("div", "gm");
+    mid.appendChild(el("div", "at", "@"));
+    mid.appendChild(el("div", "det", g.detail));
+    card.appendChild(mid);
+    card.appendChild(mkSide(g.home));
+    return card;
+  };
+  // Fold finals and postponed games shut so the team list stays near the top on a busy day
+  const leagueGames = (slot, list) => {
+    const mine = list.filter((g) => g.league === league);
+    if (!mine.length) return;
+    for (const state of ["in", "pre", "post", "off"]) {
+      const group = mine.filter((g) => g.state === state);
+      if (!group.length) continue;
+      if (state === "in" || state === "pre") {
+        slot.appendChild(el("div", "gh", GAME_HEADING[state]));
+        for (const g of group) slot.appendChild(gameCard(g));
+        continue;
+      }
+      const fold = el("details", "gfold");
+      fold.appendChild(el("summary", "gh", GAME_HEADING[state] + " (" + group.length + ")"));
+      const inner = el("div", "games");
+      for (const g of group) inner.appendChild(gameCard(g));
+      fold.appendChild(inner);
+      slot.appendChild(fold);
+    }
+    slot.appendChild(el("div", "gh", "Teams"));
   };
 
   // ---- team chooser ------------------------------------------------------
@@ -2566,16 +2591,29 @@
   };
   const renderTiles = () => {
     if (league === "now") return renderGames();
-    $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
-    const list = q ? searchTeams(q) : TEAMS.filter((t) => t[0] === league);
-    if (!list.length) {
-      tiles.appendChild(el("div", "none", "No team matches"));
+    if (q) {
+      tiles.className = "tiles";
+      const found = searchTeams(q);
+      if (!found.length) tiles.appendChild(el("div", "none", "No team matches"));
+      for (const t of found) tiles.appendChild(teamTile(t));
       return;
     }
-    for (const t of list) tiles.appendChild(teamTile(t));
+    // Show the teams at once, so a slow ESPN read can't hold them up.
+    // Today's games go in above them when the list arrives.
+    tiles.className = "games";
+    const slot = el("div", "gslot");
+    const grid = el("div", "tiles");
+    for (const t of TEAMS.filter((t) => t[0] === league)) grid.appendChild(teamTile(t));
+    tiles.appendChild(slot);
+    tiles.appendChild(grid);
+    if (gamesFresh()) return leagueGames(slot, games);
+    const lg = league;
+    loadGames().then((list) => {
+      if (league === lg && slot.isConnected && !slot.firstChild) leagueGames(slot, list);
+    });
   };
   $("#favAdd").onclick = () => openPicker();
   $("#favStart").onclick = () => { showPane("teams"); openPicker(); };

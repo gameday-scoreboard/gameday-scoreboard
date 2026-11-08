@@ -357,6 +357,11 @@ button { font: inherit; color: inherit; }
 /* The Teams grid under an On now search: the column's gap spaces it. */
 .games .tiles { margin-top: 0; }
 .gh { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 8px 2px 0; }
+/* A league tab: its games sit in the same column as the team grid under them. */
+.gslot { display: contents; }
+.gfold > summary { cursor: pointer; width: fit-content; }
+.gfold > summary:hover { color: var(--ink2); }
+.gfold > .games { margin-top: 8px; }
 .game { display: grid; grid-template-columns: 1fr 74px 1fr; align-items: stretch; gap: 6px; }
 .game .side {
   display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 8px;
