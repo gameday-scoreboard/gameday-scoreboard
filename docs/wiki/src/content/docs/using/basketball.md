@@ -34,13 +34,13 @@ On a 128-wide board the row under the clock shows the **score margin** over the 
 :::note[Coming in the next release]
 The chart and the bar go. The row under the clock shows words instead, one line at a time, about 4 seconds each, using the full width of the board:
 
-- **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw, in the scoring team's color. It stays until the next basket, and a new one shows right away. It follows **Last play**.
-- **Each team's points leader** in this game, like "Edwards 24", in that team's color.
+- **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw. It stays until the next basket, and a new one shows right away. It follows **Last play**.
+- **Each team's points leader** in this game, like "Edwards 24".
 - **A timeout**, like "Official TV Timeout", while it is the last play.
 - **The playoff series**, like "NY lead 2-1", in a playoff game.
-- **The win chance**, like "MIN 56% to win", in the color of the team ESPN favors. **Win chance** under **Live pictures** turns it off.
+- **The win chance**, like "MIN 56% to win", for the team ESPN favors. **Win chance** under **Live pictures** turns it off.
 
-At halftime only the series stays, and the line score and leaders cards take their turns as before.
+Every line is in white. At halftime only the series stays, and the line score and leaders cards take their turns as before.
 :::
 
 Basketball has no game situation line, so there is no ticker switch for one. **Last play** under **Ticker** on the device page's Display tab turns the last play on or off. See [The ticker](/using/ticker/).

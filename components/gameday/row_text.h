@@ -12,6 +12,10 @@
 // Basketball: the last basket, each side's points leader, a timeout, the
 // playoff series, the win chance.
 // Soccer: the latest goal.
+//
+// Every line is white (football's down turns red in the red zone): a team
+// color, even lifted, was hard to read across a room, and the logos and
+// abbreviations above already carry the colors.
 
 #include <cctype>
 #include <cstdint>
@@ -49,22 +53,6 @@ struct RowLines {
   }
 };
 
-// A team color as the board draws it on black: ESPN's black turns white and
-// a dark color is lifted until its brightest channel is 0xC0, so navy still
-// reads across a room.
-inline uint32_t row_rgb(uint32_t c) {
-  uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
-  uint32_t m = r > g ? (r > b ? r : b) : (g > b ? g : b);
-  if (m == 0)
-    return 0xFFFFFF;
-  if (m < 0xC0) {
-    r = r * 0xC0 / m;
-    g = g * 0xC0 / m;
-    b = b * 0xC0 / m;
-  }
-  return (r << 16) | (g << 8) | b;
-}
-
 // The latest basket the board has seen, held until the next one: ESPN's
 // last play moves on with every rebound and foul, so the panel keeps the
 // last one that scored. Follows one game; another game starts it over.
@@ -93,8 +81,8 @@ struct RowOptions {
   bool last_play{true};   // the Last play switch: the last basket
 };
 
-// The win chance as words, "ND 84% to win", in the color of the side ESPN
-// favors. Nothing without a number.
+// The win chance as words, "ND 84% to win", for the side ESPN favors.
+// Nothing without a number.
 inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   if (g.team_win_pct < 1 || g.team_win_pct > 99)
     return;
@@ -102,7 +90,7 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   int pct = ours ? g.team_win_pct : 100 - g.team_win_pct;
   const std::string &abbr = ours ? g.team_abbr : g.opp_abbr;
   std::string num = abbr + " " + std::to_string(pct) + "%";
-  RowLine *l = r.add(num + " to win", row_rgb(parse_color(ours ? g.team_color : g.opp_color)), secs);
+  RowLine *l = r.add(num + " to win", 0xFFFFFF, secs);
   if (l == nullptr)
     return;
   l->forms[1] = ::esphome::gameday::panel_text(num + " win");
@@ -154,9 +142,9 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
         break;
       }
       if (o.last_play && hold.event_id == g.event_id)
-        r.add(hold.basket, row_rgb(parse_color(hold.ours ? g.team_color : g.opp_color)));
-      r.add(g.nba.team_scorer, row_rgb(parse_color(g.team_color)));
-      r.add(g.nba.opp_scorer, row_rgb(parse_color(g.opp_color)));
+        r.add(hold.basket, white);
+      r.add(g.nba.team_scorer, white);
+      r.add(g.nba.opp_scorer, white);
       add_timeout(r, g);
       r.add(series, white);
       if (o.win_chance)

@@ -7478,8 +7478,10 @@ static void test_game_viz() {
   CHECK(fg.valid);
   CHECK_EQ((int) fg.gain_x, -1);
   CHECK(fg.red_zone);
-  CHECK_EQ((int) fg.red_from, fg.ball_x + 2);
+  // The whole last 20 yards, not only the 4 to go (Brandon, 11/8: "a little blip").
+  CHECK_EQ((int) fg.red_from, field_col(80, 128, 6));
   CHECK_EQ((int) fg.red_to, 121);
+  CHECK(fg.red_to - fg.red_from + 1 >= 20);
   CHECK_EQ((int) fg.ball_x, field_col(96, 128, 6));
   CHECK(fg.text_left);
   // At the goal line the marker still fits inside the field.
@@ -7487,7 +7489,16 @@ static void test_game_viz() {
   fg = field_strip(gl, 128);
   CHECK(fg.valid);
   CHECK_EQ((int) fg.ball_x, 120);
-  CHECK(fg.red_from <= fg.red_to);
+  CHECK_EQ((int) fg.red_from, field_col(80, 128, 6));
+  // Driving left, the zone is the 20 to our goal line.
+  GameSnapshot hl = gl;
+  hl.yard_line = 4;
+  hl.possession = 2;
+  FieldStrip fl = field_strip(hl, 128);
+  CHECK(fl.red_zone);
+  CHECK(!fl.to_right);
+  CHECK_EQ((int) fl.red_from, 6);
+  CHECK_EQ((int) fl.red_to, field_col(20, 128, 6));
   // Nobody has the ball (between plays after a score): no tip, no line, no red zone.
   GameSnapshot np = g;
   np.possession = 0;
@@ -7534,7 +7545,7 @@ static void test_row_text() {
   CHECK_EQ(r.line[1].forms[0], std::string("JXST 96% to win"));
   CHECK_EQ(r.line[1].forms[1], std::string("JXST 96% win"));
   CHECK_EQ(r.line[1].forms[2], std::string("JXST 96%"));
-  CHECK_EQ(r.line[1].rgb, row_rgb(parse_color(fb.opp_color)));
+  CHECK_EQ(r.line[1].rgb, (uint32_t) 0xFFFFFF);  // white, like the down (Brandon, 11/8)
   CHECK_EQ(row_news(fb, none), std::string("3rd & 4"));
   // The switch off leaves the down alone; halftime leaves nothing.
   RowOptions off;
@@ -7562,9 +7573,9 @@ static void test_row_text() {
   RowLines b = row_lines(g, hold, on, true);
   CHECK_EQ((int) b.n, 4);
   CHECK_EQ(b.line[0].forms[0], std::string("McDaniels 2"));
-  CHECK_EQ(b.line[0].rgb, row_rgb(parse_color(g.opp_color)));
+  CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
   CHECK_EQ(b.line[1].forms[0], std::string("Nesmith 19"));
-  CHECK_EQ(b.line[1].rgb, row_rgb(parse_color(g.team_color)));
+  CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
   CHECK_EQ(b.line[2].forms[0], std::string("Edwards 19"));
   CHECK_EQ(b.line[3].forms[0], std::string("MIN 56% to win"));  // home 0.444
   // The basket stays through the plays after it, until the next one.
@@ -7629,10 +7640,6 @@ static void test_row_text() {
   CHECK_EQ((int) so.n, 1);
   CHECK_EQ(so.line[0].forms[0], std::string("28' Lescano"));
 
-  // Team colors on black: black turns white, navy is lifted, bright stays.
-  CHECK_EQ(row_rgb(0x000000), (uint32_t) 0xFFFFFF);
-  CHECK_EQ(row_rgb(0x0C2340), (uint32_t) ((0x0C * 0xC0 / 0x40) << 16 | (0x23 * 0xC0 / 0x40) << 8 | 0xC0));
-  CHECK_EQ(row_rgb(0xFFD000), (uint32_t) 0xFFD000);
 }
 
 static void test_line_score() {

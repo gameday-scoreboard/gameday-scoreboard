@@ -27,7 +27,7 @@ struct FieldStrip {
   bool has_offense{false};  // ESPN said who has the ball; without it no tip is drawn
   int16_t gain_x{-1};    // the line to gain's column, -1 when it is the goal line or unknown
   bool red_zone{false};
-  uint8_t red_from{0}, red_to{0};  // the columns (inclusive) between the ball and the goal line
+  uint8_t red_from{0}, red_to{0};  // the columns (inclusive) of the last 20 yards, the 20 to the goal line
   uint8_t left_timeouts{0}, right_timeouts{0};
   bool text_left{false};  // "3rd & 4" goes on the left half, away from the ball
 };
@@ -67,13 +67,16 @@ inline FieldStrip field_strip(const GameSnapshot &g, int width, int ez = 6) {
     }
   }
   f.red_zone = g.is_red_zone && f.has_offense;
+  // The whole red zone glows, not only the yards left to go: at the 1 that
+  // would be a column or two, a blip from across a room. The page draws the
+  // ball and the line to gain on top.
   if (f.red_zone) {
     if (f.to_right) {
-      f.red_from = (uint8_t) std::min(bx + 2, width - ez - 1);
+      f.red_from = (uint8_t) field_col(80, width, ez);
       f.red_to = (uint8_t) (width - ez - 1);
     } else {
       f.red_from = (uint8_t) ez;
-      f.red_to = (uint8_t) std::max(bx - 1, ez);
+      f.red_to = (uint8_t) field_col(20, width, ez);
     }
   }
   f.left_timeouts = (uint8_t) std::max(0, std::min(3, g.team_timeouts));
