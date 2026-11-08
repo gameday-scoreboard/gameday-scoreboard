@@ -1710,6 +1710,26 @@ static FavGame fav(GameState st, int64_t kick, int64_t final_at = 0) {
   return g;
 }
 
+// A favorite's team read: when it's due, and what a read whose answer was
+// thrown away (the owner changed the list or the mode while it ran) leaves.
+static void test_fav_read_due() {
+  const uint32_t retry = 60000, refresh = 6 * 3600000u;
+  CHECK(fav_read_due(true, 0, 5000, retry, refresh));         // never read
+  CHECK(!fav_read_due(true, 5000, 5400, retry, refresh));     // a read started 0.4 s ago
+  CHECK(fav_read_due(true, 5000, 65000, retry, refresh));     // failed: the retry a minute on
+  CHECK(!fav_read_due(false, 5000, 65000, retry, refresh));   // has its game: the six-hour refresh
+  CHECK(fav_read_due(false, 5000, 5000 + refresh, retry, refresh));
+  // Add a team, remove another 0.4 s later: the new team's read is thrown
+  // away. It's due again at once, not a minute later.
+  uint32_t stamp = fav_stamp_after_drop(5000, true);
+  CHECK_EQ(stamp, 0u);
+  CHECK(fav_read_due(true, stamp, 5400, retry, refresh));
+  // A dropped read that didn't stamp this field (a cup's, a side poll) keeps it.
+  CHECK_EQ(fav_stamp_after_drop(5000, false), 5000u);
+  // millis() wrapping past zero between the stamp and now.
+  CHECK(fav_read_due(true, 0xFFFFF000u, 60000, retry, refresh));
+}
+
 static void test_favorites() {
   FavRules r;
   r.lockon_s = 15 * 60;
@@ -8652,6 +8672,7 @@ int main() {
   test_clock_text();
   test_color();
   test_favorites();
+  test_fav_read_due();
   test_fav_action();
   test_take_over();
   test_followed_favorite();

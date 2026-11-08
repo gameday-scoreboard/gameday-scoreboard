@@ -1771,7 +1771,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t gave_up_ms_{0};     // millis() when the loop last wrote a worker off, 0 = never
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;
-  uint32_t generation_{0};
+  // Bumped by the main loop when what the board follows changes. Atomic, so
+  // a worker in the middle of a many-read job can see it and stop early.
+  std::atomic<uint32_t> generation_{0};
   bool busy_{false};
   bool selects_published_{false};
   // Set by the fetch task once its Job is filled in. Atomic, so the main
