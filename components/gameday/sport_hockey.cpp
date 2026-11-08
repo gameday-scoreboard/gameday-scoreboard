@@ -3,7 +3,9 @@
 // penalties, because offsetting and coincidental minors would make it wrong.
 #include "espn_parse.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 namespace espn {
 
@@ -19,6 +21,13 @@ void fill_hockey_filter(JsonObject ev) {
   ev["season"]["type"] = true;
   ev["competitions"][0]["series"]["type"] = true;
   ev["competitions"][0]["series"]["summary"] = true;
+  // The big plays: who has how many goals (fill_leaders_filter keeps the
+  // leader lists; this adds the player's id), and a goal's strength.
+  ev["competitions"][0]["competitors"][0]["leaders"][0]["name"] = true;
+  JsonObject top = ev["competitions"][0]["competitors"][0]["leaders"][0]["leaders"][0];
+  top["displayValue"] = true;
+  top["athlete"]["id"] = true;
+  ev["competitions"][0]["situation"]["lastPlay"]["strength"]["abbreviation"] = true;
 }
 
 void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
@@ -28,6 +37,31 @@ void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
   JsonObjectConst series = ev["competitions"][0]["series"];
   if (s.nhl.playoffs || str_or_empty(series["type"]) == "playoff")
     s.nhl.series = str_or_empty(series["summary"]);
+  if (s.state != GameState::IN)
+    return;
+  // Before the start ESPN's leaders are the season's; from the puck drop
+  // they are this game's.
+  for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
+    const bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+    Hockey::Scorer *out = ours ? s.nhl.team_scorers : s.nhl.opp_scorers;
+    uint8_t &count = ours ? s.nhl.team_scorer_count : s.nhl.opp_scorer_count;
+    count = 0;
+    for (JsonObjectConst l : c["leaders"].as<JsonArrayConst>()) {
+      if (str_or_empty(l["name"]) != "goals")
+        continue;
+      for (JsonObjectConst top : l["leaders"].as<JsonArrayConst>()) {
+        const int goals = atoi(str_or_empty(top["displayValue"]).c_str());
+        const uint32_t id = (uint32_t) atol(str_or_empty(top["athlete"]["id"]).c_str());
+        if (goals < 2 || id == 0 || count >= Hockey::kScorersMax)
+          continue;
+        out[count].id = id;
+        out[count].goals = (uint8_t) std::min(goals, 99);
+        count++;
+      }
+    }
+  }
+  if (s.play_type == "Goal")
+    s.nhl.goal_strength = str_or_empty(ev["competitions"][0]["situation"]["lastPlay"]["strength"]["abbreviation"]);
 }
 
 }  // namespace detail

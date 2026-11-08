@@ -94,6 +94,20 @@ struct Basketball {
 struct Hockey {
   bool playoffs{false};  // season type 3
   std::string series;    // "CAR leads series 2-0", playoffs
+  // For the big plays (celeb_hockey.h), while the game is on. ESPN's goal
+  // leaders for this game list every player on top, with the id and the
+  // count; these keep each side's players on two goals or more, enough to
+  // see a third. Most are 0 or 1 a side.
+  struct Scorer {
+    uint32_t id{0};
+    uint8_t goals{0};
+  };
+  static constexpr uint8_t kScorersMax = 3;
+  Scorer team_scorers[kScorersMax]{}, opp_scorers[kScorersMax]{};
+  uint8_t team_scorer_count{0}, opp_scorer_count{0};
+  // The last play's strength when it is a goal: "power-play",
+  // "shorthanded" or "even-strength", "" when ESPN gives none.
+  std::string goal_strength;
 };
 
 // One scoreboard event, resolved to "us" and "them".

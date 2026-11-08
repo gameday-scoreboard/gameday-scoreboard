@@ -44,6 +44,9 @@ enum class CelebKind : uint8_t {
   // at the end, so every kind from DUNK on is art.
   DUNK,       // basketball: the ball slams through the rim, the rim shakes
   ALLEY_OOP,  // basketball: the lob arcs high to the rim, then the finish
+  HAT_TRICK,    // hockey: the goal lamp, then hats rain down onto the ice
+  SHORTHANDED,  // hockey: the goal lamp, then four of ours score against five
+  POWER_PLAY,   // hockey: the goal lamp, then lightning in the team's color
 };
 
 inline bool celeb_animated(CelebKind k) { return k >= CelebKind::TOUCHDOWN; }
@@ -77,6 +80,9 @@ constexpr uint32_t kCelebWinMs = 10000;
 // The big plays: each art's frames / fps, so the last frame holds to the end.
 constexpr uint32_t kCelebDunkMs = 2500;
 constexpr uint32_t kCelebAlleyOopMs = 3000;
+constexpr uint32_t kCelebHatTrickMs = 4500;    // 54 frames
+constexpr uint32_t kCelebShorthandedMs = 4500; // 54 frames
+constexpr uint32_t kCelebPowerPlayMs = 3500;   // 42 frames
 
 // Dark team colors vanish on an LED panel: lift the brightest channel to 0xE0.
 inline uint32_t celeb_bright(uint32_t c) {
