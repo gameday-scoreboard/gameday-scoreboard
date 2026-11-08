@@ -1,11 +1,11 @@
 ---
 title: "Basketball: NBA, WNBA and college"
-description: "What the panel shows for an NBA, WNBA or men's college basketball game: the period and clock, the playoff series and the victory splash."
+description: "What the panel shows for an NBA, WNBA or college basketball game: the period and clock, the playoff series and the victory splash."
 sidebar:
   order: 7
 ---
 
-NBA, WNBA and men's college basketball games share one board. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
+NBA, WNBA and men's and women's college basketball games share one board. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
 
 ## Before the game
 
@@ -23,7 +23,7 @@ Basketball teams have no Up next list on the device page: their season schedules
 
 ## During the game
 
-- **The clock and period** under the scores, like "1:04 4th", or "45.3 4th" in the last minute, when ESPN drops the minutes. Overtime reads "OT", then "2OT" and so on. College games play halves, so the clock reads "12:34 1st" or "12:34 2nd".
+- **The clock and period** under the scores, like "1:04 4th", or "45.3 4th" in the last minute, when ESPN drops the minutes. Overtime reads "OT", then "2OT" and so on. Men's college games play halves, so the clock reads "12:34 1st" or "12:34 2nd"; women's college games play quarters, like the WNBA.
 - **Breaks**: "Halftime", or "End" and the period, like "End 3rd".
 - **The playoff series** on the row under the clock, like "NY lead 2-1" or "Series 2-2", when the game is a playoff game. It takes the score margin chart's place there.
 - **The ticker** with the last play. During a break it shows the series, or the records outside the playoffs.

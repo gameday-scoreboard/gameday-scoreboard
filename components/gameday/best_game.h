@@ -37,6 +37,7 @@ inline Regulation regulation(League league) {
     case League::NBA:
       return {4, 720};
     case League::WNBA:
+    case League::WCBB:
       return {4, 600};
     case League::MCBB:
       return {2, 1200};
