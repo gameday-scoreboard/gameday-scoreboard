@@ -160,7 +160,7 @@ The panel fills the screen with a splash when someone scores, in the scoring tea
 
 A **Celebrations** choice sets how big the show is:
 
-- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds. With **Big plays** on, a dunk or an alley-oop gets a pixel-art scene of its own too (see [Basketball](/using/basketball/#big-plays)).
+- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds. With **Big plays** on, a dunk, an alley-oop, a grand slam or a walk-off gets a pixel-art scene of its own too (see [Basketball](/using/basketball/#big-plays) and [Baseball](/using/baseball/#big-plays)).
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 
