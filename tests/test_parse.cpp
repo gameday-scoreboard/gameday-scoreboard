@@ -7427,8 +7427,9 @@ static void test_game_viz() {
   CHECK(f.to_right);  // we have it, so we attack the right end zone
   CHECK_EQ((int) f.gain_x, field_col(35, 128, 6));
   CHECK(!f.red_zone);
-  CHECK_EQ((int) f.left_timeouts, 0);   // FIU, away, 0 left
-  CHECK_EQ((int) f.right_timeouts, 1);  // JXST, home, 1 left
+  // The timeouts left show as the pips under the records, from the snapshot.
+  CHECK_EQ((int) g.team_timeouts, 0);  // FIU, away, 0 left
+  CHECK_EQ((int) g.opp_timeouts, 1);   // JXST, home, 1 left
   CHECK(!f.text_left);  // the ball is on the left half, so the text goes right
   // The same read from the home side: the ball sits 69 from our end zone,
   // and the offense (them) attacks our end zone on the left.
@@ -7442,8 +7443,8 @@ static void test_game_viz() {
   CHECK(!fh.to_right);
   CHECK_EQ((int) fh.gain_x, field_col(65, 128, 6));
   CHECK(fh.text_left);
-  CHECK_EQ((int) fh.left_timeouts, 1);
-  CHECK_EQ((int) fh.right_timeouts, 0);
+  CHECK_EQ((int) h.team_timeouts, 1);
+  CHECK_EQ((int) h.opp_timeouts, 0);
   // DEL @ WKU on 2026-10-27 (trimmed from a live read): WKU, home, has the
   // ball, 4th & 11 at the DEL 45 (ESPN yardLine 55, 55 from WKU's goal line);
   // Delaware is 94.8% to win with 3 timeouts to WKU's 2.
@@ -7459,8 +7460,8 @@ static void test_game_viz() {
   CHECK_EQ((int) fd.ball_x, field_col(45, 128, 6));  // 45 from Delaware's end zone on the left
   CHECK(!fd.to_right);                                // WKU drives at it
   CHECK_EQ((int) fd.gain_x, field_col(34, 128, 6));
-  CHECK_EQ((int) fd.left_timeouts, 3);
-  CHECK_EQ((int) fd.right_timeouts, 2);
+  CHECK_EQ((int) del.team_timeouts, 3);
+  CHECK_EQ((int) del.opp_timeouts, 2);
   GameSnapshot wku;
   CHECK(parse_event_str(slurp("fixtures/event_ncaa_live_field.json"), Sport::FOOTBALL, 98, wku));
   CHECK_EQ((int) wku.team_win_pct, 5);

@@ -28,7 +28,6 @@ struct FieldStrip {
   int16_t gain_x{-1};    // the line to gain's column, -1 when it is the goal line or unknown
   bool red_zone{false};
   uint8_t red_from{0}, red_to{0};  // the columns (inclusive) of the last 20 yards, the 20 to the goal line
-  uint8_t left_timeouts{0}, right_timeouts{0};
   // The row's text ("3rd & 4", "ND 84% win") goes in the clear part of the
   // strip: between an end zone and the nearest marker (the ball, its tip or
   // the line to gain), so it never runs into one. text_left puts it against
@@ -85,8 +84,6 @@ inline FieldStrip field_strip(const GameSnapshot &g, int width, int ez = 6) {
       f.red_to = (uint8_t) field_col(20, width, ez);
     }
   }
-  f.left_timeouts = (uint8_t) std::max(0, std::min(3, g.team_timeouts));
-  f.right_timeouts = (uint8_t) std::max(0, std::min(3, g.opp_timeouts));
   // The markers' columns: the ball (two wide), its tip, the line to gain.
   int lo = bx, hi = bx + 1;
   if (f.has_offense) {

@@ -203,20 +203,23 @@ script:
             lv_obj_set_width(id(tt_clock_lbl), W - 64);
             // Timeout pips centered under each logo
             const int acx = 18, hcx = W - 18;
+            // While the field strip has their row, they sit one pixel tall
+            // under each record instead (row 46, a row clear of the strip);
+            // gd_update keeps them in step.
+            const bool strip = !lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN);
             for (int i = 0; i < 3; i++) {
-              // Timeout pips are football's (gd_update keeps them in step).
-              // Not while the field strip has their row: its end zones
-              // carry the timeouts, and this runs again on every return to
-              // the scoreboard, up to a poll before gd_update hides them.
-              if (id(gd_sport) == 0 && lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN)) {
+              // Timeout pips are football's.
+              if (id(gd_sport) == 0) {
                 lv_obj_clear_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
               } else {
                 lv_obj_add_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_add_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
               }
-              lv_obj_set_pos(abars[i], acx - 9 + i * 7, 48);
-              lv_obj_set_pos(hbars[i], hcx - 9 + i * 7, 48);
+              lv_obj_set_pos(abars[i], acx - 9 + i * 7, strip ? 46 : 48);
+              lv_obj_set_pos(hbars[i], hcx - 9 + i * 7, strip ? 46 : 48);
+              lv_obj_set_height(abars[i], strip ? 1 : 3);
+              lv_obj_set_height(hbars[i], strip ? 1 : 3);
             }
             lv_obj_set_pos(id(tt_game_status_lbl), 0, 56);
             lv_obj_set_style_text_font(id(tt_splash_lbl), id(spleen_16), 0);
@@ -645,12 +648,6 @@ script:
             }
             return lv_color_make(r, g, b);
           };
-          // White dots on a dark end zone, black on a light one, judged on the
-          // color as drawn: bright() lifts a dark team color, and turns ESPN's
-          // black (PIT, LV) white.
-          auto light = [](lv_color_t c) {
-            return (uint32_t) c.red * 299 + (uint32_t) c.green * 587 + (uint32_t) c.blue * 114 > 160000;
-          };
           auto px = [&](int x, int y, lv_color_t c) {
             if (x >= 0 && x < W && x < 128 && y >= 0 && y < 8)
               lv_canvas_set_px(cv, x, y, c, LV_OPA_COVER);
@@ -683,18 +680,11 @@ script:
                   px(x, 6, c);
                 }
               }
-              // End zones in team colors, with the timeouts left as dots.
+              // End zones in plain team colors; the timeouts are the pips
+              // under the records.
               lv_color_t tc = bright((uint32_t) team_color), oc = bright((uint32_t) opponent_color);
               fill(0, 0, ez, 8, tc);
               fill(right, 0, ez, 8, oc);
-              lv_color_t tdot = lv_color_hex(light(tc) ? 0x000000 : 0xFFFFFF);
-              lv_color_t odot = lv_color_hex(light(oc) ? 0x000000 : 0xFFFFFF);
-              for (int i = 0; i < 3; i++) {
-                if (i < fs.left_timeouts)
-                  fill(ez / 2 - 1, i * 3, 2, 2, tdot);
-                if (i < fs.right_timeouts)
-                  fill(right + ez / 2 - 1, i * 3, 2, 2, odot);
-              }
               if (fs.gain_x >= 0)
                 fill(fs.gain_x, 0, 1, 8, lv_color_hex(0xFFD000));
               // The ball, with a tip the way the offense is going.
@@ -710,9 +700,13 @@ script:
               lv_obj_invalidate(cv);
               lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
               drawn = true;
-              // The pips' row is the strip's; the end zones carry the timeouts.
-              for (lv_obj_t *o : pips)
-                lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+              // The pips' row is the strip's, so they move up under the
+              // records, one pixel tall, a row clear of the strip.
+              for (int i = 0; i < 6; i++) {
+                lv_obj_set_pos(pips[i], (i < 3 ? 18 : W - 18) - 9 + (i % 3) * 7, 46);
+                lv_obj_set_height(pips[i], 1);
+                lv_obj_clear_flag(pips[i], LV_OBJ_FLAG_HIDDEN);
+              }
               // "3rd & 4" in the clear part of the strip, between an end
               // zone and the nearest marker, never across one.
               lv_obj_set_style_text_align(id(tt_down_lbl), fs.text_left ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
@@ -734,6 +728,11 @@ script:
             lv_obj_set_width(id(tt_down_lbl), full ? W : W - 64);
             id(gd_row_room) = full ? W : W - 64;
             id(gd_row_strict) = false;
+            // The pips (football's timeouts, soccer's red cards) back on the row.
+            for (int i = 0; i < 6; i++) {
+              lv_obj_set_pos(pips[i], (i < 3 ? 18 : W - 18) - 9 + (i % 3) * 7, 48);
+              lv_obj_set_height(pips[i], 3);
+            }
           }
       - script.execute: gd_row_show
       - lambda: |-
