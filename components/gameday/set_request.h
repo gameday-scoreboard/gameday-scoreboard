@@ -321,8 +321,8 @@ enum class SetKind : uint8_t {
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
   FIELD,        // on, football's field strip on the board (game_viz.h)
-  WINBAR,       // on, the win chance bar on the board
-  SPARK,        // on, the score margin sparkline on the board
+  WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
+  SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
 };
 

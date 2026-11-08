@@ -1,10 +1,9 @@
 #pragma once
 
-// The live game pictures on a wide board's situation row
-// (firmware/pages/gameday-live.yaml): football's field strip, the win bar and
-// the score-margin sparkline for basketball and hockey. The geometry lives
-// here so the host tests can check it; the page only puts pixels where this
-// says. Pure, with no ESPHome includes.
+// The live game picture on a wide board's situation row
+// (firmware/pages/gameday-live.yaml): football's field strip. The geometry
+// lives here so the host tests can check it; the page only puts pixels where
+// this says. Pure, with no ESPHome includes.
 
 #include <algorithm>
 #include <cstdint>
@@ -17,8 +16,6 @@ namespace espn {
 
 // What the page draws, as bits in UpdateFields::viz.
 static constexpr uint8_t VIZ_FIELD = 1;    // the field strip has a ball to place
-static constexpr uint8_t VIZ_WINBAR = 2;   // ESPN gave a win chance for this read
-static constexpr uint8_t VIZ_SPARK = 4;    // the margin sparkline has a sample
 
 // The field strip, `width` px wide with an end zone `ez` px wide at each end
 // (our side's on the left, under our logo). Columns are canvas x positions.
@@ -30,9 +27,14 @@ struct FieldStrip {
   bool has_offense{false};  // ESPN said who has the ball; without it no tip is drawn
   int16_t gain_x{-1};    // the line to gain's column, -1 when it is the goal line or unknown
   bool red_zone{false};
-  uint8_t red_from{0}, red_to{0};  // the columns (inclusive) between the ball and the goal line
-  uint8_t left_timeouts{0}, right_timeouts{0};
-  bool text_left{false};  // "3rd & 4" goes on the left half, away from the ball
+  uint8_t red_from{0}, red_to{0};  // the columns (inclusive) of the last 20 yards, the 20 to the goal line
+  // The row's text ("3rd & 4", "ND 84% win") goes in the clear part of the
+  // strip: between an end zone and the nearest marker (the ball, its tip or
+  // the line to gain), so it never runs into one. text_left puts it against
+  // our end zone, left-aligned; else against theirs, right-aligned.
+  bool text_left{false};
+  uint8_t text_x{0};  // its first column
+  uint8_t text_w{0};  // its width in px, 0 when no room is clear
 };
 
 // The field column of a yard position measured from the left end zone (0 is
@@ -70,172 +72,40 @@ inline FieldStrip field_strip(const GameSnapshot &g, int width, int ez = 6) {
     }
   }
   f.red_zone = g.is_red_zone && f.has_offense;
+  // The whole red zone glows, not only the yards left to go: at the 1 that
+  // would be a column or two, a blip from across a room. The page draws the
+  // ball and the line to gain on top.
   if (f.red_zone) {
     if (f.to_right) {
-      f.red_from = (uint8_t) std::min(bx + 2, width - ez - 1);
+      f.red_from = (uint8_t) field_col(80, width, ez);
       f.red_to = (uint8_t) (width - ez - 1);
     } else {
       f.red_from = (uint8_t) ez;
-      f.red_to = (uint8_t) std::max(bx - 1, ez);
+      f.red_to = (uint8_t) field_col(20, width, ez);
     }
   }
-  f.left_timeouts = (uint8_t) std::max(0, std::min(3, g.team_timeouts));
-  f.right_timeouts = (uint8_t) std::max(0, std::min(3, g.opp_timeouts));
-  f.text_left = bx >= width / 2;
+  // The markers' columns: the ball (two wide), its tip, the line to gain.
+  int lo = bx, hi = bx + 1;
+  if (f.has_offense) {
+    if (f.to_right)
+      hi = bx + 2;
+    else
+      lo = bx - 1;
+  }
+  if (f.gain_x >= 0) {
+    lo = std::min(lo, (int) f.gain_x);
+    hi = std::max(hi, (int) f.gain_x);
+  }
+  // Two columns clear of each end zone (as before) and one clear of a marker.
+  const int lx = ez + 2, rx = width - ez - 3;  // the text's outermost columns
+  const int left_w = std::max(0, (lo - 2) - lx + 1);
+  const int right_w = std::max(0, rx - (hi + 2) + 1);
+  // The roomier side; on a tie, the half away from the ball.
+  f.text_left = left_w != right_w ? left_w > right_w : bx >= width / 2;
+  f.text_x = (uint8_t) (f.text_left ? lx : hi + 2);
+  f.text_w = (uint8_t) (f.text_left ? left_w : right_w);
   f.valid = true;
   return f;
 }
-
-// How many columns of a `width` px bar are ours for a win chance of pct
-// (1 to 99). Both sides always keep at least one column.
-inline int win_bar_split(int pct, int width) {
-  if (pct < 1 || pct > 99 || width < 2)
-    return -1;
-  int cols = (pct * width + 50) / 100;
-  return std::max(1, std::min(width - 1, cols));
-}
-
-// The score margin over one game, one sample per read while the game is on,
-// from our side. When the 128 slots are full every pair merges into one and
-// later reads count double, so a whole game always fits in the same width.
-// The same game read from the other side (two favorites playing each other)
-// flips every sample's sign, the way the scoring log and the Home Assistant
-// tracker handle it.
-struct MarginTrack {
-  static constexpr uint8_t kMax = 128;
-  int8_t margin[kMax]{};  // our score minus theirs
-  uint8_t n{0};
-  uint16_t stride{1};     // reads per sample
-  uint16_t pending{0};    // reads toward the next sample
-  std::string event_id;
-  uint32_t team_id{0};    // the side the samples count for
-  int last_margin{0};
-  // The last read recorded, so a redraw of the same read adds nothing.
-  std::string last_clock;
-  int last_period{-1};
-
-  void reset(const std::string &event, uint32_t team) {
-    n = 0;
-    stride = 1;
-    pending = 0;
-    event_id = event;
-    team_id = team;
-    last_margin = 0;
-    last_clock.clear();
-    last_period = -1;
-  }
-
-  // The same game seen from the other side: every lead becomes a deficit.
-  void flip(uint32_t team) {
-    for (uint8_t i = 0; i < n; i++)
-      margin[i] = (int8_t) -margin[i];
-    last_margin = -last_margin;
-    team_id = team;
-  }
-
-  // One read of the game. A read of another game starts over; a read from
-  // the other side flips the samples first.
-  void add(const std::string &event, uint32_t team, int score_margin) {
-    if (event != event_id)
-      reset(event, team);
-    else if (team != team_id && team != 0)
-      flip(team);
-    last_margin = score_margin;
-    if (++pending < stride)
-      return;
-    pending = 0;
-    if (n == kMax) {
-      for (uint8_t i = 0; i < kMax / 2; i++)
-        margin[i] = margin[2 * i + 1];
-      n = kMax / 2;
-      stride = (uint16_t) std::min(stride * 2, 32768);
-    }
-    margin[n] = (int8_t) std::max(-127, std::min(127, score_margin));
-    n++;
-  }
-
-  // One emit of the board: records a read when something about the game
-  // moved (the clock, the period or the score), and ignores a redraw of the
-  // read already recorded. Returns true when it recorded one.
-  bool read(const std::string &event, uint32_t team, int score_margin, const std::string &clock, int period) {
-    if (event == event_id && (team == team_id || team == 0) && score_margin == last_margin && clock == last_clock &&
-        period == last_period && n > 0)
-      return false;
-    add(event, team, score_margin);
-    last_clock = clock;
-    last_period = period;
-    return true;
-  }
-};
-
-// Two games' tracks, so a board that leaves a game (Live games switching,
-// Favorites alternating) and comes back keeps what it had. The game on the
-// board is `current()`; a third game takes the older slot.
-struct MarginTracks {
-  MarginTrack track[2];
-  uint8_t cur{0};
-
-  const MarginTrack &current() const { return track[cur]; }
-
-  // The track for `event`, made current: the one that already follows it,
-  // else the slot that is not the game the board just left.
-  MarginTrack &pick(const std::string &event) {
-    if (track[cur].event_id != event) {
-      uint8_t other = (uint8_t) (1 - cur);
-      if (track[other].event_id != event)
-        track[other].reset(event, 0);
-      cur = other;
-    }
-    return track[cur];
-  }
-};
-
-// The sparkline's columns: out[x] is the margin's height in pixels from the
-// baseline for each of `width` columns, positive up to `up`, negative down to
-// `down`. The samples, with the latest read as the last point, are stretched
-// across the width and joined with straight lines, and the tallest lead or
-// deficit of the game sets the scale, but never under min_peak (a 1-0 hockey
-// lead is a sliver, not the whole row). Returns the number of points drawn
-// (0 leaves out untouched and means nothing to draw).
-inline int margin_columns(const MarginTrack &t, int width, int up, int down, int8_t *out, int min_peak = 1) {
-  if (width <= 0 || t.n == 0)
-    return 0;
-  // Points: the samples, then the latest read when it is newer than the last sample.
-  int pts = t.n + (t.pending > 0 ? 1 : 0);
-  auto at = [&](int i) -> int { return i < t.n ? t.margin[i] : t.last_margin; };
-  int peak = std::max(1, min_peak);
-  for (int i = 0; i < pts; i++)
-    peak = std::max(peak, std::abs(at(i)));
-  auto px = [&](int v) -> int8_t {
-    if (v == 0)
-      return 0;
-    int lim = v > 0 ? up : down;
-    int h = (std::abs(v) * lim + peak - 1) / peak;  // ceil: a 1-point lead shows
-    return (int8_t) (v > 0 ? std::min(h, lim) : -std::min(h, lim));
-  };
-  if (pts == 1) {
-    for (int x = 0; x < width; x++)
-      out[x] = px(at(0));
-    return 1;
-  }
-  for (int x = 0; x < width; x++) {
-    // Which two points straddle this column, and how far between them.
-    int num = x * (pts - 1);
-    int i = num / (width - 1);
-    int rem = num - i * (width - 1);
-    if (i >= pts - 1) {
-      out[x] = px(at(pts - 1));
-      continue;
-    }
-    int a = at(i), b = at(i + 1);
-    int v = a + ((b - a) * rem) / (width - 1);
-    out[x] = px(v);
-  }
-  return pts;
-}
-
-// The sparkline's smallest full-scale margin per sport: a goal is a lot in
-// hockey, a basket is not in basketball.
-inline int margin_min_peak(Sport sport) { return sport == Sport::HOCKEY ? 3 : 10; }
 
 }  // namespace espn

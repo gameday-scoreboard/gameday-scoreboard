@@ -73,6 +73,65 @@ script:
       - delay: 5s
       - lambda: 'lv_obj_add_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);'
 
+  # The situation row's text on a wide board (components/gameday/row_text.h):
+  # one line at a time, each for its own seconds, in the longest form that
+  # fits the room the field strip left (gd_row_room). gd_update runs it on
+  # every read and the 1 s interval below on every turn. News (a new basket,
+  # a new down) jumps straight to the lead line.
+  - id: gd_row_show
+    then:
+      - lambda: |-
+          lv_obj_t *lbl = id(tt_down_lbl);
+          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          if (W < 128 || r.n == 0) {
+            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            id(gd_row_turn) = 0;
+            return;
+          }
+          if (r.news != id(gd_row_news) || id(gd_row_turn) >= r.n) {
+            id(gd_row_news) = r.news;
+            id(gd_row_turn) = 0;
+            id(gd_row_left) = r.line[0].secs;
+          }
+          const lv_font_t *f = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+          // The forms are '\n'-separated, longest first: the first that
+          // fits, else the shortest. On the field strip (gd_row_strict) a
+          // line that doesn't fit at all gives its turn to the lead line
+          // (the down and distance), and with neither the row stays empty:
+          // text there never crosses the ball or the line to gain.
+          auto fit = [&](const ::espn::RowLine &line, bool strict) -> std::string {
+            std::string pick;
+            for (int i = 0;; i++) {
+              std::string form = line.form(i);
+              if (form.empty())
+                break;
+              lv_point_t sz;
+              lv_text_get_size(&sz, form.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              if (sz.x <= id(gd_row_room))
+                return form;
+              if (!strict)
+                pick = form;
+            }
+            return pick;
+          };
+          int shown = id(gd_row_turn);
+          std::string pick = fit(r.line[shown], id(gd_row_strict));
+          if (pick.empty() && id(gd_row_strict) && shown != 0) {
+            shown = 0;
+            pick = fit(r.line[0], true);
+          }
+          const ::espn::RowLine &l = r.line[shown];
+          if (pick.empty()) {
+            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const char *cur = lv_label_get_text(lbl);
+          if (cur == nullptr || pick != cur)
+            lv_label_set_text(lbl, pick.c_str());
+          lv_obj_set_style_text_color(lbl, lv_color_hex(l.rgb), 0);
+          lv_obj_clear_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+
   - id: tt_apply_layout
     then:
       - lambda: |-
@@ -144,29 +203,29 @@ script:
             lv_obj_set_width(id(tt_clock_lbl), W - 64);
             // Timeout pips centered under each logo
             const int acx = 18, hcx = W - 18;
+            // While the field strip has their row, they sit one pixel tall
+            // under each record instead (row 46, a row clear of the strip);
+            // gd_update keeps them in step.
+            const bool strip = !lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN);
             for (int i = 0; i < 3; i++) {
-              // Timeout pips are football's (gd_update keeps them in step).
-              // Not while the field strip has their row: its end zones
-              // carry the timeouts, and this runs again on every return to
-              // the scoreboard, up to a poll before gd_update hides them.
-              if (id(gd_sport) == 0 && lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN)) {
+              // Timeout pips are football's.
+              if (id(gd_sport) == 0) {
                 lv_obj_clear_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
               } else {
                 lv_obj_add_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_add_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
               }
-              lv_obj_set_pos(abars[i], acx - 9 + i * 7, 48);
-              lv_obj_set_pos(hbars[i], hcx - 9 + i * 7, 48);
+              lv_obj_set_pos(abars[i], acx - 9 + i * 7, strip ? 46 : 48);
+              lv_obj_set_pos(hbars[i], hcx - 9 + i * 7, strip ? 46 : 48);
+              lv_obj_set_height(abars[i], strip ? 1 : 3);
+              lv_obj_set_height(hbars[i], strip ? 1 : 3);
             }
             lv_obj_set_pos(id(tt_game_status_lbl), 0, 56);
             lv_obj_set_style_text_font(id(tt_splash_lbl), id(spleen_16), 0);
             lv_obj_set_pos(id(tt_splash_lbl), 0, 16);
-            // The pictures (game_viz.h): the win bar on the row above the
-            // situation row, the strip or sparkline canvas on the row itself.
+            // The field strip's canvas on the situation row (game_viz.h).
             lv_obj_set_pos(id(tt_viz_canvas), 0, 48);
-            for (lv_obj_t *o : {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)})
-              lv_obj_set_pos(o, 0, 47);
           } else {
             // Single panel: logos side by side, everything stacked beneath
             lv_obj_set_pos(id(gd_team_logo_img), 0, 0);
@@ -200,9 +259,8 @@ script:
             lv_obj_set_pos(id(tt_game_status_lbl), 0, 56);
             lv_obj_set_style_text_font(id(tt_splash_lbl), id(spleen_12), 0);
             lv_obj_set_pos(id(tt_splash_lbl), 0, 18);
-            // No room for the pictures on a single panel
-            for (lv_obj_t *o : {id(tt_viz_canvas), id(tt_win_team), id(tt_win_opp), id(tt_win_mark)})
-              lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+            // No room for the field strip on a single panel
+            lv_obj_add_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN);
           }
           // Baseball's bases, drawn as a small diamond (first base on the
           // right), and the outs. gd_update shows them during a half inning.
@@ -246,8 +304,6 @@ script:
       opponent_score: int
       status_text: string
       clock_text: string
-      down_distance: string
-      is_red_zone: bool
       team_color: int
       opponent_color: int
       team_badge: bool
@@ -280,7 +336,6 @@ script:
       weather_card: bool
       next_line: string
       viz: int
-      win_pct: int
     then:
       - lambda: |-
           id(gd_sport) = sport;
@@ -498,29 +553,9 @@ script:
             lv_obj_clear_flag(id(tt_away_rec_lbl), LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(id(tt_home_rec_lbl), LV_OBJ_FLAG_HIDDEN);
           }
-          // Down and distance under the clock while live; red in the red zone
-          if (W >= 128 && game_state == "IN" && !down_distance.empty()) {
-            lv_label_set_text(id(tt_down_lbl), down_distance.c_str());
-            lv_obj_set_style_text_color(id(tt_down_lbl), is_red_zone ? lv_color_hex(0xFF3030) : lv_color_hex(0xFFFFFF), 0);
-            lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
-          } else {
-            lv_obj_add_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
-          }
-          // Soccer (sport 4): the latest goal on that row, "52' Saka"
-          if (W >= 128 && sport == 4 && game_state == "IN" && !situation.empty()) {
-            lv_label_set_text(id(tt_down_lbl), situation.c_str());
-            lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
-            lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
-          }
-          // Hockey (sport 3): shots on goal and the latest goal, "Shots on
-          // goal 12-16", then "Shots 12-16  12:04 Kane". It has no timeout
-          // pips, so the line has the row's whole width (the lambda below
-          // places it).
-          if (W >= 128 && sport == 3 && game_state == "IN" && !situation.empty()) {
-            lv_label_set_text(id(tt_down_lbl), situation.c_str());
-            lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
-            lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
-          }
+          // The text under the clock (down and distance, the last basket,
+          // the win chance, ...) is gd_row_show's, after the field strip
+          // below has said how much room it has.
           // Baseball (sport 1) during a half inning: bases lit gold (red with
           // the bases loaded), the count and outs beside them on a wide
           // display, out dots on a single panel. Timeout pips are football's.
@@ -551,14 +586,6 @@ script:
             lv_obj_clear_flag(id(tt_outs_lbl), LV_OBJ_FLAG_HIDDEN);
           } else {
             lv_obj_add_flag(id(tt_outs_lbl), LV_OBJ_FLAG_HIDDEN);
-          }
-          // Basketball (sport 2): the playoff series ("NY lead 2-1") on the
-          // situation row of a wide display. down_distance is always empty
-          // for it, so the football branch above has hidden the label.
-          if (sport == 2 && W >= 128 && game_state == "IN" && !situation.empty()) {
-            lv_label_set_text(id(tt_down_lbl), situation.c_str());
-            lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
-            lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
           }
           if (W >= 128) {
             lv_obj_t *pips[6] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3),
@@ -601,12 +628,11 @@ script:
             lv_obj_clear_flag(id(tt_home_team_lbl), LV_OBJ_FLAG_HIDDEN);
           }
       - lambda: |-
-          // The pictures on a wide board's situation row
-          // (components/gameday/game_viz.h): football's field strip, the win
-          // chance bar on the row above it, and the score margin sparkline for
-          // basketball and hockey. The component's viz bits say which to draw
-          // (the owner's switches already applied); the geometry comes from it
-          // too, so the host tests cover it.
+          // Football's field strip on a wide board's situation row
+          // (components/gameday/game_viz.h). The component's viz bits say
+          // whether to draw it (the owner's switch already applied); the
+          // geometry comes from it too, so the host tests cover it. Then the
+          // row's text (gd_row_show) gets the room the strip leaves it.
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
           const bool wide = W >= 128;
           lv_obj_t *cv = id(tt_viz_canvas);
@@ -622,12 +648,6 @@ script:
             }
             return lv_color_make(r, g, b);
           };
-          // White dots on a dark end zone, black on a light one, judged on the
-          // color as drawn: bright() lifts a dark team color, and turns ESPN's
-          // black (PIT, LV) white.
-          auto light = [](lv_color_t c) {
-            return (uint32_t) c.red * 299 + (uint32_t) c.green * 587 + (uint32_t) c.blue * 114 > 160000;
-          };
           auto px = [&](int x, int y, lv_color_t c) {
             if (x >= 0 && x < W && x < 128 && y >= 0 && y < 8)
               lv_canvas_set_px(cv, x, y, c, LV_OPA_COVER);
@@ -639,33 +659,6 @@ script:
           };
           const bool live = game_state == "IN";
           const bool field = wide && live && (viz & ::espn::VIZ_FIELD) != 0;
-          // The bar is football's and basketball's: baseball's row is the diamond's.
-          const bool winbar = wide && live && (sport == 0 || sport == 2) && (viz & ::espn::VIZ_WINBAR) != 0 &&
-                              win_pct >= 1 && win_pct <= 99;
-          // A playoff series ("NY lead 2-1") has the row in a basketball
-          // game, and the shots and goal line in a hockey game (the lambda
-          // above), so the margin chart gives way to them.
-          const bool series = (sport == 2 || sport == 3) && live && !situation.empty();
-          const bool spark = wide && !field && !series && (viz & ::espn::VIZ_SPARK) != 0;
-          lv_obj_t *bars[3] = {id(tt_win_team), id(tt_win_opp), id(tt_win_mark)};
-          if (winbar) {
-            // Our color from the left for our chance, theirs for the rest, a
-            // white pixel at the split.
-            int split = ::espn::win_bar_split(win_pct, W);
-            lv_obj_set_style_bg_color(bars[0], bright((uint32_t) team_color), 0);
-            lv_obj_set_style_bg_color(bars[1], bright((uint32_t) opponent_color), 0);
-            lv_obj_set_pos(bars[0], 0, 47);
-            lv_obj_set_size(bars[0], split, 1);
-            lv_obj_set_pos(bars[1], split, 47);
-            lv_obj_set_size(bars[1], W - split, 1);
-            lv_obj_set_pos(bars[2], split == W - 1 ? split - 1 : split, 47);
-            lv_obj_set_size(bars[2], 1, 1);
-            for (lv_obj_t *o : bars)
-              lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
-          } else {
-            for (lv_obj_t *o : bars)
-              lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
-          }
           lv_obj_t *pips[6] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3),
                                id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
           bool drawn = false;
@@ -687,18 +680,11 @@ script:
                   px(x, 6, c);
                 }
               }
-              // End zones in team colors, with the timeouts left as dots.
+              // End zones in plain team colors; the timeouts are the pips
+              // under the records.
               lv_color_t tc = bright((uint32_t) team_color), oc = bright((uint32_t) opponent_color);
               fill(0, 0, ez, 8, tc);
               fill(right, 0, ez, 8, oc);
-              lv_color_t tdot = lv_color_hex(light(tc) ? 0x000000 : 0xFFFFFF);
-              lv_color_t odot = lv_color_hex(light(oc) ? 0x000000 : 0xFFFFFF);
-              for (int i = 0; i < 3; i++) {
-                if (i < fs.left_timeouts)
-                  fill(ez / 2 - 1, i * 3, 2, 2, tdot);
-                if (i < fs.right_timeouts)
-                  fill(right + ez / 2 - 1, i * 3, 2, 2, odot);
-              }
               if (fs.gain_x >= 0)
                 fill(fs.gain_x, 0, 1, 8, lv_color_hex(0xFFD000));
               // The ball, with a tip the way the offense is going.
@@ -714,49 +700,41 @@ script:
               lv_obj_invalidate(cv);
               lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
               drawn = true;
-              // The pips' row is the strip's; the end zones carry the timeouts.
-              for (lv_obj_t *o : pips)
-                lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
-              // "3rd & 4" on the half of the strip away from the ball.
-              lv_obj_set_style_text_align(id(tt_down_lbl), fs.text_left ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
-              lv_obj_set_pos(id(tt_down_lbl), fs.text_left ? ez + 2 : W / 2, 48);
-              lv_obj_set_width(id(tt_down_lbl), W / 2 - ez - 2);
-            }
-          } else if (spark) {
-            // The margin over the game: our lead up in our color, theirs down
-            // in theirs, from a dim baseline, the latest read in white.
-            int8_t cols[128];
-            const int cw = std::min(W, 128);
-            int pts = ::espn::margin_columns(id(gameday_ctl).margin_track(), cw, 4, 3, cols,
-                                             ::espn::margin_min_peak((::espn::Sport) sport));
-            if (pts > 0) {
-              fill(0, 0, W, 8, lv_color_hex(0x000000));
-              lv_color_t up = bright((uint32_t) team_color), down = bright((uint32_t) opponent_color);
-              for (int x = 0; x < cw; x++) {
-                int v = cols[x];
-                px(x, 4, lv_color_hex(0x303030));
-                if (v > 0)
-                  fill(x, 4 - v, 1, v, up);
-                else if (v < 0)
-                  fill(x, 5, 1, -v, down);
+              // The pips' row is the strip's, so they move up under the
+              // records, one pixel tall, a row clear of the strip.
+              for (int i = 0; i < 6; i++) {
+                lv_obj_set_pos(pips[i], (i < 3 ? 18 : W - 18) - 9 + (i % 3) * 7, 46);
+                lv_obj_set_height(pips[i], 1);
+                lv_obj_clear_flag(pips[i], LV_OBJ_FLAG_HIDDEN);
               }
-              int last = cols[cw - 1];
-              px(cw - 1, last > 0 ? 4 - last : last < 0 ? 4 - last : 4, lv_color_hex(0xFFFFFF));
-              lv_obj_invalidate(cv);
-              lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
-              drawn = true;
+              // "3rd & 4" in the clear part of the strip, between an end
+              // zone and the nearest marker, never across one.
+              lv_obj_set_style_text_align(id(tt_down_lbl), fs.text_left ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
+              lv_obj_set_pos(id(tt_down_lbl), fs.text_x, 48);
+              lv_obj_set_width(id(tt_down_lbl), std::max(1, (int) fs.text_w));
+              id(gd_row_room) = fs.text_w;
+              id(gd_row_strict) = true;
             }
           }
           if (!drawn)
             lv_obj_add_flag(cv, LV_OBJ_FLAG_HIDDEN);
-          if (!field && wide) {
-            // The situation row as the layout had it, between the timeout
-            // pips; hockey has none, so its line spans the board.
-            const bool full = sport == 3;
+          if (!drawn && wide) {
+            // The row between the logos' columns, where football's timeout
+            // pips and soccer's red cards sit; basketball and hockey have
+            // nothing under the logos, so their text gets the full width.
+            const bool full = sport == 2 || sport == 3;
             lv_obj_set_style_text_align(id(tt_down_lbl), LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_pos(id(tt_down_lbl), full ? 0 : 32, 48);
             lv_obj_set_width(id(tt_down_lbl), full ? W : W - 64);
+            id(gd_row_room) = full ? W : W - 64;
+            id(gd_row_strict) = false;
+            // The pips (football's timeouts, soccer's red cards) back on the row.
+            for (int i = 0; i < 6; i++) {
+              lv_obj_set_pos(pips[i], (i < 3 ? 18 : W - 18) - 9 + (i % 3) * 7, 48);
+              lv_obj_set_height(pips[i], 3);
+            }
           }
+      - script.execute: gd_row_show
       - lambda: |-
           // The kickoff forecast before the start of an outdoor game
           // (components/gameday/weather.h): its icon and temperature in the
@@ -1318,6 +1296,14 @@ interval:
   - interval: 1s
     then:
       - script.execute: gd_clock_tick
+      # The situation row's next line when this one's time is up.
+      - lambda: |-
+          const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          if (r.n < 2 || --id(gd_row_left) > 0)
+            return;
+          id(gd_row_turn) = (id(gd_row_turn) + 1) % r.n;
+          id(gd_row_left) = r.line[id(gd_row_turn)].secs;
+          id(gd_row_show).execute();
   # The cards' turns on the board, 10 s each: the board (0), the line score
   # (1) and the game leaders (2), skipping a card that is not ready. The
   # board always comes first, and the halftime leaders card has one turn,
@@ -1364,6 +1350,30 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  # The situation row's text (gd_row_show): the line up now, its seconds
+  # left, the last news it jumped for, and the room it has in pixels.
+  - id: gd_row_turn
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_left
+    type: int
+    restore_value: no
+    initial_value: '4'
+  - id: gd_row_news
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_room
+    type: int
+    restore_value: no
+    initial_value: '64'
+  # The row is on the field strip, where a line that doesn't fit is left
+  # out rather than drawn across a marker.
+  - id: gd_row_strict
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 # The weather card's icons (scripts/build_weather_icons.py draws them): 16x16
 # for today, 8x8 for the next two days, in WxIcon's order (weather.h).
@@ -1533,55 +1543,15 @@ lvgl:
                         text_color: 0xFFFFFF
                         text: ""
 
-              # The pictures row (components/gameday/game_viz.h): the field
-              # strip or the margin sparkline on this canvas, and the win
-              # chance bar as three slivers on the row above. Placed by
-              # tt_apply_layout, drawn and shown by gd_update on a wide board.
+              # Football's field strip (components/gameday/game_viz.h) on
+              # the situation row. Placed by tt_apply_layout, drawn and shown
+              # by gd_update on a wide board.
               - canvas:
                   id: tt_viz_canvas
                   x: 0
                   y: 48
                   width: 128
                   height: 8
-                  hidden: true
-              - obj:
-                  id: tt_win_team
-                  scrollbar_mode: "OFF"
-                  x: 0
-                  y: 47
-                  width: 64
-                  height: 1
-                  radius: 0
-                  border_width: 0
-                  pad_all: 0
-                  bg_opa: COVER
-                  bg_color: 0x808080
-                  hidden: true
-              - obj:
-                  id: tt_win_opp
-                  scrollbar_mode: "OFF"
-                  x: 64
-                  y: 47
-                  width: 64
-                  height: 1
-                  radius: 0
-                  border_width: 0
-                  pad_all: 0
-                  bg_opa: COVER
-                  bg_color: 0x808080
-                  hidden: true
-              - obj:
-                  id: tt_win_mark
-                  scrollbar_mode: "OFF"
-                  x: 64
-                  y: 47
-                  width: 1
-                  height: 1
-                  radius: 0
-                  border_width: 0
-                  pad_all: 0
-                  bg_opa: COVER
-                  bg_color: 0xFFFFFF
                   hidden: true
 
               - label:
