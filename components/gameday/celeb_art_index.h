@@ -8,6 +8,14 @@
 #include "celeb_art_alley_oop_64.h"
 #include "celeb_art_dunk_128.h"
 #include "celeb_art_dunk_64.h"
+#include "celeb_art_fumble_128.h"
+#include "celeb_art_fumble_64.h"
+#include "celeb_art_interception_128.h"
+#include "celeb_art_interception_64.h"
+#include "celeb_art_pick_six_128.h"
+#include "celeb_art_pick_six_64.h"
+#include "celeb_art_sack_128.h"
+#include "celeb_art_sack_64.h"
 #include "celeb_plan.h"
 
 namespace espn {
@@ -21,6 +29,14 @@ inline const CelebArt *celeb_art_for(CelebKind k, int w) {
       return wide ? &celeb_art_dunk_128() : &celeb_art_dunk_64();
     case CelebKind::ALLEY_OOP:
       return wide ? &celeb_art_alley_oop_128() : &celeb_art_alley_oop_64();
+    case CelebKind::INTERCEPTION:
+      return wide ? &celeb_art_interception_128() : &celeb_art_interception_64();
+    case CelebKind::PICK_SIX:
+      return wide ? &celeb_art_pick_six_128() : &celeb_art_pick_six_64();
+    case CelebKind::FUMBLE:
+      return wide ? &celeb_art_fumble_128() : &celeb_art_fumble_64();
+    case CelebKind::SACK:
+      return wide ? &celeb_art_sack_128() : &celeb_art_sack_64();
     default:
       return nullptr;
   }
