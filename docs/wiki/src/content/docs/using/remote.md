@@ -13,7 +13,7 @@ The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart 
 2. Turn on **Discovery**. The status line says **Discovery on: press any button on the remote**.
 3. Press any button on the WizMote.
 
-The panel pairs with that remote and turns Discovery off by itself. The status line says **Paired:** and the remote's address.
+The panel pairs with that remote and turns Discovery off by itself. The status line says **Paired:** and the remote's address. The press that pairs the remote does nothing else, so pairing with **OFF** leaves the panel on. Pressing the remote that is already paired while Discovery is on turns Discovery off and does nothing else either.
 
 The panel pairs with one remote at a time. Pairing another one replaces the first. **Unpair remote** in the same section forgets the paired remote, and the status says **No remote paired**. Discovery always starts off after the panel restarts, so a remote you haven't paired can't take over the panel.
 
@@ -44,6 +44,8 @@ Buttons 1 to 4 are the first four teams in your favorites list, in order. While 
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
 
+On a bar's panel that shows a plate wall, button 4 throws the plate party for the newest plate instead. See [The plate party](/using/bar-look/#the-plate-party).
+
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
 
 **Set each button yourself.** **Remote** on the device page's Device tab, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:
@@ -54,4 +56,4 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 - **All favorites**: back to every favorite.
 - **Nothing**.
 
-A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A settings backup carries the four buttons.
+A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A button set to a playlist follows it when you rename it. A settings backup carries the four buttons.

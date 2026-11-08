@@ -19,6 +19,8 @@ The panel remembers up to five Wi-Fi networks, like your home, a phone hotspot a
 
 **Wi-Fi networks** on the device page's Device tab lists the saved networks, in the order the panel tries them, with **Connected** beside the one it's on, or **Tried first** beside the top one. **Forget** takes a network off the list. If the panel is on that network now, it stays connected until it next restarts.
 
+A new password for a saved network, saved on the hotspot's setup page, doesn't replace the one that worked until the panel joins with it, in case it was mistyped. If the panel restarts before that, it tries the new password first for a minute, then goes back to the old one.
+
 When the list is full, adding a sixth network drops the one at the bottom. The panel always keeps one network to join, so forgetting the last one doesn't take it off Wi-Fi. [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) and [Factory reset](/using/buttons-and-resets/#factory-reset) clear them all.
 
 Reset Wi-Fi keeps the saved networks. Only Factory reset clears them.

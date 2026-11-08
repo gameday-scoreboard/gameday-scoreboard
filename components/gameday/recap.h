@@ -51,7 +51,8 @@ static const int kRecapMaxDays = 7;
 
 // One league's walk through ESPN days for the finals rotation, one day read
 // per step. Back: from yesterday until the league has kRecapMinFinals finals
-// or the walk has looked kRecapMaxDays back. Forward, when no game is left
+// or the walk has read the days the rotation keeps (recap_trim drops a day
+// kRecapMaxDays back, so the walk stops a day short of it). Forward, when no game is left
 // today: from tomorrow until a day has a kickoff. A walk that ends is tried
 // again on a later day, never on every scan.
 struct RecapWalk {
@@ -77,14 +78,14 @@ struct RecapWalk {
       }
       this->step = 1;
     }
-    if (this->step > kRecapMaxDays)
+    if (this->step >= kRecapMaxDays)
       return false;
     read_day = today - this->step;
     return true;
   }
   // Back: a day was read and the league now holds `have` finals.
   void back_read(int32_t today, size_t have) {
-    if (have >= kRecapMinFinals || ++this->step > kRecapMaxDays)
+    if (have >= kRecapMinFinals || ++this->step >= kRecapMaxDays)
       this->finish(today);
   }
 

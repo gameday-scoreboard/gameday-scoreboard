@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 
 #include "message.h"
 #include "news.h"
@@ -28,6 +29,18 @@ inline ArduinoJson::Allocator *json_allocator() {
 inline std::string str_or_empty(JsonVariantConst v) {
   const char *s = v.as<const char *>();
   return s ? std::string(s) : std::string();
+}
+
+// A score, "21" or 21, kept to 0..999. strtol, not atoi: a number past
+// int's range saturates instead of being undefined, and a huge score can't
+// overflow the sums the splashes make from it.
+inline int score_value(JsonVariantConst v) {
+  long n = 0;
+  if (v.is<const char *>())
+    n = strtol(v.as<const char *>(), nullptr, 10);
+  else if (v.is<long>())
+    n = v.as<long>();
+  return (int) (n < 0 ? 0 : n > 999 ? 999 : n);
 }
 
 // True when the competition says its kickoff time is not set yet
@@ -303,7 +316,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     uint32_t id = (uint32_t) atol(str_or_empty(c["id"]).c_str());
     bool home = str_or_empty(c["homeAway"]) == "home";
     std::string abbr = str_or_empty(c["team"]["abbreviation"]);
-    int score = atoi(str_or_empty(c["score"]).c_str());
+    int score = score_value(c["score"]);
     std::string record = str_or_empty(c["records"][0]["summary"]);
     // ESPN's AP rank: 1 to 25, 99 (or nothing) when unranked
     int rank_v = c["curatedRank"]["current"] | 99;
@@ -357,10 +370,11 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   s.play_yards = (int16_t) std::min(200, std::max(-200, lp["statYardage"] | 0));
   s.play_team = (uint32_t) atol(str_or_empty(lp["team"]["id"]).c_str());
   JsonVariantConst win = lp["probability"][s.team_home ? "homeWinPercentage" : "awayWinPercentage"];
-  if (win.is<float>()) {
+  float win_f = win.is<float>() ? win.as<float>() : -1.0f;
+  if (win_f >= 0.0f && win_f <= 1.0f) {  // NaN fails too; past int's range the cast is undefined
     // ESPN goes to 0.999 and 0.001 well before the end; 100% would claim
     // a result the game hasn't reached.
-    int pct = (int) (win.as<float>() * 100.0f + 0.5f);
+    int pct = (int) (win_f * 100.0f + 0.5f);
     s.team_win_pct = (int8_t) std::min(99, std::max(1, pct));
   }
 
@@ -561,7 +575,8 @@ template<typename TInput> bool parse_team(TInput &input, Schedule &out) {
   return true;
 }
 
-// Parses an AP poll from ESPN's core API (rankings.h), at most kTop25Max
+// Parses an AP poll from ESPN's core API (rankings.h): the ranks to
+// kTop25Max, every team of a tie at the last one, at most kTop25RowsMax
 // rows. The rest of the document (the season's types and weeks, the teams
 // that got votes) is skipped as it streams.
 template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
@@ -586,13 +601,13 @@ template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
   p.date = parse_iso8601_z(detail::str_or_empty(doc["date"]));
   top25_when(doc["occurrence"]["displayValue"] | "", doc["occurrence"]["last"] | false, p.when);
   for (JsonObjectConst r : ranks) {
-    if (p.rows.size() >= kTop25Max)
+    if (p.rows.size() >= kTop25RowsMax)
       break;
     RankRow row;
     int cur = r["current"] | 0;
     int prev = r["previous"] | 0;
     row.id = top25_ref_id(r["team"]["$ref"] | "");
-    if (cur < 1 || cur > 99 || row.id == 0)
+    if (cur < 1 || cur > kTop25Max || row.id == 0)
       continue;
     row.rank = (uint8_t) cur;
     row.prev = prev > 0 && prev < 100 ? (uint8_t) prev : 0;
@@ -879,9 +894,7 @@ bool parse_live_games(TInput &input, TOut &out, int64_t *next_kickoff = nullptr,
     for (JsonObjectConst c : ev["competitions"][0]["competitors"].as<JsonArrayConst>()) {
       bool home = detail::str_or_empty(c["homeAway"]) == "home";
       std::string abbr = detail::str_or_empty(c["team"]["abbreviation"]);
-      JsonVariantConst sc = c["score"];
-      int score = sc.is<const char *>() ? atoi(sc.as<const char *>()) : (sc | 0);
-      int16_t pts = (int16_t) (score < 0 ? 0 : score > 999 ? 999 : score);
+      int16_t pts = (int16_t) detail::score_value(c["score"]);
       int r = c["curatedRank"]["current"] | 99;
       uint8_t rank = (uint8_t) (r >= 1 && r <= 25 ? r : 99);
       if (home) {

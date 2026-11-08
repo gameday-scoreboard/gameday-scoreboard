@@ -68,6 +68,11 @@ class GifPlayer {
           return this->fail_();
         wrapped = true;
         this->restart_(canvas);
+        // A control block after the last frame belongs to no frame: the
+        // first frame gets only its own.
+        delay_cs = -1;
+        transparent = -1;
+        disposal = 0;
         continue;
       }
       if (b == 0x21) {  // an extension

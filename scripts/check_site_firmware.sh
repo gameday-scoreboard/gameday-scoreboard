@@ -5,9 +5,10 @@
 # Usage: scripts/check_site_firmware.sh <site dir> <tag, e.g. v1.5.4>
 #        scripts/check_site_firmware.sh --beta <site dir>
 #        scripts/check_site_firmware.sh --follow-beta <site dir> [version]
-# --beta checks the bar panels' beta channel (site/firmware/beta/<variant>/)
-# instead: its versions end in -beta.<build>, the same for both bar variants
-# (there is no two-panel bar build). --follow-beta checks the beta for panels
+# The release's variants include the bar releases (site/firmware/<variant>-bar/).
+# --beta checks the bar betas (site/firmware/beta/<variant>/) instead: their
+# versions end in -beta.<build>, the same for both bar variants (there is no
+# two-panel bar build). --follow-beta checks the beta for panels
 # with "Follow beta" on (site/firmware/<variant>-beta/) the same way, and
 # against the given version if there is one. Set VARIANTS to check only some
 # of a mode's folders (add_beta_channel.sh checks each Follow beta board alone).
@@ -31,7 +32,7 @@ case "$1" in
   *)
     site=$1
     dir="$site/firmware"
-    variants="moonhub75 moonhub75-2panel scoreboard75 waveshare"
+    variants="moonhub75 moonhub75-2panel scoreboard75 waveshare moonhub75-bar scoreboard75-bar"
     beta_mode=0
     want=${2#v}
     ;;
