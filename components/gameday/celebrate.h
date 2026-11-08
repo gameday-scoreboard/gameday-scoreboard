@@ -37,6 +37,9 @@ enum class CelebKind : uint8_t {
   GOAL_LAMP,  // hockey: the red goal lamp spins
   THREE,      // basketball, three points in one read: the ball drops through the hoop
   WIN,        // the victory screen: the name, the final score, confetti
+  // Big plays (bench pilot): the interception two ways, to pick a style.
+  INTERCEPT,      // drawn in code: the ball's arc, a defender leaps, snatches it, runs it back
+  INTERCEPT_ART,  // frame-by-frame pixel art from flash (celeb_art.h), recolored to the team
 };
 
 inline bool celeb_animated(CelebKind k) { return k >= CelebKind::TOUCHDOWN; }
@@ -64,6 +67,8 @@ constexpr uint32_t kCelebHomeRunMs = 4500;
 constexpr uint32_t kCelebGoalMs = 4500;
 constexpr uint32_t kCelebThreeMs = 3000;
 constexpr uint32_t kCelebWinMs = 10000;
+constexpr uint32_t kCelebInterceptMs = 3600;
+constexpr uint32_t kCelebInterceptArtMs = 5000;
 
 // Dark team colors vanish on an LED panel: lift the brightest channel to 0xE0.
 inline uint32_t celeb_bright(uint32_t c) {
@@ -140,6 +145,38 @@ inline std::string celeb_final_line(const GameSnapshot &cur, bool team_won) {
   return line;
 }
 
+// Bench pilot: which interception style plays. 0 takes turns (code, then
+// art), 1 is always the code one, 2 always the pixel art. The bench YAML's
+// select sets it.
+inline uint8_t &celeb_intercept_style() {
+  static uint8_t v = 0;
+  return v;
+}
+inline CelebKind celeb_intercept_pick() {
+  return celeb_intercept_style() == 2 ? CelebKind::INTERCEPT_ART : CelebKind::INTERCEPT;
+}
+// Taking turns (style 0) happens once a fresh interception is latched.
+inline void celeb_intercept_turn(CelebPlan &p) {
+  static uint8_t turn = 0;
+  if (celeb_intercept_style() != 0)
+    return;
+  p.kind = (turn++ & 1) ? CelebKind::INTERCEPT_ART : CelebKind::INTERCEPT;
+  p.duration_ms = p.kind == CelebKind::INTERCEPT_ART ? kCelebInterceptArtMs : kCelebInterceptMs;
+}
+
+// Remembers the play an interception was shown for, so a redraw of the
+// same read never plays it twice.
+struct CelebPlayLatch {
+  std::string event, play;
+  bool take(const GameSnapshot &cur) {
+    if (cur.event_id == event && cur.last_play == play)
+      return false;
+    event = cur.event_id;
+    play = cur.last_play;
+    return true;
+  }
+};
+
 // The celebration for this poll. splash is decide_splash's answer for it,
 // which already knows about Opponent scores too and the neutral modes; the
 // one score decide_splash stays quiet on, a basketball basket, is read here:
@@ -158,6 +195,20 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   const bool live = same && prev.state == GameState::IN && cur.state == GameState::IN;
 
   if (splash.text.empty()) {
+    // Bench pilot: an interception, our defense (either side when neutral)
+    // now has the ball. Nothing scored, so decide_splash is quiet on it.
+    if (level == CelebLevel::FULL && live && cur.sport == Sport::FOOTBALL &&
+        cur.play_type.find("Interception") != std::string::npos && cur.last_play != prev.last_play &&
+        (cur.possession == 1 || (neutral && opp_splashes && cur.possession == 2))) {
+      const bool mine = cur.possession == 1;
+      CelebPlan p;
+      p.kind = celeb_intercept_pick();
+      p.color = celeb_bright(parse_color(mine ? cur.team_color : cur.opp_color));
+      p.alt = celeb_alt_for(p.color);
+      p.text = "INTERCEPTION!";
+      p.duration_ms = p.kind == CelebKind::INTERCEPT_ART ? kCelebInterceptArtMs : kCelebInterceptMs;
+      return p;
+    }
     // Basketball's three. decide_splash leaves baskets alone; Full celebrates
     // a three-point shot read on its own for our side (either side when neutral).
     if (level != CelebLevel::FULL || !live || cur.sport != Sport::BASKETBALL)
@@ -298,6 +349,12 @@ inline CelebTextPlace celeb_text_place(CelebKind kind, int w, int h) {
       break;
     case CelebKind::THREE:
       t.y = h - lh - (wide ? 14 : 10);  // the ball flies over it to the hoop
+      break;
+    case CelebKind::INTERCEPT:
+      t.y = wide ? 1 : 0;  // the ball's arc and the leap stay under it
+      break;
+    case CelebKind::INTERCEPT_ART:
+      t.y = h + 4;  // the art draws its own title; the label sits off the board
       break;
     default:
       t.y = (h - lh) / 2;

@@ -662,6 +662,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
   ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
+  ::espn::CelebPlayLatch play_latch_;  // bench pilot: the interception a show played for
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "celeb_art_intercept.h"
 #include "celebrate.h"
 
 namespace espn {
@@ -156,6 +157,7 @@ class Celebration {
     rng_.s = seed ? seed : 1;
     next_rocket_ = 0;
     ball_done_ = false;
+    art_.reset();
     switch (plan.kind) {
       case CelebKind::TOUCHDOWN:
         // Three bursts at once for the punch, rockets after.
@@ -199,6 +201,11 @@ class Celebration {
         break;
       case CelebKind::THREE:
         three_step_();
+        break;
+      case CelebKind::INTERCEPT:
+#ifndef GAMEDAY_NO_INT_CODE  // bench: build without it to measure its flash
+        intercept_step_();
+#endif
         break;
       case CelebKind::GOAL_NET:
         if (t_ < 0.05f)
@@ -245,6 +252,19 @@ class Celebration {
       case CelebKind::WIN:
         f.clear();
         break;
+      case CelebKind::INTERCEPT:
+        f.clear();
+#ifndef GAMEDAY_NO_INT_CODE
+        render_intercept_(f);
+#endif
+        break;
+      case CelebKind::INTERCEPT_ART:
+#ifndef GAMEDAY_NO_INT_ART  // bench: build without it to measure its flash
+        art_.render(f.px, f.w, f.h, f.stride, celeb_art_intercept(), t_, plan_.color, plan_.alt, fade_());
+#else
+        f.clear();
+#endif
+        return;
     }
     render_particles_(f);
   }
@@ -258,6 +278,7 @@ class Celebration {
   CelebRng rng_;
   CelebParticle p_[kCelebParticles];
   int count_{0};
+  mutable CelebArtPlayer art_;
 
   float fade_() const {
     // The last 0.6 s dims everything out so the board comes back softly.
@@ -533,6 +554,167 @@ class Celebration {
       f.hline(0, w_ - 1, h_ - 1, c);
       f.vline(0, 0, h_ - 1, c);
       f.vline(w_ - 1, 0, h_ - 1, c);
+    }
+  }
+
+  // ---- football: the interception (bench pilot, drawn in code) --------------
+  // The pass arcs in from the left under the words; a defender in the team's
+  // colors runs in from the right, leaps and snatches it at the top of the
+  // arc (a ring and sparks), comes down and runs it back to the left while
+  // the yard lines stream past.
+  static constexpr float kIntCatch = 1.05f;  // the catch
+  static constexpr float kIntLand = 1.45f;   // feet back on the grass
+  int int_ground_() const { return h_ - 6; }
+  float int_catch_x_() const { return w_ * 0.62f; }
+  float int_catch_y_() const { return h_ >= 64 ? 25.0f : h_ * 0.4f; }
+  void int_ball_at_(float u, float &x, float &y) const {
+    // Thrown from off the left edge, low, rising to the catch point.
+    const float x0 = -6, y0 = h_ - 18, x1 = int_catch_x_() - 2, y1 = int_catch_y_();
+    x = x0 + (x1 - x0) * u;
+    y = y0 + (y1 - y0) * u - sinf(u * 3.1416f) * 10.0f;
+  }
+  // The defender's center x and how high off the grass his feet are.
+  void int_player_at_(float &x, float &lift) const {
+    const float cx = int_catch_x_();
+    lift = 0;
+    if (t_ < 0.75f) {  // running in from the right edge
+      float u = t_ / 0.75f;
+      x = (w_ + 10) + (cx + 3 - (w_ + 10)) * u;
+    } else if (t_ < kIntLand) {  // the leap: up to the catch, back down
+      float u = (t_ - 0.75f) / (kIntLand - 0.75f);
+      x = cx + 3 - u * 6;
+      lift = sinf(u * 3.1416f) * 11.0f;
+    } else {  // the return: he holds the middle, the field moves
+      float u = (t_ - kIntLand) / 0.5f;
+      x = cx - 3 - (u < 1 ? u : 1) * (cx - 3 - w_ * 0.42f);
+    }
+  }
+  void intercept_step_() {
+    if (!ball_done_ && t_ >= kIntCatch) {
+      ball_done_ = true;
+      float x, lift;
+      int_player_at_(x, lift);
+      burst_(int_catch_x_() - 2, int_catch_y_(), 40, plan_.color);
+    }
+  }
+  // A 19 px defender facing left. pose 0 running, 1 reaching up, 2 carrying.
+  void int_figure_(CelebFrame &f, int x, int feet, int pose, float phase, int k) const {
+    const uint32_t team = rgb_scale(plan_.color, k), alt = rgb_scale(plan_.alt, k);
+    const uint32_t mask = rgb_scale(0xA0A0A0, k), sock = rgb_scale(plan_.color, k * 3 / 4);
+    const uint32_t shoe = rgb_scale(0x707070, k), ball = rgb_scale(0xB0581C, k);
+    const int top = feet - 18;
+    // Helmet with a stripe down the crown, the facemask in front (left).
+    f.rect(x - 1, top, x + 2, top + 3, team);
+    f.hline(x - 1, x + 2, top, alt);
+    f.put(x - 2, top + 1, team);
+    f.vline(x - 3, top + 2, top + 3, mask);
+    f.put(x - 2, top + 3, mask);
+    // Shoulder pads, jersey with a number, pants.
+    f.hline(x - 2, x + 3, top + 4, team);
+    f.rect(x - 1, top + 5, x + 2, top + 9, team);
+    f.vline(x + 1, top + 6, top + 7, alt);
+    f.rect(x - 1, top + 10, x + 2, top + 11, alt);
+    // Legs: a stride that swings with phase, tucked in the air.
+    const float s = sinf(phase * 6.2832f);
+    const int hip = top + 12;
+    if (pose == 1) {
+      f.line(x, hip, x - 2, hip + 3, sock);
+      f.line(x - 2, hip + 3, x, hip + 5, sock);
+      f.line(x + 2, hip, x + 3, hip + 4, sock);
+      f.put(x, hip + 6, shoe);
+      f.put(x + 3, hip + 5, shoe);
+    } else {
+      int a = (int) lroundf(s * 4), b = -a;
+      f.line(x, hip, x + a / 2, hip + 3, sock);
+      f.line(x + a / 2, hip + 3, x + a, feet - 1, sock);
+      f.line(x + 2, hip, x + 2 + b / 2, hip + 3, sock);
+      f.line(x + 2 + b / 2, hip + 3, x + 2 + b, feet - 1, sock);
+      f.hline(x + a - 1, x + a, feet, shoe);
+      f.hline(x + 2 + b - 1, x + 2 + b, feet, shoe);
+    }
+    // Arms (team sleeves, alt gloves).
+    if (pose == 1) {
+      f.line(x - 1, top + 5, x - 3, top - 2, team);
+      f.line(x + 2, top + 5, x + 0, top - 3, team);
+      f.put(x - 3, top - 3, alt);
+      f.put(x, top - 4, alt);
+    } else if (pose == 2) {
+      // The ball tucked high and tight in front, the other arm pumping.
+      f.line(x - 1, top + 5, x - 3, top + 7, team);
+      f.rect(x - 5, top + 6, x - 3, top + 7, ball);
+      f.put(x - 4, top + 6, rgb_scale(0xFFFFFF, k));
+      int sw = (int) lroundf(-s * 3);
+      f.line(x + 2, top + 5, x + 3 + sw, top + 9, team);
+      f.put(x + 3 + sw, top + 10, alt);
+    } else {
+      int sw = (int) lroundf(s * 3);
+      f.line(x - 1, top + 5, x - 2 - sw, top + 9, team);
+      f.line(x + 2, top + 5, x + 3 + sw, top + 9, team);
+      f.put(x - 2 - sw, top + 10, alt);
+      f.put(x + 3 + sw, top + 10, alt);
+    }
+  }
+  void render_intercept_(CelebFrame &f) const {
+    const float fade = fade_();
+    const int k = (int) (256 * fade);
+    const int ground = int_ground_();
+    // The grass, and yard lines that stream right once he runs it back.
+    f.rect(0, ground - 9, w_ - 1, h_ - 1, rgb_scale(0x08300C, k));
+    float scroll = t_ > kIntLand ? (t_ - kIntLand) * 70.0f : 0.0f;
+    for (int i = -1; i < w_ / 16 + 2; i++) {
+      int lx = i * 16 + ((int) scroll % 16);
+      f.vline(lx, ground - 9, h_ - 1, rgb_scale(0x2E7A38, k));
+      f.put(lx + 8, ground - 2, rgb_scale(0x2E7A38, k));
+    }
+    // The ball in flight, with a short trail, until it is caught.
+    if (t_ < kIntCatch) {
+      float u = t_ / kIntCatch;
+      for (int j = 4; j >= 1; j--) {
+        float uu = u - j * 0.035f;
+        if (uu < 0)
+          continue;
+        float tx, ty;
+        int_ball_at_(uu, tx, ty);
+        f.glow((int) tx, (int) ty, rgb_scale(0x804010, (200 - j * 40) * k / 256));
+      }
+      float bx, by;
+      int_ball_at_(u, bx, by);
+      const uint32_t ball = rgb_scale(0xB0581C, k);
+      f.rect((int) bx - 1, (int) by, (int) bx + 1, (int) by + 1, ball);
+      // The laces flick as it spirals.
+      f.put((int) bx + (((int) (t_ * 20)) & 1 ? 0 : -1), (int) by, rgb_scale(0xFFFFFF, k));
+    }
+    // The ring where he snatched it.
+    if (t_ >= kIntCatch && t_ < kIntCatch + 0.45f) {
+      float u = (t_ - kIntCatch) / 0.45f;
+      int r = 2 + (int) (u * 16);
+      uint32_t c = rgb_scale(plan_.alt, (int) ((1 - u) * k));
+      int cx = (int) int_catch_x_() - 2, cy = (int) int_catch_y_();
+      for (int a = 0; a < 48; a++) {
+        float th = a * 6.2832f / 48;
+        f.glow(cx + (int) lroundf(cosf(th) * r), cy + (int) lroundf(sinf(th) * r * 0.8f), c);
+      }
+    }
+    float x, lift;
+    int_player_at_(x, lift);
+    const int feet = ground - (int) lroundf(lift);
+    int pose = t_ < 0.75f ? 0 : t_ < kIntLand ? (t_ < kIntCatch ? 1 : 2) : 2;
+    if (t_ >= kIntCatch && t_ < kIntCatch + 0.2f)
+      pose = 1;  // arms still up with the ball in them
+    float phase = t_ * 3.2f;
+    int_figure_(f, (int) lroundf(x), feet, pose, phase, k);
+    if (pose == 1 && t_ >= kIntCatch) {  // the ball held up high
+      int bx = (int) lroundf(x) - 2, by = feet - 18 - 5;
+      f.rect(bx - 1, by, bx + 1, by + 1, rgb_scale(0xB0581C, k));
+    }
+    // Speed lines behind him on the return.
+    if (t_ > kIntLand) {
+      for (int j = 0; j < 4; j++) {
+        int ly = feet - 16 + j * 4, len = 6 + ((j * 5 + (int) (t_ * 30)) % 7);
+        int lx = (int) x + 6 + j % 2 * 2;
+        for (int d = 0; d < len; d++)
+          f.glow(lx + d, ly, rgb_scale(plan_.color, (len - d) * 160 / len * k / 256));
+      }
     }
   }
 
