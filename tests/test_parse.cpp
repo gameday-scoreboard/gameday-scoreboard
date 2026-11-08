@@ -3917,6 +3917,36 @@ static void test_badge() {
   // A light fill takes black text and keeps its own ring.
   b = badge_style(0xF4F6F8, 0x1E5AA8);
   CHECK(b.dark_text && b.has_ring && b.ring == 0x1E5AA8);
+  // ESPN's hex color as RGB, black when it has none or sends something that
+  // is not a color.
+  CHECK_EQ(badge_rgb("005730"), 0x005730u);
+  CHECK_EQ(badge_rgb("c8102e"), 0xC8102Eu);
+  CHECK_EQ(badge_rgb(""), 0u);
+  CHECK_EQ(badge_rgb("12345"), 0u);
+  CHECK_EQ(badge_rgb("GG0000"), 0u);
+  // The panel's letters: the team color when it reads on black, else the
+  // second color, else white.
+  CHECK_EQ(badge_text(0x1F8A3B, 0xE9D27A), 0x1F8A3Bu);  // green
+  CHECK_EQ(badge_text(0xF2A900, 0x000000), 0xF2A900u);  // gold
+  CHECK_EQ(badge_text(0xC8102E, 0x000000), 0xC8102Eu);  // red
+  CHECK_EQ(badge_text(0x0C2340, 0xC99700), 0xC99700u);  // navy: its gold
+  CHECK_EQ(badge_text(0x7A0019, 0xFFFFFF), 0xFFFFFFu);  // maroon: its white
+  CHECK_EQ(badge_text(0x7A0019, 0x041E42), kBadgeNoColorText);  // both dark
+  CHECK_EQ(badge_text(0x005730, 0xFFB81C), 0xFFB81Cu);  // dark green: its gold
+  CHECK_EQ(badge_text(0x33006F, 0x000000), kBadgeNoColorText);  // deep purple
+  CHECK_EQ(badge_text(0x4E2A84, 0x000000), 0x4E2A84u);  // purple
+  CHECK_EQ(badge_text(0x0000FF, 0x000000), 0x0000FFu);  // full blue lights well
+  CHECK_EQ(badge_peak(0x0C2340), 0x40);
+  CHECK_EQ(badge_text(0, 0), kBadgeNoColorText);        // no color at all
+  CHECK_EQ(badge_text(badge_rgb("000000"), 0), kBadgeNoColorText);
+  // The second color comes from ESPN's alternateColor: FIU is navy 091f3f
+  // with gold c3993f, JXST red cc0000 with black.
+  GameSnapshot g;
+  CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, g));
+  CHECK_EQ(g.team_alt, 0xC3993Fu);
+  CHECK_EQ(g.opp_alt, 0u);
+  CHECK_EQ(badge_text(badge_rgb(g.team_color), g.team_alt), 0xC3993Fu);
+  CHECK_EQ(badge_text(badge_rgb(g.opp_color), g.opp_alt), 0xCC0000u);
 }
 
 // The demo build's matchups, made-up teams and script (demo.h).
@@ -3961,6 +3991,9 @@ static void test_demo() {
   CHECK(!badge_style(demo_made_up(DemoKind::PRO, false).rgb, 0).dark_text);
   CHECK(!badge_style(demo_made_up(DemoKind::COLLEGE, true).rgb, 0).dark_text);
   CHECK(badge_style(demo_made_up(DemoKind::COLLEGE, false).rgb, 0).dark_text);
+  // On the panel each made-up team's letters are its own color.
+  for (size_t i = 0; i < kMadeUpTeamCount; i++)
+    CHECK_EQ(badge_text(kMadeUpTeams[i].rgb, kMadeUpTeams[i].alt), kMadeUpTeams[i].rgb);
   // One pass of the script is what the shot list is timed against.
   uint32_t total_ms = 0;
   for (size_t i = 0; i < kDemoStepCount; i++)

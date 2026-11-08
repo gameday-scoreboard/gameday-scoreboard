@@ -112,6 +112,9 @@ struct GameSnapshot {
   std::string team_record, opp_record;
   uint8_t team_rank{99}, opp_rank{99};  // AP rank (college), 99 when unranked
   std::string team_color, opp_color;
+  // ESPN's second color (alternateColor) as RGB, 0 when it has none: the
+  // letters of a side with no logo when its color is too dark (badge.h).
+  uint32_t team_alt{0}, opp_alt{0};
   std::string team_logo, opp_logo;
   bool team_winner{false};
   int possession{0};
