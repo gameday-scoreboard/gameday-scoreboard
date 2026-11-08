@@ -346,8 +346,9 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}
           path: out
-      # For the budget job: the OTA image's size and the ELF's static
-      # internal RAM. The name stays outside publish's firmware-* pattern.
+      # For the budget job: the OTA image's size, the ELF's static internal
+      # RAM and section sizes, and the OTA slot from the factory image's
+      # partition table. The name stays outside publish's firmware-* pattern.
       - name: Measure flash and static RAM
         if: needs.changes.outputs.firmware == 'true'
         run: python3 scripts/size_budget.py firmware out/${{ matrix.variant }} ${{ matrix.variant }} sizes/${{ matrix.variant }}.json
@@ -359,17 +360,24 @@ jobs:
 
   budget:
     # Flash, static internal RAM and the memory each ESPN read takes, against
-    # firmware/budget.json. A pull request into dev also fails when one figure
-    # grows more than the file's max_growth against dev's last build. A
-    # promotion carries many changes at once, so it only gets the budget.
-    # The job summary has the table. moonhub75-2panel isn't built on a pull
-    # request into dev, so its figures may be missing there.
+    # firmware/budget.json (its "about" text and scripts/size_budget.py have
+    # the rules). Every run checks the 90% OTA slot limit and the static RAM
+    # and heap caps. A pull request into dev also gets the growth rules
+    # against dev's last build and the approval rules (release allowance,
+    # 32 KB in one change, a raised cap) against dev's budget.json, passed by
+    # the owner's budget/owner-approval commit status on one of its commits.
+    # A promotion carries many changes at once, so it only gets the limits.
+    # The job summary has the tables and budget-report.json the figures.
+    # moonhub75-2panel isn't built on a pull request into dev, so its figures
+    # may be missing there.
     name: Size budget
     needs: [build, host-tests, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+      pull-requests: read
+      statuses: read
     steps:
       - uses: actions/checkout@v7
         if: needs.changes.outputs.firmware == 'true'
@@ -413,12 +421,43 @@ jobs:
           done <<< "$runs"
           rm -rf base
           echo "::warning::No complete figures from a $BASE_REF build found, so only the budget is checked, not the growth."
+      # dev's budget.json at the pull request's base, to find raised caps, and
+      # the approval statuses on each of the pull request's commits, newest
+      # first (one file per commit, named in that order).
+      - name: Base budget and owner approvals
+        if: needs.changes.outputs.firmware == 'true' && github.event_name == 'pull_request' && github.base_ref == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api -H "Accept: application/vnd.github.raw+json" \
+            "repos/$GITHUB_REPOSITORY/contents/firmware/budget.json?ref=$BASE_SHA" > pr-base-budget.json
+          mkdir -p approvals
+          n=0
+          pick='[.[] | select(.context == "budget/owner-approval") | {context, state, description, creator: .creator.login, created_at}]'
+          for sha in $(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits?per_page=100" --jq '.[].sha' | tac); do
+            n=$((n + 1))
+            gh api "repos/$GITHUB_REPOSITORY/commits/$sha/statuses?per_page=100" --jq "{sha: \"$sha\", statuses: $pick}" \
+              > "approvals/$(printf '%04d' "$n").json"
+          done
+          echo "Approval statuses on $n commits:"
+          cat approvals/*.json
       - name: Check the budget
         if: needs.changes.outputs.firmware == 'true'
         env:
           BASE_LABEL: ${{ steps.base.outputs.label }}
           ABSENT_OK: ${{ github.event_name == 'pull_request' && github.base_ref == 'dev' && 'moonhub75-2panel' || '' }}
-        run: python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL" --absent-ok "$ABSENT_OK"
+        run: |
+          python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL" --absent-ok "$ABSENT_OK" \
+            --base-budget pr-base-budget.json --approvals approvals --report budget-report.json
+      - uses: actions/upload-artifact@v7
+        if: always() && needs.changes.outputs.firmware == 'true'
+        with:
+          name: budget-report
+          path: budget-report.json
+          if-no-files-found: ignore
 
   build-demo:
     # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
