@@ -102,6 +102,16 @@ upcoming games:
 | `event_soccer_aet.json` | `soccer/fifa.world` 760500 CPV @ ARG, AET 3-2, own goal at 111' |
 | `team_epl_ars.json` | `.../soccer/eng.1/teams/359` |
 | `team_mls_mia.json` | `.../soccer/usa.1/teams/20232` |
+| `event_laliga_pre.json` | `soccer/esp.1` 401882809 ALA @ SEV, pre-game (recorded 2026-11-06) |
+| `event_bundesliga_pre.json` | `soccer/ger.1` 401884739 BMG @ HSV, pre-game (recorded 2026-11-06) |
+| `event_seriea_pre.json` | `soccer/ita.1` 401874815 UDI @ VEN, pre-game (recorded 2026-11-06) |
+| `event_ligue1_pre.json` | `soccer/fra.1` 401876405 STR @ TOU, pre-game (recorded 2026-11-06) |
+| `event_ligamx_pre.json` | `soccer/mex.1` 401876910 JUA @ ASL, pre-game (recorded 2026-11-06) |
+| `team_laliga_rma.json` | `.../soccer/esp.1/teams/86` (recorded 2026-11-06) |
+| `team_bundesliga_mun.json` | `.../soccer/ger.1/teams/132` (recorded 2026-11-06) |
+| `team_seriea_mil.json` | `.../soccer/ita.1/teams/103` (recorded 2026-11-06) |
+| `team_ligue1_psg.json` | `.../soccer/fra.1/teams/160` (recorded 2026-11-06) |
+| `team_ligamx_ame.json` | `.../soccer/mex.1/teams/227` (recorded 2026-11-06) |
 | `team_ucl_ars.json` | `.../soccer/uefa.champions/teams/359`: the same club's next Champions League game |
 | `team_uel_ars.json` | `.../soccer/uefa.europa/teams/359`: a club not in the competition gets HTTP 200 with no `nextEvent` |
 | `schedule_mls_mia.json` | `.../soccer/usa.1/teams/20232/schedule?fixture=true`, trimmed to the first 2 events (without `fixture=true` the endpoint lists past results) |

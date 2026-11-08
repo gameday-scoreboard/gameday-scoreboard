@@ -53,7 +53,8 @@ sys.path.insert(0, str(COMPONENT))
 from leagues_table import leagues  # noqa: E402
 
 # Fewest teams a fresh list may have before the run is treated as a bad read.
-MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350}
+MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350,
+             "LALIGA": 20, "BUNDESLIGA": 18, "SERIEA": 20, "LIGUE1": 18, "LIGAMX": 18}
 
 
 # ESPN returns 403 to most unfamiliar agents but accepts ones that start with "curl/".

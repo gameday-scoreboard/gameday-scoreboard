@@ -758,7 +758,8 @@ void test_scan_leagues() {
 
 // A panel in Favorites with none set runs Live games over every league.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,laliga,bundesliga,seriea,ligue1,ligamx,nba,wnba,mcbb,nhl",
+         "every league, kLeagues order");
   SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
          "the no-team default's scan reads every league");

@@ -7,7 +7,7 @@ sidebar:
 
 Between games the panel can show what's coming up for your team, and once the season is over, how it went.
 
-Both cards are for your teams in **Favorite teams** mode in every league but MLB: football (NFL and college), soccer (MLS and the Premier League), basketball (NBA, WNBA and men's college) and hockey (NHL). Baseball teams don't get them: an MLB team's season schedule is too big for the panel to read.
+Both cards are for your teams in **Favorite teams** mode in every league but MLB: football (NFL and college), soccer (MLS, the Premier League, La Liga, the Bundesliga, Serie A, Ligue 1 and Liga MX), basketball (NBA, WNBA and men's college) and hockey (NHL). Baseball teams don't get them: an MLB team's season schedule is too big for the panel to read.
 
 ## Turn them on or off
 
