@@ -1393,6 +1393,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
   ::espn::MarginTracks margin_tracks_;  // the board game's margin by read, and the last game's (game_viz.h)
+  // Hockey's latest goal per game, for the row under the clock: four games,
+  // about 200 bytes (sport_hockey.cpp).
+  ::espn::GoalHolds goal_holds_;
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};

@@ -243,64 +243,105 @@ std::string hockey_board_record(const std::string &wlo) {
 
 // ---- the row under the clock ---------------------------------------------------
 
-std::string hockey_situation(const GameSnapshot &s, size_t max) {
+void hockey_row_forms(const GameSnapshot &s, const GoalHold *goal, std::string shots[3], std::string goal_line[3]) {
+  for (int i = 0; i < 3; i++)
+    shots[i].clear(), goal_line[i].clear();
   if (!s.valid || s.state != GameState::IN || intermission(s))
-    return "";
+    return;
   const Hockey &h = s.nhl;
-  char sog[24] = "";
-  if (h.team_shots >= 0 && h.opp_shots >= 0)
-    snprintf(sog, sizeof(sog), "SOG %d-%d", h.team_shots, h.opp_shots);
-  size_t sl = strlen(sog);
-  if (sl > max)
-    sog[0] = '\0', sl = 0;
-  if (h.goal_score == 0)
-    return sog;
+  char t[64];
+  if (h.team_shots >= 0 && h.opp_shots >= 0) {
+    static const char *const kLabels[] = {"Shots on goal", "Shots", "SOG"};
+    for (int i = 0; i < 3; i++) {
+      snprintf(t, sizeof(t), "%s %d-%d", kLabels[i], h.team_shots, h.opp_shots);
+      shots[i] = t;
+    }
+  }
+  if (goal == nullptr || goal->score == 0)
+    return;
   // The goal's period, its clock and its scorer; the period gives way first
   // when it is the one on the clock row above, else the clock does.
   char pbuf[16];
-  const char *per = period_word(pbuf, h.goal_period, h.playoffs);
-  const char *name = h.goal_name[0] ? h.goal_name : "Goal";
-  const char *clock = h.goal_clock;
-  const bool same = h.goal_period == s.period;
-  const char *tries[3][3] = {{per, clock, name}, {same ? "" : per, same ? clock : "", name}, {"", "", name}};
-  const size_t room = sl == 0 ? max : max >= sl + 2 ? max - sl - 2 : 0;
-  char t[sizeof(sog) + 2 + sizeof(pbuf) + sizeof(h.goal_clock) + sizeof(h.goal_name) + 2];
-  for (const auto &parts : tries) {
-    size_t n = sl == 0 ? 0 : (size_t) snprintf(t, sizeof(t), "%s  ", sog);
-    const size_t start = n;
-    for (const char *p : parts)
-      if (*p)
-        n += snprintf(t + n, sizeof(t) - n, n > start ? " %s" : "%s", p);
-    if (n - start <= room)
-      return t;
+  const char *per = period_word(pbuf, goal->period, h.playoffs);
+  const char *name = goal->name[0] ? goal->name : "Goal";
+  const char *clock = goal->clock;
+  const bool same = goal->period == s.period;
+  const char *forms[3][3] = {{per, clock, name}, {same ? "" : per, same ? clock : "", name}, {"", "", name}};
+  for (int i = 0; i < 3; i++) {
+    size_t n = 0;
+    t[0] = '\0';
+    for (const char *p : forms[i])
+      if (*p && n < sizeof(t))
+        n += snprintf(t + n, sizeof(t) - n, n > 0 ? " %s" : "%s", p);
+    goal_line[i] = t;
   }
-  if (sl > 0)
-    return sog;
-  return std::string(name, std::min(strlen(name), max));
 }
 
-void hockey_hold_goal(const GameSnapshot &prev, GameSnapshot &cur) {
-  const Hockey &p = prev.nhl;
-  Hockey &c = cur.nhl;
-  if (!prev.valid || !cur.valid || prev.event_id != cur.event_id || p.goal_score == 0)
+std::string hockey_situation(const GameSnapshot &s, const GoalHold *goal, size_t max) {
+  std::string shots[3], line[3];
+  hockey_row_forms(s, goal, shots, line);
+  // On one line the shots are spelled out, or "Shots" when the goal or a
+  // count needs the room; the goal keeps as much of itself as fits.
+  for (const std::string &g : line) {
+    if (g.empty())
+      break;
+    if (shots[0].empty() && g.size() <= max)
+      return g;
+    for (int i = 0; i < 2 && !shots[i].empty(); i++)
+      if (shots[i].size() + 2 + g.size() <= max)
+        return shots[i] + "  " + g;
+  }
+  for (int i = 0; i < 2; i++)
+    if (!shots[i].empty() && shots[i].size() <= max)
+      return shots[i];
+  return line[0].empty() ? "" : line[2].substr(0, max);
+}
+
+// ---- held goals ----------------------------------------------------------------
+
+static uint64_t event_number(const std::string &id) { return strtoull(id.c_str(), nullptr, 10); }
+
+const GoalHold *GoalHolds::find(const std::string &event_id) const {
+  uint64_t ev = event_number(event_id);
+  for (const GoalHold &h : this->slot)
+    if (ev != 0 && h.event == ev && h.score > 0)
+      return &h;
+  return nullptr;
+}
+
+void GoalHolds::update(const GameSnapshot &g) {
+  if (!g.valid || g.sport != Sport::HOCKEY)
     return;
-  if (c.goal_score == p.goal_score) {
+  uint64_t ev = event_number(g.event_id);
+  if (ev == 0)
+    return;
+  GoalHold *h = nullptr;
+  for (GoalHold &x : this->slot)
+    if (x.event == ev)
+      h = &x;
+  const Hockey &n = g.nhl;
+  if (n.goal_score == 0) {
+    // A later play: the goal stays while the score still has it
+    if (h != nullptr && g.team_score + g.opp_score < h->score)
+      *h = GoalHold{};
+    return;
+  }
+  if (h != nullptr && h->score == n.goal_score) {
     // The same goal read again: the clock from its first read, which is
     // nearest the goal, and its scorer once ESPN has one.
-    c.goal_period = p.goal_period;
-    memcpy(c.goal_clock, p.goal_clock, sizeof(c.goal_clock));
-    if (!c.goal_name[0])
-      memcpy(c.goal_name, p.goal_name, sizeof(c.goal_name));
+    if (!h->name[0])
+      memcpy(h->name, n.goal_name, sizeof(h->name));
     return;
   }
-  // A later play: keep the goal while the score still has it (a goal taken
-  // back on review drops it).
-  if (c.goal_score == 0 && cur.team_score + cur.opp_score >= p.goal_score) {
-    c.goal_score = p.goal_score;
-    c.goal_period = p.goal_period;
-    memcpy(c.goal_clock, p.goal_clock, sizeof(c.goal_clock));
-    memcpy(c.goal_name, p.goal_name, sizeof(c.goal_name));
+  if (h == nullptr) {
+    h = &this->slot[this->next];
+    this->next = (uint8_t) ((this->next + 1) % kGames);
   }
+  h->event = ev;
+  h->score = n.goal_score;
+  h->period = n.goal_period;
+  memcpy(h->clock, n.goal_clock, sizeof(h->clock));
+  memcpy(h->name, n.goal_name, sizeof(h->name));
 }
 
 }  // namespace espn

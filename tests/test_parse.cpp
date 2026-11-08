@@ -3356,24 +3356,28 @@ static std::string swapped(std::string json, const std::string &from, const std:
 static void test_nhl_row() {
   // Shots are the other goalie's saves plus the side's goals: COL @ WPG,
   // WPG's goalie 16 saves, COL's 6, no goals yet.
+  GoalHolds holds;
+  auto row = [&holds](const GameSnapshot &s, size_t max = 25) {
+    return hockey_situation(s, holds.find(s.event_id), max);
+  };
   GameSnapshot g = nhl_event("fixtures/event_nhl_live.json", kJets);
   CHECK_EQ((int) g.nhl.team_shots, 6);
   CHECK_EQ((int) g.nhl.opp_shots, 16);
   CHECK_EQ((int) g.nhl.goal_score, 0);  // the last play is a penalty
-  CHECK_EQ(hockey_situation(g), std::string("SOG 6-16"));
+  CHECK_EQ(row(g), std::string("Shots on goal 6-16"));
   GameSnapshot c = nhl_event("fixtures/event_nhl_live.json", kAvalanche);
-  CHECK_EQ(hockey_situation(c), std::string("SOG 16-6"));  // ours first, as the scores
+  CHECK_EQ(row(c), std::string("Shots on goal 16-6"));  // ours first, as the scores
   // Between periods the row is the line score's and the leaders' (PIT 4
   // shots, WSH 14 after the 1st: ESPN's .750 and .857 save percentages agree)
   GameSnapshot e = nhl_event("fixtures/event_nhl_end.json", kPenguins);
   CHECK_EQ((int) e.nhl.team_shots, 4);
   CHECK_EQ((int) e.nhl.opp_shots, 14);
-  CHECK_EQ(hockey_situation(e), std::string(""));
+  CHECK_EQ(row(e), std::string(""));
   // After the final, nothing
   GameSnapshot f = nhl_event("fixtures/event_nhl_final.json", kCapitals);
   CHECK_EQ((int) f.nhl.team_shots, 27);
   CHECK_EQ((int) f.nhl.opp_shots, 30);
-  CHECK_EQ(hockey_situation(f), std::string(""));
+  CHECK_EQ(row(f), std::string(""));
   // A shootout's attempts stay out: ESPN's goals stat has CAR on 4 though
   // its score says 5 (PIT 28 shots, CAR 44: .857 and .909)
   GameSnapshot so = nhl_event("fixtures/event_nhl_final_so.json", kPenguins);
@@ -3388,7 +3392,7 @@ static void test_nhl_row() {
     GameSnapshot b;
     CHECK(parse_event_str(bare, Sport::HOCKEY, kJets, b, root_id(bare)));
     CHECK_EQ((int) b.nhl.opp_shots, -1);
-    CHECK_EQ(hockey_situation(b), std::string(""));
+    CHECK_EQ(row(b), std::string(""));
   }
 
   // A goal: COL scores at 3:21 of the 1st. ESPN's text names the scorer
@@ -3410,15 +3414,32 @@ static void test_nhl_row() {
   CHECK_EQ(gl.opp_score, 1);
   CHECK_EQ((int) gl.nhl.goal_score, 1);
   CHECK_EQ((int) gl.nhl.goal_period, 1);
-  CHECK_EQ(gl.nhl.goal_clock, std::string("3:21"));
-  CHECK_EQ(gl.nhl.goal_name, std::string("MacKinnon"));
-  CHECK_EQ(hockey_situation(gl), std::string("SOG 6-16  3:21 MacKinnon"));
+  CHECK_EQ(std::string(gl.nhl.goal_clock), std::string("3:21"));
+  CHECK_EQ(std::string(gl.nhl.goal_name), std::string("MacKinnon"));
+  CHECK(holds.find(gl.event_id) == nullptr);
+  holds.update(gl);
+  CHECK(holds.find(gl.event_id) != nullptr);
+  // With a goal on one line the shots go short, and the goal keeps what fits
+  CHECK_EQ(row(gl), std::string("Shots 6-16  MacKinnon"));
+  {
+    // The rotation's two lines, each longest form first
+    std::string s[3], l[3];
+    hockey_row_forms(gl, holds.find(gl.event_id), s, l);
+    CHECK_EQ(s[0], std::string("Shots on goal 6-16"));
+    CHECK_EQ(s[1], std::string("Shots 6-16"));
+    CHECK_EQ(s[2], std::string("SOG 6-16"));
+    CHECK_EQ(l[0], std::string("1st 3:21 MacKinnon"));
+    CHECK_EQ(l[1], std::string("3:21 MacKinnon"));  // the goal's own period: the clock row says it
+    CHECK_EQ(l[2], std::string("MacKinnon"));
+    hockey_row_forms(e, holds.find(e.event_id), s, l);  // between periods: nothing
+    CHECK_EQ(s[0] + l[0], std::string(""));
+  }
   {
     std::string named = swapped(scored, R"j("scoreValue":1,)j",
                                 R"j("scoreValue":1,"athletesInvolved":[{"shortName":"N. MacKinnon"}],)j");
     GameSnapshot n;
     CHECK(parse_event_str(named, Sport::HOCKEY, kJets, n, root_id(named)));
-    CHECK_EQ(n.nhl.goal_name, std::string("MacKinnon"));
+    CHECK_EQ(std::string(n.nhl.goal_name), std::string("MacKinnon"));
   }
   // Seen live: the goal before ESPN had its scorer
   {
@@ -3426,77 +3447,97 @@ static void test_nhl_row() {
                                    ", assists: Cale Makar (6)");
     GameSnapshot n;
     CHECK(parse_event_str(nameless, Sport::HOCKEY, kJets, n, root_id(nameless)));
-    CHECK_EQ(n.nhl.goal_name, std::string(""));
-    CHECK_EQ(hockey_situation(n), std::string("SOG 6-16  1st 3:21 Goal"));
+    CHECK_EQ(std::string(n.nhl.goal_name), std::string(""));
+    GoalHolds h2;
+    h2.update(n);
+    CHECK_EQ(hockey_situation(n, h2.find(n.event_id)), std::string("Shots 6-16  1st 3:21 Goal"));
     // The next read names him, and keeps the first read's clock
     GameSnapshot later = gl;
     later.display_clock = "2:58";
     snprintf(later.nhl.goal_clock, sizeof(later.nhl.goal_clock), "%s", "2:58");
-    hockey_hold_goal(n, later);
-    CHECK_EQ(later.nhl.goal_clock, std::string("3:21"));
-    CHECK_EQ(later.nhl.goal_name, std::string("MacKinnon"));
-    GameSnapshot still = n;
-    hockey_hold_goal(gl, still);
-    CHECK_EQ(still.nhl.goal_name, std::string("MacKinnon"));
+    h2.update(later);
+    CHECK_EQ(std::string(h2.find(n.event_id)->clock), std::string("3:21"));
+    CHECK_EQ(std::string(h2.find(n.event_id)->name), std::string("MacKinnon"));
   }
 
-  // Held: the next play is a faceoff, and the row keeps the goal
+  // Held: the next play is a penalty, and the row keeps the goal
   GameSnapshot next = g;  // the penalty document, with COL's goal on the score
   next.opp_score = 1;
   next.display_clock = "1:10";
-  CHECK_EQ((int) next.nhl.goal_score, 0);
-  hockey_hold_goal(gl, next);
-  CHECK_EQ((int) next.nhl.goal_score, 1);
-  CHECK_EQ(next.nhl.goal_name, std::string("MacKinnon"));
-  CHECK_EQ(hockey_situation(next), std::string("SOG 6-16  3:21 MacKinnon"));
+  holds.update(next);
+  CHECK_EQ(row(next), std::string("Shots 6-16  MacKinnon"));
+  // ...even when the board's snapshot starts over (a reread, or Live games
+  // switching away and back): the hold is kept apart from it
+  GameSnapshot reread = next;
+  CHECK_EQ(row(reread), std::string("Shots 6-16  MacKinnon"));
   // Into the 2nd: the period stays with the goal, the clock gives way
   GameSnapshot p2 = next;
   p2.period = 2;
   p2.display_clock = "18:40";
   p2.short_detail = "18:40 - 2nd";
-  p2.nhl.goal_score = 0;
-  hockey_hold_goal(next, p2);
-  CHECK_EQ(hockey_situation(p2), std::string("SOG 6-16  1st MacKinnon"));
+  holds.update(p2);
+  CHECK_EQ(row(p2), std::string("Shots 6-16  1st MacKinnon"));
   p2.nhl.team_shots = 21;
   p2.nhl.opp_shots = 19;
-  CHECK_EQ(hockey_situation(p2), std::string("SOG 21-19  1st MacKinnon"));
-  // In the goal's own period the period gives way first
-  GameSnapshot same = p2;
-  same.nhl.goal_period = 2;
-  snprintf(same.nhl.goal_clock, sizeof(same.nhl.goal_clock), "%s", "12:04");
-  CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  MacKinnon"));
-  snprintf(same.nhl.goal_name, sizeof(same.nhl.goal_name), "%s", "Ekman-Larsson");
-  CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  Ekman-Larsson"));
-  snprintf(same.nhl.goal_name, sizeof(same.nhl.goal_name), "%s", "Kane");
-  CHECK_EQ(hockey_situation(same), std::string("SOG 21-19  2nd 12:04 Kane"));
-  CHECK_EQ(hockey_situation(same, 12), std::string("SOG 21-19"));  // no room: the shots stay
-  same.nhl.team_shots = -1;
-  CHECK_EQ(hockey_situation(same), std::string("2nd 12:04 Kane"));
-  // A goal taken back on review: the score falls below it and it drops
-  GameSnapshot back = g;
-  hockey_hold_goal(gl, back);
-  CHECK_EQ((int) back.nhl.goal_score, 0);
-  CHECK_EQ(hockey_situation(back), std::string("SOG 6-16"));
-  // Another game, or no game before: nothing to hold
-  GameSnapshot other = g;
-  other.opp_score = 1;
-  other.event_id = "401892456";
-  hockey_hold_goal(gl, other);
-  CHECK_EQ((int) other.nhl.goal_score, 0);
-  GameSnapshot none;
-  GameSnapshot fresh = next;
-  fresh.nhl.goal_score = 0;
-  hockey_hold_goal(none, fresh);
-  CHECK_EQ((int) fresh.nhl.goal_score, 0);
+  CHECK_EQ(row(p2), std::string("Shots 21-19  MacKinnon"));
+
+  // Fitting the room, on a goal of this period
+  GoalHold k;
+  k.event = 1;
+  k.score = 2;
+  k.period = 2;
+  snprintf(k.clock, sizeof(k.clock), "%s", "12:04");
+  snprintf(k.name, sizeof(k.name), "%s", "Kane");
+  CHECK_EQ(hockey_situation(p2, &k), std::string("Shots 21-19  12:04 Kane"));
+  snprintf(k.name, sizeof(k.name), "%s", "Ekman-Larsson");
+  CHECK_EQ(hockey_situation(p2, &k), std::string("Shots on goal 21-19"));  // no room for the goal: the shots stay
+  snprintf(k.name, sizeof(k.name), "%s", "Kane");
+  CHECK_EQ(hockey_situation(p2, &k, 12), std::string("Shots 21-19"));
+  GameSnapshot nostats = p2;
+  nostats.nhl.team_shots = -1;
+  CHECK_EQ(hockey_situation(nostats, &k), std::string("2nd 12:04 Kane"));
+  CHECK_EQ(hockey_situation(nostats, &k, 10), std::string("12:04 Kane"));
+  CHECK_EQ(hockey_situation(p2, nullptr), std::string("Shots on goal 21-19"));
+  GameSnapshot big = p2;
+  big.nhl.team_shots = 104;
+  big.nhl.opp_shots = 100;
+  CHECK_EQ(hockey_situation(big, nullptr, 20), std::string("Shots 104-100"));  // too wide spelled out
+
   // A newer goal replaces the held one
   GameSnapshot tie = gl;
   tie.team_score = 1;
   tie.nhl.goal_score = 2;
   snprintf(tie.nhl.goal_name, sizeof(tie.nhl.goal_name), "%s", "Connor");
   snprintf(tie.nhl.goal_clock, sizeof(tie.nhl.goal_clock), "%s", "0:45");
-  hockey_hold_goal(gl, tie);
-  CHECK_EQ(tie.nhl.goal_name, std::string("Connor"));
-  CHECK_EQ(tie.nhl.goal_clock, std::string("0:45"));
+  holds.update(tie);
+  CHECK_EQ(std::string(holds.find(tie.event_id)->name), std::string("Connor"));
+  CHECK_EQ(std::string(holds.find(tie.event_id)->clock), std::string("0:45"));
+  // A goal taken back on review: the score falls below it and it drops
+  holds.update(gl);   // the 1-0 goal again: a goal of its own
+  holds.update(g);    // 0-0 on the scoreboard
+  CHECK(holds.find(g.event_id) == nullptr);
+  CHECK_EQ(row(g), std::string("Shots on goal 6-16"));
+  // Each game keeps its own, four at a time, the oldest going first
+  GoalHolds four;
+  for (int i = 0; i < 5; i++) {
+    GameSnapshot x = gl;
+    x.event_id = std::to_string(401892460 + i);
+    four.update(x);
+  }
+  CHECK(four.find("401892460") == nullptr);
+  for (int i = 1; i < 5; i++)
+    CHECK(four.find(std::to_string(401892460 + i)) != nullptr);
+  CHECK(four.find("") == nullptr);
+  // Another sport, or a read without a goal for a game it never held: nothing
+  GameSnapshot nba = gl;
+  nba.sport = Sport::BASKETBALL;
+  nba.event_id = "401892499";
+  four.update(nba);
+  CHECK(four.find("401892499") == nullptr);
+  GameSnapshot quiet = g;
+  quiet.event_id = "401892498";
+  four.update(quiet);
+  CHECK(four.find("401892498") == nullptr);
   // A shootout's goals don't move the held one
   {
     // The event's own status is the document's last one (the competition's comes first)

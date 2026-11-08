@@ -94,15 +94,40 @@ struct Hockey {
   // Shots on goal: the other goalie's saves plus the side's goals, so a
   // shootout's attempts stay out. -1 when ESPN sends no stats.
   int16_t team_shots{-1}, opp_shots{-1};
-  // The latest goal. ESPN's situation keeps only the newest play, so the
-  // component holds it from read to read (hockey_hold_goal) until the next.
-  // goal_score is both sides' goals with it in, 0 for none. Plain arrays,
-  // not strings: the snapshot is copied in many places, and a string adds
-  // code to every copy.
+  // The goal in this read's last play, if it is one. ESPN keeps only the
+  // newest play, so GoalHolds keeps it past this read. goal_score is both
+  // sides' goals with it in, 0 for none. Plain arrays, not strings: the
+  // snapshot is copied in many places, and a string adds code to every copy.
   uint8_t goal_period{0};
   uint16_t goal_score{0};
   char goal_clock[6]{};  // "12:04"
   char goal_name[24]{};  // "McDavid", cut to fit
+};
+
+// The latest goal of a hockey game, kept from read to read until the next
+// one. Outside the snapshot, so it outlasts a board that switches games and
+// back, or a reread that starts the board's snapshot over.
+struct GoalHold {
+  uint64_t event{0};  // ESPN's event id, 0 for an empty slot
+  uint16_t score{0};  // both sides' goals with it in
+  uint8_t period{0};
+  char clock[6]{};
+  char name[24]{};
+};
+
+struct GameSnapshot;
+
+// The latest goals of the last few hockey games read (a Live games board
+// that moves between games, or several hockey favorites).
+struct GoalHolds {
+  static constexpr size_t kGames = 4;
+  GoalHold slot[kGames];
+  uint8_t next{0};  // the slot a new game takes, oldest first
+  // Folds in one read: a new goal replaces the held one, the same goal read
+  // again keeps its first clock and takes its scorer once ESPN has one, and
+  // a score that falls below the held goal (taken back on review) drops it.
+  void update(const GameSnapshot &g);
+  const GoalHold *find(const std::string &event_id) const;
 };
 
 // One scoreboard event, resolved to "us" and "them".
@@ -465,13 +490,17 @@ std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, co
 std::string hockey_clock_text(const GameSnapshot &s);
 Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
 // The 128-wide row under the clock while the puck is in play, at most `max`
-// characters: shots on goal, ours first, then the latest goal
-// ("SOG 12-16  12:04 McDavid", "SOG 30-25  2nd Kane"). "" between periods,
-// after the final, and when ESPN has neither.
-std::string hockey_situation(const GameSnapshot &s, size_t max = 25);
-// Keeps the latest goal of `prev` on `cur` when `cur` is a later read of the
-// same game whose last play is no longer that goal.
-void hockey_hold_goal(const GameSnapshot &prev, GameSnapshot &cur);
+// characters: shots on goal, ours first, then the latest goal held for this
+// game (`goal`, may be null): "Shots on goal 12-16" before the first goal,
+// "Shots 12-16  12:04 Kane" after it. "" between periods, after the final,
+// and when ESPN has neither.
+std::string hockey_situation(const GameSnapshot &s, const GoalHold *goal, size_t max = 25);
+// The same as two lines that can take turns on the row, each longest form
+// first: the shots ("Shots on goal 12-16", "Shots 12-16", "SOG 12-16") and
+// the held goal ("2nd 12:04 Kane", then "12:04 Kane" in the goal's own
+// period or "2nd Kane" after it, then "Kane"). All empty between periods and
+// after the final; the shots empty without ESPN's stats, the goal before one.
+void hockey_row_forms(const GameSnapshot &s, const GoalHold *goal, std::string shots[3], std::string goal_line[3]);
 // A W-L-OTL record for the label under a logo (7 characters wide): as is when
 // it fits, else the NHL points, two a win and one an overtime loss ("70 pts").
 std::string hockey_board_record(const std::string &wlo);

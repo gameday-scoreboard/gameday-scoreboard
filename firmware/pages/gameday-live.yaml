@@ -512,9 +512,10 @@ script:
             lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
             lv_obj_clear_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
           }
-          // Hockey (sport 3): shots on goal and the latest goal, "SOG 12-16
-          // 12:04 McDavid". It has no timeout pips, so the line has the
-          // row's whole width (the lambda below places it).
+          // Hockey (sport 3): shots on goal and the latest goal, "Shots on
+          // goal 12-16", then "Shots 12-16  12:04 Kane". It has no timeout
+          // pips, so the line has the row's whole width (the lambda below
+          // places it).
           if (W >= 128 && sport == 3 && game_state == "IN" && !situation.empty()) {
             lv_label_set_text(id(tt_down_lbl), situation.c_str());
             lv_obj_set_style_text_color(id(tt_down_lbl), lv_color_hex(0xFFFFFF), 0);
