@@ -1613,6 +1613,7 @@ void GamedayComponent::loop() {
     this->walk_off_win_ms_ = 0;
     this->walk_off_release_ = true;
     this->emit_({});  // the win screen the walk-off held back
+    this->walk_off_release_ = false;  // even when emit_ returned before using it
   }
   this->captive_tick_();
   this->wifi_tick_();
