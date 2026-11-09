@@ -103,6 +103,7 @@
   "spark": true,
   "opp": true,
   "celebrate": 2,
+  "bigplays": true,
   "best": true,
   "bootaddr": true,
   "countdown": true,

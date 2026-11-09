@@ -262,6 +262,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
             </select></div>
             <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+            <div class="ctl"><label>Big plays<small>On Full, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way.</small></label><button class="sw" data-set="bigplays" aria-label="Big plays"></button></div>
           </div>
         </div>
       </div>
@@ -642,7 +643,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
-    celebrate: Number,
+    celebrate: Number, bigplays: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",

@@ -37,7 +37,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
-                                    "field",   "winbar",  "spark"};
+                                    "field",   "winbar",  "spark",   "bigplays"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -324,6 +324,7 @@ enum class SetKind : uint8_t {
   WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
   SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
+  BIGPLAYS,     // on, the big plays' own shows on Full (celeb_<sport>.h)
 };
 
 struct TeamRef {
@@ -590,6 +591,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::ODDS);
   if (k == "opp")
     return on(SetKind::OPP);
+  if (k == "bigplays")
+    return on(SetKind::BIGPLAYS);
   if (k == "bootaddr")
     return on(SetKind::BOOTADDR);
   if (k == "collide")

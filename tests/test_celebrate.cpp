@@ -2,12 +2,17 @@
 // and setting (celebrate.h), and the animation engine's math (celebrate_fx.h):
 // particles stay in the pool, fall, fade out, every kind draws something on
 // every frame of its run, and a frame costs little. Build with `make` in tests/.
+#include <ArduinoJson.h>
+
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "celeb_art_index.h"
 #include "celebrate.h"
 #include "celebrate_fx.h"
 
@@ -345,6 +350,13 @@ static void test_text_place() {
     t = celeb_text_place(k, 64, 64);
     CHECK(t.y >= 0 && t.y + 12 <= 64);
   }
+  // The art draws its own title: the page's words sit off the board.
+  for (CelebKind k : {CelebKind::DUNK, CelebKind::ALLEY_OOP})
+    for (int w : {128, 64}) {
+      t = celeb_text_place(k, w, 64);
+      CHECK(t.y >= 64);
+      CHECK_EQ(t.line2_y, -1);
+    }
 }
 
 static CelebPlan sample(CelebKind k) {
@@ -353,8 +365,251 @@ static CelebPlan sample(CelebKind k) {
   p.color = 0xE31837;
   p.alt = 0xFFFFFF;
   p.text = "TEST";
-  p.duration_ms = k == CelebKind::WIN ? kCelebWinMs : k == CelebKind::TOUCHDOWN ? kCelebTouchdownMs : 4500;
+  p.duration_ms = k == CelebKind::WIN         ? kCelebWinMs
+                  : k == CelebKind::TOUCHDOWN ? kCelebTouchdownMs
+                  : k == CelebKind::DUNK      ? kCelebDunkMs
+                  : k == CelebKind::ALLEY_OOP ? kCelebAlleyOopMs
+                                              : 4500;
   return p;
+}
+
+// A basketball read whose last play is a made two of ESPN's type, by team
+// `by` (12 is ours, 2 theirs).
+static GameSnapshot two(int team, int opp, const char *type, const char *text = "", int value = 2, uint32_t by = 12) {
+  GameSnapshot s = live(Sport::BASKETBALL, team, opp);
+  s.play_type = type;
+  s.last_play = text;
+  s.play_value = (int8_t) value;
+  s.play_team = by;
+  return s;
+}
+
+static CelebPlan plan_big(const GameSnapshot &prev, const GameSnapshot &cur, CelebLevel level, bool neutral,
+                          bool opp_splashes, bool big_plays) {
+  Splash s = decide_splash(prev, cur, opp_splashes, neutral);
+  return decide_celebration(prev, cur, s, level, neutral, opp_splashes, big_plays);
+}
+
+static void test_basketball_big_plays() {
+  GameSnapshot a = live(Sport::BASKETBALL, 50, 48);
+  // Every dunk ESPN names, ours: DUNK!, on Full.
+  for (const char *type : {"Dunk Shot", "Running Dunk Shot", "Cutting Dunk Shot", "Tip Dunk Shot", "Driving Dunk Shot",
+                           "Putback Dunk Shot"}) {
+    CelebPlan p = plan(a, two(52, 48, type), CelebLevel::FULL);
+    CHECK(p.kind == CelebKind::DUNK);
+    CHECK_EQ(p.text, "DUNK!");
+    CHECK_EQ(p.duration_ms, kCelebDunkMs);
+    CHECK_EQ(p.color, celeb_bright(0xE31837));
+  }
+  // An alley-oop is an alley-oop first, dunk or layup.
+  for (const char *type : {"Alley Oop Dunk Shot", "Running Alley Oop Dunk Shot", "Alley Oop Layup Shot"}) {
+    CelebPlan p = plan(a, two(52, 48, type), CelebLevel::FULL);
+    CHECK(p.kind == CelebKind::ALLEY_OOP);
+    CHECK_EQ(p.text, "ALLEY-OOP!");
+    CHECK_EQ(p.duration_ms, kCelebAlleyOopMs);
+  }
+  // Any other two, a missed dunk (scoreValue 0 with the points from before),
+  // an and-one (three points in the read), both sides moving, or their dunk
+  // in Favorites: nothing.
+  CHECK(plan(a, two(52, 48, "Driving Layup Shot"), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, two(52, 48, "Running Dunk Shot", "misses running dunk", 0), CelebLevel::FULL).kind ==
+        CelebKind::NONE);
+  CHECK(plan(a, two(53, 48, "Running Dunk Shot"), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, two(53, 48, "Free Throw - 1 of 1", "", 1), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, two(52, 50, "Running Dunk Shot"), CelebLevel::FULL).kind == CelebKind::NONE);
+  CHECK(plan(a, two(50, 50, "Running Dunk Shot", "", 2, 2), CelebLevel::FULL).kind == CelebKind::NONE);
+  // Our points with their team on the play: not ours.
+  CHECK(plan(a, two(52, 48, "Running Dunk Shot", "", 2, 2), CelebLevel::FULL).kind == CelebKind::NONE);
+  // A document with no scoreValue: the words decide, a make only.
+  CHECK(plan(a, two(52, 48, "Dunk Shot", "Victor Wembanyama makes two point dunk", 0, 0), CelebLevel::FULL).kind ==
+        CelebKind::DUNK);
+  CHECK(plan(a, two(52, 48, "Dunk Shot", "Victor Wembanyama misses two point dunk", 0, 0), CelebLevel::FULL).kind ==
+        CelebKind::NONE);
+  CHECK(plan(a, two(52, 48, "", "Victor Wembanyama makes alley oop dunk shot", 0, 0), CelebLevel::FULL).kind ==
+        CelebKind::ALLEY_OOP);
+  // Neutral boards: either side, with its abbreviation; theirs needs
+  // Opponent scores too.
+  CelebPlan n = plan(a, two(50, 50, "Running Dunk Shot", "", 2, 2), CelebLevel::FULL, true);
+  CHECK(n.kind == CelebKind::DUNK);
+  CHECK_EQ(n.text, "BUF DUNK!");
+  CHECK_EQ(n.color, celeb_bright(0x00338D));
+  CHECK_EQ(plan(a, two(52, 48, "Alley Oop Dunk Shot"), CelebLevel::FULL, true).text, "KC ALLEY-OOP!");
+  CHECK(plan(a, two(50, 50, "Running Dunk Shot", "", 2, 2), CelebLevel::FULL, true, false).kind == CelebKind::NONE);
+  // Subtle and Off: a dunk shows nothing, as any basket.
+  CHECK(plan(a, two(52, 48, "Running Dunk Shot"), CelebLevel::SUBTLE).kind == CelebKind::NONE);
+  CHECK(plan(a, two(52, 48, "Running Dunk Shot"), CelebLevel::OFF).kind == CelebKind::NONE);
+  // Big plays off: no dunk, and every score and win keeps its show.
+  CHECK(plan_big(a, two(52, 48, "Running Dunk Shot"), CelebLevel::FULL, false, true, false).kind == CelebKind::NONE);
+  CHECK(plan_big(a, three(53, 48), CelebLevel::FULL, false, true, false).kind == CelebKind::THREE);
+  CHECK(plan_big(live(Sport::BASKETBALL, 99, 98), final_(Sport::BASKETBALL, 99, 98), CelebLevel::FULL, false, true,
+                 false)
+            .kind == CelebKind::WIN);
+  CHECK(plan_big(live(Sport::FOOTBALL, 0, 0), live(Sport::FOOTBALL, 7, 0), CelebLevel::FULL, false, true, false).kind ==
+        CelebKind::TOUCHDOWN);
+  // Not in progress (a final read with a dunk last): the win, not a dunk.
+  GameSnapshot fin = two(100, 98, "Running Dunk Shot");
+  fin.state = GameState::POST;
+  fin.completed = true;
+  CHECK(plan(live(Sport::BASKETBALL, 98, 98), fin, CelebLevel::FULL).kind == CelebKind::WIN);
+  // Another game's read: nothing.
+  GameSnapshot other = two(52, 48, "Running Dunk Shot");
+  other.event_id = "402";
+  CHECK(plan(a, other, CelebLevel::FULL).kind == CelebKind::NONE);
+  // The latch: a redraw of the same read shows it once; a stale read that
+  // steps back and then forward to the same play stays quiet; the next dunk
+  // shows. So a bench loop that serves the same play again shows nothing:
+  // each repeat needs its own play.
+  CelebLatch latch;
+  GameSnapshot d1 = two(52, 48, "Running Dunk Shot", "Victor Wembanyama makes running dunk");
+  CHECK(celeb_latched(plan(a, d1, CelebLevel::FULL).kind) && latch.take(d1));
+  CHECK(!latch.take(d1));
+  CHECK(plan(d1, a, CelebLevel::FULL).kind == CelebKind::NONE);  // the stale read
+  CHECK(plan(a, d1, CelebLevel::FULL).kind == CelebKind::DUNK && !latch.take(d1));
+  GameSnapshot d2 = two(54, 48, "Running Dunk Shot", "Victor Wembanyama makes running dunk");
+  CHECK(plan(d1, d2, CelebLevel::FULL).kind == CelebKind::DUNK && latch.take(d2));
+  // A play that scores nothing at the same score is a new play by its words.
+  GameSnapshot d3 = d2;
+  d3.last_play = "Stephon Castle steals the ball";
+  CHECK(latch.take(d3));
+}
+
+static std::string slurp(const char *path) {
+  std::ifstream f(path, std::ios::binary);
+  std::stringstream ss;
+  ss << f.rdbuf();
+  return ss.str();
+}
+
+// Recorded play-by-play from three NBA games (11/7), replayed the way the
+// panel reads a game: every 10 seconds, the newest play as the read's last
+// play with the score after it, through the firmware's own parser. Every
+// show has to be a made dunk or alley-oop by that side; Subtle, Off and Big
+// plays off show none; a redraw never repeats one.
+static void test_basketball_recorded() {
+  JsonDocument plays;
+  CHECK(!deserializeJson(plays, slurp("fixtures/plays_nba_20261107.json")));
+  JsonDocument tmpl;
+  CHECK(!deserializeJson(tmpl, slurp("fixtures/event_nba_live.json"), DeserializationOption::NestingLimit(40)));
+  int shown[3] = {0, 0, 0}, made[2] = {0, 0};  // dunk, alley-oop, three
+  for (JsonObjectConst g : plays["games"].as<JsonArrayConst>()) {
+    JsonArrayConst list = g["plays"];
+    for (const char *side : {"home", "away"}) {
+      const uint32_t our_id = g[side]["id"].as<uint32_t>();
+      for (JsonArrayConst pl : list)
+        if (pl[4].as<uint32_t>() == our_id && pl[3].as<int>() == 2) {
+          const std::string t = pl[1].as<std::string>();
+          if (celeb_has_word(t, "alley oop"))
+            made[1]++;
+          else if (celeb_has_word(t, "dunk"))
+            made[0]++;
+        }
+      GameSnapshot prev;
+      CelebLatch latch;
+      const int64_t t0 = list[0][0].as<int64_t>(), t1 = list[list.size() - 1][0].as<int64_t>();
+      size_t i = 0;
+      for (int64_t tick = t0; tick <= t1; tick += 10) {
+        while (i + 1 < list.size() && list[i + 1][0].as<int64_t>() <= tick)
+          i++;
+        JsonArrayConst pl = list[i];
+        JsonDocument doc;
+        doc.set(tmpl.as<JsonObjectConst>());
+        JsonObject comp = doc["competitions"][0];
+        JsonArray sides = comp["competitors"];
+        for (JsonObject c : sides) {
+          const bool home = c["homeAway"] == "home";
+          JsonObjectConst t = g[home ? "home" : "away"];
+          const std::string id = std::to_string(t["id"].as<uint32_t>());
+          c["id"] = id;
+          c["team"]["id"] = id;
+          c["team"]["abbreviation"] = t["abbr"];
+          c["team"]["color"] = t["color"];
+          c["score"] = std::to_string(pl[home ? 5 : 6].as<int>());
+        }
+        doc["id"] = g["event"];
+        JsonObject lp = comp["situation"]["lastPlay"];
+        lp["type"]["text"] = pl[1];
+        lp["text"] = pl[2];
+        lp["scoreValue"] = pl[3];
+        lp["team"]["id"] = std::to_string(pl[4].as<uint32_t>());
+        std::string json;
+        serializeJson(doc, json);
+        GameSnapshot cur;
+        if (!parse_event_str(json, Sport::BASKETBALL, our_id, cur)) {
+          CHECK(false);
+          break;
+        }
+        const Splash s = decide_splash(prev, cur, true, false);
+        const CelebPlan p = decide_celebration(prev, cur, s, CelebLevel::FULL, false, true, true);
+        if (celeb_latched(p.kind)) {
+          CHECK(latch.take(cur));
+          CHECK(!latch.take(cur));  // the redraw
+        }
+        if (p.kind == CelebKind::DUNK || p.kind == CelebKind::ALLEY_OOP) {
+          // Ours, made, two points, and the kind ESPN named.
+          CHECK_EQ(cur.play_team, our_id);
+          CHECK_EQ((int) cur.play_value, 2);
+          CHECK_EQ(cur.team_score - prev.team_score, 2);
+          const bool oop = celeb_has_word(cur.play_type, "alley oop");
+          CHECK(oop == (p.kind == CelebKind::ALLEY_OOP));
+          CHECK(oop || celeb_has_word(cur.play_type, "dunk"));
+          shown[p.kind == CelebKind::DUNK ? 0 : 1]++;
+        }
+        if (p.kind == CelebKind::THREE)
+          shown[2]++;
+        // Subtle, Off and Big plays off never show one; the three keeps its
+        // show with Big plays off.
+        CHECK(!celeb_is_art(decide_celebration(prev, cur, s, CelebLevel::SUBTLE, false, true, true).kind));
+        CHECK(decide_celebration(prev, cur, s, CelebLevel::OFF, false, true, true).kind == CelebKind::NONE);
+        const CelebPlan off = decide_celebration(prev, cur, s, CelebLevel::FULL, false, true, false);
+        CHECK(!celeb_is_art(off.kind));
+        CHECK((off.kind == CelebKind::THREE) == (p.kind == CelebKind::THREE));
+        prev = cur;
+      }
+    }
+  }
+  printf("  recorded NBA: %d of %d dunks and %d of %d alley-oops shown at 10 s reads, %d threes\n", shown[0], made[0],
+         shown[1], made[1], shown[2]);
+  // Most show; a basket another play follows inside the same 10 s is one the
+  // panel never reads.
+  CHECK(shown[0] * 10 >= made[0] * 6 && shown[0] <= made[0]);
+  CHECK(shown[1] * 10 >= made[1] * 6 && shown[1] <= made[1]);
+}
+
+// The packed art: every play at both widths, sized for its board, its runs
+// covering exactly one frame each, the first frame whole, and the frames
+// lasting as long as the show.
+static void test_art() {
+  for (CelebKind k : {CelebKind::DUNK, CelebKind::ALLEY_OOP}) {
+    for (int w : {128, 64}) {
+      const CelebArt *a = celeb_art_for(k, w);
+      CHECK(a != nullptr);
+      if (a == nullptr)
+        continue;
+      CHECK_EQ((int) a->w, w);
+      CHECK_EQ((int) a->h, 64);
+      CHECK(a->frames > 0 && a->fps > 0);
+      const uint32_t ms = (uint32_t) a->frames * 1000 / a->fps, show = sample(k).duration_ms;
+      CHECK(ms <= show && ms + 1000 / a->fps >= show);
+      for (int n = 0; n < a->frames; n++) {
+        const uint8_t *q = a->data + a->offsets[n], *end = a->data + a->offsets[n + 1];
+        int px = 0;
+        bool keeps = false;
+        while (q < end) {
+          keeps |= (*q >> 4) == kArtKeep;
+          int len = (*q & 0x0F) + 1;
+          q++;
+          if (len == 16)
+            len = 16 + *q++;
+          px += len;
+        }
+        CHECK_EQ(px, (int) a->w * a->h);
+        CHECK(q == end);
+        if (n == 0)
+          CHECK(!keeps);
+      }
+    }
+  }
+  CHECK(celeb_art_for(CelebKind::THREE, 128) == nullptr);
 }
 
 static void test_frame() {
@@ -447,7 +702,7 @@ static void test_every_kind_runs() {
   static uint16_t buf[128 * 64];
   const CelebKind kinds[] = {CelebKind::TOUCHDOWN, CelebKind::WAVE,  CelebKind::HOME_RUN, CelebKind::GOAL_NET,
                              CelebKind::GOAL_LAMP, CelebKind::THREE, CelebKind::WIN,      CelebKind::FLASH,
-                             CelebKind::MUTED};
+                             CelebKind::MUTED,     CelebKind::DUNK,  CelebKind::ALLEY_OOP};
   for (int w : {128, 64}) {
     for (CelebKind k : kinds) {
       CelebFrame f{buf, w, 64, w};
@@ -491,6 +746,9 @@ int main() {
   test_baseball();
   test_hockey_soccer();
   test_basketball();
+  test_basketball_big_plays();
+  test_basketball_recorded();
+  test_art();
   test_text_place();
   test_frame();
   test_particles();

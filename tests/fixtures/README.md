@@ -36,6 +36,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nhl_ana_inseason.json` | `.../hockey/nhl/teams/25/schedule` in season: 14 finals (6-7-1, one overtime loss) and 70 games ahead (recorded 2026-11-03) |
 | `schedule_nhl_ana_2026.json` | `.../hockey/nhl/teams/25/schedule?season=2026&seasontype=2`: 82 finals, 15 in overtime and 8 in a shootout, 43-33-6 (recorded 2026-11-03) |
 | `schedule_mcbb_ala_2026_post.json` | `.../basketball/mens-college-basketball/teams/333/schedule?season=2026&seasontype=3`: three NCAA tournament games, "Midwest Region - Sweet 16" last (recorded 2026-11-03) |
+| `plays_nba_20261107.json` | `.../basketball/nba/summary?event=<id>` for three 11/7 finals (SA @ POR, HOU @ PHX, ORL @ GS), the play-by-play cut to what the panel's live read carries for each play: `[wallclock (Unix s), type.text, text (scoring plays only), scoreValue, team.id, homeScore, awayScore]`, and each team's id, abbreviation and color. 17 dunks and 9 alley-oops; the big plays test replays it at 10 s reads (recorded 2026-11-08) |
 
 The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`), and the four recorded on 2026-11-03, keep only the fields a schedule parse reads
 (every event, each cut to its date, season type, week, status, notes,
