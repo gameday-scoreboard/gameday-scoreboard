@@ -39,7 +39,7 @@ The app's QR code still comes back every 3 minutes, now with **Pick your team in
 
 ## Live games
 
-The panel follows a game in progress, picked at random from the leagues you choose, and moves to another one when that game ends or after **Switch every** minutes (1 to 30). When it moves on, it picks a different game from the one it showed last, if another one is on. Splashes name the team that scored, like "DAL TOUCHDOWN", since there is no "your team" here. With **Opponent scores too** off, only the team on the left gets them.
+The panel follows a game in progress, picked at random from the leagues you choose, and moves to another one when that game ends or after **Switch every** minutes (1 to 30). When it moves on, it picks a different game from the one it showed last, if another one is on. When it's the only game on, the panel stays on it, and a score right as **Switch every** comes around still gets its splash. Splashes name the team that scored, like "DAL TOUCHDOWN", since there is no "your team" here. With **Opponent scores too** off, only the team on the left gets them.
 
 Live games follows the best game on instead of a random one, with the **Pick the best game** switch on, as it is on a new or updated panel:
 

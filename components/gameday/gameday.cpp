@@ -3859,16 +3859,18 @@ void GamedayComponent::apply_job_() {
     uint32_t side_id = fav_home ? g.home_id : g.away_id;
     uint8_t side_rank = fav_home ? g.home_rank : g.away_rank;
     uint8_t other_rank = fav_home ? g.away_rank : g.home_rank;
-    if ((best || taken >= 0) && !over && this->game_.valid && g.event_id == this->schedule_.event_id &&
-        side_id == this->live_away_id_ && !this->live_none_ && !this->live_fallback_) {
-      // Still the favorite's game, or the best game on: keep it, and look
-      // again at the next scan.
+    if (::espn::keep_on_rescan(this->game_, this->schedule_.event_id, this->live_away_id_,
+                               !this->live_none_ && !this->live_fallback_, g.event_id, side_id)) {
+      // Still the favorite's game, the best game on, or the only game on:
+      // keep it, its last read included, and look again at the next scan.
       if (taken >= 0)
         ESP_LOGI(TAG, "Favorites take over: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
-      else
+      else if (best)
         ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      else
+        ESP_LOGI(TAG, "Still the only game on: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
       // This break has had its look; the next one comes when play resumes.
-      if (taken < 0 && ::espn::pick_break(this->game_))
+      if (best && taken < 0 && ::espn::pick_break(this->game_))
         this->break_looked_ = true;
       this->live_fav_ = fav_rank;
       this->live_away_rank_ = side_rank;
