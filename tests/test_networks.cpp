@@ -160,7 +160,9 @@ struct Slot {
 };
 
 // A boot as SavedNetworks::setup() does it: the list from flash meets the slot.
-static bool boot(NetworkList &l, const Slot &slot) { return merge_slot(l, slot.ssid.c_str(), slot.password.c_str()); }
+static bool boot(NetworkList &l, const Slot &slot, Network *pending = nullptr) {
+  return merge_slot(l, slot.ssid.c_str(), slot.password.c_str(), pending);
+}
 
 // POST /gameday/wifi?forget= as SavedNetworks::forget() does it.
 static bool forget_net(NetworkList &l, Slot &slot, const char *ssid) {
@@ -227,35 +229,63 @@ static void test_changed_slot_is_added() {
   CHECK(names(l) == "Home,iPhone");
   CHECK(l.slot_hash == slot_hash("iPhone", "pw-phone"));
   CHECK(!boot(l, slot));
-  // A new password for a known network is a fresh setup: it goes first with it.
+  // A new password for a known network may be mistyped: the list keeps the
+  // one that worked, and the new one comes back as pending, to try first
+  // this boot. Connecting with it (wifi: on_connect) is what stores it.
+  Network pending{};
   slot = Slot{"Home", "pw-new"};
-  CHECK(boot(l, slot));
+  CHECK(boot(l, slot, &pending));
   CHECK(names(l) == "Home,iPhone");
-  CHECK(strcmp(l.nets[0].password, "pw-new") == 0);
+  CHECK(strcmp(l.nets[0].password, "pw-home") == 0);
+  CHECK(strcmp(pending.ssid, "Home") == 0);
+  CHECK(strcmp(pending.password, "pw-new") == 0);
+  CHECK(l.slot_hash == slot_hash("Home", "pw-new"));
+  // It did not connect: the next boot has nothing pending and the saved
+  // password is still there.
+  CHECK(!boot(l, slot, &pending));
+  CHECK(pending.ssid[0] == '\0');
+  CHECK(strcmp(l.nets[0].password, "pw-home") == 0);
+  // A later network, iPhone, with a new password that does connect.
   slot = Slot{"iPhone", "pw-phone2"};
-  CHECK(boot(l, slot));
+  CHECK(boot(l, slot, &pending));
+  CHECK(names(l) == "Home,iPhone");
+  CHECK(strcmp(l.nets[1].password, "pw-phone") == 0);
+  CHECK(strcmp(pending.ssid, "iPhone") == 0);
+  CHECK(put_front(l, pending.ssid, pending.password));  // wifi: on_connect
   CHECK(names(l) == "iPhone,Home");
   CHECK(strcmp(l.nets[0].password, "pw-phone2") == 0);
+  CHECK(!boot(l, slot, &pending));
+  CHECK(pending.ssid[0] == '\0');
+  // Without somewhere to put it the new password is dropped, never saved.
+  slot = Slot{"Home", "pw-other"};
+  CHECK(boot(l, slot));
+  CHECK(strcmp(l.nets[1].password, "pw-home") == 0);
+  // A network the list does not have still goes first at once.
+  slot = Slot{"Cabin", "pw-cabin"};
+  CHECK(boot(l, slot, &pending));
+  CHECK(names(l) == "Cabin,iPhone,Home");
+  CHECK(pending.ssid[0] == '\0');
 }
 
-static void test_reset_empties_the_list() {
+static void test_blank_slot_keeps_the_list() {
   NetworkList l;
   clear(l);
   Slot slot{"Home", "pw-home"};
   boot(l, slot);
   put_front(l, "iPhone", "pw-phone");
-  // Reset Wi-Fi in older firmware blanked the slot. Even a list that firmware
-  // did not clear itself goes, so a reset stays a reset.
+  const uint32_t hash = l.slot_hash;
+  // Save on the hotspot page with no network picked blanks ESPHome's slot.
+  // The saved networks stay, and so does what the list last saw in the slot.
   slot = Slot{"", ""};
-  CHECK(boot(l, slot));
-  CHECK(l.count == 0);
-  CHECK(l.slot_hash == 0);
   CHECK(!boot(l, slot));
+  CHECK(names(l) == "iPhone,Home");
+  CHECK(l.slot_hash == hash);
   CHECK(!merge_slot(l, nullptr, nullptr));
-  // Set up again after the reset.
-  slot = Slot{"Home", "pw-home"};
+  CHECK(l.count == 2);
+  // A real setup afterwards still goes to the front.
+  slot = Slot{"Cabin", "pw-cabin"};
   CHECK(boot(l, slot));
-  CHECK(names(l) == "Home");
+  CHECK(names(l) == "Cabin,iPhone,Home");
 }
 
 static void test_forget_survives_a_restart() {
@@ -355,8 +385,41 @@ static void test_setup_window() {
   CHECK(restart_at([](uint32_t) { return true; }, 120) == 25 * 60);
 }
 
+// A name that starts another one, or differs from it only in case, is a
+// network of its own: a router's 2.4 GHz and 5 GHz names often share a start.
+static void test_names_that_share_a_start() {
+  NetworkList l;
+  clear(l);
+  CHECK(put_front(l, "Home-5G", "pw-5g"));
+  CHECK(find(l, "Home") == -1);
+  CHECK(put_front(l, "Home", "pw-home"));
+  CHECK(names(l) == "Home,Home-5G");
+  CHECK(find(l, "Home-5G") == 1);
+  CHECK(put_front(l, "home", "pw-lower"));
+  CHECK(names(l) == "home,Home,Home-5G");
+  CHECK(find(l, "Home-5G-2") == -1);
+  CHECK(strcmp(l.nets[2].password, "pw-5g") == 0);
+  // Forgetting the short name keeps the longer one, and the other way round.
+  bool removed = false;
+  const Network *slot = forget(l, "Home", &removed);
+  CHECK(removed && names(l) == "home,Home-5G");
+  CHECK(slot != nullptr && strcmp(slot->ssid, "home") == 0);
+  CHECK(remove(l, "Home-5G"));
+  CHECK(names(l) == "home");
+  CHECK(!remove(l, "hom"));
+  // A changed slot under the longer name is that network, not the shorter one.
+  clear(l);
+  put_front(l, "Home", "pw-home");
+  Network pending;
+  CHECK(merge_slot(l, "Home-5G", "pw-5g", &pending));
+  CHECK(names(l) == "Home-5G,Home");
+  CHECK(pending.ssid[0] == '\0');
+  CHECK(strcmp(l.nets[1].password, "pw-home") == 0);
+}
+
 int main() {
   test_put_front_and_order();
+  test_names_that_share_a_start();
   test_cap_at_max();
   test_remove();
   test_blank_and_long_names();
@@ -364,7 +427,7 @@ int main() {
   test_slot_hash();
   test_migration_from_one_network();
   test_changed_slot_is_added();
-  test_reset_empties_the_list();
+  test_blank_slot_keeps_the_list();
   test_forget_survives_a_restart();
   test_forget_the_last_network();
   test_setup_window();

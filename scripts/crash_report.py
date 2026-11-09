@@ -77,7 +77,9 @@ def build_matches(build_time, published):
 def fmt_time(t):
     if not t:
         return "unknown (no clock yet)"
-    return datetime.datetime.fromtimestamp(t).strftime("%Y-%m-%d %-I:%M %p")
+    # %-I (no leading zero) is glibc only and fails on Windows.
+    d = datetime.datetime.fromtimestamp(t)
+    return d.strftime("%Y-%m-%d ") + d.strftime("%I:%M %p").lstrip("0")
 
 
 def fetch(host):
@@ -142,6 +144,9 @@ def decode(addr2line, elf, addrs):
 
 
 def selftest():
+    # Any local time zone: an hour with no leading zero, on every platform.
+    hour = fmt_time(1792252800).split()[1]
+    assert hour[0] != "0" and hour.count(":") == 1, hour
     report = (
         "*** CRASH DETECTED ON PREVIOUS BOOT ***\n"
         "  Reason: Fault - LoadProhibited (cause 28)\n"

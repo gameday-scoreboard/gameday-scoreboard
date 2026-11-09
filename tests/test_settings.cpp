@@ -157,6 +157,74 @@ void test_round_trip() {
   const SetOp *url = find(in, SetKind::MSGURL);
   SCHECK(url != nullptr && url->text == "http://homeassistant.local:8123/local/gameday.txt", "msgurl came back wrong");
 
+  // Every value, not only the ones above: each op is what POST /gameday/set
+  // makes of the same value, and a switch is the fixture's own true or false.
+  JsonDocument fx;
+  deserializeJson(fx, slurp("fixtures/api/settings.json"));
+  size_t j = 0;
+  for (const char *key : kSetKeys) {
+    std::string k = key;
+    if (k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs")  // fav1 to fav4: favs has them
+      continue;
+    JsonVariantConst v = fx[key];
+    SCHECK(!v.isNull(), "the fixture has no %s", key);
+    if (v.isNull() || j >= in.ops.size())
+      continue;
+    const SetOp &got = in.ops[j++];
+    std::string text;
+    switch (setting_type(key)) {
+      case SettingType::BOOL:
+        text = v.as<bool>() ? "1" : "0";
+        SCHECK(got.on == v.as<bool>(), "%s came back %d, the fixture has %d", key, got.on, v.as<bool>());
+        break;
+      case SettingType::INT:
+        text = std::to_string(v.as<int>());
+        break;
+      case SettingType::TEXT:
+        text = v.as<const char *>();
+        break;
+      case SettingType::LIST: {
+        for (JsonVariantConst e : v.as<JsonArrayConst>())
+          text += (text.empty() ? "" : ",") + std::string(e.as<const char *>());
+        break;
+      }
+      case SettingType::PLAYLISTS:
+        text = "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@c:blue,@i:star;College=ncaa:251,ncaa:2294";
+        break;
+      case SettingType::CARDS:
+        text = "next:1,clock:0,countdown:1,custom:1,message:1,picture:1,gameleaders:1,top25:1,schedule:1,"
+               "seasonrecap:1,news:0,weather:1";
+        break;
+      case SettingType::NONE:
+        break;
+    }
+    SetOp want;
+    SCHECK(parse_set(k, text, want, 16), "%s=%s isn't a set request the panel takes", key, text.c_str());
+    bool same = got.kind == want.kind && got.value == want.value && got.on == want.on && got.slot == want.slot &&
+                got.mask == want.mask && got.team == want.team && got.teams == want.teams &&
+                got.text == want.text && got.ymd == want.ymd;
+    SCHECK(same, "%s came back as op %d (value %d, text '%s'), not as %s=%s makes it", key, (int) got.kind, got.value,
+           got.text.c_str(), key, text.c_str());
+  }
+  SCHECK(j == in.ops.size(), "%zu ops checked of %zu", j, in.ops.size());
+  // A few by what they mean, not by what the set request makes of them.
+  const SetOp *night_end = find(in, SetKind::NIGHT_END);
+  SCHECK(night_end != nullptr && night_end->value == 7 * 60, "nightend came back wrong");
+  const SetOp *list = find(in, SetKind::LIST);
+  SCHECK(list != nullptr && list->value == 2, "list came back wrong");
+  const SetOp *celebrate = find(in, SetKind::CELEBRATE);
+  SCHECK(celebrate != nullptr && celebrate->value == 2, "celebrate came back wrong");
+  const SetOp *cddate = find(in, SetKind::CD_DATE);
+  SCHECK(cddate != nullptr && cddate->ymd == 20261225u, "cddate came back as %u", cddate ? cddate->ymd : 0);
+  const SetOp *nick = find(in, SetKind::NICK);
+  SCHECK(nick != nullptr && nick->text == "Living room", "nick came back wrong");
+  const SetOp *hook = find(in, SetKind::HOOK);
+  SCHECK(hook != nullptr && hook->text == "http://192.168.1.20:1880/gameday", "hook came back wrong");
+  int remotes = 0;
+  for (const auto &op : in.ops)
+    remotes += op.kind == SetKind::REMOTE;
+  SCHECK(remotes == 4, "%d of the remote's 4 buttons came back", remotes);
+
   // The document's order doesn't matter.
   SettingsImport b = import(R"({"schema":1,"name":"gameday-a1b2c3","panels":1,"rotate":5,"mode":4})");
   SCHECK(b.error.empty() && b.ops.size() == 3 && b.ops[0].kind == SetKind::MODE && b.ops[1].kind == SetKind::ROTATE &&
@@ -186,7 +254,13 @@ void test_favs() {
   in = import(R"({"schema":1,"favs":[]})");
   f = find(in, SetKind::FAVS);
   SCHECK(in.error.empty() && f != nullptr && f->teams.empty(), "an empty list doesn't clear the favorites");
-  refused(R"({"schema":1,"favs":["nfl:6","nfl:6"]})", "a favorite listed twice");
+  // One team in two slots (older pages and fav1..fav4 allowed it): the
+  // panel's own backup still restores, with the second slot empty.
+  in = import(R"({"schema":1,"favs":["nfl:6","mlb:15","nfl:6"]})");
+  f = find(in, SetKind::FAVS);
+  SCHECK(in.error.empty() && f != nullptr && f->teams.size() == 3 && f->teams[0].id == 6 && f->teams[1].id == 15 &&
+             f->teams[2].id == 0,
+         "a favorite listed twice didn't restore with the second slot empty");
   refused(R"({"schema":1,"favs":["dallas"]})", "a favorite that isn't a team");
   refused(R"({"schema":1,"favs":"nfl:6"})", "favs as text");
   refused(R"({"schema":1,"favs":[6]})", "favs as numbers");
@@ -413,6 +487,19 @@ void test_playlists() {
   deserializeJson(st, R"({"sport":"hockey"})");
   settings_from_state(st.as<JsonObjectConst>(), 0, -1, -1, out);
   SCHECK(std::string(out["sport"] | "") == "hockey", "the export left the sport row out");
+  // A sport row only plays in Favorite teams, and restoring one switches the
+  // panel to that mode: a Live games backup has none, and an older Live games
+  // backup that has one restores without it.
+  JsonDocument live_st, live_out;
+  deserializeJson(live_st, R"({"mode":5,"sport":"hockey"})");
+  settings_from_state(live_st.as<JsonObjectConst>(), 0, -1, -1, live_out);
+  SCHECK(live_out["sport"].isNull(), "a Live games export kept the sport row");
+  in = import(R"({"schema":1,"mode":5,"sport":"hockey"})");
+  SCHECK(in.error.empty() && find(in, SetKind::SPORT) == nullptr && find(in, SetKind::MODE) != nullptr &&
+             find(in, SetKind::MODE)->value == 5,
+         "a Live games backup's sport row would switch the mode");
+  in = import(R"({"schema":1,"mode":4,"sport":"hockey"})");
+  SCHECK(in.error.empty() && find(in, SetKind::SPORT) != nullptr, "a Favorite teams backup lost its sport row");
   // Each playlist's options come back as their tokens (playlists.h ListOpt).
   in = import(R"({"schema":1,"lists":[{"n":"Sundays","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":false},
     {"n":"Late","t":[],"days":"60","only":false},{"n":"Plain","t":["nfl:6"]}]})");

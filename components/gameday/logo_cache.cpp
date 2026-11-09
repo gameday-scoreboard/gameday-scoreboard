@@ -137,7 +137,7 @@ void LogoCache::make_room_() {
     bool pinned = this->pinned_url_(e->url);
     slots.push_back({e->used_ms, busy, pinned});
   }
-  int i = ::espn::pick_evict(slots);
+  int i = ::espn::pick_evict(slots, millis());
   if (i >= 0)
     this->entries_.erase(this->entries_.begin() + i);
 }

@@ -138,9 +138,41 @@ inline bool night_holding(Night state) { return state == Night::DIM || state == 
 // the end of the hours it is in. Kept as a time, not a flag, so a restart
 // inside the same night (the nightly update) still knows it was skipped
 // and the next night can't.
-inline int64_t night_skip_until(const NightPrefs &p, int64_t now, int minute, int second) {
+//
+// `offset` gives the panel's UTC offset, in seconds, at an epoch. Clocks
+// that change before the end move it by the change: on the night they go
+// back, a skip made before 2 AM has an hour more to run, so the panel stays
+// lit until the real 7 AM instead of going dark from 6 to 7. An end inside
+// the hour the clocks skip forward has no local time; the later of the two
+// guesses is kept, and the hours check ends the skip when the clock passes
+// the end. An end inside the hour the clocks go back over comes twice; the
+// skip runs to the second, so the repeated hour stays lit too.
+using NightUtcOffset = int32_t (*)(int64_t epoch);
+inline int64_t night_skip_until(const NightPrefs &p, int64_t now, int minute, int second, NightUtcOffset offset) {
   const int left = (p.end - minute + kMinutesPerDay) % kMinutesPerDay;
-  return now - second + (int64_t) left * 60;
+  const int64_t naive = now - second + (int64_t) left * 60;
+  const int32_t here = offset(now);
+  const int64_t once = naive + here - offset(naive);
+  const int64_t twice = naive + here - offset(once);
+  int64_t end = once > twice ? once : twice;
+  const int32_t back = offset(end) - offset(end + 2 * 3600);
+  if (back > 0 && offset(end + back) == offset(end) - back)
+    end += back;
+  return end;
+}
+
+// The longest the clocks go back, in seconds.
+static const int64_t kNightRepeatSecs = 3600;
+
+// True when a skip that runs to `until` is over at `now` (local minute
+// `minute`): the schedule is off, the end has come, or the clock is outside
+// the hours. Outside them with an hour or less to go is the hour the clocks
+// go back over, between the first pass of the end and the second, and the
+// skip runs on through it.
+inline bool night_skip_over(const NightPrefs &p, int minute, int64_t now, int64_t until) {
+  if (!p.on || now >= until)
+    return true;
+  return !night_window(p.start, p.end, minute) && until - now > kNightRepeatSecs;
 }
 
 // The brightness the owner wants right now, before heat and power have their

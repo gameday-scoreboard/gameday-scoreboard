@@ -36,13 +36,16 @@
   let D = null;
   const post = async (params) => {
     const qs = Object.entries(params).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+    let ok = false;
     try {
       const r = await fetch("/gameday/demo?" + qs, { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
+      ok = true;
     } catch (e) {
       $("#demoNow").textContent = "Device did not respond (" + (e.message || "network") + ")";
     }
     setTimeout(load, 400);
+    return ok;
   };
 
   const selects = Array.from(card.querySelectorAll("select[data-team]"));
@@ -61,10 +64,17 @@
     b.onclick = () => post(b.dataset.demo === "stop" ? { do: "stop" } : { do: "start", kind: b.dataset.demo });
   });
   const madeup = $("#demoMadeup");
-  madeup.onclick = () => {
+  // The tapped value stands until a read that left after the panel answered:
+  // one already out carries the old value.
+  let held = null;  // {v, after}
+  madeup.onclick = async () => {
     const on = !madeup.classList.contains("on");
     madeup.classList.toggle("on", on);
-    post({ madeup: on ? 1 : 0 });
+    const mine = held = { v: on, after: Infinity };
+    const ok = await post({ madeup: on ? 1 : 0 });
+    if (held !== mine) return;  // tapped again since
+    if (ok) mine.after = Date.now();
+    else { held = null; render(); }
   };
 
   const matchup = (side) =>
@@ -81,18 +91,26 @@
       const t = D[kind] && D[kind][end];
       if (t) s.value = t.l + ":" + t.id;
     });
-    madeup.classList.toggle("on", !!D.madeup);
+    madeup.classList.toggle("on", held ? held.v : !!D.madeup);
   };
 
+  // A read asked for during another one runs after it, so it sees the latest post.
   let inflight = false;
+  let again = false;
   const load = async () => {
-    if (inflight) return;
+    if (inflight) { again = true; return; }
     inflight = true;
+    const left = Date.now();
     try {
-      const r = await fetch("/gameday/demo?_=" + Date.now(), { cache: "no-store" });
-      if (r.ok) { D = await r.json(); render(); }
+      const r = await fetch("/gameday/demo?_=" + left, { cache: "no-store" });
+      if (r.ok) {
+        D = await r.json();
+        if (held && left > held.after) held = null;
+        render();
+      }
     } catch (_) { /* the poll comes back around */ }
     inflight = false;
+    if (again) { again = false; load(); }
   };
   load();
   setInterval(load, 5000);

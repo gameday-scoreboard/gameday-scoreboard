@@ -56,6 +56,9 @@
   <div class="card">
     <h2>Boards</h2>
 
+    <h3>Waveshare ESP32-S3-RGB-Matrix</h3>
+    <p>The <a href="https://www.waveshare.com/esp32-s3-rgb-matrix.htm">Waveshare ESP32-S3-RGB-Matrix</a> is the board in ready-made Game Day Scoreboards, and it has a prebuilt firmware too. Pick it in the installer. That build hasn't run on hardware yet.</p>
+
     <h3>MoonHub75</h3>
     <p>The <a href="https://github.com/MoonModules/Hardware/tree/main/MOONHUB75">MoonHub75</a> has a prebuilt firmware. Install it from your browser with the installer and it takes updates over Wi-Fi like any other panel.</p>
 
@@ -75,7 +78,7 @@
     <p class="note">Many panels read the ESP32's 3.3 V signals fine. If yours flickers or shows the wrong colors, put 5 V level shifters (74AHCT245 or similar) between the board and the panel.</p>
 
     <h3>Other boards</h3>
-    <p>Any other ESP32-S3 HUB75 board with at least 16 MB of flash and octal PSRAM, the Waveshare ESP32-S3 RGB Matrix among them, needs its own build. There's no prebuilt firmware for these and we haven't tested them. Copy <code>firmware/controllers/moonhub75.yaml</code> with your board's pins, copy <code>firmware/gameday.yaml</code> to include it, and build that with ESPHome.</p>
+    <p>Any other ESP32-S3 HUB75 board with at least 16 MB of flash and octal PSRAM, needs its own build. There's no prebuilt firmware for these and we haven't tested them. Copy <code>firmware/controllers/moonhub75.yaml</code> with your board's pins, copy <code>firmware/gameday.yaml</code> to include it, and build that with ESPHome.</p>
     <p class="note">Give your copy its own <code>variant</code> name. A build that keeps <code>moonhub75</code> installs the MoonHub75 release over itself when an update comes out, with the wrong pins. With its own name, the panel updates when you rebuild it.</p>
   </div>
 
@@ -98,7 +101,7 @@
 
   <div class="card">
     <h2>Install</h2>
-    <p>Plug the board into a computer over USB, open the installer in Chrome or Edge, pick one panel or two, and click Install.</p>
+    <p>Plug the board into a computer over USB, open the installer in Chrome or Edge, pick your board (and on a MoonHub75-pinout board, one panel or two), and click Install.</p>
     <a class="button" href="/">Open the installer</a>
     <p>Joining Wi-Fi, picking a team and the Game Day app work the same as on a Game Day Scoreboard. <a href="https://app.gameday-scoreboard.com/setup/">Setup</a> covers the rest.</p>
     <p class="note">Building from YAML instead? The <a href="https://github.com/gameday-scoreboard/gameday-scoreboard#build-it-yourself">README</a> has the steps.</p>
@@ -109,7 +112,7 @@
     <ul>
       <li>You supply the case, stand and power supply.</li>
       <li>Email support is for Game Day Scoreboards we sold. For a panel you built, <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/issues">open an issue on GitHub</a>. Bug reports from DIY builds are welcome.</li>
-      <li>The firmware is the same, with every league and setting. The prebuilt firmware for the MoonHub75 pinout gets every release.</li>
+      <li>The firmware is the same, with every league and setting. The prebuilt firmware for the Waveshare board and the MoonHub75 pinout gets every release.</li>
     </ul>
   </div>
 

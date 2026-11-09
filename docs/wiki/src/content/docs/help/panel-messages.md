@@ -85,8 +85,6 @@ The button on the controller shows the panel's address and resets it. See [Butto
 | The panel says | What it means |
 | --- | --- |
 | **On your phone, open** the address **or** the IP address **then pick your team** | You held the button for about 1.5 seconds. The address shows for 20 seconds. On a 64x64 panel it shows the address over two lines, then the IP address and **pick a team**. |
-| **Keep holding to reset Wi-Fi**, with a bar filling | You've held it for 5 seconds. Let go now and nothing resets. |
-| **Wi-Fi reset / restarting** | You held it for 10 seconds. The panel forgets its Wi-Fi and restarts into setup. |
 
 Nothing resets until you let go, and the screen says what letting go will do.
 

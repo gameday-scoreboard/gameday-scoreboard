@@ -156,7 +156,8 @@ inline std::string ha_ordinal(int n) {
 }
 
 // The words for period p of the game: "1st quarter", "2nd half", "3rd
-// period", "5th inning", "overtime", "2nd overtime".
+// period", "5th inning", "overtime", "2nd overtime", "shootout", "1st half
+// of extra time", "penalties".
 inline std::string ha_period_name(const GameSnapshot &g, int p) {
   int regulation = 4;
   const char *word = "quarter";
@@ -164,10 +165,18 @@ inline std::string ha_period_name(const GameSnapshot &g, int p) {
     case Sport::BASEBALL:
       return ha_ordinal(p) + " inning";
     case Sport::HOCKEY:
+      // Period 5 is the shootout outside the playoffs (espn_parse.h, Hockey)
+      if (p == 5 && !g.nhl.playoffs)
+        return "shootout";
       regulation = 3;
       word = "period";
       break;
     case Sport::SOCCER:
+      // ESPN's periods 3 and 4 are the halves of extra time, 5 the shootout
+      if (p == 3 || p == 4)
+        return ha_ordinal(p - 2) + " half of extra time";
+      if (p >= 5)
+        return "penalties";
       regulation = 2;
       word = "half";
       break;
@@ -328,7 +337,7 @@ struct HaContext {
   std::string league;         // the game's league key, "" when unknown
   int64_t now_epoch{0};       // the wall clock, 0 before it is set (no reminder then)
   int pregame_minutes{0};     // the reminder's lead, 0 for none
-  uint32_t mono_s{0};         // seconds since boot, for how long a read that went back has held
+  uint32_t mono_ms{0};        // millis(), for how long a read that went back has held
 };
 
 // A read that goes back (a lower score, an earlier state or period) is
@@ -370,9 +379,9 @@ class HaTracker {
     if (back) {
       if (!s->back_since_set) {
         s->back_since_set = true;
-        s->back_since = ctx.mono_s;
+        s->back_since = ctx.mono_ms;
       }
-      if (ctx.mono_s - s->back_since < kHaStepBackHoldS)
+      if (ctx.mono_ms - s->back_since < kHaStepBackHoldS * 1000)
         return out;
       this->store_(*s, cur);
       s->period_done = std::min<int>(s->period_done, cur.period);
@@ -461,7 +470,7 @@ class HaTracker {
     bool pregame_done{false};
     bool pregame_known{false};  // whether pregame_done has been settled by a read with the clock
     bool back_since_set{false};
-    uint32_t back_since{0};  // mono_s when reads started going back
+    uint32_t back_since{0};  // mono_ms when reads started going back
   };
   static constexpr size_t kGames = 8;
 
@@ -566,9 +575,9 @@ class HaTracker {
     e.kind = HaKind::FINAL;
     e.play = "final";
     e.my_team = !ctx.neutral;
-    // A shootout decides a level soccer game, as on the board.
+    // A shootout decides a soccer game, as on the board (shootout_decides).
     int us = cur.team_score, them = cur.opp_score;
-    if (us == them && cur.sport == Sport::SOCCER && cur.soc.team_shootout >= 0 && cur.soc.opp_shootout >= 0) {
+    if (shootout_decides(cur)) {
       us = cur.soc.team_shootout;
       them = cur.soc.opp_shootout;
     }

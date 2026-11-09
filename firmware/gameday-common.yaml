@@ -5,7 +5,7 @@ substitutions:
   # The MAC suffix keeps two panels on one network apart: gameday-2f6a70.local
   name: "gameday"
   friendly_name: "Game Day Scoreboard"
-  version: "2026.11.0"
+  version: "2026.11.1"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
   # Where the panel looks for new releases. A bench build can point it at a
@@ -843,9 +843,19 @@ gameday:
     - text_sensor.template.publish:
         id: gd_status_sensor
         state: !lambda 'return x.ha_status_text;'
+    # Home Assistant shows a state over 255 characters as unknown, so a long
+    # play is cut to 255 bytes, never inside a character.
     - text_sensor.template.publish:
         id: gd_last_play_sensor
-        state: !lambda 'return x.ha_last_play;'
+        state: !lambda |-
+          std::string s = x.ha_last_play;
+          if (s.size() > 255) {
+            size_t cut = 255;
+            while (cut > 0 && ((uint8_t) s[cut] & 0xC0) == 0x80)
+              cut--;
+            s.resize(cut);
+          }
+          return s;
     # Only on a change, so the score sensors don't send the same number on
     # every redraw. Unknown with no game and before kickoff.
     - lambda: |-
@@ -958,17 +968,23 @@ switch:
     restore_mode: ALWAYS_ON
     optimistic: true
     # set_power: Game-day wake follows every turn, wherever it came from.
+    # The QC and FCC screens light the panel past the night schedule, and
+    # QC with Power off too (pages/qc.yaml, pages/regulatory.yaml).
     turn_on_action:
       - lambda: 'id(gameday_ctl).set_power(true);'
       - hub75.set_brightness:
           id: matrix
-          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state);'
+          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, !id(qc_active) && !id(reg_active));'
       - script.execute: gd_repaint
     turn_off_action:
       - lambda: 'id(gameday_ctl).set_power(false);'
-      - hub75.set_brightness:
-          id: matrix
-          brightness: 0
+      - if:
+          condition:
+            lambda: 'return !id(qc_active);'
+          then:
+            - hub75.set_brightness:
+                id: matrix
+                brightness: 0
       # An effect would keep rendering to a dark panel, and the scoreboard
       # is what Power on should bring back (pages/effects.yaml).
       - script.execute:
@@ -1008,11 +1024,11 @@ number:
       then:
         - if:
             condition:
-              switch.is_on: power
+              lambda: 'return id(power).state || id(qc_active);'
             then:
               - hub75.set_brightness:
                   id: matrix
-                  brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) x);'
+                  brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) x, !id(qc_active) && !id(reg_active));'
   - platform: template
     name: "Scroll Speed"
     id: shared_scroll_speed

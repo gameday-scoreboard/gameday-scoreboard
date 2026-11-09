@@ -10,9 +10,14 @@ branch, with the numbers in the error and in the job summary.
         build: the folder build-action leaves, with its .ota.bin and .elf.
     python3 scripts/size_budget.py host <heap.json> <out.json>
         The parser figures `make -C tests heap` printed (tests/heap_budget.cpp).
-    python3 scripts/size_budget.py check <sizes dir> [--base <dir>] [--base-label <text>]
+    python3 scripts/size_budget.py check <sizes dir> [--base <dir>] [--base-label <text>] [--absent-ok <build,...>]
         Every *.json under the sizes dir against the budget; with --base, also
-        against the base branch's figures.
+        against the base branch's figures. --absent-ok names builds that may
+        have no figures, like the ones a pull request into dev skips.
+    python3 scripts/size_budget.py complete <sizes dir> <budget.json>
+        Whether the figures are a whole base: every build and read that
+        budget lists, every metric. CI skips a base branch run that stopped
+        part way, so growth is never checked against half its figures.
     python3 scripts/size_budget.py seed <sizes dir>
         Prints a budget with 10% headroom (at least 1 KB) over those figures.
     python3 scripts/size_budget.py --selftest
@@ -80,8 +85,18 @@ def fmt(n) -> str:
     return "" if n is None else f"{n:,}"
 
 
-def check(budget: dict, sizes: dict, base: dict, base_label: str) -> tuple:
-    """Returns (errors, summary rows)."""
+def missing(budget: dict, sizes: dict) -> list:
+    """The figures budget lists that sizes doesn't have, as group.name.metric."""
+    return [f"{group}.{name}.{metric}"
+            for group in ("firmware", "host")
+            for name, limits in sorted(budget.get(group, {}).items())
+            for metric in sorted(limits)
+            if metric not in sizes.get(group, {}).get(name, {})]
+
+
+def check(budget: dict, sizes: dict, base: dict, base_label: str, absent_ok: frozenset = frozenset()) -> tuple:
+    """Returns (errors, summary rows). Builds in absent_ok may have no figures
+    (a pull request into dev doesn't build them)."""
     errors, rows = [], []
     growth = budget.get("max_growth", {})
     for group in ("firmware", "host"):
@@ -89,6 +104,8 @@ def check(budget: dict, sizes: dict, base: dict, base_label: str) -> tuple:
         measured = sizes.get(group, {})
         for name in sorted(set(limits) | set(measured)):
             if name not in measured:
+                if name in absent_ok:
+                    continue
                 errors.append(f"budget.json has {group}.{name} but nothing measured it. Remove the entry if it is gone.")
                 continue
             if name not in limits:
@@ -135,20 +152,35 @@ def run_check(args: list) -> int:
     sizes_dir = Path(args[0])
     base_dir = Path(args[args.index("--base") + 1]) if "--base" in args else None
     base_label = args[args.index("--base-label") + 1] if "--base-label" in args else ""
+    absent_ok = frozenset(filter(None, args[args.index("--absent-ok") + 1].split(","))) if "--absent-ok" in args else frozenset()
     budget = json.loads(BUDGET.read_text(encoding="utf-8"))
     base = load_sizes(base_dir) if base_dir and base_dir.is_dir() else {}
     if not base:
         base_label = ""
-    errors, rows = check(budget, load_sizes(sizes_dir), base, base_label or "the base branch")
+    sizes = load_sizes(sizes_dir)
+    errors, rows = check(budget, sizes, base, base_label or "the base branch", absent_ok)
     text = summary(rows, errors, base_label)
+    # A build or read new in this change has no base figure, so its growth
+    # isn't checked. Say so rather than pass it quietly.
+    unchecked = missing(sizes, base) if base else []
     out = os.environ.get("GITHUB_STEP_SUMMARY")
     if out:
         with open(out, "a", encoding="utf-8") as f:
             f.write(text)
     print(text)
+    for u in unchecked:
+        print(f"::warning file=firmware/budget.json::{u} has no figure in {base_label or 'the base'}, so its growth isn't checked")
     for e in errors:
         print(f"::error file=firmware/budget.json::{e}")
     return 1 if errors else 0
+
+
+def run_complete(args: list) -> int:
+    budget = json.loads(Path(args[1]).read_text(encoding="utf-8"))
+    gaps = missing(budget, load_sizes(Path(args[0])))
+    for g in gaps:
+        print(f"no figure for {g}")
+    return 1 if gaps else 0
 
 
 def selftest() -> None:
@@ -174,6 +206,12 @@ def selftest() -> None:
     assert len(new) == 1 and "no budget" in new[0]
     gone, _ = check(budget, {}, {}, "dev")
     assert len(gone) == 1 and "nothing measured" in gone[0]
+    skipped, _ = check(budget, {}, {}, "dev", frozenset({"a"}))
+    assert skipped == []
+    # A base run that stopped after the host figures: not whole.
+    assert missing(budget, {"host": {"x": {"heap": 3}}}) == ["firmware.a.flash", "firmware.a.static_ram"]
+    assert missing(budget, {"firmware": {"a": {"flash": 1}}}) == ["firmware.a.static_ram"]
+    assert missing(budget, {"firmware": {"a": {"flash": 1, "static_ram": 1}}}) == []
     assert seed({"host": {"x": {"json": 20000, "heap": 18}}}) == {"firmware": {}, "host": {"x": {"json": 22000, "heap": 1042}}}
 
     with tempfile.TemporaryDirectory() as d:
@@ -202,6 +240,8 @@ def main(argv: list) -> int:
         return 0
     if argv[:1] == ["check"] and len(argv) >= 2:
         return run_check(argv[1:])
+    if argv[:1] == ["complete"] and len(argv) == 3:
+        return run_complete(argv[1:])
     if argv[:1] == ["seed"] and len(argv) == 2:
         print(json.dumps(seed(load_sizes(Path(argv[1]))), indent=2))
         return 0

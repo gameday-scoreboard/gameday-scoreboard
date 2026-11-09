@@ -1,0 +1,38 @@
+name: Nightly
+
+# Early warning: dev built on the next ESPHome, once a night instead of on
+# every push. Allowed to fail, so a red ESPHome beta never fails the run or
+# sends a failure email; the job's own result shows what broke. Nothing is
+# published from here.
+on:
+  schedule:
+    # 3:00 AM Central (9:00 UTC).
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-beta:
+    name: Build ${{ matrix.variant }} (ESPHome beta)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: moonhub75
+            yaml: firmware/gameday.yaml
+          - variant: scoreboard75
+            yaml: firmware/gameday-scoreboard75.yaml
+          - variant: waveshare
+            yaml: firmware/gameday-waveshare.yaml
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+      - uses: esphome/build-action@v7
+        with:
+          yaml-file: ${{ matrix.yaml }}
+          version: beta

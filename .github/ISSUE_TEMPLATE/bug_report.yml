@@ -28,7 +28,7 @@ body:
     attributes:
       label: Firmware version
       description: The Firmware row on the panel's page.
-      placeholder: "1.5.5"
+      placeholder: "2026.11.0"
     validations:
       required: true
   - type: dropdown
@@ -37,7 +37,7 @@ body:
       label: Controller
       options:
         - Game Day Scoreboard (bought it)
-        - Game Day Scoreboard controller, built it myself
+        - Waveshare ESP32-S3-RGB-Matrix, built it myself
         - MoonHub75 or another ESP32-S3 HUB75 board, built it myself
         - Not sure
     validations:

@@ -74,18 +74,24 @@ COMPONENT_DIR = Path(__file__).resolve().parent
 _TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
 
 
-def timezone_options():
+def _timezone_rows():
     text = (COMPONENT_DIR / "timezones.h").read_text(encoding="utf-8")
     text = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
-    opts = [name for name, _posix, _iana in _TZ_RE.findall(text)]
+    return [(name, posix) for name, posix, _iana in _TZ_RE.findall(text)]
+
+
+def timezone_options():
+    opts = [name for name, _posix in _timezone_rows()]
     if not opts:
         raise cv.Invalid("timezones.h has no entries")
     return opts
 
 
-def _parsed_timezone_count():
+def _parsed_timezone_rows():
+    # Each row's comment names the zone and the POSIX string it was made from,
+    # so a changed string is caught as well as an added or removed zone.
     text = (COMPONENT_DIR / "timezones_parsed.h").read_text(encoding="utf-8")
-    return len(re.findall(r"^\s*\{-?\d+, -?\d+, \{", text, re.M))
+    return re.findall(r"^\s*\{-?\d+, -?\d+, \{.*//\s*([^:]+): (\S+)\s*$", text, re.M)
 
 
 def _esphome_at_least(year, month):
@@ -147,7 +153,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
-    if _parsed_timezone_count() != len(timezone_options()):
+    if _parsed_timezone_rows() != _timezone_rows():
         raise cv.Invalid(
             "timezones_parsed.h is out of date; run scripts/build_timezones.py"
         )

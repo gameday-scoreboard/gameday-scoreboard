@@ -54,9 +54,96 @@ static int red_box_x(const std::vector<uint16_t> &px, int w) {
   return n == 400 ? left : -1;
 }
 
+// A GIF built here, frame by frame, so a test can say exactly what each
+// pixel should be. Four colors; the LZW data is every pixel as its own code
+// with a clear code after every two, so the code size never grows.
+struct GifFrame {
+  int x, y, w, h;
+  int disposal;     // 0 to 3
+  int transparent;  // a color index, or -1 for none
+  bool interlaced;
+  std::vector<uint8_t> px;  // w * h color indexes, top row first
+};
+
+static std::vector<uint8_t> make_gif(int w, int h, const uint32_t (&palette)[4], const std::vector<GifFrame> &frames) {
+  std::vector<uint8_t> out = {'G', 'I', 'F', '8', '9', 'a'};
+  auto u16 = [&](int v) {
+    out.push_back((uint8_t) (v & 0xFF));
+    out.push_back((uint8_t) (v >> 8));
+  };
+  u16(w);
+  u16(h);
+  out.insert(out.end(), {0x81, 0, 0});  // four global colors
+  for (uint32_t c : palette)
+    out.insert(out.end(), {(uint8_t) (c >> 16), (uint8_t) (c >> 8), (uint8_t) c});
+  for (const GifFrame &f : frames) {
+    out.insert(out.end(), {0x21, 0xF9, 4, (uint8_t) ((f.disposal << 2) | (f.transparent >= 0 ? 1 : 0)), 10, 0,
+                           (uint8_t) (f.transparent >= 0 ? f.transparent : 0), 0});
+    out.push_back(0x2C);
+    u16(f.x);
+    u16(f.y);
+    u16(f.w);
+    u16(f.h);
+    out.push_back(f.interlaced ? 0x40 : 0);
+    // Rows in the order the file stores them.
+    std::vector<int> rows;
+    if (f.interlaced) {
+      const int start[4] = {0, 4, 2, 1}, step[4] = {8, 8, 4, 2};
+      for (int pass = 0; pass < 4; pass++)
+        for (int r = start[pass]; r < f.h; r += step[pass])
+          rows.push_back(r);
+    } else {
+      for (int r = 0; r < f.h; r++)
+        rows.push_back(r);
+    }
+    std::vector<int> codes = {4};  // clear
+    int run = 0;
+    for (int r : rows)
+      for (int x = 0; x < f.w; x++) {
+        if (run == 2) {
+          codes.push_back(4);
+          run = 0;
+        }
+        codes.push_back(f.px[(size_t) r * f.w + x]);
+        run++;
+      }
+    codes.push_back(5);  // end
+    std::vector<uint8_t> data;
+    uint32_t bits = 0;
+    int nbits = 0;
+    for (int c : codes) {
+      bits |= (uint32_t) c << nbits;
+      nbits += 3;
+      while (nbits >= 8) {
+        data.push_back((uint8_t) bits);
+        bits >>= 8;
+        nbits -= 8;
+      }
+    }
+    if (nbits > 0)
+      data.push_back((uint8_t) bits);
+    out.push_back(2);  // the LZW minimum code size
+    for (size_t i = 0; i < data.size(); i += 255) {
+      size_t n = std::min<size_t>(255, data.size() - i);
+      out.push_back((uint8_t) n);
+      out.insert(out.end(), data.begin() + i, data.begin() + i + n);
+    }
+    out.push_back(0);
+  }
+  out.push_back(0x3B);
+  return out;
+}
+
+static const uint32_t kPalette[4] = {0x000000, 0xFF0000, 0x00FF00, 0x0000FF};
+static const uint16_t kRgb565[4] = {0x0000, 0xF800, 0x07E0, 0x001F};
+
+static GifFrame solid(int x, int y, int w, int h, uint8_t color, int disposal) {
+  return {x, y, w, h, disposal, -1, false, std::vector<uint8_t>((size_t) w * h, color)};
+}
+
 static void test_gif_noise() {
-  // Interlaced, 256 colors, the code size growing to 12 bits. Its frames
-  // matched Pillow's pixel for pixel when this test was written.
+  // 256 colors, the code size growing to 12 bits. Its frames matched
+  // Pillow's pixel for pixel when this test was written.
   std::vector<uint8_t> d = load("noise.gif");
   GifPlayer g;
   CHECK(g.open(d.data(), d.size()));
@@ -97,11 +184,114 @@ static void test_gif_transparent_still() {
   std::vector<uint8_t> d = load("still.gif");
   GifPlayer g;
   CHECK(g.open(d.data(), d.size()));
-  std::vector<uint16_t> c(40 * 30, 0);
+  // The canvas starts blue here, so a transparent pixel that was drawn
+  // black shows.
+  std::vector<uint16_t> c(40 * 30, 0x001F);
   CHECK(g.next(c.data()) == (int32_t) kGifDefaultDelayMs);  // no delay given
-  CHECK(c[0] == 0);                                         // transparent: black
+  CHECK(c[0] == 0x001F);                                    // transparent: left as it was
   CHECK(c[10 * 40 + 10] == 0xFFE0);                         // yellow
-  CHECK(c[25 * 40 + 35] == 0);
+  CHECK(c[25 * 40 + 35] == 0x001F);
+}
+
+// A transparent pixel shows the frame before it, whichever color index is
+// the transparent one; the other indexes, black among them, draw.
+static void test_gif_transparency_over_a_frame() {
+  for (int t : {0, 3}) {
+    GifFrame over{0, 0, 8, 4, 1, t, false, {}};
+    for (int i = 0; i < 32; i++)
+      over.px.push_back(i % 2 ? (uint8_t) 2 : (uint8_t) t);
+    over.px[1] = t == 0 ? 3 : 0;  // the one color that isn't transparent or green
+    std::vector<uint8_t> d = make_gif(8, 4, kPalette, {solid(0, 0, 8, 4, 1, 1), over});
+    GifPlayer g;
+    CHECK(g.open(d.data(), d.size()));
+    std::vector<uint16_t> c(8 * 4, 0);
+    CHECK(g.next(c.data()) == 100);
+    CHECK(c[0] == 0xF800 && c[31] == 0xF800);
+    CHECK(g.next(c.data()) == 100);
+    int red = 0, green = 0;
+    for (int i = 0; i < 32; i++) {
+      red += c[i] == 0xF800 && i % 2 == 0;
+      green += c[i] == 0x07E0 && i % 2 == 1;
+    }
+    CHECK(red == 16);
+    CHECK(green == 15);
+    CHECK(c[1] == kRgb565[t == 0 ? 3 : 0]);
+  }
+}
+
+// What a frame's disposal leaves for the next one: 1 keeps it, 2 clears its
+// area to black, 3 puts back what was under it. Only its own area changes.
+static void test_gif_disposal_modes() {
+  const uint16_t want[4] = {0x07E0, 0x07E0, 0x0000, 0xF800};
+  for (int disposal = 1; disposal <= 3; disposal++) {
+    std::vector<uint8_t> d =
+        make_gif(8, 4, kPalette, {solid(0, 0, 8, 4, 1, 1), solid(2, 1, 3, 2, 2, disposal), solid(7, 3, 1, 1, 3, 1)});
+    GifPlayer g;
+    CHECK(g.open(d.data(), d.size()));
+    std::vector<uint16_t> c(8 * 4, 0);
+    CHECK(g.next(c.data()) == 100);
+    CHECK(g.next(c.data()) == 100);
+    CHECK(c[1 * 8 + 2] == 0x07E0 && c[2 * 8 + 4] == 0x07E0);
+    CHECK(g.next(c.data()) == 100);
+    for (int y = 0; y < 4; y++)
+      for (int x = 0; x < 8; x++) {
+        bool box = x >= 2 && x < 5 && y >= 1 && y < 3;
+        uint16_t expect = box ? want[disposal] : (x == 7 && y == 3) ? 0x001F : 0xF800;
+        if (c[(size_t) y * 8 + x] != expect) {
+          printf("FAIL disposal %d: pixel %d,%d is %04x, expected %04x\n", disposal, x, y, c[(size_t) y * 8 + x],
+                 expect);
+          failures++;
+        }
+        checks++;
+      }
+  }
+}
+
+// An interlaced frame's rows land where they belong, at every height the
+// four passes can end on, and in a frame that starts below the top.
+static void test_gif_interlaced() {
+  for (int h = 1; h <= 17; h++) {
+    // Each row's three pixels spell its number in base 4, so no two rows match.
+    std::vector<uint8_t> px;
+    for (int r = 0; r < h; r++)
+      for (int x = 0; x < 3; x++)
+        px.push_back((uint8_t) ((r >> (2 * x)) & 3));
+    for (int y0 : {0, 3}) {
+      GifFrame f{0, y0, 3, h, 0, -1, true, px};
+      std::vector<uint8_t> d = make_gif(3, h + y0, kPalette, {f});
+      GifPlayer g;
+      CHECK(g.open(d.data(), d.size()));
+      std::vector<uint16_t> c((size_t) 3 * (h + y0), 0);
+      CHECK(g.next(c.data()) == 100);
+      bool same = true;
+      for (int r = 0; r < h; r++)
+        for (int x = 0; x < 3; x++)
+          same = same && c[(size_t) (y0 + r) * 3 + x] == kRgb565[px[(size_t) r * 3 + x]];
+      if (!same)
+        printf("FAIL interlaced frame %d rows high at row %d: rows out of place\n", h, y0);
+      failures += !same;
+      checks++;
+    }
+  }
+}
+
+static void test_gif_trailing_control() {
+  // One white pixel with no control block of its own, and a control block
+  // after it (a 5 s delay, color 0 transparent) that belongs to no frame.
+  const uint8_t gif[] = {'G',  'I',  'F',  '8',  '9',  'a',  1,    0,    1,    0,    0x80, 0,    0,
+                         0xFF, 0xFF, 0xFF, 0,    0,    0,    0x2C, 0,    0,    0,    0,    1,    0,
+                         1,    0,    0,    2,    2,    0x44, 0x01, 0,    0x21, 0xF9, 4,    1,    0xF4,
+                         1,    0,    0,    0x3B};
+  GifPlayer g;
+  CHECK(g.open(gif, sizeof gif));
+  uint16_t c = 0;
+  CHECK(g.next(&c) == (int32_t) kGifDefaultDelayMs);
+  CHECK(c == 0xFFFF);
+  // Round again: the stray block doesn't carry over to the first frame.
+  c = 0;
+  CHECK(g.next(&c) == (int32_t) kGifDefaultDelayMs);
+  CHECK(g.looped());
+  CHECK(c == 0xFFFF);
 }
 
 static void test_gif_broken() {
@@ -210,6 +400,10 @@ int main() {
   test_gif_noise();
   test_gif_disposal();
   test_gif_transparent_still();
+  test_gif_transparency_over_a_frame();
+  test_gif_disposal_modes();
+  test_gif_interlaced();
+  test_gif_trailing_control();
   test_gif_broken();
   test_check();
   test_turns();

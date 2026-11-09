@@ -9,14 +9,15 @@ is the short version.
 
 ## Layout
 
-- `firmware/gameday.yaml` (MoonHub75 pinout) and
-  `firmware/gameday-scoreboard75.yaml` (the early scoreboard75 test boards) are the two
-  release builds. Each only names itself and picks a pin map from
-  `firmware/controllers/`; everything else is in
-  `firmware/gameday-common.yaml`. `firmware/gameday-2panel.yaml` is
-  gameday.yaml booting two panels wide, offered by the installer.
-  `firmware/gameday-waveshare.yaml` is the Waveshare ESP32-S3 RGB Matrix
-  build: CI builds it, the installer doesn't offer it yet.
+- `firmware/gameday-waveshare.yaml` (the Waveshare ESP32-S3-RGB-Matrix,
+  the board ready-made scoreboards ship on), `firmware/gameday.yaml`
+  (MoonHub75 pinout, for DIY boards) and `firmware/gameday-scoreboard75.yaml`
+  (the early scoreboard75 test boards) are the three release builds. Each
+  only names itself and picks a pin map from `firmware/controllers/`;
+  everything else is in `firmware/gameday-common.yaml`.
+  `firmware/gameday-2panel.yaml` is gameday.yaml booting two panels wide.
+  The installer offers the Waveshare and both MoonHub75 builds; the
+  Waveshare build hasn't run on hardware yet.
   `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.
@@ -126,6 +127,6 @@ is the short version.
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
   `firmware/` or `components/` without one, unless the PR description
   has a line `No owner-visible change, no docs: <why>` (the reviewer checks
-  that claim). Describe behavior `main` doesn't have yet in a
-  `:::note[Coming in the next release]` aside. `npm run build` in
-  `docs/wiki` must pass.
+  that claim). Describe the behavior as it is on `dev`, in the present
+  tense: the docs site publishes from `main`, so the page goes live with
+  the release. `npm run build` in `docs/wiki` must pass.
