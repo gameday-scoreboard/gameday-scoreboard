@@ -160,11 +160,13 @@ The panel fills the screen with a splash when someone scores, in the scoring tea
 
 A **Celebrations** choice sets how big the show is:
 
-- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds. With **Big plays** on, a dunk, an alley-oop, a grand slam or a walk-off gets a pixel-art scene of its own too (see [Basketball](/using/basketball/#big-plays) and [Baseball](/using/baseball/#big-plays)).
+- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 
-**Big plays**, on by default, turns those big-play scenes on or off. Off, every score and the win keep their show; only the big plays go. They show only on **Full**.
+:::note[Coming in the next release]
+**Big plays**, on by default, gives a basketball dunk or alley-oop, or a baseball grand slam or walk-off, a pixel-art scene of its own on **Full** (see [Basketball](/using/basketball/) and [Baseball](/using/baseball/#big-plays)). Off, every score and the win keep their show; only the big plays go.
+:::
 
 The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side": the first team's scores always get the full show in its colors, and with **Opponent scores too** on the second team's do too.
 

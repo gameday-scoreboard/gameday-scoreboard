@@ -1474,6 +1474,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   // one for the comparisons below instead of a 1.2 KB copy on the stack.
   std::swap(e.game, j.game);
   const GameSnapshot &old = j.game;
+  this->goal_holds_.update(e.game);
   // A refresh that came back with the same final backs off instead of
   // retrying every minute: six hours when the look-ahead found no game in the
   // coming days, 15 minutes when a read failed or the league does not look
@@ -3982,6 +3983,7 @@ void GamedayComponent::apply_job_() {
   }
   this->cache_unconfirmed_ = false;
   this->gone_event_.clear();
+  this->goal_holds_.update(j.game);
   this->prev_ = this->game_;
   this->game_ = j.game;
   this->mark_good_poll_();
@@ -4146,6 +4148,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.opponent_record = ::espn::soccer_board_record(g.opp_record);
   }
   if (g.valid && g.sport == ::espn::Sport::HOCKEY) {
+    // Shots on goal and the latest goal on the situation row
+    f.situation = ::espn::hockey_situation(g, this->goal_holds_.find(g.event_id));
     // "30-12-10" is a character too wide for the label under a logo.
     f.team_record = ::espn::hockey_board_record(g.team_record);
     f.opponent_record = ::espn::hockey_board_record(g.opp_record);
