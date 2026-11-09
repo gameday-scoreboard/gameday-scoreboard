@@ -1,6 +1,9 @@
 """Draws football's big plays as indexed PNGs, one a frame, at 128x64 (two
 panels) or 64x64 (one panel): the interception, the pick-six, the fumble
 and the sack. pack.py turns each folder into celeb_art_<play>_<width>.h.
+The pick six opens as the interception, so the panel stores only its end
+(pick_six_end) and plays the interception's frames first; pick_six draws
+the whole thing for contact sheets.
 
 The scene is one stadium: the stands in rows of fans, a wall, the grass in
 mown bands with leaning yard lines. Our player is a 32 px cartoon defender
@@ -11,7 +14,13 @@ scene is laid out from the board's width: the 64-wide set is the tighter
 shot of the same moment.
 
 Usage: python3 football_frames.py <play> <width> [out dir] [--sheet <png>]
-  play: interception, pick_six, fumble, sack; width: 128 or 64"""
+  play: interception, pick_six, pick_six_end, fumble, sack; width: 128 or 64
+
+The pick six's header:
+  python3 football_frames.py pick_six_end 128 frames/pick_six_end_128
+  python3 pack.py frames/pick_six_end_128 pick_six_128 12 \
+    ../../components/gameday/celeb_art_pick_six_128.h --palette football_frames \
+    --lead interception_128 36"""
 import math
 import sys
 from pathlib import Path
@@ -586,7 +595,15 @@ def sack(w, n=24):
     return out
 
 
-PLAYS = {"interception": intercept, "pick_six": pick_six, "fumble": fumble, "sack": sack}
+def pick_six_end(w):
+    """The pick six from the end zone on: what the panel stores for it. The
+    first TITLE_AT frames are the interception's own, played from its set
+    (pack.py --lead interception_<w> TITLE_AT)."""
+    return pick_six(w)[TITLE_AT:]
+
+
+PLAYS = {"interception": intercept, "pick_six": pick_six, "pick_six_end": pick_six_end, "fumble": fumble,
+         "sack": sack}
 
 
 def main():

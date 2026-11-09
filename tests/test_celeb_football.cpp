@@ -5,6 +5,7 @@
 // frames at both widths that last as long as its show. Build with `make` in
 // tests/.
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -187,7 +188,7 @@ static void test_art() {
         continue;
       CHECK_EQ((int) a->w, w);
       CHECK_EQ((int) a->h, 64);
-      CHECK_EQ((uint32_t) a->frames * 1000u / a->fps, pl.ms);
+      CHECK_EQ((uint32_t) a->total_frames() * 1000u / a->fps, pl.ms);
       // Every frame decodes to exactly the board's pixels: no run runs past
       // the end, none stops short.
       for (int n = 0; n < a->frames; n++) {
@@ -210,12 +211,64 @@ static void test_art() {
   }
 }
 
+// The pick six stores only its end and opens with the interception's own
+// frames: the same size, fps and palette, its own frames starting whole, and
+// the player drawing exactly the interception's pixels for its first 3 s,
+// then its own, and starting over when played again.
+static void test_pick_six_lead() {
+  static CelebArtPlayer six, pick;
+  static uint16_t a[128 * 64], b[128 * 64];
+  for (int w : {128, 64}) {
+    const CelebArt *p = celeb_art_for(CelebKind::PICK_SIX, w), *i = celeb_art_for(CelebKind::INTERCEPTION, w);
+    CHECK(p != nullptr && i != nullptr && p->lead != nullptr);
+    if (!p || !i || !p->lead)
+      continue;
+    CHECK(&p->lead() == i);
+    CHECK_EQ((int) p->lead_frames, 36);
+    CHECK(p->lead_frames <= i->frames);
+    CHECK_EQ((int) p->fps, (int) i->fps);
+    CHECK(p->w == i->w && p->h == i->h);
+    bool same_palette = true;
+    for (int k = 0; k < 16; k++)
+      same_palette &= p->palette[k] == i->palette[k];
+    CHECK(same_palette);
+    // Its own first frame has no "unchanged" runs: it can't lean on the lead.
+    bool keeps = false;
+    for (const uint8_t *q = p->data; q < p->data + p->offsets[1]; q++) {
+      keeps |= (*q >> 4) == kArtKeep;
+      if ((*q & 0x0F) == 15)
+        q++;
+    }
+    CHECK(!keeps);
+    six.reset();
+    pick.reset();
+    int lead_same = 0, own_differs = 0;
+    for (int n = 0; n < p->total_frames(); n++) {
+      const float t = (n + 0.5f) / p->fps;
+      six.render(a, w, 64, w, *p, t, 0x00338D, 0xFFFFFF, 1.0f);
+      if (n < p->lead_frames) {
+        pick.render(b, w, 64, w, *i, t, 0x00338D, 0xFFFFFF, 1.0f);
+        lead_same += memcmp(a, b, sizeof(uint16_t) * w * 64) == 0;
+      } else if (memcmp(a, b, sizeof(uint16_t) * w * 64) != 0) {
+        own_differs++;  // b still holds the interception's frame 35
+      }
+    }
+    CHECK_EQ(lead_same, (int) p->lead_frames);
+    CHECK(own_differs >= p->frames - 1);
+    // Played again from the start: the interception's first frame again.
+    six.render(a, w, 64, w, *p, 0.01f, 0x00338D, 0xFFFFFF, 1.0f);
+    pick.render(b, w, 64, w, *i, 0.01f, 0x00338D, 0xFFFFFF, 1.0f);
+    CHECK(memcmp(a, b, sizeof(uint16_t) * w * 64) == 0);
+  }
+}
+
 int main() {
   test_types();
   test_recorded_plays();
   test_pick_six();
   test_other_sports_quiet();
   test_art();
+  test_pick_six_lead();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

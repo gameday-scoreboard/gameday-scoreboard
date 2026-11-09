@@ -5,7 +5,10 @@
 // indexes, run-length coded, each frame after the first only the pixels
 // that changed. The palette has slots for the team's colors, so one set of
 // frames plays in any team's colors. celeb_art_index.h picks the set for
-// the board's width. The arrays are const, so they stay in flash; the only
+// the board's width. A play that opens like another (the pick six opens as
+// the interception) stores only its own frames and names the other as its
+// lead: the lead's first lead_frames play first, then its own, which start
+// whole. The arrays are const, so they stay in flash; the only
 // RAM is the 8 KB index buffer below, inside the Celebration that already
 // lives in PSRAM.
 #pragma once
@@ -30,13 +33,20 @@ struct CelebArt {
   const uint32_t *palette;  // 16 entries
   const uint32_t *offsets;  // frames + 1 byte offsets into data
   const uint8_t *data;
+  const CelebArt &(*lead)() = nullptr;  // played first, same size, fps and palette
+  uint16_t lead_frames = 0;
+
+  int total_frames() const { return lead_frames + frames; }
 };
 
 class CelebArtPlayer {
  public:
   static constexpr int kW = 128, kH = 64;
 
-  void reset() { decoded_ = -1; }
+  void reset() {
+    decoded_ = -1;
+    seg_ = nullptr;
+  }
 
   // Draws the art's frame for t seconds in, centered on the board.
   // px is the fw x fh RGB565 frame, stride pixels a row.
@@ -47,18 +57,29 @@ class CelebArtPlayer {
     if (art.w > kW || art.h > kH || art.frames == 0)
       return;
     int target = (int) (t * art.fps);
-    if (target >= art.frames)
-      target = art.frames - 1;
+    if (target >= art.total_frames())
+      target = art.total_frames() - 1;
     if (target < 0)
       target = 0;
-    if (target < decoded_)
+    // The lead's frames first, then this art's own.
+    const CelebArt *seg = &art;
+    if (art.lead != nullptr && target < art.lead_frames) {
+      seg = &art.lead();
+      if (seg->w != art.w || seg->h != art.h || seg->frames < art.lead_frames)
+        return;
+    } else {
+      target -= art.lead_frames;
+    }
+    if (seg != seg_ || target < decoded_) {
+      seg_ = seg;
       decoded_ = -1;
+    }
     while (decoded_ < target)
-      decode_(art, ++decoded_);
+      decode_(*seg, ++decoded_);
     uint16_t pal[16];
     const int k = (int) (fade * 256);
     for (int i = 0; i < 16; i++)
-      pal[i] = to565_(scale_(resolve_(art.palette[i], team, alt), k));
+      pal[i] = to565_(scale_(resolve_(seg->palette[i], team, alt), k));
     const int x0 = (fw - art.w) / 2, y0 = (fh - art.h) / 2;
     for (int y = 0; y < art.h; y++) {
       const int fy = y + y0;
@@ -74,6 +95,7 @@ class CelebArtPlayer {
     }
   }
 
+  // The frame last decoded, counted in its own set (the lead's or the art's).
   int frame() const { return decoded_; }
 
  private:
@@ -136,6 +158,7 @@ class CelebArtPlayer {
 
   uint8_t buf_[kW * kH]{};
   int decoded_{-1};
+  const CelebArt *seg_{nullptr};  // the set decoded_ counts in
 };
 
 }  // namespace espn
