@@ -54,7 +54,10 @@ contributors; read it too.
   firmware/gameday-common.yaml to the release it would ship as
   (`YYYY.M.patch`, this month) and folds `## Unreleased` into that
   version's CHANGELOG section with its summary line (after checking
-  `git log` since the last tag for merged changes with no bullet). So
+  `git log` since the last tag for merged changes with no bullet). The
+  prep also tightens the section so an owner can read it in a minute:
+  bullets about the same thing become one line, and a bullet only a
+  handful of owners could ever hit moves to its docs page. So
   shipping is one `beta` to `main` PR: its merge runs tag.yml, which tags
   `main`'s version and starts the release. If the month has turned since,
   the prep moves to the new month first. Promotions to `beta` happen when

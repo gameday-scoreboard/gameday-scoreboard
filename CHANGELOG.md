@@ -9,8 +9,10 @@ Format: `## vX.Y.Z` heading, one plain summary line, then the changes
 grouped under `### ⚠️ Heads up` (anything an owner has to do or notice),
 `### ✨ New` and `### 🐛 Fixes`, leaving out a group with nothing in it. One
 short line per change, written for the person who owns the panel, not for
-the code, starting with an emoji that fits it. The detail goes on the docs
-page that describes it, not here.
+the code, starting with an emoji that fits it. Name a setting or screen by
+its label on the device page or in the docs, never by a Home Assistant or
+code name. A change no owner would see (factory test screens, internals)
+gets no line. The detail goes on the docs page that describes it, not here.
 
 Changes merged since the last release go under `## Unreleased` at the top.
 The release renames that heading to the new version. A released section
