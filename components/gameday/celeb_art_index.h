@@ -8,6 +8,8 @@
 #include "celeb_art_alley_oop_64.h"
 #include "celeb_art_dunk_128.h"
 #include "celeb_art_dunk_64.h"
+#include "celeb_art_hattrick_128.h"
+#include "celeb_art_hattrick_64.h"
 #include "celeb_art_grand_slam_128.h"
 #include "celeb_art_grand_slam_64.h"
 #include "celeb_art_walk_off_128.h"
@@ -25,6 +27,8 @@ inline const CelebArt *celeb_art_for(CelebKind k, int w) {
       return wide ? &celeb_art_dunk_128() : &celeb_art_dunk_64();
     case CelebKind::ALLEY_OOP:
       return wide ? &celeb_art_alley_oop_128() : &celeb_art_alley_oop_64();
+    case CelebKind::HAT_TRICK:
+      return wide ? &celeb_art_hattrick_128() : &celeb_art_hattrick_64();
     case CelebKind::GRAND_SLAM:
       return wide ? &celeb_art_grand_slam_128() : &celeb_art_grand_slam_64();
     case CelebKind::WALK_OFF:
