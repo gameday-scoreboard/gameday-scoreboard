@@ -20,16 +20,18 @@ inline int baseball_runners_scored(const std::string &text) {
 
 // A grand slam in this read: a home run worth four. ESPN puts 4 in the play's
 // scoreValue, on the play's result ("Play Result", the words) and in some
-// games on the batter's closing row too, which has no words. With no value,
-// the words count the runners. The side's runs went up by four or more since
-// the last read, so the next batter's read never shows it again.
+// games on the batter's closing row too, which has no words. A play worth
+// four whose words aren't a home run (a bases-loaded hit and an error) is
+// four runs, not a slam. With no value, the words count the runners. The
+// side's runs went up by four or more since the last read, so the next
+// batter's read never shows it again.
 inline bool baseball_grand_slam(const GameSnapshot &prev, const GameSnapshot &cur, bool ours) {
   const int runs = ours ? cur.team_score - prev.team_score : cur.opp_score - prev.opp_score;
   const int other = ours ? cur.opp_score - prev.opp_score : cur.team_score - prev.team_score;
   if (runs < 4 || other != 0)
     return false;
   if (cur.play_value == 4)
-    return true;
+    return cur.last_play.empty() || baseball_home_run(cur);
   return cur.play_value == 0 && baseball_home_run(cur) && baseball_runners_scored(cur.last_play) == 3;
 }
 

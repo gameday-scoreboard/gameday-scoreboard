@@ -49,6 +49,19 @@ At full time a win gets a victory splash with fireworks, your abbreviation and "
 
 With **Celebrations** on **Full**, your goal ripples the net: the board becomes the back of the goal, the strands roll outward from where the ball hit and sparks fly in your club's colors under "GOAL!", for 4.5 seconds. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's goals are a dim 2-second flash. **Subtle** keeps every goal to the quick flash; **Off** shows no splash at all.
 
+:::note[Coming in the next release]
+**Big plays.** With **Celebrations** on **Full** and **Big plays** on, some goals get their own 5-second pixel-art show in your club's colors in place of the plain net ripple:
+
+- **BRACE!** A player's second goal of the match: the ball hits the net and it ripples, then the scorer's name, like "SAKA", with two balls bouncing in under it.
+- **HAT TRICK!** That player's third: the same, with three balls.
+- **PENALTY!** A penalty kick scored in the match (not the shootout): the ball on the spot, the keeper dives the wrong way, and the ball hits the other corner.
+- **LATE GOAL!** A goal from the 85th minute on that puts you ahead (or in the last five minutes of extra time): the net ripples, then the minute, like "89'", flashing in a clock ring.
+
+When a goal is more than one of these, the rarest wins: a hat trick, then a late goal, then a brace, then a penalty. An own goal never counts toward a player's brace. On a single 64x64 panel each show is drawn to fit: the titles split over two lines and a long name shows smaller or by its last word.
+
+They show for your club's goals. The other side's big plays get the same dim flash as their other goals, and in **Live games**, where neither side is yours, the first club's show in its colors and the second club's do too with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** to keep every goal to the net ripple; **Subtle** and **Off** never show them.
+:::
+
 ## Full time
 
 The clock row says "FT", "AET" after extra time, or "PENS" after a shootout. The ticker says "Full time", "After extra time" or who won on penalties, like "PSG win 4-3 on penalties", then the cup stage, the goals, any red cards and both records. With **Last play** on, it also adds ESPN's headline for the match when it has one. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for half an hour, then the panel looks up the next match.

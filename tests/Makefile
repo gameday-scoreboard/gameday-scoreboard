@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_brand build/test_plate_wall
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_brand build/test_plate_wall
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -22,6 +22,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_celeb_football
 	./build/test_celeb_hockey
 	./build/test_celeb_baseball
+	./build/test_celeb_soccer
 	./build/test_brand
 	./build/test_plate_wall
 
@@ -53,6 +54,12 @@ build/test_celeb_hockey: test_celeb_hockey.cpp $(PARSER_ONLY) $(wildcard ../comp
 build/test_celeb_baseball: test_celeb_baseball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_celeb_baseball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Soccer's big plays (celeb_soccer.h) over recorded goals, and their
+# caption over the art (celeb_caption.h).
+build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 # Not part of `all`: renders every celebration to raw RGB565 frames for
 # render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.

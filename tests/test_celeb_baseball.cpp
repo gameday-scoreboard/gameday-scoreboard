@@ -7,6 +7,9 @@
 //                            game 1, NYY at LAD, bottom 10th
 //   event_mlb_walkoff*       Marte's two-run walk-off single, TOR at CIN,
 //                            9/1/2025, bottom 9th
+//   event_mlb_triple_error*  Reynolds' bases-loaded triple and an error,
+//                            four runs and no home run, CHW at PIT,
+//                            4/7/2023, bottom 5th
 // The *_final fixtures are the recorded final reads as they are.
 // Build with `make` in tests/.
 #include <cstdio>
@@ -70,7 +73,8 @@ static CelebPlan first_show(const GameSnapshot &a, const GameSnapshot &b, bool n
   return walk.kind == CelebKind::NONE ? p : walk;
 }
 
-constexpr uint32_t kMets = 21, kTigers = 6, kDodgers = 19, kYankees = 10, kReds = 17, kJays = 14, kRays = 30;
+constexpr uint32_t kMets = 21, kTigers = 6, kDodgers = 19, kYankees = 10, kReds = 17, kJays = 14, kRays = 30, kPirates = 23,
+                   kWhiteSox = 4;
 
 static void test_runners() {
   CHECK_EQ(baseball_runners_scored("J. Soto homered to right center (419 feet), McNeil scored, Mullins scored and "
@@ -223,6 +227,38 @@ static void test_walk_off_single() {
   CHECK(first_show(a, other).kind != CelebKind::WALK_OFF);
 }
 
+// Four runs on one play that isn't a home run: Reynolds' bases-loaded triple
+// and a throwing error, CHW at PIT, 4/7/2023, bottom 5th, PIT 8-7 to 12-7.
+// ESPN gives the play 4, on its Play Result and on the Error row it posts
+// just before; both are the runs' sweep, not the slam.
+static void test_four_runs_not_a_slam() {
+  GameSnapshot a = read("event_mlb_triple_error_before", kPirates);
+  GameSnapshot b = read("event_mlb_triple_error", kPirates);
+  GameSnapshot row = read("event_mlb_triple_error_row", kPirates);
+  CHECK(a.state == GameState::IN && b.state == GameState::IN);
+  CHECK(a.team_home && a.period == 5);
+  CHECK_EQ(b.play_value, 4);
+  CHECK_EQ(row.play_value, 4);
+  CHECK(!baseball_home_run(b) && !baseball_home_run(row));
+  CelebPlan p = plan(a, b);
+  CHECK(p.kind == CelebKind::WAVE);
+  CHECK_EQ(p.text, "4 RUNS!");
+  CelebPlan r = plan(a, row);
+  CHECK(r.kind == CelebKind::WAVE);
+  CHECK_EQ(r.text, "4 RUNS!");
+  // The White Sox side on a neutral board with Opponent scores too on.
+  GameSnapshot wa = read("event_mlb_triple_error_before", kWhiteSox);
+  GameSnapshot wb = read("event_mlb_triple_error", kWhiteSox);
+  CHECK(plan(wa, wb, CelebLevel::FULL, true).kind != CelebKind::GRAND_SLAM);
+
+  // ESPN's older rows (2023 and 2024 seasons) put the slam on the pitch:
+  // type Home Run, words "Pitch 2 : Ball In Play", value 4. Still the slam.
+  GameSnapshot s0 = read("event_mlb_slam_before", kMets), s1 = read("event_mlb_slam", kMets);
+  s1.mlb.play_type = "Home Run";
+  s1.last_play = "Pitch 2 : Ball In Play";
+  CHECK(plan(s0, s1).kind == CelebKind::GRAND_SLAM);
+}
+
 // A slam in the bottom of the 9th that only ties: the slam, the game goes on.
 static void test_slam_that_ties() {
   GameSnapshot a = read("event_mlb_walkoff_slam_before", kDodgers);
@@ -237,6 +273,7 @@ int main() {
   test_walk_off_slam();
   test_walk_off_single();
   test_slam_that_ties();
+  test_four_runs_not_a_slam();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
