@@ -80,14 +80,22 @@ is the short version.
   `tests/build/fuzz_espn` (or `fuzz_set`) to replay it, and add a host test
   with the fix.
 - Size budget: CI's "Size budget" job checks each build's flash (the OTA
-  image) and static internal RAM (from the ELF), and the memory each ESPN
+  image), static internal RAM and ELF sections, and the memory each ESPN
   read takes on the host (`make -C tests heap`, `tests/heap_budget.cpp`),
-  against `firmware/budget.json`. A PR fails when a figure goes over its
-  budget, or (into `dev`) grows more than the file's `max_growth` against
-  dev's last build; the job summary has the table. A change that needs
-  more raises that one entry in the same PR and says why.
-  `python3 scripts/size_budget.py seed <sizes folder>` prints figures with
-  10% headroom (at least 1 KB).
+  against `firmware/budget.json` (its `about` text has the rules). Flash
+  fails over 90% of the build's OTA slot, and needs the repo owner's
+  approval past the per-release allowance or when one PR adds more than
+  32 KB. Static internal RAM and heap have tight caps: going over fails,
+  and raising a cap in budget.json (with the reason in `about`) needs the
+  owner's approval. JSON documents fail only when one grows more than
+  `max_growth.json` against dev's last build. The job summary has the
+  tables, room left in the OTA slot and the section diff; the
+  `budget-report` artifact has the same figures as JSON.
+  `python3 scripts/size_budget.py seed <sizes folder>` prints caps with
+  10% headroom (at least 1 KB); `release-baseline <sizes folder> <tag>`
+  resets the release block when a release is cut; CI checks that the new
+  tag is a later release tag and that the baseline matches what its Build
+  run measured.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run
