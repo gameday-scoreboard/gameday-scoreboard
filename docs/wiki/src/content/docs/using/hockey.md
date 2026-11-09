@@ -44,6 +44,18 @@ When your team wins, a victory splash with fireworks says your abbreviation and 
 
 With **Celebrations** on **Full**, your goal lights the goal lamp: a red beam spins from the middle of the board, the red glow pulses and the frame flashes, with "GOAL!" in white, for 4.5 seconds. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's goals are a dim 2-second flash. **Subtle** keeps every goal to the quick flash; **Off** shows no splash at all.
 
+### Big plays
+
+:::note[Coming in the next release]
+With **Celebrations** on **Full** and **Big plays** on (the default), a **hat trick**, one player's third goal of the game, gets a pixel-art show in your team's colors in place of the plain goal lamp: the lamp spins, "HAT TRICK!" drops in letter by letter and hats rain down onto the ice. 4.5 seconds.
+
+Your team's hat tricks show; in the Live games mode either team's do, the second team's only with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** on the device page to keep the plain goal lamp. On **Subtle** the goal flashes like any other.
+
+The panel counts goals from ESPN's goal count for each player during the game, so it can miss a hat trick when it started showing the game after the player's second goal, but it never shows one that isn't. When ESPN's count catches up a read after the goal, the goal lamp plays first and the hat trick on the next read, about 10 seconds later.
+
+Power play and shorthanded goals get the plain goal lamp: ESPN's live game data doesn't say which goals they are.
+:::
+
 ## The playoff series
 
 In the playoffs the series, like "CAR leads series 2-0", is in the ticker before the game, and takes the records' place during intermissions and at the final. It isn't on the board itself.
