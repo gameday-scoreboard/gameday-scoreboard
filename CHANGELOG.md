@@ -32,25 +32,21 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
-## Unreleased
+## v2026.11.2
+
+Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.
 
 ### ✨ New
 
-- 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
-- 🍻 Bar panels show the plate list as a plate wall, one member a page with their quote, throw a plate party for each new plate, and count down to the bar's next event
-- 🍺 Panels in bars run the bar build of each release, and install it on their own overnight
-- 🏀 Basketball's row under the clock takes turns with the last basket, each team's points leader, the playoff series and the win chance in words, in place of the score margin chart
-- 🏈 Football's field strip takes turns with the win chance in words, like "ND 84% to win", in place of the thin win chance bar
-- 🏀 Your team's dunks and alley-oops get their own pixel-art scenes on Full celebrations, with a Big plays switch to turn them off
-- 🏈 Your defense's interceptions, pick sixes, fumble recoveries and sacks get their own pixel-art scenes on Full celebrations, behind the same Big plays switch
-- ⚾ Your team's grand slams and walk-offs get their own pixel-art scenes on Full celebrations with Big plays on, and a walk-off plays before the win screen
-- ⚽ Your club's braces, hat tricks, penalties and late go-ahead goals get their own pixel-art scenes on Full celebrations with Big plays on, with the scorer's name and the minute
+- 🎆 On **Full** celebrations your team's big plays get their own pixel-art scene: dunks and alley-oops, interceptions, pick sixes, fumbles and sacks, grand slams and walk-offs, hockey hat tricks, and soccer braces, hat tricks, penalties and late go-ahead goals, with a **Big plays** switch to turn them off
+- 🔤 On a wide board the row under the clock reads in words in place of the score margin chart and the win chance bar: the win chance ("ND 84% to win") in football and basketball, the last basket, points leaders and playoff series in basketball, shots on goal and the latest goal in hockey
+- 📋 Each league tab in the team chooser starts with that league's games today, so you can add a team from its game
+- 🍺 Bar panels take the bar's logo, colors, club name and plate list from one brand file, show the plates as a plate wall with a party for each new one and a countdown to the next event, and install each release on their own overnight
 
 ### 🐛 Fixes
 
-- 🎉 Live games with **Pick the best game** off no longer misses the splash for a score that lands just as **Switch every** comes around on the only game on
 - 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation in its team color instead of an empty space
-- ⭐ A favorite you add shows within a few seconds, even when you take another favorite out right after or switch modes just before, instead of leaving the board empty for about a minute
+- ⭐ A favorite you add shows within a few seconds instead of leaving the board empty for about a minute
 
 ## v2026.11.1
 

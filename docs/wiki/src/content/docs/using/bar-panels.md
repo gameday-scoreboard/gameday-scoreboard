@@ -5,10 +5,6 @@ sidebar:
   order: 13.5
 ---
 
-:::note[Coming in the next release]
-Everything on this page arrives with the next release. Until then, bar panels run beta versions, and the device page calls the build **Bar beta**.
-:::
-
 Panels in bars and restaurants run the **bar build**. It's the same scoreboard firmware every panel runs, with the same releases on the same day, plus a few things for a panel nobody on staff should have to look after.
 
 ## Getting the bar build

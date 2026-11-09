@@ -52,7 +52,6 @@ With **Celebrations** on **Full**, a home run shows the ball arcing up and out o
 
 ### Big plays
 
-:::note[Coming in the next release]
 Two plays get their own pixel-art show in your team's colors, drawn for a 128x64 board and for a single 64x64 panel:
 
 - **Grand slam**: a home run with the bases loaded. The batter swings, the ball sails out over the right-center wall, all four runners come around to score while fireworks go off, and "GRAND SLAM!" drops in. 5 seconds, in place of the home run's show.
@@ -61,7 +60,6 @@ Two plays get their own pixel-art show in your team's colors, drawn for a 128x64
 They play only with **Celebrations** on **Full** and **Big plays** on, and only for your team's plays. In the Live games mode the second team's big plays show too when **Opponent scores too** is on. With **Celebrations** on **Subtle** a grand slam still gets the home run's quick flash.
 
 The panel sees a grand slam from ESPN's score for the play or its description; once in a while ESPN's update lands on the next batter instead, and the grand slam shows as four runs. Four runs on a play that isn't a home run, like a bases-loaded triple and an error, get the runs' sweep, not the grand slam.
-:::
 
 ## The final
 
