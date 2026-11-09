@@ -14,8 +14,11 @@ its label on the device page or in the docs, never by a Home Assistant or
 code name. A change no owner would see (factory test screens, internals)
 gets no line. The detail goes on the docs page that describes it, not here.
 
-Changes merged since the last release go under `## Unreleased` at the top.
-The release renames that heading to the new version. A released section
+Changes merged since the last release go under `## Unreleased` at the top,
+already in the released shape: the summary line, then the groups. A change
+to a feature that already has a line updates that line. The release
+renames that heading to the new version (scripts/promote.py) and changes
+nothing else. A released section
 stays as it shipped: a change to something it describes is a new bullet
 under `## Unreleased`.
 
