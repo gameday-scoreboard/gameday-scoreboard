@@ -59,7 +59,7 @@ With **Celebrations** on **Full**, your goal ripples the net: the board becomes 
 
 When a goal is more than one of these, the rarest wins: a hat trick, then a late goal, then a brace, then a penalty. An own goal never counts toward a player's brace. On a single 64x64 panel each show is drawn to fit: the titles split over two lines and a long name shows smaller or by its last word.
 
-They show for your club's goals. The other side's big plays get the same dim flash as their other goals, and in **Live games**, where neither side is yours, both sides' show in their own colors. Turn **Big plays** off under **Celebrations** to keep every goal to the net ripple; **Subtle** and **Off** never show them.
+They show for your club's goals. The other side's big plays get the same dim flash as their other goals, and in **Live games**, where neither side is yours, the first club's show in its colors and the second club's do too with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** to keep every goal to the net ripple; **Subtle** and **Off** never show them.
 :::
 
 ## Full time
