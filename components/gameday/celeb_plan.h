@@ -47,6 +47,10 @@ enum class CelebKind : uint8_t {
   HAT_TRICK,  // hockey: the goal lamp, then hats rain down onto the ice
   GRAND_SLAM,  // baseball: the ball sails out, four runners cross the plate, a bigger burst
   WALK_OFF,    // baseball: the team's color floods up from the bottom, the dugout empties; the win follows
+  BRACE,      // soccer, a scorer's second goal: the net ripples, the name, two balls
+  SOCCER_HAT_TRICK,  // soccer, the same player's third: three balls
+  PENALTY,    // soccer: the ball on the spot, the keeper dives the wrong way
+  LATE_GOAL,  // soccer, a go-ahead goal from 85': the net ripples, the minute flashes
 };
 
 inline bool celeb_animated(CelebKind k) { return k >= CelebKind::TOUCHDOWN; }
