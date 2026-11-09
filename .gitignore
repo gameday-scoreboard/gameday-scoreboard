@@ -20,3 +20,6 @@ docs/wiki/node_modules/
 docs/wiki/dist/
 docs/wiki/.astro/
 docs/wiki/src/content/docs/changelog.md
+
+# tools/celeb_art: the frames scripts' PNGs and contact sheets
+tools/celeb_art/frames/

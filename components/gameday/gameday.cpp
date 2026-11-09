@@ -4192,9 +4192,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     neutral = false;
 #endif
   ::espn::CelebPlan celeb = ::espn::decide_celebration(this->prev_, g, splash, this->celebrations(), neutral,
-                                                       this->opponent_splashes());
-  // Only a fresh read shows a three; this emit_ also runs for redraws.
-  if (celeb.kind == ::espn::CelebKind::THREE && !this->celeb_latch_.take(g))
+                                                       this->opponent_splashes(), this->big_plays());
+  // Only a fresh read shows a three or a big play; this emit_ also runs for redraws.
+  if (::espn::celeb_latched(celeb.kind) && !this->celeb_latch_.take(g))
     celeb = ::espn::CelebPlan{};
   f.splash_text = celeb.kind == ::espn::CelebKind::NONE ? std::string() : celeb.text;
   f.splash_color = celeb.color;
@@ -5443,6 +5443,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["spark"] = false;
   doc["opp"] = this->opponent_splashes();
   doc["celebrate"] = (int) this->celebrations();
+  doc["bigplays"] = this->big_plays();
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
   doc["countdown"] = this->countdown_on();
@@ -7846,6 +7847,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         break;
       case ::espn::SetKind::OPP:
         this->set_opponent_splashes(op.on);
+        break;
+      case ::espn::SetKind::BIGPLAYS:
+        this->set_big_plays(op.on);
         break;
       case ::espn::SetKind::CELEBRATE:
         this->set_celebrations((::espn::CelebLevel) op.value);
