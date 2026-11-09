@@ -10,6 +10,8 @@
 #include "celeb_art_brace_64.h"
 #include "celeb_art_dunk_128.h"
 #include "celeb_art_dunk_64.h"
+#include "celeb_art_grand_slam_128.h"
+#include "celeb_art_grand_slam_64.h"
 #include "celeb_art_hat_trick_128.h"  // soccer's
 #include "celeb_art_hat_trick_64.h"
 #include "celeb_art_hattrick_128.h"  // hockey's
@@ -18,6 +20,8 @@
 #include "celeb_art_late_goal_64.h"
 #include "celeb_art_penalty_128.h"
 #include "celeb_art_penalty_64.h"
+#include "celeb_art_walk_off_128.h"
+#include "celeb_art_walk_off_64.h"
 #include "celeb_caption.h"
 #include "celeb_plan.h"
 
@@ -34,6 +38,10 @@ inline const CelebArt *celeb_art_for(CelebKind k, int w) {
       return wide ? &celeb_art_alley_oop_128() : &celeb_art_alley_oop_64();
     case CelebKind::HAT_TRICK:
       return wide ? &celeb_art_hattrick_128() : &celeb_art_hattrick_64();
+    case CelebKind::GRAND_SLAM:
+      return wide ? &celeb_art_grand_slam_128() : &celeb_art_grand_slam_64();
+    case CelebKind::WALK_OFF:
+      return wide ? &celeb_art_walk_off_128() : &celeb_art_walk_off_64();
     case CelebKind::BRACE:
       return wide ? &celeb_art_brace_128() : &celeb_art_brace_64();
     case CelebKind::SOCCER_HAT_TRICK:

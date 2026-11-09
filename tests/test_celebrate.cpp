@@ -351,7 +351,7 @@ static void test_text_place() {
     CHECK(t.y >= 0 && t.y + 12 <= 64);
   }
   // The art draws its own title: the page's words sit off the board.
-  for (CelebKind k : {CelebKind::DUNK, CelebKind::ALLEY_OOP})
+  for (CelebKind k : {CelebKind::DUNK, CelebKind::ALLEY_OOP, CelebKind::GRAND_SLAM, CelebKind::WALK_OFF})
     for (int w : {128, 64}) {
       t = celeb_text_place(k, w, 64);
       CHECK(t.y >= 64);
@@ -369,6 +369,8 @@ static CelebPlan sample(CelebKind k) {
                   : k == CelebKind::TOUCHDOWN ? kCelebTouchdownMs
                   : k == CelebKind::DUNK      ? kCelebDunkMs
                   : k == CelebKind::ALLEY_OOP ? kCelebAlleyOopMs
+                  : k == CelebKind::GRAND_SLAM ? kCelebGrandSlamMs
+                  : k == CelebKind::WALK_OFF  ? kCelebWalkOffMs
                                               : 4500;
   return p;
 }
@@ -579,7 +581,7 @@ static void test_basketball_recorded() {
 // covering exactly one frame each, the first frame whole, and the frames
 // lasting as long as the show.
 static void test_art() {
-  for (CelebKind k : {CelebKind::DUNK, CelebKind::ALLEY_OOP}) {
+  for (CelebKind k : {CelebKind::DUNK, CelebKind::ALLEY_OOP, CelebKind::GRAND_SLAM, CelebKind::WALK_OFF}) {
     for (int w : {128, 64}) {
       const CelebArt *a = celeb_art_for(k, w);
       CHECK(a != nullptr);
