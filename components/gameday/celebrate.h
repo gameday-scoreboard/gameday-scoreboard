@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 
+#include "celeb_baseball.h"
 #include "celeb_basketball.h"
 #include "celeb_football.h"
 #include "celeb_hockey.h"
@@ -80,6 +81,9 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   if (level == CelebLevel::FULL && big_plays && live) {
     CelebPlan big;
     switch (cur.sport) {
+      case Sport::BASEBALL:
+        big = big_play_baseball(prev, cur, splash, neutral, opp_splashes);
+        break;
       case Sport::BASKETBALL:
         big = big_play_basketball(prev, cur, splash, neutral, opp_splashes);
         break;
