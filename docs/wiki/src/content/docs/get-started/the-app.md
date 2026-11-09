@@ -100,6 +100,10 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 
 Each setting has one short line saying what it does. The longer rules are on these pages.
 
+:::note[Coming in the next release]
+On Android, the **Celebrations** card also has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a dunk or an alley-oop gets its own animation, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). The switch shows once the panel runs firmware with it.
+:::
+
 On Android, **Display** has a **Live pictures** card after the ticker, with the device page's **Field strip**, **Win chance bar** and **Score margin** switches for the pictures a 128-wide board draws under the clock during a game. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
 :::note[Coming in the next release]
