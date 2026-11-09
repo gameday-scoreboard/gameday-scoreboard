@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
       {"home-run", CelebKind::HOME_RUN, "HOME RUN!", "", 0x0C2340},
       {"goal-soccer", CelebKind::GOAL_NET, "GOAL!", "", 0xEF0107},
       {"brace", CelebKind::BRACE, "BRACE!", "SAKA", 0xEF0107},
-      {"hat-trick", CelebKind::HAT_TRICK, "HAT TRICK!", "ALAN PATRICK", 0xEF0107},
+      {"hat-trick", CelebKind::SOCCER_HAT_TRICK, "HAT TRICK!", "ALAN PATRICK", 0xEF0107},
       {"penalty", CelebKind::PENALTY, "PENALTY!", "", 0xEF0107},
       {"late-goal", CelebKind::LATE_GOAL, "LATE GOAL!", "89'", 0xEF0107},
       {"goal-hockey", CelebKind::GOAL_LAMP, "GOAL!", "", 0xFCB514},
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
       case CelebKind::WIN: p.duration_ms = kCelebWinMs; break;
       case CelebKind::MUTED: p.duration_ms = kCelebMutedMs; break;
       case CelebKind::BRACE:
-      case CelebKind::HAT_TRICK: p.duration_ms = kCelebBraceMs; break;
+      case CelebKind::SOCCER_HAT_TRICK: p.duration_ms = kCelebBraceMs; break;
       case CelebKind::PENALTY: p.duration_ms = kCelebPenaltyMs; break;
       case CelebKind::LATE_GOAL: p.duration_ms = kCelebLateGoalMs; break;
       case CelebKind::DUNK: p.duration_ms = kCelebDunkMs; break;

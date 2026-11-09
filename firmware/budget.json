@@ -1,125 +1,106 @@
 {
-  "about": "Ceilings in bytes for CI's Size budget job (scripts/size_budget.py). Seeded 2026-10-17 from dev's figures plus 10% (at least 1 KB). firmware: flash is the OTA image, static_ram the ELF's internal data RAM (ESPHome's RAM line). host: tests/heap_budget.cpp on the CI runner, json the JSON documents (PSRAM on the panel), heap everything else (internal RAM on the panel). max_growth: the most one PR may add to a figure against the base branch. Raise an entry only in the PR that needs it, and say why there. 2026-10-28: flash caps and max_growth.flash raised for the 52 WLED effects (about 81 KB of flash in one change; see the effects PR). 2026-10-30: flash caps raised 10 KB for the kickoff forecast and the F/C setting (about 17 KB; see that PR), and the soccer and NFL event reads' JSON ceilings for the venue address it reads (about 300 B each). 2026-10-31: flash caps raised 8,000 B for the schedule and season recap cards (about 19.8 KB of flash: the season schedule parse and its two cards). 2026-11-03: season_nhl added, the same cards' read at its biggest (a whole NHL season, 82 finals). 2026-11-08: flash caps raised 64,000 B for the big plays' pixel art, starting with basketball's dunk and alley-oop at 128 and 64 wide (about 55 KB of flash: 51 KB of frames, the player and the detection); the other sports' plays raise them again in their own PRs. 2026-11-08: flash caps raised 160,000 B and max_growth.flash to 163,840 for soccer's big plays (brace, hat trick, penalty and late goal at 128 and 64 wide: about 143 KB of frames plus the detection and the runtime caption).",
+  "about": "Limits for CI's Size budget job (scripts/size_budget.py, whose top comment has the detail). Flash (the OTA image) has no cap here: a build fails over 90% of its OTA slot (read from the partition table in the build's factory image), and needs the owner's approval when it has grown more than release.allowance_flash since release.tag, or when one pull request adds more than 32 KB. release holds each build's flash at the last release; run `python3 scripts/size_budget.py release-baseline <sizes> <tag>` when a release is cut, never by hand. firmware.static_ram (internal data RAM from the ELF, ESPHome's RAM line) and host.heap (tests/heap_budget.cpp, internal RAM on the panel) are tight absolute caps: going over fails, and a pull request that raises one needs the owner's approval, so raise only the entry that needs it and add the reason to this text. JSON documents (PSRAM on the panel) have no cap, only max_growth.json. max_growth: the most one pull request may add to a figure against the base branch. The owner approves with a commit status on the pull request: context budget/owner-approval, state success, description `approved static_ram=<B> heap=<B> flash=<B>`. Approval passes only those approval items, never the 90% limit or a cap overrun. 2026-11-03: season_nhl heap cap added. 2026-11-08: this scheme replaced the hand-set flash and JSON caps; release seeded from v2026.11.0's build. 2026-11-08: allowance_flash 131072 to 524288 for this release, approved by the owner, so the big plays art (basketball, hockey, soccer, football, baseball, about 460 KB together) fits one release. A change that moves the release block to another tag must name a later vYYYY.M.P tag whose Build run measured exactly the baseline figures given, or it fails.",
   "max_growth": {
-    "flash": 163840,
     "static_ram": 4096,
     "json": 20480,
     "heap": 20480
   },
+  "release": {
+    "tag": "v2026.11.0",
+    "flash": {
+      "moonhub75": 2564784,
+      "moonhub75-2panel": 2564800,
+      "scoreboard75": 2541264,
+      "waveshare": 2584592
+    },
+    "allowance_flash": 524288
+  },
   "firmware": {
     "moonhub75": {
-      "flash": 2816000,
       "static_ram": 173431
     },
     "moonhub75-2panel": {
-      "flash": 2816000,
       "static_ram": 173431
     },
     "scoreboard75": {
-      "flash": 2792000,
       "static_ram": 172568
     },
     "waveshare": {
-      "flash": 2858826,
       "static_ram": 179476
     }
   },
   "host": {
     "poll_mlb_event": {
-      "heap": 1581,
-      "json": 14817
+      "heap": 1581
     },
     "poll_nba_event": {
-      "heap": 1648,
-      "json": 9688
+      "heap": 1648
     },
     "poll_ncaa_scoreboard": {
-      "heap": 1508,
-      "json": 221411
+      "heap": 1508
     },
     "poll_nfl_event": {
-      "heap": 1584,
-      "json": 9600
+      "heap": 1584
     },
     "poll_nhl_event": {
-      "heap": 1621,
-      "json": 8781
+      "heap": 1621
     },
     "poll_soccer_event": {
-      "heap": 1850,
-      "json": 15400
+      "heap": 1850
     },
     "rankings_ncaa": {
-      "heap": 1042,
-      "json": 13380
+      "heap": 1042
     },
     "scan_mlb_day": {
-      "heap": 1075,
-      "json": 7003
+      "heap": 1075
     },
     "scan_nba_day": {
-      "heap": 1075,
-      "json": 6794
+      "heap": 1075
     },
     "scan_ncaa_day": {
-      "heap": 1075,
-      "json": 20942
+      "heap": 1075
     },
     "scan_ncaa_live": {
-      "heap": 1074,
-      "json": 185850
+      "heap": 1074
     },
     "scan_nhl_day": {
-      "heap": 1074,
-      "json": 11460
+      "heap": 1074
     },
     "scan_soccer_day": {
-      "heap": 1055,
-      "json": 7023
+      "heap": 1055
     },
     "schedule_nfl": {
-      "heap": 1936,
-      "json": 6657
+      "heap": 1936
     },
     "season_nhl": {
-      "heap": 1042,
-      "json": 90916
+      "heap": 1042
     },
     "summary_mlb": {
-      "heap": 1984,
-      "json": 21760
+      "heap": 1984
     },
     "summary_nba": {
-      "heap": 1024,
-      "json": 5912
+      "heap": 1024
     },
     "summary_nfl": {
-      "heap": 1056,
-      "json": 6309
+      "heap": 1056
     },
     "summary_nhl": {
-      "heap": 1024,
-      "json": 5882
+      "heap": 1024
     },
     "team_day_ncaa": {
-      "heap": 1042,
-      "json": 6101
+      "heap": 1042
     },
     "team_nfl": {
-      "heap": 1042,
-      "json": 6277
+      "heap": 1042
     },
     "weather_forecast": {
-      "heap": 1024,
-      "json": 5700
+      "heap": 1024
     },
     "weather_hour": {
-      "heap": 1024,
-      "json": 5700
+      "heap": 1024
     },
     "weather_lookup": {
-      "heap": 1046,
-      "json": 5700
+      "heap": 1046
     }
   }
 }

@@ -236,7 +236,7 @@ static void test_made_up() {
   CHECK(soccer_big_play(two, ft, false, true).play == SoccerPlay::NONE);
   // The plan: the play's kind, the team's color and the caption in line2.
   CelebPlan p = big_play_soccer(two, three, Splash{}, false, true);
-  CHECK(p.kind == CelebKind::HAT_TRICK);
+  CHECK(p.kind == CelebKind::SOCCER_HAT_TRICK);
   CHECK_EQ(p.text, std::string("HAT TRICK!"));
   CHECK_EQ(p.line2, std::string("SAKA"));
   CHECK_EQ(p.color, celeb_bright(parse_color("EF0107")));
@@ -337,7 +337,7 @@ static void test_caption() {
 // Every soccer show plays at both widths, draws on every frame, puts its
 // caption over the art, and comes in under a few ms a frame on the host.
 static void test_shows() {
-  const CelebKind kinds[] = {CelebKind::BRACE, CelebKind::HAT_TRICK, CelebKind::PENALTY, CelebKind::LATE_GOAL};
+  const CelebKind kinds[] = {CelebKind::BRACE, CelebKind::SOCCER_HAT_TRICK, CelebKind::PENALTY, CelebKind::LATE_GOAL};
   for (int w : {128, 64}) {
     for (CelebKind k : kinds) {
       const CelebArt *art = celeb_art_for(k, w);

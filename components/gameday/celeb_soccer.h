@@ -161,7 +161,7 @@ inline CelebPlan big_play_soccer(const GameSnapshot &prev, const GameSnapshot &c
       plan.duration_ms = kCelebBraceMs;
       break;
     case SoccerPlay::HAT_TRICK:
-      plan.kind = CelebKind::HAT_TRICK;
+      plan.kind = CelebKind::SOCCER_HAT_TRICK;
       plan.text = "HAT TRICK!";
       plan.duration_ms = kCelebBraceMs;
       break;
