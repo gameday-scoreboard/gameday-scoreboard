@@ -37,6 +37,7 @@
 #include "score_log.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
+#include "settings_change.h"
 #include "startup.h"
 #include "timezones.h"
 #include "wake.h"
@@ -1728,6 +1729,57 @@ static void test_fav_read_due() {
   CHECK_EQ(fav_stamp_after_drop(5000, false), 5000u);
   // millis() wrapping past zero between the stamp and now.
   CHECK(fav_read_due(true, 0xFFFFF000u, 60000, retry, refresh));
+}
+
+// A settings change and the reads around it (settings_change.h), one case
+// per stall the replay bench found.
+static void test_settings_change() {
+  // Three quick adds, live team last: the season read for the first team
+  // waits while the board's next read is due, for 30 s after the change.
+  CHECK(board_first(10000, 9000, true));
+  CHECK(!board_first(10000, 9000, false));  // between the board's reads: side reads go
+  CHECK(!board_first(10000, 0, true));      // no change: as before
+  CHECK(board_first(9000 + kBoardFirstMs - 1, 9000, true));
+  CHECK(!board_first(9000 + kBoardFirstMs, 9000, true));  // a board that keeps reading lets them through
+  CHECK(board_first(5000, 0xFFFFF000u, true));            // millis() wrapping past zero
+
+  // A change while a season read is in flight: it stops, whatever changed,
+  // and doesn't count as a failure, so it is read again on the card's turn.
+  CHECK(job_moot_after_change(JobKind::SEASON, true, false));
+  CHECK(job_moot_after_change(JobKind::SEASON, false, false));
+  CHECK(!season_read_failed(false, true));
+  CHECK(season_read_failed(false, false));  // a real failure still waits
+  CHECK(!season_read_failed(true, false));
+
+  // A board read stops when the board was cleared, not for a take-over ask.
+  CHECK(job_moot_after_change(JobKind::BOARD, true, false));
+  CHECK(!job_moot_after_change(JobKind::BOARD, false, false));
+  // Side reads are small and the same whatever the board shows: they finish.
+  CHECK(!job_moot_after_change(JobKind::SIDE, true, false));
+
+  // Three quick adds: the first team's read in flight when the second add
+  // lands still counts, since the team is still a favorite.
+  CHECK(!job_moot_after_change(JobKind::FAV_TEAM, true, true));
+  CHECK(fav_answer_counts(true, false, true, true));
+  // A removed team's read, or one on a panel that left Favorite teams: dropped.
+  CHECK(job_moot_after_change(JobKind::FAV_TEAM, true, false));
+  CHECK(!fav_answer_counts(true, true, true, false));
+  CHECK(!fav_answer_counts(true, false, false, true));
+  // Removed and added back during the read: it stopped once, so it's dropped.
+  CHECK(!fav_answer_counts(true, true, true, true));
+  CHECK(fav_answer_counts(false, false, true, true));  // nothing changed
+
+  // Take-over turned on in Live games with nothing live: the job running
+  // then (or the long wait) no longer decides when the scan runs.
+  CHECK(take_scan_now_after_job(4, 5, true));
+  CHECK(!take_scan_now_after_job(5, 5, true));  // no ask while it ran
+  CHECK(!take_scan_now_after_job(4, 5, false));  // take-over off, or not in Live games
+
+  // mode=5&sport=none while a sport row plays: Live games stays.
+  const uint8_t fav = 4;
+  CHECK(sport_stop_keeps_mode(5, fav));
+  CHECK(!sport_stop_keeps_mode(fav, fav));  // mode=4&sport=none: Favorite teams, every favorite
+  CHECK(!sport_stop_keeps_mode(-1, fav));   // sport=none alone: as before
 }
 
 static void test_favorites() {
@@ -8892,6 +8944,7 @@ static void test_game_leaders() {
 }
 
 int main() {
+  test_settings_change();
   test_urls();
   test_iso();
   test_team_parse();

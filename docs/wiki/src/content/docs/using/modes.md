@@ -62,6 +62,10 @@ Turn on **Favorites take over** under **Switch every** and a game one of your [f
 - **Two favorites at once** shows up under the switch once it's on, and it's the same setting as **Two games at once** in Favorite teams. **Stick with the higher team** stays on the favorite higher in your list, and moves to a higher one when its game starts. **Alternate** switches between your favorites' games every **Switch every** minutes.
 - Only favorites in the leagues Live games follows count. On automatic leagues, that's all of them.
 
+:::note[Coming in the next release]
+Turning **Favorites take over** on, or adding a favorite while it's on, brings a favorite's game that's on now to the board within a few seconds. Before, when nothing else was live, the panel waited for its next look at the schedule, which could be hours away.
+:::
+
 The bar under the board says **Locked on** and the team's name while a favorite has the panel. It's off until you turn it on.
 
 With **Stick with the higher team**, the panel also checks every **Switch every** minutes (at least every 5) for a higher favorite whose game started without a set time, like the second game of a doubleheader, so it doesn't wait for the lower favorite's game to end. With **Alternate**, the switch between your favorites' games comes only every **Switch every** minutes, not also when another favorite's game is about to start.
