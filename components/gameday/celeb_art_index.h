@@ -10,6 +10,10 @@
 #include "celeb_art_dunk_64.h"
 #include "celeb_art_hattrick_128.h"
 #include "celeb_art_hattrick_64.h"
+#include "celeb_art_grand_slam_128.h"
+#include "celeb_art_grand_slam_64.h"
+#include "celeb_art_walk_off_128.h"
+#include "celeb_art_walk_off_64.h"
 #include "celeb_plan.h"
 
 namespace espn {
@@ -25,6 +29,10 @@ inline const CelebArt *celeb_art_for(CelebKind k, int w) {
       return wide ? &celeb_art_alley_oop_128() : &celeb_art_alley_oop_64();
     case CelebKind::HAT_TRICK:
       return wide ? &celeb_art_hattrick_128() : &celeb_art_hattrick_64();
+    case CelebKind::GRAND_SLAM:
+      return wide ? &celeb_art_grand_slam_128() : &celeb_art_grand_slam_64();
+    case CelebKind::WALK_OFF:
+      return wide ? &celeb_art_walk_off_128() : &celeb_art_walk_off_64();
     default:
       return nullptr;
   }
