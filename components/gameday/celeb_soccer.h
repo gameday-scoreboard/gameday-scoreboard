@@ -53,6 +53,7 @@ inline std::string soccer_minute_words(const std::string &clock) {
 
 // Late: the last five minutes of normal time and its stoppage (period 2), or
 // of extra time (period 4). A first-half stoppage goal ("45'+3'") never is.
+// With no period in the read (0), the minute alone decides, as normal time.
 inline bool soccer_late_minute(int minute, int period) {
   if (period == 4)
     return minute >= 115;

@@ -92,6 +92,10 @@ static void test_minutes() {
   CHECK(!soccer_late_minute(103, 3));
   CHECK(!soccer_late_minute(111, 4));
   CHECK(soccer_late_minute(118, 4));
+  // No period in the read: the minute alone, as normal time.
+  CHECK(soccer_late_minute(89, 0));
+  CHECK(!soccer_late_minute(70, 0));
+  CHECK(!soccer_late_minute(118, 0));
   CHECK_EQ(soccer_caption_name("Dreyer", 12), std::string("DREYER"));
   CHECK_EQ(soccer_caption_name("Lopes Cabral", 8), std::string("CABRAL"));
   CHECK_EQ(soccer_caption_name("Alan Patrick", 12), std::string("ALAN PATRICK"));
