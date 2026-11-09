@@ -10,6 +10,8 @@
 #include "celeb_art_dunk_64.h"
 #include "celeb_art_fumble_128.h"
 #include "celeb_art_fumble_64.h"
+#include "celeb_art_hattrick_128.h"
+#include "celeb_art_hattrick_64.h"
 #include "celeb_art_interception_128.h"
 #include "celeb_art_interception_64.h"
 #include "celeb_art_pick_six_128.h"
@@ -37,6 +39,8 @@ inline const CelebArt *celeb_art_for(CelebKind k, int w) {
       return wide ? &celeb_art_fumble_128() : &celeb_art_fumble_64();
     case CelebKind::SACK:
       return wide ? &celeb_art_sack_128() : &celeb_art_sack_64();
+    case CelebKind::HAT_TRICK:
+      return wide ? &celeb_art_hattrick_128() : &celeb_art_hattrick_64();
     default:
       return nullptr;
   }

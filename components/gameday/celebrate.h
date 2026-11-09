@@ -8,6 +8,7 @@
 
 #include "celeb_basketball.h"
 #include "celeb_football.h"
+#include "celeb_hockey.h"
 #include "celeb_plan.h"
 #include "espn_parse.h"
 
@@ -84,6 +85,9 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
         break;
       case Sport::FOOTBALL:
         big = big_play_football(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::HOCKEY:
+        big = big_play_hockey(prev, cur, splash, neutral, opp_splashes);
         break;
       default:
         break;
