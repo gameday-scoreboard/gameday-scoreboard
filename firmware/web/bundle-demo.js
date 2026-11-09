@@ -245,13 +245,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="vizCard">
         <h2>Live pictures</h2>
-        <p class="hint">Drawn under the clock during a game. Not on a single 64x64 panel.</p>
+        <p class="hint">Under the clock during a game. Not on a single 64x64 panel.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
-          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: each side's chance to win, as a thin bar.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
-          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game, as a small chart.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", in turn with the rest of the row.</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
         </div>
       </div>
       <div class="card">
@@ -263,6 +262,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
             </select></div>
             <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+            <div class="ctl"><label>Big plays<small>On Full, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way.</small></label><button class="sw" data-set="bigplays" aria-label="Big plays"></button></div>
           </div>
         </div>
       </div>
@@ -323,6 +323,18 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
         </div>
       </div>
+      <div class="card" id="brandCard" hidden>
+        <h2>Bar look</h2>
+        <div class="cbody">
+          <p class="hint">Your bar's logo, colors and plate list from one brand file. The panel opens the message card with them.</p>
+          <label class="fl" for="brandUrl">Brand file address<small>A web address we give you. The panel reads it again every half hour.</small></label>
+          <input type="url" id="brandUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
+          <p class="hint" id="brandRead" hidden></p>
+          <div class="ctl" id="brandLogoRow" hidden><label>Logo</label><img id="brandLogo" class="brandlogo" alt="The bar's logo"></div>
+          <div class="ctl" id="brandPartyRow" hidden><label>Plate party<small>Shows the newest plate's party now, even over a game.</small></label><button class="btn" id="brandParty">Plate party</button></div>
+          <div class="actions"><button class="btn primary" id="brandSave">Save</button><button class="btn" id="brandClear">Clear</button></div>
+        </div>
+      </div>
       <div class="card" id="picCard" hidden>
         <h2>Pictures</h2>
         <div class="cbody">
@@ -372,7 +384,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
             <button class="sw" data-set="beta" aria-label="Follow beta"></button>
           </div>
           <div class="ctl" id="barRow" hidden>
-            <label>Bar beta<small>Auto-installs beta firmware overnight.</small></label>
+            <label>Bar build<small>Installs bar updates on its own overnight, never during a live game.</small></label>
             <a class="btn" id="barReport" href="#">Something wrong?</a>
           </div>
         </div>
@@ -631,11 +643,11 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
-    celebrate: Number,
+    celebrate: Number, bigplays: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
-    field: (v) => v === "1", winbar: (v) => v === "1", spark: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
+    field: (v) => v === "1", winbar: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
     // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
     cards: (v) => {
       const pairs = new Map(v.split(",").map((p) => p.split(":")));
@@ -654,7 +666,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
     remote1: String, remote2: String, remote3: String, remote4: String,
-    msg: String, msgurl: String, msgevery: Number, nick: String,
+    msg: String, msgurl: String, msgevery: Number, nick: String, brand: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
     wake: (v) => v === "1", wakelead: Number, after: String,
@@ -1729,6 +1741,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
+    // Hockey, baseball or soccer alone: nothing here to turn off.
+    $("#vizCard").hidden = [...document.querySelectorAll("#vizCtls .ctl")].every((row) => row.hidden);
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = $("#cdOwnCard").hidden = S.countdown === undefined;
     // The Between games list; firmware from before it has a switch per card.
@@ -1760,6 +1774,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
+    renderBrand();
     renderPics();
     renderEvents();
   };
@@ -1894,6 +1909,57 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
+  };
+
+  // ---- the bar build's brand pack (components/gameday/brand.h) ----------------
+  let brandSeen = null;
+  const renderBrand = () => {
+    // Only the bar build reads brand packs.
+    $("#brandCard").hidden = S.brand === undefined;
+    if (S.brand === undefined) return;
+    const input = $("#brandUrl");
+    if (S.brand !== brandSeen && document.activeElement !== input) {
+      brandSeen = S.brand;
+      input.value = S.brand;
+    }
+    const read = S.brandread;
+    const line = $("#brandRead");
+    line.hidden = !S.brand;
+    const logo = read && read.ok && read.logo_ok ? read.logo : "";
+    $("#brandLogoRow").hidden = !logo;
+    if (logo && $("#brandLogo").getAttribute("src") !== logo) $("#brandLogo").src = logo;
+    // The plate wall shows the pack's list while the panel has no list of its own.
+    $("#brandPartyRow").hidden = !(S.brand && read && read.ok && read.list && !S.msgurl);
+    if (!S.brand) return;
+    const kept = read && read.ok ? " Showing the last look it read." : "";
+    let text;
+    if (!read || read.status === undefined || read.status < 0) text = read && read.ok ? "Showing the saved look. Reading the file again." : "Not read yet.";
+    else if (read.status === 0) text = "The panel couldn't reach that address. It tries again in a few minutes." + kept;
+    else if (read.status !== 200) text = "That address answered with an error (HTTP " + read.status + "). It tries again in a few minutes." + kept;
+    else if (read.error) text = read.error + kept;
+    else text = "Loaded: " + (read.name || read.title || "the brand file") + ".";
+    if (read && read.ok && read.warning) text += " Left out: " + read.warning + ".";
+    if (read && read.logo_error) text += " " + read.logo_error;
+    if (read && read.sprite_error) text += " " + read.sprite_error;
+    line.textContent = text;
+  };
+  $("#brandParty").onclick = () => {
+    doAction("plate_party");
+    toast("Plate party");
+  };
+  $("#brandSave").onclick = () => {
+    const url = $("#brandUrl").value.trim();
+    if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The brand file's address starts with http:// or https://");
+    if (!asciiUrl(url)) return toast(ASCII_URL);
+    brandSeen = null;
+    setGD({ brand: url });
+    toast(url ? "Brand file saved" : "Bar look off");
+  };
+  $("#brandClear").onclick = () => {
+    $("#brandUrl").value = "";
+    brandSeen = null;
+    setGD({ brand: "" });
+    toast("Bar look off");
   };
 
   // ---- game-day wake and after the game (components/gameday/wake.h) ----------
@@ -2430,42 +2496,67 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     for (const g of shown) {
       if (g.state !== lastState) {
         lastState = g.state;
-        const heading = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
-        tiles.appendChild(el("div", "gh", heading[g.state] || "Final"));
+        tiles.appendChild(el("div", "gh", GAME_HEADING[g.state] || "Final"));
       }
-      const card = el("div", "game" + (g.state === "in" ? " live" : ""));
-      const mkSide = (s) => {
-        const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
-        b.disabled = !t;
-        b.title = t ? t[3] : "Not in the team list";
-        if (t) {
-          b.dataset.key = keyOf(t);
-          b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
-        }
-        const img = el("img");
-        img.loading = "lazy";
-        img.src = logoUrl(g.league, s.id, s.abbr);
-        img.alt = "";
-        b.appendChild(img);
-        const txt = el("div", "st");
-        txt.appendChild(el("div", "n", s.name));
-        txt.appendChild(el("div", "a", s.abbr));
-        b.appendChild(txt);
-        b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
-        b.onclick = () => {
-          if (t) toggleFav(t);
-        };
-        return b;
-      };
-      card.appendChild(mkSide(g.away));
-      const mid = el("div", "gm");
-      mid.appendChild(el("div", "at", "@"));
-      mid.appendChild(el("div", "det", g.detail));
-      card.appendChild(mid);
-      card.appendChild(mkSide(g.home));
-      tiles.appendChild(card);
+      tiles.appendChild(gameCard(g));
     }
+  };
+  const GAME_HEADING = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
+  // One game: a button per side that adds or takes out that team.
+  const gameCard = (g) => {
+    const card = el("div", "game" + (g.state === "in" ? " live" : ""));
+    const mkSide = (s) => {
+      const t = teamById(g.league, s.id);
+      const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
+      b.disabled = !t;
+      b.title = t ? t[3] : "Not in the team list";
+      if (t) {
+        b.dataset.key = keyOf(t);
+        b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+      }
+      const img = el("img");
+      img.loading = "lazy";
+      img.src = logoUrl(g.league, s.id, s.abbr);
+      img.alt = "";
+      b.appendChild(img);
+      const txt = el("div", "st");
+      txt.appendChild(el("div", "n", s.name));
+      txt.appendChild(el("div", "a", s.abbr));
+      b.appendChild(txt);
+      b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
+      b.onclick = () => {
+        if (t) toggleFav(t);
+      };
+      return b;
+    };
+    card.appendChild(mkSide(g.away));
+    const mid = el("div", "gm");
+    mid.appendChild(el("div", "at", "@"));
+    mid.appendChild(el("div", "det", g.detail));
+    card.appendChild(mid);
+    card.appendChild(mkSide(g.home));
+    return card;
+  };
+  // Fold finals and postponed games shut so the team list stays near the top on a busy day
+  const leagueGames = (slot, list) => {
+    const mine = list.filter((g) => g.league === league);
+    if (!mine.length) return;
+    for (const state of ["in", "pre", "post", "off"]) {
+      const group = mine.filter((g) => g.state === state);
+      if (!group.length) continue;
+      if (state === "in" || state === "pre") {
+        slot.appendChild(el("div", "gh", GAME_HEADING[state]));
+        for (const g of group) slot.appendChild(gameCard(g));
+        continue;
+      }
+      const fold = el("details", "gfold");
+      fold.appendChild(el("summary", "gh", GAME_HEADING[state] + " (" + group.length + ")"));
+      const inner = el("div", "games");
+      for (const g of group) inner.appendChild(gameCard(g));
+      fold.appendChild(inner);
+      slot.appendChild(fold);
+    }
+    slot.appendChild(el("div", "gh", "Teams"));
   };
 
   // ---- team chooser ------------------------------------------------------
@@ -2505,16 +2596,29 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   };
   const renderTiles = () => {
     if (league === "now") return renderGames();
-    $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
-    const list = q ? searchTeams(q) : TEAMS.filter((t) => t[0] === league);
-    if (!list.length) {
-      tiles.appendChild(el("div", "none", "No team matches"));
+    if (q) {
+      tiles.className = "tiles";
+      const found = searchTeams(q);
+      if (!found.length) tiles.appendChild(el("div", "none", "No team matches"));
+      for (const t of found) tiles.appendChild(teamTile(t));
       return;
     }
-    for (const t of list) tiles.appendChild(teamTile(t));
+    // Show the teams at once, so a slow ESPN read can't hold them up.
+    // Today's games go in above them when the list arrives.
+    tiles.className = "games";
+    const slot = el("div", "gslot");
+    const grid = el("div", "tiles");
+    for (const t of TEAMS.filter((t) => t[0] === league)) grid.appendChild(teamTile(t));
+    tiles.appendChild(slot);
+    tiles.appendChild(grid);
+    if (gamesFresh()) return leagueGames(slot, games);
+    const lg = league;
+    loadGames().then((list) => {
+      if (league === lg && slot.isConnected && !slot.firstChild) leagueGames(slot, list);
+    });
   };
   $("#favAdd").onclick = () => openPicker();
   $("#favStart").onclick = () => { showPane("teams"); openPicker(); };
@@ -2769,7 +2873,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
     $("#hEspn").textContent = h.espn == null ? "None yet"
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
-    const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
+    const chan = { stable: "stable", beta: "beta", bar: "bar" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
     const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");

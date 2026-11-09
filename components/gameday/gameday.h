@@ -36,9 +36,15 @@
 #include "espn_parse.h"
 #include "favorites.h"
 #include "game_leaders.h"
+#include "row_text.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
+#include "brand.h"
+#include "brand_card.h"
+#include "brand_lvgl.h"
+#include "plate_wall.h"
+#include "plate_wall_lvgl.h"
 #include "health.h"
 #include "hook.h"
 #include "line_score.h"
@@ -109,25 +115,24 @@ struct UpdateFields {
   std::string clock_text;  // "5:36 - 3rd" while the game is live, else empty
   std::string down_distance;  // "3rd & 10" while live, else empty
   bool is_red_zone{false};
-  // The pictures on a wide board's situation row (game_viz.h): which the
-  // page draws now (VIZ_* bits, the owner's switches already applied) and
-  // our side's win chance (1 to 99, -1 when ESPN gave none).
+  // The picture on a wide board's situation row (game_viz.h): which the
+  // page draws now (VIZ_* bits, the owner's switch already applied).
   uint8_t viz{0};
-  int win_pct{-1};
+  // The text lines the situation row takes turns showing (row_text.h).
+  ::espn::RowLines row;
   uint32_t team_color{0xFFFFFF};
   uint32_t opponent_color{0xFFFFFF};
-  // A side with no logo shows its abbreviation badge in the logo slot (badge.h):
-  // the fill is its color above, the ring this second color. Only the demo
-  // build's made-up teams set these; release firmware leaves them false.
+  // A side with no logo shows its abbreviation in the logo slot, in this
+  // color on black (badge.h, badge_text): a team ESPN has no logo for (small
+  // schools), or the demo build's made-up teams.
   bool team_badge{false};
   bool opponent_badge{false};
-  uint32_t team_ring{0};
-  uint32_t opponent_ring{0};
+  uint32_t team_badge_rgb{0xFFFFFF};
+  uint32_t opponent_badge_rgb{0xFFFFFF};
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty
   // Other sports (football leaves these at their defaults).
   uint8_t sport{0};        // ::espn::Sport
   std::string situation;   // baseball: the count "2-1" while a half inning is on
-                           // basketball: the playoff series "NY lead 2-1"
   int outs{-1};            // baseball: outs in the half inning, -1 when none
   uint8_t bases{0};        // baseball: 1 first, 2 second, 4 third
   bool highlight{false};   // the situation row stands out (bases loaded)
@@ -305,7 +310,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void refresh_now();
   // WizMote buttons 1-4: each does what the owner set it to (set_request.h
   // RemoteTarget), its own favorite until then. The demo build gives them to
-  // the demo (demo.cpp).
+  // the demo (demo.cpp); on the bar build, button 4 throws the plate party
+  // while the card shows the brand pack's plate list.
   void remote_number(uint8_t n);
   // Favorites with no favorite set: the panel follows live games and the
   // finals rotation, and the boot screen gives the app's QR code a turn
@@ -329,20 +335,23 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
   bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
-  // The pictures on the board (game_viz.h), each on unless the owner turns it
-  // off. Stored as "off" bits so panels from before them keep all three.
+  // Football's field strip (game_viz.h) and the win chance line on the
+  // situation row (row_text.h), each on unless the owner turns it off.
+  // Stored as "off" bits so panels from before them keep both.
   bool field_strip_on() const { return (this->prefs8_.viz & VIZ8_NOFIELD) == 0; }
-  bool win_bar_on() const { return (this->prefs8_.viz & VIZ8_NOWINBAR) == 0; }
-  bool margin_spark_on() const { return (this->prefs8_.viz & VIZ8_NOSPARK) == 0; }
+  bool win_chance_on() const { return (this->prefs8_.viz & VIZ8_NOWIN) == 0; }
   void set_field_strip(bool on) { this->set_viz8_(VIZ8_NOFIELD, !on); }
-  void set_win_bar(bool on) { this->set_viz8_(VIZ8_NOWINBAR, !on); }
-  void set_margin_spark(bool on) { this->set_viz8_(VIZ8_NOSPARK, !on); }
+  void set_win_chance(bool on) { this->set_viz8_(VIZ8_NOWIN, !on); }
   bool ticker_last_play() const { return this->flag_(FLAG_PLAY); }
   bool ticker_odds() const { return this->flag_(FLAG_ODDS); }
   bool opponent_splashes() const { return this->flag_(FLAG_OPP); }
   // Celebrations (celebrate.h): off, subtle or full. Full is the default.
   ::espn::CelebLevel celebrations() const { return ::espn::celeb_level_from_stored(this->prefs8_.celeb); }
   void set_celebrations(::espn::CelebLevel level);
+  // Big plays (celeb_<sport>.h): a dunk or an alley-oop gets its own show on
+  // Full. Stored as an "off" bit so panels from before it have it on.
+  bool big_plays() const { return (this->prefs8_.viz & VIZ8_NOBIGPLAYS) == 0; }
+  void set_big_plays(bool on) { this->set_viz8_(VIZ8_NOBIGPLAYS, !on); }
   bool setup_done() const { return this->flag_(FLAG_SETUP); }
   // The first real scoreboard since boot, or since the team last changed,
   // is on the board. The boot screen waits for it (boot.yaml, boot_hide).
@@ -462,7 +471,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static bool asleep_at_boot();
   // "Follow beta": the update entity reads the beta manifest instead of the
   // release one. Off unless the owner turns it on; only in builds with
-  // beta_channel (the release builds, gameday-common.yaml).
+  // beta_channel (the release and bar builds, gameday-common.yaml).
 #ifdef GAMEDAY_BETA_CHANNEL
   void set_beta_channel(http_request::HttpRequestUpdate *update, const char *stable, const char *beta) {
     this->beta_update_ = update;
@@ -492,15 +501,32 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // for the panel rolls up; the page says how long one pass takes, and the
   // card stays up at least that long.
   const std::string &msg_card() const { return this->msg_card_; }
+  // The message card's page is the bar build's opening card (brand.h): the
+  // pack's logo, title and wall name, drawn by brand_card_draw().
+  bool brand_card_up() const { return this->msg_shown_ && this->msg_card_ == ::espn::kBrandPage; }
+#ifdef GAMEDAY_BAR
+  const ::espn::BrandPack &brand_pack() const { return this->brand_; }
+  const BrandLogo &brand_logo() const { return this->brand_logo_; }
+  const BrandSprite &brand_sprite() const { return this->brand_sprite_; }
+  // The message card's page is the plate wall's (plate_wall.h): a member's
+  // plate, a plate party or the event page, drawn by plate_wall_show().
+  bool plate_card_up() const {
+    return this->msg_shown_ && (this->msg_card_[0] == ::espn::kPlatePageMark ||
+                                this->msg_card_[0] == ::espn::kPartyPageMark ||
+                                this->msg_card_[0] == ::espn::kEventPageMark);
+  }
+  // The newest plate's party (the top of the list), up now and over a game
+  // too, from the remote's button 4 or the device page. who is for the log.
+  void plate_party(const char *who);
+#endif
   // The board game's line score at halftime and the final, laid out for a
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
   ::espn::LineScoreText line_score(int width_px) const { return ::espn::line_score_text(this->game_, width_px); }
   // The board game's field strip for a strip width_px wide (game_viz.h),
-  // valid only while football is on, and the margin samples the panel has
-  // seen of the board game. Read by gd_update in firmware/pages/gameday-live.yaml.
+  // valid only while football is on. Read by gd_update in
+  // firmware/pages/gameday-live.yaml.
   ::espn::FieldStrip field_strip(int width_px) const { return ::espn::field_strip(this->game_, width_px); }
-  const ::espn::MarginTrack &margin_track() const { return this->margin_tracks_.current(); }
   void set_msg_roll_ms(uint32_t ms) { this->msg_roll_ms_ = ms; }
   // The Top 25 card's page (gd_top25_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
@@ -637,7 +663,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
-  ::espn::CelebLatch celeb_latch_;  // the read a THREE was shown for, so a redraw never repeats it
+  ::espn::CelebLatch celeb_latch_;  // the read a THREE or a big play was shown for, so a redraw never repeats it
+  // A walk-off ESPN posts with the final plays first; the win screen waits
+  // here for its show to end (loop()).
+  ::espn::CelebPlan walk_off_win_;
+  std::string walk_off_event_;
+  uint32_t walk_off_win_ms_{0};  // when the win goes up, 0 for none
+  bool walk_off_release_{false};
   // The Top 25 card: football's poll and basketball's (rankings.h slots),
   // each read once a day while the panel follows that league.
   ::espn::Poll top25_[2];
@@ -831,8 +863,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
   static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
-  static constexpr uint8_t VIZ8_NOWINBAR = 2;  // the win chance bar off
-  static constexpr uint8_t VIZ8_NOSPARK = 4;   // the score margin sparkline off
+  static constexpr uint8_t VIZ8_NOWIN = 2;     // the win chance line off (was the win bar's)
+  // 4 was the score margin chart's, now gone; a panel may still have it set.
+  static constexpr uint8_t VIZ8_NOBIGPLAYS = 8;  // the big plays' shows off (a celebration, not a picture)
   void set_viz8_(uint8_t f, bool set);
   static constexpr uint8_t TICK8_COUNT = 1;  // baseball count, outs, pitcher and batter
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
@@ -1101,6 +1134,36 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool msg_eof{false};
     bool msg_ok{false};
     int msg_status{0};  // HTTP status, 0 for no answer
+#ifdef GAMEDAY_BAR
+    // The bar build's brand pack (brand.h) and its logo, on this task too.
+    // logo_have is what the panel has on hand, so the same logo isn't read
+    // twice.
+    bool need_brand{false};
+    std::string brand_url;
+    std::string brand_doc;
+    int brand_status{0};
+    bool brand_ok{false};
+    std::string brand_error;
+    ::espn::BrandPack brand_pack;
+    bool brand_logo_read{false};  // a logo was read: brand_logo or brand_logo_error holds it
+    BrandLogo brand_logo;
+    std::string brand_logo_error;
+    std::string logo_have_url;
+    bool logo_have_tint{false};
+    uint32_t logo_have_fg{0}, logo_have_bg{0};
+    // The logo of the pack on hand, read when this read fails (after a
+    // restart the logo isn't kept, only the pack).
+    bool brand_keep_ok{false};
+    std::string keep_logo, keep_logo_color, keep_sprite;
+    uint32_t keep_rim{0}, keep_bg{0};
+    // The pack's sprite, the same way: read when it isn't the one on hand.
+    std::string sprite_have_url;
+    bool brand_sprite_read{false};
+    BrandSprite brand_sprite;
+    std::string brand_sprite_error;
+    // The list is the pack's plate list: lines keep up to kPlateLineMax.
+    bool msg_plates{false};
+#endif
     // The Top 25 card's poll for one league (rankings.h), on this task too.
     bool need_top25{false};
     uint8_t top25_slot{0};
@@ -1338,7 +1401,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
-  ::espn::MarginTracks margin_tracks_;  // the board game's margin by read, and the last game's (game_viz.h)
+  // The board game's last basket, held until the next (row_text.h), and
+  // the row's news so far: the page jumps to the lead line when it changes.
+  ::espn::RowHold row_hold_;
+  std::string row_news_;
+  uint32_t row_news_n_{0};
+  // Hockey's latest goal per game, for the row under the clock: four games,
+  // about 200 bytes (sport_hockey.cpp).
+  ::espn::GoalHolds goal_holds_;
 
   ESPPreferenceObject pref_;
   Prefs prefs_{};
@@ -1378,14 +1448,84 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t now_tried_{0};
   // Where the bar's "Something wrong?" link on the device page writes to.
   std::string report_email_;
+  // The brand pack (brand.h): its address, saved on its own, and the last
+  // good file, saved apart so the look survives a boot with no network.
+  struct PrefsBrandUrl {
+    char url[::espn::kBrandUrlMax + 1];
+    uint8_t spare[3];
+  } __attribute__((packed));
+  struct PrefsBrandDoc {
+    uint16_t size;
+    char doc[::espn::kBrandMaxBytes];
+  } __attribute__((packed));
+  ESPPreferenceObject brand_url_pref_, brand_doc_pref_;
+  std::string brand_url_;
+  // fnv1_hash() of the file brand_ was read from, so a read of the same
+  // file doesn't write the flash again; 0 for none saved.
+  uint32_t brand_doc_hash_{0};
+  bool brand_read_due_{false};
+  uint32_t brand_read_ms_{0};  // millis() of the last good read, 0 = none since boot
+  uint32_t brand_fail_ms_{0};  // millis() of the last failed one, 0 = none since
+  int brand_status_{-1};       // the last read's HTTP status, 0 no answer, -1 none yet
+  std::string brand_error_;    // why the last read's file wasn't used, "" when it was
+  std::string brand_logo_error_;
+  void load_brand_();
+  void set_brand_(const std::string &url);
+  void brand_tick_();
+  void start_brand_job_();
+  void run_brand_job_();
+  void run_brand_logo_(const ::espn::BrandPack &p);
+  void run_brand_sprite_(const std::string &url);
+  void apply_brand_job_();
+  void apply_brand_sprite_(const std::string &url);
+  void take_brand_logo_(BrandLogo &read);
+  // The pack on hand, none read yet when brand_ok_ is false.
+  ::espn::BrandPack brand_;
+  bool brand_ok_{false};
+  BrandLogo brand_logo_;
+  BrandSprite brand_sprite_;
+  std::string brand_sprite_error_;
+  // The plate wall (plate_wall.h). The card reads the pack's plate list:
+  // one member a page, in the plate wall's look.
+  bool plates_() const { return this->msg_url_.empty() && this->brand_ok_; }
+  // The top line of the list's last read from the top, and its id kept in
+  // flash, to see a new plate.
+  struct PrefsPlateTop {
+    char id[::espn::kPlateIdMax + 1];
+  } __attribute__((packed));
+  ESPPreferenceObject plate_pref_;
+  std::string plate_top_id_;
+  std::string party_line_;
+  bool party_due_{false};    // the party goes up at the card's next page
+  bool party_force_{false};  // asked for: now, over a game too
+  bool brand_event_done_{false};  // the event page had its turn after the opening card
+  void plate_top_(const std::string &line);
+  std::string event_page_() const;
+#else
+  static constexpr bool brand_ok_ = false;  // only the bar build reads packs
 #endif
+  // The opening card went up for this pass through the list; it goes up
+  // again when the list comes back round to the top.
+  bool brand_opened_{false};
+  // The list the message card reads: the panel's own address, else the
+  // pack's plate list on the bar build.
+  const std::string &msg_src_() const {
+#ifdef GAMEDAY_BAR
+    if (this->msg_url_.empty() && this->brand_ok_)
+      return this->brand_.list;
+#endif
+    return this->msg_url_;
+  }
 #ifdef GAMEDAY_BETA_CHANNEL
   http_request::HttpRequestUpdate *beta_update_{nullptr};
   const char *stable_source_{nullptr};
   const char *beta_source_{nullptr};
   ESPPreferenceObject beta_pref_;
   uint8_t follow_beta_{0};  // 1 = read the beta manifest
+  bool channel_switched_{false};  // Follow beta switched; no manifest result since
   void apply_channel_();
+  void forget_update_();
+  void check_channel_result_();
 #endif
   void auto_update_tick_();
   bool followed_game_live_() const;
@@ -1645,7 +1785,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t gave_up_ms_{0};     // millis() when the loop last wrote a worker off, 0 = never
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
   Job job_;
-  uint32_t generation_{0};
+  // Bumped by the main loop when what the board follows changes. Atomic, so
+  // a worker in the middle of a many-read job can see it and stop early.
+  std::atomic<uint32_t> generation_{0};
   bool busy_{false};
   bool selects_published_{false};
   // Set by the fetch task once its Job is filled in. Atomic, so the main

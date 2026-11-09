@@ -1,97 +1,20 @@
-// Which celebration a score gets, and the owner's Celebrations setting.
-// Pure, no ESPHome includes: the host tests run decide_celebration() over
-// every sport and both sides. The animations themselves are celebrate_fx.h.
+// Which celebration a score or a big play gets. Pure, no ESPHome includes:
+// the host tests run decide_celebration() over every sport and both sides.
+// The kinds and the owner's setting are celeb_plan.h, each sport's big plays
+// celeb_<sport>.h, the animations celebrate_fx.h.
 #pragma once
 #include <cstdint>
 #include <string>
 
+#include "celeb_baseball.h"
+#include "celeb_basketball.h"
+#include "celeb_football.h"
+#include "celeb_hockey.h"
+#include "celeb_plan.h"
+#include "celeb_soccer.h"
 #include "espn_parse.h"
 
 namespace espn {
-
-// The owner's setting. Off: no full-screen splash at all, the board just
-// updates. Subtle: a short solid flash in the team's color with white words,
-// the look before fireworks. Full: the animations in celebrate_fx.h.
-enum class CelebLevel : uint8_t { OFF = 0, SUBTLE = 1, FULL = 2 };
-
-// Saved as one byte where 0 is Full, so a panel saved before the setting
-// existed keeps celebrating.
-inline CelebLevel celeb_level_from_stored(uint8_t v) {
-  return v == 1 ? CelebLevel::OFF : v == 2 ? CelebLevel::SUBTLE : CelebLevel::FULL;
-}
-inline uint8_t celeb_level_to_stored(CelebLevel l) {
-  return l == CelebLevel::OFF ? 1 : l == CelebLevel::SUBTLE ? 2 : 0;
-}
-inline const char *celeb_level_name(CelebLevel l) {
-  return l == CelebLevel::OFF ? "off" : l == CelebLevel::SUBTLE ? "subtle" : "full";
-}
-
-enum class CelebKind : uint8_t {
-  NONE = 0,
-  FLASH,      // solid team color, white words (Subtle, and Full's tiny scores)
-  MUTED,      // the other side: the same, dimmed, shorter
-  TOUCHDOWN,  // goalposts, fireworks in the team's colors
-  WAVE,       // field goal, extra point, two points, a safety, runs: a light sweep
-  HOME_RUN,   // the ball arcs out of the park and bursts
-  GOAL_NET,   // soccer: the net ripples where the ball hit
-  GOAL_LAMP,  // hockey: the red goal lamp spins
-  THREE,      // basketball, three points in one read: the ball drops through the hoop
-  WIN,        // the victory screen: the name, the final score, confetti
-};
-
-inline bool celeb_animated(CelebKind k) { return k >= CelebKind::TOUCHDOWN; }
-
-struct CelebPlan {
-  CelebKind kind{CelebKind::NONE};
-  uint32_t color{0xFFFFFF};  // the celebrating team's color, lifted for the panel
-  uint32_t alt{0xFFFFFF};    // its second color (white or gold when ESPN gives none)
-  std::string text;          // the words, "TOUCHDOWN!" or "KC WINS!"
-  std::string line2;         // the win's final score, "24-17"; empty otherwise
-  uint32_t duration_ms{0};
-  bool operator==(const CelebPlan &o) const {
-    return kind == o.kind && color == o.color && alt == o.alt && text == o.text && line2 == o.line2 &&
-           duration_ms == o.duration_ms;
-  }
-};
-
-// How long each one holds the board. The win stays longest: it is the final,
-// and the line score follows it.
-constexpr uint32_t kCelebFlashMs = 2500;
-constexpr uint32_t kCelebMutedMs = 2000;
-constexpr uint32_t kCelebWaveMs = 3000;
-constexpr uint32_t kCelebTouchdownMs = 5000;
-constexpr uint32_t kCelebHomeRunMs = 4500;
-constexpr uint32_t kCelebGoalMs = 4500;
-constexpr uint32_t kCelebThreeMs = 3000;
-constexpr uint32_t kCelebWinMs = 10000;
-
-// Dark team colors vanish on an LED panel: lift the brightest channel to 0xE0.
-inline uint32_t celeb_bright(uint32_t c) {
-  uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
-  uint32_t m = r > g ? (r > b ? r : b) : (g > b ? g : b);
-  if (m == 0)
-    return 0xFFFFFF;
-  if (m < 0xE0) {
-    r = r * 0xE0 / m;
-    g = g * 0xE0 / m;
-    b = b * 0xE0 / m;
-  }
-  return (r << 16) | (g << 8) | b;
-}
-
-// Half brightness, for the other side's muted flash.
-inline uint32_t celeb_dim(uint32_t c) { return ((c >> 1) & 0x7F7F7F); }
-
-// Gold when the team's color is itself near white, else white: the second
-// color for sparks and confetti next to the team's own.
-inline uint32_t celeb_alt_for(uint32_t color) {
-  uint32_t r = (color >> 16) & 0xFF, g = (color >> 8) & 0xFF, b = color & 0xFF;
-  return (r > 0xC0 && g > 0xC0 && b > 0xC0) ? 0xFFD000 : 0xFFFFFF;
-}
-
-inline bool celeb_same_game(const GameSnapshot &prev, const GameSnapshot &cur) {
-  return prev.valid && cur.valid && !cur.event_id.empty() && prev.event_id == cur.event_id;
-}
 
 // Whether a basketball read's last play was a made three by this side.
 // ESPN's scoreValue is 3 only for a made three (a miss is 0), and its team
@@ -105,13 +28,7 @@ inline bool celeb_three_play(const GameSnapshot &cur, bool ours) {
     return false;
   if (cur.play_value > 0)
     return cur.play_value == 3;
-  auto has = [](const std::string &s, const char *w) {
-    std::string low;
-    low.reserve(s.size());
-    for (char c : s)
-      low += (char) ((c >= 'A' && c <= 'Z') ? c + 32 : c);
-    return low.find(w) != std::string::npos;
-  };
+  auto has = celeb_has_word;
   const bool three = has(cur.last_play, "three point") || has(cur.last_play, "three-point") ||
                      has(cur.last_play, "3-pt") || has(cur.play_type, "three point") ||
                      has(cur.play_type, "three-point");
@@ -147,8 +64,13 @@ inline std::string celeb_final_line(const GameSnapshot &cur, bool team_won) {
 // read. Opponent scores (not neutral) are always MUTED when they show at all,
 // and opp_splashes is the Opponent scores too switch, which the other side's
 // three obeys as its other scores do.
+//
+// big_plays is the Big plays switch: on Full, each sport's own big plays
+// (celeb_<sport>.h) come first and take over the splash they land on. Off,
+// every score and win keeps its show and only the big plays go.
 inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot &cur, const Splash &splash,
-                                    CelebLevel level, bool neutral, bool opp_splashes = true) {
+                                    CelebLevel level, bool neutral, bool opp_splashes = true,
+                                    bool big_plays = true) {
   CelebPlan none;
   if (level == CelebLevel::OFF)
     return none;
@@ -156,6 +78,31 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   const int delta = same ? cur.team_score - prev.team_score : 0;
   const int odelta = same ? cur.opp_score - prev.opp_score : 0;
   const bool live = same && prev.state == GameState::IN && cur.state == GameState::IN;
+
+  if (level == CelebLevel::FULL && big_plays && live) {
+    CelebPlan big;
+    switch (cur.sport) {
+      case Sport::BASEBALL:
+        big = big_play_baseball(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::BASKETBALL:
+        big = big_play_basketball(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::FOOTBALL:
+        big = big_play_football(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::HOCKEY:
+        big = big_play_hockey(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::SOCCER:
+        big = big_play_soccer(prev, cur, splash, neutral, opp_splashes);
+        break;
+      default:
+        break;
+    }
+    if (big.kind != CelebKind::NONE)
+      return big;
+  }
 
   if (splash.text.empty()) {
     // Basketball's three. decide_splash leaves baskets alone; Full celebrates
@@ -254,25 +201,30 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   }
 }
 
-// The three is read from the scores, not from a poll's arrival, and the
-// component redraws the board for many reasons between polls (a failed
-// poll's back-off, a setting change, a card coming or going). This remembers
-// the read a THREE was shown for, so the same (game, scores) never shows it
-// twice; a stale ESPN read that steps back and forward again is the same
-// pair and stays quiet too.
+// The three and the big plays are read from the scores and the last play,
+// not from a poll's arrival, and the component redraws the board for many
+// reasons between polls (a failed poll's back-off, a setting change, a card
+// coming or going). This remembers the read one was shown for, so the same
+// (game, scores, last play) never shows twice; a stale ESPN read that steps
+// back and forward again is the same read and stays quiet too. The play's
+// words are in the key for the plays that score nothing (a sack): a new one
+// at the same score is a new play.
 struct CelebLatch {
-  std::string event;
+  std::string event, play;
   int team{-1}, opp{-1};
   // True the first time this read of this game asks; false after that.
   bool take(const GameSnapshot &cur) {
-    if (cur.event_id == event && cur.team_score == team && cur.opp_score == opp)
+    if (cur.event_id == event && cur.team_score == team && cur.opp_score == opp && cur.last_play == play)
       return false;
     event = cur.event_id;
     team = cur.team_score;
     opp = cur.opp_score;
+    play = cur.last_play;
     return true;
   }
 };
+// Which kinds the latch guards: the ones read from a play, not a splash.
+inline bool celeb_latched(CelebKind k) { return k == CelebKind::THREE || celeb_is_art(k); }
 
 // Where the words go, so the animation leaves them room. The page uses the
 // same answer for its label; the host renderer for its own text.
@@ -300,6 +252,11 @@ inline CelebTextPlace celeb_text_place(CelebKind kind, int w, int h) {
       t.y = h - lh - (wide ? 14 : 10);  // the ball flies over it to the hoop
       break;
     default:
+      if (celeb_is_art(kind)) {
+        t.y = h + 4;  // the art draws its own title; the words sit off the board
+        t.line2_y = -1;
+        break;
+      }
       t.y = (h - lh) / 2;
       break;
   }

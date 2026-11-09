@@ -22,12 +22,14 @@ is the short version.
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.
 - `firmware/gameday-bar.yaml` and `firmware/gameday-scoreboard75-bar.yaml`
-  are the bar builds, for the free panels in bars: the same firmware plus
-  `firmware/pages/bar.yaml`, which reads the beta channel
-  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`) and installs from it
-  on its own at night. CI publishes them only from `beta`. Release
-  firmware never installs anything unless the owner turns on "Install
-  updates automatically".
+  are the bar builds, for panels in bars: the same firmware plus
+  `firmware/pages/bar.yaml`, which reads the bar releases
+  (`install.gameday-scoreboard.com/firmware/<variant>-bar/`, published with
+  every release) and installs from them on its own at night. With Follow
+  beta on they read the bar betas
+  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`), published from
+  `beta`. Release firmware never installs anything unless the owner turns
+  on "Install updates automatically".
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.
@@ -55,7 +57,7 @@ is the short version.
 
 ## Build and test
 
-- ESPHome 2026.10.0, the version CI pins (`ESPHOME_VERSION` in
+- ESPHome 2026.10.2, the version CI pins (`ESPHOME_VERSION` in
   `.github/workflows/build.yml`). Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
@@ -78,14 +80,22 @@ is the short version.
   `tests/build/fuzz_espn` (or `fuzz_set`) to replay it, and add a host test
   with the fix.
 - Size budget: CI's "Size budget" job checks each build's flash (the OTA
-  image) and static internal RAM (from the ELF), and the memory each ESPN
+  image), static internal RAM and ELF sections, and the memory each ESPN
   read takes on the host (`make -C tests heap`, `tests/heap_budget.cpp`),
-  against `firmware/budget.json`. A PR fails when a figure goes over its
-  budget, or (into `dev`) grows more than the file's `max_growth` against
-  dev's last build; the job summary has the table. A change that needs
-  more raises that one entry in the same PR and says why.
-  `python3 scripts/size_budget.py seed <sizes folder>` prints figures with
-  10% headroom (at least 1 KB).
+  against `firmware/budget.json` (its `about` text has the rules). Flash
+  fails over 90% of the build's OTA slot, and needs the repo owner's
+  approval past the per-release allowance or when one PR adds more than
+  32 KB. Static internal RAM and heap have tight caps: going over fails,
+  and raising a cap in budget.json (with the reason in `about`) needs the
+  owner's approval. JSON documents fail only when one grows more than
+  `max_growth.json` against dev's last build. The job summary has the
+  tables, room left in the OTA slot and the section diff; the
+  `budget-report` artifact has the same figures as JSON.
+  `python3 scripts/size_budget.py seed <sizes folder>` prints caps with
+  10% headroom (at least 1 KB); `release-baseline <sizes folder> <tag>`
+  resets the release block when a release is cut; CI checks that the new
+  tag is a later release tag and that the baseline matches what its Build
+  run measured.
 - Device page tests: in `tests/web`, `npm ci` and
   `npx playwright install chromium` once, then `npm test`.
 - After editing `firmware/web/app.js` or `app.css`, run

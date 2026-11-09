@@ -58,7 +58,7 @@ struct Settings {
   int celebrate{2};  // celebrate.h CelebLevel
   bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, top25{true}, news{false}, gameleaders{true};
   uint16_t cards_off{0};  // the Between games list's other cards (cards.h)
-  bool field{true}, winbar{true}, spark{true};
+  bool field{true}, winbar{true}, spark{true}, bigplays{true};
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
@@ -214,6 +214,7 @@ void load(Settings &s, JsonObjectConst o) {
   flag("field", s.field);
   flag("winbar", s.winbar);
   flag("spark", s.spark);
+  flag("bigplays", s.bigplays);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
@@ -377,6 +378,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::FIELD: s.field = op.on; break;
     case SetKind::WINBAR: s.winbar = op.on; break;
     case SetKind::SPARK: s.spark = op.on; break;
+    case SetKind::BIGPLAYS: s.bigplays = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
@@ -394,6 +396,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::MSG: s.msg = op.text; break;
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
+    case SetKind::BRAND: break;  // the bar build only; these cases are a home build's
     case SetKind::NICK: s.nick = op.text; break;
     case SetKind::HOOK: s.hook = op.text; break;
     case SetKind::PREGAME: s.pregame = op.value; break;
@@ -499,6 +502,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["field"] = s.field;
   doc["winbar"] = s.winbar;
   doc["spark"] = s.spark;
+  doc["bigplays"] = s.bigplays;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
@@ -693,6 +697,12 @@ void test_parse_set() {
   SCHECK(!parse_set("msgurl", "ftp://example.com/names.txt", op, kFavMax), "msgurl ftp");
   SCHECK(!parse_set("msgurl", "https://exa mple.com", op, kFavMax), "msgurl with a space");
   SCHECK(!parse_set("msgurl", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "msgurl too long");
+  SCHECK(parse_set("brand", "https://example.com/brand/taproom.json", op, kFavMax) && op.kind == SetKind::BRAND &&
+             op.text == "https://example.com/brand/taproom.json",
+         "brand");
+  SCHECK(parse_set("brand", "", op, kFavMax) && op.kind == SetKind::BRAND && op.text.empty(), "brand cleared");
+  SCHECK(!parse_set("brand", "file:///brand.json", op, kFavMax), "brand that isn't http");
+  SCHECK(!parse_set("brand", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "brand too long");
   SCHECK(parse_set("msgevery", "0", op, kFavMax) && op.value == 0, "msgevery 0 holds the board");
   SCHECK(parse_set("msgevery", "99", op, kFavMax) && op.value == kMsgEveryMax, "msgevery 99");
   SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");

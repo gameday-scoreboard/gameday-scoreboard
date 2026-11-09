@@ -74,7 +74,7 @@ isn't a final release like `2026.10.0`.
 ```mermaid
 flowchart LR
     dev["dev<br/>changes merge here<br/>ESPHome beta allowed"]
-    beta["beta<br/>bar panels, test channel<br/>ESPHome beta allowed"]
+    beta["beta<br/>test panels, test channel<br/>ESPHome beta allowed"]
     main["main<br/>customers<br/>final ESPHome only"]
     tag["Release tag, automatic<br/>zip and site manifests"]
     dev -- "promotion PR, CI green" --> beta
@@ -83,7 +83,7 @@ flowchart LR
 ```
 
 When `dev` is on a beta pin, the final ships first: the pin moves on
-`dev`, `dev` is promoted to `beta`, the bar panels run it for a night, and
+`dev`, `dev` is promoted to `beta`, test panels run it for a night, and
 then `beta` is promoted to `main`. What customers get is what the beta
 channel ran.
 
@@ -105,7 +105,7 @@ A fix we want that is only in an ESPHome beta, in order:
 
 ### Setup
 
-- [ESPHome](https://esphome.io/) 2026.10.0, the version CI builds with.
+- [ESPHome](https://esphome.io/) 2026.10.2, the version CI builds with.
 - g++ for the host tests.
 - Node and Python 3 for the device page tests.
 

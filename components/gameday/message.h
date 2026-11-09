@@ -203,8 +203,9 @@ template<class S> uint32_t msg_count(const S &list) {
 
 // Reads a plain text list as it streams in and keeps entries [from, from +
 // max): one per line, trimmed and cleaned, blank lines skipped, each cut to
-// kMsgLineMax. S is the string type it fills (PSRAM on the panel).
-template<class S> class MsgReader {
+// LineMax (kMsgLineMax unless the list says otherwise). S is the string type
+// it fills (PSRAM on the panel).
+template<class S, size_t LineMax = kMsgLineMax> class MsgReader {
  public:
   MsgReader(uint32_t from, uint32_t max) : from_(from), max_(max) {}
 
@@ -217,9 +218,9 @@ template<class S> class MsgReader {
         this->end_line_();
         continue;
       }
-      // Up to a little past kMsgLineMax: message_clean() cuts it at a
+      // Up to a little past LineMax: message_clean() cuts it at a
       // character boundary.
-      if (this->line_.size() < kMsgLineMax + 4)
+      if (this->line_.size() < LineMax + 4)
         this->line_ += c;
     }
     return !this->full();
@@ -246,7 +247,7 @@ template<class S> class MsgReader {
     // A UTF-8 byte order mark at the very top
     if (this->seen_ == 0 && this->line_.compare(0, 3, "\xEF\xBB\xBF") == 0)
       this->line_.erase(0, 3);
-    std::string e = message_clean(this->line_, kMsgLineMax, false);
+    std::string e = message_clean(this->line_, LineMax, false);
     this->line_.clear();
     if (e.empty())
       return;

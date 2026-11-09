@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_brand build/test_plate_wall
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -19,6 +19,12 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_logo_cache_asan
 	./build/test_picture
 	./build/test_celebrate
+	./build/test_celeb_football
+	./build/test_celeb_hockey
+	./build/test_celeb_baseball
+	./build/test_celeb_soccer
+	./build/test_brand
+	./build/test_plate_wall
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -32,6 +38,28 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 build/test_celebrate: test_celebrate.cpp $(PARSER_ONLY) ../components/gameday/celebrate.h ../components/gameday/celebrate_fx.h $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_celebrate.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Football's big plays (celeb_football.h) on recorded ESPN reads, and their
+# frames (celeb_art_index.h).
+build/test_celeb_football: test_celeb_football.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_football.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Hockey's big plays on recorded NHL reads (celeb_hockey.h).
+build/test_celeb_hockey: test_celeb_hockey.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_hockey.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Baseball's big plays (celeb_baseball.h) on recorded ESPN plays.
+build/test_celeb_baseball: test_celeb_baseball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_baseball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Soccer's big plays (celeb_soccer.h) over recorded goals, and their
+# caption over the art (celeb_caption.h).
+build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 # Not part of `all`: renders every celebration to raw RGB565 frames for
 # render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.
@@ -75,6 +103,18 @@ build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache
 build/test_picture: test_picture.cpp $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_picture.cpp -o $@ $(LDFLAGS)
+
+# Brand packs on the bar build: the pack file, its defaults, the logo's
+# colors and the opening card's layout (brand.h).
+build/test_brand: test_brand.cpp ../components/gameday/brand.h ../components/gameday/message.h ../components/gameday/countdown.h ../components/gameday/night.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_brand.cpp -o $@ $(LDFLAGS)
+
+# The plate wall on the bar build: list lines, a new plate's party, names in
+# plates, the quote's rise, page times and the event page (plate_wall.h).
+build/test_plate_wall: test_plate_wall.cpp ../components/gameday/plate_wall.h ../components/gameday/message.h ../components/gameday/weather.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_plate_wall.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the
