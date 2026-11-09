@@ -22,6 +22,14 @@ inline bool board_first(uint32_t now, uint32_t changed_ms, bool board_due) {
   return changed_ms != 0 && board_due && now - changed_ms < kBoardFirstMs;
 }
 
+// Whether the game leaders read for the board's game (a summary of up to
+// 600 KB, about 5 s) waits: a change is recent and a favorite on the list
+// has never been read. It goes ahead of the mode's next read otherwise, and
+// after three quick adds it held the third team (the live one) back 5 s.
+inline bool leaders_wait(uint32_t now, uint32_t changed_ms, bool unread_favorite) {
+  return changed_ms != 0 && unread_favorite && now - changed_ms < kBoardFirstMs;
+}
+
 // What the job in flight reads, as far as a change cares.
 enum class JobKind : uint8_t {
   BOARD,     // a scan, a game, a team or a day for the board

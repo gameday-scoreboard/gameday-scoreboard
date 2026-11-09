@@ -3390,8 +3390,12 @@ void GamedayComponent::start_job_() {
   j.scan_leagues = this->scan_leagues_();
   j.top25 = this->no_team_default();
   // This game's leaders at halftime and the final (game_leaders.h): one
-  // summary read for the board's game, ahead of whatever the mode reads next.
-  if (this->leaders_due_()) {
+  // summary read for the board's game, ahead of whatever the mode reads next,
+  // except a favorite just added and not read yet (leaders_wait).
+  bool unread = false;
+  for (const auto &e : this->fav_)
+    unread = unread || (this->favorites_mode_() && e.fetched_ms == 0);
+  if (this->leaders_due_() && !::espn::leaders_wait(now, this->board_first_ms_, unread)) {
     j.need_leaders = true;
     j.leaders_league = (uint8_t) this->board_league_();
     j.leaders_sport = this->game_.sport;

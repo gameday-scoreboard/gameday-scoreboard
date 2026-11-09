@@ -1743,6 +1743,13 @@ static void test_settings_change() {
   CHECK(!board_first(9000 + kBoardFirstMs, 9000, true));  // a board that keeps reading lets them through
   CHECK(board_first(5000, 0xFFFFF000u, true));            // millis() wrapping past zero
 
+  // Three quick adds, the first a final: its game leaders read waits while
+  // the other two favorites are unread, and goes once they're read.
+  CHECK(leaders_wait(10000, 9000, true));
+  CHECK(!leaders_wait(10000, 9000, false));
+  CHECK(!leaders_wait(10000, 0, true));  // no change: ahead of the next read, as before
+  CHECK(!leaders_wait(9000 + kBoardFirstMs, 9000, true));
+
   // A change while a season read is in flight: it stops, whatever changed,
   // and doesn't count as a failure, so it is read again on the card's turn.
   CHECK(job_moot_after_change(JobKind::SEASON, true, false));
