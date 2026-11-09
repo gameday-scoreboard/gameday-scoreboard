@@ -706,6 +706,8 @@ jobs:
           python3 scripts/crash_report.py --selftest
           python3 scripts/site_seo.py --selftest
           python3 scripts/beta_version.py --selftest
+          python3 scripts/changelog_check.py --selftest
+          python3 scripts/promote.py --selftest
       - name: Site pages have their search and sharing tags
         run: python3 scripts/site_seo.py check docs/site
       - name: Device page mock matches the firmware's set table

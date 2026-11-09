@@ -52,7 +52,7 @@ Search on **On now** finds a team that isn't playing today. When nothing on toda
 
 On the device page, each league tab starts with that league's games today, the same way **On now** shows them, with all of its teams under them. **Final** and **Postponed or canceled** start folded; tap the heading to open one. A league with no games today shows just its teams.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 The app's league tabs do the same.
 :::
 
