@@ -25,12 +25,7 @@ NHL teams have no Up next list on the device page: their season schedules are to
 - **Intermissions** show ESPN's words, like "End of 1st", and the ticker shows the series, or the records outside the playoffs.
 - **The ticker** with the last play. Turn it off with **Last play** under **Ticker** on the device page's Display tab. See [The ticker](/using/ticker/).
 
-
-On a 128-wide board the row under the clock shows the **score margin** over the game: a small chart of the lead, built from every read the panel has made since it started showing the game. Your team's lead fills up from the middle in your color, the other team's fills down in theirs, and a white pixel marks the latest read. A three-goal lead fills the row. The chart keeps the last two games the board showed, so Live games switching away and back picks up where it left off; a restart starts over. Between periods nothing changes, and after the final the row is left to the line score and leaders cards. **Score margin** under **Live pictures** on the device page's Display tab turns it off. ESPN publishes no win chance for hockey, so there is no win chance bar.
-
-:::note[Coming in the next release]
-The score margin chart goes, and so does its switch. In its place the row under the clock spells out **shots on goal**, like "Shots on goal 12-16", your team's shots first, the way the scores sit. After the first goal it adds **the latest goal**: when it went in and who scored it, like "Shots 12-16  12:04 Kane". A goal from an earlier period shows its period instead of the clock, like "Shots 21-19  1st Kane", since the clock row above already says which period it is now. A long name shows on its own, like "Shots 6-16  MacKinnon", and one too long to fit leaves the row to the shots. The goal stays on the row until the next one; a goal taken back on review comes off. Now and then ESPN never shows a goal on its own, often one that went to video review; the row then shows just the shots until the next goal. Shots come from ESPN's saves and goals, so shootout attempts don't count. Between periods and after the final the row is left to the line score and leaders cards, as before. A panel that starts mid-game shows the shots right away and the goal from the next one on.
-:::
+On a 128-wide board the row under the clock spells out **shots on goal**, like "Shots on goal 12-16", your team's shots first, the way the scores sit. After the first goal it adds **the latest goal**: when it went in and who scored it, like "Shots 12-16  12:04 Kane". A goal from an earlier period shows its period instead of the clock, like "Shots 21-19  1st Kane", since the clock row above already says which period it is now. A long name shows on its own, like "Shots 6-16  MacKinnon", and one too long to fit leaves the row to the shots. The goal stays on the row until the next one; a goal taken back on review comes off. Now and then ESPN never shows a goal on its own, often one that went to video review; the row then shows just the shots until the next goal. Shots come from ESPN's saves and goals, so shootout attempts don't count. Between periods and after the final the row is left to the line score and leaders cards. A panel that starts mid-game shows the shots right away and the goal from the next one on.
 
 The board doesn't show power plays. ESPN's NHL data has no power play field, and working one out from the penalties would be wrong when penalties offset.
 
@@ -46,7 +41,6 @@ With **Celebrations** on **Full**, your goal lights the goal lamp: a red beam sp
 
 ### Big plays
 
-:::note[Coming in the next release]
 With **Celebrations** on **Full** and **Big plays** on (the default), a **hat trick**, one player's third goal of the game, gets a pixel-art show in your team's colors in place of the plain goal lamp: the lamp spins, "HAT TRICK!" drops in letter by letter and hats rain down onto the ice. 4.5 seconds.
 
 Your team's hat tricks show; in the Live games mode either team's do, the second team's only with **Opponent scores too** on. Turn **Big plays** off under **Celebrations** on the device page to keep the plain goal lamp. On **Subtle** the goal flashes like any other.
@@ -54,7 +48,6 @@ Your team's hat tricks show; in the Live games mode either team's do, the second
 The panel counts goals from ESPN's goal count for each player during the game, so it can miss a hat trick when it started showing the game after the player's second goal, but it never shows one that isn't. When ESPN's count catches up a read after the goal, the goal lamp plays first and the hat trick on the next read, about 10 seconds later.
 
 Power play and shorthanded goals get the plain goal lamp: ESPN's live game data doesn't say which goals they are.
-:::
 
 ## The playoff series
 
