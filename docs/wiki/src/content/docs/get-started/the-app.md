@@ -63,7 +63,7 @@ Under **Night mode until**, **Turn on for tonight** puts the panel back at its n
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
 
 :::note[Coming in the next release]
-On iPhone, each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
+Each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
 :::
 
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
@@ -99,6 +99,10 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
 Each setting has one short line saying what it does. The longer rules are on these pages.
+
+:::note[Coming in the next release]
+On Android, the **Celebrations** card also has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a dunk or an alley-oop gets its own animation, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). The switch shows once the panel runs firmware with it.
+:::
 
 On Android, **Display** has a **Live pictures** card after the ticker, with the device page's **Field strip**, **Win chance bar** and **Score margin** switches for the pictures a 128-wide board draws under the clock during a game. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
