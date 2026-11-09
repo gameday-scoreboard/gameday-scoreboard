@@ -42,6 +42,7 @@ through `update_important` in the panel's state.
 - 🏀 Basketball's row under the clock takes turns with the last basket, each team's points leader, the playoff series and the win chance in words, in place of the score margin chart
 - 🏈 Football's field strip takes turns with the win chance in words, like "ND 84% to win", in place of the thin win chance bar
 - 🏀 Your team's dunks and alley-oops get their own pixel-art scenes on Full celebrations, with a Big plays switch to turn them off
+- 🏈 Your defense's interceptions, pick sixes, fumble recoveries and sacks get their own pixel-art scenes on Full celebrations, behind the same Big plays switch
 - ⚾ Your team's grand slams and walk-offs get their own pixel-art scenes on Full celebrations with Big plays on, and a walk-off plays before the win screen
 - ⚽ Your club's braces, hat tricks, penalties and late go-ahead goals get their own pixel-art scenes on Full celebrations with Big plays on, with the scorer's name and the minute
 

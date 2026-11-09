@@ -11,7 +11,13 @@ The palette comes from the frames script: --palette names a module next to
 this one whose PALETTE is a list of (name, (r, g, b)), the names team,
 team_shade, alt, alt_shade and team_light standing for the team's colors.
 
+--lead <play>_<width> <n> stores only these frames and plays that play's
+first n frames before them: a play that opens like another one (the pick
+six opens as the interception) keeps those frames once. The lead's palette
+must be the same, and these frames start whole.
+
 Usage: python3 pack.py <frames dir> <play>_<width> <fps> <out .h> --palette <module>
+         [--lead <play>_<width> <n>]
   e.g. python3 pack.py frames/dunk_128 dunk_128 12 \
          ../../components/gameday/celeb_art_dunk_128.h --palette basketball_frames"""
 import importlib
@@ -51,6 +57,11 @@ def runs(pixels):
 
 def main():
     args = sys.argv[1:]
+    lead = None
+    if "--lead" in args:
+        k = args.index("--lead")
+        lead = (args[k + 1], int(args[k + 2]))
+        del args[k:k + 3]
     if "--palette" not in args or len(args) != 6:
         sys.exit(__doc__)
     k = args.index("--palette")
@@ -88,12 +99,17 @@ def main():
         pal.append("0x000000")
     ident = "".join(p.capitalize() for p in name.split("_"))
     lines = [
-        f"// Made by tools/celeb_art/pack.py from {len(frames)} frames at {w}x{h}, {fps} fps; do not edit.",
+        f"// Made by tools/celeb_art/pack.py from {len(frames)} frames at {w}x{h}, {fps} fps"
+        + (f", after {lead[0]}'s first {lead[1]}" if lead else "") + "; do not edit.",
         f"// {len(data)} bytes of runs for {len(frames) * w * h} pixels.",
         "#pragma once",
         "#include <cstdint>",
         "",
         '#include "celeb_art.h"',
+    ]
+    if lead:
+        lines.append(f'#include "celeb_art_{lead[0]}.h"')
+    lines += [
         "",
         "namespace espn {",
         "",
@@ -107,7 +123,7 @@ def main():
         "};",
         f"inline const CelebArt &celeb_art_{name}() {{",
         f"  static constexpr CelebArt art{{{w}, {h}, {fps}, {len(frames)}, kArt{ident}Palette, kArt{ident}Offsets, "
-        f"kArt{ident}Data}};",
+        f"kArt{ident}Data" + (f", celeb_art_{lead[0]}, {lead[1]}" if lead else "") + "};",
         "  return art;",
         "}",
         "",

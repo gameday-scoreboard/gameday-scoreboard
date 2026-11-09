@@ -44,6 +44,10 @@ int main(int argc, char **argv) {
       {"muted", CelebKind::MUTED, "BUF TOUCHDOWN", "", 0x00338D},
       {"dunk", CelebKind::DUNK, "DUNK!", "", 0xC4CED4},
       {"alley-oop", CelebKind::ALLEY_OOP, "ALLEY-OOP!", "", 0xE03A3E},
+      {"interception", CelebKind::INTERCEPTION, "INTERCEPTION!", "", 0x00338D},
+      {"pick-six", CelebKind::PICK_SIX, "PICK SIX!", "", 0x00338D},
+      {"fumble", CelebKind::FUMBLE, "FUMBLE!", "", 0xE31837},
+      {"sack", CelebKind::SACK, "SACK!", "", 0xE31837},
       {"grand-slam", CelebKind::GRAND_SLAM, "GRAND SLAM!", "", 0x002D72},
       {"walk-off", CelebKind::WALK_OFF, "WALK-OFF!", "", 0x005A9C},
   };
@@ -70,6 +74,10 @@ int main(int argc, char **argv) {
       case CelebKind::LATE_GOAL: p.duration_ms = kCelebLateGoalMs; break;
       case CelebKind::DUNK: p.duration_ms = kCelebDunkMs; break;
       case CelebKind::ALLEY_OOP: p.duration_ms = kCelebAlleyOopMs; break;
+      case CelebKind::INTERCEPTION: p.duration_ms = kCelebInterceptionMs; break;
+      case CelebKind::PICK_SIX: p.duration_ms = kCelebPickSixMs; break;
+      case CelebKind::FUMBLE: p.duration_ms = kCelebFumbleMs; break;
+      case CelebKind::SACK: p.duration_ms = kCelebSackMs; break;
       case CelebKind::GRAND_SLAM: p.duration_ms = kCelebGrandSlamMs; break;
       case CelebKind::WALK_OFF: p.duration_ms = kCelebWalkOffMs; break;
       default: p.duration_ms = kCelebFlashMs; break;

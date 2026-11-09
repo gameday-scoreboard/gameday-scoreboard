@@ -44,9 +44,13 @@ enum class CelebKind : uint8_t {
   // at the end, so every kind from DUNK on is art.
   DUNK,       // basketball: the ball slams through the rim, the rim shakes
   ALLEY_OOP,  // basketball: the lob arcs high to the rim, then the finish
-  HAT_TRICK,  // hockey: the goal lamp, then hats rain down onto the ice
-  GRAND_SLAM,  // baseball: the ball sails out, four runners cross the plate, a bigger burst
-  WALK_OFF,    // baseball: the team's color floods up from the bottom, the dugout empties; the win follows
+  INTERCEPTION,  // football: a defender leaps and picks off the pass, runs it back
+  PICK_SIX,      // football: the interception, then the end zone's goalposts
+  FUMBLE,        // football: the ball bounces loose, a defender dives on it
+  SACK,          // football: the quarterback goes down, the board jolts
+  HAT_TRICK,     // hockey: the goal lamp, then hats rain down onto the ice
+  GRAND_SLAM,    // baseball: the ball sails out, four runners cross the plate, a bigger burst
+  WALK_OFF,      // baseball: the team's color floods up from the bottom, the dugout empties; the win follows
   BRACE,      // soccer, a scorer's second goal: the net ripples, the name, two balls
   SOCCER_HAT_TRICK,  // soccer, the same player's third: three balls
   PENALTY,    // soccer: the ball on the spot, the keeper dives the wrong way
@@ -84,6 +88,10 @@ constexpr uint32_t kCelebWinMs = 10000;
 // The big plays: each art's frames / fps, so the last frame holds to the end.
 constexpr uint32_t kCelebDunkMs = 2500;
 constexpr uint32_t kCelebAlleyOopMs = 3500;
+constexpr uint32_t kCelebInterceptionMs = 5000;
+constexpr uint32_t kCelebPickSixMs = 6000;
+constexpr uint32_t kCelebFumbleMs = 4000;
+constexpr uint32_t kCelebSackMs = 2000;
 constexpr uint32_t kCelebHatTrickMs = 4500;  // 54 frames
 constexpr uint32_t kCelebGrandSlamMs = 5000;
 constexpr uint32_t kCelebWalkOffMs = 4500;
