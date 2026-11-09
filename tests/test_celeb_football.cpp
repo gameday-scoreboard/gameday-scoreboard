@@ -242,10 +242,11 @@ static void test_pick_six_lead() {
     CHECK(!keeps);
     six.reset();
     pick.reset();
-    int lead_same = 0, own_differs = 0;
+    int lead_same = 0, own_differs = 0, frame_counts = 0;
     for (int n = 0; n < p->total_frames(); n++) {
       const float t = (n + 0.5f) / p->fps;
       six.render(a, w, 64, w, *p, t, 0x00338D, 0xFFFFFF, 1.0f);
+      frame_counts += six.frame() == n;  // the play's frame, the lead's included
       if (n < p->lead_frames) {
         pick.render(b, w, 64, w, *i, t, 0x00338D, 0xFFFFFF, 1.0f);
         lead_same += memcmp(a, b, sizeof(uint16_t) * w * 64) == 0;
@@ -254,6 +255,7 @@ static void test_pick_six_lead() {
       }
     }
     CHECK_EQ(lead_same, (int) p->lead_frames);
+    CHECK_EQ(frame_counts, p->total_frames());
     CHECK(own_differs >= p->frames - 1);
     // Played again from the start: the interception's first frame again.
     six.render(a, w, 64, w, *p, 0.01f, 0x00338D, 0xFFFFFF, 1.0f);

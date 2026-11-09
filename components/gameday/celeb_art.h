@@ -74,6 +74,7 @@ class CelebArtPlayer {
       seg_ = seg;
       decoded_ = -1;
     }
+    seg_start_ = seg == &art ? art.lead_frames : 0;
     while (decoded_ < target)
       decode_(*seg, ++decoded_);
     uint16_t pal[16];
@@ -95,8 +96,9 @@ class CelebArtPlayer {
     }
   }
 
-  // The frame last decoded, counted in its own set (the lead's or the art's).
-  int frame() const { return decoded_; }
+  // The play's frame last drawn, counted from its first (a lead's frames
+  // included), or -1 before the first.
+  int frame() const { return decoded_ < 0 ? -1 : seg_start_ + decoded_; }
 
  private:
   // The same arithmetic as celebrate_fx.h's rgb565, rgb_scale and rgb_mix;
@@ -159,6 +161,7 @@ class CelebArtPlayer {
   uint8_t buf_[kW * kH]{};
   int decoded_{-1};
   const CelebArt *seg_{nullptr};  // the set decoded_ counts in
+  int seg_start_{0};              // the play's frame where that set starts
 };
 
 }  // namespace espn
