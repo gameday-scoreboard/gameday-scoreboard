@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Live games' "Pick the best game": which game in progress a fan would flip
 // to, from what the day's scan already reads (score, period, clock, AP
 // rank), and the upset alert when a ranked side trails late. Pure, no

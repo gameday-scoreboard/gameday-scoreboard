@@ -130,6 +130,8 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator("#tzline")).toContainText("US Central");
   await expect(page.locator("#hostname")).toHaveText("gameday-2f6a70.local");
   await expect(page.locator("#ver")).toHaveText("v1.5.4");
+  await expect(page.locator("#credit")).toHaveText("© 2026 Brandon Harvey");
+  await expect(page.locator(".foot a", { hasText: "GPLv3" })).toHaveAttribute("href", /NOTICE\.md$/);
   // A row per favorite, the one on the board marked.
   await expect(page.locator("#upnextList .un.fav .n")).toHaveText(["DAL vs PHI", "HOU vs WSH", "MISS vs LSU"]);
   await expect(page.locator("#upnextList .un.shown .n")).toHaveText("DAL vs PHI");

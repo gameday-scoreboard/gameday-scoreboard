@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Text on a full-screen box: the banner (firmware/pages/message.yaml), the
 // message card and the news card (firmware/pages/gameday-live.yaml). The text
 // takes the biggest font it fits in, centered; past the smallest it rolls up

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The device page's POST /gameday/set: which keys it takes, what each value
 // means and where it is clamped or refused, and the leagues each live mode
 // scans.

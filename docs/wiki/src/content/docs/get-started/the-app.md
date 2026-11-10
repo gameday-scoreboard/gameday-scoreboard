@@ -20,7 +20,7 @@ Both apps have three tabs: **Board**, **Teams** and **Settings**. They show the 
 
 A few things are on iPhone only for now: the night schedule, and the **Pick the best game** and **Favorites take over** switches. They're marked below. On Android, use the [device page](/using/device-page/) for them.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 The Android app gets all three, so none of them stays on iPhone only:
 
 - **Settings > Display > Screen** has the night schedule: **Night schedule**, **Starts at**, **Ends at**, **Screen at night** and **Night brightness**. See [Night schedule](/using/brightness-and-clock/#night-schedule).
@@ -52,7 +52,7 @@ When the panel shows its thermometer or plug in the corner, the Board shows the 
 
 On iPhone, while the night schedule has the panel dimmed or dark, the Board says so under the game, like **Night mode until 7:00 AM**, with what brings the panel back. See [Night schedule](/using/brightness-and-clock/#night-schedule).
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 Under **Night mode until**, **Turn on for tonight** puts the panel back at its normal brightness for the rest of the night. Turning **Panel on** back on during the night does the same. The Board then says **Night mode off until** the next start time, like **Night mode off until 11:00 PM**, and **Back to night mode** goes back to the schedule. During a live game of yours there's no button, since the game already has the panel lit. The next night the schedule runs as usual.
 :::
 
@@ -62,13 +62,13 @@ Under **Night mode until**, **Turn on for tonight** puts the panel back at its n
 
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 Each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
 :::
 
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 On iPhone and Android, each playlist has **Options** under its teams, with the device page's playlist options: **Plays on** (tap the days, then set **From** and **To**), **Only this list's games**, and **Only today's games** (**Same as Favorites**, **On** or **Off**). The playlist's row shows its schedule, like "Weekends 8:00 PM to 2:00 AM". **Options** shows once the panel runs firmware with playlist options. See [Playlists](/using/favorites/#playlists).
 
 On Android, when your favorites cover more than one sport, **Playing** also lists **All football**, **All basketball** and the rest, one for each sport, between **All favorites** and your playlists. **Playlists** no longer has **One per sport**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
@@ -88,7 +88,7 @@ In both apps, **Only today's games**, **Jump to the action** and **Score banner*
 - **Panels**: every panel saved in the app, and new ones nearby.
 - **Team logos**, the app's version, links to help, **Diagnostics** and **Copy diagnostics**, which puts what support needs on the clipboard to paste into an email. It never includes passwords.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 On Android, **Setup** has **Walk through the settings again** too. It opens the walkthrough from setup: your teams, what the panel shows, the ticker and switching, and the timezone.
 :::
 
@@ -100,13 +100,13 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 
 Each setting has one short line saying what it does. The longer rules are on these pages.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 On Android, the **Celebrations** card also has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a dunk or an alley-oop, or a soccer brace, hat trick, penalty or late go-ahead goal, gets its own animation, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). The switch shows once the panel runs firmware with it.
 :::
 
 On Android, **Display** has a **Live pictures** card after the ticker, for what a 128-wide board draws under the clock during a game: the device page's **Field strip**, and **Win chance bar**, the app's name for the device page's **Win chance**, which turns the win chance line under the clock on or off ("ND 84% to win"). Its **Score margin** switch does nothing, since the chart it turned off is gone. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 An app update renames **Win chance bar** to **Win chance** and drops **Score margin**.
 :::
 

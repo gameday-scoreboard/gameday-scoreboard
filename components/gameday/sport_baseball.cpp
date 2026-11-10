@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Baseball's ticker, clock row and splashes. Pure, no ESPHome includes.
 #include "espn_parse.h"
 

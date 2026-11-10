@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The between-games cards: one row each in the device page's Between games
 // list, with a switch, in the order the page shows them. The state document's
 // "cards" list, the set key cards=, the settings backup, the device page and

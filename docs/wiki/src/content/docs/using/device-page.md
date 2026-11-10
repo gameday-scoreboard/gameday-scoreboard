@@ -239,3 +239,7 @@ A red box near the bottom of the Device tab has the three buttons that restart t
 ### FCC information
 
 Folded at the very bottom. **Show on panel** puts the panel's model, FCC ID and FCC statement on its own screen for about a minute, then it goes back to the board. A panel that was switched off turns on for it and stays on. One that is dimmed or dark for the night lights up for it, then goes back to the night setting. See [FCC information](/fcc/).
+
+## Under every tab
+
+The bottom of the page shows the firmware version, a link to the source code, where the scores come from, and the author and license: "© 2026 Brandon Harvey · GPLv3". GPLv3 links to the license notice.

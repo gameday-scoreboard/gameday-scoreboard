@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The demo build's scripted game (firmware/gameday-demo.yaml). Release
 // firmware compiles none of this: GAMEDAY_DEMO is only defined when the
 // gameday block in YAML says demo: true.

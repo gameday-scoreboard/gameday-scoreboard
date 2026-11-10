@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
 // Local override of ESPHome 2026.10.0 esphome/components/improv_ble

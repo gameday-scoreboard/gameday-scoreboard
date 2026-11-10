@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Demo build only (firmware/pages/demo.yaml): the Demo card, a backup to the
 // remote for starting and stopping the looping demo and picking its teams.
 // scripts/build_web.py appends this to the device page in bundle-demo.js;

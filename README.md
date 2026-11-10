@@ -129,4 +129,4 @@ Contributions are welcome: bug reports from game days, test fixtures from odd ga
 
 ## License
 
-MIT.
+GPLv3, with an attribution term, from November 2026. Code released before that stays MIT. [NOTICE.md](NOTICE.md) says why it changed and what each license covers.

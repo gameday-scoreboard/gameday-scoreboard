@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Soccer's big plays: a brace or hat trick, a penalty and a late goal. All
 // four are goals, so they read from the goal list the panel already keeps
 // (ESPN's details, Soccer::goals) the moment the score moves. Pure, no

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Playlists: named groups of the owner's favorites. Favorite teams mode plays
 // one of them, or every favorite when none is chosen, and WizMote buttons 1
 // to 4 pick the first four. A playlist is kept as a mask over the favorites

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Puts an object back to its freshly constructed state where it sits.
 //
 // `x = T{}` builds the new T on the stack first and copies it over. A

@@ -129,9 +129,16 @@ is the short version.
 - A PR that changes what an owner sees or does adds one bullet under
   `## Unreleased` at the top of CHANGELOG.md, in its group (`### ⚠️ Heads
   up`, `### ✨ New` or `### 🐛 Fixes`): one short line for the owner,
-  starting with an emoji. The detail goes on the docs page.
+  starting with an emoji. The detail goes on the docs page. The section
+  starts with a plain summary line under 240 characters (the first PR
+  after a release writes it; a later one rewrites it when its change is
+  the bigger news), and a change to a feature that already has a line
+  updates that line instead of adding another. CI's "Changelog ready to
+  release" job checks this on PRs into `dev`: a PR touching `firmware/`
+  or `components/` changes Unreleased unless its description has `No
+  owner-visible change, no docs: <why>` or `No changelog line: <why>`.
   Never edit a released section or the version number; the maintainers
-  rename `## Unreleased` and bump the version when a release goes out.
+  rename `## Unreleased` and set the version when a release goes out.
 - A change an owner or DIY builder can see or do comes with its docs
   page, updated or added under `docs/wiki/src/content/docs/` in the same
   PR. CI's "Docs updated" job fails a PR into `dev` that touches
@@ -139,4 +146,7 @@ is the short version.
   has a line `No owner-visible change, no docs: <why>` (the reviewer checks
   that claim). Describe the behavior as it is on `dev`, in the present
   tense: the docs site publishes from `main`, so the page goes live with
-  the release. `npm run build` in `docs/wiki` must pass.
+  the release. No "Coming in the next release" notes (CI refuses them);
+  a phone app feature that waits for an app update uses
+  `:::note[Coming in the next app update]`. `npm run build` in
+  `docs/wiki` must pass.
