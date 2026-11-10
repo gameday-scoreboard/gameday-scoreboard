@@ -178,4 +178,5 @@ previews the site.
 ## License
 
 By contributing you agree that your work is released under this repo's
-[MIT license](LICENSE).
+[GPLv3 license](LICENSE), with the additional terms in
+[NOTICE.md](NOTICE.md).

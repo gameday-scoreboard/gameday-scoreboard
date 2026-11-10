@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 """gameday: polls ESPN for one team's football game and hands the page
 the same fields the Home Assistant blueprint used to push."""
 

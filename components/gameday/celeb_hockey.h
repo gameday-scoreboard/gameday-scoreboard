@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Hockey's big play: the hat trick. Pure, no ESPHome includes; the host
 // tests run it on recorded ESPN reads.
 //

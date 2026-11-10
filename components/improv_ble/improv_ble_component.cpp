@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps

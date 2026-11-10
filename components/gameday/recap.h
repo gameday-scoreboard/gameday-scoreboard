@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The finals rotation: what a live mode shows on a panel with no team picked
 // when nothing is live. The games later today under a "Later today" header,
 // then a header per game day and league ("Yesterday's NHL scores") and that

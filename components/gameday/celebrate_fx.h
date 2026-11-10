@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The celebration animations: fireworks, confetti, a light wave, a ball out
 // of the park, a rippling net, a spinning goal lamp, a three through the
 // hoop, drawn into an RGB565 frame. Pure, no ESPHome or LVGL includes: the

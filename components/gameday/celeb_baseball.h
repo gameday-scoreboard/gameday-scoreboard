@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Baseball's big plays: the grand slam and the walk-off. Pure, no ESPHome
 // includes: tests/test_celeb_baseball.cpp runs them over recorded ESPN reads.
 // The frames they play are celeb_art_grand_slam_*.h and celeb_art_walk_off_*.h.

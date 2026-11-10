@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The brand pack's logo and sprite (brand.h) on the panel: PNG files decoded
 // once, on the fetch task, into PSRAM. The logo is RGB565 pixels in the
 // pack's colors, which the opening card shows (brand_lvgl.h); the sprite a

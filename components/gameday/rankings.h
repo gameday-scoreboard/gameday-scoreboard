@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The college Top 25 card: the AP poll for college football and men's
 // college basketball, read from ESPN's core API (about 28 KB a poll) once a
 // day and shown between games, a page of rows at a time, while the panel

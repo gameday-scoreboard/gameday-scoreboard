@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Football's big plays: an interception (a pick-six bigger), a fumble the
 // defense recovers, and a sack, read from the last play's type in the game
 // read. Pure, no ESPHome includes; the host tests run it on recorded ESPN
