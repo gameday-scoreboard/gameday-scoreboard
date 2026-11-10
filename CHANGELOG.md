@@ -35,9 +35,9 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
-## Unreleased
+## v2026.11.2
 
-The firmware's license changes to GPLv3 for new code.
+Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.
 
 ### ⚠️ Heads up
 
@@ -46,13 +46,6 @@ The firmware's license changes to GPLv3 for new code.
 ### ✨ New
 
 - ©️ The bottom of the device page names the firmware's author and license
-
-## v2026.11.2
-
-Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.
-
-### ✨ New
-
 - 🎆 On **Full** celebrations your team's big plays get their own pixel-art scene: dunks and alley-oops, interceptions, pick sixes, fumbles and sacks, grand slams and walk-offs, hockey hat tricks, and soccer braces, hat tricks, penalties and late go-ahead goals, with a **Big plays** switch to turn them off
 - 🔤 On a wide board the row under the clock reads in words in place of the score margin chart and the win chance bar: the win chance ("ND 84% to win") in football and basketball, the last basket, points leaders and playoff series in basketball, shots on goal and the latest goal in hockey
 - 📋 Each league tab in the team chooser starts with that league's games today, so you can add a team from its game

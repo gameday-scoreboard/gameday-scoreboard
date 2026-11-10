@@ -17,7 +17,9 @@ its released shape:
 - Each bullet sits in a group and starts with an emoji.
 
 With --base, every released `## vX.Y.Z` section in the base must be the same
-in this file: a released section stays as it shipped. --need-change also
+in this file: a released section stays as it shipped. A version section counts
+as released once its `vX.Y.Z` tag exists; until then (prepped, on beta, not
+shipped) it can still take a line. --need-change also
 fails when the Unreleased section is the same as the base's, for a PR that
 changes the firmware and so owes the section a line.
 """
@@ -85,19 +87,29 @@ def check_unreleased(text):
     return problems
 
 
-def check_against(base_text, text, need_change):
+def check_against(base_text, text, need_change, tags=None):
+    """tags: the release tags that exist. None treats every version section
+    as released."""
     problems = []
     base, head = sections(base_text), sections(text)
+    pending_changed = False
     for heading, body in base.items():
         if heading == "Unreleased" or not heading.startswith("v"):
             continue
         if heading not in head:
             problems.append(f"The released section `## {heading}` is gone.")
+        elif tags is not None and heading not in tags:
+            pending_changed = pending_changed or head[heading] != body
         elif head[heading] != body:
             problems.append(f"The released section `## {heading}` changed. A released section stays as it shipped: put the change under `## Unreleased`.")
-    if need_change and head.get("Unreleased", "") == base.get("Unreleased", ""):
+    if need_change and head.get("Unreleased", "") == base.get("Unreleased", "") and not pending_changed:
         problems.append("This PR changes the firmware but adds nothing under `## Unreleased`.")
     return problems
+
+
+def release_tags():
+    out = subprocess.run(["git", "tag", "--list", "v*"], check=True, capture_output=True, text=True).stdout
+    return set(out.split())
 
 
 def git_show(ref):
@@ -137,6 +149,10 @@ def selftest():
     more = good.replace("- ⭐ Favorites", "- ⭐ Favorites\n- 🏷️ Logos")
     assert check_against(good, more, True) == []
     assert check_against(head + v1, good, True) == []
+    # A version that isn't tagged yet (prepped, on beta) can still take a line,
+    # and that line counts as the PR's changelog change.
+    assert check_against(good, edited, True, tags=set()) == []
+    assert any("v2026.11.1" in p for p in check_against(good, edited, False, tags={"v2026.11.1"}))
     print("selftest ok")
 
 
@@ -153,7 +169,7 @@ def main():
     text = CHANGELOG.read_text(encoding="utf-8")
     problems = check_unreleased(text)
     if args.base:
-        problems += check_against(git_show(args.base), text, args.need_change)
+        problems += check_against(git_show(args.base), text, args.need_change, release_tags())
     for p in problems:
         print(f"::error file=CHANGELOG.md::{p}")
     if not problems:
