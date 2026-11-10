@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 """saved_networks: the panel remembers up to five Wi-Fi networks instead of
 ESPHome's one, and tries the last one that worked first."""
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Words drawn over a big play's art while it plays: the scorer's name on a
 // brace, the minute of a late goal. The frames are drawn ahead of time, so
 // anything that changes from game to game is stamped on top here, in the

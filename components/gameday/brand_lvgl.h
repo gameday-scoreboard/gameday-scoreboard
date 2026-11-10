@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The opening card on the bar build (brand.h): the pack's logo, title and
 // wall name in its colors, drawn into the tt_brand box of
 // firmware/pages/gameday-live.yaml when the message card puts it up.

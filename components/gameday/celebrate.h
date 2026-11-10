@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Which celebration a score or a big play gets. Pure, no ESPHome includes:
 // the host tests run decide_celebration() over every sport and both sides.
 // The kinds and the owner's setting are celeb_plan.h, each sport's big plays

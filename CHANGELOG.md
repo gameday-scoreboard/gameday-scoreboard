@@ -35,6 +35,18 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+The firmware's license changes to GPLv3 for new code.
+
+### ⚠️ Heads up
+
+- 📜 New firmware code is open source under GPLv3 instead of MIT, so anyone who builds on it keeps the author's name on it and shares their source; code released before stays MIT
+
+### ✨ New
+
+- ©️ The bottom of the device page names the firmware's author and license
+
 ## v2026.11.2
 
 Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.

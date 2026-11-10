@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The celebration a play gets, as data: the owner's Celebrations setting,
 // the kinds of show, the plan the component hands the page, and the color
 // helpers every sport's picker shares. Pure, no ESPHome includes.

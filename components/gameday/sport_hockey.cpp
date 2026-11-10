@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Hockey's ticker, clock row and splashes. Pure, no ESPHome includes.
 // ESPN's NHL feed has no power play field. The board must not infer one from
 // penalties, because offsetting and coincidental minors would make it wrong.

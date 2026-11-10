@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Frame-by-frame pixel art for the big plays (a dunk, an alley-oop). Each
 // play's frames are drawn as PNGs at 128x64 and at 64x64 by a
 // tools/celeb_art/<sport>_frames.py script and packed by

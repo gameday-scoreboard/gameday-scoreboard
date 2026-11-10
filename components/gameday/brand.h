@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Brand packs, on the bar build: one small JSON file at an address the owner
 // sets (POST /gameday/set?brand=...) gives the panel a bar's look, so the
 // same firmware dresses up for any bar with no reflash:

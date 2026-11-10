@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Which frames each big play draws, at the board's width. Every play has a
 // set drawn at 128x64 (two panels) and one at 64x64 (one panel); the
 // single-panel build can change width at runtime, so it carries both.
