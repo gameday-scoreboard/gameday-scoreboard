@@ -5543,6 +5543,24 @@ static void test_update_mark() {
   CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
   CHECK(m.failed[0] == '\0');
 
+  // A release ranks above its own betas, so a beta of the release a panel
+  // runs is a downgrade too: its rollback isn't kept. A beta of the next
+  // release, the one Follow beta offers, is.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.11.2-beta.1");
+  m.written = 1;
+  CHECK(update_mark_boot(m, "2026.11.2", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.failed[0] == '\0');
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.11.3-beta.1300");
+  m.written = 1;
+  CHECK(update_mark_boot(m, "2026.11.2", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(update_failed_here(m, "2026.11.3-beta.1300"));
+  CHECK(!update_failed_here(m, "2026.11.3-beta.1301"));
+  // Once the release it was building toward is out, the beta is behind it.
+  CHECK(update_mark_boot(m, "2026.11.3", false) == UpdateOutcome::NONE);
+  CHECK(m.failed[0] == '\0');
+
   // Beta versions fit, a longer string is cut and still ends.
   m = UpdateMark{};
   update_mark_set(m.installing, "2026.10.0-beta.812");
