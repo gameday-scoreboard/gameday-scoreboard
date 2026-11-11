@@ -68,7 +68,6 @@
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,
-  "brand": "http://192.168.1.20/brand/taproom.json",
   "autoupd": false,
   "beta": false,
   "lists": [

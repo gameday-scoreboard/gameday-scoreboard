@@ -10,10 +10,6 @@
 // is fully written and checked), and the next try is the next night. A
 // release that rolled back on the panel is not installed on its own again
 // (UpdateMark below).
-//
-// The bar build (firmware/pages/bar.yaml) runs the same rules against the
-// beta channel with the setting always on, plus "Install now"
-// (install_now_listed) for pushing a fix to one bar without waiting.
 #pragma once
 
 #include <cstdint>
@@ -162,33 +158,8 @@ enum class AutoUpdateStep : uint8_t {
   CHECK,      // read the manifest now, then come back
   WAIT_GAME,  // an update is waiting but a followed game is live
   INSTALL,    // record tonight's try, then install
-  INSTALL_NOW,  // record the try for this version, then install (install_now_listed)
   SKIP_FAILED,  // the release on offer rolled back here; leave it to a manual install
 };
-
-// "Install now" for the beta channel: the publisher names panels in the
-// release summary ("... Install now: gameday-aba970 gameday-500ebc", or
-// "all"), and a listed bar panel installs at its next manifest read, any hour,
-// instead of waiting for the night. Names are separated by spaces or commas.
-static const char kInstallNowTag[] = "Install now:";
-
-inline bool install_now_listed(const std::string &summary, const std::string &name) {
-  size_t at = summary.find(kInstallNowTag);
-  if (at == std::string::npos || name.empty())
-    return false;
-  size_t i = at + sizeof(kInstallNowTag) - 1;
-  while (i < summary.size()) {
-    while (i < summary.size() && (summary[i] == ' ' || summary[i] == ','))
-      i++;
-    size_t start = i;
-    while (i < summary.size() && summary[i] != ' ' && summary[i] != ',')
-      i++;
-    std::string word = summary.substr(start, i - start);
-    if (word == name || word == "all")
-      return true;
-  }
-  return false;
-}
 
 struct AutoUpdateInputs {
   bool enabled{false};
@@ -203,13 +174,10 @@ struct AutoUpdateInputs {
   bool available{false};   // the update entity says a different version is out
   bool newer{false};       // and version_newer() agrees it is newer
   bool live{false};        // a game the panel follows is in progress
-  bool now{false};         // install_now_listed() and not tried for this version yet
   bool failed{false};      // update_failed_here() for the release on offer
 };
 
 inline AutoUpdateStep auto_update_step(const AutoUpdateInputs &in) {
-  if (in.enabled && in.now && in.available && in.newer && !in.failed)
-    return in.live ? AutoUpdateStep::WAIT_GAME : AutoUpdateStep::INSTALL_NOW;
   if (!in.enabled || !in.clock_valid || in.tried_day == in.today)
     return AutoUpdateStep::IDLE;
   if (in.hour < kAutoUpdateStartHour || in.hour >= kAutoUpdateEndHour)

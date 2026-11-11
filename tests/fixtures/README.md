@@ -224,8 +224,8 @@ or its limits change.
 Not from ESPN either: `api/` is the panel's own HTTP API as the companion
 app sees it. `state.json` is a `GET /gameday/state` document with every key
 the firmware can send, so it has some together that a real panel never sends
-at once (the bar build's `bar` next to `beta`, favorites rows next to the
-team's upcoming games, a reason for an empty board next to a live game).
+at once (favorites rows next to the team's upcoming games, a reason for an
+empty board next to a live game).
 `wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
 /gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
 (`demo` and `demo_stop` only in demo builds). `settings.json` is `GET

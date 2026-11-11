@@ -21,15 +21,6 @@ is the short version.
   `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
   add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
   are never released.
-- `firmware/gameday-bar.yaml` and `firmware/gameday-scoreboard75-bar.yaml`
-  are the bar builds, for panels in bars: the same firmware plus
-  `firmware/pages/bar.yaml`, which reads the bar releases
-  (`install.gameday-scoreboard.com/firmware/<variant>-bar/`, published with
-  every release) and installs from them on its own at night. With Follow
-  beta on they read the bar betas
-  (`install.gameday-scoreboard.com/firmware/beta/<variant>/`), published from
-  `beta`. Release firmware never installs anything unless the owner turns
-  on "Install updates automatically".
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.
