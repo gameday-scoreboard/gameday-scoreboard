@@ -49,7 +49,6 @@ Big plays: dunks, interceptions, grand slams, hat tricks and braces get their ow
 - 🎆 On **Full** celebrations your team's big plays get their own pixel-art scene: dunks and alley-oops, interceptions, pick sixes, fumbles and sacks, grand slams and walk-offs, hockey hat tricks, and soccer braces, hat tricks, penalties and late go-ahead goals, with a **Big plays** switch to turn them off
 - 🔤 On a wide board the row under the clock reads in words in place of the score margin chart and the win chance bar: the win chance ("ND 84% to win") in football and basketball, the last basket, points leaders and playoff series in basketball, shots on goal and the latest goal in hockey
 - 📋 Each league tab in the team chooser starts with that league's games today, so you can add a team from its game
-- 🍺 Bar panels take the bar's logo, colors, club name and plate list from one brand file, show the plates as a plate wall with a party for each new one and a countdown to the next event, and install each release on their own overnight
 
 ### 🐛 Fixes
 
