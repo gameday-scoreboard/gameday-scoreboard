@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // "Install updates automatically": when an opted-in panel may install a new
 // release on its own. Pure, with no ESPHome includes, so the host tests
 // compile it directly.

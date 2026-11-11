@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Basketball's parse extras, ticker, clock row and splash (NBA, WNBA, men's
 // college). Pure, no ESPHome includes.
 #include "espn_parse.h"

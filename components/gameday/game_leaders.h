@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // This game's leaders at halftime and the final: each side's top lines from
 // ESPN's game summary, read once at the break and once at the final, never on
 // the live poll, and the card that shows them. Pure, with no ESPHome

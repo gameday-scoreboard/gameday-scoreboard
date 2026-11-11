@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The FCC information the panel shows on its own screen, the electronic
 // label of 47 CFR 2.935 (firmware/pages/regulatory.yaml): the name, the
 // model, the module's FCC ID and the Part 15 statement. Constants on

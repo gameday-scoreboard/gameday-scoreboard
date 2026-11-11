@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Which celebration a score or a big play gets. Pure, no ESPHome includes:
 // the host tests run decide_celebration() over every sport and both sides.
 // The kinds and the owner's setting are celeb_plan.h, each sport's big plays
@@ -6,8 +8,12 @@
 #include <cstdint>
 #include <string>
 
+#include "celeb_baseball.h"
 #include "celeb_basketball.h"
+#include "celeb_football.h"
+#include "celeb_hockey.h"
 #include "celeb_plan.h"
+#include "celeb_soccer.h"
 #include "espn_parse.h"
 
 namespace espn {
@@ -78,8 +84,20 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
   if (level == CelebLevel::FULL && big_plays && live) {
     CelebPlan big;
     switch (cur.sport) {
+      case Sport::BASEBALL:
+        big = big_play_baseball(prev, cur, splash, neutral, opp_splashes);
+        break;
       case Sport::BASKETBALL:
         big = big_play_basketball(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::FOOTBALL:
+        big = big_play_football(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::HOCKEY:
+        big = big_play_hockey(prev, cur, splash, neutral, opp_splashes);
+        break;
+      case Sport::SOCCER:
+        big = big_play_soccer(prev, cur, splash, neutral, opp_splashes);
         break;
       default:
         break;

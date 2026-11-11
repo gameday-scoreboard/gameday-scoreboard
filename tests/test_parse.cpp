@@ -599,6 +599,32 @@ static void test_best_game() {
   CHECK(!rotate_due(m5, 10 * sw, true, true, false, false, false));  // or Switch every when longer
   CHECK(rotate_due(10 * sw, 10 * sw, true, true, false, false, false));
 
+  // A scan that picks the game already on the board keeps it, last read and
+  // all, Pick the best game on or off. Seen from the away side (id 7).
+  {
+    GameSnapshot read1 = live(0, 0);
+    read1.sport = Sport::SOCCER;
+    read1.short_detail = "60'";
+    CHECK(keep_on_rescan(read1, "1", 7, true, "1", 7));
+    CHECK(!keep_on_rescan(read1, "1", 7, true, "2", 7));    // another game: fresh
+    CHECK(!keep_on_rescan(read1, "1", 7, true, "1", 9));    // the other side: fresh
+    CHECK(!keep_on_rescan(read1, "1", 7, false, "1", 7));   // nothing live, or the owner's team
+    CHECK(!keep_on_rescan(GameSnapshot{}, "1", 7, true, "1", 7));  // not read yet
+    CHECK(!keep_on_rescan(read1, "", 7, true, "", 7));
+    GameSnapshot ended = read1;
+    ended.state = GameState::POST;
+    CHECK(!keep_on_rescan(ended, "1", 7, true, "1", 7));  // the board saw it end
+    // The goal lands on the read right after the scan. Kept, the read before
+    // it is still there to compare against, and the goal splashes; started
+    // fresh (what a scan with Best game off used to do), it went unseen.
+    GameSnapshot read2 = read1;
+    read2.opp_score = 1;
+    read2.short_detail = "61'";
+    GameSnapshot kept = keep_on_rescan(read1, "1", 7, true, "1", 7) ? read1 : GameSnapshot{};
+    CHECK_EQ(decide_splash(kept, read2, true, true).text, std::string("PHI GOAL"));
+    CHECK_EQ(decide_splash(GameSnapshot{}, read2, true, true).text, std::string(""));
+  }
+
   // A poll of the followed game, the away side as team, checked for an upset.
   GameSnapshot p = live(24, 21);
   p.period = 4;

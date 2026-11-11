@@ -13,8 +13,6 @@ A change is saved on the panel the moment you make it, from the page, the app, H
 
 The page is split into five tabs: **Home**, **Teams**, **Display**, **Customize** and **Device**, described below. On a phone they sit in a bar at the bottom of the screen; on a computer they're under the panel's name at the top. The open tab is kept in the page's address, so a reload stays on it. Each setting has one short line on the page, and the full rules are here in the docs. The page also fits a phone's screen now, where iPhone Safari used to draw it as a zoomed-out desktop page.
 
-Until then, the same settings are on one long page, in cards: the board and the mode buttons first, then Favorites, the Panel card (power, brightness, ticker speed, Showing, the night schedule), Ticker, Celebrations, Between games, Setup and the Device card.
-
 ## The header
 
 The top of the page shows the panel's name, big, or its nickname if you gave it one. It shrinks into a slim bar as you scroll down. A red **Not answering** pill shows next to it only while the page can't reach the panel.
@@ -106,9 +104,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
-:::note[Coming in the next release]
 Each league tab starts with that league's games today, under the same headings, and lists all of its teams under a **Teams** heading after them. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count; tap the heading to open one. A league with no games today shows just its teams.
-:::
 
 On **On now**, a search that matches none of today's games lists the teams it matches under a **Teams** heading instead, with their league, so a team that isn't playing today still turns up.
 
@@ -142,17 +138,12 @@ Only the switches for sports your panel follows are shown. Hockey and basketball
 
 ### Live pictures
 
-Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). All three start on.
+Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). Both start on. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer).
 
 | Setting | What it does |
 | --- | --- |
-| **Field strip** | Football: the field across the row, with the ball, the line to gain, the direction of play and the timeouts left. |
-| **Win chance bar** | Football and basketball: a thin bar split at ESPN's chance for each side to win. |
-| **Score margin** | Basketball and hockey: the lead over the game as a small chart. |
-
-:::note[Coming in the next release]
-Two switches here. **Win chance bar** becomes **Win chance**: in football and basketball the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win", and this switch turns that line on or off. **Score margin** goes with its chart. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer).
-:::
+| **Field strip** | Football: the field across the row, with the ball, the line to gain and the direction of play. See [Football](/using/football/#during-the-game). |
+| **Win chance** | Football and basketball: the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win". This switch turns that line on or off. |
 
 ### Celebrations
 
@@ -164,9 +155,7 @@ A **Celebrations** choice sets how big the show is:
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 
-:::note[Coming in the next release]
-**Big plays**, on by default, gives a basketball dunk or alley-oop a pixel-art scene of its own on **Full** (see [Basketball](/using/basketball/)). Off, every score and the win keep their show; only the big plays go.
-:::
+**Big plays**, on by default, gives some plays a pixel-art scene of their own on **Full**: a basketball dunk or alley-oop (see [Basketball](/using/basketball/)), a hockey hat trick (see [Hockey](/using/hockey/#big-plays)), a baseball grand slam or walk-off (see [Baseball](/using/baseball/#big-plays)), a soccer brace, hat trick, penalty or late go-ahead goal (see [Soccer](/using/soccer/)), and your football defense's interceptions, pick sixes, fumble recoveries and sacks (see [Football](/using/football/#big-plays)). Off, every score and the win keep their show; only the big plays go.
 
 The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side": the first team's scores always get the full show in its colors, and with **Opponent scores too** on the second team's do too.
 
@@ -250,3 +239,7 @@ A red box near the bottom of the Device tab has the three buttons that restart t
 ### FCC information
 
 Folded at the very bottom. **Show on panel** puts the panel's model, FCC ID and FCC statement on its own screen for about a minute, then it goes back to the board. A panel that was switched off turns on for it and stays on. One that is dimmed or dark for the night lights up for it, then goes back to the night setting. See [FCC information](/fcc/).
+
+## Under every tab
+
+The bottom of the page shows the firmware version, a link to the source code, where the scores come from, and the author and license: "© 2026 Brandon Harvey · GPLv3". GPLv3 links to the license notice.

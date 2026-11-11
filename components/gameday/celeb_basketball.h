@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Basketball's big plays: a dunk and an alley-oop, read from the last play
 // the way the three is (celebrate.h). Pure, no ESPHome includes; the host
 // tests run it on recorded ESPN plays.

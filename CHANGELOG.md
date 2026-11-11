@@ -9,11 +9,16 @@ Format: `## vX.Y.Z` heading, one plain summary line, then the changes
 grouped under `### ⚠️ Heads up` (anything an owner has to do or notice),
 `### ✨ New` and `### 🐛 Fixes`, leaving out a group with nothing in it. One
 short line per change, written for the person who owns the panel, not for
-the code, starting with an emoji that fits it. The detail goes on the docs
-page that describes it, not here.
+the code, starting with an emoji that fits it. Name a setting or screen by
+its label on the device page or in the docs, never by a Home Assistant or
+code name. A change no owner would see (factory test screens, internals)
+gets no line. The detail goes on the docs page that describes it, not here.
 
-Changes merged since the last release go under `## Unreleased` at the top.
-The release renames that heading to the new version. A released section
+Changes merged since the last release go under `## Unreleased` at the top,
+already in the released shape: the summary line, then the groups. A change
+to a feature that already has a line updates that line. The release
+renames that heading to the new version (scripts/promote.py) and changes
+nothing else. A released section
 stays as it shipped: a change to something it describes is a new bullet
 under `## Unreleased`.
 
@@ -32,21 +37,33 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
+Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.
+
+### 🐛 Fixes
+
+- ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download
+- 🔁 Turning on Favorites take over, or adding a favorite while it's on, shows a favorite's game that's on now within seconds, instead of waiting hours when nothing else was live
+
+## v2026.11.2
+
+Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.
+
+### ⚠️ Heads up
+
+- 📜 New firmware code is open source under GPLv3 instead of MIT, so anyone who builds on it keeps the author's name on it and shares their source; code released before stays MIT
+
 ### ✨ New
 
-- 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
-- 🍻 Bar panels show the plate list as a plate wall, one member a page with their quote, throw a plate party for each new plate, and count down to the bar's next event
-- 🍺 Panels in bars run the bar build of each release, and install it on their own overnight
-- 🏀 Basketball's row under the clock takes turns with the last basket, each team's points leader, the playoff series and the win chance in words, in place of the score margin chart
-- 🏈 Football's field strip takes turns with the win chance in words, like "ND 84% to win", in place of the thin win chance bar
-- 🏀 Your team's dunks and alley-oops get their own pixel-art scenes on Full celebrations, with a Big plays switch to turn them off
+- ©️ The bottom of the device page names the firmware's author and license
+- 🎆 On **Full** celebrations your team's big plays get their own pixel-art scene: dunks and alley-oops, interceptions, pick sixes, fumbles and sacks, grand slams and walk-offs, hockey hat tricks, and soccer braces, hat tricks, penalties and late go-ahead goals, with a **Big plays** switch to turn them off
+- 🔤 On a wide board the row under the clock reads in words in place of the score margin chart and the win chance bar: the win chance ("ND 84% to win") in football and basketball, the last basket, points leaders and playoff series in basketball, shots on goal and the latest goal in hockey
+- 📋 Each league tab in the team chooser starts with that league's games today, so you can add a team from its game
+- 🍺 Bar panels take the bar's logo, colors, club name and plate list from one brand file, show the plates as a plate wall with a party for each new one and a countdown to the next event, and install each release on their own overnight
 
 ### 🐛 Fixes
 
 - 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation in its team color instead of an empty space
-- ⭐ A favorite you add shows within a few seconds, even when you take another favorite out right after or switch modes just before, instead of leaving the board empty for about a minute
-- ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download
-- 🔁 Turning on Favorites take over, or adding a favorite while it's on, shows a favorite's game that's on now within seconds, instead of waiting hours when nothing else was live
+- ⭐ A favorite you add shows within a few seconds instead of leaving the board empty for about a minute
 
 ## v2026.11.1
 

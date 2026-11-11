@@ -20,6 +20,9 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
+| `event_nfl_sack_before.json`, `event_nfl_sack.json` | `.../football/nfl/scoreboard/401873045`, NYJ @ KC live, the read before KC sacks G.Smith and the read with it: last play type "Sack", the play's team and the ball both NYJ's (recorded 2026-11-08) |
+| `event_nfl_fumble_before.json`, `event_nfl_fumble.json` | `.../football/nfl/scoreboard/401873040`, DAL @ IND live, the read before DAL recovers J.Taylor's fumble and the read with it: "Fumble Recovery (Opponent)", the play's team and the ball both DAL's (recorded 2026-11-08) |
+| `event_nfl_interception_before.json`, `event_nfl_interception.json` | `.../football/nfl/scoreboard/401873049`, GB @ NE live, the read before GB intercepts D.Maye and the read with it: "Pass Interception Return", the play's team and the ball both GB's (recorded 2026-11-08) |
 | `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
 | `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
 | `rankings_mcbb_20261019.json` | `sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1`, the preseason AP poll, every record 0-0 (recorded 2026-10-29) |
@@ -146,6 +149,7 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |
 | `event_nhl_final_2ot.json` | 401869781 OTT @ CAR, 2026 playoffs, Final/2OT 3-2 CAR, series line (recorded after the fact) |
 | `event_nhl_goal.json` | 401892674 FLA @ BOS, 2026-11-08, 3:55 left in the 1st, 3-0 BOS, a goal as the last play (Geekie, with athletesInvolved; no period or clock on the play) |
+| `event_nhl_hattrick_final.json` | 401892640 DAL @ WSH, 2026-11-03, Final 6-5 DAL, Robertson's hat trick: the game's goal leaders list every scorer with the player's id and count (recorded 2026-11-08, after the fact). test_celeb_hockey.cpp puts it back in the 3rd period with his count at 1 to 4 for the reads around his third goal |
 | `team_nhl_edm.json` | `.../hockey/nhl/teams/6` (next event is the EDM @ ANA game above) |
 
 `football_golden.txt` is written by the host tests (`GOLDEN_WRITE=1`) and

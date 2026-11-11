@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The plate wall, on the bar build: the message card showing the brand pack's
 // plate list (brand.h) one member a page, the way a bar's mug club hangs its
 // plates. Each list line is "number|name|quote|round": round 2 marks a

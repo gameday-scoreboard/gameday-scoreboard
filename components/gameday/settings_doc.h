@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The settings backup: GET /gameday/settings writes the panel's settings as
 // one JSON document and POST /gameday/settings takes one back, for the device
 // page's Export and Import and the apps' back up and restore. The document's

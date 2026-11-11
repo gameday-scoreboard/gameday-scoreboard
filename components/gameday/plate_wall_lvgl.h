@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The plate wall on the panel (plate_wall.h): the message card's plate,
 // plate party and event pages, drawn on one LVGL canvas over the scoreboard
 // by gd_msg_card in firmware/pages/gameday-live.yaml. Bar build only; the

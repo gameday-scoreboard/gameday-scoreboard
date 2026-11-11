@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The celebration animations: fireworks, confetti, a light wave, a ball out
 // of the park, a rippling net, a spinning goal lamp, a three through the
 // hoop, drawn into an RGB565 frame. Pure, no ESPHome or LVGL includes: the
@@ -217,9 +219,13 @@ class Celebration {
   void render(CelebFrame &f) const {
     if (celeb_is_art(plan_.kind)) {
       // The big plays: their frames for this width, recolored to the team.
-      if (const CelebArt *art = celeb_art_for(plan_.kind, f.w))
+      if (const CelebArt *art = celeb_art_for(plan_.kind, f.w)) {
         art_.render(f.px, f.w, f.h, f.stride, *art, t_, plan_.color, plan_.alt, fade_());
-      else
+        // The words that change from game to game, over the frames.
+        if (const CelebCaption *c = celeb_caption_for(plan_.kind, f.w))
+          celeb_caption_draw(f.px, f.w, f.h, f.stride, *c, plan_.line2, art_.frame(), t_, plan_.color, plan_.alt,
+                             fade_());
+      } else
         f.clear();
       return;
     }

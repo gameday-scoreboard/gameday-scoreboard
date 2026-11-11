@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
@@ -510,6 +512,8 @@
       <span id="ver"></span><span>·</span>
       <a href="https://github.com/gameday-scoreboard/gameday-scoreboard" target="_blank" rel="noopener">gameday-scoreboard</a>
       <span>·</span><span>scores from ESPN</span>
+      <br><span id="credit">© 2026 Brandon Harvey</span><span>·</span>
+      <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/blob/main/NOTICE.md" target="_blank" rel="noopener">GPLv3</a>
     </p>
   </div>
 

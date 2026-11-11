@@ -25,7 +25,7 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 
 While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app opens it so you can add your teams. On iPhone a short walkthrough takes you through your teams, what the panel shows, the ticker and the timezone.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 The Android app has the walkthrough too. After a first setup, once the panel answers, it takes you through your teams, what the panel shows, the ticker and switching, and the timezone, one page each. Each choice goes to the panel as you make it, and **Skip** moves on and leaves that setting as it is. It doesn't come up after **Set up Wi-Fi again**. To go through it later, open **Settings > Device > Setup** and tap **Walk through the settings again**.
 :::
 

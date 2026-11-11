@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Live games' "Pick the best game": which game in progress a fan would flip
 // to, from what the day's scan already reads (score, period, clock, AP
 // rank), and the upset alert when a ranked side trails late. Pure, no
@@ -204,6 +206,19 @@ inline bool rotate_due(uint32_t elapsed_ms, uint32_t switch_ms, bool held, bool 
   if (on_fav || !best)
     return true;
   return at_brk && !break_looked;
+}
+
+// A Live games scan picked the game already on the board, read from the same
+// side: keep it as it is, its last read included, so a score on the next
+// read is still compared against the one before and gets its splash. That
+// holds however the game was picked (Pick the best game on or off, or a
+// favorite's game). A different game or side, a game the board saw end, or a
+// board that isn't following a live game (nothing live, or the owner's own
+// team filling in: following false) starts fresh.
+inline bool keep_on_rescan(const GameSnapshot &board, const std::string &board_event, uint32_t board_side,
+                           bool following, const std::string &picked_event, uint32_t picked_side) {
+  return following && board.valid && board.state == GameState::IN && !board_event.empty() &&
+         picked_event == board_event && picked_side == board_side;
 }
 
 // The followed game as the scan would list it, from a poll of it, for the

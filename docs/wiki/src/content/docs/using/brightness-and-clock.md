@@ -34,7 +34,7 @@ You can always get past the schedule. During its hours, any of these turns night
 
 The device page then says **Night mode off until 11:00 PM**, the next start time. To go back to the schedule before then, press **Back to night mode** there, or **NIGHT** on the remote. The next night the schedule runs as usual. Home Assistant automations don't turn night mode off, so one that runs at night can't wake the panel by mistake.
 
-:::note[Coming in the next release]
+:::note[Coming in the next app update]
 The Android app gets these too: **Turn on for tonight** under **Night mode until** on its Board, and **Panel on** in the app, turn night mode off for the rest of the night. The Board then says **Night mode off until 11:00 PM**, with **Back to night mode**. See [The Game Day app](/get-started/the-app/#board).
 :::
 

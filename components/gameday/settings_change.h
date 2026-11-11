@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // A settings change and the reads around it: which read goes first after
 // the change, which read in flight it stops, and which answers still count.
 // The apps and the device page send a change as several quick posts, so the

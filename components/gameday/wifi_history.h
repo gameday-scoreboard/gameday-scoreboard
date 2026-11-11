@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Wi-Fi history for the device page's Diagnostics: the signal once a minute
 // for the last 24 hours, and each time the panel lost its network and why.
 // Pure, with no ESPHome includes, so the host tests compile it directly.
