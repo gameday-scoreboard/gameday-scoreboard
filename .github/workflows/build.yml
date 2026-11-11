@@ -755,7 +755,40 @@ jobs:
           cache: npm
           cache-dependency-path: tests/web/package-lock.json
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The browser comes from Playwright's download host and its system
+      # libraries from Ubuntu's apt mirrors, and a DNS blip on the runner
+      # failed whole runs at that step. So the browser is cached per
+      # Playwright version, downloads are retried, and apt runs only when a
+      # library is missing (the runner image normally has them all).
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Chromium from the cache
+        id: chromium-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      - name: Download Chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        # Headless runs use only the headless shell, so skip full Chromium.
+        run: ../../scripts/retry.sh npx playwright install --only-shell chromium
+      - name: Chromium's system libraries
+        run: |
+          # Playwright checks the same way at launch: ldd on the browser and
+          # its .so files.
+          if [ -z "$(find ~/.cache/ms-playwright -type f -name chrome-headless-shell)" ]; then
+            echo "::error::No chrome-headless-shell under ~/.cache/ms-playwright"
+            exit 1
+          fi
+          missing=$(find ~/.cache/ms-playwright -type f \( -name chrome-headless-shell -o -name '*.so' \) \
+            -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)
+          if [ -z "$missing" ]; then
+            echo "The runner image has every library Chromium needs; no apt install."
+            exit 0
+          fi
+          echo "$missing"
+          ../../scripts/retry.sh npx playwright install-deps chromium
       - run: npm test
 
   publish:
