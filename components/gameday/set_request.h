@@ -34,7 +34,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "countdown", "top25", "cdname", "cddate", "gameleaders", "msg",
                                     "msgurl",
-                                    "msgevery", "brand", "best",   "jump",   "banner",  "leaders", "night",
+                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
@@ -296,7 +296,6 @@ enum class SetKind : uint8_t {
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
-  BRAND,     // text, the bar build's brand pack address (brand.h); "" clears it
   BEST,      // on, Live games picks the best game (best_game.h)
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
@@ -462,12 +461,6 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "msgurl") {
     op.kind = SetKind::MSGURL;
-    op.text = v;
-    return msg_url_ok(v);
-  }
-  if (k == "brand") {
-    // Taken on every build; only the bar build reads the pack.
-    op.kind = SetKind::BRAND;
     op.text = v;
     return msg_url_ok(v);
   }

@@ -6,14 +6,6 @@ on:
     branches: [main, beta, dev]
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      install_now:
-        description: >-
-          Beta channel only (run on beta): panel names, like gameday-aba970,
-          or "all". Those bar panels, if Follow beta is on, install this beta
-          within 15 minutes instead of at night.
-        type: string
-        default: ""
 
 # Read-only by default. Only publish writes (the release and Pages), and it
 # asks for that itself.
@@ -47,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # On the beta branch, the version this run's beta goes out under, worked
-      # out once here: the board and bar builds would number it apart if a
+      # out once here: the board builds would number it apart if a
       # release tag or the month changed between their starts.
       - name: Beta version
         id: beta
@@ -297,8 +289,8 @@ jobs:
           key: esphome-components-${{ env.ESPHOME_VERSION }}-${{ hashFiles('firmware/**/*.yaml') }}
           restore-keys: esphome-components-${{ env.ESPHOME_VERSION }}-
       # On the beta branch this is also the beta channel for panels with
-      # "Follow beta" on: the same "-beta.<run>" version as the bar build of
-      # this run, and publish-beta puts it on the site. beta_version.py
+      # "Follow beta" on: the "-beta.<run>" version the Release notes job
+      # worked out, and publish-beta puts it on the site. beta_version.py
       # numbers it after the newest release tag, so dev's YAML keeps the
       # last release's version until the release prep PR sets the next one.
       - name: Beta version and summary
@@ -481,7 +473,7 @@ jobs:
           if-no-files-found: ignore
 
   build-demo:
-    # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
+    # The demo build (firmware/pages/demo.yaml) for showing panels in person and
     # sending them to creators. A downloadable file on the run and nothing
     # more: the artifact name does not match publish's firmware-* pattern, so
     # it never reaches the flasher site or a manifest. Tags and pull requests
@@ -510,102 +502,18 @@ jobs:
           name: demo-${{ matrix.variant }}
           path: ${{ steps.esphome.outputs.name }}
 
-  build-bar:
-    # The bar build (firmware/pages/bar.yaml): real firmware for panels in
-    # bars that installs bar updates on its own at night. Every run keeps it
-    # as a downloadable file (bar-<variant>, outside publish's firmware-*
-    # pattern, staged as <variant>-bar/) for flashing a new bar panel by hand.
-    # On a release tag publish puts it on the site as the bar release
-    # (firmware/<variant>-bar/) and on the release as firmware-<variant>-bar.zip.
-    # On the beta branch it is the bar betas, read by bar panels with Follow
-    # beta on: its version is the next release's number plus "-beta.<run>"
-    # (scripts/beta_version.py) so each one is newer than the last, and
-    # publish-beta puts it on the site. A pull request into dev builds the
-    # MoonHub75 one only, and none when it touches only docs.
-    name: Build ${{ matrix.variant }} bar
-    if: ${{ !(github.event_name == 'pull_request' && github.base_ref == 'dev' && needs.changes.outputs.firmware != 'true') }}
-    needs: [branch-rules, notes, changes]
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.beta.outputs.version }}
-    strategy:
-      matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && github.base_ref == 'dev' && '[{"variant":"moonhub75","yaml":"firmware/gameday-bar.yaml"}]' || '[{"variant":"moonhub75","yaml":"firmware/gameday-bar.yaml"},{"variant":"scoreboard75","yaml":"firmware/gameday-scoreboard75-bar.yaml"}]') }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Version and summary
-        id: beta
-        env:
-          NOW: ${{ inputs.install_now }}
-          NOTES: ${{ needs.notes.outputs.summary }}
-          BETA_VERSION: ${{ needs.notes.outputs.beta_version }}
-        run: |
-          set -euo pipefail
-          v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
-          summary="Development build"
-          url="https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            # A bar release: the release's summary and its section of the
-            # site's changelog, as in build.
-            summary=$NOTES
-            url="https://install.gameday-scoreboard.com/changelog/#$GITHUB_REF_NAME"
-          elif [ "$GITHUB_REF" = refs/heads/beta ]; then
-            v=$BETA_VERSION
-            [ -n "$v" ] || { echo "::error::No beta version from the Release notes job"; exit 1; }
-            sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
-            summary="Bar beta $v from ${GITHUB_SHA::7}."
-            if [ -n "$NOW" ]; then
-              # Panel names only; the firmware reads this list (auto_update.h).
-              if ! [[ "$NOW" =~ ^[A-Za-z0-9_,\ -]+$ ]]; then
-                echo "::error::install_now takes panel names like gameday-aba970, or all"
-                exit 1
-              fi
-              summary="$summary Install now: $NOW"
-            fi
-          elif [ -n "$NOW" ]; then
-            echo "::warning::install_now only does something on the beta branch"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "summary=$summary" >> "$GITHUB_OUTPUT"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "$v: $summary"
-      - name: Build firmware
-        id: esphome
-        uses: esphome/build-action@v7
-        with:
-          yaml-file: ${{ matrix.yaml }}
-          version: ${{ env.ESPHOME_VERSION }}
-          complete-manifest: true
-          release-summary: ${{ steps.beta.outputs.summary }}
-          release-url: ${{ steps.beta.outputs.url }}
-      - name: Stage output under a stable folder name
-        run: |
-          mkdir -p out
-          cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}-bar
-          ls -R out
-      # Under a -bar folder, so it reads "Game Day Scoreboard (bar)".
-      - name: Product name in the manifest
-        run: ./scripts/set_manifest_name.sh out
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bar-${{ matrix.variant }}
-          path: out
-
   publish-beta:
-    # The beta channels, from one build of the beta branch:
-    # - install.gameday-scoreboard.com/firmware/beta/<variant>/, the bar builds, read
-    #   only by bar panels with Follow beta on (and bar panels still on a bar
-    #   build from before the bar releases, which move to them with this one).
-    # - install.gameday-scoreboard.com/firmware/<variant>-beta/, the release builds,
-    #   read by panels with "Follow beta" on (the two-panel build follows
-    #   moonhub75's, as it does for releases).
+    # The beta channel, from one build of the beta branch:
+    # install.gameday-scoreboard.com/firmware/<variant>-beta/, the release builds,
+    # read by panels with "Follow beta" on (the two-panel build follows
+    # moonhub75's, as it does for releases).
     # Runs when someone pushes (promotes) to beta, or runs Build on beta by
-    # hand with install_now. Pages only deploys from main and release tags,
+    # hand. Pages only deploys from main and release tags,
     # so the files go on the rolling beta-firmware prerelease and the Site
     # workflow on main republishes the site with them. The stable manifests
     # and the flasher are left as they are.
     name: Publish the beta channel
-    needs: [build, build-bar, host-tests, web-tests]
+    needs: [build, host-tests, web-tests, notes]
     if: github.ref == 'refs/heads/beta' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
@@ -613,11 +521,6 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: bar-*
-          path: stage/bar
-          merge-multiple: true
       - uses: actions/download-artifact@v8
         with:
           name: firmware-moonhub75
@@ -633,28 +536,20 @@ jobs:
       - name: Check the files and store them on the beta-firmware prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          BETA: ${{ needs.build-bar.outputs.version }}
+          BETA: ${{ needs.notes.outputs.beta_version }}
         run: |
           set -euo pipefail
-          mkdir -p stage/firmware/beta
-          # Waveshare has a Follow beta build but no bar build.
+          mkdir -p stage/firmware
           for v in moonhub75 scoreboard75 waveshare; do
             mv "stage/release/$v" "stage/firmware/$v-beta"
           done
-          for v in moonhub75 scoreboard75; do
-            mv "stage/bar/$v-bar" "stage/firmware/beta/$v"
-          done
           ls -R stage
-          bash scripts/check_site_firmware.sh --beta stage
           bash scripts/check_site_firmware.sh --follow-beta stage "$BETA"
           mkdir -p release
-          for v in moonhub75 scoreboard75; do
-            (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
-          done
           for v in moonhub75 scoreboard75 waveshare; do
             (cd stage/firmware && zip -r "../../release/firmware-$v-beta.zip" "$v-beta")
           done
-          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels with Follow beta on read it from install.gameday-scoreboard.com/firmware/beta/, and other panels with Follow beta on from install.gameday-scoreboard.com/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
+          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Panels with Follow beta on read it from install.gameday-scoreboard.com/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
           if gh release view beta-firmware >/dev/null 2>&1; then
             gh release upload beta-firmware release/*.zip --clobber
             gh release edit beta-firmware --prerelease --title "Beta $BETA" --notes "$notes"
@@ -793,7 +688,7 @@ jobs:
 
   publish:
     name: Publish flasher and release
-    needs: [build, build-bar, host-tests, web-tests, notes]
+    needs: [build, host-tests, web-tests, notes]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -808,12 +703,6 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: firmware-*
-          path: artifacts
-          merge-multiple: true
-      # The bar releases, as artifacts/<variant>-bar/.
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: bar-*
           path: artifacts
           merge-multiple: true
       - uses: actions/download-artifact@v8
@@ -837,7 +726,7 @@ jobs:
           python3 scripts/site_seo.py build site
           ls -R site
           bash scripts/check_site_firmware.sh site "$GITHUB_REF_NAME"
-      # Keep the bar panels' beta channel on the site through a release.
+      # Keep the Follow beta channel on the site through a release.
       - name: Add the beta channel
         env:
           GH_TOKEN: ${{ github.token }}
@@ -870,7 +759,7 @@ jobs:
           # resolve the same wherever the folder lands) so site.yml can
           # rebuild site/firmware/<variant>/ from a release asset instead of
           # a Build artifact, which expires after 90 days.
-          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare moonhub75-bar scoreboard75-bar; do
+          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare; do
             (cd artifacts && zip -r "../release/firmware-$v.zip" "$v")
             ASSETS="$ASSETS release/firmware-$v.zip"
           done
@@ -880,7 +769,7 @@ jobs:
             echo
             echo "Panels update themselves from their device page or the Game Day app. To install from scratch, use the [installer](https://install.gameday-scoreboard.com/) in your browser."
             echo
-            echo "**Which file?** You don't need any of them for that. To flash a board over USB by hand, use \`gameday-scoreboard-${GITHUB_REF_NAME}-waveshare.factory.bin\` for the Waveshare ESP32-S3-RGB-Matrix (the board in ready-made scoreboards) or \`gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin\` for a MoonHub75-pinout board. The \`firmware-*.zip\` files are what the installer site is built from; you don't need them. The \`-bar\` ones are the bar build, for panels in bars."
+            echo "**Which file?** You don't need any of them for that. To flash a board over USB by hand, use \`gameday-scoreboard-${GITHUB_REF_NAME}-waveshare.factory.bin\` for the Waveshare ESP32-S3-RGB-Matrix (the board in ready-made scoreboards) or \`gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin\` for a MoonHub75-pinout board. The \`firmware-*.zip\` files are what the installer site is built from; you don't need them."
             if [ -n "$PREV" ]; then
               echo
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"

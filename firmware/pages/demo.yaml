@@ -1,4 +1,4 @@
-# The demo build: a looping scripted game for showing the panel in bars and
+# The demo build: a looping scripted game for showing the panel in person and
 # sending it to creators. Included only by the *-demo.yaml top-level files,
 # which CI builds as a downloadable file and never publishes to the flasher
 # or the update manifest. Otherwise it is a normal panel.

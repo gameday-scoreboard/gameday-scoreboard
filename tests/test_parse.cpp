@@ -5249,7 +5249,7 @@ static void test_auto_update() {
   CHECK(version_newer("2026.10.0-beta.813", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.811", "2026.10.0-beta.812"));
-  // A bar panel hand-flashed with a release takes the next release's betas,
+  // A panel on a release with Follow beta on takes the next release's betas,
   // never a beta of the release it already runs (older code).
   CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0"));
   CHECK(version_newer("2026.10.1-beta.812", "2026.10.0"));
@@ -5258,60 +5258,22 @@ static void test_auto_update() {
   CHECK(!version_newer("2026.10.0-beta.", "2026.10.0"));
   CHECK(!version_newer("2026.10.0-dev", "2026.10.0"));
 
-  // Install now: names in the release summary.
-  const std::string me = "gameday-aba970";
-  CHECK(install_now_listed("Beta 2026.10.0-beta.812. Install now: gameday-aba970", me));
-  CHECK(install_now_listed("Install now: gameday-500ebc, gameday-aba970", me));
-  CHECK(install_now_listed("Install now: gameday-500ebc,gameday-aba970 ", me));
-  CHECK(install_now_listed("Beta 2026.10.0-beta.812. Install now: all", me));
-  CHECK(!install_now_listed("Install now: gameday-500ebc", me));
-  CHECK(!install_now_listed("Install now: gameday-aba9700", me));
-  CHECK(!install_now_listed("Install now: gameday-aba97", me));
-  CHECK(!install_now_listed("Install now:", me));
-  CHECK(!install_now_listed("Beta 2026.10.0-beta.812", me));
-  CHECK(!install_now_listed("gameday-aba970", me));  // named, but not in the list
-  CHECK(!install_now_listed("Install now: all", ""));
-
   // Follow beta switched while a check ran: its result names the other
   // channel's folder (the updater joins the manifest's relative ota path to
   // the folder it read). The two folders don't share a prefix either way.
-  const char *bar = "https://install.gameday-scoreboard.com/firmware/moonhub75-bar/manifest.json";
-  const char *beta = "https://install.gameday-scoreboard.com/firmware/beta/moonhub75/manifest.json";
-  const std::string bar_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75-bar/gameday-esp32s3.ota.bin";
-  const std::string beta_bin = "https://install.gameday-scoreboard.com/firmware/beta/moonhub75/gameday-esp32s3.ota.bin";
-  CHECK(firmware_from_source(bar_bin, bar));
+  const char *rel = "https://install.gameday-scoreboard.com/firmware/moonhub75/manifest.json";
+  const char *beta = "https://install.gameday-scoreboard.com/firmware/moonhub75-beta/manifest.json";
+  const std::string rel_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75/gameday-esp32s3.ota.bin";
+  const std::string beta_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75-beta/gameday-esp32s3.ota.bin";
+  CHECK(firmware_from_source(rel_bin, rel));
   CHECK(firmware_from_source(beta_bin, beta));
-  CHECK(!firmware_from_source(beta_bin, bar));
-  CHECK(!firmware_from_source(bar_bin, beta));
-  CHECK(!firmware_from_source("https://install.gameday-scoreboard.com/firmware/moonhub75/gameday-esp32s3.ota.bin", bar));
-  CHECK(firmware_from_source("", bar));  // nothing read yet
-  CHECK(firmware_from_source(bar_bin, nullptr));
+  CHECK(!firmware_from_source(beta_bin, rel));
+  CHECK(!firmware_from_source(rel_bin, beta));
+  CHECK(!firmware_from_source("https://install.gameday-scoreboard.com/firmware/scoreboard75/gameday-esp32s3.ota.bin", rel));
+  CHECK(firmware_from_source("", rel));  // nothing read yet
+  CHECK(firmware_from_source(rel_bin, nullptr));
 
-  // Listed: installs at any hour, even off, unless a game is live.
-  t = in;
-  t.hour = 15;
-  t.now = true;
-  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
-  t.clock_valid = false;  // no clock needed
-  t.tried_day = in.today;  // and a night try doesn't block it
-  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
-  t.live = true;
-  CHECK(auto_update_step(t) == AutoUpdateStep::WAIT_GAME);
-  t.live = false;
-  t.newer = false;
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t.newer = true;
-  t.available = false;
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t.available = true;
-  t.enabled = false;
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t = in;
-  t.now = true;  // in the window too, the try counts for this version, not the night
-  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
-
-  // A release that rolled back here: skipped every night, live game or not,
-  // and Install now doesn't override it.
+  // A release that rolled back here: skipped every night, live game or not.
   t = in;
   t.failed = true;
   CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
@@ -5322,12 +5284,6 @@ static void test_auto_update() {
   t.checked_day = t.today;
   CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
   t.check_done = false;  // nothing to say before tonight's read is back
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t = in;
-  t.failed = true;
-  t.now = true;
-  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
-  t.hour = 15;
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
@@ -7223,7 +7179,7 @@ static void test_message() {
 
   CHECK(msg_url_ok(""));
   CHECK(msg_url_ok("http://192.168.1.20/names.txt"));
-  CHECK(msg_url_ok("https://gist.githubusercontent.com/x/raw/plates.txt"));
+  CHECK(msg_url_ok("https://gist.githubusercontent.com/x/raw/messages.txt"));
   CHECK(!msg_url_ok("https://"));
   CHECK(!msg_url_ok("ftp://example.com/a.txt"));
   CHECK(!msg_url_ok("example.com/a.txt"));

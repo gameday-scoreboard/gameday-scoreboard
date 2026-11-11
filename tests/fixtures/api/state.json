@@ -194,25 +194,6 @@
   "update_failed": "2026.10.2",
   "update_important": true,
   "update_shown": 1793142120,
-  "bar": {
-    "report": "support@gameday-scoreboard.com"
-  },
-  "brand": "http://192.168.1.20/brand/taproom.json",
-  "brandread": {
-    "status": 200,
-    "ok": true,
-    "error": "The brand file isn't JSON.",
-    "name": "Main Street Taproom",
-    "title": "MUG CLUB",
-    "wall": "WALL OF FAME",
-    "logo": "http://192.168.1.20/brand/taproom-logo.png",
-    "logo_ok": false,
-    "list": "http://192.168.1.20/brand/plates.txt",
-    "sprite_ok": true,
-    "warning": "colors.rim isn't a color like #D4A017",
-    "logo_error": "The logo has to be a PNG file.",
-    "sprite_error": "The sprite can be up to 64 by 32 pixels."
-  },
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,
