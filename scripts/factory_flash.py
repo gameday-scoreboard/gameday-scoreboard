@@ -112,6 +112,7 @@ def image_info(data):
     The update manifest URL names the variant, and the boot log line holds the
     project version, both as plain strings in the app.
     """
+    # The Follow beta folders (<variant>-beta/) never match.
     variant = re.search(rb"/firmware/([a-z0-9]+)/manifest\.json", data)
     version = re.search(rb"gameday-scoreboard version (\d+\.\d+\.\d+)", data)
     return (variant.group(1).decode() if variant else "", version.group(1).decode() if version else "")
@@ -464,6 +465,9 @@ def selftest():
     assert factory_from_zip(buf.getvalue(), "moonhub75") == b"image"
     assert version_from("gameday-scoreboard-v1.5.5-scoreboard75.factory.bin") == "1.5.5"
     assert version_from("firmware.factory.bin") == ""
+    home = b"\0https://install.gameday-scoreboard.com/firmware/waveshare-beta/manifest.json\0" \
+           b"https://install.gameday-scoreboard.com/firmware/waveshare/manifest.json\0"
+    assert image_info(home)[0] == "waveshare"
 
     good = bytearray(b"\xff" * 0x20000)
     good[0] = 0xE9
@@ -602,7 +606,8 @@ def main():
     src.add_argument("--image", type=Path, help="local .factory.bin to flash")
     # Ready-made scoreboards ship on the Waveshare ESP32-S3-RGB-Matrix. moonhub75 is the
     # DIY pinout; scoreboard75 is the early test boards.
-    ap.add_argument("--variant", default="waveshare", choices=["waveshare", "moonhub75", "scoreboard75"])
+    ap.add_argument("--variant", default="waveshare",
+                    choices=["waveshare", "moonhub75", "scoreboard75"])
     ap.add_argument("--port", help="serial port, for one board only (default: find the Espressif USB device "
                     "for each unit)")
     ap.add_argument("--baud", type=int, default=460800)

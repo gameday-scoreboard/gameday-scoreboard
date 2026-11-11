@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Game-day wake and After the game. Wake turns a panel that is off back on a
 // set time before a game of the owner's team or one of their favorites
 // starts. After the game says what the panel does once that game's final has

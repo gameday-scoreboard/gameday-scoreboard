@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Template bodies for the streaming parsers. Included from espn_parse.h.
 #pragma once
 
@@ -7,6 +9,7 @@
 #include <cctype>
 #include <cstdlib>
 
+#include "badge.h"
 #include "message.h"
 #include "news.h"
 #include "season.h"
@@ -53,7 +56,8 @@ inline bool time_tbd(JsonObjectConst comp) {
 // The fields read from one event, whether it sits in a scoreboard's events
 // array or is a single-event document's root. board_extras adds what the
 // halftime and final boards need (line score, headline, the last play's
-// details for the scoring log) and the pre-game ticker's week and forecast:
+// details for the scoring log), each side's second color and the pre-game
+// ticker's week and forecast:
 // every league polls its game on its own (fetch_game_), so a whole day's
 // scoreboard, up to 750 KB for college football, leaves them out.
 inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
@@ -102,6 +106,8 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   comp["situation"]["lastPlay"]["team"]["id"] = true;
   comp["situation"]["lastPlay"]["athletesInvolved"][0]["shortName"] = true;
   c["linescores"][0]["value"] = true;
+  // The second color, for the letters of a side with no logo (badge.h).
+  c["team"]["alternateColor"] = true;
   comp["headlines"][0]["shortLinkText"] = true;
   ev["season"]["type"] = true;
   ev["week"]["number"] = true;
@@ -335,6 +341,7 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
     (ours ? s.team_record : s.opp_record) = record;
     (ours ? s.team_rank : s.opp_rank) = rank;
     (ours ? s.team_color : s.opp_color) = color;
+    (ours ? s.team_alt : s.opp_alt) = badge_rgb(str_or_empty(c["team"]["alternateColor"]));
     (ours ? s.team_logo : s.opp_logo) = logo;
     (ours ? s.team_timeouts : s.opp_timeouts) = timeouts;
     uint8_t *lines = ours ? s.team_lines : s.opp_lines;

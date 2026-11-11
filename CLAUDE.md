@@ -35,8 +35,9 @@ contributors; read it too.
   tense, written for the owner, no internal names, cards or notes. The
   docs site publishes only from `main`, so a page goes live with the
   release that brings its behavior; no "Coming in the next release"
-  asides. `cd docs/wiki && npm run
-  build` must pass.
+  notes (CI refuses a PR that adds one). A phone app feature that waits
+  for an app update uses `:::note[Coming in the next app update]`.
+  `cd docs/wiki && npm run build` must pass.
 - PR descriptions say what changed and how it was tested, nothing else: no
   links to private repos or trackers, no card numbers or `Closes` lines
   for them, no private notes. No AI attribution or Claude-headed
@@ -49,18 +50,20 @@ contributors; read it too.
   customers run and what the live site deploys from, only takes a PR from
   `beta`. Release tags go on `main`. CI fails a PR into `beta` or `main`
   from any other branch and refuses to publish a tag that isn't on `main`.
-- Releases: every `dev` to `beta` promotion is release-ready. Before
-  opening it, a release prep PR into `dev` sets `version` in
-  firmware/gameday-common.yaml to the release it would ship as
-  (`YYYY.M.patch`, this month) and folds `## Unreleased` into that
-  version's CHANGELOG section with its summary line (after checking
-  `git log` since the last tag for merged changes with no bullet). So
-  shipping is one `beta` to `main` PR: its merge runs tag.yml, which tags
-  `main`'s version and starts the release. If the month has turned since,
-  the prep moves to the new month first. Promotions to `beta` happen when
-  the repo owner says so; `beta` to `main` only on the repo owner's "ship
-  it". PRs into `dev` may auto-merge on green once benched; promotions
-  never do. dev, beta and main require the build, test and size checks.
+- Releases: `dev` is always ready to release, so promoting is one
+  command: `python3 scripts/promote.py` (`--dry-run` first). It checks
+  dev, works out the version the way a beta does (the newest tag plus
+  one, or `YYYY.M.0` in a new month), opens and merges a release prep PR
+  into `dev` that renames `## Unreleased` to that version and sets
+  `version` in firmware/gameday-common.yaml, then opens the `dev` to
+  `beta` PR. Nothing is written at promotion time: every PR into `dev`
+  leaves CHANGELOG.md and the docs in their released shape (see the
+  CHANGELOG rule below). So shipping is one `beta` to `main` PR: its
+  merge runs tag.yml, which tags `main`'s version and starts the release.
+  Promotions to `beta` happen when the repo owner says so; `beta` to
+  `main` only on the repo owner's "ship it". PRs into `dev` may
+  auto-merge on green once benched; promotions never do. dev, beta and
+  main require the build, test and size checks.
 - ESPHome versions by channel: `dev` and `beta` may pin an ESPHome beta;
   `main` and release tags build only on a final release. The pin is
   `ESPHOME_VERSION` at the top of build.yml, and CI (Branch rules) fails a
@@ -76,10 +79,18 @@ contributors; read it too.
 - A PR an owner would notice adds its bullet under `## Unreleased` in
   CHANGELOG.md, under `### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`:
   one short line, starting with an emoji that fits it, the detail on the
-  docs page (CHANGELOG.md's own top note has the format). Released
-  sections stay as they shipped; release prep (above) folds Unreleased
-  into the next version's section. A tag without a matching section
-  fails CI.
+  docs page (CHANGELOG.md's own top note has the format). The section
+  stays release-ready as each PR lands: it starts with a plain summary
+  line under 240 characters, which a PR rewrites when its change is the
+  bigger news; a bullet about the same feature as one already there is
+  folded into that line, not added beside it; a fix to something that
+  hasn't shipped changes no line, or that feature's line. CI ("Changelog
+  ready to release", scripts/changelog_check.py) fails a PR into `dev`
+  that touches firmware/ or components/ without changing Unreleased,
+  unless the description has `No owner-visible change, no docs: <why>`
+  or `No changelog line: <why>` (a change too small or rare for the
+  notes), and fails any PR that edits a released section or leaves
+  Unreleased out of shape. A tag without a matching section fails CI.
 - Name branches after the change (`espn-gzip`); CI's Branch rules job
   refuses a PR from a `card-<number>` branch.
 - ESPHome venv at ~/development/tools/esphome-venv flashes over USB and

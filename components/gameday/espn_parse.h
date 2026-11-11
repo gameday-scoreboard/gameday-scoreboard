@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Pure ESPN parsing and game logic. No ESPHome includes so the host test
 // binary can compile this file directly.
 #pragma once
@@ -84,6 +86,9 @@ struct Basketball {
   Phase phase{Phase::OTHER};
   std::string series;                  // ESPN's line: "ATL leads series 1-0"
   int8_t team_wins{-1}, opp_wins{-1};  // series wins so far, -1 outside a series
+  // Each side's points leader in this game, "Edwards 24", while it is on;
+  // "" before anyone scores or when ESPN lists none.
+  std::string team_scorer, opp_scorer;
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
@@ -91,6 +96,55 @@ struct Basketball {
 struct Hockey {
   bool playoffs{false};  // season type 3
   std::string series;    // "CAR leads series 2-0", playoffs
+  // Shots on goal: the other goalie's saves plus the side's goals, so a
+  // shootout's attempts stay out. -1 when ESPN sends no stats.
+  int16_t team_shots{-1}, opp_shots{-1};
+  // The goal in this read's last play, if it is one. ESPN keeps only the
+  // newest play, so GoalHolds keeps it past this read. goal_score is both
+  // sides' goals with it in, 0 for none. Plain arrays, not strings: the
+  // snapshot is copied in many places, and a string adds code to every copy.
+  uint8_t goal_period{0};
+  uint16_t goal_score{0};
+  char goal_clock[6]{};  // "12:04"
+  char goal_name[24]{};  // "McDavid", cut to fit
+  // For the big plays (celeb_hockey.h), while the game is on. ESPN's goal
+  // leaders for this game list every scorer with the id and the count;
+  // these keep each side's players on two goals or more, enough to see a
+  // third. Most games have none.
+  struct Scorer {
+    uint32_t id{0};
+    uint8_t goals{0};
+  };
+  static constexpr uint8_t kScorersMax = 3;
+  Scorer team_scorers[kScorersMax]{}, opp_scorers[kScorersMax]{};
+  uint8_t team_scorer_count{0}, opp_scorer_count{0};
+};
+
+// The latest goal of a hockey game, kept from read to read until the next
+// one. Outside the snapshot, so it outlasts a board that switches games and
+// back, or a reread that starts the board's snapshot over.
+struct GoalHold {
+  uint64_t event{0};  // ESPN's event id, 0 for an empty slot
+  uint16_t score{0};  // both sides' goals with it in
+  uint8_t period{0};
+  char clock[6]{};
+  char name[24]{};
+};
+
+struct GameSnapshot;
+
+// The latest goals of the last few hockey games read (a Live games board
+// that moves between games, or several hockey favorites).
+struct GoalHolds {
+  static constexpr size_t kGames = 4;
+  GoalHold slot[kGames];
+  uint8_t next{0};  // the slot a new game takes, oldest first
+  // Folds in one read: a new goal replaces the held one, the same goal read
+  // again keeps its first clock and takes its scorer once ESPN has one, and
+  // a score that moves without a goal play (a goal taken back, or one ESPN
+  // never showed as the last play) drops it.
+  void update(const GameSnapshot &g);
+  const GoalHold *find(const std::string &event_id) const;
 };
 
 // One scoreboard event, resolved to "us" and "them".
@@ -112,6 +166,9 @@ struct GameSnapshot {
   std::string team_record, opp_record;
   uint8_t team_rank{99}, opp_rank{99};  // AP rank (college), 99 when unranked
   std::string team_color, opp_color;
+  // ESPN's second color (alternateColor) as RGB, 0 when it has none: the
+  // letters of a side with no logo when its color is too dark (badge.h).
+  uint32_t team_alt{0}, opp_alt{0};
   std::string team_logo, opp_logo;
   bool team_winner{false};
   int possession{0};
@@ -273,6 +330,15 @@ struct TickerOptions {
   bool last_play{true};
   bool odds{true};
   bool leaders{true};  // each side's season leader before the start
+  // A wide board's row under the clock already says these (row_text.h), so
+  // the ticker leaves them out rather than say them twice: the win chance
+  // and the down and distance (football; the field strip, or the row's text
+  // with the strip off). row_timeout: a wide board shows no timeout line at
+  // all in basketball, the stopped clock says it, so the ticker leaves a
+  // timeout as the last play out too.
+  bool row_win{false};
+  bool row_down{false};
+  bool row_timeout{false};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -357,6 +423,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 // "KC 72% to win" for the side ESPN's model favors, "" when it gives no
 // number (football's last play only).
 std::string win_chance(const GameSnapshot &s);
+// ESPN's last play is a timeout ("Official TV Timeout", "Full timeout").
+bool timeout_play(const std::string &text);
 // Whether ESPN has said the board has no game, for no_game_text. In Favorites
 // (favs > 0) only once every favorite's team read has answered (`read` of
 // them): one answered favorite says nothing of the others.
@@ -449,6 +517,18 @@ bool baseball_home_run(const GameSnapshot &s);
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);
 Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// The 128-wide row under the clock while the puck is in play, at most `max`
+// characters: shots on goal, ours first, then the latest goal held for this
+// game (`goal`, may be null): "Shots on goal 12-16" before the first goal,
+// "Shots 12-16  12:04 Kane" after it. "" between periods, after the final,
+// and when ESPN has neither.
+std::string hockey_situation(const GameSnapshot &s, const GoalHold *goal, size_t max = 25);
+// The same as two lines that can take turns on the row, each longest form
+// first: the shots ("Shots on goal 12-16", "Shots 12-16", "SOG 12-16") and
+// the held goal ("2nd 12:04 Kane", then "12:04 Kane" in the goal's own
+// period or "2nd Kane" after it, then "Kane"). All empty between periods and
+// after the final; the shots empty without ESPN's stats, the goal before one.
+void hockey_row_forms(const GameSnapshot &s, const GoalHold *goal, std::string shots[3], std::string goal_line[3]);
 // A W-L-OTL record for the label under a logo (7 characters wide): as is when
 // it fits, else the NHL points, two a win and one an overtime loss ("70 pts").
 std::string hockey_board_record(const std::string &wlo);

@@ -130,6 +130,8 @@ test("shows a live game and the settings from /gameday/state", async ({ page, re
   await expect(page.locator("#tzline")).toContainText("US Central");
   await expect(page.locator("#hostname")).toHaveText("gameday-2f6a70.local");
   await expect(page.locator("#ver")).toHaveText("v1.5.4");
+  await expect(page.locator("#credit")).toHaveText("© 2026 Brandon Harvey");
+  await expect(page.locator(".foot a", { hasText: "GPLv3" })).toHaveAttribute("href", /NOTICE\.md$/);
   // A row per favorite, the one on the board marked.
   await expect(page.locator("#upnextList .un.fav .n")).toHaveText(["DAL vs PHI", "HOU vs WSH", "MISS vs LSU"]);
   await expect(page.locator("#upnextList .un.shown .n")).toHaveText("DAL vs PHI");
@@ -470,6 +472,92 @@ test("an On now search that matches no game finds the team instead", async ({ pa
   await expect(page.locator("#tiles .none")).toHaveText("No game matches");
 });
 
+test("a league tab starts with that league's games today, finals folded, then its teams", async ({ page, request }) => {
+  const side = (homeAway, id, abbr, name, score) => ({ homeAway, score, team: { id, abbreviation: abbr, shortDisplayName: name } });
+  const ev = (id, date, state, detail, home, away, completed = true) => ({
+    id, date, status: { type: { state, shortDetail: detail, completed } },
+    competitions: [{ competitors: [side("home", ...home), side("away", ...away)] }],
+  });
+  let nflAsks = 0;
+  await page.route("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard*", (route) => {
+    nflAsks++;
+    return route.fulfill({
+      json: {
+        events: [
+          ev("1", "2026-10-11T17:00Z", "post", "Final", ["6", "DAL", "Cowboys", "24"], ["21", "PHI", "Eagles", "20"]),
+          ev("2", "2026-10-11T20:25Z", "in", "8:12 - 2nd", ["9", "GB", "Packers", "7"], ["3", "CHI", "Bears", "3"]),
+          ev("3", "2026-10-12T00:20Z", "pre", "8:20 PM", ["12", "KC", "Chiefs", "0"], ["7", "DEN", "Broncos", "0"]),
+          ev("4", "2026-10-11T17:00Z", "post", "Postponed", ["2", "BUF", "Bills", "0"], ["15", "MIA", "Dolphins", "0"], false),
+        ],
+      },
+    });
+  });
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "teams");
+  await page.locator("#favAdd").click();
+  // A game is live, so the picker moves to On now; the NFL tab has the same games.
+  await expect(page.locator(".tabs button.on")).toHaveText("On now");
+  await page.locator(".tabs button", { hasText: "NFL" }).click();
+  await expect(page.locator("#tiles .gh")).toHaveText(["Live now", "Later today", "Final (1)", "Postponed or canceled (1)", "Teams"]);
+  // The list On now just read is reused: no second ask for the tab.
+  expect(nflAsks).toBe(1);
+  // Finals and postponed games start folded; the live and later ones show.
+  await expect(page.locator("#tiles .side:visible .n")).toHaveText(["Bears", "Packers", "Broncos", "Chiefs"]);
+  await page.locator("#tiles summary", { hasText: "Final" }).click();
+  await expect(page.locator("#tiles .side:visible .n")).toHaveText(["Bears", "Packers", "Broncos", "Chiefs", "Eagles", "Cowboys"]);
+  // Then every NFL team, A to Z, after the games.
+  await expect(page.locator("#tiles .tile")).toHaveCount(32);
+  await expect(page.locator("#tiles .tile .n").first()).toHaveText("Arizona Cardinals");
+  // The Cowboys are a favorite: checked on the game and on the team tile.
+  await expect(page.locator("#tiles .side.on .n")).toHaveText("Cowboys");
+  await expect(page.locator("#tiles .tile.on .n")).toContainText(["Dallas Cowboys"]);
+  // A tap on a side adds the team, and its tile checks too.
+  await page.locator("#tiles .side", { hasText: "Chiefs" }).click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,nfl:12" });
+  await expect(page.locator("#tiles .tile", { hasText: "Kansas City Chiefs" })).toHaveAttribute("aria-pressed", "true");
+  // A league with nothing today: just the teams, no heading.
+  await page.locator(".tabs button", { hasText: "NHL" }).click();
+  await expect(page.locator("#tiles .tile")).toHaveCount(32);
+  await expect(page.locator("#tiles .gh")).toHaveCount(0);
+  await expect(page.locator("#tiles .game")).toHaveCount(0);
+  // A search on a league tab is teams only, from every league.
+  await page.locator(".tabs button", { hasText: "NFL" }).click();
+  await page.locator("#q").fill("packers");
+  await expect(page.locator("#tiles .tile .n")).toHaveText(["Green Bay Packers"]);
+  await expect(page.locator("#tiles .game")).toHaveCount(0);
+});
+
+test("a league tab shows its teams at once and adds today's games when they arrive", async ({ page, request }) => {
+  const side = (homeAway, id, abbr, name) => ({ homeAway, score: "0", team: { id, abbreviation: abbr, shortDisplayName: name } });
+  let release;
+  const held = new Promise((r) => (release = r));
+  await page.route("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard*", async (route) => {
+    await held;
+    return route.fulfill({
+      json: {
+        events: [{
+          id: "3", date: "2026-10-12T00:20Z",
+          status: { type: { state: "pre", shortDetail: "8:20 PM" } },
+          competitions: [{ competitors: [side("home", "12", "KC", "Chiefs"), side("away", "7", "DEN", "Broncos")] }],
+        }],
+      },
+    });
+  });
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "teams");
+  await page.locator("#favAdd").click();
+  // Nothing live, so it opens on the first favorite's league before the games come.
+  await expect(page.locator(".tabs button.on")).toHaveText("NFL");
+  await expect(page.locator("#tiles .tile")).toHaveCount(32);
+  await expect(page.locator("#tiles .gh")).toHaveCount(0);
+  release();
+  await expect(page.locator("#tiles .gh")).toHaveText(["Later today", "Teams"]);
+  await expect(page.locator("#tiles .side .n")).toHaveText(["Broncos", "Chiefs"]);
+  await expect(page.locator(".tabs button.on")).toHaveText("NFL");
+});
+
 test("the On now tab asks ESPN for every college game, not the Top 25", async ({ page, request }) => {
   // Without groups= the college basketball scoreboard lists only ranked teams' games.
   const side = (homeAway, id, abbr, name) => ({ homeAway, score: "40", team: { id, abbreviation: abbr, shortDisplayName: name } });
@@ -651,24 +739,6 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await chips.getByRole("button", { name: "NBA", exact: true }).click();
   await expectSet(request, { live: "mlb,nhl,nba" });
   await expect(chips.getByRole("button", { pressed: true })).toHaveText(["MLB", "NBA", "NHL"]);
-});
-
-test("bar build: no switch, a bar beta note and an email with the panel's name", async ({ page, request }) => {
-  await reset(request, { autoupd: null, bar: { report: "support@gameday-scoreboard.com" } });
-  await page.goto("/");
-  await tab(page, "device");
-  await expect(page.locator("#hostname")).not.toBeEmpty();
-  await expect(page.locator("#autoupdRow")).toBeHidden();
-  await expect(page.locator("#barRow")).toBeVisible();
-  const href = await page.locator("#barReport").getAttribute("href");
-  expect(href).toMatch(/^mailto:support@gameday-scoreboard\.com\?subject=Bar%20panel%20gameday-2f6a70&body=/);
-  expect(decodeURIComponent(href.split("body=")[1])).toContain("Panel: gameday-2f6a70");
-
-  await reset(request);
-  await page.goto("/");
-  await tab(page, "device");
-  await expect(page.locator("#hostname")).not.toBeEmpty();
-  await expect(page.locator("#barRow")).toBeHidden();
 });
 
 test("favorites post the whole list in order on add, move and remove", async ({ page, request }) => {
@@ -1943,46 +2013,40 @@ test("pre-game leaders switch: every sport but soccer, posts leaders", async ({ 
   await expect(sw).toBeHidden();
 });
 
-test("pictures switches: field strip, win chance bar and score margin, by sport", async ({ page, request }) => {
+test("pictures switches: field strip and win chance, by sport", async ({ page, request }) => {
   const sw = (name) => page.getByRole("switch", { name, exact: true });
-  // Nothing picked yet: all three, on.
+  // Nothing picked yet: both, on; the score margin chart is gone.
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
   await tab(page, "display");
   await expect(sw("Field strip")).toBeVisible();
-  await expect(sw("Win chance bar")).toBeVisible();
-  await expect(sw("Score margin")).toBeVisible();
+  await expect(sw("Win chance")).toBeVisible();
+  await expect(sw("Score margin")).toHaveCount(0);
   await expect(sw("Field strip")).toBeChecked();
   await sw("Field strip").click();
   await expectSet(request, { field: "0" });
   await expect(sw("Field strip")).not.toBeChecked();
-  await sw("Win chance bar").click();
+  await sw("Win chance").click();
   await expectSet(request, { winbar: "0" });
-  await sw("Score margin").click();
-  await expectSet(request, { spark: "0" });
   const st = await deviceState(request);
-  expect([st.field, st.winbar, st.spark]).toEqual([false, false, false]);
+  expect([st.field, st.winbar]).toEqual([false, false]);
 
-  // A football favorite: the strip and the bar, no margin chart.
+  // A football favorite: the strip and the win chance.
   await reset(request, { favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}] });
   await page.reload();
   await expect(sw("Field strip")).toBeVisible();
-  await expect(sw("Win chance bar")).toBeVisible();
-  await expect(sw("Score margin")).toBeHidden();
+  await expect(sw("Win chance")).toBeVisible();
 
-  // Hockey only: the margin chart alone (ESPN has no win chance for hockey).
+  // Hockey only: nothing to turn off, so no card (ESPN has no win chance for hockey).
   await reset(request, { favs: [{ l: "nhl", id: 25, abbr: "ANA", name: "Anaheim Ducks" }, {}, {}, {}] });
   await page.reload();
-  await expect(sw("Field strip")).toBeHidden();
-  await expect(sw("Win chance bar")).toBeHidden();
-  await expect(sw("Score margin")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live pictures" })).toBeHidden();
 
-  // Basketball: the bar and the chart.
+  // Basketball: the win chance alone.
   await reset(request, { favs: [{ l: "nba", id: 25, abbr: "SA", name: "San Antonio Spurs" }, {}, {}, {}] });
   await page.reload();
   await expect(sw("Field strip")).toBeHidden();
-  await expect(sw("Win chance bar")).toBeVisible();
-  await expect(sw("Score margin")).toBeVisible();
+  await expect(sw("Win chance")).toBeVisible();
 });
 
 test("situation switches: one per sport the panel follows, each posting its own key", async ({ page, request }) => {
@@ -2655,7 +2719,7 @@ test("the game events card says how the last post went, and hides on firmware wi
 });
 
 test("the message card says how the list's last read went, and hides on firmware without it", async ({ page, request }) => {
-  const url = "https://example.com/plates.txt";
+  const url = "https://example.com/messages.txt";
   await reset(request, { msgurl: url, msgread: { status: 200, entries: 412 } });
   await page.goto("/");
   await tab(page, "customize");

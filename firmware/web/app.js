@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
@@ -241,13 +243,12 @@
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="vizCard">
         <h2>Live pictures</h2>
-        <p class="hint">Drawn under the clock during a game. Not on a single 64x64 panel.</p>
+        <p class="hint">Under the clock during a game. Not on a single 64x64 panel.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
-          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: each side's chance to win, as a thin bar.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
-          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game, as a small chart.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", in turn with the rest of the row.</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
         </div>
       </div>
       <div class="card">
@@ -259,6 +260,7 @@
               <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
             </select></div>
             <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+            <div class="ctl"><label>Big plays<small>On Full, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way.</small></label><button class="sw" data-set="bigplays" aria-label="Big plays"></button></div>
           </div>
         </div>
       </div>
@@ -366,10 +368,6 @@
           <div class="ctl" id="betaRow" hidden>
             <label>Follow beta<small>Switches to beta firmware for new features early. It may have bugs.</small></label>
             <button class="sw" data-set="beta" aria-label="Follow beta"></button>
-          </div>
-          <div class="ctl" id="barRow" hidden>
-            <label>Bar beta<small>Auto-installs beta firmware overnight.</small></label>
-            <a class="btn" id="barReport" href="#">Something wrong?</a>
           </div>
         </div>
       </div>
@@ -498,6 +496,8 @@
       <span id="ver"></span><span>·</span>
       <a href="https://github.com/gameday-scoreboard/gameday-scoreboard" target="_blank" rel="noopener">gameday-scoreboard</a>
       <span>·</span><span>scores from ESPN</span>
+      <br><span id="credit">© 2026 Brandon Harvey</span><span>·</span>
+      <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/blob/main/NOTICE.md" target="_blank" rel="noopener">GPLv3</a>
     </p>
   </div>
 
@@ -627,11 +627,11 @@
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
-    celebrate: Number,
+    celebrate: Number, bigplays: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
-    field: (v) => v === "1", winbar: (v) => v === "1", spark: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
+    field: (v) => v === "1", winbar: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
     // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
     cards: (v) => {
       const pairs = new Map(v.split(",").map((p) => p.split(":")));
@@ -1725,6 +1725,8 @@
     document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
+    // Hockey, baseball or soccer alone: nothing here to turn off.
+    $("#vizCard").hidden = [...document.querySelectorAll("#vizCtls .ctl")].every((row) => row.hidden);
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = $("#cdOwnCard").hidden = S.countdown === undefined;
     // The Between games list; firmware from before it has a switch per card.
@@ -1740,19 +1742,12 @@
     renderWeather();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
-    // Older firmware and the bar and demo builds have no beta to follow.
+    // Older firmware and the demo build have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
     // The rollback line and the important mark in the firmware box read this
     // document, which can land after the update entity does.
     if (((S.update_failed || "") !== fwFailed || !!S.update_important !== fwImportant) && ents[byName["Firmware"]])
       renderUpdate(ents[byName["Firmware"]]);
-    // The bar build: a note, and an email to us with the panel's name in it.
-    $("#barRow").hidden = !S.bar;
-    if (S.bar) {
-      const who = S.name || "this panel";
-      $("#barReport").href = "mailto:" + S.bar.report + "?subject=" + encodeURIComponent("Bar panel " + who) +
-        "&body=" + encodeURIComponent("Panel: " + who + "\nWhat's wrong:\n");
-    }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
@@ -2426,42 +2421,67 @@
     for (const g of shown) {
       if (g.state !== lastState) {
         lastState = g.state;
-        const heading = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
-        tiles.appendChild(el("div", "gh", heading[g.state] || "Final"));
+        tiles.appendChild(el("div", "gh", GAME_HEADING[g.state] || "Final"));
       }
-      const card = el("div", "game" + (g.state === "in" ? " live" : ""));
-      const mkSide = (s) => {
-        const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
-        b.disabled = !t;
-        b.title = t ? t[3] : "Not in the team list";
-        if (t) {
-          b.dataset.key = keyOf(t);
-          b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
-        }
-        const img = el("img");
-        img.loading = "lazy";
-        img.src = logoUrl(g.league, s.id, s.abbr);
-        img.alt = "";
-        b.appendChild(img);
-        const txt = el("div", "st");
-        txt.appendChild(el("div", "n", s.name));
-        txt.appendChild(el("div", "a", s.abbr));
-        b.appendChild(txt);
-        b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
-        b.onclick = () => {
-          if (t) toggleFav(t);
-        };
-        return b;
-      };
-      card.appendChild(mkSide(g.away));
-      const mid = el("div", "gm");
-      mid.appendChild(el("div", "at", "@"));
-      mid.appendChild(el("div", "det", g.detail));
-      card.appendChild(mid);
-      card.appendChild(mkSide(g.home));
-      tiles.appendChild(card);
+      tiles.appendChild(gameCard(g));
     }
+  };
+  const GAME_HEADING = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
+  // One game: a button per side that adds or takes out that team.
+  const gameCard = (g) => {
+    const card = el("div", "game" + (g.state === "in" ? " live" : ""));
+    const mkSide = (s) => {
+      const t = teamById(g.league, s.id);
+      const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
+      b.disabled = !t;
+      b.title = t ? t[3] : "Not in the team list";
+      if (t) {
+        b.dataset.key = keyOf(t);
+        b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+      }
+      const img = el("img");
+      img.loading = "lazy";
+      img.src = logoUrl(g.league, s.id, s.abbr);
+      img.alt = "";
+      b.appendChild(img);
+      const txt = el("div", "st");
+      txt.appendChild(el("div", "n", s.name));
+      txt.appendChild(el("div", "a", s.abbr));
+      b.appendChild(txt);
+      b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
+      b.onclick = () => {
+        if (t) toggleFav(t);
+      };
+      return b;
+    };
+    card.appendChild(mkSide(g.away));
+    const mid = el("div", "gm");
+    mid.appendChild(el("div", "at", "@"));
+    mid.appendChild(el("div", "det", g.detail));
+    card.appendChild(mid);
+    card.appendChild(mkSide(g.home));
+    return card;
+  };
+  // Fold finals and postponed games shut so the team list stays near the top on a busy day
+  const leagueGames = (slot, list) => {
+    const mine = list.filter((g) => g.league === league);
+    if (!mine.length) return;
+    for (const state of ["in", "pre", "post", "off"]) {
+      const group = mine.filter((g) => g.state === state);
+      if (!group.length) continue;
+      if (state === "in" || state === "pre") {
+        slot.appendChild(el("div", "gh", GAME_HEADING[state]));
+        for (const g of group) slot.appendChild(gameCard(g));
+        continue;
+      }
+      const fold = el("details", "gfold");
+      fold.appendChild(el("summary", "gh", GAME_HEADING[state] + " (" + group.length + ")"));
+      const inner = el("div", "games");
+      for (const g of group) inner.appendChild(gameCard(g));
+      fold.appendChild(inner);
+      slot.appendChild(fold);
+    }
+    slot.appendChild(el("div", "gh", "Teams"));
   };
 
   // ---- team chooser ------------------------------------------------------
@@ -2501,16 +2521,29 @@
   };
   const renderTiles = () => {
     if (league === "now") return renderGames();
-    $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
-    const list = q ? searchTeams(q) : TEAMS.filter((t) => t[0] === league);
-    if (!list.length) {
-      tiles.appendChild(el("div", "none", "No team matches"));
+    if (q) {
+      tiles.className = "tiles";
+      const found = searchTeams(q);
+      if (!found.length) tiles.appendChild(el("div", "none", "No team matches"));
+      for (const t of found) tiles.appendChild(teamTile(t));
       return;
     }
-    for (const t of list) tiles.appendChild(teamTile(t));
+    // Show the teams at once, so a slow ESPN read can't hold them up.
+    // Today's games go in above them when the list arrives.
+    tiles.className = "games";
+    const slot = el("div", "gslot");
+    const grid = el("div", "tiles");
+    for (const t of TEAMS.filter((t) => t[0] === league)) grid.appendChild(teamTile(t));
+    tiles.appendChild(slot);
+    tiles.appendChild(grid);
+    if (gamesFresh()) return leagueGames(slot, games);
+    const lg = league;
+    loadGames().then((list) => {
+      if (league === lg && slot.isConnected && !slot.firstChild) leagueGames(slot, list);
+    });
   };
   $("#favAdd").onclick = () => openPicker();
   $("#favStart").onclick = () => { showPane("teams"); openPicker(); };
@@ -2765,7 +2798,7 @@
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
     $("#hEspn").textContent = h.espn == null ? "None yet"
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
-    const chan = { stable: "stable", beta: "beta", bar: "bar beta" }[h.channel];
+    const chan = { stable: "stable", beta: "beta" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
     const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
@@ -3066,11 +3099,11 @@
       // The panel rolled back from this very version (a crash in its first
       // minute); it won't install it on its own again, but Install still tries.
       const failed = !!(S && S.update_failed && S.update_failed === u.value);
-      const nightly = S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "";
+      const nightly = S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "";
       fwWaiting = true;
       if (failed) {
         $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
-        sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+        sub.textContent = "Install tries it again." + (S.autoupd ? " It won't install this one on its own." : "");
       } else if (fwImportant) {
         // The release is marked important (its summary starts with
         // "Important:"): it fixes something broken, so the box says so.

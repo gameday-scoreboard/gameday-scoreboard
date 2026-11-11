@@ -9,11 +9,16 @@ Format: `## vX.Y.Z` heading, one plain summary line, then the changes
 grouped under `### ⚠️ Heads up` (anything an owner has to do or notice),
 `### ✨ New` and `### 🐛 Fixes`, leaving out a group with nothing in it. One
 short line per change, written for the person who owns the panel, not for
-the code, starting with an emoji that fits it. The detail goes on the docs
-page that describes it, not here.
+the code, starting with an emoji that fits it. Name a setting or screen by
+its label on the device page or in the docs, never by a Home Assistant or
+code name. A change no owner would see (factory test screens, internals)
+gets no line. The detail goes on the docs page that describes it, not here.
 
-Changes merged since the last release go under `## Unreleased` at the top.
-The release renames that heading to the new version. A released section
+Changes merged since the last release go under `## Unreleased` at the top,
+already in the released shape: the summary line, then the groups. A change
+to a feature that already has a line updates that line. The release
+renames that heading to the new version (scripts/promote.py) and changes
+nothing else. A released section
 stays as it shipped: a change to something it describes is a new bullet
 under `## Unreleased`.
 
@@ -29,6 +34,26 @@ change, a panel that won't start) starts its summary line with
 `Important:`. Panels read that word from the update summary: their ticker
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
+
+## v2026.11.2
+
+Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.
+
+### ⚠️ Heads up
+
+- 📜 New firmware code is open source under GPLv3 instead of MIT, so anyone who builds on it keeps the author's name on it and shares their source; code released before stays MIT
+
+### ✨ New
+
+- ©️ The bottom of the device page names the firmware's author and license
+- 🎆 On **Full** celebrations your team's big plays get their own pixel-art scene: dunks and alley-oops, interceptions, pick sixes, fumbles and sacks, grand slams and walk-offs, hockey hat tricks, and soccer braces, hat tricks, penalties and late go-ahead goals, with a **Big plays** switch to turn them off
+- 🔤 On a wide board the row under the clock reads in words in place of the score margin chart and the win chance bar: the win chance ("ND 84% to win") in football and basketball, the last basket, points leaders and playoff series in basketball, shots on goal and the latest goal in hockey
+- 📋 Each league tab in the team chooser starts with that league's games today, so you can add a team from its game
+
+### 🐛 Fixes
+
+- 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation in its team color instead of an empty space
+- ⭐ A favorite you add shows within a few seconds instead of leaving the board empty for about a minute
 
 ## v2026.11.1
 

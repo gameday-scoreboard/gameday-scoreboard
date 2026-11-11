@@ -103,6 +103,7 @@
   "spark": true,
   "opp": true,
   "celebrate": 2,
+  "bigplays": true,
   "best": true,
   "bootaddr": true,
   "countdown": true,
@@ -193,9 +194,6 @@
   "update_failed": "2026.10.2",
   "update_important": true,
   "update_shown": 1793142120,
-  "bar": {
-    "report": "support@gameday-scoreboard.com"
-  },
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,

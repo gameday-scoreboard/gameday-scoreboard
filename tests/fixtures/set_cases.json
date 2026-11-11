@@ -10,7 +10,7 @@
   "base": {
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "sport": "", "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
-    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "field": true, "winbar": true, "spark": true, "opp": true, "celebrate": 2, "best": true, "bootaddr": true,
+    "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "field": true, "winbar": true, "spark": true, "opp": true, "celebrate": 2, "bigplays": true, "best": true, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0,
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
     "wake": false, "wakelead": 15, "after": "scoreboard"
@@ -45,6 +45,8 @@
     {"name": "today on", "set": [["today", "1"]], "expect": {"today": true}},
     {"name": "ticker and boot switches off", "set": [["down", "0"], ["play", "0"], ["odds", "0"], ["opp", "0"], ["bootaddr", "0"], ["tzauto", "0"]],
      "expect": {"down": false, "play": false, "odds": false, "opp": false, "bootaddr": false, "tz_auto": false}},
+    {"name": "big plays off", "set": [["bigplays", "0"]], "expect": {"bigplays": false}},
+    {"name": "big plays back on", "set": [["bigplays", "0"], ["bigplays", "1"]], "expect": {"bigplays": true}},
     {"name": "best game off", "set": [["best", "0"]], "expect": {"best": false}},
     {"name": "jump to the action on, score banner off", "set": [["jump", "1"], ["banner", "0"]], "expect": {"jump": true, "banner": false}},
     {"name": "pre-game leaders off", "set": [["leaders", "0"]], "expect": {"leaders": false}},

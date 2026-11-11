@@ -3,24 +3,15 @@
 # must exist, match the release tag, and point only at files that are there
 # and whose md5 and sha256 match the manifest's.
 # Usage: scripts/check_site_firmware.sh <site dir> <tag, e.g. v1.5.4>
-#        scripts/check_site_firmware.sh --beta <site dir>
 #        scripts/check_site_firmware.sh --follow-beta <site dir> [version]
-# --beta checks the bar panels' beta channel (site/firmware/beta/<variant>/)
-# instead: its versions end in -beta.<build>, the same for both bar variants
-# (there is no two-panel bar build). --follow-beta checks the beta for panels
-# with "Follow beta" on (site/firmware/<variant>-beta/) the same way, and
-# against the given version if there is one. Set VARIANTS to check only some
+# --follow-beta checks the beta for panels with "Follow beta" on
+# (site/firmware/<variant>-beta/) instead: their versions end in
+# -beta.<build>, the same for every variant, and match the given version if
+# there is one. Set VARIANTS to check only some
 # of a mode's folders (add_beta_channel.sh checks each Follow beta board alone).
 set -euo pipefail
 
 case "$1" in
-  --beta)
-    site=$2
-    dir="$site/firmware"
-    variants="beta/moonhub75 beta/scoreboard75"
-    beta_mode=1
-    want=""
-    ;;
   --follow-beta)
     site=$2
     dir="$site/firmware"

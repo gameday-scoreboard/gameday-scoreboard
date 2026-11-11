@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -19,6 +19,10 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_logo_cache_asan
 	./build/test_picture
 	./build/test_celebrate
+	./build/test_celeb_football
+	./build/test_celeb_hockey
+	./build/test_celeb_baseball
+	./build/test_celeb_soccer
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -32,6 +36,28 @@ build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
 build/test_celebrate: test_celebrate.cpp $(PARSER_ONLY) ../components/gameday/celebrate.h ../components/gameday/celebrate_fx.h $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_celebrate.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Football's big plays (celeb_football.h) on recorded ESPN reads, and their
+# frames (celeb_art_index.h).
+build/test_celeb_football: test_celeb_football.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_football.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Hockey's big plays on recorded NHL reads (celeb_hockey.h).
+build/test_celeb_hockey: test_celeb_hockey.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_hockey.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Baseball's big plays (celeb_baseball.h) on recorded ESPN plays.
+build/test_celeb_baseball: test_celeb_baseball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_baseball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Soccer's big plays (celeb_soccer.h) over recorded goals, and their
+# caption over the art (celeb_caption.h).
+build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 # Not part of `all`: renders every celebration to raw RGB565 frames for
 # render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.

@@ -20,6 +20,9 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
+| `event_nfl_sack_before.json`, `event_nfl_sack.json` | `.../football/nfl/scoreboard/401873045`, NYJ @ KC live, the read before KC sacks G.Smith and the read with it: last play type "Sack", the play's team and the ball both NYJ's (recorded 2026-11-08) |
+| `event_nfl_fumble_before.json`, `event_nfl_fumble.json` | `.../football/nfl/scoreboard/401873040`, DAL @ IND live, the read before DAL recovers J.Taylor's fumble and the read with it: "Fumble Recovery (Opponent)", the play's team and the ball both DAL's (recorded 2026-11-08) |
+| `event_nfl_interception_before.json`, `event_nfl_interception.json` | `.../football/nfl/scoreboard/401873049`, GB @ NE live, the read before GB intercepts D.Maye and the read with it: "Pass Interception Return", the play's team and the ball both GB's (recorded 2026-11-08) |
 | `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
 | `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
 | `rankings_mcbb_20261019.json` | `sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1`, the preseason AP poll, every record 0-0 (recorded 2026-10-29) |
@@ -36,6 +39,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nhl_ana_inseason.json` | `.../hockey/nhl/teams/25/schedule` in season: 14 finals (6-7-1, one overtime loss) and 70 games ahead (recorded 2026-11-03) |
 | `schedule_nhl_ana_2026.json` | `.../hockey/nhl/teams/25/schedule?season=2026&seasontype=2`: 82 finals, 15 in overtime and 8 in a shootout, 43-33-6 (recorded 2026-11-03) |
 | `schedule_mcbb_ala_2026_post.json` | `.../basketball/mens-college-basketball/teams/333/schedule?season=2026&seasontype=3`: three NCAA tournament games, "Midwest Region - Sweet 16" last (recorded 2026-11-03) |
+| `plays_nba_20261107.json` | `.../basketball/nba/summary?event=<id>` for three 11/7 finals (SA @ POR, HOU @ PHX, ORL @ GS), the play-by-play cut to what the panel's live read carries for each play: `[wallclock (Unix s), type.text, text (scoring plays only), scoreValue, team.id, homeScore, awayScore]`, and each team's id, abbreviation and color. 17 dunks and 9 alley-oops; the big plays test replays it at 10 s reads (recorded 2026-11-08) |
 
 The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`), and the four recorded on 2026-11-03, keep only the fields a schedule parse reads
 (every event, each cut to its date, season type, week, status, notes,
@@ -144,6 +148,8 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | `event_nhl_pre.json` | 401892456 EDM @ ANA, pre-game with odds and O/U |
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |
 | `event_nhl_final_2ot.json` | 401869781 OTT @ CAR, 2026 playoffs, Final/2OT 3-2 CAR, series line (recorded after the fact) |
+| `event_nhl_goal.json` | 401892674 FLA @ BOS, 2026-11-08, 3:55 left in the 1st, 3-0 BOS, a goal as the last play (Geekie, with athletesInvolved; no period or clock on the play) |
+| `event_nhl_hattrick_final.json` | 401892640 DAL @ WSH, 2026-11-03, Final 6-5 DAL, Robertson's hat trick: the game's goal leaders list every scorer with the player's id and count (recorded 2026-11-08, after the fact). test_celeb_hockey.cpp puts it back in the 3rd period with his count at 1 to 4 for the reads around his third goal |
 | `team_nhl_edm.json` | `.../hockey/nhl/teams/6` (next event is the EDM @ ANA game above) |
 
 `football_golden.txt` is written by the host tests (`GOLDEN_WRITE=1`) and
@@ -218,8 +224,8 @@ or its limits change.
 Not from ESPN either: `api/` is the panel's own HTTP API as the companion
 app sees it. `state.json` is a `GET /gameday/state` document with every key
 the firmware can send, so it has some together that a real panel never sends
-at once (the bar build's `bar` next to `beta`, favorites rows next to the
-team's upcoming games, a reason for an empty board next to a live game).
+at once (favorites rows next to the team's upcoming games, a reason for an
+empty board next to a live game).
 `wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
 /gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
 (`demo` and `demo_stop` only in demo builds). `settings.json` is `GET

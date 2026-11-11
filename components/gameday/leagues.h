@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Every league the panel can follow and what differs between them. Pure, no
 // ESPHome includes, so the host tests use it too. scripts/build_teams.py,
 // scripts/build_web.py, __init__.py and tests/web/mock_device.py read kLeagues

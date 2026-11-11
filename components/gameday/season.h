@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The schedule and season recap cards: one read of a favorite's season
 // schedule (the same document as the Up next list, schedule_url) gives both.
 // The schedule card is the team's next three games; the recap card, only

@@ -6,14 +6,6 @@ on:
     branches: [main, beta, dev]
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      install_now:
-        description: >-
-          Beta channel only (run on beta): panel names, like gameday-aba970,
-          or "all". Those bar panels install this beta within 15 minutes
-          instead of at night.
-        type: string
-        default: ""
 
 # Read-only by default. Only publish writes (the release and Pages), and it
 # asks for that itself.
@@ -24,7 +16,7 @@ permissions:
 # may pin an ESPHome beta; main and release tags need a final release, which
 # Branch rules checks.
 env:
-  ESPHOME_VERSION: "2026.10.0"
+  ESPHOME_VERSION: "2026.10.2"
 
 # A newer push to the same ref cancels the older run. That stays on for dev
 # too: a merge that lands within a few minutes of the last one leaves the
@@ -47,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # On the beta branch, the version this run's beta goes out under, worked
-      # out once here: the board and bar builds would number it apart if a
+      # out once here: the board builds would number it apart if a
       # release tag or the month changed between their starts.
       - name: Beta version
         id: beta
@@ -297,8 +289,8 @@ jobs:
           key: esphome-components-${{ env.ESPHOME_VERSION }}-${{ hashFiles('firmware/**/*.yaml') }}
           restore-keys: esphome-components-${{ env.ESPHOME_VERSION }}-
       # On the beta branch this is also the beta channel for panels with
-      # "Follow beta" on: the same "-beta.<run>" version as the bar build of
-      # this run, and publish-beta puts it on the site. beta_version.py
+      # "Follow beta" on: the "-beta.<run>" version the Release notes job
+      # worked out, and publish-beta puts it on the site. beta_version.py
       # numbers it after the newest release tag, so dev's YAML keeps the
       # last release's version until the release prep PR sets the next one.
       - name: Beta version and summary
@@ -346,8 +338,9 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}
           path: out
-      # For the budget job: the OTA image's size and the ELF's static
-      # internal RAM. The name stays outside publish's firmware-* pattern.
+      # For the budget job: the OTA image's size, the ELF's static internal
+      # RAM and section sizes, and the OTA slot from the factory image's
+      # partition table. The name stays outside publish's firmware-* pattern.
       - name: Measure flash and static RAM
         if: needs.changes.outputs.firmware == 'true'
         run: python3 scripts/size_budget.py firmware out/${{ matrix.variant }} ${{ matrix.variant }} sizes/${{ matrix.variant }}.json
@@ -359,17 +352,24 @@ jobs:
 
   budget:
     # Flash, static internal RAM and the memory each ESPN read takes, against
-    # firmware/budget.json. A pull request into dev also fails when one figure
-    # grows more than the file's max_growth against dev's last build. A
-    # promotion carries many changes at once, so it only gets the budget.
-    # The job summary has the table. moonhub75-2panel isn't built on a pull
-    # request into dev, so its figures may be missing there.
+    # firmware/budget.json (its "about" text and scripts/size_budget.py have
+    # the rules). Every run checks the 90% OTA slot limit and the static RAM
+    # and heap caps. A pull request into dev also gets the growth rules
+    # against dev's last build and the approval rules (release allowance,
+    # 32 KB in one change, a raised cap) against dev's budget.json, passed by
+    # the owner's budget/owner-approval commit status on one of its commits.
+    # A promotion carries many changes at once, so it only gets the limits.
+    # The job summary has the tables and budget-report.json the figures.
+    # moonhub75-2panel isn't built on a pull request into dev, so its figures
+    # may be missing there.
     name: Size budget
     needs: [build, host-tests, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+      pull-requests: read
+      statuses: read
     steps:
       - uses: actions/checkout@v7
         if: needs.changes.outputs.firmware == 'true'
@@ -413,15 +413,67 @@ jobs:
           done <<< "$runs"
           rm -rf base
           echo "::warning::No complete figures from a $BASE_REF build found, so only the budget is checked, not the growth."
+      # dev's budget.json at the pull request's base, to find raised caps, and
+      # the approval statuses on each of the pull request's commits, newest
+      # first (one file per commit, named in that order).
+      - name: Base budget and owner approvals
+        if: needs.changes.outputs.firmware == 'true' && github.event_name == 'pull_request' && github.base_ref == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api -H "Accept: application/vnd.github.raw+json" \
+            "repos/$GITHUB_REPOSITORY/contents/firmware/budget.json?ref=$BASE_SHA" > pr-base-budget.json
+          mkdir -p approvals
+          n=0
+          pick='[.[] | select(.context == "budget/owner-approval") | {context, state, description, creator: .creator.login, created_at}]'
+          for sha in $(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits?per_page=100" --jq '.[].sha' | tac); do
+            n=$((n + 1))
+            gh api "repos/$GITHUB_REPOSITORY/commits/$sha/statuses?per_page=100" --jq "{sha: \"$sha\", statuses: $pick}" \
+              > "approvals/$(printf '%04d' "$n").json"
+          done
+          echo "Approval statuses on $n commits:"
+          cat approvals/*.json
+          # A change that moves the release block to another tag resets the
+          # flash allowance, so the check compares its baseline with the
+          # figures that tag's own Build run measured.
+          old_tag=$(jq -r '.release.tag // ""' pr-base-budget.json)
+          new_tag=$(jq -r '.release.tag // ""' firmware/budget.json)
+          mkdir -p release-sizes
+          if [ -n "$new_tag" ] && [ "$new_tag" != "$old_tag" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$new_tag" > /dev/null; then
+              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&event=push&status=success&per_page=1" \
+                --jq '.workflow_runs[0].id // empty')
+              if [ -n "$id" ]; then
+                gh run download "$id" -p 'sizes-*' -D release-sizes || true
+                echo "Release figures for $new_tag from run $id"
+              else
+                echo "No finished Build run for $new_tag"
+              fi
+            else
+              echo "No tag $new_tag in this repository"
+            fi
+          fi
       - name: Check the budget
         if: needs.changes.outputs.firmware == 'true'
         env:
           BASE_LABEL: ${{ steps.base.outputs.label }}
           ABSENT_OK: ${{ github.event_name == 'pull_request' && github.base_ref == 'dev' && 'moonhub75-2panel' || '' }}
-        run: python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL" --absent-ok "$ABSENT_OK"
+        run: |
+          python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL" --absent-ok "$ABSENT_OK" \
+            --base-budget pr-base-budget.json --approvals approvals --release-sizes release-sizes \
+            --report budget-report.json
+      - uses: actions/upload-artifact@v7
+        if: always() && needs.changes.outputs.firmware == 'true'
+        with:
+          name: budget-report
+          path: budget-report.json
+          if-no-files-found: ignore
 
   build-demo:
-    # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
+    # The demo build (firmware/pages/demo.yaml) for showing panels in person and
     # sending them to creators. A downloadable file on the run and nothing
     # more: the artifact name does not match publish's firmware-* pattern, so
     # it never reaches the flasher site or a manifest. Tags and pull requests
@@ -450,93 +502,18 @@ jobs:
           name: demo-${{ matrix.variant }}
           path: ${{ steps.esphome.outputs.name }}
 
-  build-bar:
-    # The bar build (firmware/pages/bar.yaml): real firmware that installs
-    # from the beta channel on its own, for the free panels in bars. Every run
-    # keeps it as a downloadable file (bar-<variant>, outside publish's
-    # firmware-* pattern) for flashing a new bar panel by hand. On the beta
-    # branch it is also the beta channel: its version is the next release's
-    # number plus "-beta.<run>" (scripts/beta_version.py) so each one is newer
-    # than the last, and publish-beta puts it on the site. Tags and pull
-    # requests into dev skip it.
-    name: Build ${{ matrix.variant }} bar
-    if: ${{ !startsWith(github.ref, 'refs/tags/') && !(github.event_name == 'pull_request' && github.base_ref == 'dev') }}
-    needs: [branch-rules, notes]
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.beta.outputs.version }}
-    strategy:
-      matrix:
-        include:
-          - variant: moonhub75
-            yaml: firmware/gameday-bar.yaml
-          - variant: scoreboard75
-            yaml: firmware/gameday-scoreboard75-bar.yaml
-    steps:
-      - uses: actions/checkout@v7
-      - name: Beta version and summary
-        id: beta
-        env:
-          NOW: ${{ inputs.install_now }}
-          BETA_VERSION: ${{ needs.notes.outputs.beta_version }}
-        run: |
-          set -euo pipefail
-          v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
-          summary="Development build"
-          if [ "$GITHUB_REF" = refs/heads/beta ]; then
-            v=$BETA_VERSION
-            [ -n "$v" ] || { echo "::error::No beta version from the Release notes job"; exit 1; }
-            sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
-            summary="Bar beta $v from ${GITHUB_SHA::7}."
-            if [ -n "$NOW" ]; then
-              # Panel names only; the firmware reads this list (auto_update.h).
-              if ! [[ "$NOW" =~ ^[A-Za-z0-9_,\ -]+$ ]]; then
-                echo "::error::install_now takes panel names like gameday-aba970, or all"
-                exit 1
-              fi
-              summary="$summary Install now: $NOW"
-            fi
-          elif [ -n "$NOW" ]; then
-            echo "::warning::install_now only does something on the beta branch"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "summary=$summary" >> "$GITHUB_OUTPUT"
-          echo "$v: $summary"
-      - name: Build firmware
-        id: esphome
-        uses: esphome/build-action@v7
-        with:
-          yaml-file: ${{ matrix.yaml }}
-          version: ${{ env.ESPHOME_VERSION }}
-          complete-manifest: true
-          release-summary: ${{ steps.beta.outputs.summary }}
-          release-url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
-      - name: Stage output under a stable folder name
-        run: |
-          mkdir -p out
-          cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
-          ls -R out
-      - name: Product name in the manifest
-        run: ./scripts/set_manifest_name.sh out
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bar-${{ matrix.variant }}
-          path: out
-
   publish-beta:
-    # The beta channels, from one build of the beta branch:
-    # - install.gameday-scoreboard.com/firmware/beta/<variant>/, the bar builds, read
-    #   only by bar panels.
-    # - install.gameday-scoreboard.com/firmware/<variant>-beta/, the release builds,
-    #   read by panels with "Follow beta" on (the two-panel build follows
-    #   moonhub75's, as it does for releases).
+    # The beta channel, from one build of the beta branch:
+    # install.gameday-scoreboard.com/firmware/<variant>-beta/, the release builds,
+    # read by panels with "Follow beta" on (the two-panel build follows
+    # moonhub75's, as it does for releases).
     # Runs when someone pushes (promotes) to beta, or runs Build on beta by
-    # hand with install_now. Pages only deploys from main and release tags,
+    # hand. Pages only deploys from main and release tags,
     # so the files go on the rolling beta-firmware prerelease and the Site
     # workflow on main republishes the site with them. The stable manifests
     # and the flasher are left as they are.
     name: Publish the beta channel
-    needs: [build, build-bar, host-tests, web-tests]
+    needs: [build, host-tests, web-tests, notes]
     if: github.ref == 'refs/heads/beta' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
@@ -544,11 +521,6 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: bar-*
-          path: stage/firmware/beta
-          merge-multiple: true
       - uses: actions/download-artifact@v8
         with:
           name: firmware-moonhub75
@@ -564,24 +536,20 @@ jobs:
       - name: Check the files and store them on the beta-firmware prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          BETA: ${{ needs.build-bar.outputs.version }}
+          BETA: ${{ needs.notes.outputs.beta_version }}
         run: |
           set -euo pipefail
-          # Waveshare has a Follow beta build but no bar build.
+          mkdir -p stage/firmware
           for v in moonhub75 scoreboard75 waveshare; do
             mv "stage/release/$v" "stage/firmware/$v-beta"
           done
           ls -R stage
-          bash scripts/check_site_firmware.sh --beta stage
           bash scripts/check_site_firmware.sh --follow-beta stage "$BETA"
           mkdir -p release
-          for v in moonhub75 scoreboard75; do
-            (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
-          done
           for v in moonhub75 scoreboard75 waveshare; do
             (cd stage/firmware && zip -r "../../release/firmware-$v-beta.zip" "$v-beta")
           done
-          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from install.gameday-scoreboard.com/firmware/beta/, and panels with Follow beta on from install.gameday-scoreboard.com/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
+          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Panels with Follow beta on read it from install.gameday-scoreboard.com/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
           if gh release view beta-firmware >/dev/null 2>&1; then
             gh release upload beta-firmware release/*.zip --clobber
             gh release edit beta-firmware --prerelease --title "Beta $BETA" --notes "$notes"
@@ -633,6 +601,8 @@ jobs:
           python3 scripts/crash_report.py --selftest
           python3 scripts/site_seo.py --selftest
           python3 scripts/beta_version.py --selftest
+          python3 scripts/changelog_check.py --selftest
+          python3 scripts/promote.py --selftest
       - name: Site pages have their search and sharing tags
         run: python3 scripts/site_seo.py check docs/site
       - name: Device page mock matches the firmware's set table
@@ -680,7 +650,40 @@ jobs:
           cache: npm
           cache-dependency-path: tests/web/package-lock.json
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The browser comes from Playwright's download host and its system
+      # libraries from Ubuntu's apt mirrors, and a DNS blip on the runner
+      # failed whole runs at that step. So the browser is cached per
+      # Playwright version, downloads are retried, and apt runs only when a
+      # library is missing (the runner image normally has them all).
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Chromium from the cache
+        id: chromium-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      - name: Download Chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        # Headless runs use only the headless shell, so skip full Chromium.
+        run: ../../scripts/retry.sh npx playwright install --only-shell chromium
+      - name: Chromium's system libraries
+        run: |
+          # Playwright checks the same way at launch: ldd on the browser and
+          # its .so files.
+          if [ -z "$(find ~/.cache/ms-playwright -type f -name chrome-headless-shell)" ]; then
+            echo "::error::No chrome-headless-shell under ~/.cache/ms-playwright"
+            exit 1
+          fi
+          missing=$(find ~/.cache/ms-playwright -type f \( -name chrome-headless-shell -o -name '*.so' \) \
+            -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)
+          if [ -z "$missing" ]; then
+            echo "The runner image has every library Chromium needs; no apt install."
+            exit 0
+          fi
+          echo "$missing"
+          ../../scripts/retry.sh npx playwright install-deps chromium
       - run: npm test
 
   publish:
@@ -723,7 +726,7 @@ jobs:
           python3 scripts/site_seo.py build site
           ls -R site
           bash scripts/check_site_firmware.sh site "$GITHUB_REF_NAME"
-      # Keep the bar panels' beta channel on the site through a release.
+      # Keep the Follow beta channel on the site through a release.
       - name: Add the beta channel
         env:
           GH_TOKEN: ${{ github.token }}

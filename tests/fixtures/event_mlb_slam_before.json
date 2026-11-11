@@ -1,0 +1,1284 @@
+{
+ "id": "401696968",
+ "uid": "s:1~l:10~e:401696968",
+ "date": "2025-09-01T17:10Z",
+ "name": "New York Mets at Detroit Tigers",
+ "shortName": "NYM @ DET",
+ "season": {
+  "year": 2025,
+  "type": 2,
+  "slug": "regular-season"
+ },
+ "competitions": [
+  {
+   "id": "401696968",
+   "uid": "s:1~l:10~e:401696968~c:401696968",
+   "date": "2025-09-01T17:10Z",
+   "attendance": 38912,
+   "type": {
+    "id": "1",
+    "abbreviation": "STD"
+   },
+   "timeValid": true,
+   "neutralSite": false,
+   "conferenceCompetition": false,
+   "playByPlayAvailable": true,
+   "recent": false,
+   "wasSuspended": false,
+   "venue": {
+    "id": "45",
+    "fullName": "Comerica Park",
+    "address": {
+     "city": "Detroit",
+     "state": "Michigan"
+    },
+    "indoor": false
+   },
+   "competitors": [
+    {
+     "id": "6",
+     "uid": "s:1~l:10~t:6",
+     "type": "team",
+     "order": 0,
+     "homeAway": "home",
+     "winner": false,
+     "team": {
+      "id": "6",
+      "uid": "s:1~l:10~t:6",
+      "location": "Detroit",
+      "name": "Tigers",
+      "abbreviation": "DET",
+      "displayName": "Detroit Tigers",
+      "shortDisplayName": "Tigers",
+      "color": "0a2240",
+      "alternateColor": "ff4713",
+      "isActive": true,
+      "links": [
+       {
+        "rel": [
+         "clubhouse",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/_/name/det/detroit-tigers",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/roster/_/name/det/detroit-tigers",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:6&section=roster",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/stats/_/name/det/detroit-tigers",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:6&section=stats",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/schedule/_/name/det",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:6&section=scores",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/det.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/scoreboard/det.png"
+     },
+     "score": "3",
+     "linescores": [
+      {
+       "value": 1.0,
+       "displayValue": "1",
+       "period": 1
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 2
+      },
+      {
+       "value": 2.0,
+       "displayValue": "2",
+       "period": 3
+      },
+      {
+       "value": 2.0,
+       "displayValue": "2",
+       "period": 4
+      },
+      {
+       "value": 1.0,
+       "displayValue": "1",
+       "period": 5
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 6
+      },
+      {
+       "value": 1.0,
+       "displayValue": "1",
+       "period": 7
+      },
+      {
+       "value": 1.0,
+       "displayValue": "1",
+       "period": 8
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 9
+      }
+     ],
+     "statistics": [
+      {
+       "name": "hits",
+       "abbreviation": "H",
+       "displayValue": "14"
+      },
+      {
+       "name": "runs",
+       "abbreviation": "R",
+       "displayValue": "8"
+      },
+      {
+       "name": "avg",
+       "abbreviation": "AVG",
+       "displayValue": ".341"
+      },
+      {
+       "name": "saves",
+       "abbreviation": "SV",
+       "displayValue": "0"
+      },
+      {
+       "name": "losses",
+       "abbreviation": "L",
+       "displayValue": "1"
+      },
+      {
+       "name": "wins",
+       "abbreviation": "W",
+       "displayValue": "0"
+      },
+      {
+       "name": "ERA",
+       "abbreviation": "ERA",
+       "displayValue": "9.00"
+      },
+      {
+       "name": "errors",
+       "abbreviation": "E",
+       "displayValue": "1"
+      }
+     ],
+     "leaders": [
+      {
+       "name": "avg",
+       "displayName": "Batting Average",
+       "shortDisplayName": "BA",
+       "abbreviation": "AVG",
+       "leaders": [
+        {
+         "displayValue": "4-5, HR, 2B, 2 RBI, 2 R",
+         "value": 0.800000011920929,
+         "athlete": {
+          "id": "34958",
+          "fullName": "Jahmai Jones",
+          "displayName": "Jahmai Jones",
+          "shortName": "J. Jones",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/34958"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/34958.png",
+          "jersey": "37",
+          "position": {
+           "abbreviation": "DH"
+          },
+          "team": {
+           "id": "6"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "6"
+         }
+        }
+       ]
+      },
+      {
+       "name": "homeRuns",
+       "displayName": "Home Runs",
+       "shortDisplayName": "HR",
+       "abbreviation": "HR",
+       "leaders": [
+        {
+         "displayValue": "4-5, HR, 2B, 2 RBI, 2 R",
+         "value": 1.0,
+         "athlete": {
+          "id": "34958",
+          "fullName": "Jahmai Jones",
+          "displayName": "Jahmai Jones",
+          "shortName": "J. Jones",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/34958"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/34958.png",
+          "jersey": "37",
+          "position": {
+           "abbreviation": "DH"
+          },
+          "team": {
+           "id": "6"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "6"
+         }
+        }
+       ]
+      },
+      {
+       "name": "RBIs",
+       "displayName": "Runs Batted In",
+       "shortDisplayName": "RBI",
+       "abbreviation": "RBI",
+       "leaders": [
+        {
+         "displayValue": "1-5, HR, 3 RBI, R, K",
+         "value": 3.0,
+         "athlete": {
+          "id": "41586",
+          "fullName": "Wenceel Perez",
+          "displayName": "Wenceel Perez",
+          "shortName": "W. Perez",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/41586"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/41586.png",
+          "jersey": "46",
+          "position": {
+           "abbreviation": "RF"
+          },
+          "team": {
+           "id": "6"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "6"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "RAT",
+       "abbreviation": "RAT",
+       "leaders": [
+        {
+         "displayValue": "4-5, HR, 2B, 2 RBI, 2 R",
+         "value": 74.75,
+         "athlete": {
+          "id": "34958",
+          "fullName": "Jahmai Jones",
+          "displayName": "Jahmai Jones",
+          "shortName": "J. Jones",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/34958"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/34958.png",
+          "jersey": "37",
+          "position": {
+           "abbreviation": "DH"
+          },
+          "team": {
+           "id": "6"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "6"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "MLB",
+       "abbreviation": "MLB",
+       "leaders": [
+        {
+         "displayValue": "4-5, HR, 2B, 2 RBI, 2 R",
+         "value": 74.75,
+         "athlete": {
+          "id": "34958",
+          "fullName": "Jahmai Jones",
+          "displayName": "Jahmai Jones",
+          "shortName": "J. Jones",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/34958"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/34958.png",
+          "jersey": "37",
+          "position": {
+           "abbreviation": "DH"
+          },
+          "team": {
+           "id": "6"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "6"
+         }
+        }
+       ]
+      }
+     ],
+     "probables": [
+      {
+       "name": "probableStartingPitcher",
+       "displayName": "Probable Starting Pitcher",
+       "shortDisplayName": "Starter",
+       "abbreviation": "SP",
+       "playerId": 29155,
+       "athlete": {
+        "id": "29155",
+        "fullName": "Charlie Morton",
+        "displayName": "Charlie Morton",
+        "shortName": "C. Morton",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/29155"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/29155.png",
+        "jersey": "50",
+        "position": "SP",
+        "team": {
+         "id": "15"
+        }
+       },
+       "statistics": [
+        {
+         "name": "saves",
+         "abbreviation": "SV",
+         "displayValue": "0",
+         "rankDisplayValue": "Tied-219th"
+        },
+        {
+         "name": "losses",
+         "abbreviation": "L",
+         "displayValue": "11",
+         "rankDisplayValue": "Tied-25th"
+        },
+        {
+         "name": "wins",
+         "abbreviation": "W",
+         "displayValue": "9",
+         "rankDisplayValue": "Tied-59th"
+        },
+        {
+         "name": "ERA",
+         "abbreviation": "ERA",
+         "displayValue": "5.83"
+        },
+        {
+         "name": "errors",
+         "abbreviation": "E",
+         "displayValue": "3",
+         "rankDisplayValue": "Tied-222nd"
+        }
+       ],
+       "record": "(9-11, 5.83)"
+      }
+     ],
+     "hits": 14,
+     "errors": 1,
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "Game",
+       "type": "total",
+       "summary": "80-59"
+      },
+      {
+       "name": "Home",
+       "type": "home",
+       "summary": "44-26"
+      },
+      {
+       "name": "Road",
+       "type": "road",
+       "summary": "36-33"
+      }
+     ]
+    },
+    {
+     "id": "21",
+     "uid": "s:1~l:10~t:21",
+     "type": "team",
+     "order": 1,
+     "homeAway": "away",
+     "winner": false,
+     "team": {
+      "id": "21",
+      "uid": "s:1~l:10~t:21",
+      "location": "New York",
+      "name": "Mets",
+      "abbreviation": "NYM",
+      "displayName": "New York Mets",
+      "shortDisplayName": "Mets",
+      "color": "002d72",
+      "alternateColor": "ff5910",
+      "isActive": true,
+      "links": [
+       {
+        "rel": [
+         "clubhouse",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/_/name/nym/new-york-mets",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/roster/_/name/nym/new-york-mets",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:21&section=roster",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/stats/_/name/nym/new-york-mets",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:21&section=stats",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/schedule/_/name/nym",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:21&section=scores",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/nym.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/scoreboard/nym.png"
+     },
+     "score": "2",
+     "linescores": [
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 1
+      },
+      {
+       "value": 2.0,
+       "displayValue": "2",
+       "period": 2
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 3
+      },
+      {
+       "value": 4.0,
+       "displayValue": "4",
+       "period": 4
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 5
+      },
+      {
+       "value": 3.0,
+       "displayValue": "3",
+       "period": 6
+      },
+      {
+       "value": 1.0,
+       "displayValue": "1",
+       "period": 7
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 8
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 9
+      }
+     ],
+     "statistics": [
+      {
+       "name": "hits",
+       "abbreviation": "H",
+       "displayValue": "8"
+      },
+      {
+       "name": "runs",
+       "abbreviation": "R",
+       "displayValue": "10"
+      },
+      {
+       "name": "avg",
+       "abbreviation": "AVG",
+       "displayValue": ".250"
+      },
+      {
+       "name": "saves",
+       "abbreviation": "SV",
+       "displayValue": "1"
+      },
+      {
+       "name": "losses",
+       "abbreviation": "L",
+       "displayValue": "0"
+      },
+      {
+       "name": "wins",
+       "abbreviation": "W",
+       "displayValue": "1"
+      },
+      {
+       "name": "ERA",
+       "abbreviation": "ERA",
+       "displayValue": "8.00"
+      },
+      {
+       "name": "errors",
+       "abbreviation": "E",
+       "displayValue": "0"
+      }
+     ],
+     "leaders": [
+      {
+       "name": "avg",
+       "displayName": "Batting Average",
+       "shortDisplayName": "BA",
+       "abbreviation": "AVG",
+       "leaders": [
+        {
+         "displayValue": "3-3, 2B, 2 RBI, 2 R",
+         "value": 1.0,
+         "athlete": {
+          "id": "33805",
+          "fullName": "Luis Torrens",
+          "displayName": "Luis Torrens",
+          "shortName": "L. Torrens",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/33805"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/33805.png",
+          "jersey": "13",
+          "position": {
+           "abbreviation": "C"
+          },
+          "team": {
+           "id": "21"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "21"
+         }
+        }
+       ]
+      },
+      {
+       "name": "homeRuns",
+       "displayName": "Home Runs",
+       "shortDisplayName": "HR",
+       "abbreviation": "HR",
+       "leaders": [
+        {
+         "displayValue": "2-3, HR, 3B, 6 RBI, 2 R, 2 BB, K",
+         "value": 1.0,
+         "athlete": {
+          "id": "36969",
+          "fullName": "Juan Soto",
+          "displayName": "Juan Soto",
+          "shortName": "J. Soto",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/36969"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/36969.png",
+          "jersey": "22",
+          "position": {
+           "abbreviation": "LF"
+          },
+          "team": {
+           "id": "21"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "21"
+         }
+        }
+       ]
+      },
+      {
+       "name": "RBIs",
+       "displayName": "Runs Batted In",
+       "shortDisplayName": "RBI",
+       "abbreviation": "RBI",
+       "leaders": [
+        {
+         "displayValue": "2-3, HR, 3B, 6 RBI, 2 R, 2 BB, K",
+         "value": 6.0,
+         "athlete": {
+          "id": "36969",
+          "fullName": "Juan Soto",
+          "displayName": "Juan Soto",
+          "shortName": "J. Soto",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/36969"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/36969.png",
+          "jersey": "22",
+          "position": {
+           "abbreviation": "LF"
+          },
+          "team": {
+           "id": "21"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "21"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "RAT",
+       "abbreviation": "RAT",
+       "leaders": [
+        {
+         "displayValue": "2-3, HR, 3B, 6 RBI, 2 R, 2 BB, K",
+         "value": 75.75,
+         "athlete": {
+          "id": "36969",
+          "fullName": "Juan Soto",
+          "displayName": "Juan Soto",
+          "shortName": "J. Soto",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/36969"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/36969.png",
+          "jersey": "22",
+          "position": {
+           "abbreviation": "LF"
+          },
+          "team": {
+           "id": "21"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "21"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "MLB",
+       "abbreviation": "MLB",
+       "leaders": [
+        {
+         "displayValue": "2-3, HR, 3B, 6 RBI, 2 R, 2 BB, K",
+         "value": 75.75,
+         "athlete": {
+          "id": "36969",
+          "fullName": "Juan Soto",
+          "displayName": "Juan Soto",
+          "shortName": "J. Soto",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/36969"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/36969.png",
+          "jersey": "22",
+          "position": {
+           "abbreviation": "LF"
+          },
+          "team": {
+           "id": "21"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "21"
+         }
+        }
+       ]
+      }
+     ],
+     "probables": [
+      {
+       "name": "probableStartingPitcher",
+       "displayName": "Probable Starting Pitcher",
+       "shortDisplayName": "Starter",
+       "abbreviation": "SP",
+       "playerId": 33244,
+       "athlete": {
+        "id": "33244",
+        "fullName": "Sean Manaea",
+        "displayName": "Sean Manaea",
+        "shortName": "S. Manaea",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/33244"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/33244.png",
+        "jersey": "59",
+        "position": "SP",
+        "team": {
+         "id": "21"
+        }
+       },
+       "statistics": [
+        {
+         "name": "saves",
+         "abbreviation": "SV",
+         "displayValue": "0",
+         "rankDisplayValue": "Tied-219th"
+        },
+        {
+         "name": "losses",
+         "abbreviation": "L",
+         "displayValue": "4",
+         "rankDisplayValue": "Tied-199th"
+        },
+        {
+         "name": "wins",
+         "abbreviation": "W",
+         "displayValue": "2",
+         "rankDisplayValue": "Tied-354th"
+        },
+        {
+         "name": "ERA",
+         "abbreviation": "ERA",
+         "displayValue": "5.64"
+        },
+        {
+         "name": "errors",
+         "abbreviation": "E",
+         "displayValue": "0",
+         "rankDisplayValue": "Tied-668th"
+        }
+       ],
+       "record": "(2-4, 5.64)"
+      }
+     ],
+     "hits": 8,
+     "errors": 0,
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "Game",
+       "type": "total",
+       "summary": "74-64"
+      },
+      {
+       "name": "Home",
+       "type": "home",
+       "summary": "45-27"
+      },
+      {
+       "name": "Road",
+       "type": "road",
+       "summary": "29-37"
+      }
+     ]
+    }
+   ],
+   "notes": [],
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 4,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "Top 4th",
+     "shortDetail": "Top 4th"
+    }
+   },
+   "broadcasts": [
+    {
+     "market": "away",
+     "names": [
+      "MLB.TV",
+      "SNY"
+     ]
+    },
+    {
+     "market": "home",
+     "names": [
+      "FanDuel SN DET"
+     ]
+    },
+    {
+     "market": "national",
+     "names": [
+      "MLBN"
+     ]
+    }
+   ],
+   "leaders": [
+    {
+     "name": "MLBRating",
+     "displayName": "MLB Rating",
+     "shortDisplayName": "RAT",
+     "abbreviation": "RAT",
+     "leaders": [
+      {
+       "displayValue": "2-3, HR, 3B, 6 RBI, 2 R, 2 BB, K",
+       "value": 75.75,
+       "athlete": {
+        "id": "36969",
+        "fullName": "Juan Soto",
+        "displayName": "Juan Soto",
+        "shortName": "J. Soto",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/36969"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/36969.png",
+        "jersey": "22",
+        "position": {
+         "abbreviation": "LF"
+        },
+        "team": {
+         "id": "21"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "21"
+       }
+      },
+      {
+       "displayValue": "4-5, HR, 2B, 2 RBI, 2 R",
+       "value": 74.75,
+       "athlete": {
+        "id": "34958",
+        "fullName": "Jahmai Jones",
+        "displayName": "Jahmai Jones",
+        "shortName": "J. Jones",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/34958"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/34958.png",
+        "jersey": "37",
+        "position": {
+         "abbreviation": "DH"
+        },
+        "team": {
+         "id": "6"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "6"
+       }
+      }
+     ]
+    }
+   ],
+   "format": {
+    "regulation": {
+     "periods": 9
+    }
+   },
+   "startDate": "2025-09-01T17:10Z",
+   "broadcast": "MLBN",
+   "geoBroadcasts": [
+    {
+     "type": {
+      "id": "5",
+      "shortName": "Radio"
+     },
+     "market": {
+      "id": "1",
+      "type": "National"
+     },
+     "media": {
+      "shortName": "ERADM"
+     },
+     "lang": "en",
+     "region": "us"
+    },
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "2",
+      "type": "Home"
+     },
+     "media": {
+      "shortName": "FanDuel SN DET"
+     },
+     "lang": "en",
+     "region": "us"
+    },
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "3",
+      "type": "Away"
+     },
+     "media": {
+      "shortName": "SNY"
+     },
+     "lang": "en",
+     "region": "us"
+    },
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "1",
+      "type": "National"
+     },
+     "media": {
+      "shortName": "MLBN"
+     },
+     "lang": "en",
+     "region": "us"
+    }
+   ],
+   "headlines": [
+    {
+     "type": "Recap",
+     "description": "\u2014 Juan Soto tied his career high with six RBI, hitting a grand slam and a tiebreaking, two-run triple to lead the New York Mets over the Detroit Tigers 10-8 on Monday.",
+     "shortLinkText": "Soto ties career high with 6 RBIs, hits grand slam to lead Mets over Tigers 10-8"
+    }
+   ],
+   "highlights": [],
+   "situation": {
+    "lastPlay": {
+     "id": "4016969680605990057",
+     "type": {
+      "id": "57",
+      "text": "Play Result",
+      "type": "play-result"
+     },
+     "alternativeType": {
+      "id": "37",
+      "text": "Strike Swinging",
+      "abbreviation": "SS",
+      "alternativeText": "Strikeout",
+      "type": "strike-swinging"
+     },
+     "text": "Lindor struck out swinging.",
+     "scoreValue": 0,
+     "team": {
+      "id": "21"
+     },
+     "atBatId": "4016969680605",
+     "summaryType": "N"
+    },
+    "balls": 0,
+    "strikes": 0,
+    "outs": 2,
+    "onFirst": true,
+    "onSecond": true,
+    "onThird": true
+   }
+  }
+ ],
+ "links": [
+  {
+   "language": "en-US",
+   "rel": [
+    "summary",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/game/_/gameId/401696968/mets-tigers",
+   "text": "Gamecast",
+   "shortText": "Gamecast",
+   "isExternal": false,
+   "isPremium": false
+  },
+  {
+   "language": "en-US",
+   "rel": [
+    "boxscore",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/boxscore/_/gameId/401696968",
+   "text": "Box Score",
+   "shortText": "Box Score",
+   "isExternal": false,
+   "isPremium": false
+  },
+  {
+   "language": "en-US",
+   "rel": [
+    "pbp",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/playbyplay/_/gameId/401696968",
+   "text": "Play-by-Play",
+   "shortText": "Play-by-Play",
+   "isExternal": false,
+   "isPremium": false
+  },
+  {
+   "language": "en-US",
+   "rel": [
+    "recap",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/recap?gameId=401696968",
+   "text": "Recap",
+   "shortText": "Recap",
+   "isExternal": false,
+   "isPremium": false
+  }
+ ],
+ "status": {
+  "clock": 0.0,
+  "displayClock": "0:00",
+  "period": 4,
+  "type": {
+   "id": "2",
+   "name": "STATUS_IN_PROGRESS",
+   "state": "in",
+   "completed": false,
+   "description": "In Progress",
+   "detail": "Top 4th",
+   "shortDetail": "Top 4th"
+  }
+ }
+}

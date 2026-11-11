@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Timezone choices offered on the device. select.py and the web page parse
 // this table, so keep each entry on one line in this exact shape:
 //     {"Display name", "POSIX TZ string", "IANA/Zone"},

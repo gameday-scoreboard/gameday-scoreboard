@@ -13,10 +13,10 @@
 # Usage: scripts/set_manifest_name.sh <dir>
 set -euo pipefail
 
-name="Game Day Scoreboard"
 improv_wait=30
 found=0
 while IFS= read -r -d '' m; do
+  name="Game Day Scoreboard"
   jq --arg n "$name" --argjson w "$improv_wait" '.name = $n | .new_install_improv_wait_time = $w' "$m" > "$m.tmp"
   mv "$m.tmp" "$m"
   echo "$m: name $name"

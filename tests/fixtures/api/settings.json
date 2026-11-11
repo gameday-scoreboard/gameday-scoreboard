@@ -31,6 +31,7 @@
   "spark": true,
   "opp": true,
   "celebrate": 2,
+  "bigplays": true,
   "best": true,
   "bootaddr": true,
   "night": true,

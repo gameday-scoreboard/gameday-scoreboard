@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // "Update ready" on the ticker: a panel that doesn't install updates on its
 // own says on its ticker, for an hour a day, that a new release is waiting.
 // Pure, with no ESPHome includes, so the host tests compile it directly.
