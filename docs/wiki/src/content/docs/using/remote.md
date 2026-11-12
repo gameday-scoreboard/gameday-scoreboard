@@ -44,8 +44,6 @@ Buttons 1 to 4 are the first four teams in your favorites list, in order. While 
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
 
-On a bar's panel that shows a plate wall, button 4 throws the plate party for the newest plate instead. See [The plate party](/using/bar-look/#the-plate-party).
-
 With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
 
 **Set each button yourself.** **Remote** on the device page's Device tab, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:

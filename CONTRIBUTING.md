@@ -63,9 +63,9 @@ the shape before you spend the time.
 
 ### Branches and ESPHome versions
 
-Work lands in `dev`, moves to `beta` (the test channel that the bar
-panels install from), and then to `main`, which customers run. `dev` and
-`beta` may build on an ESPHome beta. `main`, and so every release tag and
+Work lands in `dev`, moves to `beta` (the test channel that panels with
+Follow beta on install from), and then to `main`, which customers run.
+`dev` and `beta` may build on an ESPHome beta. `main`, and so every release tag and
 the update feed, builds only on a final ESPHome release. CI checks it: the
 pin is `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, and
 the Branch rules job fails a PR into `main` or a release tag when that pin

@@ -396,7 +396,6 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::MSG: s.msg = op.text; break;
     case SetKind::MSGURL: s.msgurl = op.text; break;
     case SetKind::MSGEVERY: s.msgevery = op.value; break;
-    case SetKind::BRAND: break;  // the bar build only; these cases are a home build's
     case SetKind::NICK: s.nick = op.text; break;
     case SetKind::HOOK: s.hook = op.text; break;
     case SetKind::PREGAME: s.pregame = op.value; break;
@@ -697,12 +696,6 @@ void test_parse_set() {
   SCHECK(!parse_set("msgurl", "ftp://example.com/names.txt", op, kFavMax), "msgurl ftp");
   SCHECK(!parse_set("msgurl", "https://exa mple.com", op, kFavMax), "msgurl with a space");
   SCHECK(!parse_set("msgurl", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "msgurl too long");
-  SCHECK(parse_set("brand", "https://example.com/brand/taproom.json", op, kFavMax) && op.kind == SetKind::BRAND &&
-             op.text == "https://example.com/brand/taproom.json",
-         "brand");
-  SCHECK(parse_set("brand", "", op, kFavMax) && op.kind == SetKind::BRAND && op.text.empty(), "brand cleared");
-  SCHECK(!parse_set("brand", "file:///brand.json", op, kFavMax), "brand that isn't http");
-  SCHECK(!parse_set("brand", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "brand too long");
   SCHECK(parse_set("msgevery", "0", op, kFavMax) && op.value == 0, "msgevery 0 holds the board");
   SCHECK(parse_set("msgevery", "99", op, kFavMax) && op.value == kMsgEveryMax, "msgevery 99");
   SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");
