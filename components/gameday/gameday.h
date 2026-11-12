@@ -59,6 +59,7 @@
 #include "prefs_sync.h"
 #include "set_request.h"
 #include "settings_doc.h"
+#include "settings_change.h"
 #include "startup.h"
 #include "wake.h"
 #include "update_nudge.h"
@@ -562,6 +563,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_active_list_(uint8_t n, bool announce) { this->play_list_(n, 0, announce); }
   // row: 1 + Sport, one of sport_rows_(); 0 = every favorite.
   void set_sport_row_(uint8_t row, bool announce);
+  void stop_sport_row_();
   // Plays playlist n or sport row (one of them, or neither for every favorite).
   void play_list_(uint8_t n, uint8_t row, bool announce);
   std::string list_name_(uint8_t n) const;  // n = 1..count
@@ -1025,6 +1027,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // HTTP requests and parsing into it, and the main loop applies the result.
   struct Job {
     uint32_t generation{0};
+    uint32_t take_asks{0};  // take_asks_ when the job started (take_scan_now_after_job)
     const ::espn::Team *team{nullptr};
     uint8_t mode{0};  // effective_mode_() when the job was made; the worker reads this, not the prefs
     // live-game modes: scan the day's games first, then follow one
@@ -1129,6 +1132,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool season_ok{false};
     uint32_t season_bytes{0};
     uint32_t season_ms{0};  // how long the read took
+    bool season_cut{false};  // a settings change stopped it (settings_change.h)
     // The weather (weather.h): 1 looks the town up, 2 reads the forecast,
     // 3 looks the next game's venue up, 4 reads its kickoff hour, on this
     // task so it never runs alongside an ESPN read.
@@ -1262,6 +1266,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Clears the board and scans again now, for a change in what the mode
   // follows. The caller starts the boot screen hold first.
   void restart_board_();
+  // A settings change: the board's reads go first, and the job in flight
+  // stops if the change makes it useless (settings_change.h).
+  void board_changed_(bool board_cleared);
+  ::espn::JobKind job_kind_() const;
+  bool fav_listed_(const ::espn::Team *team) const;  // a favorite, on Favorite teams
   // Restarts the board when Live games now scans other leagues than before.
   bool live_leagues_changed_(const std::vector<League> &before);
   // A game poll came back clean: clear the miss count and start the clock over.
@@ -1657,6 +1666,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Bumped by the main loop when what the board follows changes. Atomic, so
   // a worker in the middle of a many-read job can see it and stop early.
   std::atomic<uint32_t> generation_{0};
+  // Set by the main loop when a settings change makes the job in flight
+  // useless (job_moot_after_change); the worker stops at its next request,
+  // and the season read mid-body. Cleared when a worker starts.
+  std::atomic<bool> job_moot_{false};
+  // millis() of the last change that cleared the board or asked for a
+  // take-over scan, 0 for none: the board's reads go first (board_first).
+  uint32_t board_first_ms_{0};
+  // Bumped when take-over or the favorites change in Live games, so a job
+  // that was running then ends in the scan they asked for.
+  uint32_t take_asks_{0};
   bool busy_{false};
   bool selects_published_{false};
   // Set by the fetch task once its Job is filled in. Atomic, so the main
