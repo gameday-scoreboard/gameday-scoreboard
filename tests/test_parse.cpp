@@ -3173,6 +3173,7 @@ static void test_mlb_home_run() {
   const uint32_t kRays = 30, kYankees = 10;
   GameSnapshot before = mlb_event("fixtures/event_mlb_hr_before.json", kRays);
   GameSnapshot after = mlb_event("fixtures/event_mlb_hr.json", kRays);
+  CHECK(after.play_id == (int64_t) 4019079871004990057LL);  // ESPN's lastPlay id
   CHECK_EQ(after.mlb.play_type, std::string("Play Result"));
   CHECK(after.last_play.find("homered") != std::string::npos);
   CHECK_EQ(after.team_score - before.team_score, 2);

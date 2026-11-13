@@ -174,6 +174,10 @@ struct GameSnapshot {
   int possession{0};
   int team_timeouts{0}, opp_timeouts{0};
   std::string last_play, down_distance;
+  // ESPN's id for the last play, 0 when it gives none. It stays the same
+  // when ESPN rewrites the play's words ("... Touchback.", then
+  // "** Injury Update"), so a big play is celebrated once (celebrate.h).
+  int64_t play_id{0};
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
   // Football, for the field strip (game_viz.h): where the ball is as ESPN
