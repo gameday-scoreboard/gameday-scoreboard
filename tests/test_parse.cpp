@@ -3187,6 +3187,150 @@ static void test_nhl_team() {
   CHECK_EQ(s.team_record, std::string("2-0-1"));  // W-L-OTL
 }
 
+// Late in the second intermission: ESPN has moved MIN @ TOR on to the 3rd at
+// 20:00 before the puck drops, the last play still "End of 2nd Period". The
+// board, Pick the best game, the game leaders and Home Assistant all treat it
+// as the intermission it is, until the faceoff (COL @ OTT, the read after
+// the puck dropped).
+static void test_nhl_late_intermission() {
+  const uint32_t kLeafs = 21, kWild = 30;
+  GameSnapshot g = nhl_event("fixtures/event_nhl_late_intermission.json", kLeafs);
+  CHECK(g.state == GameState::IN);
+  CHECK_EQ(g.period, 3);
+  CHECK_EQ(g.display_clock, std::string("20:00"));
+  CHECK_EQ(g.short_detail, std::string("20:00 - 3rd"));
+  CHECK_EQ(g.last_play, std::string("End of 2nd Period"));
+  CHECK(hockey_late_intermission(g));
+  CHECK_EQ(hockey_intermission_text(g), std::string("End of 2nd"));
+  CHECK_EQ(clock_text(g), std::string("End of 2nd"));
+  // The ticker: the records, as through the rest of the intermission
+  TickerOptions o;
+  CHECK_EQ(status_text(g, o, ""), std::string("TOR 8-10-2 | MIN 13-3-4"));
+  GameSnapshot w = nhl_event("fixtures/event_nhl_late_intermission.json", kWild);
+  CHECK_EQ(status_text(w, o, ""), std::string("MIN 13-3-4 | TOR 8-10-2"));
+  GameSnapshot bare = g;
+  bare.team_record.clear();
+  bare.opp_record.clear();
+  CHECK_EQ(status_text(bare, o, ""), std::string("End of 2nd"));
+  // The row under the clock is left to the cards, as between periods
+  CHECK_EQ(hockey_situation(g, nullptr), std::string(""));
+  CHECK(at_break(g));
+  CHECK(pick_break(g));
+  CHECK(!in_action(g, League::NHL));
+  CHECK(leaders_stage(g) == LeadersStage::HALF);
+  CHECK(ha_at_break(g));
+  CHECK_EQ(ha_periods_over(g), 2);
+  CHECK_EQ(ha_period_text(g), std::string("End of 2nd"));
+  CHECK_EQ(ha_clock_text(g), std::string(""));
+
+  // The puck dropped: the faceoff is the last play and the clock runs.
+  GameSnapshot f = nhl_event("fixtures/event_nhl_faceoff.json", kAvalanche);
+  CHECK_EQ(f.period, 3);
+  CHECK_EQ(f.display_clock, std::string("19:41"));
+  CHECK_EQ(f.last_play, std::string("Ridly Greig faceoff won against Nazem Kadri"));
+  CHECK(!hockey_late_intermission(f));
+  CHECK_EQ(hockey_intermission_text(f), std::string(""));
+  CHECK_EQ(clock_text(f), std::string("19:41 3rd"));
+  CHECK(!at_break(f));
+  CHECK(leaders_stage(f) == LeadersStage::NONE);
+  CHECK(!ha_at_break(f));
+  CHECK_EQ(ha_periods_over(f), 2);
+  CHECK_EQ(ha_period_text(f), std::string("3rd period"));
+  CHECK_EQ(ha_clock_text(f), std::string("19:41"));
+
+  // Play has begun once either changes: the faceoff at 20:00, or a clock
+  // that runs while ESPN's last play trails it.
+  GameSnapshot t = g;
+  t.last_play = f.last_play;
+  CHECK(!hockey_late_intermission(t));
+  CHECK(!at_break(t));
+  CHECK(leaders_stage(t) == LeadersStage::NONE);
+  t = g;
+  t.display_clock = "19:55";
+  t.short_detail = "19:55 - 3rd";
+  CHECK(!hockey_late_intermission(t));
+  CHECK(!at_break(t));
+  CHECK_EQ(clock_text(t), std::string("19:55 3rd"));
+  CHECK_EQ(status_text(t, o, ""), std::string("19:55 - 3rd | End of 2nd Period"));
+  // The first period has no intermission before it; other sports aren't
+  // read this way.
+  t = g;
+  t.period = 1;
+  CHECK(!hockey_late_intermission(t));
+  t = g;
+  t.sport = Sport::FOOTBALL;
+  CHECK(!hockey_late_intermission(t));
+  CHECK(!at_break(t));
+
+  // Before overtime: 5 minutes in the regular season, 20 in the playoffs,
+  // where the periods after it read "2OT" and on.
+  GameSnapshot ot = g;
+  ot.period = 4;
+  ot.last_play = "End of 3rd Period";
+  ot.display_clock = "5:00";
+  ot.short_detail = "5:00 - OT";
+  CHECK(hockey_late_intermission(ot));
+  CHECK_EQ(clock_text(ot), std::string("End of 3rd"));
+  CHECK(leaders_stage(ot) == LeadersStage::NONE);
+  ot.display_clock = "20:00";
+  CHECK(!hockey_late_intermission(ot));
+  ot.nhl.playoffs = true;
+  CHECK(hockey_late_intermission(ot));
+  ot.period = 5;
+  ot.last_play = "End of 1st Overtime";
+  CHECK_EQ(hockey_intermission_text(ot), std::string("End of OT"));
+  ot.period = 6;
+  CHECK_EQ(hockey_intermission_text(ot), std::string("End of 2OT"));
+  ot.nhl.playoffs = false;
+  ot.period = 5;  // the shootout has no clock to wait at
+  CHECK(!hockey_late_intermission(ot));
+
+  // Home Assistant: the 2nd ends once, the late part adds nothing, and the
+  // 3rd ends after the puck drops and the period is played.
+  HaTracker h;
+  HaContext c = ha_ctx();
+  GameSnapshot r = g;
+  r.display_clock = "4:10";
+  r.short_detail = "4:10 - 2nd";
+  r.last_play = "Shot";
+  r.period = 2;
+  h.update(r, c);
+  r.display_clock = "0:00";
+  r.short_detail = "End of 2nd";
+  r.last_play = "End of 2nd Period";
+  std::vector<HaEvent> e = h.update(r, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 2);
+  CHECK(h.update(g, c).empty());
+  t = g;
+  t.display_clock = "19:41";
+  t.short_detail = "19:41 - 3rd";
+  t.last_play = f.last_play;
+  CHECK(h.update(t, c).empty());
+  t.display_clock = "0:00";
+  t.short_detail = "End of 3rd";
+  t.last_play = "End of 3rd Period";
+  e = h.update(t, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 3);
+  // A panel that missed "End of 2nd" reports it at the late part, once.
+  HaTracker missed;
+  r.display_clock = "4:10";
+  r.short_detail = "4:10 - 2nd";
+  r.last_play = "Shot";
+  missed.update(r, c);
+  e = missed.update(g, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 2);
+  CHECK(missed.update(g, c).empty());
+  // A game first seen late in the intermission has the 2nd behind it.
+  HaTracker fresh;
+  CHECK(fresh.update(g, c).empty());
+  e = fresh.update(t, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 3);
+}
+
 static void test_nhl_live() {
   // COL @ WPG, 3:21 left in the 1st, a delay of game penalty the last play
   GameSnapshot g = nhl_event("fixtures/event_nhl_live.json", kJets);
@@ -9006,6 +9150,7 @@ int main() {
   test_nhl_urls();
   test_nhl_team();
   test_nhl_live();
+  test_nhl_late_intermission();
   test_nhl_pre_post();
   test_nhl_row();
   test_pregame_extras();
