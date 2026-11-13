@@ -45,6 +45,7 @@
 #include "health.h"
 #include "hook.h"
 #include "line_score.h"
+#include "live_scan.h"
 #include "message.h"
 #include "news.h"
 #include "season.h"
@@ -1033,6 +1034,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool need_scan{false};
     bool rotate{false};  // the scan is the Switch every look, not a kickoff or a game that ended
     std::vector<League> scan_leagues;
+    // The board has no game on it: stop at the first league with one, leave
+    // the leagues not read yet in scan_rest, and the main loop shows a game
+    // while a second job (scan_cont) reads them (live_scan.h).
+    bool scan_early{false};
+    bool scan_cont{false};
+    std::vector<League> scan_rest;
     bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
     ::espn::LiveList live;
     bool scan_ok{false};
@@ -1427,6 +1434,26 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t league;
   };
   std::vector<LiveSide, PsramAllocator<LiveSide>> scan_live_sides_;
+  // The leagues with a game on at the last scan, read first by the next one
+  // (live_scan.h). Kept across a settings change: the games are still on.
+  uint16_t scan_live_leagues_{0};
+  // A scan that showed its first game early: what it had read, kept while
+  // that game's own read runs, then handed to the job that reads the rest.
+  struct ScanRest {
+    uint8_t stage{0};  // 0 none, 1 the shown game's read is next, 2 the rest of the scan is next
+    uint32_t generation{0};
+    std::vector<League> leagues;
+    ::espn::LiveList live;
+    ::espn::FinalList finals;
+    ::espn::PendingList pending;
+    int64_t next_kickoff{0};
+    int64_t fav_kickoff{0};
+    bool scan_ok{false};
+    bool want_finals{false};
+  };
+  ScanRest scan_rest_;
+  void keep_scan_rest_();         // main loop, after a job's answer was applied
+  bool start_scan_rest_(Job &j);  // start_job_: the shown game's read, then the rest
   void load_night_();
   void set_night_(const ::espn::NightPrefs &p);
   void night_tick_();  // from loop(), every AUTO_UPDATE_TICK

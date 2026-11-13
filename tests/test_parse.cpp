@@ -25,6 +25,7 @@
 #include "health.h"
 #include "hook.h"
 #include "line_score.h"
+#include "live_scan.h"
 #include "logo_lru.h"
 #include "message.h"
 #include "news.h"
@@ -445,6 +446,70 @@ static LiveGame lg(League l, int away, int home, int period, int clock, uint8_t 
   g.away_rank = away_rank;
   g.home_rank = home_rank;
   return g;
+}
+
+// A Live games scan's read order and its early show (live_scan.h): the nine
+// league scan that kept the board empty for 9 to 12 s.
+static void test_live_scan() {
+  const std::vector<League> nine = {League::NFL, League::NCAA, League::MLB, League::NBA, League::WNBA,
+                                    League::MCBB, League::NHL,  League::MLS, League::EPL};
+  // Nothing known yet (first scan since boot): the owner's own order.
+  CHECK(scan_order(nine, 0) == nine);
+  // The NBA and the NHL had games on at the last scan: they are read first,
+  // in the owner's order, then the rest in theirs.
+  LiveList last;
+  last.push_back(lg(League::NHL, 1, 0, 2, 600, 99, 99, "h1"));
+  last.push_back(lg(League::NBA, 50, 48, 2, 300, 99, 99, "b1"));
+  last.push_back(lg(League::NBA, 20, 30, 1, 100, 99, 99, "b2"));
+  uint16_t mask = scan_live_leagues(last);
+  CHECK_EQ((int) mask, (int) (scan_league_bit((uint8_t) League::NBA) | scan_league_bit((uint8_t) League::NHL)));
+  const std::vector<League> want = {League::NBA, League::NHL, League::NFL, League::NCAA, League::MLB,
+                                    League::WNBA, League::MCBB, League::MLS, League::EPL};
+  CHECK(scan_order(nine, mask) == want);
+  // A league chip with two leagues, the second one live: it goes first.
+  CHECK(scan_order({League::NFL, League::NBA}, mask) == (std::vector<League>{League::NBA, League::NFL}));
+  // A league the owner no longer follows is never added back.
+  CHECK(scan_order({League::NFL, League::MLB}, mask) == (std::vector<League>{League::NFL, League::MLB}));
+  CHECK(scan_order({}, mask).empty());
+  CHECK_EQ((int) scan_league_bit(16), 0);
+
+  // What the next scan goes by: a whole scan replaces it, a part of one
+  // (an early show, or a league that failed) only adds.
+  const uint16_t nfl = scan_league_bit((uint8_t) League::NFL);
+  CHECK_EQ((int) scan_live_after(mask, nfl, true), (int) nfl);
+  CHECK_EQ((int) scan_live_after(mask, nfl, false), (int) (mask | nfl));
+  CHECK_EQ((int) scan_live_after(mask, 0, true), 0);  // everything ended
+
+  // The early show: only for a board with no game in progress on it.
+  CHECK(scan_may_show_early(false, false));  // nothing picked yet (a settings change, startup)
+  CHECK(scan_may_show_early(true, true));    // the owner's team filling in, nothing live
+  CHECK(scan_may_show_early(false, true));   // the finals
+  CHECK(!scan_may_show_early(true, false));  // a game is up: Switch every reads the whole scan
+  // Worker, after each league: stop at the first one with a game on.
+  CHECK(!scan_show_now(true, 0, 8));   // nothing on in this league: keep reading
+  CHECK(scan_show_now(true, 2, 7));    // a game: show it, 7 leagues to go
+  CHECK(!scan_show_now(true, 2, 0));   // the last league: that is the whole scan
+  CHECK(!scan_show_now(false, 2, 7));  // a game is already up
+
+  // The rest of the scan, Pick the best game off: the game shown stays,
+  // whatever else turned up, so there is no switch on screen.
+  LiveList all = last;
+  all.push_back(lg(League::NFL, 21, 21, 4, 60, 99, 99, "f1"));  // tied late: the best game by far
+  CHECK_EQ(live_index(all, "b1"), 1);
+  CHECK_EQ(live_index(all, "nope"), -1);
+  CHECK_EQ(live_index(all, ""), -1);
+  CHECK_EQ(scan_keep_shown(all, "b1", true, false), 1);
+  // A rescan (Switch every) is not the rest of a scan: it moves on as before.
+  CHECK_EQ(scan_keep_shown(all, "b1", false, false), -1);
+  // The shown game ended meanwhile and left the list: pick again.
+  CHECK_EQ(scan_keep_shown(all, "gone", true, false), -1);
+  // Pick the best game on: best_live_game decides. It stays for a near-tie
+  // and moves once for a clearly better game.
+  CHECK_EQ(scan_keep_shown(all, "b1", true, true), -1);
+  CHECK_EQ((int) best_live_game(all, "b1"), 3);
+  LiveList close = last;
+  close.push_back(lg(League::NFL, 50, 47, 2, 300, 99, 99, "f2"));
+  CHECK_EQ((int) best_live_game(close, "b1"), 1);
 }
 
 static void test_best_game() {
@@ -9368,6 +9433,7 @@ int main() {
   test_game_leaders();
   test_score_log();
   test_best_game();
+  test_live_scan();
   test_best_game_switch();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);

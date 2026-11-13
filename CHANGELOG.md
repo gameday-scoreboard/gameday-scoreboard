@@ -35,6 +35,14 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+Live games puts a game on the board sooner: the panel shows the first game in progress it finds, instead of reading every league before it shows anything.
+
+### 🐛 Fixes
+
+- ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league
+
 ## v2026.11.3
 
 Pick the best game now starts off, so Live games shows a random game until you turn it on. Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.

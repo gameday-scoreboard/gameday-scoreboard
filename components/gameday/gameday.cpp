@@ -1736,6 +1736,7 @@ void GamedayComponent::loop() {
     this->job_done_ = false;
     const uint32_t asks = this->job_.take_asks;
     this->apply_job_();
+    this->keep_scan_rest_();
     if (::espn::take_scan_now_after_job(asks, this->take_asks_, this->take_over_())) {
       // Take-over or the favorites changed while the job ran: the scan they
       // asked for, now, whatever the job's own answer scheduled.
@@ -3338,8 +3339,10 @@ void GamedayComponent::start_job_() {
   j.team = this->fallback_team_();
   j.mode = this->effective_mode_();
   j.our_id = this->orient_id_();
-  j.scan_leagues = this->scan_leagues_();
+  j.scan_leagues = ::espn::scan_order(this->scan_leagues_(), this->scan_live_leagues_);
   j.top25 = this->no_team_default();
+  if (this->scan_rest_.stage != 0 && (this->scan_rest_.generation != this->generation_ || !this->live_mode_()))
+    ::espn::reset_in_place(this->scan_rest_);  // the board follows something else now
   // This game's leaders at halftime and the final (game_leaders.h): one
   // summary read for the board's game, ahead of whatever the mode reads next,
   // except a favorite just added and not read yet (leaders_wait).
@@ -3377,6 +3380,8 @@ void GamedayComponent::start_job_() {
     this->schedule_next_(SCHEDULE_INTERVAL);
     return;
   }
+  if (this->start_scan_rest_(j))
+    return;
   if (this->live_mode_() && this->recap_on_) {
     // The finals rotation is up: read the days it still needs one by one,
     // then rescan for a live game when the wait is over.
@@ -3393,6 +3398,7 @@ void GamedayComponent::start_job_() {
       return;
     }
     j.need_scan = true;
+    j.scan_early = true;  // the finals are up, not a game
     j.want_finals = true;
     this->start_worker_();
     return;
@@ -3429,6 +3435,7 @@ void GamedayComponent::start_job_() {
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_ || take_due;
         j.rotate = rotate;
       }
+      j.scan_early = j.need_scan && ::espn::scan_may_show_early(this->schedule_.valid, this->live_none_);
       // With no team, nothing live means the finals rotation: the scan keeps
       // today's finals for it.
       j.want_finals = j.team == nullptr;
@@ -3557,6 +3564,56 @@ void GamedayComponent::worker_(void *arg) {
   vTaskDelete(nullptr);
 }
 
+// A scan that stopped at its first game (live_scan.h) left the leagues it
+// hasn't read in the job. Keep them and what it read so far: the next job
+// reads the game just picked, so the board has it, and the one after reads
+// the rest. Called after every job, so the rest starts as soon as the
+// game's read is in, not at that game's next poll.
+void GamedayComponent::keep_scan_rest_() {
+  Job &j = this->job_;
+  ScanRest &r = this->scan_rest_;
+  if (j.need_scan && !j.scan_rest.empty() && j.generation == this->generation_ && this->schedule_.valid) {
+    ::espn::reset_in_place(r);
+    r.stage = 1;
+    r.generation = j.generation;
+    r.leagues.swap(j.scan_rest);
+    r.live.swap(j.live);
+    r.finals.swap(j.finals);
+    r.pending.swap(j.pending);
+    r.next_kickoff = j.next_kickoff;
+    r.fav_kickoff = j.fav_kickoff;
+    r.scan_ok = j.scan_ok;
+    r.want_finals = j.want_finals;
+  }
+  if (r.stage != 0)
+    this->schedule_next_(0);
+}
+
+bool GamedayComponent::start_scan_rest_(Job &j) {
+  ScanRest &r = this->scan_rest_;
+  if (r.stage == 0)
+    return false;
+  if (r.stage == 1 && this->schedule_.valid) {
+    r.stage = 2;
+    j.schedule = this->schedule_;  // the game the scan just picked: one read and it is on the board
+    this->start_worker_();
+    return true;
+  }
+  j.need_scan = true;
+  j.scan_cont = true;
+  j.scan_leagues.swap(r.leagues);
+  j.live.swap(r.live);
+  j.finals.swap(r.finals);
+  j.pending.swap(r.pending);
+  j.next_kickoff = r.next_kickoff;
+  j.fav_kickoff = r.fav_kickoff;
+  j.scan_ok = r.scan_ok;
+  j.want_finals = r.want_finals;
+  ::espn::reset_in_place(r);
+  this->start_worker_();
+  return true;
+}
+
 // Worker task: network and parsing only, no display or entity access.
 void GamedayComponent::run_job_() {
   Job &j = this->job_;
@@ -3613,8 +3670,10 @@ void GamedayComponent::run_job_() {
   if (j.need_scan) {
     ::espn::FinalList *finals = j.want_finals ? &j.finals : nullptr;
     ::espn::PendingList *pending = j.want_finals ? &j.pending : nullptr;
-    j.scan_ok = true;
-    for (League l : j.scan_leagues) {
+    if (!j.scan_cont)
+      j.scan_ok = true;  // the rest of a scan carries on from what the first part read
+    for (size_t li = 0; li < j.scan_leagues.size(); li++) {
+      League l = j.scan_leagues[li];
       // The owner changed what the board follows (a mode, a team, the
       // favorites): the main loop throws this scan away, so stop at the next
       // league instead of reading the rest first. Nine leagues take about
@@ -3631,6 +3690,12 @@ void GamedayComponent::run_job_() {
       j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending, 0, j.top25,
                                           watch.empty() ? nullptr : &watch, &j.fav_kickoff) &&
                   j.scan_ok;
+      // The board has no game on it and this league has one: hand it over
+      // now, and read the leagues left in a job of their own.
+      if (::espn::scan_show_now(j.scan_early, j.live.size(), j.scan_leagues.size() - li - 1) && !this->job_moot_) {
+        j.scan_rest.assign(j.scan_leagues.begin() + li + 1, j.scan_leagues.end());
+        break;
+      }
     }
     return;  // the main loop picks a game, then the next cycle polls it
   }
@@ -3785,12 +3850,19 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(this->back_off_());
       return;
     }
-    if (j.want_finals)
+    // A scan that stopped at its first game: the finals, the next kickoff
+    // and the favorites' kickoffs wait for the leagues still to be read.
+    const bool part = !j.scan_rest.empty();
+    this->scan_live_leagues_ = ::espn::scan_live_after(this->scan_live_leagues_, ::espn::scan_live_leagues(j.live),
+                                                       j.scan_ok && !part);
+    if (j.want_finals && !part)
       this->recap_absorb_(j, (int64_t) this->time_->timestamp_now());
     this->clear_backoff_();
     // Favorites take over: when to scan for the next favorite's kickoff. The
     // pick below says again whether a favorite has the board.
-    if (this->take_over_()) {
+    if (part) {
+      // The rest of this scan is the look take-over asked for.
+    } else if (this->take_over_()) {
       int64_t tnow = (int64_t) this->time_->timestamp_now();
       int64_t at = ::espn::take_over_rescan_at(tnow, j.fav_kickoff);
       this->take_scan_at_ = j.scan_ok ? at : ::espn::take_over_rescan_keep(tnow, at, this->take_scan_at_);
@@ -3894,10 +3966,14 @@ void GamedayComponent::apply_job_() {
     int taken = favs.empty() ? -1
                              : ::espn::take_over_pick(j.live, favs, this->schedule_.event_id, over,
                                                       this->prefs4_.collide == 1, j.rotate);
+    // The rest of a scan that already put a game up: with Pick the best
+    // game off that game stays, where a rescan would move on to another.
+    const int shown = taken >= 0 ? -1 : ::espn::scan_keep_shown(j.live, this->schedule_.event_id, j.scan_cont, best);
     const ::espn::LiveGame &g =
-        j.live[taken >= 0 ? (size_t) taken
-                          : best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
-                                 : pick[random_uint32() % pick.size()]];
+        j.live[taken >= 0   ? (size_t) taken
+               : shown >= 0 ? (size_t) shown
+               : best       ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
+                            : pick[random_uint32() % pick.size()]];
     int fav_rank = taken >= 0 ? ::espn::live_fav_rank(g, favs) : -1;
     // The favorite's side is the board's own team, as in Favorite teams mode;
     // any other game reads like a broadcast, away team first.
@@ -3913,6 +3989,9 @@ void GamedayComponent::apply_job_() {
         ESP_LOGI(TAG, "Favorites take over: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
       else if (best)
         ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      else if (shown >= 0)
+        ESP_LOGI(TAG, "Scan done, %u live: staying on %s @ %s", (unsigned) j.live.size(), g.away_abbr.c_str(),
+                 g.home_abbr.c_str());
       else
         ESP_LOGI(TAG, "Still the only game on: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
       // This break has had its look; the next one comes when play resumes.
@@ -3934,6 +4013,8 @@ void GamedayComponent::apply_job_() {
                (unsigned) j.live.size(), ::espn::live_interest(g));
     else
       ESP_LOGI(TAG, "Following %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+    if (part)
+      ESP_LOGI(TAG, "Showing it now: %u more league(s) to read", (unsigned) j.scan_rest.size());
     // Both logos download while the game is read, so its board can go up whole.
     this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.away_id, g.away_abbr.c_str()));
     this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.home_id, g.home_abbr.c_str()));
