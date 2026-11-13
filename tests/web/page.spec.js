@@ -1323,18 +1323,22 @@ test("Pick the best game switch posts and changes what the Live games bar says",
   const hint = sw.locator("xpath=following-sibling::small");
   await expect(hint).toContainText("Off, a random live game");
   await expect(hint).toContainText("On, the closest game with the least time left");
-  await expect(name).toHaveText("Showing a game in progress. Picks another when it ends.");
+  await expect(name).toHaveText("Showing a random live game. A new one every minute, or when it ends.");
   await sw.click();
   await expectSet(request, { best: "1" });
   await expect(sw).toHaveAttribute("aria-checked", "true");
-  await expect(name).toHaveText("Showing the best game on");
+  await expect(name).toHaveText("Showing the best game on. It moves only at a break in play.");
   expect((await deviceState(request)).best).toBe(true);
   await sw.click();
   await expectSet(request, { best: "0" });
   await expect(sw).toHaveAttribute("aria-checked", "false");
-  await expect(name).toHaveText("Showing a game in progress. Picks another when it ends.");
+  await expect(name).toHaveText("Showing a random live game. A new one every minute, or when it ends.");
   await expect(page.locator("#liveLg")).toBeHidden();
   expect((await deviceState(request)).best).toBe(false);
+  // Off, the line names Switch every's minutes.
+  await reset(request, { mode: 5, live: ["mlb"], live_auto: false, rotate: 5 });
+  await page.reload();
+  await expect(name).toHaveText("Showing a random live game. A new one every 5 minutes, or when it ends.");
 });
 
 test("Favorites take over switch posts, shows the two-favorites rule, and the bar names the favorite", async ({ page, request }) => {
@@ -1367,7 +1371,7 @@ test("Live games bar says when nothing is live and the panel shows your first fa
   const name = page.locator("#liveName");
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false, best: true });
   await page.goto("/");
-  await expect(name).toHaveText("Showing the best game on");
+  await expect(name).toHaveText("Showing the best game on. It moves only at a break in play.");
 
   await reset(request, { mode: 5, live: ["mlb"], live_auto: false, fallback: true });
   await page.reload();

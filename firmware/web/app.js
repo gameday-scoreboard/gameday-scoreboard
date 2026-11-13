@@ -138,7 +138,7 @@
       <button data-mode="5" aria-pressed="false">Live games<small>Games on right now, in leagues you pick</small></button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name" id="liveName">Showing a game in progress. Picks another when it ends.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
+      <div class="cur"><div><div class="name" id="liveName">Showing a random live game.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">None of your teams are playing. Showing their next games.</div><button class="linkbtn" id="favStart" hidden>Add a team</button></div></div>
@@ -977,6 +977,7 @@
     setGD({ live: "" });
     toast("Leagues follow your favorites");
   };
+  const everyMin = (m) => (Number(m) > 1 ? m + " minutes" : "minute");
   const renderLiveBar = () => {
     const auto = liveAuto();
     // With nothing live the device shows the first favorite's card, or with
@@ -986,7 +987,8 @@
     $("#liveName").textContent = lock ? (lock.name || lock.abbr) + " are on, so the panel stays on the game until it ends"
       : S.fallback ? "Nothing live right now. Showing your team until a game starts."
         : S.recap ? "Nothing live right now. Showing recent finals."
-          : S.best ? "Showing the best game on" : "Showing a game in progress. Picks another when it ends.";
+          : S.best ? "Showing the best game on. It moves only at a break in play."
+            : "Showing a random live game. A new one every " + everyMin(S.rotate) + ", or when it ends.";
     $("#liveLg").textContent = auto ? "Leagues follow your favorites. Tap one to choose by hand." : "";
     $("#liveLg").hidden = !auto;
     $("#liveChips").classList.toggle("auto", auto);
