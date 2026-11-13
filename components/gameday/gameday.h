@@ -1353,6 +1353,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's last basket, held until the next (row_text.h), and
   // the row's news so far: the page jumps to the lead line when it changes.
   ::espn::RowHold row_hold_;
+  // When the board game's win chance shows (row_text.h WinSwing): after a
+  // score, a turnover or a big move, not on every turn of the row.
+  ::espn::WinSwing win_swing_;
   std::string row_news_;
   uint32_t row_news_n_{0};
   // Hockey's latest goal per game, for the row under the clock: four games,

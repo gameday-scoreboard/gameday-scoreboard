@@ -43,6 +43,10 @@ Pick the best game now starts off, so Live games shows a random game until you t
 
 - 🎲 **Pick the best game** in Live games is now off by default, and this update turns it off once; turn it back on under **Live games** on the device page
 
+### ✨ New
+
+- 📊 The win chance shows after a touchdown, field goal, turnover or a swing of 10 points or more, instead of every few seconds
+
 ### 🐛 Fixes
 
 - ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download
