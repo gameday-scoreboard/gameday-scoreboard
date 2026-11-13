@@ -95,7 +95,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 | Setting | What it does |
 | --- | --- |
 | **Switch every** | Moves to another game in progress after this many minutes, 1 to 30. A new panel starts at 1. |
-| **Pick the best game** | On unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games). |
+| **Pick the best game** | Off to start. Off, the panel picks a random live game and moves to another every **Switch every** minutes; on, it follows the closest game with the least time left and never leaves it mid-play, moving only at a break. See [Live games](/using/modes/#live-games). |
 | **Favorites take over** | Off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over). |
 
 ### Choosing teams
@@ -143,7 +143,7 @@ Drawn in the row under the clock during a game, on a 128-wide board (not on a si
 | Setting | What it does |
 | --- | --- |
 | **Field strip** | Football: the field across the row, with the ball, the line to gain and the direction of play. See [Football](/using/football/#during-the-game). |
-| **Win chance** | Football and basketball: the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win". This switch turns that line on or off. |
+| **Win chance** | Football and basketball: the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win", when the game comes up, after a touchdown, field goal or turnover, and when the number moves 10 points or more (basketball: when it comes up and on a move). This switch turns that line on or off. |
 
 ### Celebrations
 

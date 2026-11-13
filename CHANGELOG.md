@@ -35,6 +35,25 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## v2026.11.3
+
+Pick the best game now starts off, so Live games shows a random game until you turn it on. Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.
+
+### ⚠️ Heads up
+
+- 🎲 **Pick the best game** in Live games is now off by default, and this update turns it off once; turn it back on under **Live games** on the device page
+
+### ✨ New
+
+- 📊 The win chance shows after a touchdown, field goal, turnover or a swing of 10 points or more, instead of every few seconds
+
+### 🐛 Fixes
+
+- ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download
+- 🔁 Turning on Favorites take over, or adding a favorite while it's on, shows a favorite's game that's on now within seconds, instead of waiting hours when nothing else was live
+- 🏈 An interception, fumble or sack celebrates once, instead of again each time ESPN rewrites the play
+- 🏒 A hockey intermission stays on the board until the puck drops, records and game leaders included, instead of ending when ESPN puts up the next period's clock early
+
 ## v2026.11.2
 
 Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.

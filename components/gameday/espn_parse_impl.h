@@ -70,6 +70,7 @@ inline void fill_event_filter(JsonObject ev, bool board_extras = true) {
   ev["status"]["type"]["shortDetail"] = true;
   JsonObject comp = ev["competitions"].add<JsonObject>();
   comp["timeValid"] = true;
+  comp["situation"]["lastPlay"]["id"] = true;
   comp["situation"]["lastPlay"]["text"] = true;
   comp["situation"]["lastPlay"]["scoreValue"] = true;
   comp["situation"]["lastPlay"]["drive"]["description"] = true;
@@ -302,6 +303,8 @@ inline bool snapshot_from_event(JsonObjectConst ev, uint32_t our_team_id, GameSn
   s.time_tbd = time_tbd(comp);
   JsonObjectConst sit = comp["situation"];
   s.last_play = str_or_empty(sit["lastPlay"]["text"]);
+  // A string of digits, "-89356481" in college football; 0 when it has none.
+  s.play_id = (int64_t) strtoll(str_or_empty(sit["lastPlay"]["id"]).c_str(), nullptr, 10);
   s.down_distance = str_or_empty(sit["downDistanceText"]);
   s.short_down_distance = str_or_empty(sit["shortDownDistanceText"]);
   s.is_red_zone = sit["isRedZone"] | false;

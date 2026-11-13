@@ -174,6 +174,10 @@ struct GameSnapshot {
   int possession{0};
   int team_timeouts{0}, opp_timeouts{0};
   std::string last_play, down_distance;
+  // ESPN's id for the last play, 0 when it gives none. It stays the same
+  // when ESPN rewrites the play's words ("... Touchback.", then
+  // "** Injury Update"), so a big play is celebrated once (celebrate.h).
+  int64_t play_id{0};
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
   // Football, for the field strip (game_viz.h): where the ball is as ESPN
@@ -237,6 +241,36 @@ struct GameSnapshot {
 inline bool shootout_decides(const GameSnapshot &g) {
   return g.sport == Sport::SOCCER && g.soc.team_shootout >= 0 && g.soc.opp_shootout >= 0 &&
          g.soc.team_shootout != g.soc.opp_shootout;
+}
+
+// Late in a hockey intermission ESPN moves the game on to the next period
+// before the puck drops: "20:00 - 3rd", the clock full, and the last play
+// still "End of 2nd Period" until the faceoff replaces it. The clock has to
+// be full too, since ESPN's last play can trail a clock that is running.
+// Overtime is 5 minutes in the regular season, whose period 5 is the
+// shootout; every period is 20 in the playoffs.
+inline bool hockey_late_intermission(const GameSnapshot &g) {
+  if (g.sport != Sport::HOCKEY || g.state != GameState::IN || g.period < 2 || g.last_play.rfind("End of", 0) != 0)
+    return false;
+  if (g.nhl.playoffs || g.period <= 3)
+    return g.display_clock == "20:00";
+  return g.period == 4 && g.display_clock == "5:00";
+}
+
+// What a hockey intermission is called on the board and in Home Assistant:
+// ESPN's own "End of 1st", and the same words for its late part, when ESPN
+// has moved on to the next period ("End of 2nd", "End of OT", "End of 2OT").
+// "" when the game isn't between periods.
+inline std::string hockey_intermission_text(const GameSnapshot &g) {
+  if (g.sport != Sport::HOCKEY || g.state != GameState::IN)
+    return "";
+  if (g.short_detail.rfind("End of", 0) == 0)
+    return g.short_detail;
+  if (!hockey_late_intermission(g))
+    return "";
+  static const char *const kEnded[] = {"", "1st", "2nd", "3rd", "OT"};
+  int ended = g.period - 1;
+  return std::string("End of ") + (ended <= 4 ? kEnded[ended] : std::to_string(ended - 3) + "OT");
 }
 
 // One future game from the team's schedule endpoint, for the "Up next" list.
@@ -337,6 +371,9 @@ struct TickerOptions {
   // all in basketball, the stopped clock says it, so the ticker leaves a
   // timeout as the last play out too.
   bool row_win{false};
+  // The win chance is news right now (row_text.h WinSwing): after a score,
+  // a turnover or a big move. Off, the ticker leaves it out too.
+  bool win_due{true};
   bool row_down{false};
   bool row_timeout{false};
   // Both records before the start, for a board too narrow to show them

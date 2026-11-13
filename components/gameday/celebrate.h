@@ -208,20 +208,42 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
 // reasons between polls (a failed poll's back-off, a setting change, a card
 // coming or going). This remembers the read one was shown for, so the same
 // (game, scores, last play) never shows twice; a stale ESPN read that steps
-// back and forward again is the same read and stays quiet too. The play's
-// words are in the key for the plays that score nothing (a sack): a new one
-// at the same score is a new play.
+// back and forward again is the same read and stays quiet too. With ESPN's
+// play id the key is the play itself, so rewriting its words ("...
+// Touchback.", then "** Injury Update") doesn't show it again; one
+// interception played four times in 90 seconds on 11/12 before this.
+// Without an id, the play's words are in the key for the plays that score
+// nothing (a sack): a new one at the same score is a new play. And in case
+// ESPN ever gives a rewritten play a new id, the same turnover doesn't show
+// twice within kTurnoverGapMs for a game (two of a kind that close is all
+// but unheard of; two sacks in a row are not, so sacks don't count).
 struct CelebLatch {
+  static constexpr uint32_t kTurnoverGapMs = 90 * 1000;
   std::string event, play;
   int team{-1}, opp{-1};
+  int64_t id{0};
+  CelebKind turnover{CelebKind::NONE};
+  uint32_t turnover_ms{0};
   // True the first time this read of this game asks; false after that.
-  bool take(const GameSnapshot &cur) {
-    if (cur.event_id == event && cur.team_score == team && cur.opp_score == opp && cur.last_play == play)
+  bool take(const GameSnapshot &cur) { return this->take(cur, CelebKind::NONE, 0); }
+  bool take(const GameSnapshot &cur, CelebKind kind, uint32_t now) {
+    const bool same_game = cur.event_id == event;
+    if (same_game && (cur.play_id != 0 ? cur.play_id == id
+                                        : cur.team_score == team && cur.opp_score == opp && cur.last_play == play))
+      return false;
+    const bool is_turnover =
+        kind == CelebKind::INTERCEPTION || kind == CelebKind::PICK_SIX || kind == CelebKind::FUMBLE;
+    if (same_game && is_turnover && kind == turnover && now - turnover_ms < kTurnoverGapMs)
       return false;
     event = cur.event_id;
     team = cur.team_score;
     opp = cur.opp_score;
     play = cur.last_play;
+    id = cur.play_id;
+    if (is_turnover) {
+      turnover = kind;
+      turnover_ms = now;
+    }
     return true;
   }
 };

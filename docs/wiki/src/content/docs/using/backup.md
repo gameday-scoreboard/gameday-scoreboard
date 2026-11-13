@@ -32,7 +32,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out. A backup saved in Live games comes back in Live games.
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
-- The Live games leagues, **Switch every** and **Pick the best game**
+- The Live games leagues, **Switch every** and **Pick the best game**. A backup saved on v2026.11.2 or older brings **Pick the best game** back only when it was off. The switch started on in those releases, so a saved on may not be your choice, and the panel keeps its own setting instead.
 - **Take over**, **After the final** and **Two games at once**
 - Every ticker switch and **Opponent scores too**
 - **Celebrations** (Off, Subtle or Full), and **Big plays**

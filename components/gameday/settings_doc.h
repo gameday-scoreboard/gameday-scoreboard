@@ -37,6 +37,7 @@
 #include <string>
 #include <vector>
 
+#include "auto_update.h"
 #include "espn_parse.h"
 #include "playlists.h"
 #include "set_request.h"
@@ -219,6 +220,19 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     out["scroll"] = scroll;
 }
 
+// Pick the best game was on by default through this release, so a backup
+// from it or older has "best": true on a panel nobody set. A restore leaves
+// that out. A backup's version is the panel's own ("v2026.11.2", a beta
+// "v2026.11.3-beta.812"); one missing or unreadable counts as old.
+constexpr const char *kBestDefaultOnUntil = "2026.11.2";
+
+inline bool backup_after_best_default_on(JsonVariantConst version) {
+  const char *v = version | "";
+  if (*v == 'v')
+    v++;
+  return version_newer(v, kBestDefaultOnUntil);
+}
+
 // What the panel can take, from the build and the running firmware.
 struct SettingsTarget {
   std::string name;  // this panel's hostname, as the export writes it
@@ -305,6 +319,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           out.skipped.push_back(k);
           continue;
         }
+        if (k == "best" && v.as<bool>() && !backup_after_best_default_on(doc["version"]))
+          continue;  // the old default, not a choice: the panel keeps its own
         parse_set(k, v.as<bool>() ? "1" : "0", op, target.fav_max);
         break;
       }

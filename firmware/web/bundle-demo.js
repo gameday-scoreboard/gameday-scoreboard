@@ -142,7 +142,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       <button data-mode="5" aria-pressed="false">Live games<small>Games on right now, in leagues you pick</small></button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name" id="liveName">Showing a game in progress. Picks another when it ends.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
+      <div class="cur"><div><div class="name" id="liveName">Showing a random live game.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">None of your teams are playing. Showing their next games.</div><button class="linkbtn" id="favStart" hidden>Add a team</button></div></div>
@@ -195,7 +195,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <p class="hint">Follows a live game, then moves to the next one.</p>
           <div class="livectls">
           <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
-          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
+          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>Off, a random live game, a new one every Switch every minutes. On, the closest game with the least time left, and it never leaves mid-play: it moves only at a break.</small></div>
           <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
           <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
             <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
@@ -252,7 +252,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         <p class="hint">Under the clock during a game. Not on a single 64x64 panel.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
-          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", in turn with the rest of the row.</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", when the game comes up, after a touchdown, field goal or turnover, and on a swing of 10 points or more (basketball: the swing only).</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
         </div>
       </div>
       <div class="card">
@@ -981,6 +981,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     setGD({ live: "" });
     toast("Leagues follow your favorites");
   };
+  const everyMin = (m) => (Number(m) > 1 ? m + " minutes" : "minute");
   const renderLiveBar = () => {
     const auto = liveAuto();
     // With nothing live the device shows the first favorite's card, or with
@@ -990,7 +991,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#liveName").textContent = lock ? (lock.name || lock.abbr) + " are on, so the panel stays on the game until it ends"
       : S.fallback ? "Nothing live right now. Showing your team until a game starts."
         : S.recap ? "Nothing live right now. Showing recent finals."
-          : S.best ? "Showing the best game on" : "Showing a game in progress. Picks another when it ends.";
+          : S.best ? "Showing the best game on. It moves only at a break in play."
+            : "Showing a random live game. A new one every " + everyMin(S.rotate) + ", or when it ends.";
     $("#liveLg").textContent = auto ? "Leagues follow your favorites. Tap one to choose by hand." : "";
     $("#liveLg").hidden = !auto;
     $("#liveChips").classList.toggle("auto", auto);
