@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Why the panel last started, for the health block in /gameday/state. Pure,
 // with no ESPHome includes, so the host tests compile it directly.
 //

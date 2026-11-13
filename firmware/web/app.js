@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
@@ -258,6 +260,7 @@
               <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
             </select></div>
             <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+            <div class="ctl"><label>Big plays<small>On Full, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way.</small></label><button class="sw" data-set="bigplays" aria-label="Big plays"></button></div>
           </div>
         </div>
       </div>
@@ -318,18 +321,6 @@
           <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
         </div>
       </div>
-      <div class="card" id="brandCard" hidden>
-        <h2>Bar look</h2>
-        <div class="cbody">
-          <p class="hint">Your bar's logo, colors and plate list from one brand file. The panel opens the message card with them.</p>
-          <label class="fl" for="brandUrl">Brand file address<small>A web address we give you. The panel reads it again every half hour.</small></label>
-          <input type="url" id="brandUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
-          <p class="hint" id="brandRead" hidden></p>
-          <div class="ctl" id="brandLogoRow" hidden><label>Logo</label><img id="brandLogo" class="brandlogo" alt="The bar's logo"></div>
-          <div class="ctl" id="brandPartyRow" hidden><label>Plate party<small>Shows the newest plate's party now, even over a game.</small></label><button class="btn" id="brandParty">Plate party</button></div>
-          <div class="actions"><button class="btn primary" id="brandSave">Save</button><button class="btn" id="brandClear">Clear</button></div>
-        </div>
-      </div>
       <div class="card" id="picCard" hidden>
         <h2>Pictures</h2>
         <div class="cbody">
@@ -377,10 +368,6 @@
           <div class="ctl" id="betaRow" hidden>
             <label>Follow beta<small>Switches to beta firmware for new features early. It may have bugs.</small></label>
             <button class="sw" data-set="beta" aria-label="Follow beta"></button>
-          </div>
-          <div class="ctl" id="barRow" hidden>
-            <label>Bar build<small>Installs bar updates on its own overnight, never during a live game.</small></label>
-            <a class="btn" id="barReport" href="#">Something wrong?</a>
           </div>
         </div>
       </div>
@@ -509,6 +496,8 @@
       <span id="ver"></span><span>·</span>
       <a href="https://github.com/gameday-scoreboard/gameday-scoreboard" target="_blank" rel="noopener">gameday-scoreboard</a>
       <span>·</span><span>scores from ESPN</span>
+      <br><span id="credit">© 2026 Brandon Harvey</span><span>·</span>
+      <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/blob/main/NOTICE.md" target="_blank" rel="noopener">GPLv3</a>
     </p>
   </div>
 
@@ -638,7 +627,7 @@
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
-    celebrate: Number,
+    celebrate: Number, bigplays: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
@@ -661,7 +650,7 @@
     list: Number,
     sport: (v) => (v === "none" ? "" : v),
     remote1: String, remote2: String, remote3: String, remote4: String,
-    msg: String, msgurl: String, msgevery: Number, nick: String, brand: String,
+    msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
     wake: (v) => v === "1", wakelead: Number, after: String,
@@ -1753,23 +1742,15 @@
     renderWeather();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
-    // Older firmware and the bar and demo builds have no beta to follow.
+    // Older firmware and the demo build have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
     // The rollback line and the important mark in the firmware box read this
     // document, which can land after the update entity does.
     if (((S.update_failed || "") !== fwFailed || !!S.update_important !== fwImportant) && ents[byName["Firmware"]])
       renderUpdate(ents[byName["Firmware"]]);
-    // The bar build: a note, and an email to us with the panel's name in it.
-    $("#barRow").hidden = !S.bar;
-    if (S.bar) {
-      const who = S.name || "this panel";
-      $("#barReport").href = "mailto:" + S.bar.report + "?subject=" + encodeURIComponent("Bar panel " + who) +
-        "&body=" + encodeURIComponent("Panel: " + who + "\nWhat's wrong:\n");
-    }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
-    renderBrand();
     renderPics();
     renderEvents();
   };
@@ -1904,57 +1885,6 @@
     msgSeen.msg = msgSeen.msgurl = msgSeen.msgevery = null;
     setGD({ msg: "", msgurl: "" });
     toast("Message card off");
-  };
-
-  // ---- the bar build's brand pack (components/gameday/brand.h) ----------------
-  let brandSeen = null;
-  const renderBrand = () => {
-    // Only the bar build reads brand packs.
-    $("#brandCard").hidden = S.brand === undefined;
-    if (S.brand === undefined) return;
-    const input = $("#brandUrl");
-    if (S.brand !== brandSeen && document.activeElement !== input) {
-      brandSeen = S.brand;
-      input.value = S.brand;
-    }
-    const read = S.brandread;
-    const line = $("#brandRead");
-    line.hidden = !S.brand;
-    const logo = read && read.ok && read.logo_ok ? read.logo : "";
-    $("#brandLogoRow").hidden = !logo;
-    if (logo && $("#brandLogo").getAttribute("src") !== logo) $("#brandLogo").src = logo;
-    // The plate wall shows the pack's list while the panel has no list of its own.
-    $("#brandPartyRow").hidden = !(S.brand && read && read.ok && read.list && !S.msgurl);
-    if (!S.brand) return;
-    const kept = read && read.ok ? " Showing the last look it read." : "";
-    let text;
-    if (!read || read.status === undefined || read.status < 0) text = read && read.ok ? "Showing the saved look. Reading the file again." : "Not read yet.";
-    else if (read.status === 0) text = "The panel couldn't reach that address. It tries again in a few minutes." + kept;
-    else if (read.status !== 200) text = "That address answered with an error (HTTP " + read.status + "). It tries again in a few minutes." + kept;
-    else if (read.error) text = read.error + kept;
-    else text = "Loaded: " + (read.name || read.title || "the brand file") + ".";
-    if (read && read.ok && read.warning) text += " Left out: " + read.warning + ".";
-    if (read && read.logo_error) text += " " + read.logo_error;
-    if (read && read.sprite_error) text += " " + read.sprite_error;
-    line.textContent = text;
-  };
-  $("#brandParty").onclick = () => {
-    doAction("plate_party");
-    toast("Plate party");
-  };
-  $("#brandSave").onclick = () => {
-    const url = $("#brandUrl").value.trim();
-    if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The brand file's address starts with http:// or https://");
-    if (!asciiUrl(url)) return toast(ASCII_URL);
-    brandSeen = null;
-    setGD({ brand: url });
-    toast(url ? "Brand file saved" : "Bar look off");
-  };
-  $("#brandClear").onclick = () => {
-    $("#brandUrl").value = "";
-    brandSeen = null;
-    setGD({ brand: "" });
-    toast("Bar look off");
   };
 
   // ---- game-day wake and after the game (components/gameday/wake.h) ----------
@@ -2868,7 +2798,7 @@
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
     $("#hEspn").textContent = h.espn == null ? "None yet"
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
-    const chan = { stable: "stable", beta: "beta", bar: "bar" }[h.channel];
+    const chan = { stable: "stable", beta: "beta" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
     const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
@@ -3169,11 +3099,11 @@
       // The panel rolled back from this very version (a crash in its first
       // minute); it won't install it on its own again, but Install still tries.
       const failed = !!(S && S.update_failed && S.update_failed === u.value);
-      const nightly = S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "";
+      const nightly = S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "";
       fwWaiting = true;
       if (failed) {
         $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
-        sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+        sub.textContent = "Install tries it again." + (S.autoupd ? " It won't install this one on its own." : "");
       } else if (fwImportant) {
         // The release is marked important (its summary starts with
         // "Important:"): it fixes something broken, so the box says so.

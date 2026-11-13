@@ -37,6 +37,7 @@
 #include "score_log.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
+#include "settings_change.h"
 #include "startup.h"
 #include "timezones.h"
 #include "wake.h"
@@ -597,6 +598,32 @@ static void test_best_game() {
   CHECK(rotate_due(m5, sw, true, true, true, false, false));
   CHECK(!rotate_due(m5, 10 * sw, true, true, false, false, false));  // or Switch every when longer
   CHECK(rotate_due(10 * sw, 10 * sw, true, true, false, false, false));
+
+  // A scan that picks the game already on the board keeps it, last read and
+  // all, Pick the best game on or off. Seen from the away side (id 7).
+  {
+    GameSnapshot read1 = live(0, 0);
+    read1.sport = Sport::SOCCER;
+    read1.short_detail = "60'";
+    CHECK(keep_on_rescan(read1, "1", 7, true, "1", 7));
+    CHECK(!keep_on_rescan(read1, "1", 7, true, "2", 7));    // another game: fresh
+    CHECK(!keep_on_rescan(read1, "1", 7, true, "1", 9));    // the other side: fresh
+    CHECK(!keep_on_rescan(read1, "1", 7, false, "1", 7));   // nothing live, or the owner's team
+    CHECK(!keep_on_rescan(GameSnapshot{}, "1", 7, true, "1", 7));  // not read yet
+    CHECK(!keep_on_rescan(read1, "", 7, true, "", 7));
+    GameSnapshot ended = read1;
+    ended.state = GameState::POST;
+    CHECK(!keep_on_rescan(ended, "1", 7, true, "1", 7));  // the board saw it end
+    // The goal lands on the read right after the scan. Kept, the read before
+    // it is still there to compare against, and the goal splashes; started
+    // fresh (what a scan with Best game off used to do), it went unseen.
+    GameSnapshot read2 = read1;
+    read2.opp_score = 1;
+    read2.short_detail = "61'";
+    GameSnapshot kept = keep_on_rescan(read1, "1", 7, true, "1", 7) ? read1 : GameSnapshot{};
+    CHECK_EQ(decide_splash(kept, read2, true, true).text, std::string("PHI GOAL"));
+    CHECK_EQ(decide_splash(GameSnapshot{}, read2, true, true).text, std::string(""));
+  }
 
   // A poll of the followed game, the away side as team, checked for an upset.
   GameSnapshot p = live(24, 21);
@@ -1728,6 +1755,64 @@ static void test_fav_read_due() {
   CHECK_EQ(fav_stamp_after_drop(5000, false), 5000u);
   // millis() wrapping past zero between the stamp and now.
   CHECK(fav_read_due(true, 0xFFFFF000u, 60000, retry, refresh));
+}
+
+// A settings change and the reads around it (settings_change.h), one case
+// per stall the replay bench found.
+static void test_settings_change() {
+  // Three quick adds, live team last: the season read for the first team
+  // waits while the board's next read is due, for 30 s after the change.
+  CHECK(board_first(10000, 9000, true));
+  CHECK(!board_first(10000, 9000, false));  // between the board's reads: side reads go
+  CHECK(!board_first(10000, 0, true));      // no change: as before
+  CHECK(board_first(9000 + kBoardFirstMs - 1, 9000, true));
+  CHECK(!board_first(9000 + kBoardFirstMs, 9000, true));  // a board that keeps reading lets them through
+  CHECK(board_first(5000, 0xFFFFF000u, true));            // millis() wrapping past zero
+
+  // Three quick adds, the first a final: its game leaders read waits while
+  // the other two favorites are unread, and goes once they're read.
+  CHECK(leaders_wait(10000, 9000, true));
+  CHECK(!leaders_wait(10000, 9000, false));
+  CHECK(!leaders_wait(10000, 0, true));  // no change: ahead of the next read, as before
+  CHECK(!leaders_wait(9000 + kBoardFirstMs, 9000, true));
+
+  // A change while a season read is in flight: it stops, whatever changed,
+  // and doesn't count as a failure, so it is read again on the card's turn.
+  CHECK(job_moot_after_change(JobKind::SEASON, true, false));
+  CHECK(job_moot_after_change(JobKind::SEASON, false, false));
+  CHECK(!season_read_failed(false, true));
+  CHECK(season_read_failed(false, false));  // a real failure still waits
+  CHECK(!season_read_failed(true, false));
+
+  // A board read stops when the board was cleared, not for a take-over ask.
+  CHECK(job_moot_after_change(JobKind::BOARD, true, false));
+  CHECK(!job_moot_after_change(JobKind::BOARD, false, false));
+  // Side reads are small and the same whatever the board shows: they finish.
+  CHECK(!job_moot_after_change(JobKind::SIDE, true, false));
+
+  // Three quick adds: the first team's read in flight when the second add
+  // lands still counts, since the team is still a favorite.
+  CHECK(!job_moot_after_change(JobKind::FAV_TEAM, true, true));
+  CHECK(fav_answer_counts(true, false, true, true));
+  // A removed team's read, or one on a panel that left Favorite teams: dropped.
+  CHECK(job_moot_after_change(JobKind::FAV_TEAM, true, false));
+  CHECK(!fav_answer_counts(true, true, true, false));
+  CHECK(!fav_answer_counts(true, false, false, true));
+  // Removed and added back during the read: it stopped once, so it's dropped.
+  CHECK(!fav_answer_counts(true, true, true, true));
+  CHECK(fav_answer_counts(false, false, true, true));  // nothing changed
+
+  // Take-over turned on in Live games with nothing live: the job running
+  // then (or the long wait) no longer decides when the scan runs.
+  CHECK(take_scan_now_after_job(4, 5, true));
+  CHECK(!take_scan_now_after_job(5, 5, true));  // no ask while it ran
+  CHECK(!take_scan_now_after_job(4, 5, false));  // take-over off, or not in Live games
+
+  // mode=5&sport=none while a sport row plays: Live games stays.
+  const uint8_t fav = 4;
+  CHECK(sport_stop_keeps_mode(5, fav));
+  CHECK(!sport_stop_keeps_mode(fav, fav));  // mode=4&sport=none: Favorite teams, every favorite
+  CHECK(!sport_stop_keeps_mode(-1, fav));   // sport=none alone: as before
 }
 
 static void test_favorites() {
@@ -5223,7 +5308,7 @@ static void test_auto_update() {
   CHECK(version_newer("2026.10.0-beta.813", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0-beta.812"));
   CHECK(!version_newer("2026.10.0-beta.811", "2026.10.0-beta.812"));
-  // A bar panel hand-flashed with a release takes the next release's betas,
+  // A panel on a release with Follow beta on takes the next release's betas,
   // never a beta of the release it already runs (older code).
   CHECK(!version_newer("2026.10.0-beta.812", "2026.10.0"));
   CHECK(version_newer("2026.10.1-beta.812", "2026.10.0"));
@@ -5232,60 +5317,22 @@ static void test_auto_update() {
   CHECK(!version_newer("2026.10.0-beta.", "2026.10.0"));
   CHECK(!version_newer("2026.10.0-dev", "2026.10.0"));
 
-  // Install now: names in the release summary.
-  const std::string me = "gameday-aba970";
-  CHECK(install_now_listed("Beta 2026.10.0-beta.812. Install now: gameday-aba970", me));
-  CHECK(install_now_listed("Install now: gameday-500ebc, gameday-aba970", me));
-  CHECK(install_now_listed("Install now: gameday-500ebc,gameday-aba970 ", me));
-  CHECK(install_now_listed("Beta 2026.10.0-beta.812. Install now: all", me));
-  CHECK(!install_now_listed("Install now: gameday-500ebc", me));
-  CHECK(!install_now_listed("Install now: gameday-aba9700", me));
-  CHECK(!install_now_listed("Install now: gameday-aba97", me));
-  CHECK(!install_now_listed("Install now:", me));
-  CHECK(!install_now_listed("Beta 2026.10.0-beta.812", me));
-  CHECK(!install_now_listed("gameday-aba970", me));  // named, but not in the list
-  CHECK(!install_now_listed("Install now: all", ""));
-
   // Follow beta switched while a check ran: its result names the other
   // channel's folder (the updater joins the manifest's relative ota path to
   // the folder it read). The two folders don't share a prefix either way.
-  const char *bar = "https://install.gameday-scoreboard.com/firmware/moonhub75-bar/manifest.json";
-  const char *beta = "https://install.gameday-scoreboard.com/firmware/beta/moonhub75/manifest.json";
-  const std::string bar_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75-bar/gameday-esp32s3.ota.bin";
-  const std::string beta_bin = "https://install.gameday-scoreboard.com/firmware/beta/moonhub75/gameday-esp32s3.ota.bin";
-  CHECK(firmware_from_source(bar_bin, bar));
+  const char *rel = "https://install.gameday-scoreboard.com/firmware/moonhub75/manifest.json";
+  const char *beta = "https://install.gameday-scoreboard.com/firmware/moonhub75-beta/manifest.json";
+  const std::string rel_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75/gameday-esp32s3.ota.bin";
+  const std::string beta_bin = "https://install.gameday-scoreboard.com/firmware/moonhub75-beta/gameday-esp32s3.ota.bin";
+  CHECK(firmware_from_source(rel_bin, rel));
   CHECK(firmware_from_source(beta_bin, beta));
-  CHECK(!firmware_from_source(beta_bin, bar));
-  CHECK(!firmware_from_source(bar_bin, beta));
-  CHECK(!firmware_from_source("https://install.gameday-scoreboard.com/firmware/moonhub75/gameday-esp32s3.ota.bin", bar));
-  CHECK(firmware_from_source("", bar));  // nothing read yet
-  CHECK(firmware_from_source(bar_bin, nullptr));
+  CHECK(!firmware_from_source(beta_bin, rel));
+  CHECK(!firmware_from_source(rel_bin, beta));
+  CHECK(!firmware_from_source("https://install.gameday-scoreboard.com/firmware/scoreboard75/gameday-esp32s3.ota.bin", rel));
+  CHECK(firmware_from_source("", rel));  // nothing read yet
+  CHECK(firmware_from_source(rel_bin, nullptr));
 
-  // Listed: installs at any hour, even off, unless a game is live.
-  t = in;
-  t.hour = 15;
-  t.now = true;
-  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
-  t.clock_valid = false;  // no clock needed
-  t.tried_day = in.today;  // and a night try doesn't block it
-  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
-  t.live = true;
-  CHECK(auto_update_step(t) == AutoUpdateStep::WAIT_GAME);
-  t.live = false;
-  t.newer = false;
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t.newer = true;
-  t.available = false;
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t.available = true;
-  t.enabled = false;
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t = in;
-  t.now = true;  // in the window too, the try counts for this version, not the night
-  CHECK(auto_update_step(t) == AutoUpdateStep::INSTALL_NOW);
-
-  // A release that rolled back here: skipped every night, live game or not,
-  // and Install now doesn't override it.
+  // A release that rolled back here: skipped every night, live game or not.
   t = in;
   t.failed = true;
   CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
@@ -5296,12 +5343,6 @@ static void test_auto_update() {
   t.checked_day = t.today;
   CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
   t.check_done = false;  // nothing to say before tonight's read is back
-  CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
-  t = in;
-  t.failed = true;
-  t.now = true;
-  CHECK(auto_update_step(t) == AutoUpdateStep::SKIP_FAILED);
-  t.hour = 15;
   CHECK(auto_update_step(t) == AutoUpdateStep::IDLE);
 }
 
@@ -5456,6 +5497,24 @@ static void test_update_mark() {
   update_mark_set(m.installing, "1.5.5");
   m.written = 1;
   CHECK(update_mark_boot(m, "2026.10.0", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.failed[0] == '\0');
+
+  // A release ranks above its own betas, so a beta of the release a panel
+  // runs is a downgrade too: its rollback isn't kept. A beta of the next
+  // release, the one Follow beta offers, is.
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.11.2-beta.1");
+  m.written = 1;
+  CHECK(update_mark_boot(m, "2026.11.2", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(m.failed[0] == '\0');
+  m = UpdateMark{};
+  update_mark_set(m.installing, "2026.11.3-beta.1300");
+  m.written = 1;
+  CHECK(update_mark_boot(m, "2026.11.2", true) == UpdateOutcome::ROLLED_BACK);
+  CHECK(update_failed_here(m, "2026.11.3-beta.1300"));
+  CHECK(!update_failed_here(m, "2026.11.3-beta.1301"));
+  // Once the release it was building toward is out, the beta is behind it.
+  CHECK(update_mark_boot(m, "2026.11.3", false) == UpdateOutcome::NONE);
   CHECK(m.failed[0] == '\0');
 
   // Beta versions fit, a longer string is cut and still ends.
@@ -7179,7 +7238,7 @@ static void test_message() {
 
   CHECK(msg_url_ok(""));
   CHECK(msg_url_ok("http://192.168.1.20/names.txt"));
-  CHECK(msg_url_ok("https://gist.githubusercontent.com/x/raw/plates.txt"));
+  CHECK(msg_url_ok("https://gist.githubusercontent.com/x/raw/messages.txt"));
   CHECK(!msg_url_ok("https://"));
   CHECK(!msg_url_ok("ftp://example.com/a.txt"));
   CHECK(!msg_url_ok("example.com/a.txt"));
@@ -8892,6 +8951,7 @@ static void test_game_leaders() {
 }
 
 int main() {
+  test_settings_change();
   test_urls();
   test_iso();
   test_team_parse();

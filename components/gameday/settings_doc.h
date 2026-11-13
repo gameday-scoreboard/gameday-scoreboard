@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The settings backup: GET /gameday/settings writes the panel's settings as
 // one JSON document and POST /gameday/settings takes one back, for the device
 // page's Export and Import and the apps' back up and restore. The document's
@@ -60,12 +62,12 @@ inline SettingType setting_type(const char *k) {
                                       "autoupd", "count", "match", "beta",  "best",   "jump",       "banner",
                                       "leaders", "night", "nightscreen", "favtake", "countdown", "top25",
                                       "news",    "gameleaders", "wxon", "wake",
-                                      "field",   "winbar", "spark"};
+                                      "field",   "winbar", "spark", "bigplays"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
                                      "wakelead", "celebrate", "wxunit"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
-                                      "msgurl", "brand", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
+                                      "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
                                       "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
@@ -115,11 +117,11 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
   static const char *const kKeys[] = {"nick",     "mode",     "favs",     "rotate",      "lockon",     "release",
                                       "collide",  "today",    "jump",     "banner",      "favtake",    "live",
                                       "tz",       "tzauto",   "down",     "count",       "match",      "play",
-                                      "odds",     "leaders",  "field",    "winbar",      "spark",      "opp",      "celebrate",   "best",        "bootaddr",   "night",
+                                      "odds",     "leaders",  "field",    "winbar",      "spark",      "opp",      "celebrate",   "bigplays",    "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
-                                      "msg",      "msgurl",   "msgevery", "brand",       "autoupd",     "beta",
+                                      "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
@@ -354,7 +356,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         }
         // A sport this firmware has no row for (newer firmware may have more)
         // is left out and listed, like a team it doesn't know.
-        if ((k == "tz" && timezone_index(text.c_str()) < 0) || ((k == "msgurl" || k == "brand") && !msg_url_ok(text)) ||
+        if ((k == "tz" && timezone_index(text.c_str()) < 0) || (k == "msgurl" && !msg_url_ok(text)) ||
             (k == "hook" && !hook_url_ok(text)) ||
             (k == "sport" && text != "none" && sport_row_from_key(text.c_str()) == 0) ||
             (k == "after" && after_parse(text) < 0)) {

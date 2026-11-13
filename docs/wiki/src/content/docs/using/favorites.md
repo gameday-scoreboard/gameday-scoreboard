@@ -17,9 +17,7 @@ The order is the priority. Higher teams win when two games clash (unless you cho
 
 Then tap **Favorite teams** under the board to switch the panel to it. The list is kept when you switch to another mode and back.
 
-:::note[Coming in the next release]
-A team you add shows on the board within a few seconds, in whatever order you make the changes: add a team and take another out right after, or switch to Favorite teams and then pick the team. Before, some of those orders left the board empty for about a minute.
-:::
+A team you add shows on the board within a few seconds, in whatever order you make the changes: add a team and take another out right after, add several in a row, or switch to Favorite teams and then pick the team.
 
 The list also works in Live games. With **Favorites take over** on, Live games shows its usual games until one of your favorites is playing, then stays on that game until it ends. See [Favorites take over](/using/modes/#favorites-take-over).
 

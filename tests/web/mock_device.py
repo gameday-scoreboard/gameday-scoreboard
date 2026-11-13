@@ -156,7 +156,7 @@ INITIAL = {
     # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
     "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "bigplays": True, "best": True, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.
@@ -739,7 +739,7 @@ def apply_set(kv):
                 STATE["tz"], STATE["tz_name"] = i, TZS[i]
         elif k == "tzauto":
             STATE["tz_auto"] = v == "1"
-        elif k in ("down", "count", "match", "play", "odds", "leaders", "field", "winbar", "spark", "opp", "best", "bootaddr", "autoupd", "beta"):
+        elif k in ("down", "count", "match", "play", "odds", "leaders", "field", "winbar", "spark", "opp", "bigplays", "best", "bootaddr", "autoupd", "beta"):
             STATE[k] = v == "1"
         elif k == "panels":
             if 1 <= atoi(v) <= MAX_COLS:
@@ -776,8 +776,6 @@ def apply_set(kv):
         elif k == "msgurl":
             if msg_url_ok(v):
                 STATE["msgurl"] = v
-        elif k == "brand":
-            pass  # parse_set takes it; only the bar build reads a brand pack, and this is a home build
         elif k == "msgevery":
             if v[:1].isdigit():
                 STATE["msgevery"] = min(LIMITS["kMsgEveryMax"], atoi(v))
@@ -1018,7 +1016,7 @@ def import_settings(doc):
                     skipped.append(f"{k}={v}")
                     continue
                 kv.append((k, v if r == 1 else "none"))
-            elif (k == "tz" and timezone_index(v) < 0) or (k in ("msgurl", "brand") and not msg_url_ok(v)) or (
+            elif (k == "tz" and timezone_index(v) < 0) or (k == "msgurl" and not msg_url_ok(v)) or (
                     k == "hook" and not hook_url_ok(v)) or (k == "sport" and v != "none" and v not in SPORT_KEYS) or (
                     k == "after" and v not in AFTER) or (
                     re.fullmatch(r"remote[1-4]", k) and remote_parse(v) is None):

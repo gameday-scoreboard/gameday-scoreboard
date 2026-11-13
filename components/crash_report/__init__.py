@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 """crash_report: keeps the last crash's backtrace in flash, so it survives an
 unplug and can be read over the network at any time from /gameday/crash."""
 

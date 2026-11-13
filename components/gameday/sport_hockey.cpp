@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Hockey's ticker, clock row and splashes. Pure, no ESPHome includes.
 // ESPN's NHL feed has no power play field. The board must not infer one from
 // penalties, because offsetting and coincidental minors would make it wrong.
@@ -36,6 +38,38 @@ void fill_hockey_filter(JsonObject ev) {
   JsonObject stat = comp["competitors"][0]["statistics"].add<JsonObject>();
   stat["name"] = true;
   stat["displayValue"] = true;
+  // The hat trick: who has how many goals (fill_leaders_filter keeps the
+  // leader lists; this adds the player's id).
+  JsonObject list = comp["competitors"][0]["leaders"][0];
+  list["name"] = true;
+  JsonObject top = list["leaders"][0];
+  top["displayValue"] = true;
+  top["athlete"]["id"] = true;
+}
+
+// Each side's players on two goals or more in this game, from ESPN's goal
+// leaders, which list every scorer once the puck drops (the season's before).
+static void big_play_scorers(JsonObjectConst comp, GameSnapshot &s) {
+  Hockey &h = s.nhl;
+  for (JsonObjectConst c : comp["competitors"].as<JsonArrayConst>()) {
+    const bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+    Hockey::Scorer *out = ours ? h.team_scorers : h.opp_scorers;
+    uint8_t &count = ours ? h.team_scorer_count : h.opp_scorer_count;
+    count = 0;
+    for (JsonObjectConst l : c["leaders"].as<JsonArrayConst>()) {
+      if (str_or_empty(l["name"]) != "goals")
+        continue;
+      for (JsonObjectConst top : l["leaders"].as<JsonArrayConst>()) {
+        const int goals = atoi(str_or_empty(top["displayValue"]).c_str());
+        const uint32_t id = (uint32_t) atol(str_or_empty(top["athlete"]["id"]).c_str());
+        if (goals < 2 || id == 0 || count >= Hockey::kScorersMax)
+          continue;
+        out[count].id = id;
+        out[count].goals = (uint8_t) std::min(goals, 99);
+        count++;
+      }
+    }
+  }
 }
 
 // One of a side's stats ("saves", "goals") as a count, -1 when it has none
@@ -102,6 +136,8 @@ void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
     h.team_shots = (int16_t) (saves[1] + goals[0]);
   if (saves[0] >= 0 && goals[1] >= 0)
     h.opp_shots = (int16_t) (saves[0] + goals[1]);
+  if (s.state == GameState::IN)
+    big_play_scorers(comp, s);
   // The latest goal, while the puck is in play. A shootout's goals don't
   // count on the scoreboard until the end, so the last real one stays.
   if (s.state != GameState::IN || shootout(s) || s.play_value <= 0)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Favorite Teams mode: which of the four favorites the panel shows right now.
 // Pure logic on epoch seconds, no ESPHome includes, so the host tests cover
 // the timing rules (lock-on, release, collisions, the idle playlist).

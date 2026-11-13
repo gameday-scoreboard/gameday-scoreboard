@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The countdown card: big digits to the next kickoff ("2d 14h"), or to a day
 // the owner named ("Christmas"), on the no-game screen in the team's colors.
 // Between games the next game's card and its countdown take turns, and a

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Pure ESPN parsing and game logic. No ESPHome includes so the host test
 // binary can compile this file directly.
 #pragma once
@@ -105,6 +107,17 @@ struct Hockey {
   uint16_t goal_score{0};
   char goal_clock[6]{};  // "12:04"
   char goal_name[24]{};  // "McDavid", cut to fit
+  // For the big plays (celeb_hockey.h), while the game is on. ESPN's goal
+  // leaders for this game list every scorer with the id and the count;
+  // these keep each side's players on two goals or more, enough to see a
+  // third. Most games have none.
+  struct Scorer {
+    uint32_t id{0};
+    uint8_t goals{0};
+  };
+  static constexpr uint8_t kScorersMax = 3;
+  Scorer team_scorers[kScorersMax]{}, opp_scorers[kScorersMax]{};
+  uint8_t team_scorer_count{0}, opp_scorer_count{0};
 };
 
 // The latest goal of a hockey game, kept from read to read until the next
