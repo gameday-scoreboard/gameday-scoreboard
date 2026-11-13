@@ -248,7 +248,7 @@
         <p class="hint">Under the clock during a game. Not on a single 64x64 panel.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
-          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", in turn with the rest of the row.</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", after a score, a turnover or a big swing.</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
         </div>
       </div>
       <div class="card">

@@ -143,7 +143,7 @@ Drawn in the row under the clock during a game, on a 128-wide board (not on a si
 | Setting | What it does |
 | --- | --- |
 | **Field strip** | Football: the field across the row, with the ball, the line to gain and the direction of play. See [Football](/using/football/#during-the-game). |
-| **Win chance** | Football and basketball: the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win". This switch turns that line on or off. |
+| **Win chance** | Football and basketball: the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win", when the game comes up, after a football score or turnover, and when the number moves 10 points or more. This switch turns that line on or off. |
 
 ### Celebrations
 

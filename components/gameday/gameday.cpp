@@ -4210,10 +4210,15 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   const bool playing = g.valid && g.state == GameState::IN && !::espn::at_halftime(g);
   if (playing && this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
     f.viz |= ::espn::VIZ_FIELD;
+  // Only while play is on: at halftime the row is the line score, so a
+  // showing then would go unseen.
+  const bool win_due = playing && this->win_swing_.read(g, millis());
+  if (win_due && this->win_swing_.began != nullptr && this->win_chance_on())
+    ESP_LOGI(TAG, "Win chance (%s): %s", this->win_swing_.began, ::espn::win_chance(g).c_str());
   if (g.valid) {
     this->row_hold_.read(g);
     ::espn::RowOptions ro;
-    ro.win_chance = this->win_chance_on();
+    ro.win_chance = this->win_chance_on() && win_due;
     ro.last_play = this->ticker_last_play();
     ::espn::fill_row_lines(f.row, g, this->row_hold_, ro, playing);
     // Hockey's one line (shots and the last goal, sport_hockey.cpp) on the same row.
@@ -4289,6 +4294,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // is shown nowhere there, since the stopped clock says it.
   const bool wide = this->panels_ != nullptr && this->panels_->cols() >= 2;
   opts.row_win = wide && this->win_chance_on();
+  opts.win_due = win_due;
   opts.row_timeout = wide;
   opts.row_down = wide;
 

@@ -543,7 +543,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     if (!s.drive.empty())
       add_part(out, "Drive: " + s.drive);
   }
-  if (o.odds && !o.row_win)
+  if (o.odds && !o.row_win && o.win_due)
     add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;

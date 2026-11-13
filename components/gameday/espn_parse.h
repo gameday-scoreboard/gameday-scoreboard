@@ -367,6 +367,9 @@ struct TickerOptions {
   // all in basketball, the stopped clock says it, so the ticker leaves a
   // timeout as the last play out too.
   bool row_win{false};
+  // The win chance is news right now (row_text.h WinSwing): after a score,
+  // a turnover or a big move. Off, the ticker leaves it out too.
+  bool win_due{true};
   bool row_down{false};
   bool row_timeout{false};
   // Both records before the start, for a board too narrow to show them

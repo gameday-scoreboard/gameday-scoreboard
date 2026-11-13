@@ -39,6 +39,10 @@ through `update_important` in the panel's state.
 
 Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.
 
+### ✨ New
+
+- 📊 The win chance shows after a score, a turnover or a swing of 10 points or more, instead of every few seconds
+
 ### 🐛 Fixes
 
 - ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download

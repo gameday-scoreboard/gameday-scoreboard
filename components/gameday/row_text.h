@@ -10,9 +10,10 @@
 // marks in soccer, the full width in basketball). Pure, with no ESPHome
 // includes, so the host tests build it.
 //
-// Football: down and distance, then the win chance.
+// Football: down and distance, then the win chance after a big swing
+// (WinSwing below).
 // Basketball: the last basket, each side's points leader, the playoff
-// series, the win chance. No timeout line: the stopped clock already shows
+// series, the win chance after a big swing. No timeout line: the stopped clock already shows
 // the break, and ESPN gives no count of basketball timeouts left.
 // Soccer: the latest goal.
 //
@@ -22,6 +23,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 
 #include "espn_parse.h"
@@ -102,6 +104,66 @@ struct RowHold {
 struct RowOptions {
   bool win_chance{true};  // the Win chance switch (winbar)
   bool last_play{true};   // the Last play switch: the last basket
+};
+
+// When the win chance is worth showing: the first number of a game, a
+// football score or turnover, or a move of 10 points or more since it last
+// showed, at most once every 3 minutes for a move. Each showing lasts
+// kShowMs, long enough for one turn on the row or one ticker pass. A steady
+// "WSH 51% to win" every 12 seconds said nothing new. Follows one game;
+// another game starts it over.
+struct WinSwing {
+  static constexpr uint32_t kShowMs = 25 * 1000;
+  static constexpr uint32_t kGapMs = 3 * 60 * 1000;
+  static constexpr int kSwing = 10;  // points, on our side's chance
+  std::string event_id;
+  int shown{-1};  // our side's chance when it last showed, -1 not yet
+  int score{-1};  // both scores added, at the last read
+  std::string play;
+  uint32_t start{0};  // millis() when the last showing began
+  bool on{false};
+  // Why the showing that this read began started ("first", "score",
+  // "turnover", "swing"), for the log; nullptr when this read began none.
+  const char *began{nullptr};
+
+  // One read of the board game (redraws of the same read change nothing).
+  // True while the win chance should be on the row and the ticker.
+  bool read(const GameSnapshot &g, uint32_t now) {
+    if (g.event_id != this->event_id) {
+      *this = WinSwing();
+      this->event_id = g.event_id;
+    }
+    const int pct = g.team_win_pct;
+    if (pct < 1 || pct > 99)
+      return false;
+    const bool football = g.sport == Sport::FOOTBALL;
+    const int score = g.team_score + g.opp_score;
+    const bool scored = football && this->score >= 0 && score != this->score;
+    this->score = score;
+    const bool new_play = g.play_type != this->play;
+    this->play = g.play_type;
+    const bool turnover = football && new_play && turnover_play(g.play_type);
+    const bool showing = this->on && now - this->start < kShowMs;
+    if (!showing)
+      this->on = false;
+    const bool swing = this->shown >= 0 && std::abs(pct - this->shown) >= kSwing && now - this->start >= kGapMs;
+    this->began = nullptr;
+    if (this->shown < 0 || scored || turnover || swing) {
+      this->on = true;
+      this->start = now;
+      this->began = this->shown < 0 ? "first" : scored ? "score" : turnover ? "turnover" : "swing";
+    }
+    // The number it shows is the latest; a move counts from the last one shown.
+    if (this->on)
+      this->shown = pct;
+    return this->on;
+  }
+
+  // ESPN's play types where the ball changes sides on a mistake.
+  static bool turnover_play(const std::string &t) {
+    return t.find("Interception") != std::string::npos || t.find("Fumble Recovery (Opponent)") != std::string::npos ||
+           t.find("Fumble Return") != std::string::npos || t.find("Blocked") != std::string::npos;
+  }
 };
 
 // The win chance as words, "ND 84% to win", for the side ESPN favors.

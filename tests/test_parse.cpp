@@ -8068,6 +8068,75 @@ static void test_game_viz() {
 
 }
 
+// When the win chance shows (row_text.h WinSwing): the first number, a
+// football score or turnover, or a move of 10 or more at most every 3 minutes.
+static void test_win_swing() {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::IN;
+  g.sport = Sport::FOOTBALL;
+  g.event_id = "401";
+  g.team_win_pct = 51;
+  g.play_type = "Rush";
+  WinSwing w;
+  const uint32_t s = 1000, m = 60 * 1000;
+  CHECK(w.read(g, 0));                  // the game's first number shows
+  CHECK_EQ(std::string(w.began), std::string("first"));
+  CHECK(w.read(g, 20 * s));             // for the length of one showing
+  CHECK(w.began == nullptr);            // a read inside it begins nothing
+  CHECK(!w.read(g, 30 * s));            // then goes away
+  g.team_win_pct = 58;
+  CHECK(!w.read(g, 2 * m));             // 7 points is no swing
+  g.team_win_pct = 62;
+  CHECK(w.read(g, 4 * m));              // 11 points since it showed, 3 minutes on: shows
+  CHECK_EQ(w.shown, 62);
+  g.team_win_pct = 40;
+  CHECK(!w.read(g, 5 * m));             // a 22-point move inside 3 minutes waits (window over)
+  CHECK(w.read(g, 7 * m + 1));          // and shows once the 3 minutes are up
+  // A football score shows it at once, gap or not.
+  g.team_score = 7;
+  CHECK(w.read(g, 7 * m + 40 * s));
+  CHECK_EQ(std::string(w.began), std::string("score"));
+  CHECK(!w.read(g, 8 * m + 10 * s));
+  // A turnover too, once per play.
+  g.play_type = "Pass Interception Return";
+  CHECK(w.read(g, 9 * m));
+  CHECK(!w.read(g, 9 * m + 30 * s));    // the same last play again is no news
+  g.play_type = "Rush";
+  CHECK(!w.read(g, 10 * m));
+  // Redraws of a read change nothing.
+  CHECK(!w.read(g, 10 * m));
+  // Basketball scores all the time: only a swing shows it.
+  GameSnapshot b = g;
+  b.sport = Sport::BASKETBALL;
+  b.event_id = "402";
+  b.team_win_pct = 55;
+  WinSwing wb;
+  CHECK(wb.read(b, 0));
+  b.team_score = 30;
+  CHECK(!wb.read(b, 40 * s));
+  b.team_score = 32;
+  CHECK(!wb.read(b, 5 * m));
+  b.team_win_pct = 70;
+  CHECK(wb.read(b, 6 * m));
+  // No number, nothing; another game starts over.
+  g.team_win_pct = -1;
+  CHECK(!w.read(g, 11 * m));
+  g.event_id = "403";
+  g.team_win_pct = 80;
+  CHECK(w.read(g, 11 * m + s));
+  // The ticker leaves the win chance out between showings.
+  GameSnapshot sc = g;
+  sc.short_detail = "4:04 - 1st";
+  TickerOptions due, quiet;
+  due.clock = quiet.clock = false;
+  due.down_distance = quiet.down_distance = false;
+  due.last_play = quiet.last_play = false;
+  quiet.win_due = false;
+  CHECK(status_text(sc, due, "").find("to win") != std::string::npos);
+  CHECK(status_text(sc, quiet, "").find("to win") == std::string::npos);
+}
+
 // The situation row's text lines (row_text.h), from the recorded reads.
 static void test_row_text() {
   RowOptions on;
@@ -9124,6 +9193,7 @@ int main() {
   test_schedule_due();
   test_no_live_rescan();
   test_game_viz();
+  test_win_swing();
   test_row_text();
   test_live_scan_clock();
   test_team_cache();
