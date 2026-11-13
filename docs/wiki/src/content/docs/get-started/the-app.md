@@ -98,16 +98,22 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 - **Customize**: the banner, the message card, your pictures and the date countdown.
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
+:::note[Coming in the next app update]
+The iPhone app gets the **Celebrations** choice too, so it's in both apps: **Full**, **Subtle** or **Off**, above **Opponent scores too** in **Celebrations** under **Display**, as on Android. It shows once the panel runs firmware with that setting.
+:::
+
 Each setting has one short line saying what it does. The longer rules are on these pages.
 
 :::note[Coming in the next app update]
-On Android, the **Celebrations** card also has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a dunk or an alley-oop, or a soccer brace, hat trick, penalty or late go-ahead goal, gets its own animation, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). The switch shows once the panel runs firmware with it.
+On iPhone and Android, **Celebrations** under **Display** has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a big play gets a pixel-art scene of its own, like a dunk, a hockey hat trick, a grand slam, a soccer penalty or an interception, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). It's on until you turn it off, and the switch shows once the panel runs firmware with it.
 :::
 
 On Android, **Display** has a **Live pictures** card after the ticker, for what a 128-wide board draws under the clock during a game: the device page's **Field strip**, and **Win chance bar**, the app's name for the device page's **Win chance**, which turns the win chance line under the clock on or off ("ND 84% to win"). Its **Score margin** switch does nothing, since the chart it turned off is gone. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
 :::note[Coming in the next app update]
-An app update renames **Win chance bar** to **Win chance** and drops **Score margin**.
+On Android, the update renames **Win chance bar** to **Win chance** and drops **Score margin**.
+
+On iPhone, **Display** gets a **Live pictures** section after the ticker too, with the same **Field strip** and **Win chance** switches. **Field strip** shows while the panel follows football and **Win chance** while it follows football or basketball, so a panel that follows only hockey, baseball or soccer has no section (see [Live pictures](/using/device-page/#live-pictures)). The section shows once the panel runs firmware with them.
 :::
 
 On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
@@ -121,6 +127,10 @@ On iPhone, once the panel runs firmware with the list of cards, **Between games*
 On iPhone and Android, **Display** has a **Weather** section after **Between games**, like the device page's: type your town or a US ZIP code in **Town or ZIP code** and tap **Look up**. The line under the box says what the panel found, like **Found: Coppell, Texas**, and the last line says when the forecast was last read (see [Set your town](/using/weather/#set-your-town)). The section has its own **Weather card** switch until the panel runs firmware with the list of cards; then the switch is the list's **Weather** row. To forget the town, clear the box and tap **Look up**. The section shows once the panel runs firmware with the weather card.
 
 On Android, the **Weather** section also has the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
+
+:::note[Coming in the next app update]
+The iPhone app gets **Degrees** in its **Weather** section and the kickoff forecast on the Board too, so both are in both apps.
+:::
 
 On iPhone and Android, **Display** has the device page's **Game-day wake** and **After the game**, under the night schedule in **Screen** on iPhone and under ticker speed in the **Screen** card on Android: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
 

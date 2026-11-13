@@ -161,13 +161,14 @@ inline size_t best_live_game(const LiveList &games, const std::string &current,
 }
 
 // The game on the board is between plays long enough to leave it: the end
-// of a quarter, period or half inning, halftime, or not in progress at all.
-// Never in the middle of a drive.
+// of a quarter, period or half inning, halftime, a hockey intermission to the
+// faceoff, or not in progress at all. Never in the middle of a drive.
 inline bool at_break(const GameSnapshot &g) {
   if (!g.valid || g.state != GameState::IN)
     return true;
   const std::string &d = g.short_detail;
-  return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT";
+  return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT" ||
+         hockey_late_intermission(g);
 }
 
 // When Pick the best game may leave the game on the board: at a break, and
@@ -234,6 +235,22 @@ inline LiveGame live_view(const GameSnapshot &g, uint8_t league, uint8_t away_ra
   v.away_rank = away_rank;
   v.home_rank = home_rank;
   return v;
+}
+
+// The switch's bits in the saved live byte (Prefs8::live). It started on
+// with kLiveRandom set meaning off, so a saved 0 was on. It is off by
+// default now, for every panel: on takes kLiveBest, which every byte saved
+// before has clear, so each panel comes up off once and keeps what its
+// owner sets after that. kLiveRandom still follows the switch, so firmware
+// from before reads the same choice after a rollback, and a panel turned
+// off there stays off here.
+constexpr uint8_t kLiveRandom = 1;
+constexpr uint8_t kLiveBest = 2;
+
+inline bool best_game_on(uint8_t live) { return (live & kLiveBest) != 0 && (live & kLiveRandom) == 0; }
+
+inline uint8_t best_game_set(uint8_t live, bool on) {
+  return on ? (uint8_t) ((live | kLiveBest) & ~kLiveRandom) : (uint8_t) ((live & ~kLiveBest) | kLiveRandom);
 }
 
 }  // namespace espn

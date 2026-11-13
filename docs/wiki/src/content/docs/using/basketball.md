@@ -30,7 +30,7 @@ On a 128-wide board the row under the clock shows words, one line at a time, abo
 - **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw. It stays until the next basket, and a new one shows right away. It follows **Last play**.
 - **Each team's points leader** in this game, like "Edwards 24".
 - **The playoff series**, like "NY lead 2-1" or "Series 2-2", in a playoff game.
-- **The win chance**, like "MIN 56% to win", for the team ESPN favors. **Win chance** under **Live pictures** on the device page's Display tab turns it off.
+- **The win chance**, like "MIN 56% to win", for the team ESPN favors, when the game first comes up and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes. **Win chance** under **Live pictures** on the device page's Display tab turns it off.
 
 Every line is in white. At halftime only the series stays, and the line score and leaders cards take their turns.
 

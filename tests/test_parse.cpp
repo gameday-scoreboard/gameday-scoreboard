@@ -37,6 +37,7 @@
 #include "score_log.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
+#include "settings_change.h"
 #include "startup.h"
 #include "timezones.h"
 #include "wake.h"
@@ -633,6 +634,41 @@ static void test_best_game() {
   CHECK_EQ((int) v.away_score, 24);
   CHECK(upset_alert(v));
   CHECK(!upset_alert(live_view(p, (uint8_t) League::NCAA, 2, 99)));
+}
+
+// Pick the best game's saved bits (best_game.h): off on a new panel and,
+// once, on every panel updated from firmware that had it on; the owner's
+// choice after that sticks. saved is the byte in flash, read again at each
+// start.
+static void test_best_game_switch() {
+  // A new panel, or one after a factory reset: the blob loads as zeros.
+  CHECK(!best_game_on(0));
+  // Saved by firmware from before: 0 was on, kLiveRandom off. Both start off.
+  uint8_t saved = 0;
+  CHECK(!best_game_on(saved));
+  CHECK(!best_game_on(kLiveRandom));
+  // The owner turns it back on. Nothing at start changes the saved byte, so
+  // it reads on after every restart and later update.
+  saved = best_game_set(saved, true);
+  CHECK(best_game_on(saved));
+  CHECK_EQ((int) saved, (int) kLiveBest);
+  // Firmware from before reads on too after a rollback (kLiveRandom clear).
+  CHECK((saved & kLiveRandom) == 0);
+  // Off again: off here and in firmware from before.
+  saved = best_game_set(saved, false);
+  CHECK(!best_game_on(saved));
+  CHECK((saved & kLiveRandom) != 0);
+  // Back on from off, then off from a rollback's firmware (it sets only
+  // kLiveRandom): off here as well.
+  saved = best_game_set(saved, true);
+  CHECK(best_game_on(saved));
+  CHECK(!best_game_on((uint8_t) (saved | kLiveRandom)));
+  // Setting the same value again changes nothing (no flash write).
+  CHECK_EQ((int) best_game_set(saved, true), (int) saved);
+  CHECK_EQ((int) best_game_set(0, false), (int) kLiveRandom);
+  // The byte's other bits are left alone.
+  CHECK_EQ((int) (best_game_set(0xF0, true) & 0xF0), 0xF0);
+  CHECK_EQ((int) (best_game_set(0xF0, false) & 0xF0), 0xF0);
 }
 
 // Home Assistant's score and final events (ha_events.h). The scores and finals of a tracker's events, for the tests that predate
@@ -1754,6 +1790,64 @@ static void test_fav_read_due() {
   CHECK_EQ(fav_stamp_after_drop(5000, false), 5000u);
   // millis() wrapping past zero between the stamp and now.
   CHECK(fav_read_due(true, 0xFFFFF000u, 60000, retry, refresh));
+}
+
+// A settings change and the reads around it (settings_change.h), one case
+// per stall the replay bench found.
+static void test_settings_change() {
+  // Three quick adds, live team last: the season read for the first team
+  // waits while the board's next read is due, for 30 s after the change.
+  CHECK(board_first(10000, 9000, true));
+  CHECK(!board_first(10000, 9000, false));  // between the board's reads: side reads go
+  CHECK(!board_first(10000, 0, true));      // no change: as before
+  CHECK(board_first(9000 + kBoardFirstMs - 1, 9000, true));
+  CHECK(!board_first(9000 + kBoardFirstMs, 9000, true));  // a board that keeps reading lets them through
+  CHECK(board_first(5000, 0xFFFFF000u, true));            // millis() wrapping past zero
+
+  // Three quick adds, the first a final: its game leaders read waits while
+  // the other two favorites are unread, and goes once they're read.
+  CHECK(leaders_wait(10000, 9000, true));
+  CHECK(!leaders_wait(10000, 9000, false));
+  CHECK(!leaders_wait(10000, 0, true));  // no change: ahead of the next read, as before
+  CHECK(!leaders_wait(9000 + kBoardFirstMs, 9000, true));
+
+  // A change while a season read is in flight: it stops, whatever changed,
+  // and doesn't count as a failure, so it is read again on the card's turn.
+  CHECK(job_moot_after_change(JobKind::SEASON, true, false));
+  CHECK(job_moot_after_change(JobKind::SEASON, false, false));
+  CHECK(!season_read_failed(false, true));
+  CHECK(season_read_failed(false, false));  // a real failure still waits
+  CHECK(!season_read_failed(true, false));
+
+  // A board read stops when the board was cleared, not for a take-over ask.
+  CHECK(job_moot_after_change(JobKind::BOARD, true, false));
+  CHECK(!job_moot_after_change(JobKind::BOARD, false, false));
+  // Side reads are small and the same whatever the board shows: they finish.
+  CHECK(!job_moot_after_change(JobKind::SIDE, true, false));
+
+  // Three quick adds: the first team's read in flight when the second add
+  // lands still counts, since the team is still a favorite.
+  CHECK(!job_moot_after_change(JobKind::FAV_TEAM, true, true));
+  CHECK(fav_answer_counts(true, false, true, true));
+  // A removed team's read, or one on a panel that left Favorite teams: dropped.
+  CHECK(job_moot_after_change(JobKind::FAV_TEAM, true, false));
+  CHECK(!fav_answer_counts(true, true, true, false));
+  CHECK(!fav_answer_counts(true, false, false, true));
+  // Removed and added back during the read: it stopped once, so it's dropped.
+  CHECK(!fav_answer_counts(true, true, true, true));
+  CHECK(fav_answer_counts(false, false, true, true));  // nothing changed
+
+  // Take-over turned on in Live games with nothing live: the job running
+  // then (or the long wait) no longer decides when the scan runs.
+  CHECK(take_scan_now_after_job(4, 5, true));
+  CHECK(!take_scan_now_after_job(5, 5, true));  // no ask while it ran
+  CHECK(!take_scan_now_after_job(4, 5, false));  // take-over off, or not in Live games
+
+  // mode=5&sport=none while a sport row plays: Live games stays.
+  const uint8_t fav = 4;
+  CHECK(sport_stop_keeps_mode(5, fav));
+  CHECK(!sport_stop_keeps_mode(fav, fav));  // mode=4&sport=none: Favorite teams, every favorite
+  CHECK(!sport_stop_keeps_mode(-1, fav));   // sport=none alone: as before
 }
 
 static void test_favorites() {
@@ -3079,6 +3173,7 @@ static void test_mlb_home_run() {
   const uint32_t kRays = 30, kYankees = 10;
   GameSnapshot before = mlb_event("fixtures/event_mlb_hr_before.json", kRays);
   GameSnapshot after = mlb_event("fixtures/event_mlb_hr.json", kRays);
+  CHECK(after.play_id == (int64_t) 4019079871004990057LL);  // ESPN's lastPlay id
   CHECK_EQ(after.mlb.play_type, std::string("Play Result"));
   CHECK(after.last_play.find("homered") != std::string::npos);
   CHECK_EQ(after.team_score - before.team_score, 2);
@@ -3126,6 +3221,150 @@ static void test_nhl_team() {
   CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-10-08T02:00Z"));
   CHECK_EQ(s.team_color, std::string("00205b"));
   CHECK_EQ(s.team_record, std::string("2-0-1"));  // W-L-OTL
+}
+
+// Late in the second intermission: ESPN has moved MIN @ TOR on to the 3rd at
+// 20:00 before the puck drops, the last play still "End of 2nd Period". The
+// board, Pick the best game, the game leaders and Home Assistant all treat it
+// as the intermission it is, until the faceoff (COL @ OTT, the read after
+// the puck dropped).
+static void test_nhl_late_intermission() {
+  const uint32_t kLeafs = 21, kWild = 30;
+  GameSnapshot g = nhl_event("fixtures/event_nhl_late_intermission.json", kLeafs);
+  CHECK(g.state == GameState::IN);
+  CHECK_EQ(g.period, 3);
+  CHECK_EQ(g.display_clock, std::string("20:00"));
+  CHECK_EQ(g.short_detail, std::string("20:00 - 3rd"));
+  CHECK_EQ(g.last_play, std::string("End of 2nd Period"));
+  CHECK(hockey_late_intermission(g));
+  CHECK_EQ(hockey_intermission_text(g), std::string("End of 2nd"));
+  CHECK_EQ(clock_text(g), std::string("End of 2nd"));
+  // The ticker: the records, as through the rest of the intermission
+  TickerOptions o;
+  CHECK_EQ(status_text(g, o, ""), std::string("TOR 8-10-2 | MIN 13-3-4"));
+  GameSnapshot w = nhl_event("fixtures/event_nhl_late_intermission.json", kWild);
+  CHECK_EQ(status_text(w, o, ""), std::string("MIN 13-3-4 | TOR 8-10-2"));
+  GameSnapshot bare = g;
+  bare.team_record.clear();
+  bare.opp_record.clear();
+  CHECK_EQ(status_text(bare, o, ""), std::string("End of 2nd"));
+  // The row under the clock is left to the cards, as between periods
+  CHECK_EQ(hockey_situation(g, nullptr), std::string(""));
+  CHECK(at_break(g));
+  CHECK(pick_break(g));
+  CHECK(!in_action(g, League::NHL));
+  CHECK(leaders_stage(g) == LeadersStage::HALF);
+  CHECK(ha_at_break(g));
+  CHECK_EQ(ha_periods_over(g), 2);
+  CHECK_EQ(ha_period_text(g), std::string("End of 2nd"));
+  CHECK_EQ(ha_clock_text(g), std::string(""));
+
+  // The puck dropped: the faceoff is the last play and the clock runs.
+  GameSnapshot f = nhl_event("fixtures/event_nhl_faceoff.json", kAvalanche);
+  CHECK_EQ(f.period, 3);
+  CHECK_EQ(f.display_clock, std::string("19:41"));
+  CHECK_EQ(f.last_play, std::string("Ridly Greig faceoff won against Nazem Kadri"));
+  CHECK(!hockey_late_intermission(f));
+  CHECK_EQ(hockey_intermission_text(f), std::string(""));
+  CHECK_EQ(clock_text(f), std::string("19:41 3rd"));
+  CHECK(!at_break(f));
+  CHECK(leaders_stage(f) == LeadersStage::NONE);
+  CHECK(!ha_at_break(f));
+  CHECK_EQ(ha_periods_over(f), 2);
+  CHECK_EQ(ha_period_text(f), std::string("3rd period"));
+  CHECK_EQ(ha_clock_text(f), std::string("19:41"));
+
+  // Play has begun once either changes: the faceoff at 20:00, or a clock
+  // that runs while ESPN's last play trails it.
+  GameSnapshot t = g;
+  t.last_play = f.last_play;
+  CHECK(!hockey_late_intermission(t));
+  CHECK(!at_break(t));
+  CHECK(leaders_stage(t) == LeadersStage::NONE);
+  t = g;
+  t.display_clock = "19:55";
+  t.short_detail = "19:55 - 3rd";
+  CHECK(!hockey_late_intermission(t));
+  CHECK(!at_break(t));
+  CHECK_EQ(clock_text(t), std::string("19:55 3rd"));
+  CHECK_EQ(status_text(t, o, ""), std::string("19:55 - 3rd | End of 2nd Period"));
+  // The first period has no intermission before it; other sports aren't
+  // read this way.
+  t = g;
+  t.period = 1;
+  CHECK(!hockey_late_intermission(t));
+  t = g;
+  t.sport = Sport::FOOTBALL;
+  CHECK(!hockey_late_intermission(t));
+  CHECK(!at_break(t));
+
+  // Before overtime: 5 minutes in the regular season, 20 in the playoffs,
+  // where the periods after it read "2OT" and on.
+  GameSnapshot ot = g;
+  ot.period = 4;
+  ot.last_play = "End of 3rd Period";
+  ot.display_clock = "5:00";
+  ot.short_detail = "5:00 - OT";
+  CHECK(hockey_late_intermission(ot));
+  CHECK_EQ(clock_text(ot), std::string("End of 3rd"));
+  CHECK(leaders_stage(ot) == LeadersStage::NONE);
+  ot.display_clock = "20:00";
+  CHECK(!hockey_late_intermission(ot));
+  ot.nhl.playoffs = true;
+  CHECK(hockey_late_intermission(ot));
+  ot.period = 5;
+  ot.last_play = "End of 1st Overtime";
+  CHECK_EQ(hockey_intermission_text(ot), std::string("End of OT"));
+  ot.period = 6;
+  CHECK_EQ(hockey_intermission_text(ot), std::string("End of 2OT"));
+  ot.nhl.playoffs = false;
+  ot.period = 5;  // the shootout has no clock to wait at
+  CHECK(!hockey_late_intermission(ot));
+
+  // Home Assistant: the 2nd ends once, the late part adds nothing, and the
+  // 3rd ends after the puck drops and the period is played.
+  HaTracker h;
+  HaContext c = ha_ctx();
+  GameSnapshot r = g;
+  r.display_clock = "4:10";
+  r.short_detail = "4:10 - 2nd";
+  r.last_play = "Shot";
+  r.period = 2;
+  h.update(r, c);
+  r.display_clock = "0:00";
+  r.short_detail = "End of 2nd";
+  r.last_play = "End of 2nd Period";
+  std::vector<HaEvent> e = h.update(r, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 2);
+  CHECK(h.update(g, c).empty());
+  t = g;
+  t.display_clock = "19:41";
+  t.short_detail = "19:41 - 3rd";
+  t.last_play = f.last_play;
+  CHECK(h.update(t, c).empty());
+  t.display_clock = "0:00";
+  t.short_detail = "End of 3rd";
+  t.last_play = "End of 3rd Period";
+  e = h.update(t, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 3);
+  // A panel that missed "End of 2nd" reports it at the late part, once.
+  HaTracker missed;
+  r.display_clock = "4:10";
+  r.short_detail = "4:10 - 2nd";
+  r.last_play = "Shot";
+  missed.update(r, c);
+  e = missed.update(g, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 2);
+  CHECK(missed.update(g, c).empty());
+  // A game first seen late in the intermission has the 2nd behind it.
+  HaTracker fresh;
+  CHECK(fresh.update(g, c).empty());
+  e = fresh.update(t, c);
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].period, 3);
 }
 
 static void test_nhl_live() {
@@ -7865,6 +8104,125 @@ static void test_game_viz() {
 
 }
 
+// When the win chance shows (row_text.h WinSwing): the first number, a
+// football score or turnover, or a move of 10 or more at most every 3 minutes.
+static void test_win_swing() {
+  GameSnapshot g;
+  g.valid = true;
+  g.state = GameState::IN;
+  g.sport = Sport::FOOTBALL;
+  g.event_id = "401";
+  g.team_win_pct = 51;
+  g.play_type = "Rush";
+  WinSwing w;
+  const uint32_t s = 1000, m = 60 * 1000;
+  CHECK(w.read(g, 0));                  // the game's first number shows
+  CHECK_EQ(std::string(w.began), std::string("first"));
+  CHECK(w.read(g, 20 * s));             // for the length of one showing
+  CHECK(w.began == nullptr);            // a read inside it begins nothing
+  CHECK(!w.read(g, 30 * s));            // then goes away
+  g.team_win_pct = 58;
+  CHECK(!w.read(g, 2 * m));             // 7 points is no swing
+  g.team_win_pct = 62;
+  CHECK(w.read(g, 4 * m));              // 11 points since it showed, 3 minutes on: shows
+  CHECK_EQ(w.shown, 62);
+  g.team_win_pct = 40;
+  CHECK(!w.read(g, 5 * m));             // a 22-point move inside 3 minutes waits (window over)
+  CHECK(w.read(g, 7 * m + 1));          // and shows once the 3 minutes are up
+  // A touchdown or field goal shows it at once, gap or not, with the
+  // number from the same play.
+  g.play_type = "Passing Touchdown";
+  g.last_play = "J.Daniels pass to T.McLaurin for 22 yds, TOUCHDOWN";
+  g.play_value = 6;
+  g.team_score = 7;
+  CHECK(w.read(g, 7 * m + 40 * s));
+  CHECK_EQ(std::string(w.began), std::string("score"));
+  CHECK(w.ticker);
+  // The ticker keeps it after the row's turn, until the next play.
+  CHECK(!w.read(g, 8 * m + 10 * s));
+  CHECK(w.ticker);
+  // The extra point is the same score: no second showing, and the ticker
+  // lets go. ESPN can send it as the touchdown play again, with new text and
+  // the try's point in the score.
+  g.last_play = "J.Daniels pass to T.McLaurin for 22 yds, TOUCHDOWN (J.Moody kick)";
+  g.play_value = 7;
+  g.team_score = 8;
+  CHECK(!w.read(g, 8 * m + 30 * s));
+  g.play_type = "Extra Point Good";
+  g.last_play = "J.Moody extra point is GOOD";
+  g.play_value = 1;
+  CHECK(!w.read(g, 8 * m + 50 * s));
+  CHECK(!w.ticker);
+  // If ESPN's score lagged the touchdown, the try still adds up to a new 7
+  // points; the 2 minutes after a score showing hold it off.
+  {
+    WinSwing lag = w;
+    lag.scored_at = 0;  // the touchdown's read still had the old score
+    GameSnapshot t = g;
+    t.play_type = "Passing Touchdown";
+    t.last_play = "J.Daniels pass to T.McLaurin for 22 yds, TOUCHDOWN (J.Moody kick) again";
+    t.play_value = 7;
+    CHECK(!lag.read(t, 8 * m + 55 * s));
+  }
+  // A field goal after it is a new score.
+  g.play_type = "Field Goal Good";
+  g.last_play = "J.Moody 41 yd FG GOOD";
+  g.play_value = 3;
+  g.team_score = 11;
+  CHECK(w.read(g, 9 * m + 45 * s));
+  CHECK_EQ(std::string(w.began), std::string("score"));
+  // A turnover too, once per play: NFL and college names.
+  g.play_type = "Pass Interception Return";
+  g.last_play = "J.Daniels pass intended for T.McLaurin INTERCEPTED by D.Banks";
+  g.play_value = 0;
+  CHECK(w.read(g, 10 * m + 30 * s));
+  CHECK_EQ(std::string(w.began), std::string("turnover"));
+  CHECK(!w.read(g, 11 * m));    // the same last play again is no news
+  CHECK(w.ticker);
+  g.play_type = "Rush";
+  g.last_play = "B.Robinson run for 4 yds";
+  CHECK(!w.read(g, 11 * m + 30 * s));
+  CHECK(!w.ticker);
+  // Redraws of a read change nothing.
+  CHECK(!w.read(g, 11 * m + 30 * s));
+  CHECK(WinSwing::turnover_play("Sack Opp Fumble Recovery"));
+  CHECK(WinSwing::turnover_play("Fumble Recovery (Opponent)"));
+  CHECK(!WinSwing::turnover_play("Fumble Recovery (Own)"));
+  CHECK(!WinSwing::turnover_play("Sack"));
+  // Basketball scores all the time: only a swing shows it.
+  GameSnapshot b = g;
+  b.sport = Sport::BASKETBALL;
+  b.event_id = "402";
+  b.team_win_pct = 55;
+  WinSwing wb;
+  CHECK(wb.read(b, 0));
+  b.play_type = "Pullup Jump Shot";
+  b.last_play = "A.Edwards makes 26-foot three point jumper";
+  b.play_value = 3;
+  CHECK(!wb.read(b, 40 * s));
+  b.last_play = "R.Gobert makes two foot dunk";
+  b.play_value = 2;
+  CHECK(!wb.read(b, 5 * m));
+  b.team_win_pct = 70;
+  CHECK(wb.read(b, 6 * m));
+  // No number, nothing; another game starts over.
+  g.team_win_pct = -1;
+  CHECK(!w.read(g, 12 * m));
+  g.event_id = "403";
+  g.team_win_pct = 80;
+  CHECK(w.read(g, 12 * m + s));
+  // The ticker leaves the win chance out between showings.
+  GameSnapshot sc = g;
+  sc.short_detail = "4:04 - 1st";
+  TickerOptions due, quiet;
+  due.clock = quiet.clock = false;
+  due.down_distance = quiet.down_distance = false;
+  due.last_play = quiet.last_play = false;
+  quiet.win_due = false;
+  CHECK(status_text(sc, due, "").find("to win") != std::string::npos);
+  CHECK(status_text(sc, quiet, "").find("to win") == std::string::npos);
+}
+
 // The situation row's text lines (row_text.h), from the recorded reads.
 static void test_row_text() {
   RowOptions on;
@@ -8892,6 +9250,7 @@ static void test_game_leaders() {
 }
 
 int main() {
+  test_settings_change();
   test_urls();
   test_iso();
   test_team_parse();
@@ -8920,6 +9279,7 @@ int main() {
   test_schedule_due();
   test_no_live_rescan();
   test_game_viz();
+  test_win_swing();
   test_row_text();
   test_live_scan_clock();
   test_team_cache();
@@ -8946,6 +9306,7 @@ int main() {
   test_nhl_urls();
   test_nhl_team();
   test_nhl_live();
+  test_nhl_late_intermission();
   test_nhl_pre_post();
   test_nhl_row();
   test_pregame_extras();
@@ -9007,6 +9368,7 @@ int main() {
   test_game_leaders();
   test_score_log();
   test_best_game();
+  test_best_game_switch();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
