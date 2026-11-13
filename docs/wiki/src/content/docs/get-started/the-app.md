@@ -107,7 +107,9 @@ On iPhone and Android, **Celebrations** under **Display** has a **Big plays** sw
 On Android, **Display** has a **Live pictures** card after the ticker, for what a 128-wide board draws under the clock during a game: the device page's **Field strip**, and **Win chance bar**, the app's name for the device page's **Win chance**, which turns the win chance line under the clock on or off ("ND 84% to win"). Its **Score margin** switch does nothing, since the chart it turned off is gone. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
 :::note[Coming in the next app update]
-An app update renames **Win chance bar** to **Win chance** and drops **Score margin**.
+On Android, the update renames **Win chance bar** to **Win chance** and drops **Score margin**.
+
+On iPhone, **Display** gets a **Live pictures** section after the ticker too, with the same **Field strip** and **Win chance** switches. **Field strip** shows while the panel follows football and **Win chance** while it follows football or basketball, so a panel that follows only hockey, baseball or soccer has no section (see [Live pictures](/using/device-page/#live-pictures)). The section shows once the panel runs firmware with them.
 :::
 
 On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
