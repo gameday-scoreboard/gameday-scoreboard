@@ -48,8 +48,11 @@ inline LeadersStage leaders_stage(const GameSnapshot &g) {
     case Sport::BASKETBALL:
       return at_halftime(g) ? LeadersStage::HALF : LeadersStage::NONE;
     case Sport::HOCKEY:
-      // "End of 2nd" (status END_PERIOD); a shootout never has period 2.
-      return g.period == 2 && g.short_detail.rfind("End", 0) == 0 ? LeadersStage::HALF : LeadersStage::NONE;
+      // "End of 2nd" (status END_PERIOD), then "20:00 - 3rd" until the
+      // faceoff; a shootout never has period 2.
+      return (g.period == 2 && g.short_detail.rfind("End", 0) == 0) || (g.period == 3 && hockey_late_intermission(g))
+                 ? LeadersStage::HALF
+                 : LeadersStage::NONE;
     case Sport::BASEBALL:
       return g.period == 5 && (g.mlb.half == Half::MID || g.mlb.half == Half::END) ? LeadersStage::HALF
                                                                                     : LeadersStage::NONE;

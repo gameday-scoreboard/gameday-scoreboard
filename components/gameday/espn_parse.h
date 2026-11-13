@@ -239,6 +239,36 @@ inline bool shootout_decides(const GameSnapshot &g) {
          g.soc.team_shootout != g.soc.opp_shootout;
 }
 
+// Late in a hockey intermission ESPN moves the game on to the next period
+// before the puck drops: "20:00 - 3rd", the clock full, and the last play
+// still "End of 2nd Period" until the faceoff replaces it. The clock has to
+// be full too, since ESPN's last play can trail a clock that is running.
+// Overtime is 5 minutes in the regular season, whose period 5 is the
+// shootout; every period is 20 in the playoffs.
+inline bool hockey_late_intermission(const GameSnapshot &g) {
+  if (g.sport != Sport::HOCKEY || g.state != GameState::IN || g.period < 2 || g.last_play.rfind("End of", 0) != 0)
+    return false;
+  if (g.nhl.playoffs || g.period <= 3)
+    return g.display_clock == "20:00";
+  return g.period == 4 && g.display_clock == "5:00";
+}
+
+// What a hockey intermission is called on the board and in Home Assistant:
+// ESPN's own "End of 1st", and the same words for its late part, when ESPN
+// has moved on to the next period ("End of 2nd", "End of OT", "End of 2OT").
+// "" when the game isn't between periods.
+inline std::string hockey_intermission_text(const GameSnapshot &g) {
+  if (g.sport != Sport::HOCKEY || g.state != GameState::IN)
+    return "";
+  if (g.short_detail.rfind("End of", 0) == 0)
+    return g.short_detail;
+  if (!hockey_late_intermission(g))
+    return "";
+  static const char *const kEnded[] = {"", "1st", "2nd", "3rd", "OT"};
+  int ended = g.period - 1;
+  return std::string("End of ") + (ended <= 4 ? kEnded[ended] : std::to_string(ended - 3) + "OT");
+}
+
 // One future game from the team's schedule endpoint, for the "Up next" list.
 struct Upcoming {
   std::string event_id;

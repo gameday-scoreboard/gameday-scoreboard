@@ -196,7 +196,7 @@ inline std::string ha_period_name(const GameSnapshot &g, int p) {
 }
 
 // The game is between periods: halftime, an intermission, "End of 3rd", the
-// end of an inning. The period the break follows is g.period.
+// end of an inning. The period the break follows is ha_periods_over(g).
 inline bool ha_at_break(const GameSnapshot &g) {
   if (g.state != GameState::IN)
     return false;
@@ -207,9 +207,18 @@ inline bool ha_at_break(const GameSnapshot &g) {
       return g.nba.phase == Phase::END_PERIOD || g.nba.phase == Phase::HALFTIME;
     case Sport::SOCCER:
       return g.soc.status == "STATUS_HALFTIME" || g.soc.status == "STATUS_END_PERIOD";
+    case Sport::HOCKEY:
+      return !hockey_intermission_text(g).empty();
     default:
       return g.short_detail.rfind("End of", 0) == 0 || g.short_detail.find("Halftime") != std::string::npos;
   }
+}
+
+// The periods over in a live game: the one a break follows, else the one
+// before the period under way. Late in a hockey intermission ESPN already
+// names the next period (hockey_late_intermission).
+inline int ha_periods_over(const GameSnapshot &g) {
+  return ha_at_break(g) && !hockey_late_intermission(g) ? g.period : g.period - 1;
 }
 
 // Home Assistant's Period sensor: where a live game is, in words. "3rd
@@ -234,6 +243,8 @@ inline std::string ha_period_text(const GameSnapshot &g) {
     return "Halftime";
   if (g.sport == Sport::BASKETBALL && g.nba.phase == Phase::HALFTIME)
     return "Halftime";
+  if (g.sport == Sport::HOCKEY && ha_at_break(g))
+    return hockey_intermission_text(g);
   if (ha_at_break(g) && !g.short_detail.empty())
     return g.short_detail;
   return ha_period_name(g, g.period);
@@ -434,7 +445,7 @@ class HaTracker {
     // break or two, every period over by the time the next is under way, in
     // order. A final ends the last one itself.
     if (cur.state == GameState::IN && !was_pre) {
-      int last = ha_at_break(cur) ? cur.period : cur.period - 1;
+      int last = ha_periods_over(cur);
       for (int ended = s->period_done + 1; ended <= last; ended++) {
         HaEvent e = base_(cur, true, ctx);
         e.kind = HaKind::PERIOD;
@@ -445,7 +456,7 @@ class HaTracker {
       }
     }
     if (cur.state == GameState::IN && was_pre)
-      s->period_done = ha_at_break(cur) ? cur.period : cur.period - 1;
+      s->period_done = ha_periods_over(cur);
     // ESPN also moves a suspended or canceled game to post, with completed
     // false. Only a completed game has a final.
     if (s->state == GameState::IN && cur.state == GameState::POST && cur.completed)
@@ -517,7 +528,7 @@ class HaTracker {
     store_(s, cur);
     // Whatever already happened stays unreported: a period already over, a
     // reminder already due.
-    s.period_done = cur.state != GameState::IN ? 0 : ha_at_break(cur) ? cur.period : cur.period - 1;
+    s.period_done = cur.state != GameState::IN ? 0 : ha_periods_over(cur);
     s.pregame_done = s.pregame_known = cur.state != GameState::PRE;
     if (!s.pregame_known)
       pregame_decide_(s, cur, ctx);

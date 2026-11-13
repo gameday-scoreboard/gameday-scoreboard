@@ -144,6 +144,8 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | --- | --- |
 | `event_nhl_live.json` | 401892455 COL @ WPG, 3:21 left in the 1st, 0-0, a delay of game penalty as the last play |
 | `event_nhl_end.json` | 401891830 PIT @ WSH, End of 1st (status END_PERIOD, the intermission), 2-1 WSH |
+| `event_nhl_late_intermission.json` | 401892697 MIN @ TOR, 2026-11-12, late in the second intermission: status IN_PROGRESS, period 3, displayClock "20:00", shortDetail "20:00 - 3rd", the last play still "End of 2nd Period" (type "Period End") before the puck drops, 2-2 |
+| `event_nhl_faceoff.json` | 401892698 COL @ OTT, 2026-11-12, the first read after the puck dropped for the 3rd: 19:41, the faceoff as the last play (the read before was "20:00 - 3rd" with "End of 2nd Period"), 2-1 OTT |
 | `event_nhl_final.json` | 401891830 PIT @ WSH, Final 5-3 WSH |
 | `event_nhl_pre.json` | 401892456 EDM @ ANA, pre-game with odds and O/U |
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |

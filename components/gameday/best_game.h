@@ -161,13 +161,14 @@ inline size_t best_live_game(const LiveList &games, const std::string &current,
 }
 
 // The game on the board is between plays long enough to leave it: the end
-// of a quarter, period or half inning, halftime, or not in progress at all.
-// Never in the middle of a drive.
+// of a quarter, period or half inning, halftime, a hockey intermission to the
+// faceoff, or not in progress at all. Never in the middle of a drive.
 inline bool at_break(const GameSnapshot &g) {
   if (!g.valid || g.state != GameState::IN)
     return true;
   const std::string &d = g.short_detail;
-  return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT";
+  return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT" ||
+         hockey_late_intermission(g);
 }
 
 // When Pick the best game may leave the game on the board: at a break, and

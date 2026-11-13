@@ -157,10 +157,10 @@ void hockey_from_event(JsonObjectConst ev, GameSnapshot &s) {
 
 }  // namespace detail
 
-// Between periods ESPN's shortDetail reads "End of 1st" (status END_PERIOD)
-static bool intermission(const GameSnapshot &s) {
-  return s.state == GameState::IN && s.short_detail.rfind("End of", 0) == 0;
-}
+// Between periods ESPN's shortDetail reads "End of 1st" (status END_PERIOD),
+// and late in the intermission the next period waits at its full clock
+// (hockey_late_intermission, espn_parse.h)
+static bool intermission(const GameSnapshot &s) { return !hockey_intermission_text(s).empty(); }
 
 // "1st", "OT", "SO", or in the playoffs "2OT", "3OT"; "" before the start
 static const char *period_word(char (&buf)[16], int period, bool playoffs) {
@@ -184,6 +184,8 @@ static std::string period_name(int period, bool playoffs) {
 std::string hockey_clock_text(const GameSnapshot &s) {
   if (s.state == GameState::IN && shootout(s))
     return "SO";
+  if (hockey_late_intermission(s))
+    return hockey_intermission_text(s);
   bool has_clock = s.display_clock.find(':') != std::string::npos && s.period > 0;
   bool special = s.short_detail.find(':') == std::string::npos;
   if (!has_clock || special) {
@@ -228,7 +230,7 @@ std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, co
   if (intermission(s)) {
     // The clock row already says which period ended
     out = standing;
-    return out.empty() ? s.short_detail : out;
+    return out.empty() ? hockey_intermission_text(s) : out;
   }
   if (o.clock)
     add_part(out, s.short_detail);
