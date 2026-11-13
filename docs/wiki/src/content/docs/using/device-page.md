@@ -95,7 +95,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 | Setting | What it does |
 | --- | --- |
 | **Switch every** | Moves to another game in progress after this many minutes, 1 to 30. A new panel starts at 1. |
-| **Pick the best game** | On unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games). |
+| **Pick the best game** | Off to start. Off, the panel picks a random live game and moves to another every **Switch every** minutes; on, it follows the closest game with the least time left and never leaves it mid-play, moving only at a break. See [Live games](/using/modes/#live-games). |
 | **Favorites take over** | Off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over). |
 
 ### Choosing teams

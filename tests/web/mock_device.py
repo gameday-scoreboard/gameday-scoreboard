@@ -156,7 +156,7 @@ INITIAL = {
     # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
     "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "bigplays": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "bigplays": True, "best": False, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.
@@ -878,6 +878,33 @@ def settings_doc():
     return out
 
 
+BEST_DEFAULT_ON_UNTIL = re.search(r'kBestDefaultOnUntil = "([^"]+)"',
+                                  (REPO / "components/gameday/settings_doc.h").read_text(encoding="utf-8")).group(1)
+
+
+def version_parts(v):
+    """auto_update.h parse_version_parts(): (numbers, beta, build), None for no leading digit."""
+    m = re.match(r"(\d+(?:\.\d+){0,3})(?:-beta\.(\d+))?", v)
+    if not m:
+        return None
+    n = [int(x) for x in m.group(1).split(".")] + [0] * 4
+    return n[:4], m.group(2) is not None, int(m.group(2) or 0)
+
+
+def backup_after_best_default_on(version):
+    """settings_doc.h: a backup from after Pick the best game's old on default."""
+    if not isinstance(version, str):
+        return False
+    a, b = version_parts(version[1:] if version.startswith("v") else version), version_parts(BEST_DEFAULT_ON_UNTIL)
+    if a is None:
+        return False
+    if a[0] != b[0]:
+        return a[0] > b[0]
+    if a[1] != b[1]:
+        return not a[1]
+    return a[1] and a[2] > b[2]
+
+
 def import_settings(doc):
     """parse_settings() and apply_settings_(): (code, reply). Nothing changes on a 400."""
     def fail(why):
@@ -985,6 +1012,8 @@ def import_settings(doc):
                 return fail(k + " should be true or false.")
             if k == "beta" and "beta" not in STATE or k == "autoupd" and "autoupd" not in STATE:
                 skipped.append(k)
+                continue
+            if k == "best" and v and not backup_after_best_default_on(doc.get("version")):
                 continue
             kv.append((k, "1" if v else "0"))
         elif kind == "Int":
@@ -1163,6 +1192,23 @@ def selftest():
         if code != 400 or json.dumps(STATE, sort_keys=True) != before:
             bad += 1
             print(f"FAIL {json.dumps(doc)} wasn't refused whole")
+    # Pick the best game's old default stays out of a restore (settings_doc.h).
+    for version, on, want in (("v2026.11.2", True, False), (None, True, False), ("v2026.11.2-beta.700", True, False),
+                              ("v2026.11.3", True, True), ("v2026.11.3-beta.900", True, True),
+                              ("v2026.11.3", False, False)):
+        reset_state({"best": False})
+        doc = {"schema": 1, "best": on}
+        if version is not None:
+            doc["version"] = version
+        code, reply = import_settings(doc)
+        if code != 200 or reply["skipped"] or STATE["best"] != want:
+            bad += 1
+            print(f"FAIL best {on} from {version} restored as {STATE['best']}")
+    reset_state({"best": True})
+    import_settings({"schema": 1, "version": "v2026.11.3", "best": False})
+    if STATE["best"]:
+        bad += 1
+        print("FAIL best false from a new backup didn't restore")
     # One team in two slots restores, with the second slot empty.
     code, _ = import_settings({"schema": 1, "favs": ["nfl:6", "mlb:15", "nfl:6"]})
     if code != 200 or [f.get("abbr", "") for f in STATE["favs"][:3]] != ["DAL", "ATL", ""]:

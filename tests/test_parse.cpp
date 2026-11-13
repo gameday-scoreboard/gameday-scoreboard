@@ -636,6 +636,41 @@ static void test_best_game() {
   CHECK(!upset_alert(live_view(p, (uint8_t) League::NCAA, 2, 99)));
 }
 
+// Pick the best game's saved bits (best_game.h): off on a new panel and,
+// once, on every panel updated from firmware that had it on; the owner's
+// choice after that sticks. saved is the byte in flash, read again at each
+// start.
+static void test_best_game_switch() {
+  // A new panel, or one after a factory reset: the blob loads as zeros.
+  CHECK(!best_game_on(0));
+  // Saved by firmware from before: 0 was on, kLiveRandom off. Both start off.
+  uint8_t saved = 0;
+  CHECK(!best_game_on(saved));
+  CHECK(!best_game_on(kLiveRandom));
+  // The owner turns it back on. Nothing at start changes the saved byte, so
+  // it reads on after every restart and later update.
+  saved = best_game_set(saved, true);
+  CHECK(best_game_on(saved));
+  CHECK_EQ((int) saved, (int) kLiveBest);
+  // Firmware from before reads on too after a rollback (kLiveRandom clear).
+  CHECK((saved & kLiveRandom) == 0);
+  // Off again: off here and in firmware from before.
+  saved = best_game_set(saved, false);
+  CHECK(!best_game_on(saved));
+  CHECK((saved & kLiveRandom) != 0);
+  // Back on from off, then off from a rollback's firmware (it sets only
+  // kLiveRandom): off here as well.
+  saved = best_game_set(saved, true);
+  CHECK(best_game_on(saved));
+  CHECK(!best_game_on((uint8_t) (saved | kLiveRandom)));
+  // Setting the same value again changes nothing (no flash write).
+  CHECK_EQ((int) best_game_set(saved, true), (int) saved);
+  CHECK_EQ((int) best_game_set(0, false), (int) kLiveRandom);
+  // The byte's other bits are left alone.
+  CHECK_EQ((int) (best_game_set(0xF0, true) & 0xF0), 0xF0);
+  CHECK_EQ((int) (best_game_set(0xF0, false) & 0xF0), 0xF0);
+}
+
 // Home Assistant's score and final events (ha_events.h). The scores and finals of a tracker's events, for the tests that predate
 // the other kinds.
 static std::vector<HaEvent> sf(std::vector<HaEvent> v) {
@@ -9212,6 +9247,7 @@ int main() {
   test_game_leaders();
   test_score_log();
   test_best_game();
+  test_best_game_switch();
   failures += run_set_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

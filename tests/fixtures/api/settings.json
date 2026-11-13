@@ -32,7 +32,7 @@
   "opp": true,
   "celebrate": 2,
   "bigplays": true,
-  "best": true,
+  "best": false,
   "bootaddr": true,
   "night": true,
   "nightstart": "23:00",
