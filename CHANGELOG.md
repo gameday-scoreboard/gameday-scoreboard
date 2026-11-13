@@ -47,6 +47,7 @@ Pick the best game now starts off, so Live games shows a random game until you t
 
 - ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download
 - 🔁 Turning on Favorites take over, or adding a favorite while it's on, shows a favorite's game that's on now within seconds, instead of waiting hours when nothing else was live
+- 🏒 A hockey intermission stays on the board until the puck drops, records and game leaders included, instead of ending when ESPN puts up the next period's clock early
 
 ## v2026.11.2
 
