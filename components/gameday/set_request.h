@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The device page's POST /gameday/set: which keys it takes, what each value
 // means and where it is clamped or refused, and the leagues each live mode
 // scans.
@@ -32,12 +34,12 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "countdown", "top25", "cdname", "cddate", "gameleaders", "msg",
                                     "msgurl",
-                                    "msgevery", "brand", "best",   "jump",   "banner",  "leaders", "night",
+                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
-                                    "field",   "winbar",  "spark"};
+                                    "field",   "winbar",  "spark",   "bigplays"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -294,7 +296,6 @@ enum class SetKind : uint8_t {
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
-  BRAND,     // text, the bar build's brand pack address (brand.h); "" clears it
   BEST,      // on, Live games picks the best game (best_game.h)
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
@@ -321,9 +322,10 @@ enum class SetKind : uint8_t {
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
   FIELD,        // on, football's field strip on the board (game_viz.h)
-  WINBAR,       // on, the win chance bar on the board
-  SPARK,        // on, the score margin sparkline on the board
+  WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
+  SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
+  BIGPLAYS,     // on, the big plays' own shows on Full (celeb_<sport>.h)
 };
 
 struct TeamRef {
@@ -462,12 +464,6 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.text = v;
     return msg_url_ok(v);
   }
-  if (k == "brand") {
-    // Taken on every build; only the bar build reads the pack.
-    op.kind = SetKind::BRAND;
-    op.text = v;
-    return msg_url_ok(v);
-  }
   if (k == "msgevery") {
     // 0 means something here, so text isn't read as 0 like the other numbers.
     op.kind = SetKind::MSGEVERY;
@@ -590,6 +586,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::ODDS);
   if (k == "opp")
     return on(SetKind::OPP);
+  if (k == "bigplays")
+    return on(SetKind::BIGPLAYS);
   if (k == "bootaddr")
     return on(SetKind::BOOTADDR);
   if (k == "collide")

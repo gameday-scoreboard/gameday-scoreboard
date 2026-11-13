@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #include "espn_parse.h"
 #include "game_leaders.h"
 #include "weather.h"
@@ -532,7 +534,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, records_line(s));
     return out;
   }
-  if (o.down_distance)
+  if (o.down_distance && !o.row_down)
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);
@@ -541,11 +543,18 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     if (!s.drive.empty())
       add_part(out, "Drive: " + s.drive);
   }
-  if (o.odds)
+  if (o.odds && !o.row_win)
     add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+bool timeout_play(const std::string &text) {
+  std::string low = text;
+  for (char &c : low)
+    c = (char) tolower((unsigned char) c);
+  return low.find("timeout") != std::string::npos;
 }
 
 std::string win_chance(const GameSnapshot &s) {

@@ -5,7 +5,7 @@ substitutions:
   # The MAC suffix keeps two panels on one network apart: gameday-2f6a70.local
   name: "gameday"
   friendly_name: "Game Day Scoreboard"
-  version: "2026.11.1"
+  version: "2026.11.2"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
   # Where the panel looks for new releases. A bench build can point it at a
@@ -893,8 +893,6 @@ gameday:
         opponent_score: !lambda 'return x.opponent_score;'
         status_text: !lambda 'return gameday::panel_text(x.status_text);'
         clock_text: !lambda 'return gameday::panel_text(x.clock_text);'
-        down_distance: !lambda 'return gameday::panel_text(x.down_distance);'
-        is_red_zone: !lambda 'return x.is_red_zone;'
         team_color: !lambda 'return (int) x.team_color;'
         opponent_color: !lambda 'return (int) x.opponent_color;'
         team_badge: !lambda 'return x.team_badge;'
@@ -926,7 +924,6 @@ gameday:
         countdown_card: !lambda 'return x.countdown_at != 0;'
         weather_card: !lambda 'return x.wx_card;'
         viz: !lambda 'return (int) x.viz;'
-        win_pct: !lambda 'return x.win_pct;'
         # Built from panel_text() pieces with a line break that panel_text()
         # would turn into a space, so it goes to the board as it is.
         next_line: !lambda 'return x.next_line;'

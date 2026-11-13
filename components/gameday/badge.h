@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The abbreviation badge that stands in for a team logo: a rounded square in
 // the team's color with the abbreviation on it. The rules are the companion
 // app's (TeamBadgeStyle.swift), so a panel and a phone showing the same team

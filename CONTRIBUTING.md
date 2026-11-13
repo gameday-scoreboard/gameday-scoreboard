@@ -63,9 +63,9 @@ the shape before you spend the time.
 
 ### Branches and ESPHome versions
 
-Work lands in `dev`, moves to `beta` (the test channel that the bar
-panels install from), and then to `main`, which customers run. `dev` and
-`beta` may build on an ESPHome beta. `main`, and so every release tag and
+Work lands in `dev`, moves to `beta` (the test channel that panels with
+Follow beta on install from), and then to `main`, which customers run.
+`dev` and `beta` may build on an ESPHome beta. `main`, and so every release tag and
 the update feed, builds only on a final ESPHome release. CI checks it: the
 pin is `ESPHOME_VERSION` at the top of `.github/workflows/build.yml`, and
 the Branch rules job fails a PR into `main` or a release tag when that pin
@@ -141,7 +141,9 @@ DIY builder would notice, update or add the page for it under
 into `dev` that changes `firmware/` or `components/` without a docs
 change. When nothing visible changed, add a line to the PR
 description saying why: `No owner-visible change, no docs: <why>`.
-A maintainer checks that claim in review. `docs/wiki/README.md` has the
+A maintainer checks that claim in review. Write the page for the
+behavior as it is on `dev`, with no "Coming in the next release" note:
+the page goes live with the release that brings it. `docs/wiki/README.md` has the
 page conventions, and `npm install` then `npm run dev` in `docs/wiki`
 previews the site.
 
@@ -156,9 +158,13 @@ previews the site.
   (`### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`): one short line
   for the person who owns the panel, starting with an emoji, like
   "- 🎵 Playlists: group your favorites and play just that group". The
-  detail belongs on the docs page. Leave the released sections and the version number
-  alone; the maintainers turn `## Unreleased` into the release when it
-  goes out.
+  detail belongs on the docs page. If your change belongs to a feature
+  that already has a line, update that line instead. The section starts
+  with a one-line summary of the release so far; write it if you add the
+  first bullet. CI checks the section's shape; when owners won't notice
+  your change, say so in the PR description: `No changelog line: <why>`.
+  Leave the released sections and the version number alone; the
+  maintainers turn `## Unreleased` into the release when it goes out.
 
 ### Things we won't merge
 
@@ -172,4 +178,5 @@ previews the site.
 ## License
 
 By contributing you agree that your work is released under this repo's
-[MIT license](LICENSE).
+[GPLv3 license](LICENSE), with the additional terms in
+[NOTICE.md](NOTICE.md).

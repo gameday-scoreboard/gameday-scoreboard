@@ -11,9 +11,7 @@ NFL and college football games share one board. What you see depends on your pan
 
 The next-game card shows both team logos, your team on the left, with each team's abbreviation in its own color and the season records under the logos.
 
-:::note[Coming in the next release]
 A team ESPN has no logo for, like a small-division school on a college schedule, shows its abbreviation in the logo's place, in its team color. A team color too dark to read on the panel, like navy or maroon, uses the team's second color, or white when that is dark too or ESPN has no color for the team.
-:::
 
 A college team in the AP Top 25 has its rank on the outer top corner of its logo, small white digits on a black patch, like **6** for the sixth-ranked team. It stays there during the game and at the final, and it's on the Later today and final score cards [Live games](/using/modes/#when-nothing-is-live) shows when nothing is live. An unranked team's logo is untouched. The rank comes from ESPN with the game, so it changes when the poll does. It is always drawn; the **College Top 25** switch on the device page is for the [Top 25 card](/using/top-25/) between games, not for this.
 
@@ -45,15 +43,15 @@ At kickoff the board switches to the live scoreboard:
 - **Records** under each logo.
 - **A college team's AP rank** on the outer top corner of its logo.
 - **Timeout pips** under each logo: three bars per team, lit gold for each timeout left and dim for each one used.
-- **The ticker** with the down, distance and where the ball is, like "3rd & 4 at FIU 31", and the last play. Turn either off under **Ticker** on the device page's Display tab. See [The ticker](/using/ticker/).
+- **The ticker** with the last play, and on a single 64x64 panel the down, distance and where the ball is before it, like "3rd & 4 at FIU 31". Turn either off under **Ticker** on the device page's Display tab. See [The ticker](/using/ticker/).
 
-On a 128-wide board the down and distance row becomes a **field strip**: a picture of the field across the board with your end zone on the left under your logo and the other team's on the right, each in its team's color. A white marker shows where the ball is, with a tip pointing the way the offense is going, and a gold line marks the line to gain. In the red zone the field between the ball and the goal line glows red and the marker turns red. Each team's timeouts left show as dots in its end zone (three, two, one or none), in place of the timeout pips. The down and distance text, like "3rd & 4", sits on the half of the strip away from the ball.
+On a 128-wide board the down and distance row becomes a **field strip**: a picture of the field across the board with your end zone on the left under your logo and the other team's on the right, each in plain team color. A white marker shows where the ball is, with a tip pointing the way the offense is going, and a gold line marks the line to gain. In the red zone the whole last 20 yards glow red, from the 20 to the goal line, with the ball and the line to gain drawn on top, so it stands out even at the 1, and the marker turns red. The timeout pips stay under each team's record, as with the strip off.
 
-Just above the strip, a one-pixel **win chance bar** runs the width of the board: your color from the left for ESPN's chance of your team winning, the other team's color for the rest, with a white pixel at the split. It moves with every play.
+The row takes turns with the **win chance** in words: the down and distance for about 8 seconds, then the team ESPN favors for about 4, like "ND 84% to win", in white like the down and distance, shortened to "ND 84% win" or "ND 84%" when there isn't room. On the strip the text never runs into the ball or the gold line: it sits in the open part of the strip, between an end zone and the nearest marker, on whichever side has more room, and when even "ND 84%" doesn't fit there, the down and distance stays up instead (squeezed to "2nd&17" or "2&17" if it has to). A new down shows right away.
 
-Both are on to start. **Field strip** and **Win chance bar** under **Live pictures** on the device page's Display tab turn them off; with the strip off, the row shows the down and distance and the timeout pips as before. A single 64x64 panel has no room for either.
+Both are on to start. **Field strip** and **Win chance** under **Live pictures** on the device page's Display tab turn them off; with the strip off, the row shows the down and distance in words. A single 64x64 panel has no room for either.
 
-After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Odds, TV and win chance**.
+After a touchdown or field goal, the ticker adds how the drive went next to the scoring play, like "Drive: 4 plays, 58 yards, 1:36". It follows **Last play**. When ESPN has a win chance for the game, the ticker ends with the side it favors, like "KC 72% to win", until the final. It follows **Odds, TV and win chance**. On a 128-wide board the ticker leaves the win chance out while **Win chance** is on, so it isn't said twice; with it off, or on a single 64x64 panel, the ticker keeps it. The ticker on a 128-wide board also leaves out the down and distance, since the strip shows it (or the row under the clock with **Field strip** off), and goes straight to the last play.
 
 On a single 64x64 panel, the logos sit side by side with the scores under them. During play the clock takes the abbreviations' place and the gold possession line goes under the score. There is no room for records, timeout pips or the down and distance row, so down and distance is only in the ticker. A ranked college team's rank still sits on its logo's corner.
 
@@ -78,6 +76,19 @@ With **Celebrations** on **Full**, your touchdown gets 5 seconds of fireworks in
 The panel compares each score with the one before, about every 10 seconds, so a touchdown and the extra point that land in the same update show as one TOUCHDOWN.
 
 When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
+
+## Big plays
+
+With **Celebrations** on **Full** and **Big plays** on, your defense's big plays get their own pixel-art scene in your team's colors, even though nothing scored:
+
+- **Interception**: the pass sails in, your defender leaps and picks it off, then runs it back as "PICKED OFF!" drops in. 5 seconds.
+- **Pick six**: the same catch and return, then the end zone: he spikes the ball under the goalposts, sparks go up and "PICK SIX!" drops in. It plays in place of the touchdown's fireworks. 6 seconds.
+- **Fumble**: the ball bounces loose end over end, your defender dives on it and comes up holding it high. "FUMBLE!" 4 seconds.
+- **Sack**: the quarterback sets to throw and your defender buries him. The board jolts and "SACK!" slams in. 2 seconds, the shortest, since a team gets two or three a game.
+
+A fumble counts only when your defense comes up with the ball, and a sack only on the other team's quarterback. A two-panel board gets the wide scene; a single panel gets a tighter one drawn for 64 pixels.
+
+The other side's big plays show nothing, unless the panel is following a game in Live games with **Opponent scores too** on: then both teams' big plays play, each in its own colors. **Subtle** and **Off** show no big plays (a pick six still gets its touchdown flash on **Subtle**), and turning **Big plays** off keeps every score and win and drops only these.
 
 ## Halftime and the final
 

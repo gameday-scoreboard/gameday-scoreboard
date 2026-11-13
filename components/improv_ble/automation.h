@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #ifdef USE_ESP32
 #ifdef USE_IMPROV_BLE_STATE_CALLBACK

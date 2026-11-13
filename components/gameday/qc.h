@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Readouts for the QC screen (firmware/pages/qc.yaml), and the factory flag
 // that starts it.
 #pragma once
