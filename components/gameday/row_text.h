@@ -116,11 +116,14 @@ struct RowOptions {
 struct WinSwing {
   static constexpr uint32_t kShowMs = 25 * 1000;
   static constexpr uint32_t kGapMs = 3 * 60 * 1000;
+  static constexpr uint32_t kScoreGapMs = 2 * 60 * 1000;  // a touchdown and its try
   static constexpr int kSwing = 10;  // points, on our side's chance
   std::string event_id;
   int shown{-1};  // our side's chance when it last showed, -1 not yet
   std::string play;   // the last play at the last read (its type and text)
   std::string hold;   // the last play when the latest showing began
+  int scored_at{-1};  // both scores added when a score last showed it
+  uint32_t scored_ms{0};  // and when
   uint32_t start{0};  // millis() when the last showing began
   bool on{false};     // on the row
   bool ticker{false};  // in the ticker: the showing, then until the next play
@@ -141,11 +144,20 @@ struct WinSwing {
     const bool football = g.sport == Sport::FOOTBALL;
     // The score and the number come from the same last play, so a showing
     // never starts on the number from before it. The try after a touchdown
-    // (1 or 2 points) doesn't show it again.
+    // doesn't show it again: ESPN can report it as the touchdown play again
+    // with new text, so a score also has to add 3 points or more since the
+    // last score that showed it, and come 2 minutes or more after it, in
+    // case ESPN's score lags the play (seen live, WSH at NYG 11/12).
     const std::string key = g.play_type + "|" + g.last_play;
     const bool new_play = !this->play.empty() && key != this->play;
     this->play = key;
-    const bool scored = football && new_play && g.play_value >= 3;
+    const int total = g.team_score + g.opp_score;
+    const bool scored = football && new_play && g.play_value >= 3 &&
+                        (this->scored_at < 0 || (total - this->scored_at >= 3 && now - this->scored_ms >= kScoreGapMs));
+    if (scored) {
+      this->scored_at = total;
+      this->scored_ms = now;
+    }
     const bool turnover = football && new_play && turnover_play(g.play_type);
     const bool showing = this->on && now - this->start < kShowMs;
     if (!showing)
