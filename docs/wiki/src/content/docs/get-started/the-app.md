@@ -101,17 +101,13 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 Each setting has one short line saying what it does. The longer rules are on these pages.
 
 :::note[Coming in the next app update]
-On Android, the **Celebrations** card also has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a dunk or an alley-oop, or a soccer brace, hat trick, penalty or late go-ahead goal, gets its own animation, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). The switch shows once the panel runs firmware with it.
+On iPhone and Android, **Celebrations** under **Display** has a **Big plays** switch under **Opponent scores too**. With **Celebrations** on **Full**, a big play gets a pixel-art scene of its own, like a dunk, a hockey hat trick, a grand slam, a soccer penalty or an interception, and scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). It's on until you turn it off, and the switch shows once the panel runs firmware with it.
 :::
 
 On Android, **Display** has a **Live pictures** card after the ticker, for what a 128-wide board draws under the clock during a game: the device page's **Field strip**, and **Win chance bar**, the app's name for the device page's **Win chance**, which turns the win chance line under the clock on or off ("ND 84% to win"). Its **Score margin** switch does nothing, since the chart it turned off is gone. Each switch shows when the panel follows a sport it draws for (see [Device page](/using/device-page/)). The card shows once the panel runs firmware with them.
 
 :::note[Coming in the next app update]
 An app update renames **Win chance bar** to **Win chance** and drops **Score margin**.
-:::
-
-:::note[Coming in the next release]
-On iPhone, **Celebrations** under **Display** has a **Big plays** switch after **Opponent scores too**. On **Full**, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way (see [Celebrations](/using/device-page/#celebrations)). It's on until you turn it off, and the switch shows once the panel runs firmware with it.
 :::
 
 On iPhone and Android, **Between games** under **Display** has a **Game leaders** switch after **Countdown to the next game**. At halftime and the final, each team's top players from the box score take a turn with the board (see [Between games](/using/device-page/#between-games)). The switch shows once the panel runs firmware with the card.
