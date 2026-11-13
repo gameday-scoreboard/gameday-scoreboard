@@ -148,7 +148,8 @@ struct WinSwing {
     // with new text, so a score also has to add 3 points or more since the
     // last score that showed it, and come 2 minutes or more after it, in
     // case ESPN's score lags the play (seen live, WSH at NYG 11/12).
-    const std::string key = g.play_type + "|" + g.last_play;
+    // ESPN's play id when it has one: rewritten words are the same play.
+    const std::string key = g.play_id != 0 ? std::to_string(g.play_id) : g.play_type + "|" + g.last_play;
     const bool new_play = !this->play.empty() && key != this->play;
     this->play = key;
     const int total = g.team_score + g.opp_score;

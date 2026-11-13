@@ -4253,7 +4253,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   ::espn::CelebPlan celeb = ::espn::decide_celebration(this->prev_, g, splash, this->celebrations(), neutral,
                                                        this->opponent_splashes(), this->big_plays());
   // Only a fresh read shows a three or a big play; this emit_ also runs for redraws.
-  if (::espn::celeb_latched(celeb.kind) && !this->celeb_latch_.take(g))
+  if (::espn::celeb_latched(celeb.kind) && !this->celeb_latch_.take(g, celeb.kind, millis()))
     celeb = ::espn::CelebPlan{};
   // A walk-off in the same read as the final: the walk-off plays now and the
   // win screen when it ends (loop() calls back with walk_off_release_ set).

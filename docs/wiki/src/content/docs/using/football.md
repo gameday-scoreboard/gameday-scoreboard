@@ -86,7 +86,7 @@ With **Celebrations** on **Full** and **Big plays** on, your defense's big plays
 - **Fumble**: the ball bounces loose end over end, your defender dives on it and comes up holding it high. "FUMBLE!" 4 seconds.
 - **Sack**: the quarterback sets to throw and your defender buries him. The board jolts and "SACK!" slams in. 2 seconds, the shortest, since a team gets two or three a game.
 
-A fumble counts only when your defense comes up with the ball, and a sack only on the other team's quarterback. A two-panel board gets the wide scene; a single panel gets a tighter one drawn for 64 pixels.
+A fumble counts only when your defense comes up with the ball, and a sack only on the other team's quarterback. Each play celebrates once, even when ESPN rewrites it a few times afterward (adding "Touchback" or an injury update). A two-panel board gets the wide scene; a single panel gets a tighter one drawn for 64 pixels.
 
 The other side's big plays show nothing, unless the panel is following a game in Live games with **Opponent scores too** on: then both teams' big plays play, each in its own colors. **Subtle** and **Off** show no big plays (a pick six still gets its touchdown flash on **Subtle**), and turning **Big plays** off keeps every score and win and drops only these.
 

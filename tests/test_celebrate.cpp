@@ -330,6 +330,40 @@ static void test_basketball() {
   GameSnapshot other = three(53, 48);
   other.event_id = "402";
   CHECK(latch.take(other));
+  // ESPN's play id: rewriting a play's words is the same play (one
+  // interception played four times in 90 seconds on 11/12).
+  {
+    GameSnapshot p = three(53, 48);
+    p.sport = Sport::FOOTBALL;
+    p.event_id = "501";
+    p.play_id = 4017727501234;
+    p.last_play = "J.Daniels pass deep left intended for C.Okonkwo INTERCEPTED by J.Holland at NYG 0.";
+    CelebLatch l;
+    const uint32_t s = 1000;
+    CHECK(l.take(p, CelebKind::INTERCEPTION, 0));
+    p.last_play += " Touchback.";
+    CHECK(!l.take(p, CelebKind::INTERCEPTION, 22 * s));
+    p.last_play += " ** Injury Update";
+    CHECK(!l.take(p, CelebKind::INTERCEPTION, 65 * s));
+    // A new id for the same turnover inside 90 seconds stays quiet too.
+    GameSnapshot q = p;
+    q.play_id = 4017727501299;
+    CHECK(!l.take(q, CelebKind::INTERCEPTION, 80 * s));
+    // A different turnover, or a sack, is news.
+    q.play_id = 4017727501300;
+    CHECK(l.take(q, CelebKind::FUMBLE, 85 * s));
+    q.play_id = 4017727501301;
+    CHECK(l.take(q, CelebKind::SACK, 100 * s));
+    q.play_id = 4017727501302;
+    CHECK(l.take(q, CelebKind::SACK, 110 * s));  // two sacks in a row both show
+    // The next interception, minutes later, shows.
+    q.play_id = 4017727509999;
+    CHECK(l.take(q, CelebKind::INTERCEPTION, 11 * 60 * s));
+    // Another game is its own.
+    GameSnapshot r = q;
+    r.event_id = "502";
+    CHECK(l.take(r, CelebKind::INTERCEPTION, 11 * 60 * s + 1));
+  }
   // The win still shows.
   CHECK(plan(live(Sport::BASKETBALL, 99, 98), final_(Sport::BASKETBALL, 99, 98), CelebLevel::FULL).kind ==
         CelebKind::WIN);
@@ -529,6 +563,7 @@ static void test_basketball_recorded() {
         }
         doc["id"] = g["event"];
         JsonObject lp = comp["situation"]["lastPlay"];
+        lp["id"] = std::to_string(1000 + i);  // each play its own id, as ESPN gives
         lp["type"]["text"] = pl[1];
         lp["text"] = pl[2];
         lp["scoreValue"] = pl[3];
