@@ -98,6 +98,10 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 - **Customize**: the banner, the message card, your pictures and the date countdown.
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
+:::note[Coming in the next app update]
+The iPhone app gets the **Celebrations** choice too, so it's in both apps: **Full**, **Subtle** or **Off**, above **Opponent scores too** in **Celebrations** under **Display**, as on Android. It shows once the panel runs firmware with that setting.
+:::
+
 Each setting has one short line saying what it does. The longer rules are on these pages.
 
 :::note[Coming in the next app update]
