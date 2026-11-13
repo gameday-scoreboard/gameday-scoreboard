@@ -332,6 +332,44 @@ static void test_event_live() {
   CHECK_EQ(chi.opp_leader, std::string("Penix Jr. 719 yds 3 TD"));
 }
 
+static void test_nfl_overtime() {
+  // NFL games that went to overtime, recorded from the single-event
+  // endpoint after the fact (see fixtures/README.md). Before these, NFL
+  // overtime was only covered by hand-built snapshots: the OT finals in
+  // the fixtures were basketball, hockey and college football.
+  GameSnapshot dal;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_ot.json"), Sport::FOOTBALL, 6, dal, "401772834"));
+  CHECK(dal.state == GameState::POST);
+  CHECK(dal.completed);
+  CHECK_EQ(dal.period, 5);
+  CHECK_EQ(dal.short_detail, std::string("Final/OT"));
+  CHECK(in_overtime(League::NFL, dal.period));
+  CHECK(dal.team_winner);
+  CHECK_EQ(dal.team_score, 40);
+  CHECK_EQ(dal.opp_score, 37);
+  CHECK_EQ(dal.opp_abbr, std::string("NYG"));
+  // The ticker calls a completed football final just "Final" (pinned in
+  // test_status_text); the "Final/OT" detail itself is on the snapshot
+  // above and is what the panel's own detail line shows.
+  TickerOptions o;
+  CHECK_EQ(status_text(dal, o, ""), std::string("Final | DAL 1-1 | NYG 0-2"));
+
+  // The 2025 Packers-Cowboys tie: overtime ran out with no winner, so
+  // neither side is flagged the winner and the scores stay level.
+  GameSnapshot gb;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_ot_tie.json"), Sport::FOOTBALL, 9, gb, "401772921"));
+  CHECK(gb.state == GameState::POST);
+  CHECK(gb.completed);
+  CHECK_EQ(gb.period, 5);
+  CHECK_EQ(gb.short_detail, std::string("Final/OT"));
+  CHECK(!gb.team_winner);
+  CHECK_EQ(gb.team_score, 40);
+  CHECK_EQ(gb.opp_score, 40);
+  CHECK_EQ(gb.opp_abbr, std::string("DAL"));
+  // Both records carry the tie in the third column.
+  CHECK_EQ(status_text(gb, o, ""), std::string("Final | GB 2-1-1 | DAL 1-2-1"));
+}
+
 static bool same_snapshot(const GameSnapshot &a, const GameSnapshot &b) {
   return a.valid == b.valid && a.state == b.state && a.event_id == b.event_id && a.kickoff_epoch == b.kickoff_epoch &&
          a.completed == b.completed && a.short_detail == b.short_detail && a.display_clock == b.display_clock &&
@@ -2328,6 +2366,32 @@ static void test_mlb_pre_post() {
   ppd_was.state = GameState::IN;
   ppd.team_score = 2;
   CHECK_EQ(decide_splash(ppd_was, ppd, true, true).text, std::string(""));
+
+  // Extra innings for real: MIL @ TB went 12 (2026-10-27). The only
+  // extra-inning coverage before this fixture faked a "Final/10" detail
+  // on the nine-inning final above.
+  GameSnapshot x12 = mlb_event("fixtures/event_mlb_final_12.json", kBrewers);
+  CHECK(x12.state == GameState::POST);
+  CHECK(x12.completed);
+  CHECK_EQ(x12.period, 12);
+  CHECK_EQ(x12.short_detail, std::string("Final/12"));
+  CHECK(!x12.team_winner);
+  CHECK_EQ(x12.team_score, 3);
+  CHECK_EQ(x12.opp_score, 4);
+  CHECK_EQ(x12.opp_abbr, std::string("TB"));
+
+  // The 2025 Speedway Classic (ATL @ CIN) was suspended by rain in the
+  // first inning and finished the next day. ESPN's document for it now
+  // reads Final with wasSuspended set on the competition, so the panel
+  // shows a normal final instead of sitting on "Suspended" for good.
+  GameSnapshot sus = mlb_event("fixtures/event_mlb_suspended_final.json", kBraves);
+  CHECK(sus.state == GameState::POST);
+  CHECK(sus.completed);
+  CHECK_EQ(sus.short_detail, std::string("Final"));
+  CHECK(sus.team_winner);
+  CHECK_EQ(sus.team_score, 4);
+  CHECK_EQ(sus.opp_score, 2);
+  CHECK_EQ(sus.opp_abbr, std::string("CIN"));
 
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_mlb_top.json"), Sport::BASEBALL, kWhiteSox, x));  // not in it
@@ -9257,6 +9321,7 @@ int main() {
   test_scoreboard_live();
   test_scoreboard_post();
   test_event_live();
+  test_nfl_overtime();
   test_event_matches_scoreboard();
   test_scoreboard_pre_nfl();
   test_splash();
