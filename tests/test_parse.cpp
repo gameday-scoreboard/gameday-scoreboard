@@ -8093,19 +8093,42 @@ static void test_win_swing() {
   g.team_win_pct = 40;
   CHECK(!w.read(g, 5 * m));             // a 22-point move inside 3 minutes waits (window over)
   CHECK(w.read(g, 7 * m + 1));          // and shows once the 3 minutes are up
-  // A football score shows it at once, gap or not.
+  // A touchdown or field goal shows it at once, gap or not, with the
+  // number from the same play.
+  g.play_type = "Passing Touchdown";
+  g.last_play = "J.Daniels pass to T.McLaurin for 22 yds, TOUCHDOWN";
+  g.play_value = 6;
   g.team_score = 7;
   CHECK(w.read(g, 7 * m + 40 * s));
   CHECK_EQ(std::string(w.began), std::string("score"));
+  CHECK(w.ticker);
+  // The ticker keeps it after the row's turn, until the next play.
   CHECK(!w.read(g, 8 * m + 10 * s));
-  // A turnover too, once per play.
+  CHECK(w.ticker);
+  // The extra point is the same score: no second showing, and the ticker lets go.
+  g.play_type = "Extra Point Good";
+  g.last_play = "J.Moody extra point is GOOD";
+  g.play_value = 1;
+  CHECK(!w.read(g, 8 * m + 50 * s));
+  CHECK(!w.ticker);
+  // A turnover too, once per play: NFL and college names.
   g.play_type = "Pass Interception Return";
+  g.last_play = "J.Daniels pass intended for T.McLaurin INTERCEPTED by D.Banks";
+  g.play_value = 0;
   CHECK(w.read(g, 9 * m));
+  CHECK_EQ(std::string(w.began), std::string("turnover"));
   CHECK(!w.read(g, 9 * m + 30 * s));    // the same last play again is no news
+  CHECK(w.ticker);
   g.play_type = "Rush";
+  g.last_play = "B.Robinson run for 4 yds";
   CHECK(!w.read(g, 10 * m));
+  CHECK(!w.ticker);
   // Redraws of a read change nothing.
   CHECK(!w.read(g, 10 * m));
+  CHECK(WinSwing::turnover_play("Sack Opp Fumble Recovery"));
+  CHECK(WinSwing::turnover_play("Fumble Recovery (Opponent)"));
+  CHECK(!WinSwing::turnover_play("Fumble Recovery (Own)"));
+  CHECK(!WinSwing::turnover_play("Sack"));
   // Basketball scores all the time: only a swing shows it.
   GameSnapshot b = g;
   b.sport = Sport::BASKETBALL;
@@ -8113,9 +8136,12 @@ static void test_win_swing() {
   b.team_win_pct = 55;
   WinSwing wb;
   CHECK(wb.read(b, 0));
-  b.team_score = 30;
+  b.play_type = "Pullup Jump Shot";
+  b.last_play = "A.Edwards makes 26-foot three point jumper";
+  b.play_value = 3;
   CHECK(!wb.read(b, 40 * s));
-  b.team_score = 32;
+  b.last_play = "R.Gobert makes two foot dunk";
+  b.play_value = 2;
   CHECK(!wb.read(b, 5 * m));
   b.team_win_pct = 70;
   CHECK(wb.read(b, 6 * m));

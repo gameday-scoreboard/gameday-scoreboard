@@ -107,21 +107,23 @@ struct RowOptions {
 };
 
 // When the win chance is worth showing: the first number of a game, a
-// football score or turnover, or a move of 10 points or more since it last
-// showed, at most once every 3 minutes for a move. Each showing lasts
-// kShowMs, long enough for one turn on the row or one ticker pass. A steady
-// "WSH 51% to win" every 12 seconds said nothing new. Follows one game;
-// another game starts it over.
+// football touchdown, field goal or turnover, or a move of 10 points or more
+// since it last showed, at most once every 3 minutes for a move. On the row
+// a showing lasts kShowMs, a turn or two; on the ticker it stays until the
+// next play, since a ticker that changes restarts its scroll and the win
+// chance is its last part. A steady "WSH 51% to win" every 12 seconds said
+// nothing new. Follows one game; another game starts it over.
 struct WinSwing {
   static constexpr uint32_t kShowMs = 25 * 1000;
   static constexpr uint32_t kGapMs = 3 * 60 * 1000;
   static constexpr int kSwing = 10;  // points, on our side's chance
   std::string event_id;
   int shown{-1};  // our side's chance when it last showed, -1 not yet
-  int score{-1};  // both scores added, at the last read
-  std::string play;
+  std::string play;   // the last play at the last read (its type and text)
+  std::string hold;   // the last play when the latest showing began
   uint32_t start{0};  // millis() when the last showing began
-  bool on{false};
+  bool on{false};     // on the row
+  bool ticker{false};  // in the ticker: the showing, then until the next play
   // Why the showing that this read began started ("first", "score",
   // "turnover", "swing"), for the log; nullptr when this read began none.
   const char *began{nullptr};
@@ -137,11 +139,13 @@ struct WinSwing {
     if (pct < 1 || pct > 99)
       return false;
     const bool football = g.sport == Sport::FOOTBALL;
-    const int score = g.team_score + g.opp_score;
-    const bool scored = football && this->score >= 0 && score != this->score;
-    this->score = score;
-    const bool new_play = g.play_type != this->play;
-    this->play = g.play_type;
+    // The score and the number come from the same last play, so a showing
+    // never starts on the number from before it. The try after a touchdown
+    // (1 or 2 points) doesn't show it again.
+    const std::string key = g.play_type + "|" + g.last_play;
+    const bool new_play = !this->play.empty() && key != this->play;
+    this->play = key;
+    const bool scored = football && new_play && g.play_value >= 3;
     const bool turnover = football && new_play && turnover_play(g.play_type);
     const bool showing = this->on && now - this->start < kShowMs;
     if (!showing)
@@ -152,17 +156,23 @@ struct WinSwing {
       this->on = true;
       this->start = now;
       this->began = this->shown < 0 ? "first" : scored ? "score" : turnover ? "turnover" : "swing";
+      this->hold = key;
     }
     // The number it shows is the latest; a move counts from the last one shown.
     if (this->on)
       this->shown = pct;
+    else if (key != this->hold)
+      this->hold.clear();
+    this->ticker = this->on || !this->hold.empty();
     return this->on;
   }
 
   // ESPN's play types where the ball changes sides on a mistake.
   static bool turnover_play(const std::string &t) {
+    // "Fumble Recovery (Opponent)" in the NFL, "Sack Opp Fumble Recovery" in college.
     return t.find("Interception") != std::string::npos || t.find("Fumble Recovery (Opponent)") != std::string::npos ||
-           t.find("Fumble Return") != std::string::npos || t.find("Blocked") != std::string::npos;
+           t.find("Opp Fumble Recovery") != std::string::npos || t.find("Fumble Return") != std::string::npos ||
+           t.find("Blocked") != std::string::npos;
   }
 };
 

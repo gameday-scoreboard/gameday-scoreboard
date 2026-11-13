@@ -4294,7 +4294,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // is shown nowhere there, since the stopped clock says it.
   const bool wide = this->panels_ != nullptr && this->panels_->cols() >= 2;
   opts.row_win = wide && this->win_chance_on();
-  opts.win_due = win_due;
+  opts.win_due = playing && this->win_swing_.ticker;
   opts.row_timeout = wide;
   opts.row_down = wide;
 

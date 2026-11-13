@@ -41,7 +41,7 @@ Favorites reach the board faster: several added in a row, or a live favorite wit
 
 ### ✨ New
 
-- 📊 The win chance shows after a score, a turnover or a swing of 10 points or more, instead of every few seconds
+- 📊 The win chance shows after a touchdown, field goal, turnover or a swing of 10 points or more, instead of every few seconds
 
 ### 🐛 Fixes
 
