@@ -37,7 +37,11 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.
+Pick the best game now starts off, so Live games shows a random game until you turn it on. Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.
+
+### ⚠️ Heads up
+
+- 🎲 **Pick the best game** in Live games is now off by default, and this update turns it off once; turn it back on under **Live games** on the device page
 
 ### 🐛 Fixes
 

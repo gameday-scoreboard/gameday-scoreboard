@@ -1961,7 +1961,7 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
 }
 
 void GamedayComponent::set_best_game(bool on) {
-  uint8_t next = on ? (this->prefs8_.live & ~LIVE8_RANDOM) : (this->prefs8_.live | LIVE8_RANDOM);
+  uint8_t next = ::espn::best_game_set(this->prefs8_.live, on);
   if (next == this->prefs8_.live)
     return;
   this->prefs8_.live = next;

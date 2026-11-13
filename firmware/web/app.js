@@ -191,7 +191,7 @@
           <p class="hint">Follows a live game, then moves to the next one.</p>
           <div class="livectls">
           <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
-          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
+          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>Off, a random live game, a new one every Switch every minutes. On, the closest game with the least time left, and it never leaves mid-play: it moves only at a break.</small></div>
           <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
           <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
             <option value="0">Stick with the higher team</option><option value="1">Alternate</option>

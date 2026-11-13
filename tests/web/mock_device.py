@@ -156,7 +156,7 @@ INITIAL = {
     # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
     "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
-    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "bigplays": True, "best": True, "bootaddr": True,
+    "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "bigplays": True, "best": False, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
     "gameleaders": True,
     # cards.h: the Between games list, rebuilt by state_doc() from these choices.

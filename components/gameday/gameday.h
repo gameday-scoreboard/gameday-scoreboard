@@ -331,7 +331,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // bit so panels from before the setting keep showing them.
   bool ticker_leaders() const { return (this->prefs8_.ticker & TICK8_NOLEADERS) == 0; }
   // Live games follows the best game on (best_game.h) rather than a random one.
-  bool best_game() const { return (this->prefs8_.live & LIVE8_RANDOM) == 0; }
+  bool best_game() const { return ::espn::best_game_on(this->prefs8_.live); }
   // Football's field strip (game_viz.h) and the win chance line on the
   // situation row (row_text.h), each on unless the owner turns it off.
   // Stored as "off" bits so panels from before them keep both.
@@ -829,7 +829,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // since a blob that changes size fails to load and resets.
   struct Prefs8 {
     uint8_t ticker;  // TICK8_*
-    uint8_t live;    // LIVE8_*, set bits are the non-default choice: a saved spare byte is 0
+    uint8_t live;    // Pick the best game, best_game.h kLiveRandom and kLiveBest
     uint8_t celeb;   // byte 2, celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
     uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
@@ -844,7 +844,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static constexpr uint8_t TICK8_MATCH = 2;  // soccer goals, cards, possession and shots
   // Season leaders before the start, on by default: set means off.
   static constexpr uint8_t TICK8_NOLEADERS = 4;
-  static constexpr uint8_t LIVE8_RANDOM = 1;  // "Pick the best game" off: a random game, as before
   void set_ticker8_(uint8_t f, bool on);
   // The countdown card's settings (countdown.h), in their own blob. A panel
   // without it has the next game's countdown on and no custom one.
