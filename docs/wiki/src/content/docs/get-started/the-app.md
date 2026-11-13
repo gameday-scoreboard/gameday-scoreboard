@@ -128,6 +128,10 @@ On iPhone and Android, **Display** has a **Weather** section after **Between gam
 
 On Android, the **Weather** section also has the device page's **Degrees**: **Auto**, **Fahrenheit (°F)** or **Celsius (°C)** (see [Fahrenheit or Celsius](/using/weather/#fahrenheit-or-celsius)). Before an outdoor game, the game on the Board also shows the forecast for kickoff under its start time, like "Forecast 57°F, Partly Cloudy", when the panel has one. Both show once the panel runs firmware with them.
 
+:::note[Coming in the next app update]
+The iPhone app gets **Degrees** in its **Weather** section and the kickoff forecast on the Board too, so both are in both apps.
+:::
+
 On iPhone and Android, **Display** has the device page's **Game-day wake** and **After the game**, under the night schedule in **Screen** on iPhone and under ticker speed in the **Screen** card on Android: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
 
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
