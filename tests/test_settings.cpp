@@ -630,10 +630,46 @@ void test_reply() {
 
 }  // namespace
 
+// "best": true in a backup from firmware that had Pick the best game on by
+// default is the old default, not a choice, so a restore leaves it out
+// (the panel keeps its own). false, and true from a later version, restore.
+void test_best_default() {
+  auto best = [](const std::string &version_field, bool on) {
+    return import("{\"schema\":1," + version_field + "\"best\":" + (on ? "true" : "false") + "}");
+  };
+  struct Case {
+    const char *version;  // the backup's "version" member, "" for none
+    bool on;
+    int want;  // -1 left out, 0 restored off, 1 restored on
+  } cases[] = {
+      {"\"version\":\"v2026.11.2\",", true, -1},        // the last release with it on
+      {"\"version\":\"v2026.10.1\",", true, -1},        // older
+      {"\"version\":\"v2026.11.2-beta.700\",", true, -1},  // a beta of that release
+      {"", true, -1},                                     // no version
+      {"\"version\":\"dev\",", true, -1},               // unreadable
+      {"\"version\":42,", true, -1},                      // not text
+      {"\"version\":\"v2026.11.2\",", false, 0},        // off restores from any version
+      {"", false, 0},
+      {"\"version\":\"v2026.11.3\",", true, 1},         // the release that starts it off
+      {"\"version\":\"v2026.11.3-beta.900\",", true, 1},  // its beta
+      {"\"version\":\"2026.12.0\",", true, 1},          // later, without the v
+      {"\"version\":\"v2026.11.3\",", false, 0},
+  };
+  for (const auto &c : cases) {
+    SettingsImport in = best(c.version, c.on);
+    SCHECK(in.error.empty(), "best %s %d was refused: %s", c.version, c.on, in.error.c_str());
+    SCHECK(in.skipped.empty(), "best %s %d was listed as left out", c.version, c.on);
+    const SetOp *op = find(in, SetKind::BEST);
+    int got = op == nullptr ? -1 : op->on ? 1 : 0;
+    SCHECK(got == c.want, "best %s %d restored as %d, not %d", c.version, c.on, got, c.want);
+  }
+}
+
 int main() {
   test_types();
   test_export();
   test_round_trip();
+  test_best_default();
   test_favs();
   test_refused();
   test_left_out();
