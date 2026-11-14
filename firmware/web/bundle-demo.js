@@ -120,6 +120,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         <div id="fxCtls" hidden>
           <p class="hint">The effect stays on until you pick another page.</p>
         </div>
+        <div id="sbCtls" hidden>
+          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows; start a row with a color like [red] or [#FF6400].</p>
+        </div>
       </div>
     </div>
 
@@ -228,7 +231,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option>
             </select></div>
           </div>
         </div>
@@ -1922,7 +1925,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#afterHint").textContent = S.after === "off"
       ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
       : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
-        : "The final, then your next game, as before.";
+        : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
+          : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2235,8 +2239,15 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     // onValue: the effect controls show only while the panel is on its Effects
     // page, whoever put it there (this page, Home Assistant, or the panel
     // taking the screen back), so it follows the entity's value, not the tap.
-    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => {
+      $("#fxCtls").hidden = v !== "Effects";
+      $("#sbCtls").hidden = v !== "Smart board";
+    } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
+    { name: "Smart board row 1", into: "#sbCtls", label: "Row 1" },
+    { name: "Smart board row 2", into: "#sbCtls", label: "Row 2" },
+    { name: "Smart board row 3", into: "#sbCtls", label: "Row 3" },
+    { name: "Smart board row 4", into: "#sbCtls", label: "Row 4" },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
@@ -2339,6 +2350,18 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       row.appendChild(val);
       host.appendChild(row);
       return { update(ev) { if (!dragging) { r.value = ev.value; show(ev.value); } } };
+    }
+    if (domain === "text") {
+      const t = el("input");
+      t.id = label.htmlFor = id;
+      t.type = "text";
+      t.maxLength = e.max_length ?? 255;
+      t.spellcheck = false;
+      t.onchange = () => post(e.id, "set", { value: t.value });
+      row.appendChild(t);
+      host.appendChild(row);
+      // The panel's value waits while somebody is typing in the box.
+      return { update(ev) { if (document.activeElement !== t) t.value = ev.value ?? ev.state ?? ""; } };
     }
     if (domain === "select") {
       const s = el("select");

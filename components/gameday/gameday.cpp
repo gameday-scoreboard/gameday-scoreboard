@@ -2545,9 +2545,17 @@ void GamedayComponent::wake_tick_() {
   this->save_wake_state_();
   // A Live games board on another game, anyone's, keeps that game: the
   // clock is only for its own team's card.
-  const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) &&
-                     !(this->live_mode_() && !this->live_fallback_);
-  const bool changed = clock != this->wake_clock_ || was_asleep != this->wake_state_.asleep;
+  const bool live_other = this->live_mode_() && !this->live_fallback_;
+  const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) && !live_other;
+  const bool smart = ::espn::wake_smart(this->wake_, this->wake_state_, in) && !live_other;
+  const bool changed =
+      clock != this->wake_clock_ || smart != this->wake_smart_ || was_asleep != this->wake_state_.asleep;
+  if (smart != this->wake_smart_) {
+    ESP_LOGI(TAG, smart ? "After the game: the Smart board until the next game is near"
+                        : "After the game: back to the scoreboard");
+    this->wake_smart_ = smart;
+    this->fire_action_("smartboard");
+  }
   if (clock != this->wake_clock_) {
     ESP_LOGI(TAG, clock ? "After the game: the clock until the next game is near"
                         : "After the game: back to the scoreboard");
@@ -5656,7 +5664,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["wake"] = this->wake_.on != 0;
   doc["wakelead"] = this->wake_.lead;
   doc["after"] = ::espn::after_word(this->wake_.after);
-  doc["wake_now"] = ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_);
+  doc["wake_now"] = ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_);
 #if defined(USE_UPDATE)
   // Left out where nothing can be installed (the demo build), so the page
   // and the app hide the switch.

@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -23,6 +23,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_celeb_hockey
 	./build/test_celeb_baseball
 	./build/test_celeb_soccer
+	./build/test_smart_board
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -67,6 +68,11 @@ build/render_celebrations: render_celebrations.cpp $(PARSER_ONLY) $(wildcard ../
 
 celebrate-gifs: build/render_celebrations
 	python3 render_celebrations.py build/render_celebrations build/celebrations
+
+# The Smart board's rows: color tags, layout and font (smart_board.h).
+build/test_smart_board: test_smart_board.cpp ../components/gameday/smart_board.h ../components/gameday/panel_text.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_smart_board.cpp -o $@ $(LDFLAGS)
 
 build/test_networks: test_networks.cpp $(wildcard ../components/saved_networks/*.h)
 	@mkdir -p build

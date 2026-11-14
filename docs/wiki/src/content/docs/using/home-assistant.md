@@ -45,6 +45,8 @@ A **Chip Temperature** sensor reports the controller's temperature, the reading 
 
 **Select Page** gets a third option, **Effects**, which fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255) to set it. The panel starts on the Scoreboard after every restart and puts the Scoreboard back itself when it has something to show you, so an automation that wants the pattern back after that selects Effects again. Three diagnostic sensors, **Effect FPS**, **Effect Render Time** and **Effect Output Time**, read the pattern's frame rate while one runs and are unknown otherwise. See [Effects](/using/effects/).
 
+**Select Page** also has **Smart board**, and four text entities, **Smart board row 1** to **Smart board row 4**, fill it: set one with **Text: Set value**, from a template that reads any entity's state or attribute, with color tags like `[red]`. Picked under **Select Page**, the Smart board stays up through restarts until something picks another page. See [Smart board](/using/smart-board/).
+
 **Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
 **Team** and **Opponent** name the two sides, **Team Color** and **Opponent Color** give each side's color as `0,42,92` for a light to follow, **Period** says where the game is (`3rd quarter`, `Halftime`) and **Game Clock** shows the clock. See [Game events](/using/game-events/#entities-for-the-game).

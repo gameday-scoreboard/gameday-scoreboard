@@ -63,6 +63,7 @@
 #include "settings_change.h"
 #include "startup.h"
 #include "wake.h"
+#include "smart_board.h"
 #include "update_nudge.h"
 #include "weather.h"
 #include "wifi_history.h"
@@ -483,6 +484,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // white and no icon.
   void say(const std::string &text, int secs, uint8_t mark = 0);
   const std::string &say_text() const { return this->say_text_; }
+  // After the game is Smart board and it is between games: the Smart board
+  // page goes up until the next game is near (pages/smart_board.yaml, on
+  // the "smartboard" action, which fires each time this changes).
+  bool smart_between() const { return this->wake_smart_; }
   int say_secs() const { return this->say_secs_; }
   // The banner's look: a playlist's color and icon (playlists.h ListColor,
   // ListIcon) while it shows that playlist's name, white and no icon for
@@ -1461,12 +1466,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void night_tick_();  // from loop(), every AUTO_UPDATE_TICK
   // Game-day wake (wake.h), its own blob, and its state, kept in RTC memory
   // through a restart. wake_clock_ is the clock between games, on the board
-  // now (clock_fields_).
+  // now (clock_fields_); wake_smart_ the Smart board between games, which
+  // pages/smart_board.yaml puts up on the "smartboard" action.
   ESPPreferenceObject wake_pref_;
   ::espn::WakePrefs wake_{};
   ::espn::WakeState wake_state_{};
   bool wake_loaded_{false};
   bool wake_clock_{false};
+  bool wake_smart_{false};
   bool power_on_{true};
   // Live games with Favorites take over: the next start of a favorite's
   // game from the last scan, 0 for none.
