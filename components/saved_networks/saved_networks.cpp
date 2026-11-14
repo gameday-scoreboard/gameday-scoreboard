@@ -10,6 +10,9 @@
 #ifdef USE_IMPROV_BLE
 #include "esphome/components/improv_ble/improv_ble_component.h"
 #endif
+#ifdef USE_ESP32
+#include <esp_wifi.h>
+#endif
 
 #include <array>
 #include <cstdio>
@@ -214,17 +217,20 @@ void SavedNetworks::note_connected(const wifi::WiFiAP &ap) {
   this->save_();
 }
 
-bool SavedNetworks::forget(const std::string &ssid) {
+Forgot SavedNetworks::forget(const std::string &ssid) {
+  const auto now = this->connected_ssid_();
   bool removed;
   bool rewrite_slot;
+  bool leaves;
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
     rewrite_slot = wifi_list::forget(this->list_, ssid.c_str(), &removed) != nullptr;
+    leaves = removed && wifi_list::leaves_now(this->list_, ssid.c_str(), now.data());
   }
   if (!removed)
-    return false;
-  ESP_LOGI(TAG, "Forgot %s", ssid.c_str());
-  this->defer([this, rewrite_slot, ssid]() {
+    return Forgot::NOT_SAVED;
+  ESP_LOGI(TAG, "Forgot %s%s", ssid.c_str(), leaves ? "; leaving it for the next saved network" : "");
+  this->defer([this, rewrite_slot, leaves, ssid]() {
     if (ssid == this->pending_.ssid)
       this->pending_ = {};
     if (rewrite_slot) {
@@ -251,8 +257,37 @@ bool SavedNetworks::forget(const std::string &ssid) {
       }
     }
     this->save_();
+    // A second for the HTTP reply to reach the page or the app first.
+    if (leaves)
+      this->set_timeout("leave", 1000, [this, ssid]() { this->leave_(ssid); });
   });
-  return true;
+  return leaves ? Forgot::LEAVES : Forgot::STAYS;
+}
+
+// The live list no longer has the forgotten network, so once the panel is
+// off it ESPHome's reconnect scans and joins one that is left: the front
+// one if it can see it (priority 1 in apply_()), else the strongest. Checked
+// again here: the panel may have moved on its own in the second since.
+void SavedNetworks::leave_(const std::string &ssid) {
+  if (wifi::global_wifi_component == nullptr || this->in_setup_ || this->count() == 0)
+    return;
+  const auto now = this->connected_ssid_();
+  if (ssid != now.data())
+    return;
+  ESP_LOGI(TAG, "Leaving %s for the next saved network", ssid.c_str());
+#ifdef USE_ESP32
+  esp_wifi_disconnect();
+#endif
+}
+
+std::array<char, wifi::SSID_BUFFER_SIZE> SavedNetworks::connected_ssid_() const {
+  std::array<char, wifi::SSID_BUFFER_SIZE> now{};
+  auto *w = wifi::global_wifi_component;
+  // Read from the driver, not from get_sta(): that one is blank while
+  // ESPHome rescans, and this runs on the HTTP task too.
+  if (w != nullptr && w->is_connected())
+    w->wifi_ssid_to(now);
+  return now;
 }
 
 void SavedNetworks::start_setup() {
@@ -263,12 +298,7 @@ void SavedNetworks::start_setup() {
 }
 
 std::vector<Entry> SavedNetworks::list() {
-  std::array<char, wifi::SSID_BUFFER_SIZE> now{};
-  auto *w = wifi::global_wifi_component;
-  // Read from the driver, not from get_sta(): that one is blank while
-  // ESPHome rescans, and this runs on the HTTP task.
-  if (w != nullptr && w->is_connected())
-    w->wifi_ssid_to(now);
+  const auto now = this->connected_ssid_();
   std::vector<Entry> out;
   std::lock_guard<std::mutex> lock(this->mutex_);
   out.reserve(this->list_.count);

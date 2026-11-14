@@ -170,4 +170,15 @@ inline const Network *forget(NetworkList &list, const char *ssid, bool *removed)
   return &list.nets[0];
 }
 
+// Whether forgetting a network takes the panel off it at once, to join the
+// networks left in the list, the front one first. Only the network it is on
+// now (connected; blank when it is on none), and only when another one is
+// left: with none, ESPHome's slot keeps the forgotten network (forget()
+// above), so the panel stays on it. list is the list after forget().
+inline bool leaves_now(const NetworkList &list, const char *forgotten, const char *connected) {
+  if (forgotten == nullptr || connected == nullptr || connected[0] == '\0')
+    return false;
+  return strncmp(forgotten, connected, SSID_SIZE) == 0 && list.count > 0 && find(list, forgotten) < 0;
+}
+
 }  // namespace wifi_list

@@ -3160,12 +3160,27 @@
       else if (i === 0) label.appendChild(el("small", null, "Tried first"));
       row.appendChild(label);
       const b = el("button", "btn danger", "Forget");
+      // Forgetting the network the panel is on moves it to the others now,
+      // the top one first. The only one stays: the panel always keeps a
+      // network to join, so it saves that one again when it next joins.
+      const others = nets.filter((o) => o !== n);
+      const next = others.length ? others[0].ssid : "";
       b.onclick = async () => {
-        if (!confirm("Forget " + n.ssid + "?")) return;
+        let ask = "Forget " + n.ssid + "?";
+        if (n.connected && next) {
+          ask += " The panel moves to " + next + " now" + (others.length > 1 ? ", or another saved network if it can't see " + next + "." : ".");
+        } else if (n.connected) {
+          ask += " It's the only saved network, so the panel stays on it and saves it again after a restart. Reset Wi-Fi takes the panel off it.";
+        }
+        if (!confirm(ask)) return;
         b.disabled = true;
         try {
           const r = await fetch("/gameday/wifi?forget=" + encodeURIComponent(n.ssid), { method: "POST" });
-          toast(r.ok ? "Forgot " + n.ssid + (n.connected ? "; it stays connected until the next restart" : "") : "Could not forget " + n.ssid);
+          const j = r.ok ? await r.json().catch(() => ({})) : null;
+          if (!j) toast("Could not forget " + n.ssid);
+          else if (j.moving) toast("Forgot " + n.ssid + ". Moving to " + (others.length > 1 ? "the next saved network" : next) + " now");
+          else if (n.connected) toast("Forgot " + n.ssid + ". It's the only saved network, so the panel stays on it");
+          else toast("Forgot " + n.ssid);
         } catch (_) {
           toast("Could not forget " + n.ssid);
         }

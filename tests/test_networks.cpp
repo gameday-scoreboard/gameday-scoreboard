@@ -352,6 +352,53 @@ static void test_forget_the_last_network() {
   CHECK(names(l) == "Home");
 }
 
+// Forget on the device page or in the app: the panel leaves the network it
+// is on only when that is the one forgotten and another is left to join.
+static void test_forget_leaves_now() {
+  NetworkList l;
+  clear(l);
+  put_front(l, "iPhone", "pw-phone");
+  put_front(l, "Home", "pw-home");
+  bool removed = false;
+  // On Home, Home forgotten, iPhone left: it moves now.
+  forget(l, "Home", &removed);
+  CHECK(removed && leaves_now(l, "Home", "Home"));
+  // On iPhone, a network it is not on forgotten: it stays.
+  clear(l);
+  put_front(l, "iPhone", "pw-phone");
+  put_front(l, "Home", "pw-home");
+  forget(l, "Home", &removed);
+  CHECK(!leaves_now(l, "Home", "iPhone"));
+  // On nothing (setup mode, or between networks): nothing to leave.
+  CHECK(!leaves_now(l, "Home", ""));
+  CHECK(!leaves_now(l, "Home", nullptr));
+  // On Home, the only one, forgotten: the slot keeps it, so it stays.
+  clear(l);
+  put_front(l, "Home", "pw-home");
+  forget(l, "Home", &removed);
+  CHECK(removed && l.count == 0 && !leaves_now(l, "Home", "Home"));
+  // A name that only starts like the one it is on is another network.
+  clear(l);
+  put_front(l, "Home", "pw-home");
+  put_front(l, "Home-5G", "pw-5g");
+  forget(l, "Home", &removed);
+  CHECK(!leaves_now(l, "Home", "Home-5G"));
+  // Three saved, on the front one: it leaves, and the next one is tried first.
+  clear(l);
+  put_front(l, "Friend", "pw-friend");
+  put_front(l, "iPhone", "pw-phone");
+  put_front(l, "Home", "pw-home");
+  const Network *next = forget(l, "Home", &removed);
+  CHECK(leaves_now(l, "Home", "Home"));
+  CHECK(next != nullptr && strcmp(next->ssid, "iPhone") == 0);
+  // On the second one and it is forgotten: it leaves too.
+  clear(l);
+  put_front(l, "iPhone", "pw-phone");
+  put_front(l, "Home", "pw-home");
+  forget(l, "iPhone", &removed);
+  CHECK(leaves_now(l, "iPhone", "iPhone"));
+}
+
 // Ticks every 10 s like gd_setup_window; the first second it restarts at, or 0.
 static uint32_t restart_at(bool (*busy)(uint32_t), uint32_t failed_at) {
   SetupWindow w;
@@ -430,6 +477,7 @@ int main() {
   test_blank_slot_keeps_the_list();
   test_forget_survives_a_restart();
   test_forget_the_last_network();
+  test_forget_leaves_now();
   test_setup_window();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

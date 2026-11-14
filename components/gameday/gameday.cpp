@@ -7315,11 +7315,15 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
       request->send(400, "application/json", "{\"error\":\"forget is required\"}");
       return;
     }
-    if (!nets->forget(ssid)) {
+    const saved_networks::Forgot forgot = nets->forget(ssid);
+    if (forgot == saved_networks::Forgot::NOT_SAVED) {
       request->send(404, "application/json", "{\"error\":\"not a saved network\"}");
       return;
     }
-    request->send(200, "application/json", "{\"ok\":true}");
+    // moving: the panel leaves this network now for another saved one.
+    request->send(200, "application/json",
+                  forgot == saved_networks::Forgot::LEAVES ? "{\"ok\":true,\"moving\":true}"
+                                                           : "{\"ok\":true,\"moving\":false}");
     return;
   }
   if (request->method() != HTTP_GET) {

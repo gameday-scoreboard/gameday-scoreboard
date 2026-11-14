@@ -16,7 +16,8 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          night_now to "skipped" and night_resume a "skipped" one back
                          to "dim" or "off"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
-  POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
+  POST /gameday/wifi     forget=<ssid>; 404 when it is not saved; "moving" when it was
+                         the connected one and another is left (it moves to that one)
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
   POST /gameday/settings a backup as a JSON body: checked whole, then applied through
                          apply_set; 400 with "error" when refused
@@ -1430,8 +1431,14 @@ class Handler(BaseHTTPRequestHandler):
             keep = [n for n in WIFI["list"] if n["ssid"] != q["forget"]]
             if len(keep) == len(WIFI["list"]):
                 return self._json(404, {"error": "not a saved network"})
+            # Forgetting the network the panel is on, with another left, moves
+            # it to the top one left (saved_networks.cpp, leave_()).
+            gone = next(n for n in WIFI["list"] if n["ssid"] == q["forget"])
+            moving = gone["connected"] and len(keep) > 0
+            if moving:
+                keep = [dict(n, connected=(i == 0)) for i, n in enumerate(keep)]
             WIFI["list"] = keep
-            return self._json(200, {"ok": True})
+            return self._json(200, {"ok": True, "moving": moving})
         if u.path == "/gameday/picture":
             n = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(n)

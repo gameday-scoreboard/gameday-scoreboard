@@ -237,7 +237,9 @@ class GamedaySelect : public select::Select, public Component {
 //                                    400 with "error" when refused or past 4 KB
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
-//   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
+//   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved.
+//                                    "moving": true when it was the one the panel is on and
+//                                    the panel leaves it now for another saved network
 //   GET  /gameday/crash              the last crash, watchdog or brownout restart and its
 //                                    backtrace, kept in flash (components/crash_report)
 //   POST /gameday/crash?clear=1      empties it

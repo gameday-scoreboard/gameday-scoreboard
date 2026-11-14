@@ -2321,11 +2321,54 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   await expect(rows).toHaveCount(1);
   await expect(rows.nth(0).locator("label")).toContainText("Home");
 
-  // Forgetting the last one leaves the empty line.
-  page.once("dialog", (d) => d.accept());
+  // Forgetting the last one, which it's on, says it stays on it, and leaves the empty line.
+  let asked = "";
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
   await rows.nth(0).locator("button").click();
   await expect(rows).toHaveCount(0);
+  expect(asked).toContain("only saved network, so the panel stays on it");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. It's the only saved network");
   await expect(page.locator("#netsEmpty")).toBeVisible();
+
+  // Forgetting the one it's on with others left names the next one and moves there.
+  await reset(request, {}, [], [
+    { ssid: "Home", connected: true },
+    { ssid: "iPhone", connected: false },
+  ]);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(2);
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
+  await rows.nth(0).locator("button").click();
+  await expect.poll(() => asked).toBe("Forget Home? The panel moves to iPhone now.");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. Moving to iPhone now");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+
+  // With more than one left, the next one is named and the rest are a fallback.
+  await reset(request, {}, [], [
+    { ssid: "Home", connected: true },
+    { ssid: "iPhone", connected: false },
+    { ssid: "Friend", connected: false },
+  ]);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(3);
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
+  await rows.nth(0).locator("button").click();
+  await expect.poll(() => asked).toBe("Forget Home? The panel moves to iPhone now, or another saved network if it can't see iPhone.");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. Moving to the next saved network now");
 
   // Firmware without the list: the section stays hidden.
   await reset(request, {}, [], null);
