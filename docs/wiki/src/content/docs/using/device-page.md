@@ -218,7 +218,7 @@ The next sections are folded shut, each with a one-line summary. Tap one to open
   - **Show how to connect when the panel starts**: after it joins Wi-Fi, the panel shows a QR code for the Game Day app, then its address, for about 20 seconds. Turn it off to go straight to the scoreboard.
   - **Backup**: **Export settings** saves this panel's settings to a file, and **Import settings** loads a saved file back, onto this panel or another one. Wi-Fi networks and the WizMote pairing aren't in the file. See [Back up and restore settings](/using/backup/).
 - **Game events**: tells Home Assistant when your team scores, with a heads-up before the start and an optional web address to post them to. See [Game events](/using/game-events/).
-- **Wi-Fi networks**: the networks the panel remembers, in the order it tries them, with **Forget** for each. In the next release, forgetting the network the panel is on moves it to the next saved one right away. See [Wi-Fi](/using/wifi/).
+- **Wi-Fi networks**: the networks the panel remembers, in the order it tries them, with **Forget** for each. Forgetting the network the panel is on moves it to the next saved one right away. See [Wi-Fi](/using/wifi/).
 - **Diagnostics**: see [below](#diagnostics).
 - **Remote**: pairs and unpairs a WizMote with **Discovery** and **Unpair remote**. It also sets what buttons 1 to 4 show. See [WizMote remote](/using/remote/).
 - **Matrix**: click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/).
