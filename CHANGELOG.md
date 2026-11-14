@@ -39,6 +39,10 @@ through `update_important` in the panel's state.
 
 Live games puts a game on the board sooner: the panel shows the first game in progress it finds, instead of reading every league before it shows anything.
 
+### ✨ New
+
+- 📉 The panel downloads a fifth of the data from ESPN or less: it asks for the scores compressed, so **ESPN data** on the device page climbs much slower
+
 ### 🐛 Fixes
 
 - ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league
