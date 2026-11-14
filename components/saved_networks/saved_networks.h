@@ -38,8 +38,14 @@
 // A setup from the app narrows the live list to the new network the way
 // ESPHome always did; a failed one hands the whole list back (reapply(),
 // from improv_ble). Forgetting a network takes it out of flash and out of
-// the live list at once.
+// the live list at once. Forgetting the one the panel is on, with another
+// saved network left, also takes it off that one a second later (time for
+// the HTTP reply to go out), and ESPHome scans and joins the rest the way it
+// does after any drop. ESP-IDF reports that as ASSOC_LEAVE, which the Wi-Fi
+// health doesn't count as a drop (wifi_history.h).
 
+#include <array>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -64,6 +70,13 @@ struct Entry {
   bool connected;  // the network the panel is on right now
 };
 
+// What forget() did.
+enum class Forgot : uint8_t {
+  NOT_SAVED,  // the network was not in the list; nothing changed
+  STAYS,      // taken off the list; the panel stays where it is
+  LEAVES,     // taken off the list, and the panel leaves it for the rest
+};
+
 class SavedNetworks : public Component {
  public:
   void setup() override;
@@ -77,9 +90,10 @@ class SavedNetworks : public Component {
   // Called from wifi: on_connect with the network the panel just joined. It
   // moves to the front and the list is saved when anything changed.
   void note_connected(const wifi::WiFiAP &ap);
-  // Takes one network out of the saved list. Returns false when it was not
-  // there. Safe from the HTTP task; the flash write runs on the main loop.
-  bool forget(const std::string &ssid);
+  // Takes one network out of the saved list, and the panel off it when it
+  // is on it and another is left (wifi_list::leaves_now()). Safe from the
+  // HTTP task; the flash write and the leaving run on the main loop.
+  Forgot forget(const std::string &ssid);
   // "Reset Wi-Fi": the next boot starts in setup mode. Call it right before
   // restarting; the flag is in flash when this returns.
   void start_setup();
@@ -102,6 +116,10 @@ class SavedNetworks : public Component {
   void apply_();  // hands the list to the Wi-Fi component; main loop only
   void save_();   // main loop only
   void pending_timeout_();
+  void leave_(const std::string &ssid);  // main loop only
+  // The network the panel is on, read from the driver; blank when on none.
+  // Safe from the HTTP task.
+  std::array<char, wifi::SSID_BUFFER_SIZE> connected_ssid_() const;
 
   NetworkList list_{};
   // A new password for a saved network, tried first this boot and stored
