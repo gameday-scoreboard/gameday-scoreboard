@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 """gameday: polls ESPN for one team's football game and hands the page
 the same fields the Home Assistant blueprint used to push."""
 
@@ -6,12 +8,13 @@ from pathlib import Path
 
 from esphome import automation
 import esphome.codegen as cg
-from esphome.components import http_request, runtime_image, time, web_server_base
+from esphome.components import http_request, number, runtime_image, time, web_server_base
 from esphome.components.http_request.update import HttpRequestUpdate
 from esphome.components.panel_layout import PanelLayout
 from esphome.components.web_server_base import CONF_WEB_SERVER_BASE_ID
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_TIME_ID, CONF_TRIGGER_ID, __version__ as ESPHOME_VERSION
+
 
 DEPENDENCIES = ["network", "http_request", "time"]
 AUTO_LOAD = ["json", "runtime_image", "select", "web_server_base"]
@@ -19,18 +22,23 @@ CODEOWNERS = ["@bharvey88"]
 
 CONF_HTTP_REQUEST_ID = "http_request_id"
 CONF_PANEL_LAYOUT_ID = "panel_layout_id"
+# The Brightness and Scroll Speed numbers, for the settings backup (settings_doc.h)
+CONF_BRIGHTNESS_ID = "brightness_id"
+CONF_SCROLL_SPEED_ID = "scroll_speed_id"
 CONF_ON_UPDATE = "on_update"
 CONF_ON_ACTION = "on_action"
+# The game events of the game Home Assistant follows (ha_events.h). The
+# component sends them to Home Assistant and the webhook itself; these
+# triggers are for a build's own YAML: scores, finals, or every event.
+CONF_ON_SCORE = "on_score"
+CONF_ON_FINAL = "on_final"
+CONF_ON_GAME_EVENT = "on_game_event"
 # The demo build (firmware/gameday-demo.yaml): a looping scripted game the
 # remote and the device page start and stop. Off in release firmware.
 CONF_DEMO = "demo"
-# The bar build (firmware/gameday-bar.yaml): real firmware that installs from
-# the beta channel on its own. Off in release firmware.
-CONF_BAR = "bar"
-CONF_REPORT_EMAIL = "report_email"
-# "Follow beta" on the device page (release builds): points the update entity
-# at the beta manifest instead of the release one. The bar build is always on
-# the bar channel and the demo build never updates, so neither has it.
+# "Follow beta" on the device page (release builds): points the
+# update entity at the beta manifest instead of the release one. The demo
+# build never updates, so it has none.
 CONF_BETA_CHANNEL = "beta_channel"
 CONF_UPDATE_ID = "update_id"
 CONF_STABLE = "stable"
@@ -46,50 +54,42 @@ UpdateTrigger = gameday_ns.class_(
 ActionTrigger = gameday_ns.class_(
     "ActionTrigger", automation.Trigger.template(cg.std_string)
 )
+HaEventConstRef = (
+    cg.global_ns.namespace("espn").struct("HaEvent").operator("const").operator("ref")
+)
+ScoreTrigger = gameday_ns.class_(
+    "ScoreTrigger", automation.Trigger.template(HaEventConstRef)
+)
+FinalTrigger = gameday_ns.class_(
+    "FinalTrigger", automation.Trigger.template(HaEventConstRef)
+)
+GameEventTrigger = gameday_ns.class_(
+    "GameEventTrigger", automation.Trigger.template(HaEventConstRef)
+)
 
 COMPONENT_DIR = Path(__file__).resolve().parent
 
-_TEAM_RE = re.compile(r'\{League::(\w+),\s*(\d+),\s*"([^"]*)",\s*"([^"]*)",\s*(\d+)\}')
-# kLeagues rows in leagues.h: {League::NFL, "nfl", "football/nfl", "NFL", ...
-_LEAGUE_RE = re.compile(r'\{League::(\w+),\s*"(\w+)",\s*"[^"]+",\s*"([^"]+)",')
 _TZ_RE = re.compile(r'\{"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\}')
-# Leagues left out of Home Assistant's team select. Men's college
-# basketball's ~365 teams would push the options past Home Assistant's 16 KB
-# attribute limit; the device page lists them.
-_HA_SKIP_LEAGUES = {"MCBB"}
 
 
-def team_options():
-    """Select options in kTeams order, without _HA_SKIP_LEAGUES."""
-    prefixes = {
-        lg: prefix
-        for lg, _key, prefix in _LEAGUE_RE.findall(
-            (COMPONENT_DIR / "leagues.h").read_text(encoding="utf-8")
-        )
-    }
-    text = (COMPONENT_DIR / "teams.h").read_text(encoding="utf-8")
-    opts = []
-    for league, _tid, _abbr, name, _group in _TEAM_RE.findall(text):
-        if league in _HA_SKIP_LEAGUES:
-            continue
-        opts.append(f"{prefixes[league]}: {name}")
-    if len(opts) < 100:
-        raise cv.Invalid("teams.h looks truncated; run scripts/build_teams.py")
-    return opts
+def _timezone_rows():
+    text = (COMPONENT_DIR / "timezones.h").read_text(encoding="utf-8")
+    text = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
+    return [(name, posix) for name, posix, _iana in _TZ_RE.findall(text)]
 
 
 def timezone_options():
-    text = (COMPONENT_DIR / "timezones.h").read_text(encoding="utf-8")
-    text = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
-    opts = [name for name, _posix, _iana in _TZ_RE.findall(text)]
+    opts = [name for name, _posix in _timezone_rows()]
     if not opts:
         raise cv.Invalid("timezones.h has no entries")
     return opts
 
 
-def _parsed_timezone_count():
+def _parsed_timezone_rows():
+    # Each row's comment names the zone and the POSIX string it was made from,
+    # so a changed string is caught as well as an added or removed zone.
     text = (COMPONENT_DIR / "timezones_parsed.h").read_text(encoding="utf-8")
-    return len(re.findall(r"^\s*\{-?\d+, -?\d+, \{", text, re.M))
+    return re.findall(r"^\s*\{-?\d+, -?\d+, \{.*//\s*([^:]+): (\S+)\s*$", text, re.M)
 
 
 def _esphome_at_least(year, month):
@@ -97,11 +97,9 @@ def _esphome_at_least(year, month):
     return bool(m) and (int(m.group(1)), int(m.group(2))) >= (year, month)
 
 
-def _not_demo_and_bar(config):
-    if config[CONF_DEMO] and CONF_BAR in config:
-        raise cv.Invalid("the demo build never updates itself; it can't be a bar build too")
-    if CONF_BETA_CHANNEL in config and (config[CONF_DEMO] or CONF_BAR in config):
-        raise cv.Invalid("beta_channel is for release builds; remove it in the demo and bar builds")
+def _not_demo_and_beta(config):
+    if CONF_BETA_CHANNEL in config and config[CONF_DEMO]:
+        raise cv.Invalid("the demo build never updates itself; remove beta_channel")
     return config
 
 
@@ -116,10 +114,9 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
             web_server_base.WebServerBase
         ),
         cv.Optional(CONF_PANEL_LAYOUT_ID): cv.use_id(PanelLayout),
+        cv.Optional(CONF_BRIGHTNESS_ID): cv.use_id(number.Number),
+        cv.Optional(CONF_SCROLL_SPEED_ID): cv.use_id(number.Number),
         cv.Optional(CONF_DEMO, default=False): cv.boolean,
-        cv.Optional(CONF_BAR): cv.Schema(
-            {cv.Required(CONF_REPORT_EMAIL): cv.string_strict}
-        ),
         cv.Optional(CONF_BETA_CHANNEL): cv.Schema(
             {
                 cv.Required(CONF_UPDATE_ID): cv.use_id(HttpRequestUpdate),
@@ -133,14 +130,23 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
         cv.Optional(CONF_ON_ACTION): automation.validate_automation(
             {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ActionTrigger)}
         ),
+        cv.Optional(CONF_ON_SCORE): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ScoreTrigger)}
+        ),
+        cv.Optional(CONF_ON_GAME_EVENT): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(GameEventTrigger)}
+        ),
+        cv.Optional(CONF_ON_FINAL): automation.validate_automation(
+            {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FinalTrigger)}
+        ),
     }
-).extend(cv.COMPONENT_SCHEMA), _not_demo_and_bar)
+).extend(cv.COMPONENT_SCHEMA), _not_demo_and_beta)
 
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
-    if _parsed_timezone_count() != len(timezone_options()):
+    if _parsed_timezone_rows() != _timezone_rows():
         raise cv.Invalid(
             "timezones_parsed.h is out of date; run scripts/build_timezones.py"
         )
@@ -150,9 +156,6 @@ async def to_code(config):
         cg.add_define("GAMEDAY_TZ_PARSED")
     if config[CONF_DEMO]:
         cg.add_define("GAMEDAY_DEMO")
-    if CONF_BAR in config:
-        cg.add_define("GAMEDAY_BAR")
-        cg.add(var.set_report_email(config[CONF_BAR][CONF_REPORT_EMAIL]))
     if CONF_BETA_CHANNEL in config:
         conf = config[CONF_BETA_CHANNEL]
         cg.add_define("GAMEDAY_BETA_CHANNEL")
@@ -163,6 +166,14 @@ async def to_code(config):
                 conf[CONF_BETA],
             )
         )
+    # web_stack.cpp raises the web server task's stack above ESPHome's fixed size.
+    cg.add_build_flag("-Wl,--wrap=httpd_start")
+    # Every release since the first fireworks has been built with NDEBUG: the
+    # fireworks component set it for its physics library, and it reaches all
+    # of ESP-IDF, so assert() in FreeRTOS, the ring buffers and the queues
+    # compiled out. The celebrations replaced that component; this keeps the
+    # build as it was (about 2.4 KB of IRAM and 1.5 KB of DRAM otherwise).
+    cg.add_build_flag("-DNDEBUG=1")
     runtime_image.enable_format("PNG")  # logo_cache.cpp decodes ESPN's PNG logos
     cg.add(var.set_http(await cg.get_variable(config[CONF_HTTP_REQUEST_ID])))
     cg.add(var.set_time(await cg.get_variable(config[CONF_TIME_ID])))
@@ -175,6 +186,10 @@ async def to_code(config):
         cg.add(
             var.set_panel_layout(await cg.get_variable(config[CONF_PANEL_LAYOUT_ID]))
         )
+    if CONF_BRIGHTNESS_ID in config:
+        cg.add(var.set_brightness_number(await cg.get_variable(config[CONF_BRIGHTNESS_ID])))
+    if CONF_SCROLL_SPEED_ID in config:
+        cg.add(var.set_scroll_number(await cg.get_variable(config[CONF_SCROLL_SPEED_ID])))
     for conf in config.get(CONF_ON_UPDATE, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(
@@ -183,3 +198,7 @@ async def to_code(config):
     for conf in config.get(CONF_ON_ACTION, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [(cg.std_string, "x")], conf)
+    for key in (CONF_ON_SCORE, CONF_ON_FINAL, CONF_ON_GAME_EVENT):
+        for conf in config.get(key, []):
+            trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+            await automation.build_automation(trigger, [(HaEventConstRef, "x")], conf)

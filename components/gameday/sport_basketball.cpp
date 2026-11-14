@@ -1,12 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Basketball's parse extras, ticker, clock row and splash (NBA, WNBA, men's
 // college). Pure, no ESPHome includes.
 #include "espn_parse.h"
+#include "game_leaders.h"
 
 namespace espn {
 
 using detail::add_last_play;
 using detail::add_odds;
 using detail::add_part;
+using detail::pregame_records;
 using detail::records_line;
 
 namespace detail {
@@ -35,6 +39,19 @@ void basketball_from_event(JsonObjectConst ev, GameSnapshot &s) {
     b.phase = Phase::END_PERIOD;
   else if (name == "STATUS_HALFTIME")
     b.phase = Phase::HALFTIME;
+  // The game's points leaders, for the situation row (row_text.h). Before
+  // the start ESPN's list is the season's (points per game), so only now.
+  if (s.state == GameState::IN) {
+    for (JsonObjectConst c : comp["competitors"].as<JsonArrayConst>()) {
+      JsonObjectConst top = top_leader(c, "points");
+      std::string who = leader_short_surname(str_or_empty(top["athlete"]["shortName"]));
+      std::string pts = str_or_empty(top["displayValue"]);
+      if (who.empty() || pts.empty() || pts == "0")
+        continue;
+      bool ours = (uint32_t) atol(str_or_empty(c["id"]).c_str()) == s.team_id;
+      (ours ? b.team_scorer : b.opp_scorer) = who + " " + pts;
+    }
+  }
   // Keep the series of a playoff game only
   JsonObjectConst series = comp["series"];
   if (str_or_empty(series["type"]) != "playoff")
@@ -88,10 +105,14 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
     case GameState::NOT_FOUND:
       return "No upcoming game";
     case GameState::PRE:
+      add_part(out, s.game_name);  // a playoff round, like "East 1st Round - Game 2"
       add_part(out, kickoff_local.empty() ? s.short_detail : kickoff_local);
       add_part(out, b.series);
+      if (o.records)
+        add_part(out, pregame_records(s));
       add_odds(out, s, o);
-      add_part(out, s.venue);
+      detail::add_leaders(out, s, o);
+      add_part(out, detail::venue_line(s, o));
       return out;
     case GameState::POST:
       // Postponed, Canceled or Suspended: ESPN's post state without a result.
@@ -111,8 +132,14 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
   }
   if (o.clock)
     add_part(out, s.short_detail);
-  if (o.last_play)
+  // A wide board shows no timeout line (row_text.h): the stopped clock
+  // says it. The ticker shows the records then, as in a break; the clock
+  // would repeat the clock row.
+  const bool row_has_it = o.row_timeout && timeout_play(s.last_play);
+  if (o.last_play && !row_has_it)
     add_last_play(out, s.last_play);
+  if (out.empty() && row_has_it)
+    out = records_line(s);
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;

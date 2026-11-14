@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Demo build only (firmware/pages/demo.yaml): the Demo card, a backup to the
 // remote for starting and stopping the looping demo and picking its teams.
 // scripts/build_web.py appends this to the device page in bundle-demo.js;
@@ -15,32 +17,37 @@
   card.style.marginTop = "14px";
   card.innerHTML = `
     <h2>Demo</h2>
-    <p class="hint">A scripted game that loops until you stop it, with the normal board for a few seconds between runs. On a WizMote: 1 pro, 2 college, 4 back to live scores.</p>
-    <div class="ctl"><label>Now</label><span class="val" id="demoNow" style="min-width:0;text-align:left">...</span></div>
-    <div class="actions" style="margin:6px 0 4px">
-      <button class="btn primary" data-demo="pro">Start pro</button>
-      <button class="btn primary" data-demo="college">Start college</button>
-      <button class="btn" data-demo="stop">Stop</button>
-    </div>
-    <div class="sub">Pro football</div>
-    <div class="ctl"><label>Home</label><select data-team="pro_home"></select></div>
-    <div class="ctl"><label>Away</label><select data-team="pro_away"></select></div>
-    <div class="sub">College football</div>
-    <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
-    <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
-    <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>`;
-  $("#board").after(card);
+    <div class="cbody">
+      <p class="hint">A scripted game that loops until you stop it, with the normal board for a few seconds between runs. On a WizMote: 1 pro, 2 college, 4 back to live scores.</p>
+      <div class="ctl"><label>Now</label><span class="val" id="demoNow" style="min-width:0;text-align:left">...</span></div>
+      <div class="actions" style="margin:6px 0 4px">
+        <button class="btn primary" data-demo="pro">Start pro</button>
+        <button class="btn primary" data-demo="college">Start college</button>
+        <button class="btn" data-demo="stop">Stop</button>
+      </div>
+      <div class="sub">Pro football</div>
+      <div class="ctl"><label>Home</label><select data-team="pro_home"></select></div>
+      <div class="ctl"><label>Away</label><select data-team="pro_away"></select></div>
+      <div class="sub">College football</div>
+      <div class="ctl"><label>Home</label><select data-team="college_home"></select></div>
+      <div class="ctl"><label>Away</label><select data-team="college_away"></select></div>
+      <div class="ctl"><label>Made-up teams<small>Invented names and colors, no logos, and no live board between runs. For filming and anything that gets posted.</small></label><button class="sw" id="demoMadeup" aria-label="Made-up teams"></button></div>
+    </div>`;
+  $(".boardctl").after(card);
 
   let D = null;
   const post = async (params) => {
     const qs = Object.entries(params).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+    let ok = false;
     try {
       const r = await fetch("/gameday/demo?" + qs, { method: "POST" });
       if (!r.ok) throw new Error("HTTP " + r.status);
+      ok = true;
     } catch (e) {
       $("#demoNow").textContent = "Device did not respond (" + (e.message || "network") + ")";
     }
     setTimeout(load, 400);
+    return ok;
   };
 
   const selects = Array.from(card.querySelectorAll("select[data-team]"));
@@ -59,10 +66,17 @@
     b.onclick = () => post(b.dataset.demo === "stop" ? { do: "stop" } : { do: "start", kind: b.dataset.demo });
   });
   const madeup = $("#demoMadeup");
-  madeup.onclick = () => {
+  // The tapped value stands until a read that left after the panel answered:
+  // one already out carries the old value.
+  let held = null;  // {v, after}
+  madeup.onclick = async () => {
     const on = !madeup.classList.contains("on");
     madeup.classList.toggle("on", on);
-    post({ madeup: on ? 1 : 0 });
+    const mine = held = { v: on, after: Infinity };
+    const ok = await post({ madeup: on ? 1 : 0 });
+    if (held !== mine) return;  // tapped again since
+    if (ok) mine.after = Date.now();
+    else { held = null; render(); }
   };
 
   const matchup = (side) =>
@@ -79,18 +93,26 @@
       const t = D[kind] && D[kind][end];
       if (t) s.value = t.l + ":" + t.id;
     });
-    madeup.classList.toggle("on", !!D.madeup);
+    madeup.classList.toggle("on", held ? held.v : !!D.madeup);
   };
 
+  // A read asked for during another one runs after it, so it sees the latest post.
   let inflight = false;
+  let again = false;
   const load = async () => {
-    if (inflight) return;
+    if (inflight) { again = true; return; }
     inflight = true;
+    const left = Date.now();
     try {
-      const r = await fetch("/gameday/demo?_=" + Date.now(), { cache: "no-store" });
-      if (r.ok) { D = await r.json(); render(); }
+      const r = await fetch("/gameday/demo?_=" + left, { cache: "no-store" });
+      if (r.ok) {
+        D = await r.json();
+        if (held && left > held.after) held = null;
+        render();
+      }
     } catch (_) { /* the poll comes back around */ }
     inflight = false;
+    if (again) { again = false; load(); }
   };
   load();
   setInterval(load, 5000);

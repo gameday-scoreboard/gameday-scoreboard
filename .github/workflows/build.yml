@@ -6,19 +6,17 @@ on:
     branches: [main, beta, dev]
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      install_now:
-        description: >-
-          Beta channel only (run on beta): panel names, like gameday-aba970,
-          or "all". Those bar panels install this beta within 15 minutes
-          instead of at night.
-        type: string
-        default: ""
 
 # Read-only by default. Only publish writes (the release and Pages), and it
 # asks for that itself.
 permissions:
   contents: read
+
+# The ESPHome every build job uses (nightly.yml builds on the ESPHome beta). dev and beta
+# may pin an ESPHome beta; main and release tags need a final release, which
+# Branch rules checks.
+env:
+  ESPHOME_VERSION: "2026.10.2"
 
 # A newer push to the same ref cancels the older run. That stays on for dev
 # too: a merge that lands within a few minutes of the last one leaves the
@@ -37,8 +35,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       summary: ${{ steps.notes.outputs.summary }}
+      beta_version: ${{ steps.beta.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+      # On the beta branch, the version this run's beta goes out under, worked
+      # out once here: the board builds would number it apart if a
+      # release tag or the month changed between their starts.
+      - name: Beta version
+        id: beta
+        if: github.ref == 'refs/heads/beta'
+        run: |
+          v=$(python3 scripts/beta_version.py "$GITHUB_RUN_NUMBER")
+          echo "Beta $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
       # The manifest takes its version from the YAML, not the tag, so a tag
       # whose bump was forgotten would publish the old number. Fail before
       # anything builds.
@@ -60,6 +69,11 @@ jobs:
             echo "summary=Development build" >> "$GITHUB_OUTPUT"
           fi
           cat notes.md
+      # The site's /changelog page is rendered at deploy; fail here first.
+      - name: Changelog page renders
+        run: |
+          cp docs/site/changelog/index.html /tmp/changelog.html
+          python3 scripts/release_notes.py --page /tmp/changelog.html
       - uses: actions/upload-artifact@v7
         with:
           name: release-notes
@@ -68,12 +82,35 @@ jobs:
   branch-rules:
     # Work lands in dev. beta only takes changes promoted from dev, and main
     # (what customers run) only takes changes promoted from beta; only a tag
-    # on main publishes to the flasher and the panels. The
-    # checks are steps, not job conditions, so the job passes (rather than
+    # on main publishes to the flasher and the panels, and main builds only on
+    # a final ESPHome release. The checks are steps, not job conditions, so the job passes (rather than
     # skips) when they don't apply and build still runs.
     name: Branch rules
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The override label on a promotion PR.
+      pull-requests: read
     steps:
+      # The head branch's name stays in the merge commit for good, and this
+      # repo is public, so a branch is named after the change, not a ticket in
+      # a private tracker.
+      - name: Branch names say what the change is
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          ticket='(^|[/_.-])card-[0-9]'
+          for b in card-123-ha-log-noise fix/card-7 Card-12 fix/CARD-7-gzip; do
+            grep -qiE "$ticket" <<< "$b" || { echo "::error::The ticket pattern misses $b"; exit 1; }
+          done
+          for b in dev espn-gzip scorecard-2x power-cut-boot Scorecard-2x; do
+            grep -qiE "$ticket" <<< "$b" && { echo "::error::The ticket pattern wrongly takes $b"; exit 1; }
+          done
+          if grep -qiE "$ticket" <<< "$HEAD_REF"; then
+            echo "::error::The branch $HEAD_REF names a ticket. Push the change to a branch named after it, like espn-gzip, and open the PR from there."
+            exit 1
+          fi
       - name: PRs into beta come from dev
         if: github.event_name == 'pull_request' && github.base_ref == 'beta'
         env:
@@ -94,6 +131,46 @@ jobs:
             echo "::error::main only takes PRs from beta (this one is from $HEAD_REPO:$HEAD_REF). Target beta instead."
             exit 1
           fi
+      # Customers run main, so main and release tags build only on a final
+      # ESPHome release, like 2026.10.0. The maintainer's esphome-beta-ok
+      # label lets one promotion PR through, and the tag on its merge. Labels
+      # come from the API, not the event, so re-running this job after adding
+      # the label sees it.
+      - name: main builds on a final ESPHome
+        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          final='^[0-9]+\.[0-9]+\.[0-9]+$'
+          # Check the pattern itself first, so an edit can't quietly weaken it.
+          for v in 2026.10.0 2026.9.12; do
+            grep -qE "$final" <<< "$v" || { echo "::error::The final-release pattern misses $v"; exit 1; }
+          done
+          for v in 2026.10.0b3 2026.10.0-dev beta latest dev; do
+            grep -qE "$final" <<< "$v" && { echo "::error::The final-release pattern wrongly takes $v"; exit 1; }
+          done
+          if grep -qE "$final" <<< "$ESPHOME_VERSION"; then
+            echo "ESPHome $ESPHOME_VERSION is a final release."
+            exit 0
+          fi
+          if [ -n "$PR" ]; then
+            prs=$PR
+          else
+            # A tag: the promotion PR that merged this commit into main.
+            prs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+                    --jq '.[] | select(.base.ref == "main" and .merged_at != null) | .number')
+          fi
+          for n in $prs; do
+            ok=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$n" --jq '.labels[] | select(.name == "esphome-beta-ok") | .name')
+            if [ -n "$ok" ]; then
+              echo "::warning::ESPHome $ESPHOME_VERSION is a beta. Building it for main anyway: PR #$n has the esphome-beta-ok label."
+              exit 0
+            fi
+          done
+          echo "::error file=.github/workflows/build.yml::ESPHOME_VERSION is $ESPHOME_VERSION, a beta. main and release tags build only on a final ESPHome release: move the pin to a final release on dev, then promote again. To ship this beta anyway, the maintainer adds the esphome-beta-ok label to the promotion PR and re-runs this job."
+          exit 1
       - uses: actions/checkout@v7
         with:
           # Tags need history for the main check. The quotes matter: a bare 0
@@ -107,23 +184,68 @@ jobs:
           # Check the pattern itself first, so an edit can't quietly weaken it.
           for f in firmware-HANDOFF.md HANDOFF.md SESSION-2026-10-14.md CLAUDE.local.md \
                    firmware/CLAUDE.local.md plans/x.md reviews/x.md specs/x.md notes/x.md \
-                   docs/plans/x.md docs/superpowers/x.md; do
-            grep -qE "$pattern" <<< "$f" || { echo "::error::The private-notes pattern misses $f"; exit 1; }
+                   docs/plans/x.md docs/superpowers/x.md handoff.md pcb-Handoff.md session-notes.md \
+                   claude.local.md Plans/x.md docs/Reviews/x.md; do
+            grep -qiE "$pattern" <<< "$f" || { echo "::error::The private-notes pattern misses $f"; exit 1; }
           done
           for f in CLAUDE.md README.md docs/release-notes.md firmware/plans.yaml specs.md; do
-            grep -qE "$pattern" <<< "$f" && { echo "::error::The private-notes pattern wrongly catches $f"; exit 1; }
+            grep -qiE "$pattern" <<< "$f" && { echo "::error::The private-notes pattern wrongly catches $f"; exit 1; }
           done
-          found=$(git ls-files | grep -E "$pattern" || true)
+          found=$(git ls-files | grep -iE "$pattern" || true)
           if [ -n "$found" ]; then
             echo "$found" | while read -r f; do echo "::error file=$f::Private notes don't belong in this public repo. Remove the file."; done
             exit 1
           fi
+      # On main's own line of commits (its merges), not just reachable from
+      # it: every dev and beta commit is an ancestor of main once promoted.
       - name: Release tags are on main
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+          if ! git rev-list --first-parent origin/main | grep -qx "$GITHUB_SHA"; then
             echo "::error::$GITHUB_REF_NAME is not on main. Promote beta to main, then tag main."
             exit 1
+          fi
+
+  changes:
+    # A pull request into dev that touches only docs (docs/ and the top-level
+    # .md files) skips the firmware compiles. build and budget still run and
+    # pass with their steps skipped, so their required checks report; a
+    # skipped job (job-level if) would leave a matrix check unnamed and
+    # waiting.
+    name: What changed
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      firmware: ${{ steps.files.outputs.firmware }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          docs='^docs/|^[^/]+\.md$'
+          # Check the pattern itself first, so an edit can't quietly widen it.
+          for f in docs/wiki/x.md docs/site/index.html README.md CHANGELOG.md; do
+            grep -qE "$docs" <<< "$f" || { echo "::error::The docs pattern misses $f"; exit 1; }
+          done
+          for f in firmware/gameday.yaml firmware/web/app.js components/gameday/x.h .github/workflows/build.yml scripts/x.py firmware/README.md; do
+            grep -qE "$docs" <<< "$f" && { echo "::error::The docs pattern wrongly takes $f"; exit 1; }
+          done
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || [ "$GITHUB_BASE_REF" != dev ]; then
+            echo "firmware=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A renamed file counts at its old path too, so moving firmware
+          # into docs/ isn't docs only.
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          if grep -qvE "$docs" <<< "$files"; then
+            echo "firmware=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Docs only, so the firmware builds are skipped:"
+            echo "$files"
+            echo "firmware=false" >> "$GITHUB_OUTPUT"
           fi
 
   build:
@@ -131,35 +253,60 @@ jobs:
     # controller pinout. The variant names the manifest folder on the flasher
     # site, and the updater on a panel only ever looks in its own folder.
     # moonhub75-2panel is the same firmware booting two panels wide, for the
-    # DIY installer only; it updates from moonhub75's folder.
+    # DIY installer only; it updates from moonhub75's folder. A pull request
+    # into dev builds the three boards (it is a full compile for one default),
+    # and every push, promotion and tag builds all four.
     name: Build ${{ matrix.variant }}
-    needs: [notes, branch-rules]
+    needs: [notes, branch-rules, changes]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - variant: moonhub75
-            yaml: firmware/gameday.yaml
-          - variant: moonhub75-2panel
-            yaml: firmware/gameday-2panel.yaml
-          - variant: scoreboard75
-            yaml: firmware/gameday-scoreboard75.yaml
+        variant: ${{ fromJSON(github.event_name == 'pull_request' && github.base_ref == 'dev' && '["moonhub75","scoreboard75","waveshare"]' || '["moonhub75","moonhub75-2panel","scoreboard75","waveshare"]') }}
     steps:
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.firmware == 'true'
+      - name: The variant's YAML
+        id: yaml
+        if: needs.changes.outputs.firmware == 'true'
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          case "$VARIANT" in
+            moonhub75) f=firmware/gameday.yaml ;;
+            moonhub75-2panel) f=firmware/gameday-2panel.yaml ;;
+            scoreboard75) f=firmware/gameday-scoreboard75.yaml ;;
+            waveshare) f=firmware/gameday-waveshare.yaml ;;
+            *) echo "::error::No YAML for $VARIANT"; exit 1 ;;
+          esac
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+      # Cloning the external components took about 90 s of each build's 5.6
+      # minutes; the ESP-IDF install takes about 15 s, so it isn't cached.
+      - name: External components from the last build
+        if: needs.changes.outputs.firmware == 'true'
+        uses: actions/cache@v6
+        with:
+          path: firmware/.esphome/external_components
+          key: esphome-components-${{ env.ESPHOME_VERSION }}-${{ hashFiles('firmware/**/*.yaml') }}
+          restore-keys: esphome-components-${{ env.ESPHOME_VERSION }}-
       # On the beta branch this is also the beta channel for panels with
-      # "Follow beta" on: the same "-beta.<run>" version as the bar build of
-      # this run, and publish-beta puts it on the site.
+      # "Follow beta" on: the "-beta.<run>" version the Release notes job
+      # worked out, and publish-beta puts it on the site. beta_version.py
+      # numbers it after the newest release tag, so dev's YAML keeps the
+      # last release's version until the release prep PR sets the next one.
       - name: Beta version and summary
+        if: needs.changes.outputs.firmware == 'true'
         id: beta
         env:
           NOTES: ${{ needs.notes.outputs.summary }}
+          BETA_VERSION: ${{ needs.notes.outputs.beta_version }}
         run: |
           set -euo pipefail
           summary=$NOTES
-          url="https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          # The release's section of the site's changelog, which this tag's deploy renders.
+          url="https://install.gameday-scoreboard.com/changelog/#$GITHUB_REF_NAME"
           if [ "$GITHUB_REF" = refs/heads/beta ]; then
-            v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
-            v="$v-beta.$GITHUB_RUN_NUMBER"
+            v=$BETA_VERSION
+            [ -n "$v" ] || { echo "::error::No beta version from the Release notes job"; exit 1; }
             sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
             summary="Beta $v from ${GITHUB_SHA::7}."
             url="https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
@@ -167,56 +314,73 @@ jobs:
           echo "summary=$summary" >> "$GITHUB_OUTPUT"
           echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Build firmware
+        if: needs.changes.outputs.firmware == 'true'
         id: esphome
         uses: esphome/build-action@v7
         with:
-          yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          yaml-file: ${{ steps.yaml.outputs.file }}
+          version: ${{ env.ESPHOME_VERSION }}
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: ${{ steps.beta.outputs.url }}
       - name: Stage output under a stable folder name
+        if: needs.changes.outputs.firmware == 'true'
         run: |
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
       # The installer would say "Installing bharvey88.gameday-scoreboard".
       - name: Product name in the manifest
+        if: needs.changes.outputs.firmware == 'true'
         run: ./scripts/set_manifest_name.sh out
       - uses: actions/upload-artifact@v7
+        if: needs.changes.outputs.firmware == 'true'
         with:
           name: firmware-${{ matrix.variant }}
           path: out
-      # For the budget job: the OTA image's size and the ELF's static
-      # internal RAM. The name stays outside publish's firmware-* pattern.
+      # For the budget job: the OTA image's size, the ELF's static internal
+      # RAM and section sizes, and the OTA slot from the factory image's
+      # partition table. The name stays outside publish's firmware-* pattern.
       - name: Measure flash and static RAM
+        if: needs.changes.outputs.firmware == 'true'
         run: python3 scripts/size_budget.py firmware out/${{ matrix.variant }} ${{ matrix.variant }} sizes/${{ matrix.variant }}.json
       - uses: actions/upload-artifact@v7
+        if: needs.changes.outputs.firmware == 'true'
         with:
           name: sizes-${{ matrix.variant }}
           path: sizes
 
   budget:
     # Flash, static internal RAM and the memory each ESPN read takes, against
-    # firmware/budget.json. A pull request into dev also fails when one figure
-    # grows more than the file's max_growth against dev's last build. A
-    # promotion carries many changes at once, so it only gets the budget.
-    # The job summary has the table.
+    # firmware/budget.json (its "about" text and scripts/size_budget.py have
+    # the rules). Every run checks the 90% OTA slot limit and the static RAM
+    # and heap caps. A pull request into dev also gets the growth rules
+    # against dev's last build and the approval rules (release allowance,
+    # 32 KB in one change, a raised cap) against dev's budget.json, passed by
+    # the owner's budget/owner-approval commit status on one of its commits.
+    # A promotion carries many changes at once, so it only gets the limits.
+    # The job summary has the tables and budget-report.json the figures.
+    # moonhub75-2panel isn't built on a pull request into dev, so its figures
+    # may be missing there.
     name: Size budget
-    needs: [build, host-tests]
+    needs: [build, host-tests, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+      pull-requests: read
+      statuses: read
     steps:
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.firmware == 'true'
       - uses: actions/download-artifact@v8
+        if: needs.changes.outputs.firmware == 'true'
         with:
           pattern: sizes-*
           path: sizes
       - name: Figures from the base branch
         id: base
-        if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+        if: needs.changes.outputs.firmware == 'true' && github.event_name == 'pull_request' && github.base_ref == 'dev'
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -225,7 +389,9 @@ jobs:
           set -uo pipefail
           # The base commit's own run first, then the base branch's newest
           # runs: a push that lands while dev builds cancels the older run,
-          # sometimes before it uploaded its figures.
+          # sometimes before it uploaded its figures, or after only some of
+          # them. A run counts only when it has every figure its commit's
+          # budget.json lists, so growth is never checked against half a base.
           runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?head_sha=$BASE_SHA&event=push&per_page=5" \
                    --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' || true)
           runs="$runs
@@ -234,25 +400,86 @@ jobs:
           while read -r id sha; do
             [ -n "$id" ] || continue
             rm -rf base
-            if gh run download "$id" -p 'sizes-*' -D base 2>/dev/null && [ -n "$(ls -A base 2>/dev/null)" ]; then
-              echo "label=$BASE_REF ${sha::7} (run $id)" >> "$GITHUB_OUTPUT"
-              echo "Base figures from run $id ($sha)"
-              exit 0
+            gh run download "$id" -p 'sizes-*' -D base 2>/dev/null && [ -n "$(ls -A base 2>/dev/null)" ] || continue
+            gh api -H "Accept: application/vnd.github.raw+json" \
+              "repos/$GITHUB_REPOSITORY/contents/firmware/budget.json?ref=$sha" > base-budget.json || continue
+            if ! python3 scripts/size_budget.py complete base base-budget.json; then
+              echo "Run $id ($sha) is missing figures, trying an older one."
+              continue
             fi
+            echo "label=$BASE_REF ${sha::7} (run $id)" >> "$GITHUB_OUTPUT"
+            echo "Base figures from run $id ($sha)"
+            exit 0
           done <<< "$runs"
-          echo "::warning::No figures from a $BASE_REF build found, so only the budget is checked, not the growth."
+          rm -rf base
+          echo "::warning::No complete figures from a $BASE_REF build found, so only the budget is checked, not the growth."
+      # dev's budget.json at the pull request's base, to find raised caps, and
+      # the approval statuses on each of the pull request's commits, newest
+      # first (one file per commit, named in that order).
+      - name: Base budget and owner approvals
+        if: needs.changes.outputs.firmware == 'true' && github.event_name == 'pull_request' && github.base_ref == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api -H "Accept: application/vnd.github.raw+json" \
+            "repos/$GITHUB_REPOSITORY/contents/firmware/budget.json?ref=$BASE_SHA" > pr-base-budget.json
+          mkdir -p approvals
+          n=0
+          pick='[.[] | select(.context == "budget/owner-approval") | {context, state, description, creator: .creator.login, created_at}]'
+          for sha in $(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits?per_page=100" --jq '.[].sha' | tac); do
+            n=$((n + 1))
+            gh api "repos/$GITHUB_REPOSITORY/commits/$sha/statuses?per_page=100" --jq "{sha: \"$sha\", statuses: $pick}" \
+              > "approvals/$(printf '%04d' "$n").json"
+          done
+          echo "Approval statuses on $n commits:"
+          cat approvals/*.json
+          # A change that moves the release block to another tag resets the
+          # flash allowance, so the check compares its baseline with the
+          # figures that tag's own Build run measured.
+          old_tag=$(jq -r '.release.tag // ""' pr-base-budget.json)
+          new_tag=$(jq -r '.release.tag // ""' firmware/budget.json)
+          mkdir -p release-sizes
+          if [ -n "$new_tag" ] && [ "$new_tag" != "$old_tag" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$new_tag" > /dev/null; then
+              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&event=push&status=success&per_page=1" \
+                --jq '.workflow_runs[0].id // empty')
+              if [ -n "$id" ]; then
+                gh run download "$id" -p 'sizes-*' -D release-sizes || true
+                echo "Release figures for $new_tag from run $id"
+              else
+                echo "No finished Build run for $new_tag"
+              fi
+            else
+              echo "No tag $new_tag in this repository"
+            fi
+          fi
       - name: Check the budget
+        if: needs.changes.outputs.firmware == 'true'
         env:
           BASE_LABEL: ${{ steps.base.outputs.label }}
-        run: python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL"
+          ABSENT_OK: ${{ github.event_name == 'pull_request' && github.base_ref == 'dev' && 'moonhub75-2panel' || '' }}
+        run: |
+          python3 scripts/size_budget.py check sizes --base base --base-label "$BASE_LABEL" --absent-ok "$ABSENT_OK" \
+            --base-budget pr-base-budget.json --approvals approvals --release-sizes release-sizes \
+            --report budget-report.json
+      - uses: actions/upload-artifact@v7
+        if: always() && needs.changes.outputs.firmware == 'true'
+        with:
+          name: budget-report
+          path: budget-report.json
+          if-no-files-found: ignore
 
   build-demo:
-    # The demo build (firmware/pages/demo.yaml) for showing panels in bars and
+    # The demo build (firmware/pages/demo.yaml) for showing panels in person and
     # sending them to creators. A downloadable file on the run and nothing
     # more: the artifact name does not match publish's firmware-* pattern, so
-    # it never reaches the flasher site or a manifest, and tags skip it.
+    # it never reaches the flasher site or a manifest. Tags and pull requests
+    # into dev skip it; every push, promotion and dev push builds it.
     name: Build ${{ matrix.variant }} demo
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ !startsWith(github.ref, 'refs/tags/') && !(github.event_name == 'pull_request' && github.base_ref == 'dev') }}
     needs: branch-rules
     runs-on: ubuntu-latest
     strategy:
@@ -269,95 +496,24 @@ jobs:
         uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
+          version: ${{ env.ESPHOME_VERSION }}
       - uses: actions/upload-artifact@v7
         with:
           name: demo-${{ matrix.variant }}
           path: ${{ steps.esphome.outputs.name }}
 
-  build-bar:
-    # The bar build (firmware/pages/bar.yaml): real firmware that installs
-    # from the beta channel on its own, for the free panels in bars. Every run
-    # keeps it as a downloadable file (bar-<variant>, outside publish's
-    # firmware-* pattern) for flashing a new bar panel by hand. On the beta
-    # branch it is also the beta channel: its version gets "-beta.<run>" so
-    # each one is newer than the last, and publish-beta puts it on the site.
-    name: Build ${{ matrix.variant }} bar
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-    needs: branch-rules
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.beta.outputs.version }}
-    strategy:
-      matrix:
-        include:
-          - variant: moonhub75
-            yaml: firmware/gameday-bar.yaml
-          - variant: scoreboard75
-            yaml: firmware/gameday-scoreboard75-bar.yaml
-    steps:
-      - uses: actions/checkout@v7
-      - name: Beta version and summary
-        id: beta
-        env:
-          NOW: ${{ inputs.install_now }}
-        run: |
-          set -euo pipefail
-          v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml)
-          summary="Development build"
-          if [ "$GITHUB_REF" = refs/heads/beta ]; then
-            v="$v-beta.$GITHUB_RUN_NUMBER"
-            sed -i "s/^  version: \".*\"$/  version: \"$v\"/" firmware/gameday-common.yaml
-            summary="Bar beta $v from ${GITHUB_SHA::7}."
-            if [ -n "$NOW" ]; then
-              # Panel names only; the firmware reads this list (auto_update.h).
-              if ! [[ "$NOW" =~ ^[A-Za-z0-9_,\ -]+$ ]]; then
-                echo "::error::install_now takes panel names like gameday-aba970, or all"
-                exit 1
-              fi
-              summary="$summary Install now: $NOW"
-            fi
-          elif [ -n "$NOW" ]; then
-            echo "::warning::install_now only does something on the beta branch"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "summary=$summary" >> "$GITHUB_OUTPUT"
-          echo "$v: $summary"
-      - name: Build firmware
-        id: esphome
-        uses: esphome/build-action@v7
-        with:
-          yaml-file: ${{ matrix.yaml }}
-          version: "2026.10.0b3"
-          complete-manifest: true
-          release-summary: ${{ steps.beta.outputs.summary }}
-          release-url: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
-      - name: Stage output under a stable folder name
-        run: |
-          mkdir -p out
-          cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
-          ls -R out
-      - name: Product name in the manifest
-        run: ./scripts/set_manifest_name.sh out
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bar-${{ matrix.variant }}
-          path: out
-
   publish-beta:
-    # The beta channels, from one build of the beta branch:
-    # - gamedayscoreboard.app/firmware/beta/<variant>/, the bar builds, read
-    #   only by bar panels.
-    # - gamedayscoreboard.app/firmware/<variant>-beta/, the release builds,
-    #   read by panels with "Follow beta" on (the two-panel build follows
-    #   moonhub75's, as it does for releases).
+    # The beta channel, from one build of the beta branch:
+    # install.gameday-scoreboard.com/firmware/<variant>-beta/, the release builds,
+    # read by panels with "Follow beta" on (the two-panel build follows
+    # moonhub75's, as it does for releases).
     # Runs when someone pushes (promotes) to beta, or runs Build on beta by
-    # hand with install_now. Pages only deploys from main and release tags,
+    # hand. Pages only deploys from main and release tags,
     # so the files go on the rolling beta-firmware prerelease and the Site
     # workflow on main republishes the site with them. The stable manifests
     # and the flasher are left as they are.
     name: Publish the beta channel
-    needs: [build, build-bar, host-tests, web-tests]
+    needs: [build, host-tests, web-tests, notes]
     if: github.ref == 'refs/heads/beta' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
@@ -367,35 +523,33 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          pattern: bar-*
-          path: stage/firmware/beta
-          merge-multiple: true
-      - uses: actions/download-artifact@v8
-        with:
           name: firmware-moonhub75
           path: stage/release
       - uses: actions/download-artifact@v8
         with:
           name: firmware-scoreboard75
           path: stage/release
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-waveshare
+          path: stage/release
       - name: Check the files and store them on the beta-firmware prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          BETA: ${{ needs.build-bar.outputs.version }}
+          BETA: ${{ needs.notes.outputs.beta_version }}
         run: |
           set -euo pipefail
-          for v in moonhub75 scoreboard75; do
+          mkdir -p stage/firmware
+          for v in moonhub75 scoreboard75 waveshare; do
             mv "stage/release/$v" "stage/firmware/$v-beta"
           done
           ls -R stage
-          bash scripts/check_site_firmware.sh --beta stage
           bash scripts/check_site_firmware.sh --follow-beta stage "$BETA"
           mkdir -p release
-          for v in moonhub75 scoreboard75; do
-            (cd stage/firmware/beta && zip -r "../../../release/firmware-beta-$v.zip" "$v")
+          for v in moonhub75 scoreboard75 waveshare; do
             (cd stage/firmware && zip -r "../../release/firmware-$v-beta.zip" "$v-beta")
           done
-          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Bar panels read it from gamedayscoreboard.app/firmware/beta/, and panels with Follow beta on from gamedayscoreboard.app/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
+          notes="Beta firmware, not for customers. $BETA from $GITHUB_SHA. Panels with Follow beta on read it from install.gameday-scoreboard.com/firmware/<variant>-beta/; this prerelease only stores the files between site deploys."
           if gh release view beta-firmware >/dev/null 2>&1; then
             gh release upload beta-firmware release/*.zip --clobber
             gh release edit beta-firmware --prerelease --title "Beta $BETA" --notes "$notes"
@@ -422,28 +576,6 @@ jobs:
             echo "::warning::main's Site workflow doesn't take beta publishes yet, so this beta goes live with the next release."
           fi
 
-  build-beta:
-    # Early warning: the next ESPHome, allowed to fail. Nothing is published
-    # from this job.
-    name: Build ${{ matrix.variant }} (ESPHome beta)
-    needs: notes
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: moonhub75
-            yaml: firmware/gameday.yaml
-          - variant: scoreboard75
-            yaml: firmware/gameday-scoreboard75.yaml
-    steps:
-      - uses: actions/checkout@v7
-      - uses: esphome/build-action@v7
-        with:
-          yaml-file: ${{ matrix.yaml }}
-          version: beta
-
   host-tests:
     name: Parser tests
     runs-on: ubuntu-latest
@@ -466,16 +598,29 @@ jobs:
           python3 scripts/factory_flash.py --selftest
           python3 scripts/burnin_monitor.py --selftest
           python3 scripts/improv_scan.py --selftest
+          python3 scripts/crash_report.py --selftest
+          python3 scripts/site_seo.py --selftest
+          python3 scripts/beta_version.py --selftest
+          python3 scripts/changelog_check.py --selftest
+          python3 scripts/promote.py --selftest
+      - name: Site pages have their search and sharing tags
+        run: python3 scripts/site_seo.py check docs/site
       - name: Device page mock matches the firmware's set table
         run: python3 tests/web/mock_device.py --selftest
       - name: Fuzz the parsers (30 s a target)
         run: make -C tests fuzz
-      - name: Keep the input a fuzz crash left
+      # libFuzzer names the input after what went wrong: a crash, a hang
+      # (timeout), a leak or running out of memory (oom).
+      - name: Keep the input a failed fuzz run left
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: fuzz-crashes
-          path: tests/build/crash-*
+          path: |
+            tests/build/crash-*
+            tests/build/timeout-*
+            tests/build/leak-*
+            tests/build/oom-*
           if-no-files-found: ignore
 
   web-tests:
@@ -491,17 +636,54 @@ jobs:
       - name: bundle.js and bundle-demo.js are built from the current sources
         run: |
           python3 ../../scripts/build_web.py
-          git diff --exit-code -- ../../firmware/web/bundle.js ../../firmware/web/bundle-demo.js || {
-            echo "::error::firmware/web/bundle.js or bundle-demo.js is out of date. Run python scripts/build_web.py and commit both."
+          # status, not diff: a bundle deleted from the commit comes back as
+          # an untracked file, which git diff doesn't show.
+          stale=$(git status --porcelain -- ../../firmware/web/bundle.js ../../firmware/web/bundle-demo.js)
+          if [ -n "$stale" ]; then
+            echo "$stale"
+            echo "::error::firmware/web/bundle.js or bundle-demo.js is out of date or missing. Run python scripts/build_web.py and commit both."
             exit 1
-          }
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: tests/web/package-lock.json
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The browser comes from Playwright's download host and its system
+      # libraries from Ubuntu's apt mirrors, and a DNS blip on the runner
+      # failed whole runs at that step. So the browser is cached per
+      # Playwright version, downloads are retried, and apt runs only when a
+      # library is missing (the runner image normally has them all).
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Chromium from the cache
+        id: chromium-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      - name: Download Chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        # Headless runs use only the headless shell, so skip full Chromium.
+        run: ../../scripts/retry.sh npx playwright install --only-shell chromium
+      - name: Chromium's system libraries
+        run: |
+          # Playwright checks the same way at launch: ldd on the browser and
+          # its .so files.
+          if [ -z "$(find ~/.cache/ms-playwright -type f -name chrome-headless-shell)" ]; then
+            echo "::error::No chrome-headless-shell under ~/.cache/ms-playwright"
+            exit 1
+          fi
+          missing=$(find ~/.cache/ms-playwright -type f \( -name chrome-headless-shell -o -name '*.so' \) \
+            -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)
+          if [ -z "$missing" ]; then
+            echo "The runner image has every library Chromium needs; no apt install."
+            exit 0
+          fi
+          echo "$missing"
+          ../../scripts/retry.sh npx playwright install-deps chromium
       - run: npm test
 
   publish:
@@ -528,16 +710,23 @@ jobs:
           name: release-notes
           path: notes
       - name: Assemble site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p site/firmware
           # docs/site/. (not docs/site/*) so .well-known/ is copied too.
           cp -r docs/site/. site/
+          # This tag's release is created after the deploy, so its date comes from --date.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-pre-releases --json tagName,publishedAt > /tmp/releases.json
+          python3 scripts/release_notes.py --page site/changelog/index.html --dates /tmp/releases.json --date "$GITHUB_REF_NAME=$(TZ=America/Chicago date +%F)"
           cp -r artifacts/* site/firmware/
           sed -i "s/__VERSION__/${GITHUB_REF_NAME}/g" site/index.html
+          # Support's FAQPage JSON-LD, sitemap.xml and robots.txt.
+          python3 scripts/site_seo.py build site
           ls -R site
           bash scripts/check_site_firmware.sh site "$GITHUB_REF_NAME"
-      # Keep the bar panels' beta channel on the site through a release.
+      # Keep the Follow beta channel on the site through a release.
       - name: Add the beta channel
         env:
           GH_TOKEN: ${{ github.token }}
@@ -555,18 +744,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release
-          # MoonHub75 keeps the unsuffixed factory bin name it has always had.
-          f=$(ls artifacts/moonhub75/*.factory.bin | head -1)
-          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}.factory.bin"
-          f=$(ls artifacts/scoreboard75/*.factory.bin | head -1)
-          cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-scoreboard75.factory.bin"
-          ASSETS="release/gameday-scoreboard-${GITHUB_REF_NAME}.factory.bin release/gameday-scoreboard-${GITHUB_REF_NAME}-scoreboard75.factory.bin"
+          # Waveshare's and MoonHub75's factory images on their own, for flashing
+          # by hand (the board we ship, and the one DIY builders use), plus the
+          # variant zips below. scoreboard75 is the early test boards: its image
+          # stays in its zip. scripts/factory_flash.py reads the image out of a zip.
+          ASSETS=""
+          for v in waveshare moonhub75; do
+            f=$(ls artifacts/$v/*.factory.bin | head -1)
+            cp "$f" "release/gameday-scoreboard-${GITHUB_REF_NAME}-$v.factory.bin"
+            ASSETS="$ASSETS release/gameday-scoreboard-${GITHUB_REF_NAME}-$v.factory.bin"
+          done
           # Also zip each variant's manifest folder (manifest.json plus the
           # OTA and factory bins it references, with relative paths that
           # resolve the same wherever the folder lands) so site.yml can
           # rebuild site/firmware/<variant>/ from a release asset instead of
           # a Build artifact, which expires after 90 days.
-          for v in moonhub75 moonhub75-2panel scoreboard75; do
+          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare; do
             (cd artifacts && zip -r "../release/firmware-$v.zip" "$v")
             ASSETS="$ASSETS release/firmware-$v.zip"
           done
@@ -574,7 +767,9 @@ jobs:
           {
             cat notes/notes.md
             echo
-            echo "Install or update from the [flasher page](https://gamedayscoreboard.app/), or let a panel already running v0.2.2 or later update itself from its device page."
+            echo "Panels update themselves from their device page or the Game Day app. To install from scratch, use the [installer](https://install.gameday-scoreboard.com/) in your browser."
+            echo
+            echo "**Which file?** You don't need any of them for that. To flash a board over USB by hand, use \`gameday-scoreboard-${GITHUB_REF_NAME}-waveshare.factory.bin\` for the Waveshare ESP32-S3-RGB-Matrix (the board in ready-made scoreboards) or \`gameday-scoreboard-${GITHUB_REF_NAME}-moonhub75.factory.bin\` for a MoonHub75-pinout board. The \`firmware-*.zip\` files are what the installer site is built from; you don't need them."
             if [ -n "$PREV" ]; then
               echo
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"

@@ -37,6 +37,8 @@ void dump_snapshot(std::ostream &o, const GameSnapshot &s) {
   o << "  poss=" << s.possession << " dd=" << s.down_distance << " sdd=" << s.short_down_distance
     << " rz=" << s.is_red_zone << "\n";
   o << "  play=" << s.last_play << "\n";
+  if (!s.drive.empty() || s.team_win_pct >= 0)
+    o << "  drive=" << s.drive << " win=" << (int) s.team_win_pct << "\n";
   o << "  odds=" << s.odds << " ou=" << s.over_under << " tv=" << s.tv << " venue=" << s.venue << "\n";
 }
 
@@ -122,7 +124,7 @@ void dump_scoreboard(std::ostream &o, const char *path) {
         dump_splashes(o, s);
     }
   }
-  std::vector<LiveGame> live;
+  LiveList live;
   bool ok = parse_live_games(json, live);
   o << " live ok=" << ok << " n=" << live.size() << "\n";
   for (const auto &g : live)

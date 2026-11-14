@@ -1,7 +1,10 @@
-// Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble
+// SPDX-License-Identifier: GPL-3.0-only
+// Local override of ESPHome 2026.10.0 esphome/components/improv_ble
 // (ESPHome is GPLv3 for C++, MIT for Python; https://github.com/esphome/esphome).
 // Game Day changes: answers Improv RPC 0x04 (Get Wi-Fi Networks) over BLE, keeps
-// the password out of the log, and goes back to the saved network after a failed handover.
+// the password out of the log, goes back to the saved network after a failed handover,
+// says in the advert whether the panel has a saved network, and hangs up on
+// phones and counts open links so Bluetooth can be turned off without a stall.
 // Every change from upstream sits between "GAMEDAY: begin" and "GAMEDAY: end".
 
 #include "improv_ble_component.h"
@@ -23,9 +26,15 @@
 #include "esphome/components/esp32_ble_server/ble_2902.h"
 
 // GAMEDAY: begin
+#include <esp_bt_main.h>
+#include <esp_event.h>
+#include <esp_gatts_api.h>
 #include <esp_wifi.h>
 
 #include <algorithm>
+
+// Bluedroid's count of open links (stack/btm_api.h, outside its public API).
+extern "C" uint16_t BTM_GetNumAclLinks(void);
 // GAMEDAY: end
 
 namespace esphome::improv_ble {
@@ -60,6 +69,29 @@ static constexpr uint32_t NETWORKS_SEND_INTERVAL_MS = 100;
 static constexpr size_t NETWORKS_MAX = 20;
 // GAMEDAY: end
 
+// GAMEDAY: begin
+// Wait this long after stop() took the service down before starting it
+// again. Bluedroid's STOP event comes back in milliseconds; BLEService has no
+// getter for STOPPING or STOPPED, so the delay stands in for it.
+static constexpr uint32_t SERVICE_RESTART_DELAY = 500;
+
+// WIFI_EVENT_SCAN_DONE, on the event task: flags a scan that found nothing.
+static void on_scan_done(void *arg, esp_event_base_t base, int32_t id, void *data) {
+  const auto *done = static_cast<const wifi_event_sta_scan_done_t *>(data);
+  if (done != nullptr && (done->status != 0 || done->number == 0))
+    static_cast<std::atomic<bool> *>(arg)->store(true);
+}
+// GAMEDAY: end
+
+// GAMEDAY: begin (saved-network flag in the advert)
+// The last reserved service data byte. Bit 7 says this firmware fills the
+// byte, so the app can tell "no saved network" from older firmware that
+// leaves it 0. Bit 0 says the panel has a saved network it is trying to reach.
+static constexpr uint8_t ADV_FLAGS_INDEX = 7;
+static constexpr uint8_t ADV_FLAGS_PRESENT = 0x80;
+static constexpr uint8_t ADV_FLAG_SAVED_NETWORK = 0x01;
+// GAMEDAY: end
+
 ImprovBLEComponent::ImprovBLEComponent() { global_improv_component = this; }
 
 void ImprovBLEComponent::setup() {
@@ -75,9 +107,16 @@ void ImprovBLEComponent::setup() {
 #endif
   global_ble_server->on_disconnect([this](uint16_t conn_id) {
     this->set_error_(improv::ERROR_NONE);
-    this->cancel_wifi_networks_();  // GAMEDAY
+    // GAMEDAY: begin
+    this->cancel_wifi_networks_();
+    // Half a command from a phone that left must not prefix the next one's.
+    this->incoming_data_.clear();
+    // GAMEDAY: end
   });
-  wifi::global_wifi_component->add_scan_results_listener(this);  // GAMEDAY
+  // GAMEDAY: begin
+  wifi::global_wifi_component->add_scan_results_listener(this);
+  wifi::global_wifi_component->add_connect_state_listener(this);
+  // GAMEDAY: end
 
 #ifdef USE_PROVISIONING
   if (provisioning::global_provisioning_manager != nullptr) {
@@ -155,6 +194,10 @@ void ImprovBLEComponent::loop() {
   uint32_t now = App.get_loop_component_start_time();
 
   // GAMEDAY: begin
+  if (this->networks_wait_scan_ && this->networks_scan_empty_.exchange(false)) {
+    ESP_LOGD(TAG, "Wi-Fi scan found no networks");
+    this->queue_wifi_networks_();
+  }
   if (this->networks_wait_scan_ && now - this->networks_scan_start_ > NETWORKS_SCAN_TIMEOUT_MS) {
     ESP_LOGW(TAG, "Wi-Fi scan did not finish; sending the last results");
     this->queue_wifi_networks_();
@@ -189,6 +232,17 @@ void ImprovBLEComponent::loop() {
           this->set_error_(improv::ERROR_NONE);
           this->should_start_ = false;  // Clear flag after starting
           ESP_LOGD(TAG, "Service started!");
+          // GAMEDAY: begin
+        } else if (this->service_stopped_ && !this->service_->is_starting() &&
+                   millis() - this->service_stopped_ms_ >= SERVICE_RESTART_DELAY) {
+          // Stopped by stop() with Bluetooth left on (a phone kept its link
+          // through gd_ble_off): neither branch above starts it again, so the
+          // app could not find the panel after a later Wi-Fi drop. The delay
+          // lets the stop finish in Bluedroid first.
+          ESP_LOGD(TAG, "Restarting the stopped service");
+          this->service_stopped_ = false;
+          this->service_->start();
+          // GAMEDAY: end
         }
       }
       break;
@@ -364,6 +418,10 @@ void ImprovBLEComponent::stop() {
     // Release first so removing the service UUID does not restart advertising on the way out
     this->release_advertising_();
     this->service_->stop();
+    // GAMEDAY: begin
+    this->service_stopped_ = true;
+    this->service_stopped_ms_ = millis();
+    // GAMEDAY: end
     this->set_state_(improv::STATE_STOPPED);
   });
 }
@@ -439,6 +497,7 @@ void ImprovBLEComponent::process_incoming_data_() {
             current = this->last_connected_sta_;
           this->restore_sta_ = current.get_ssid().empty() ? wifi::WiFiAP{} : current;
         }
+        this->joined_since_handover_ = false;
         // GAMEDAY: end
 
         wifi::global_wifi_component->set_sta(sta);
@@ -476,6 +535,36 @@ void ImprovBLEComponent::process_incoming_data_() {
 }
 
 void ImprovBLEComponent::on_wifi_connect_timeout_() {
+  // GAMEDAY: begin
+  this->failed_ssid_ = this->connecting_sta_.get_ssid().str();
+  this->failed_ms_ = std::max<uint32_t>(millis(), 1);
+  this->handover_failed_ = true;
+  // Put the right network in memory before the state change below: improv's
+  // on_start (pages/boot.yaml) redraws the screen from it at once, and a
+  // failed network still there reads as a real one the panel has lost.
+  if (this->setup_mode_) {
+    // After "Reset Wi-Fi" the panel had a blank network, which is what keeps
+    // it in setup (components/saved_networks). Put that back rather than
+    // clearing the list: Bluetooth and the hotspot stay up, the app can send
+    // the name and password again, and gd_setup_window takes the panel back
+    // to its saved networks once the owner has gone.
+    wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+  } else if (!this->restore_sta_.get_ssid().empty()) {
+    // Go back to the network the panel had, which is still the one saved in
+    // flash. Upstream clears the list here, which left a panel with a wrong
+    // password offline until a power cycle and kept the offline restart in
+    // gameday-common.yaml from firing. The handover narrowed the live list
+    // to the new network, so the other saved networks come back too.
+    if (this->restore_networks_)
+      this->restore_networks_();
+    else
+      wifi::global_wifi_component->set_sta(this->restore_sta_);
+    wifi::global_wifi_component->start_connecting(this->restore_sta_);
+  } else {
+    // A new panel, nothing to go back to: back to setup, as upstream.
+    wifi::global_wifi_component->clear_sta();
+  }
+  // GAMEDAY: end
   this->set_error_(improv::ERROR_UNABLE_TO_CONNECT);
   this->set_state_(improv::STATE_AUTHORIZED);
 #ifdef USE_BINARY_SENSOR
@@ -484,18 +573,11 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
 #endif
   ESP_LOGW(TAG, "Timed out while connecting to Wi-Fi network");
   // GAMEDAY: begin
-  // Go back to the network the panel had, which is still the one saved in
-  // flash. Upstream clears the list here, which left a panel with a wrong
-  // password offline until a power cycle and kept the offline
-  // restart in gameday-common.yaml from firing.
-  if (!this->restore_sta_.get_ssid().empty()) {
+  if (this->setup_mode_)
+    ESP_LOGI(TAG, "Staying in setup for another try");
+  else if (!this->restore_sta_.get_ssid().empty())
     ESP_LOGI(TAG, "Going back to the saved network");
-    wifi::global_wifi_component->set_sta(this->restore_sta_);
-    wifi::global_wifi_component->start_connecting(this->restore_sta_);
-    return;
-  }
   // GAMEDAY: end
-  wifi::global_wifi_component->clear_sta();
 }
 
 void ImprovBLEComponent::check_wifi_connection_() {
@@ -504,6 +586,20 @@ void ImprovBLEComponent::check_wifi_connection_() {
   }
 
   if (this->state_ == improv::STATE_PROVISIONING) {
+    // GAMEDAY: begin
+    // is_connected() stays true for a moment after the handover starts, on
+    // the network the panel already had. Only a network joined since, with
+    // the name sent, is a success to report and save.
+    if (!this->joined_since_handover_)
+      return;
+    std::array<char, wifi::SSID_BUFFER_SIZE> now{};
+    wifi::global_wifi_component->wifi_ssid_to(now);
+    if (strncmp(now.data(), this->connecting_sta_.get_ssid().c_str(), now.size()) != 0)
+      return;
+    // A network list still going out would land after the result below and
+    // replace it on the characteristic.
+    this->cancel_wifi_networks_();
+    // GAMEDAY: end
     wifi::global_wifi_component->save_wifi_sta(this->connecting_sta_.get_ssid(), this->connecting_sta_.get_password());
     this->connecting_sta_ = {};
     this->restore_sta_ = {};  // GAMEDAY
@@ -560,10 +656,45 @@ void ImprovBLEComponent::advertise_service_data_() {
 
   service_data[3] = capabilities;
   // service_data[4-7] are already 0 (Reserved)
+  // GAMEDAY: begin
+  service_data[ADV_FLAGS_INDEX] = ADV_FLAGS_PRESENT | (this->has_saved_network_ ? ADV_FLAG_SAVED_NETWORK : 0);
+  // GAMEDAY: end
 
   // Atomically set service data and disable name in advertising
   esp32_ble::global_ble->advertising_set_service_data_and_name(std::span<const uint8_t>(service_data), false);
 }
+
+// GAMEDAY: begin
+uint16_t ImprovBLEComponent::open_links() {
+  // Bluedroid's state only exists while it is up (CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY).
+  if (esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED)
+    return 0;
+  return BTM_GetNumAclLinks();
+}
+
+void ImprovBLEComponent::hang_up() {
+  auto *server = esp32_ble_server::global_ble_server;
+  if (server == nullptr)
+    return;
+  // Copied first: the server's list changes as the disconnects come back.
+  const uint32_t n = server->get_connected_client_count();
+  std::array<uint16_t, USE_ESP32_BLE_MAX_CONNECTIONS> ids{};
+  std::copy_n(server->get_clients(), std::min<uint32_t>(n, ids.size()), ids.begin());
+  for (uint32_t i = 0; i < n && i < ids.size(); i++)
+    esp_ble_gatts_close(server->get_gatts_if(), ids[i]);
+}
+
+void ImprovBLEComponent::set_has_saved_network(bool saved) {
+  if (this->has_saved_network_ == saved)
+    return;
+  this->has_saved_network_ = saved;
+  ESP_LOGD(TAG, "Advertising saved network: %s", YESNO(saved));
+  // Already advertising: send the new flag now rather than at the next state change
+  if (this->state_ != improv::STATE_STOPPED && this->state_ != improv::STATE_PROVISIONED &&
+      !this->advertising_device_name_)
+    this->advertise_service_data_();
+}
+// GAMEDAY: end
 
 void ImprovBLEComponent::update_advertising_type_() {
   uint32_t now = App.get_loop_component_start_time();
@@ -638,6 +769,14 @@ void ImprovBLEComponent::handle_get_wifi_networks_() {
   // the middle of a connection attempt. The component stores the results of
   // any scan (Improv keeps it storing all of them) and calls
   // on_wifi_scan_results() when it is done. Same settings as its own scans.
+  // It skips its listeners when a scan finds nothing, which would leave the
+  // app waiting out NETWORKS_SCAN_TIMEOUT_MS for an empty list, so watch the
+  // driver's event for that too. Armed before the scan starts.
+  if (!this->networks_scan_handler_) {
+    this->networks_scan_handler_ = esp_event_handler_instance_register(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, on_scan_done,
+                                                                       &this->networks_scan_empty_, nullptr) == ESP_OK;
+  }
+  this->networks_scan_empty_ = false;
   wifi_scan_config_t config{};
   config.show_hidden = false;
   config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
@@ -653,6 +792,11 @@ void ImprovBLEComponent::handle_get_wifi_networks_() {
   }
   this->networks_wait_scan_ = true;
   this->networks_scan_start_ = App.get_loop_component_start_time();
+}
+
+void ImprovBLEComponent::on_wifi_connect_state(StringRef ssid, std::span<const uint8_t, 6> bssid) {
+  if (!ssid.empty())
+    this->joined_since_handover_ = true;
 }
 
 void ImprovBLEComponent::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {

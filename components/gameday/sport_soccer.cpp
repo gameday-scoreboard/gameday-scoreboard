@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Soccer's parse extras, ticker, clock row and splashes. Pure, no ESPHome
 // includes.
 #include "espn_parse.h"
@@ -303,8 +305,11 @@ std::string soccer_situation(const GameSnapshot &s, size_t max) {
 std::string soccer_board_record(const std::string &wdl) {
   if (wdl.size() <= 7)
     return wdl;
+  // Three digits a count at most: a longer one (only a malformed record has
+  // one) stops the match, so the record shows as it came and 3 * w can't
+  // overflow.
   int w = 0, d = 0, l = 0;
-  if (sscanf(wdl.c_str(), "%d-%d-%d", &w, &d, &l) != 3)
+  if (sscanf(wdl.c_str(), "%3d-%3d-%3d", &w, &d, &l) != 3)
     return wdl;
   return std::to_string(3 * w + d) + " pts";
 }
@@ -412,7 +417,7 @@ std::string soccer_status_text(const GameSnapshot &s, const TickerOptions &o, co
       add_part(out, stage(f.note));
       add_part(out, pair_line("Form", s, f.team_form, f.opp_form));
       add_odds(out, s, o, odds_line(s));
-      add_part(out, s.venue);
+      add_part(out, detail::venue_line(s, o));
       return ascii_fold(out);
     case GameState::POST:
       out = final_line(s);
@@ -472,8 +477,8 @@ int pick_schedule(const std::vector<Schedule> &comps, int64_t now_epoch, const s
 // ---- splashes ------------------------------------------------------------------
 
 // A goal for us is "GOAL!", theirs "LEE GOAL" (with opponent splashes on). The
-// win splashes at full time; a draw gets none. A shootout decides a level
-// game.
+// win splashes at full time; a draw gets none. A shootout decides the game
+// (shootout_decides).
 Splash soccer_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral) {
   Splash none;
   if (!prev.valid || !cur.valid || prev.event_id != cur.event_id)
@@ -482,7 +487,7 @@ Splash soccer_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opp
     if (!cur.completed)
       return none;
     int us = cur.team_score, them = cur.opp_score;
-    if (us == them && cur.soc.team_shootout >= 0 && cur.soc.opp_shootout >= 0) {
+    if (shootout_decides(cur)) {
       us = cur.soc.team_shootout;
       them = cur.soc.opp_shootout;
     }

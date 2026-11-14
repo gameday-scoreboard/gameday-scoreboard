@@ -1,0 +1,91 @@
+name: Tag release
+
+# A beta-to-main merge is the release. When main's firmware version has no tag
+# yet, this tags the merge and runs Build on the tag, which publishes the
+# release, the flasher site and the update feed. A tag made with the
+# workflow's own token doesn't start other workflows, so this starts Build
+# itself (workflow_dispatch is the one event GitHub lets that token trigger).
+# A version that already has a tag and a release does nothing: a merge whose
+# version wasn't bumped releases nothing, and an existing tag never moves. A
+# tag with no release (its Build failed) fails this job until it is fixed.
+# Before tagging it checks what Build would refuse (the CHANGELOG section,
+# a promotion from beta, a final ESPHome), so a bad merge isn't tagged at all.
+# Pushing a tag by hand still works the same as before.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag main's version if it has no tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/^  version: "\(.*\)"$/\1/p' firmware/gameday-common.yaml | head -n1)
+          if ! grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<< "$v"; then
+            echo "::error file=firmware/gameday-common.yaml::version is '$v', not a release number like 2026.11.0"
+            exit 1
+          fi
+          tag="v$v"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            # A tag with no release is a release that failed after tagging:
+            # say so instead of passing, unless Build on it is still going.
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "$tag is already tagged and released, so there is nothing to release."
+              exit 0
+            fi
+            running=$(gh run list --workflow build.yml --branch "$tag" --json status --jq '[.[] | select(.status != "completed")] | length')
+            if [ "$running" != "0" ]; then
+              echo "$tag is tagged and its Build is still running."
+              exit 0
+            fi
+            echo "::error::$tag is tagged but has no release: its Build failed. Fix it on dev, promote, and run Build on $tag again (gh workflow run build.yml --ref $tag), or delete the tag and promote again."
+            exit 1
+          fi
+          # Everything Build checks before it publishes, checked before the
+          # tag goes on: a tag that fails Build would stay behind with no
+          # release, and every later merge would find it and pass.
+          if ! grep -qx "## $tag" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::main is at $v but CHANGELOG.md has no '## $tag' section, so it isn't tagged. Add the section on dev and promote again."
+            exit 1
+          fi
+          if ! python3 scripts/release_notes.py "$tag" >/dev/null || ! python3 scripts/release_notes.py "$tag" --summary >/dev/null; then
+            echo "::error file=CHANGELOG.md::The '## $tag' section in CHANGELOG.md has no summary line or bullets, so it isn't tagged. Fill it in on dev and promote again."
+            exit 1
+          fi
+          # The merge has to be a promotion from beta, and on a final ESPHome
+          # unless that PR has the esphome-beta-ok label (build.yml's own checks).
+          prs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+                  --jq '.[] | select(.base.ref == "main" and .merged_at != null) | "\(.number) \(.head.ref) \(.head.repo.full_name)"')
+          if [ -n "$prs" ] && ! grep -q " beta $GITHUB_REPOSITORY$" <<< "$prs"; then
+            echo "::error::main got this commit from a PR that isn't from beta ($prs), so it isn't tagged."
+            exit 1
+          fi
+          esphome=$(sed -n 's/^  ESPHOME_VERSION: "\(.*\)"$/\1/p' .github/workflows/build.yml | head -n1)
+          if ! grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<< "$esphome"; then
+            ok=""
+            for n in $(cut -d' ' -f1 <<< "$prs"); do
+              ok=$ok$(gh api "repos/$GITHUB_REPOSITORY/pulls/$n" --jq '.labels[] | select(.name == "esphome-beta-ok") | .name')
+            done
+            if [ -z "$ok" ]; then
+              echo "::error file=.github/workflows/build.yml::ESPHOME_VERSION is $esphome, a beta, and the promotion PR has no esphome-beta-ok label, so it isn't tagged. Move the pin to a final release on dev and promote again, or add the label and re-run this job."
+              exit 1
+            fi
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          echo "Tagged $tag at $GITHUB_SHA"
+          gh workflow run build.yml --ref "$tag"
+          echo "Started Build on $tag"

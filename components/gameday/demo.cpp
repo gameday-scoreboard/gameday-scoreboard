@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The demo build's scripted game (firmware/gameday-demo.yaml). Release
 // firmware compiles none of this: GAMEDAY_DEMO is only defined when the
 // gameday block in YAML says demo: true.
@@ -180,6 +182,11 @@ void GamedayComponent::demo_show_step_(bool splash) {
     g.opp_color = color;
   }
   g.valid = true;
+  // Each run is a game of its own, to the celebrations (which compare event
+  // ids) and to the game events (ha_track_).
+  if (this->demo_step_ == 0)
+    this->demo_run_++;
+  g.event_id = "demo-" + std::to_string(this->demo_run_);
   g.state = d.state;
   g.completed = d.state == GameState::POST;
   g.team_score = d.us;
@@ -190,6 +197,11 @@ void GamedayComponent::demo_show_step_(bool splash) {
   g.short_down_distance = d.down;
   g.down_distance = d.down;
   g.is_red_zone = d.red_zone;
+  g.yard_line = d.yard_line;
+  g.distance = d.distance;
+  g.down = d.down[0] >= '1' && d.down[0] <= '4' ? (uint8_t) (d.down[0] - '0') : 0;
+  g.team_win_pct = d.win;
+  g.team_home = true;
   g.last_play = d.play;
   g.team_winner = d.state == GameState::POST && d.us > d.them;
   g.team_timeouts = d.period <= 2 ? 3 : 2;
@@ -210,22 +222,24 @@ void GamedayComponent::demo_show_step_(bool splash) {
 }
 
 // With made-up teams there is no logo to fetch, so each logo slot shows the
-// side's abbreviation on its colors instead, the way the app shows every team.
+// side's abbreviation in its color instead.
 void GamedayComponent::demo_badges_(UpdateFields &f) const {
   if (!this->demo_playing_() || !this->demo_prefs_.madeup)
     return;
   DemoKind kind = (DemoKind) this->demo_kind_;
+  const auto &home = ::espn::demo_made_up(kind, true);
+  const auto &away = ::espn::demo_made_up(kind, false);
   f.team_badge = true;
   f.opponent_badge = true;
-  f.team_ring = ::espn::demo_made_up(kind, true).alt;
-  f.opponent_ring = ::espn::demo_made_up(kind, false).alt;
+  f.team_badge_rgb = ::espn::badge_text(home.rgb, home.alt);
+  f.opponent_badge_rgb = ::espn::badge_text(away.rgb, away.alt);
 }
 
 ::espn::DemoMatchup GamedayComponent::demo_matchup_(uint8_t kind) const {
   bool college = kind == (uint8_t) DemoKind::COLLEGE;
   return ::espn::demo_matchup((DemoKind) kind, college ? this->demo_prefs_.college_home : this->demo_prefs_.pro_home,
                               college ? this->demo_prefs_.college_away : this->demo_prefs_.pro_away,
-                              (League) this->prefs_.league, this->prefs_.team_id);
+                              this->fallback_team_());
 }
 
 uint8_t GamedayComponent::demo_league_() const {

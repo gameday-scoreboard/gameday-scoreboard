@@ -1,0 +1,13 @@
+{
+  "networks": [
+    {
+      "ssid": "Home Wi-Fi",
+      "connected": true
+    },
+    {
+      "ssid": "Garage",
+      "connected": false
+    }
+  ],
+  "max": 5
+}

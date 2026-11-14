@@ -1,0 +1,136 @@
+blueprint:
+  name: "Game Day Scoreboard: flash the lights in team colors on a score"
+  description: >-
+    When the game your Game Day Scoreboard follows has a score, flashes your
+    lights in the scoring team's color, then puts them back the way they were.
+    Choose your team's scores only or both teams', and which plays count.
+    The device page's "Send a test event" button runs it too, so you can try
+    it without waiting for a game.
+  domain: automation
+  author: Game Day Scoreboard
+  source_url: https://docs.gameday-scoreboard.com/blueprints/gameday-score-lights.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    lights:
+      name: Lights
+      description: The lights to flash. Color lights show the team's color.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    whose:
+      name: Whose scores
+      description: >-
+        Your team is the one on the left of the board in Favorite teams. In
+        Live games neither side is yours, so pick both teams there.
+      default: mine
+      selector:
+        select:
+          options:
+            - label: My team's
+              value: mine
+            - label: Both teams'
+              value: both
+    plays:
+      name: Plays
+      description: Leave empty for every score.
+      default: []
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Touchdown
+              value: touchdown
+            - label: Field goal
+              value: field_goal
+            - label: Extra point
+              value: extra_point
+            - label: Two-point try or safety
+              value: two_point
+            - label: Run (baseball)
+              value: run
+            - label: Home run
+              value: home_run
+            - label: Goal (hockey, soccer)
+              value: goal
+            - label: Basket (basketball)
+              value: score
+    flashes:
+      name: Flashes
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+    seconds:
+      name: Seconds per flash
+      default: 0.7
+      selector:
+        number:
+          min: 0.3
+          max: 3
+          step: 0.1
+          unit_of_measurement: s
+    panel:
+      name: Only this panel
+      description: >-
+        With more than one panel, the panel's name (like gameday-2f6a70), so
+        two panels on the same game don't both flash the lights. Empty for any.
+      default: ""
+      selector:
+        text:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: event
+    event_type: esphome.gameday_score
+  - trigger: event
+    event_type: esphome.gameday_test
+
+variables:
+  whose: !input whose
+  plays: !input plays
+  panel: !input panel
+  lights: !input lights
+  seconds: !input seconds
+  data: "{{ trigger.event.data }}"
+  color: "{{ (data.team_rgb | default('255,255,255')).split(',') | map('int') | list }}"
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (whose == 'both' or data.my_team == 'true')
+         and (plays | count == 0 or data.play in plays)
+         and (panel == '' or data.panel == panel) }}
+
+actions:
+  - action: scene.create
+    data:
+      scene_id: gameday_score_lights_before
+      snapshot_entities: "{{ lights }}"
+  - repeat:
+      count: !input flashes
+      sequence:
+        - action: light.turn_on
+          target:
+            entity_id: "{{ lights }}"
+          data:
+            rgb_color: "{{ color }}"
+            brightness_pct: 100
+            transition: 0
+        - delay:
+            seconds: "{{ seconds }}"
+        - action: light.turn_off
+          target:
+            entity_id: "{{ lights }}"
+          data:
+            transition: 0
+        - delay:
+            seconds: "{{ seconds / 2 }}"
+  - action: scene.turn_on
+    target:
+      entity_id: scene.gameday_score_lights_before

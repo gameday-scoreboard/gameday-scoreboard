@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's new - Game Day Scoreboard</title>
+  <meta name="description" content="Every Game Day Scoreboard firmware release, newest first, with what changed in each one.">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/changelog/">
+  <meta property="og:site_name" content="Game Day Scoreboard">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="What's new - Game Day Scoreboard">
+  <meta property="og:description" content="Every Game Day Scoreboard firmware release, newest first, with what changed in each one.">
+  <meta property="og:url" content="https://install.gameday-scoreboard.com/changelog/">
+  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@GameDayScore">
+  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
+    main { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+    h1 { font-size: 2rem; margin: 0 0 4px; }
+    .sub { color: #9da7b3; margin: 0 0 32px; }
+    .card { background: #151b23; border: 1px solid #262e38; border-radius: 12px; padding: 20px 24px; margin: 0 0 20px; scroll-margin-top: 16px; }
+    .card:target { border-color: #7cc4ff; }
+    .card h2 { margin: 0; font-size: 1.2rem; }
+    .card h2 a { color: inherit; text-decoration: none; }
+    .when { margin: 0; font-size: 0.9rem; color: #9da7b3; }
+    .sum { margin: 8px 0 0; color: #c3ccd6; }
+    details { margin-top: 10px; }
+    summary { cursor: pointer; color: #7cc4ff; font-size: 0.95rem; }
+    ul { margin: 10px 0 0; padding-left: 20px; color: #c3ccd6; }
+    li { margin: 0 0 8px; }
+    a { color: #7cc4ff; }
+    footer { margin-top: 40px; font-size: 0.85rem; color: #6f7a86; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>What's new</h1>
+  <p class="sub">Every firmware release, newest first. Your panel's device page shows the version it runs under Firmware, and offers each new one there.</p>
+
+<!-- RELEASES -->
+
+  <footer>
+    <a href="/">Game Day Scoreboard</a> &middot; <a href="/support/">Support</a>
+  </footer>
+</main>
+<script>
+  // A link to one release, like the device page's "Release notes", opens its list.
+  const openTarget = () => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    const card = id && document.getElementById(id);
+    const d = card && card.querySelector("details");
+    if (d) d.open = true;
+  };
+  window.addEventListener("hashchange", openTarget);
+  openTarget();
+</script>
+</body>
+</html>

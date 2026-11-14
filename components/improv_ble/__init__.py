@@ -1,6 +1,6 @@
 from esphome import automation
 import esphome.codegen as cg
-# Local override of ESPHome 2026.10.0b3 esphome/components/improv_ble (MIT for
+# Local override of ESPHome 2026.10.0 esphome/components/improv_ble (MIT for
 # Python). Game Day change: answers Improv RPC 0x04 (Get Wi-Fi Networks) over
 # BLE. Every change from upstream is marked GAMEDAY.
 from esphome.components import binary_sensor, improv_base, output
@@ -153,6 +153,9 @@ async def to_code(config: ConfigType) -> None:
     cg.add_define("USE_IMPROV_BLE")
     # GAMEDAY: told when a Wi-Fi scan finishes, to answer RPC 0x04
     wifi.request_wifi_scan_results_listener()
+    # GAMEDAY: told when the panel joins a network, so a handover only
+    # reports success once the network sent was actually joined
+    wifi.request_wifi_connect_state_listener()
 
     await improv_base.setup_improv_core(var, config)
 

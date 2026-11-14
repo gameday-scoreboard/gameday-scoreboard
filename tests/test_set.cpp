@@ -4,11 +4,15 @@
 #include <ArduinoJson.h>
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "playlists.h"
 #include "set_request.h"
 
 using namespace espn;
@@ -47,13 +51,38 @@ std::string keys(const std::vector<League> &leagues) {
 // apply_set_'s setters store. PanelLayout's 1 to max_cols check (2 in
 // gameday-common.yaml) is the one refusal outside set_request.h.
 struct Settings {
-  TeamRef team;
-  uint8_t team_league{0};
-  int mode{0}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
-  bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true};
-  bool bootaddr{true}, autoupd{false}, beta{false};
+  int mode{4}, rotate{1}, lockon{15}, release{30}, tz{1}, panels{1};
+  bool collide{false}, today{false}, tz_auto{true}, down{true}, count{true}, match{true}, play{true}, odds{true}, opp{true}, best{true};
+  bool jump{false}, banner{true}, favtake{false};
+  bool leaders{true};
+  int celebrate{2};  // celebrate.h CelebLevel
+  bool bootaddr{true}, autoupd{false}, beta{false}, countdown{true}, top25{true}, news{false}, gameleaders{true};
+  uint16_t cards_off{0};  // the Between games list's other cards (cards.h)
+  bool field{true}, winbar{true}, spark{true}, bigplays{true};
+  std::string cdname;
+  uint32_t cdymd{0};
   TeamRef favs[16];
+  // Playlists as the firmware keeps them: a name, a mask over favs and the
+  // options (Prefs9 and Prefs10), and its color and icon (Prefs12).
+  struct List {
+    std::string first;
+    uint16_t second;
+    ListOpt opt;
+    uint8_t mark{0};
+  };
+  std::vector<List> lists;
+  int list{0};
+  int sport{0};  // the sport row playing, 1 + Sport; 0 = none
+  RemoteTarget remote[4];  // the WizMote's buttons (Prefs11)
   uint16_t live_mask{0};
+  std::string msg, msgurl, nick, hook;
+  std::string town;
+  bool wxon{false};
+  int wxunit{0};
+  int msgevery{kMsgEveryDefault};
+  int pregame{kPregameDefault};
+  NightPrefs night{night_defaults()};
+  WakePrefs wake{wake_defaults()};
 };
 constexpr int kFavMax = 16;
 constexpr int kMaxCols = 2;
@@ -68,16 +97,34 @@ std::string team_str(const TeamRef &t) {
   return t.id == 0 ? "" : std::string(league_key((League) t.league)) + ":" + std::to_string(t.id);
 }
 
+// GamedayComponent::card_on and set_card: a card that kept its own switch
+// reads and writes that one.
+bool *own_switch(Settings &s, Card c) {
+  switch (c) {
+    case Card::COUNTDOWN: return &s.countdown;
+    case Card::TOP25: return &s.top25;
+    case Card::NEWS: return &s.news;
+    case Card::LEADERS: return &s.gameleaders;
+    case Card::WEATHER: return &s.wxon;
+    default: return nullptr;
+  }
+}
+
+bool card_on(const Settings &s, Card c) {
+  const bool *own = own_switch(const_cast<Settings &>(s), c);
+  return own != nullptr ? *own : (s.cards_off & card_bit(c)) == 0;
+}
+
+void set_card(Settings &s, Card c, bool on) {
+  if (bool *own = own_switch(s, c))
+    *own = on;
+  else if (on)
+    s.cards_off &= (uint16_t) ~card_bit(c);
+  else
+    s.cards_off |= card_bit(c);
+}
+
 void load(Settings &s, JsonObjectConst o) {
-  if (o["team_league"].is<const char *>()) {
-    const LeagueInfo *info = league_by_key(o["team_league"]);
-    s.team_league = info != nullptr ? (uint8_t) info->league : 0;
-  }
-  if (o["team"].is<const char *>()) {
-    s.team = team_ref(o["team"]);
-    if (s.team.id != 0)
-      s.team_league = s.team.league;
-  }
   if (o["favs"].is<JsonArrayConst>()) {
     int i = 0;
     for (auto f : o["favs"].as<JsonArrayConst>())
@@ -85,6 +132,37 @@ void load(Settings &s, JsonObjectConst o) {
         s.favs[i++] = team_ref(f.as<const char *>());
     for (; i < kFavMax; i++)
       s.favs[i] = TeamRef{};
+  }
+  if (o["lists"].is<JsonArrayConst>()) {
+    s.lists.clear();
+    for (JsonObjectConst l : o["lists"].as<JsonArrayConst>()) {
+      uint16_t mask = 0;
+      for (auto f : l["f"].as<JsonArrayConst>())
+        mask |= (uint16_t) (1u << f.as<int>());
+      ListOpt opt;
+      if (l["days"].is<const char *>())
+        list_opt_token("@d:" + std::string(l["days"].as<const char *>()), opt);
+      if (l["start"].is<const char *>())
+        list_opt_token("@t:" + std::string(l["start"].as<const char *>()) + "-" + (l["end"] | "00:00"), opt);
+      if (l["only"] | false)
+        opt.flags |= LISTOPT_ONLY;
+      if (l["today"].is<bool>())
+        list_opt_token(l["today"].as<bool>() ? "@today:1" : "@today:0", opt);
+      uint8_t mark = 0;
+      list_mark_token("@c:" + std::string(l["color"] | ""), mark);
+      list_mark_token("@i:" + std::string(l["icon"] | ""), mark);
+      s.lists.push_back({l["n"].as<const char *>(), mask, opt, mark});
+    }
+  }
+  if (o["list"].is<int>())
+    s.list = o["list"].as<int>();
+  if (o["sport"].is<const char *>())
+    s.sport = sport_row_from_key(o["sport"].as<const char *>());
+  if (o["remote"].is<JsonArrayConst>()) {
+    int b = 0;
+    for (JsonObjectConst r : o["remote"].as<JsonArrayConst>())
+      if (b < 4)
+        remote_parse(r["v"] | "fav", s.remote[b++]);
   }
   if (o["live_auto"].is<bool>() || o["live"].is<JsonArrayConst>()) {
     std::string list;
@@ -106,6 +184,17 @@ void load(Settings &s, JsonObjectConst o) {
   num("release", s.release);
   num("tz", s.tz);
   num("panels", s.panels);
+  num("msgevery", s.msgevery);
+  num("pregame", s.pregame);
+  num("wxunit", s.wxunit);
+  if (o["hook"].is<const char *>())
+    s.hook = o["hook"].as<const char *>();
+  if (o["msg"].is<const char *>())
+    s.msg = o["msg"].as<const char *>();
+  if (o["msgurl"].is<const char *>())
+    s.msgurl = o["msgurl"].as<const char *>();
+  if (o["nick"].is<const char *>())
+    s.nick = o["nick"].as<const char *>();
   int collide = s.collide ? 1 : 0;
   num("collide", collide);
   s.collide = collide != 0;
@@ -117,18 +206,79 @@ void load(Settings &s, JsonObjectConst o) {
   flag("play", s.play);
   flag("odds", s.odds);
   flag("opp", s.opp);
+  flag("best", s.best);
+  flag("jump", s.jump);
+  flag("banner", s.banner);
+  flag("favtake", s.favtake);
+  flag("leaders", s.leaders);
+  flag("field", s.field);
+  flag("winbar", s.winbar);
+  flag("spark", s.spark);
+  flag("bigplays", s.bigplays);
   flag("bootaddr", s.bootaddr);
   flag("autoupd", s.autoupd);
   flag("beta", s.beta);
+  flag("countdown", s.countdown);
+  flag("top25", s.top25);
+  flag("news", s.news);
+  flag("gameleaders", s.gameleaders);
+  flag("wxon", s.wxon);
+  if (o["town"].is<const char *>())
+    s.town = o["town"].as<const char *>();
+  // As the backup lists them: {"next": true, ...}.
+  for (JsonPairConst p : o["cards"].as<JsonObjectConst>())
+    if (const CardRow *r = card_row(p.key().c_str()))
+      set_card(s, r->card, p.value().as<bool>());
+  if (o["cdname"].is<const char *>())
+    s.cdname = o["cdname"].as<const char *>();
+  if (o["cddate"].is<const char *>())
+    parse_countdown_date(o["cddate"].as<const char *>(), s.cdymd);
+  bool on = s.night.on != 0, screen = s.night.screen_off == 0;
+  flag("night", on);
+  flag("nightscreen", screen);
+  s.night.on = on ? 1 : 0;
+  s.night.screen_off = screen ? 0 : 1;
+  int level = s.night.level;
+  num("nightlevel", level);
+  num("celebrate", s.celebrate);
+  s.night.level = (uint8_t) level;
+  if (o["nightstart"].is<const char *>())
+    s.night.start = (uint16_t) night_parse_time(o["nightstart"].as<const char *>());
+  if (o["nightend"].is<const char *>())
+    s.night.end = (uint16_t) night_parse_time(o["nightend"].as<const char *>());
+  bool wake = s.wake.on != 0;
+  flag("wake", wake);
+  s.wake.on = wake ? 1 : 0;
+  int lead = s.wake.lead;
+  num("wakelead", lead);
+  s.wake.lead = (uint8_t) lead;
+  if (o["after"].is<const char *>())
+    s.wake.after = (uint8_t) after_parse(o["after"].as<const char *>());
 }
 
-void apply(Settings &s, const SetOp &op) {
+std::vector<TeamRef> fav_refs(const Settings &s) { return std::vector<TeamRef>(s.favs, s.favs + kFavMax); }
+
+// sport_rows_: the sport rows the favorites give Playing.
+uint8_t rows(const Settings &s) {
+  uint8_t sports = 0;
+  for (const auto &f : s.favs)
+    if (f.id != 0)
+      sports |= sport_bit(f.league);
+  return sport_rows(sports);
+}
+
+// remap_lists_: each playlist follows its teams through a favorites change,
+// and a sport row the favorites have no row for stops.
+void remap(Settings &s, const std::vector<TeamRef> &before) {
+  for (auto &l : s.lists)
+    l.second = remap_mask(l.second, before, fav_refs(s));
+  if (!sport_row_has(rows(s), (uint8_t) s.sport))
+    s.sport = 0;
+}
+
+void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sport_pick) {
+  std::vector<TeamRef> before = fav_refs(s);
   switch (op.kind) {
-    case SetKind::TEAM:
-      s.team = op.team;
-      if (op.team.id != 0)
-        s.team_league = op.team.league;
-      break;
     case SetKind::MODE: s.mode = op.value; break;
     case SetKind::ROTATE: s.rotate = op.value; break;
     case SetKind::LOCKON: s.lockon = op.value; break;
@@ -139,8 +289,78 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::FAVS:
       for (int i = 0; i < kFavMax; i++)
         s.favs[i] = i < (int) op.teams.size() ? op.teams[i] : TeamRef{};
+      remap(s, before);
       break;
-    case SetKind::FAV_SLOT: s.favs[op.slot - 1] = op.team; break;
+    case SetKind::FAV_SLOT:
+      s.favs[op.slot - 1] = op.team;
+      remap(s, before);
+      break;
+    case SetKind::LISTS: {
+      // set_lists_: the one being played stays chosen by its name, or by
+      // list= in the same request.
+      std::string active = s.list > 0 ? s.lists[s.list - 1].first : "";
+      std::vector<ListDef> defs = parse_lists(op.text, kFavMax);
+      // A WizMote button on a renamed playlist follows it.
+      std::vector<std::string> old_names, new_names;
+      for (const auto &l : s.lists)
+        old_names.push_back(l.first);
+      for (const auto &d : defs)
+        new_names.push_back(d.name);
+      for (auto &b : s.remote) {
+        if (b.kind != (uint8_t) RemoteKind::LIST)
+          continue;
+        std::string to = list_renamed(old_names, new_names, remote_name(b));
+        if (to.empty())
+          continue;
+        memset(b.name, 0, sizeof(b.name));
+        memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+      }
+      s.lists.clear();
+      s.list = 0;
+      for (const auto &d : defs) {
+        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark});
+        if (!active.empty() && d.name == active)
+          s.list = (int) s.lists.size();
+      }
+      if (keep_list >= 0 && keep_list <= (int) s.lists.size()) {
+        s.list = keep_list;
+        s.sport = 0;
+      }
+      break;
+    }
+    case SetKind::REMOTE: {
+      // set_remote_: a playlist's name as the playlists keep it.
+      RemoteTarget t;
+      remote_parse(op.text, t);
+      if (t.kind == (uint8_t) RemoteKind::LIST) {
+        std::string name = list_name_clean(remote_name(t));
+        memset(t.name, 0, sizeof(t.name));
+        memcpy(t.name, name.data(), name.size());
+        if (name.empty())
+          t = RemoteTarget{};
+      }
+      s.remote[op.slot - 1] = t;
+      break;
+    }
+    case SetKind::LIST:
+      // set_active_list_ switches to Favorite teams; a number past the last
+      // playlist is refused. With lists= set_lists_ took it, and with a
+      // sport row picked, sport= does.
+      if (!with_lists && !sport_pick && op.value <= (int) s.lists.size()) {
+        s.list = op.value;
+        s.sport = 0;
+        s.mode = (int) Mode::FAVORITES;
+      }
+      break;
+    case SetKind::SPORT:
+      // set_sport_row_ plays a row the favorites give; none stops the one
+      // playing unless list= says what plays.
+      if (op.value != 0 ? sport_row_has(rows(s), (uint8_t) op.value) : keep_list < 0 && s.sport != 0) {
+        s.list = 0;
+        s.sport = op.value;
+        s.mode = (int) Mode::FAVORITES;
+      }
+      break;
     case SetKind::TZ: s.tz = op.value; break;
     case SetKind::TZ_AUTO: s.tz_auto = op.on; break;
     case SetKind::DOWN: s.down = op.on; break;
@@ -149,9 +369,54 @@ void apply(Settings &s, const SetOp &op) {
     case SetKind::PLAY: s.play = op.on; break;
     case SetKind::ODDS: s.odds = op.on; break;
     case SetKind::OPP: s.opp = op.on; break;
+    case SetKind::CELEBRATE: s.celebrate = op.value; break;
+    case SetKind::BEST: s.best = op.on; break;
+    case SetKind::JUMP: s.jump = op.on; break;
+    case SetKind::BANNER: s.banner = op.on; break;
+    case SetKind::FAVTAKE: s.favtake = op.on; break;
+    case SetKind::LEADERS: s.leaders = op.on; break;
+    case SetKind::FIELD: s.field = op.on; break;
+    case SetKind::WINBAR: s.winbar = op.on; break;
+    case SetKind::SPARK: s.spark = op.on; break;
+    case SetKind::BIGPLAYS: s.bigplays = op.on; break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
+    case SetKind::COUNTDOWN: s.countdown = op.on; break;
+    case SetKind::TOP25: s.top25 = op.on; break;
+    case SetKind::NEWS: s.news = op.on; break;
+    case SetKind::GAMELEADERS: s.gameleaders = op.on; break;
+    case SetKind::CARDS:
+      for (const auto &r : kCards)
+        if (op.mask & card_bit(r.card))
+          set_card(s, r.card, (op.value & card_bit(r.card)) != 0);
+      break;
+    case SetKind::CD_NAME: s.cdname = op.text; break;
+    case SetKind::CD_DATE: s.cdymd = op.ymd; break;
+    case SetKind::MSG: s.msg = op.text; break;
+    case SetKind::MSGURL: s.msgurl = op.text; break;
+    case SetKind::MSGEVERY: s.msgevery = op.value; break;
+    case SetKind::NICK: s.nick = op.text; break;
+    case SetKind::HOOK: s.hook = op.text; break;
+    case SetKind::PREGAME: s.pregame = op.value; break;
+    // set_town(): a new town turns the card on, "" turns it off, the same
+    // town again leaves the switch alone.
+    case SetKind::TOWN:
+      if (op.text != s.town) {
+        s.town = op.text;
+        s.wxon = !op.text.empty();
+      }
+      break;
+    case SetKind::WXON: s.wxon = op.on; break;
+    case SetKind::WXUNIT: s.wxunit = op.value; break;
+    case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
+    case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
+    case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
+    case SetKind::NIGHT_SCREEN: s.night.screen_off = op.on ? 0 : 1; break;
+    case SetKind::NIGHT_LEVEL: s.night.level = (uint8_t) op.value; break;
+    case SetKind::WAKE: s.wake.on = op.on ? 1 : 0; break;
+    case SetKind::WAKE_LEAD: s.wake.lead = (uint8_t) op.value; break;
+    case SetKind::AFTER: s.wake.after = (uint8_t) op.value; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -161,7 +426,6 @@ void apply(Settings &s, const SetOp &op) {
 
 // The settings keys of rebuild_state_'s document, teams as league:id.
 void state_doc(const Settings &s, JsonDocument &doc) {
-  doc["team"] = team_str(s.team);
   doc["mode"] = s.mode;
   doc["rotate"] = s.rotate;
   doc["lockon"] = s.lockon;
@@ -174,13 +438,50 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   JsonArray favs = doc["favs"].to<JsonArray>();
   for (int i = 0; i < fav_n; i++)
     favs.add(team_str(s.favs[i]));
+  JsonArray lists = doc["lists"].to<JsonArray>();
+  for (const auto &l : s.lists) {
+    JsonObject o = lists.add<JsonObject>();
+    o["n"] = l.first;
+    JsonArray f = o["f"].to<JsonArray>();
+    for (int i = 0; i < kFavMax; i++)
+      if (s.favs[i].id != 0 && ((l.second >> i) & 1u))
+        f.add(i);
+    std::string days;
+    for (int d = 0; d < 7; d++)
+      if ((l.opt.days >> d) & 1u)
+        days += (char) ('0' + d);
+    o["days"] = days;
+    o["start"] = list_time_text(l.opt.start);
+    o["end"] = list_time_text(l.opt.end);
+    o["only"] = (l.opt.flags & LISTOPT_ONLY) != 0;
+    if (l.opt.flags & LISTOPT_TODAY_SET)
+      o["today"] = (l.opt.flags & LISTOPT_TODAY) != 0;
+    o["color"] = list_color_key(l.mark);
+    o["icon"] = list_icon_key(l.mark);
+  }
+  doc["list"] = s.list;
+  std::vector<std::string> names;
+  for (const auto &l : s.lists)
+    names.push_back(l.first);
+  JsonArray remote = doc["remote"].to<JsonArray>();
+  for (int b = 1; b <= 4; b++) {
+    JsonObject o = remote.add<JsonObject>();
+    o["v"] = remote_text(s.remote[b - 1]);
+    o["gone"] = remote_resolve((uint8_t) b, s.remote[b - 1], fav_refs(s), names).gone;
+  }
+  JsonArray sports = doc["sports"].to<JsonArray>();
+  for (uint8_t row = 1; row <= kSportCount; row++)
+    if (sport_row_has(rows(s), row))
+      sports.add(kSportKeys[row - 1]);
+  doc["sport"] = sport_row_has(rows(s), (uint8_t) s.sport) ? kSportKeys[s.sport - 1] : "";
   doc["today"] = s.today;
   std::vector<uint8_t> fav_leagues;
   for (const auto &f : s.favs)
     if (f.id != 0)
       fav_leagues.push_back(f.league);
   JsonArray live = doc["live"].to<JsonArray>();
-  for (League l : live_leagues(s.live_mask, s.team_league, fav_leagues))
+  bool no_team = no_team_default((uint8_t) s.mode, !fav_leagues.empty());
+  for (League l : no_team ? no_team_leagues() : live_leagues(s.live_mask, fav_leagues))
     live.add(league_key(l));
   doc["live_auto"] = s.live_mask == 0;
   doc["tz"] = s.tz;
@@ -191,10 +492,47 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["play"] = s.play;
   doc["odds"] = s.odds;
   doc["opp"] = s.opp;
+  doc["celebrate"] = s.celebrate;
+  doc["best"] = s.best;
+  doc["jump"] = s.jump;
+  doc["banner"] = s.banner;
+  doc["favtake"] = s.favtake;
+  doc["leaders"] = s.leaders;
+  doc["field"] = s.field;
+  doc["winbar"] = s.winbar;
+  doc["spark"] = s.spark;
+  doc["bigplays"] = s.bigplays;
   doc["bootaddr"] = s.bootaddr;
   doc["autoupd"] = s.autoupd;
   doc["beta"] = s.beta;
+  doc["countdown"] = s.countdown;
+  doc["top25"] = s.top25;
+  doc["news"] = s.news;
+  doc["gameleaders"] = s.gameleaders;
+  // The state's list has names and more; the cases compare the switches.
+  JsonObject cards = doc["cards"].to<JsonObject>();
+  for (const auto &r : kCards)
+    cards[r.id] = card_on(s, r.card);
+  doc["cdname"] = s.cdname;
+  doc["cddate"] = countdown_date_text(s.cdymd);
   doc["panels"] = s.panels;
+  doc["msg"] = s.msg;
+  doc["msgurl"] = s.msgurl;
+  doc["msgevery"] = s.msgevery;
+  doc["nick"] = s.nick;
+  doc["hook"] = s.hook;
+  doc["pregame"] = s.pregame;
+  doc["town"] = s.town;
+  doc["wxon"] = s.wxon;
+  doc["wxunit"] = s.wxunit;
+  doc["night"] = s.night.on != 0;
+  doc["nightstart"] = night_time_text(s.night.start);
+  doc["nightend"] = night_time_text(s.night.end);
+  doc["nightscreen"] = s.night.screen_off == 0;
+  doc["nightlevel"] = s.night.level;
+  doc["wake"] = s.wake.on != 0;
+  doc["wakelead"] = s.wake.lead;
+  doc["after"] = after_word(s.wake.after);
 }
 
 void test_fixture_cases() {
@@ -216,10 +554,24 @@ void test_fixture_cases() {
           kv.emplace_back(key, p[1].as<const char *>());
     int status = kv.empty() ? 400 : 200;
     SCHECK(status == (c["status"] | 200), "%s: status %d", name, status);
-    SetOp op;
-    for (const auto &p : kv)
+    std::vector<SetOp> ops;
+    for (const auto &p : kv) {
+      SetOp op;
       if (parse_set(p.first, p.second, op, kFavMax))
-        apply(s, op);
+        ops.push_back(op);
+    }
+    // apply_ops_: list= with lists= names the playlist playing after the change.
+    // A sport row picked takes over list= in the same request.
+    bool with_lists = false, sport_pick = false;
+    int keep_list = -1;
+    for (const auto &op : ops) {
+      with_lists = with_lists || op.kind == SetKind::LISTS;
+      sport_pick = sport_pick || (op.kind == SetKind::SPORT && op.value != 0);
+      if (op.kind == SetKind::LIST)
+        keep_list = op.value;
+    }
+    for (const auto &op : ops)
+      apply(s, op, with_lists, keep_list, sport_pick);
     JsonDocument got;
     state_doc(s, got);
     for (JsonPairConst e : c["expect"].as<JsonObjectConst>()) {
@@ -232,6 +584,35 @@ void test_fixture_cases() {
   SCHECK(n >= 50, "only %d cases read from fixtures/set_cases.json", n);
 }
 
+void test_cards() {
+  // Every card has its own id and bit, and the bits fit the saved mask.
+  uint16_t seen = 0;
+  for (const auto &r : kCards) {
+    SCHECK(card_row(r.id) == &r, "card %s: its id is its own", r.id);
+    SCHECK((seen & card_bit(r.card)) == 0, "card %s: its bit is its own", r.id);
+    seen |= card_bit(r.card);
+    // A card saved in cards_off keeps its bit through a load; the countdown and
+    // news keep their own bytes.
+    bool own = r.card == Card::COUNTDOWN || r.card == Card::NEWS || r.card == Card::WEATHER;
+    SCHECK(((kCardsOffBits & card_bit(r.card)) != 0) == !own, "card %s: cards_off keeps its bit", r.id);
+    // A saved 0 is the default for a card in cards_off, so every one is on by default.
+    SCHECK(own || r.on, "card %s: on by default", r.id);
+  }
+  // Bits the cards had before the list (game leaders 0, Top 25 5) keep their meaning.
+  SCHECK(card_bit(Card::LEADERS) == 1u << 0 && card_bit(Card::TOP25) == 1u << 5, "saved bits kept");
+  SCHECK(card_row("news") != nullptr && !card_row("news")->on, "news is off by default");
+
+  // The board's base card. Next game on: the clock only between seasons, with Clock on.
+  SCHECK(!clock_instead(true, true, true, false), "next game on, in season: the next game");
+  SCHECK(clock_instead(true, true, true, true), "next game on, between seasons: the clock");
+  SCHECK(!clock_instead(true, false, true, true), "clock off, between seasons: the next game stays");
+  // Next game off: the clock between games whatever Clock says, never over a game or a final.
+  SCHECK(clock_instead(false, true, true, false), "next game off: the clock");
+  SCHECK(clock_instead(false, false, true, false), "next game and clock off: still the clock");
+  SCHECK(!clock_instead(false, true, false, false), "next game off, a game on the board: the game");
+  SCHECK(!clock_instead(false, false, false, false), "next game and clock off, a game on the board: the game");
+}
+
 void test_parse_set() {
   SetOp op;
   SCHECK(!parse_set("bogus", "1", op, kFavMax), "unknown key");
@@ -241,8 +622,12 @@ void test_parse_set() {
          "fav4");
   SCHECK(parse_set("fav1", "none", op, kFavMax) && op.slot == 1 && op.team.id == 0, "fav1 none");
   SCHECK(!parse_set("fav1", "nfl:99999", op, kFavMax), "fav1 unknown team");
-  SCHECK(parse_set("team", "none", op, kFavMax) && op.kind == SetKind::TEAM && op.team.id == 0, "team none");
-  SCHECK(parse_set("team", "nfl:6x", op, kFavMax) && op.team.id == 6, "team id reads like strtoul");
+  SCHECK(!parse_set("team", "nfl:6", op, kFavMax), "team is not a setting");
+  SCHECK(parse_set("sport", "basketball", op, kFavMax) && op.kind == SetKind::SPORT && op.value == 3, "sport row");
+  SCHECK(parse_set("sport", "none", op, kFavMax) && op.kind == SetKind::SPORT && op.value == 0, "sport none");
+  SCHECK(!parse_set("sport", "", op, kFavMax) && !parse_set("sport", "Football", op, kFavMax) &&
+             !parse_set("sport", "racing", op, kFavMax),
+         "a word that names no sport");
 
   SCHECK(parse_set("favs", "nfl:6,bogus,nfl:6,mlb:15", op, kFavMax), "favs");
   SCHECK(op.teams.size() == 2 && op.refused.size() == 1 && op.refused[0] == "bogus", "favs drops repeats, logs bad");
@@ -250,37 +635,103 @@ void test_parse_set() {
 
   SCHECK(parse_set("rotate", "-5", op, kFavMax) && op.value == kRotateMinMinutes, "rotate -5");
   SCHECK(parse_set("rotate", "999", op, kFavMax) && op.value == kRotateMaxMinutes, "rotate 999");
-  SCHECK(parse_set("lockon", "", op, kFavMax) && op.value == kLockonMinMinutes, "lockon empty");
+  SCHECK(!parse_set("lockon", "", op, kFavMax), "lockon empty is refused");
+  SCHECK(!parse_set("release", "60s", op, kFavMax), "release with trailing text is refused");
+  SCHECK(!parse_set("mode", "abc", op, kFavMax), "mode text is refused, not Favorites");
+  SCHECK(!parse_set("mode", "1.5", op, kFavMax), "mode 1.5 is refused");
+  SCHECK(!parse_set("rotate", "9999999", op, kFavMax), "rotate past six digits is refused");
   SCHECK(parse_set("release", "100000", op, kFavMax) && op.value == kReleaseMaxSeconds, "release 100000");
-  SCHECK(parse_set("mode", "0", op, kFavMax) && op.value == 0, "mode 0");
+  SCHECK(parse_set("mode", "0", op, kFavMax) && op.value == (int) Mode::FAVORITES, "mode 0, My team before, is Favorites");
+  SCHECK(parse_set("mode", "2", op, kFavMax) && op.value == 2, "an old live mode stays");
+  SCHECK(read_mode(0) == 4 && read_mode(4) == 4 && read_mode(5) == 5 && read_mode(6) == -1 && read_mode(-1) == -1,
+         "read_mode");
   SCHECK(parse_set("mode", "5", op, kFavMax) && op.value == 5, "mode 5");
   SCHECK(!parse_set("mode", "6", op, kFavMax), "mode 6");
   SCHECK(parse_set("panels", "7", op, kFavMax) && op.value == 7, "panels passes the count through");
+  SCHECK(!parse_set("panels", "257", op, kFavMax), "panels 257 is refused, not 1");
+  SCHECK(!parse_set("panels", "0", op, kFavMax), "panels 0 is refused");
+  SCHECK(!parse_set("panels", "two", op, kFavMax), "panels text is refused");
+  SCHECK(!parse_set("panels", "99999999999", op, kFavMax), "panels past int is refused");
+  SCHECK(parse_set("nightlevel", "40", op, kFavMax) && op.value == 40, "nightlevel 40");
+  SCHECK(parse_set("nightlevel", "0", op, kFavMax) && op.value == 1, "nightlevel 0 is held at 1");
+  SCHECK(parse_set("nightlevel", "999", op, kFavMax) && op.value == 255, "nightlevel 999 is held at 255");
+  SCHECK(!parse_set("nightlevel", "dim", op, kFavMax), "nightlevel text is refused");
+  SCHECK(!parse_set("nightlevel", "99999999999", op, kFavMax), "nightlevel past int is refused");
   SCHECK(parse_set("tz", "America/Chicago", op, kFavMax) && op.value == 1, "tz IANA");
   SCHECK(!parse_set("tz", "-1", op, kFavMax), "tz -1");
   SCHECK(parse_set("down", "1", op, kFavMax) && op.on, "down 1");
   SCHECK(parse_set("down", "on", op, kFavMax) && !op.on, "down on is off");
+  SCHECK(parse_set("countdown", "0", op, kFavMax) && op.kind == SetKind::COUNTDOWN && !op.on, "countdown 0");
+  SCHECK(parse_set("top25", "0", op, kFavMax) && op.kind == SetKind::TOP25 && !op.on, "top25 0");
+  SCHECK(parse_set("gameleaders", "0", op, kFavMax) && op.kind == SetKind::GAMELEADERS && !op.on, "gameleaders 0");
+  SCHECK(parse_set("cards", "next:0,clock:1,standings:1", op, kFavMax) && op.kind == SetKind::CARDS &&
+             op.mask == (card_bit(Card::NEXT) | card_bit(Card::CLOCK)) && op.value == card_bit(Card::CLOCK) &&
+             op.refused.size() == 1 && op.refused[0] == "standings:1",
+         "cards: two known, one left out");
+  SCHECK(!parse_set("cards", "standings:1", op, kFavMax), "cards naming none it has");
+  SCHECK(!parse_set("cards", "", op, kFavMax), "cards empty");
+  SCHECK(!parse_set("cards", "next", op, kFavMax), "cards with no value");
+  SCHECK(parse_set("cdname", "  Christmas \n", op, kFavMax) && op.kind == SetKind::CD_NAME && op.text == "Christmas",
+         "cdname trims");
+  SCHECK(parse_set("cddate", "2026-12-25", op, kFavMax) && op.kind == SetKind::CD_DATE && op.ymd == 20261225,
+         "cddate");
+  SCHECK(parse_set("cddate", "none", op, kFavMax) && op.ymd == 0, "cddate none clears");
+  SCHECK(!parse_set("cddate", "12/25/2026", op, kFavMax), "cddate in another format");
+  SCHECK(!parse_set("cddate", "2027-02-29", op, kFavMax), "cddate on a day that doesn't exist");
+  SCHECK(parse_set("msg", "Happy birthday", op, kFavMax) && op.kind == SetKind::MSG && op.text == "Happy birthday",
+         "msg");
+  SCHECK(parse_set("msg", std::string(300, 'x'), op, kFavMax) && op.text.size() == kMsgTextMax, "msg is capped");
+  SCHECK(parse_set("msg", "Caf\xE9 \xC3\xA9t\xC3", op, kFavMax) && op.text == "Caf \xC3\xA9t",
+         "bytes that aren't UTF-8 are left out of a message");
+  SCHECK(parse_set("nick", "Garage", op, kFavMax) && op.kind == SetKind::NICK && op.text == "Garage", "nick");
+  SCHECK(parse_set("nick", std::string(100, 'x'), op, kFavMax) && op.text.size() == kNickMax, "nick is capped");
+  SCHECK(parse_set("nick", "a\nb", op, kFavMax) && op.text == "a b", "nick is one line");
+  SCHECK(parse_set("nick", "Caf\xE9 \xC3\xA9t\xC3", op, kFavMax) && op.text == "Caf \xC3\xA9t",
+         "bytes that aren't UTF-8 are left out of a nickname");
+  SCHECK(utf8_only("A\xE0\x81\x81" "B\xED\xA0\x80" "C\xF4\x90\x80\x80" "D\xC1\xBF" "E") == "ABCDE",
+         "overlong forms, surrogates and code points past U+10FFFF are left out");
+  SCHECK(utf8_only("\xC3\xA9\xE2\x80\x99\xF0\x9F\x8F\x88") == "\xC3\xA9\xE2\x80\x99\xF0\x9F\x8F\x88",
+         "valid two, three and four byte characters stay");
+  SCHECK(parse_set("msgurl", "https://example.com/names.txt", op, kFavMax) && op.kind == SetKind::MSGURL, "msgurl");
+  SCHECK(!parse_set("msgurl", "ftp://example.com/names.txt", op, kFavMax), "msgurl ftp");
+  SCHECK(!parse_set("msgurl", "https://exa mple.com", op, kFavMax), "msgurl with a space");
+  SCHECK(!parse_set("msgurl", "https://" + std::string(kMsgUrlMax, 'a'), op, kFavMax), "msgurl too long");
+  SCHECK(parse_set("msgevery", "0", op, kFavMax) && op.value == 0, "msgevery 0 holds the board");
+  SCHECK(parse_set("msgevery", "99", op, kFavMax) && op.value == kMsgEveryMax, "msgevery 99");
+  SCHECK(!parse_set("msgevery", "abc", op, kFavMax), "msgevery text is refused, not 0");
+  SCHECK(!parse_set("msgevery", "-1", op, kFavMax), "msgevery -1");
+  SCHECK(parse_set("wake", "1", op, kFavMax) && op.kind == SetKind::WAKE && op.on, "wake 1");
+  SCHECK(parse_set("wakelead", "30", op, kFavMax) && op.kind == SetKind::WAKE_LEAD && op.value == 30, "wakelead 30");
+  SCHECK(parse_set("wakelead", "1", op, kFavMax) && op.value == kWakeLeadMin, "wakelead is clamped up");
+  SCHECK(parse_set("wakelead", "900", op, kFavMax) && op.value == kWakeLeadMax, "wakelead is clamped down");
+  SCHECK(!parse_set("wakelead", "15m", op, kFavMax), "wakelead takes a whole number");
+  SCHECK(parse_set("after", "clock", op, kFavMax) && op.kind == SetKind::AFTER && op.value == (int) After::CLOCK,
+         "after clock");
+  SCHECK(parse_set("after", "off", op, kFavMax) && op.value == (int) After::OFF, "after off");
+  SCHECK(parse_set("after", "scoreboard", op, kFavMax) && op.value == (int) After::SCOREBOARD, "after scoreboard");
+  SCHECK(!parse_set("after", "effects", op, kFavMax), "after effects isn't in this firmware");
 
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
-                 parse_set(key, "", op, kFavMax);
+                 parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
+                 parse_set(key, "none", op, kFavMax) || parse_set(key, "next:1", op, kFavMax) ||
+                 parse_set(key, "clock", op, kFavMax) ||
+                 parse_set(key, "fav", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
 }
 
 void test_live_leagues() {
   std::vector<uint8_t> none;
-  SCHECK(keys(live_leagues(0, (uint8_t) League::NFL, none)) == "nfl", "auto, nothing saved");
-  SCHECK(keys(live_leagues(0, (uint8_t) League::MLB, none)) == "mlb", "auto, team only");
-  SCHECK(keys(live_leagues(0, (uint8_t) League::NHL, {(uint8_t) League::NCAA, (uint8_t) League::NHL})) == "ncaa,nhl",
-         "auto, team plus favorites, league order");
-  SCHECK(keys(live_leagues(0, 200, none)) == "nfl", "auto, unknown league byte falls back to NFL");
-  SCHECK(keys(live_leagues(0, 200, {(uint8_t) League::EPL})) == "epl", "auto, unknown team league skipped");
+  SCHECK(keys(live_leagues(0, none)) == "nfl", "auto, no favorites is NFL");
+  SCHECK(keys(live_leagues(0, {(uint8_t) League::NHL, (uint8_t) League::NCAA})) == "ncaa,nhl",
+         "auto, the favorites' leagues in league order");
+  SCHECK(keys(live_leagues(0, {200})) == "nfl", "auto, an unknown league falls back to NFL");
+  SCHECK(keys(live_leagues(0, {200, (uint8_t) League::EPL})) == "epl", "auto, an unknown league skipped");
   uint16_t mlb_nba = (uint16_t) ((1u << (uint8_t) League::MLB) | (1u << (uint8_t) League::NBA));
-  SCHECK(keys(live_leagues(mlb_nba, (uint8_t) League::NFL, {(uint8_t) League::NHL})) == "mlb,nba",
-         "an explicit mask ignores team and favorites");
-  SCHECK(keys(live_leagues(1u << 15, (uint8_t) League::MLB, none)) == "nfl", "a mask of unknown leagues is NFL");
+  SCHECK(keys(live_leagues(mlb_nba, {(uint8_t) League::NHL})) == "mlb,nba", "an explicit mask ignores the favorites");
+  SCHECK(keys(live_leagues(1u << 15, none)) == "nfl", "a mask of unknown leagues is NFL");
 
   SCHECK(live_mask_from_keys("") == 0, "empty keys");
   SCHECK(live_mask_from_keys("xfl,MLB") == 0, "unknown and upper-case keys");
@@ -291,15 +742,27 @@ void test_live_leagues() {
 // What each mode's scan reads is what its finals rotation walks.
 void test_scan_leagues() {
   std::vector<League> live = {League::MLB, League::NBA, League::NHL};
-  SCHECK(keys(scan_leagues((uint8_t) Mode::MY_TEAM, live)) == "", "My team scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NFL, live)) == "nfl", "Live NFL");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_NCAA, live)) == "ncaa", "Live college");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything and the no-team default");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE_ANY, live)) == "nfl,ncaa", "Live anything");
   SCHECK(keys(scan_leagues((uint8_t) Mode::FAVORITES, live)) == "", "Favorites scans none");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live)) == "mlb,nba,nhl", "Live games, its own leagues");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, (uint8_t) League::EPL, {}))) == "epl",
-         "Live games, auto from the team's league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, {(uint8_t) League::EPL}))) == "epl",
+         "Live games, auto from a favorite's league");
   SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
+}
+
+// A panel in Favorites with none set runs Live games over every league.
+void test_no_team() {
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
+         "the no-team default's scan reads every league");
+  const uint8_t favs = (uint8_t) Mode::FAVORITES;
+  SCHECK(no_team_default(favs, false), "Favorites with none set");
+  SCHECK(!no_team_default(favs, true), "Favorites with one set");
+  for (uint8_t m : {(uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA, (uint8_t) Mode::LIVE_ANY, (uint8_t) Mode::LIVE})
+    SCHECK(!no_team_default(m, false), "mode %u is a choice", (unsigned) m);
 }
 
 // A change to Live games' leagues restarts the scan only when it changes what
@@ -310,32 +773,306 @@ void test_live_scan_changed() {
   std::vector<uint8_t> none;
   uint16_t ncaa = (uint16_t) (1u << (uint8_t) League::NCAA);
   uint16_t nfl_only = (uint16_t) (1u << nfl);
-  // No team saved, list on auto (NFL), then set to college only: the
+  // No favorites, list on auto (NFL), then set to college only: the
   // living room panel that kept cycling NFL finals.
-  SCHECK(live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(ncaa, nfl, none)), "auto NFL to college");
-  SCHECK(!live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(nfl_only, nfl, none)),
+  SCHECK(live_scan_changed(live, live_leagues(0, none), live_leagues(ncaa, none)), "auto NFL to college");
+  SCHECK(!live_scan_changed(live, live_leagues(0, none), live_leagues(nfl_only, none)),
          "auto NFL to an explicit NFL reads the same league");
-  SCHECK(!live_scan_changed(live, live_leagues(ncaa, nfl, none), live_leagues(ncaa, nfl, none)), "same list");
+  SCHECK(!live_scan_changed(live, live_leagues(ncaa, none), live_leagues(ncaa, none)), "same list");
   // On auto a new favorite in another league adds that league.
-  SCHECK(live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(0, nfl, {(uint8_t) League::NHL})),
+  SCHECK(live_scan_changed(live, live_leagues(0, {nfl}), live_leagues(0, {nfl, (uint8_t) League::NHL})),
          "auto, a favorite added in a new league");
-  SCHECK(!live_scan_changed(live, live_leagues(0, nfl, none), live_leagues(0, nfl, {nfl})),
-         "auto, a favorite added in the team's league");
-  SCHECK(!live_scan_changed(live, live_leagues(ncaa, nfl, none), live_leagues(ncaa, nfl, {(uint8_t) League::NHL})),
+  SCHECK(!live_scan_changed(live, live_leagues(0, {nfl}), live_leagues(0, {nfl, nfl})),
+         "auto, a favorite added in a league already followed");
+  SCHECK(!live_scan_changed(live, live_leagues(ncaa, none), live_leagues(ncaa, {(uint8_t) League::NHL})),
          "an explicit list ignores a new favorite");
   // Modes that don't read the list never restart for it.
-  for (uint8_t m : {(uint8_t) Mode::MY_TEAM, (uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA,
-                    (uint8_t) Mode::LIVE_ANY, (uint8_t) Mode::FAVORITES})
-    SCHECK(!live_scan_changed(m, live_leagues(0, nfl, none), live_leagues(ncaa, nfl, none)),
+  for (uint8_t m : {(uint8_t) Mode::LIVE_NFL, (uint8_t) Mode::LIVE_NCAA, (uint8_t) Mode::LIVE_ANY,
+                    (uint8_t) Mode::FAVORITES})
+    SCHECK(!live_scan_changed(m, live_leagues(0, none), live_leagues(ncaa, none)),
            "mode %u ignores Live games' list", (unsigned) m);
+}
+
+// Playlists (playlists.h): parsing a set request's lists, and the masks that
+// keep them over the favorites list.
+void test_playlists() {
+  std::vector<ListDef> l = parse_lists("Football=nfl:6,ncaa:251;Hoops=nba:6", kFavMax);
+  SCHECK(l.size() == 2 && l[0].name == "Football" && l[0].teams.size() == 2 && l[1].name == "Hoops" &&
+             l[1].teams.size() == 1,
+         "two playlists in order");
+  SCHECK(parse_lists("", kFavMax).empty(), "\"\" clears them");
+  l = parse_lists("=nfl:6;  ;Dallas=nfl:6,nfl:6,nfl:99999,bogus", kFavMax);
+  SCHECK(l.size() == 1 && l[0].name == "Dallas" && l[0].teams.size() == 1, "no name drops it; repeats, unknown teams go");
+  l = parse_lists("Empty", kFavMax);
+  SCHECK(l.size() == 1 && l[0].teams.empty(), "a playlist with no teams is kept");
+  std::string many;
+  for (int i = 0; i < kListMax + 3; i++)
+    many += "P" + std::to_string(i) + "=nfl:6;";
+  SCHECK(parse_lists(many, kFavMax).size() == (size_t) kListMax, "at most kListMax playlists");
+  SCHECK(parse_lists("A=nfl:1,nfl:2,nfl:3", 2)[0].teams.size() == 2, "no more teams than favorites");
+  SCHECK(list_name_clean("  Sunday   Football Crew  ") == "Sunday Football", "cut to 16 bytes, spaces squeezed");
+  SCHECK(list_name_clean("a\tb\x01" "c") == "a bc", "tabs to spaces, control characters out");
+  SCHECK(list_name_clean("ÉÉÉÉÉÉÉÉÉ").size() == 16, "cut at a character boundary");
+  SCHECK(list_renamed({"A", "B"}, {"A", "C"}, "B") == "C", "a rename in place carries the name");
+  SCHECK(list_renamed({"A", "B"}, {"A", "C"}, "A").empty(), "a kept playlist is not renamed");
+  SCHECK(list_renamed({"A", "B"}, {"B", "A"}, "A").empty(), "a move is not a rename");
+  SCHECK(list_renamed({"A", "B"}, {"A"}, "B").empty(), "a removed playlist is gone, not renamed");
+  SCHECK(list_renamed({"A", "B"}, {"A", "B", "C"}, "B").empty(), "an added one renames nothing");
+  SCHECK(list_renamed({"A", "B"}, {"B", "C"}, "A").empty(), "a name taken from another playlist is not a rename");
+  SCHECK(list_name_clean("Hoops\xff\xc3") == "Hoops", "bytes that aren't UTF-8 go");
+
+  std::vector<TeamRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 25}};
+  SCHECK(list_mask({{(uint8_t) League::NHL, 25}, {(uint8_t) League::NFL, 6}}, favs) == 0b101, "mask by favorite");
+  SCHECK(list_mask({{(uint8_t) League::MLB, 15}}, favs) == 0, "a team that isn't a favorite has no bit");
+  std::vector<TeamRef> moved = {{(uint8_t) League::NHL, 25}, {(uint8_t) League::NFL, 6}};
+  SCHECK(remap_mask(0b011, favs, moved) == 0b10, "reordered: Dallas moves, the Mavericks left");
+  SCHECK(remap_mask(0b001, favs, favs) == 0b001, "unchanged list, same mask");
+  SCHECK(list_has(0, false, 7) && list_has(0, true, 7), "no playlist, or an empty one: every favorite");
+  SCHECK(list_has(0b10, true, 1) && !list_has(0b10, true, 0), "a playlist: its own favorites");
+
+  // Sport rows.
+  SCHECK(sport_row_from_key("football") == 1 && sport_row_from_key("soccer") == 5 && sport_row_from_key("") == 0 &&
+             sport_row_from_key("Football") == 0 && sport_row_from_key("racing") == 0,
+         "sport keys to rows");
+  SCHECK(sport_bit((uint8_t) League::NCAA) == sport_bit((uint8_t) League::NFL) &&
+             sport_bit((uint8_t) League::MCBB) == 1u << (uint8_t) Sport::BASKETBALL && sport_bit(200) == 0,
+         "a bit per sport, none for an unknown league");
+  uint8_t football = sport_bit((uint8_t) League::NFL), hoops = sport_bit((uint8_t) League::NBA);
+  SCHECK(sport_rows(0) == 0 && sport_rows(football) == 0, "one sport or none: no rows");
+  SCHECK(sport_rows(football | hoops) == (football | hoops), "two sports: a row each");
+  SCHECK(sport_row_has(football | hoops, 1) && sport_row_has(football | hoops, 3) &&
+             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && !sport_row_has(0xff, 6),
+         "rows by number");
+  for (int s = 0; s < kSportCount; s++)
+    SCHECK(std::string(kSportRowNames[s]).size() <= kListNameMax, "%s is longer than a playlist name", kSportRowNames[s]);
+}
+
+// A playlist's color and icon (playlists.h): their tokens in the lists=
+// text, both ways, and the panel's color for each.
+void test_list_marks() {
+  std::vector<ListDef> l =
+      parse_lists("Sundays=nfl:6,@c:blue,@i:star,@d:0;Hoops=nba:6,@i:heart;Red=@c:red;Plain=nba:6", kFavMax);
+  SCHECK(l.size() == 4 && l[0].teams.size() == 1 && l[0].opt.days == 1, "marks sit beside teams and options");
+  SCHECK(list_color(l[0].mark) == 6 && list_icon(l[0].mark) == 1, "blue and star read: %02x", l[0].mark);
+  SCHECK(std::string(list_color_key(l[0].mark)) == "blue" && std::string(list_icon_key(l[0].mark)) == "star",
+         "keys back");
+  SCHECK(list_color(l[1].mark) == 0 && std::string(list_icon_key(l[1].mark)) == "heart", "an icon alone");
+  SCHECK(std::string(list_color_key(l[2].mark)) == "red" && list_icon(l[2].mark) == 0, "a color alone");
+  SCHECK(l[3].mark == 0 && list_mark_text(0).empty(), "no tokens, no mark");
+  SCHECK(list_mark_text(l[0].mark) == ",@c:blue,@i:star", "tokens back: %s", list_mark_text(l[0].mark).c_str());
+  SCHECK(list_rgb(l[0].mark) == 0x3070FF && list_rgb(l[1].mark) == 0xFFFFFF, "blue, else white");
+  l = parse_lists("A=@c:plaid,@i:unicorn;B=@c:red,@c:green;C=@c:red,@c:", kFavMax);
+  SCHECK(l[0].mark == 0 && l[0].opt == ListOpt{}, "a color or icon it doesn't know is none, not an option");
+  SCHECK(std::string(list_color_key(l[1].mark)) == "green", "the last color wins");
+  SCHECK(l[2].mark == 0, "an empty color clears it");
+  // Every key is lower case and unique, so the tokens read back.
+  for (int i = 0; i < kListColorCount; i++) {
+    uint8_t m = 0;
+    SCHECK(list_mark_token(std::string("@c:") + kListColors[i].key, m) && list_color(m) == i + 1, "color %d",
+           i);
+  }
+  for (int i = 0; i < kListIconCount; i++) {
+    uint8_t m = 0;
+    SCHECK(list_mark_token(std::string("@i:") + kListIcons[i].key, m) && list_icon(m) == i + 1, "icon %d", i);
+    bool any = false;
+    for (uint16_t r : kListIcons[i].rows)
+      any = any || r != 0;
+    SCHECK(any && (kListIcons[i].rows[0] >> 11) == 0, "icon %s drawn inside 11 columns", kListIcons[i].key);
+  }
+  SCHECK(list_color(0x0F) == 0 && list_icon(0xF0) == 0, "a saved byte past the sets is none");
+  // A full list of teams keeps the tokens after it.
+  std::string full = "Full=";
+  for (int i = 1; i <= (int) kFavMax + 2; i++)
+    full += "nfl:" + std::to_string(i) + ",";
+  l = parse_lists(full + "@d:0,@c:teal,@i:bolt", kFavMax);
+  SCHECK(l[0].teams.size() == (size_t) kFavMax && l[0].opt.days == 1 && list_mark_text(l[0].mark) == ",@c:teal,@i:bolt",
+         "tokens after a full list: %zu teams, %s", l[0].teams.size(), list_mark_text(l[0].mark).c_str());
+}
+
+// Local day of the week (0 Sunday) and minute after midnight of an epoch in
+// a POSIX timezone, as the panel's clock gives them.
+std::pair<int, int> local_dm(int64_t epoch, const char *tz) {
+  setenv("TZ", tz, 1);
+  tzset();
+  time_t t = (time_t) epoch;
+  struct tm lt;
+  localtime_r(&t, &lt);
+  return {lt.tm_wday, lt.tm_hour * 60 + lt.tm_min};
+}
+
+// Playlist options (playlists.h): the tokens in the lists= text, the
+// schedule across midnight and through daylight saving, the tick's steps.
+void test_list_options() {
+  std::vector<ListDef> l = parse_lists("Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:1;Plain=nba:6", kFavMax);
+  SCHECK(l.size() == 2 && l[0].teams.size() == 1 && l[1].teams.size() == 1, "tokens aren't teams");
+  SCHECK(l[0].opt.days == 1 && l[0].opt.start == 11 * 60 && l[0].opt.end == 23 * 60, "days and hours read");
+  SCHECK(l[0].opt.flags == (LISTOPT_ONLY | LISTOPT_TODAY_SET | LISTOPT_TODAY), "only and today read");
+  SCHECK(l[1].opt == ListOpt{}, "no tokens, no options");
+  SCHECK(list_opt_text(l[0].opt) == ",@d:0,@t:11:00-23:00,@only,@today:1", "options back as tokens: %s",
+         list_opt_text(l[0].opt).c_str());
+  SCHECK(list_opt_text(ListOpt{}).empty(), "no options, no tokens");
+  l = parse_lists("A=@d:6530x,@t:7:05-6:30,@today:0", kFavMax);
+  SCHECK(l[0].opt.days == 0b1101001 && l[0].opt.start == 7 * 60 + 5 && l[0].opt.end == 6 * 60 + 30,
+         "days in any order, odd characters dropped, hours past midnight");
+  SCHECK(l[0].opt.flags == LISTOPT_TODAY_SET, "today:0 is set and off");
+  SCHECK(list_opt_text(l[0].opt) == ",@d:0356,@t:07:05-06:30,@today:0", "days sorted, hours zero padded: %s",
+         list_opt_text(l[0].opt).c_str());
+  l = parse_lists("A=@t:11:00-23:00;B=@d:1,@t:25:00-23:00;C=@d:1,@t:11:00;D=@t:9:00-9:00,@d:2", kFavMax);
+  SCHECK(l[0].opt.days == 0 && list_opt_text(l[0].opt).empty(), "hours with no days are no schedule");
+  SCHECK(l[1].opt.start == 0 && l[1].opt.end == 0 && l[2].opt.start == 0, "bad hours dropped");
+  SCHECK(l[3].opt.days == 4 && list_opt_text(l[3].opt) == ",@d:2", "the same start and end is all day");
+  SCHECK(list_parse_time("00:00") == 0 && list_parse_time("23:59") == 23 * 60 + 59 && list_parse_time("24:00") < 0 &&
+             list_parse_time("12:60") < 0 && list_parse_time("noon") < 0 && list_parse_time("1:5") < 0,
+         "time parsing");
+  SCHECK(list_today(ListOpt{}, true) && !list_today(ListOpt{}, false), "no setting follows the switch");
+  SCHECK(list_today(l[0].opt, true), "A: switch");
+  ListOpt off;
+  list_opt_token("@today:0", off);
+  SCHECK(!list_today(off, true), "today off beats the switch");
+
+  // Sundays 11:00 to 23:00
+  ListOpt sun;
+  list_opt_token("@d:0", sun);
+  list_opt_token("@t:11:00-23:00", sun);
+  SCHECK(list_scheduled(sun, 0, 11 * 60) && list_scheduled(sun, 0, 22 * 60 + 59), "inside the hours");
+  SCHECK(!list_scheduled(sun, 0, 10 * 60 + 59) && !list_scheduled(sun, 0, 23 * 60), "outside the hours");
+  SCHECK(!list_scheduled(sun, 1, 12 * 60) && !list_scheduled(sun, 6, 12 * 60), "other days");
+  // Saturdays 20:00 to 02:00: into Sunday morning, not from Friday night
+  ListOpt late;
+  list_opt_token("@d:6", late);
+  list_opt_token("@t:20:00-02:00", late);
+  SCHECK(list_scheduled(late, 6, 20 * 60) && list_scheduled(late, 6, 23 * 60 + 59), "Saturday evening");
+  SCHECK(list_scheduled(late, 0, 0) && list_scheduled(late, 0, 1 * 60 + 59), "Sunday small hours");
+  SCHECK(!list_scheduled(late, 0, 2 * 60) && !list_scheduled(late, 0, 20 * 60), "Sunday 2 AM is over; Sunday night isn't a Saturday");
+  SCHECK(!list_scheduled(late, 6, 1 * 60), "Saturday 1 AM is Friday's night, not scheduled");
+  // Every day all day
+  ListOpt all;
+  list_opt_token("@d:0123456", all);
+  SCHECK(list_scheduled(all, 3, 0) && list_scheduled(all, 3, 23 * 60 + 59), "all day");
+  SCHECK(!list_scheduled(ListOpt{}, 0, 12 * 60), "no schedule");
+  // Overlaps: the list higher in the order wins
+  ListOpt opts[3] = {ListOpt{}, sun, all};
+  SCHECK(scheduled_list(opts, 3, 0, 12 * 60) == 2, "Sunday noon: the Sundays list, above the every-day one");
+  SCHECK(scheduled_list(opts, 3, 2, 12 * 60) == 3, "Tuesday: the every-day list");
+  SCHECK(scheduled_list(opts, 2, 2, 12 * 60) == 0, "without it, nothing");
+  SCHECK(scheduled_list(opts, 0, 0, 12 * 60) == 0, "no lists");
+
+  // Through daylight saving in US Central: the hours follow the local
+  // clock. Fall back 2026-11-01: 1:30 AM CDT (06:30Z) and 1:30 AM CST
+  // (07:30Z) are both inside a Saturday-night window that ends at 2 AM, and
+  // 2:30 AM CST (08:30Z) is past it. Spring forward 2026-03-08: 1:59 AM CST
+  // (07:59Z) is inside, the next minute is 3:00 AM CDT and outside.
+  const char *central = "CST6CDT,M3.2.0,M11.1.0";
+  auto at = [&](int64_t epoch) { return local_dm(epoch, central); };
+  std::pair<int, int> dm = at(1793514600);  // 2026-11-01 06:30Z, 1:30 AM CDT Sunday
+  SCHECK(dm.first == 0 && dm.second == 90 && list_scheduled(late, dm.first, dm.second), "1:30 AM CDT inside");
+  dm = at(1793518200);  // 07:30Z, 1:30 AM CST (the hour again)
+  SCHECK(dm.first == 0 && dm.second == 90 && list_scheduled(late, dm.first, dm.second), "1:30 AM CST inside too");
+  dm = at(1793521800);  // 08:30Z, 2:30 AM CST
+  SCHECK(dm.first == 0 && dm.second == 150 && !list_scheduled(late, dm.first, dm.second), "2:30 AM CST over");
+  dm = at(1772956740);  // 2026-03-08 07:59Z, 1:59 AM CST Sunday
+  SCHECK(dm.first == 0 && dm.second == 119 && list_scheduled(late, dm.first, dm.second), "1:59 AM CST inside");
+  dm = at(1772956800);  // 08:00Z, 3:00 AM CDT
+  SCHECK(dm.first == 0 && dm.second == 180 && !list_scheduled(late, dm.first, dm.second), "3:00 AM CDT over");
+  // A Sunday 11 AM start lands an hour later in UTC after the fall back
+  dm = at(1793466000);  // 2026-10-31 17:00Z, Saturday noon CDT: not Sunday
+  SCHECK(dm.first == 6 && !list_scheduled(sun, dm.first, dm.second), "Saturday noon");
+  dm = at(1793552400);  // 2026-11-01 17:00Z, 11:00 AM CST Sunday
+  SCHECK(dm.first == 0 && dm.second == 11 * 60 && list_scheduled(sun, dm.first, dm.second), "11 AM CST Sunday starts it");
+  dm = at(1793548800);  // 16:00Z, 10:00 AM CST
+  SCHECK(dm.second == 10 * 60 && !list_scheduled(sun, dm.first, dm.second), "10 AM CST, not yet");
+
+  // The tick's steps (schedule_step)
+  SchedStep st = schedule_step(2, 0, 0, false);
+  SCHECK(st.start && st.list == 2 && !st.restore, "a schedule starts");
+  st = schedule_step(2, 2, 2, false);
+  SCHECK(!st.start && !st.restore, "under way: nothing");
+  st = schedule_step(2, 0, 0, true);
+  SCHECK(!st.start && !st.restore, "a locked game finishes first");
+  st = schedule_step(0, 2, 2, false);
+  SCHECK(st.restore && !st.start, "over: back to what played");
+  st = schedule_step(0, 2, 1, false);
+  SCHECK(!st.restore && !st.start, "over, but the owner picked another list: it stays");
+  st = schedule_step(3, 2, 2, false);
+  SCHECK(st.start && st.list == 3, "a higher list's schedule takes over");
+  st = schedule_step(0, 2, 2, true);
+  SCHECK(!st.restore, "over, but locked: wait");
+}
+
+// The WizMote's buttons (set_request.h RemoteTarget, playlists.h
+// remote_resolve): the text both ways and what a button does now.
+void test_remote() {
+  RemoteTarget t;
+  SCHECK(remote_parse("fav", t) && t.kind == (uint8_t) RemoteKind::FAVORITE && remote_text(t) == "fav", "fav");
+  SCHECK(remote_parse("team:nfl:6", t) && t.kind == (uint8_t) RemoteKind::TEAM && t.league == (uint8_t) League::NFL &&
+             t.id == 6 && remote_text(t) == "team:nfl:6",
+         "a team");
+  SCHECK(!remote_parse("team:nfl:99999", t) && !remote_parse("team:dallas", t) && !remote_parse("team:", t),
+         "a team the panel doesn't know is refused");
+  SCHECK(remote_parse("list:Sunday Football", t) && t.kind == (uint8_t) RemoteKind::LIST &&
+             remote_name(t) == "Sunday Football" && remote_text(t) == "list:Sunday Football",
+         "a playlist by name");
+  SCHECK(remote_parse("list:ABCDEFGHIJKLMNOPQRST", t) && remote_name(t) == "ABCDEFGHIJKLMNOP", "a name is cut to 16 bytes");
+  SCHECK(!remote_parse("list:", t), "a playlist with no name is refused");
+  SCHECK(remote_parse("sport:hockey", t) && t.kind == (uint8_t) RemoteKind::SPORT && t.sport == (uint8_t) Sport::HOCKEY &&
+             remote_text(t) == "sport:hockey",
+         "a sport row");
+  SCHECK(!remote_parse("sport:Hockey", t) && !remote_parse("sport:curling", t), "an unknown sport is refused");
+  SCHECK(remote_parse("all", t) && remote_text(t) == "all" && remote_parse("none", t) && remote_text(t) == "none", "all, none");
+  SCHECK(!remote_parse("", t) && !remote_parse("nfl:6", t) && !remote_parse("favorite", t), "anything else is refused");
+  SetOp op;
+  SCHECK(parse_set("remote2", "team:nfl:6", op, kFavMax) && op.kind == SetKind::REMOTE && op.slot == 2 &&
+             op.text == "team:nfl:6",
+         "remote2 set key");
+  SCHECK(!parse_set("remote5", "fav", op, kFavMax) && !parse_set("remote0", "fav", op, kFavMax) &&
+             !parse_set("remote1", "team:dallas", op, kFavMax),
+         "remote keys are 1 to 4, values checked");
+
+  const uint8_t NFL = (uint8_t) League::NFL, NBA = (uint8_t) League::NBA, NHL = (uint8_t) League::NHL;
+  std::vector<TeamRef> favs = {{NFL, 6}, {NBA, 6}, {}, {NHL, 25}};
+  std::vector<std::string> names = {"Sundays", "Hoops"};
+  RemoteAction a = remote_resolve(2, RemoteTarget{}, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 2 && !a.gone, "the default is favorite n");
+  remote_parse("team:nhl:25", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::TEAM && a.fav_slot == 4 && !a.gone, "a team is followed to its slot");
+  remote_parse("team:mlb:15", t);
+  a = remote_resolve(3, t, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 3 && a.gone, "a team that isn't a favorite: the default, gone");
+  remote_parse("list:Hoops", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::LIST && a.list == 2 && !a.gone, "a playlist by name");
+  remote_parse("list:Gone", t);
+  a = remote_resolve(4, t, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 4 && a.gone, "a playlist that is gone: the default");
+  remote_parse("sport:basketball", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::SPORT && a.sport_row == 1 + (uint8_t) Sport::BASKETBALL && !a.gone, "a sport row");
+  remote_parse("sport:baseball", t);
+  a = remote_resolve(1, t, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.gone, "a sport with no favorites: the default");
+  a = remote_resolve(1, t, {{NFL, 6}}, names);
+  SCHECK(a.gone, "no rows with one sport");
+  remote_parse("all", t);
+  a = remote_resolve(3, t, favs, names);
+  SCHECK(a.kind == RemoteKind::ALL && a.list == 0 && !a.gone, "all favorites");
+  remote_parse("none", t);
+  a = remote_resolve(3, t, favs, names);
+  SCHECK(a.kind == RemoteKind::NONE && !a.gone, "nothing");
 }
 
 }  // namespace
 
 int run_set_tests(int &total_checks) {
+  test_remote();
+  test_list_options();
+  test_list_marks();
+  test_playlists();
   test_parse_set();
+  test_cards();
   test_live_leagues();
   test_scan_leagues();
+  test_no_team();
   test_live_scan_changed();
   test_fixture_cases();
   total_checks += checks;

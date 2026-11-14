@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Every league the panel can follow and what differs between them. Pure, no
 // ESPHome includes, so the host tests use it too. scripts/build_teams.py,
-// scripts/build_web.py and __init__.py read kLeagues with a regex: keep one
-// row per line in the same field order.
+// scripts/build_web.py, __init__.py and tests/web/mock_device.py read kLeagues
+// through leagues_table.py, which stops on a row it can't read: keep
+// LeagueInfo's field order.
 #pragma once
 
 #include <cstdint>
@@ -14,6 +17,20 @@ enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA
 
 enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
 
+// The state document's and /gameday/set's word for each, in Sport order.
+constexpr int kSportCount = 5;
+constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer"};
+static_assert((int) Sport::SOCCER + 1 == kSportCount, "a key per Sport");
+
+// A sport row in Playing (playlists.h) is numbered 1 + its Sport; 0 is none.
+// "football" -> 1, and 0 for a word that names no sport.
+inline uint8_t sport_row_from_key(const char *k) {
+  for (int s = 0; s < kSportCount; s++)
+    if (strcmp(k, kSportKeys[s]) == 0)
+      return (uint8_t) (s + 1);
+  return 0;
+}
+
 struct LeagueInfo {
   League league;
   const char *key;       // team refs and the state document: "nfl", "mlb"
@@ -21,30 +38,29 @@ struct LeagueInfo {
   const char *prefix;    // Home Assistant team options and logs: "NFL"
   const char *logo_dir;  // a.espncdn.com/i/teamlogos/<dir>/500/...
   Sport sport;
-  bool per_event;      // poll scoreboard/<event id>, not the day's whole slate
   bool season_list;    // the team schedule is small enough for the Up next list
   bool logo_by_id;     // logo files are named by team id, not abbreviation
   uint8_t linger_min;  // a final stays on the board this long before the next game
 };
 
 constexpr LeagueInfo kLeagues[] = {
-    {League::NFL, "nfl", "football/nfl", "NFL", "nfl", Sport::FOOTBALL, true, true, false, 30},
-    {League::NCAA, "ncaa", "football/college-football", "NCAAF", "ncaa", Sport::FOOTBALL, true, true, true, 30},
+    {League::NFL, "nfl", "football/nfl", "NFL", "nfl", Sport::FOOTBALL, true, false, 30},
+    {League::NCAA, "ncaa", "football/college-football", "NCAAF", "ncaa", Sport::FOOTBALL, true, true, 30},
     // A regular-season team schedule is ~2.7 MB, so no Up next list. Game 2
     // of a doubleheader can start half an hour after game 1: short linger.
-    {League::MLB, "mlb", "baseball/mlb", "MLB", "mlb", Sport::BASEBALL, true, false, false, 10},
+    {League::MLB, "mlb", "baseball/mlb", "MLB", "mlb", Sport::BASEBALL, false, false, 10},
     // Soccer logos are named by team id. Up next is the league's own fixture
     // list (~100-280 KB); cup games come from the kCups reads below.
-    {League::MLS, "mls", "soccer/usa.1", "MLS", "soccer", Sport::SOCCER, true, true, true, 30},
-    {League::EPL, "epl", "soccer/eng.1", "EPL", "soccer", Sport::SOCCER, true, true, true, 30},
+    {League::MLS, "mls", "soccer/usa.1", "MLS", "soccer", Sport::SOCCER, true, true, 30},
+    {League::EPL, "epl", "soccer/eng.1", "EPL", "soccer", Sport::SOCCER, true, true, 30},
     // An 82-game NBA season schedule is ~1 MB (WNBA ~840 KB): no Up next list.
-    {League::NBA, "nba", "basketball/nba", "NBA", "nba", Sport::BASKETBALL, true, false, false, 30},
-    {League::WNBA, "wnba", "basketball/wnba", "WNBA", "wnba", Sport::BASKETBALL, true, false, false, 30},
+    {League::NBA, "nba", "basketball/nba", "NBA", "nba", Sport::BASKETBALL, false, false, 30},
+    {League::WNBA, "wnba", "basketball/wnba", "WNBA", "wnba", Sport::BASKETBALL, false, false, 30},
     // A college season schedule is ~570 KB. Its teams are left out of Home
     // Assistant's team select (__init__.py).
-    {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, true, false, true, 30},
+    {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
-    {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, true, false, false, 30},
+    {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
 };
 
 constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);

@@ -1,0 +1,27 @@
+/* Match the installer site (docs/site): dark by default, one blue accent. */
+:root {
+	--sl-color-accent-low: #cfe8fb;
+	--sl-color-accent: #0b6fb8;
+	--sl-color-accent-high: #064a7c;
+}
+
+:root[data-theme='dark'] {
+	--sl-color-accent-low: #12304a;
+	--sl-color-accent: #3d93d1;
+	--sl-color-accent-high: #7cc4ff;
+
+	--sl-color-white: #e6edf3;
+	--sl-color-gray-1: #e6edf3;
+	--sl-color-gray-2: #c3ccd6;
+	--sl-color-gray-3: #9da7b3;
+	--sl-color-gray-4: #5f6b78;
+	--sl-color-gray-5: #262e38;
+	--sl-color-gray-6: #151b23;
+	--sl-color-gray-7: #10151c;
+	--sl-color-black: #0b0f14;
+}
+
+.hero img {
+	border-radius: 12px;
+	border: 1px solid var(--sl-color-gray-5);
+}

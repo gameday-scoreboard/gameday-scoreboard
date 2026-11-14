@@ -21,8 +21,59 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_ncaa_live.json` | `.../college-football/scoreboard/401871053`, one game on its own: FIU @ JXST, 0:33 left in the 4th (recorded 2026-10-13) |
 | `event_nfl_pre.json` | `.../football/nfl/scoreboard/401872999`, CHI @ ATL a week out, with odds (recorded 2026-10-13) |
 | `event_nfl_super_bowl.json` | `.../football/nfl/scoreboard/401772988`, Super Bowl LX on its own (recorded 2026-10-13) |
+| `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
+| `event_nfl_sack_before.json`, `event_nfl_sack.json` | `.../football/nfl/scoreboard/401873045`, NYJ @ KC live, the read before KC sacks G.Smith and the read with it: last play type "Sack", the play's team and the ball both NYJ's (recorded 2026-11-08) |
+| `event_nfl_fumble_before.json`, `event_nfl_fumble.json` | `.../football/nfl/scoreboard/401873040`, DAL @ IND live, the read before DAL recovers J.Taylor's fumble and the read with it: "Fumble Recovery (Opponent)", the play's team and the ball both DAL's (recorded 2026-11-08) |
+| `event_nfl_interception_before.json`, `event_nfl_interception.json` | `.../football/nfl/scoreboard/401873049`, GB @ NE live, the read before GB intercepts D.Maye and the read with it: "Pass Interception Return", the play's team and the ball both GB's (recorded 2026-11-08) |
+| `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
+| `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
+| `rankings_mcbb_20261019.json` | `sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1`, the preseason AP poll, every record 0-0 (recorded 2026-10-29) |
+| `news_nfl.json` | `.../football/nfl/news?limit=6`, the league's six latest headlines (recorded 2026-10-29) |
+| `schedule_nfl_dal_inseason.json` | `.../football/nfl/teams/6/schedule`, week 9: seven finals (3-4) and ten games ahead (recorded 2026-10-31) |
+| `schedule_wnba_dal_offseason.json` | `.../basketball/wnba/teams/3/schedule` after the season: 44 regular-season finals (27-17) and a first-round loss (recorded 2026-10-31) |
+| `schedule_mlb_nyy_offseason.json` | `.../baseball/mlb/teams/10/schedule` after the ALDS: the five playoff games only, so the record is the team read's (recorded 2026-10-31) |
+| `schedule_mls_cin_2025.json` | `.../soccer/usa.1/teams/18267/schedule?season=2025`: results newest first, draws, and the playoffs named by season type (recorded 2026-10-31) |
+| `schedule_ncaa_ala_2025_post.json` | `.../college-football/teams/333/schedule?season=2025&seasontype=3`: two playoff games, the second "at the Rose Bowl Presented by Prudential" (recorded 2026-10-31) |
+| `schedule_nba_phi_2026_post.json` | `.../basketball/nba/teams/20/schedule?season=2026&seasontype=3`: two playoff series, "East Semifinals - Game 4" last (recorded 2026-10-31) |
+| `schedule_mlb_col_missed.json` | `.../baseball/mlb/teams/27/schedule` during the playoffs, for a team that missed them: the season's year and an empty `events` list, as ESPN sent it (recorded 2026-10-31) |
+
+| `schedule_nba_dal_inseason.json` | `.../basketball/nba/teams/6/schedule` in season: seven finals (4-3) and 73 games ahead, NBA Cup notes (recorded 2026-11-03) |
+| `schedule_nhl_ana_inseason.json` | `.../hockey/nhl/teams/25/schedule` in season: 14 finals (6-7-1, one overtime loss) and 70 games ahead (recorded 2026-11-03) |
+| `schedule_nhl_ana_2026.json` | `.../hockey/nhl/teams/25/schedule?season=2026&seasontype=2`: 82 finals, 15 in overtime and 8 in a shootout, 43-33-6 (recorded 2026-11-03) |
+| `schedule_mcbb_ala_2026_post.json` | `.../basketball/mens-college-basketball/teams/333/schedule?season=2026&seasontype=3`: three NCAA tournament games, "Midwest Region - Sweet 16" last (recorded 2026-11-03) |
+| `plays_nba_20261107.json` | `.../basketball/nba/summary?event=<id>` for three 11/7 finals (SA @ POR, HOU @ PHX, ORL @ GS), the play-by-play cut to what the panel's live read carries for each play: `[wallclock (Unix s), type.text, text (scoring plays only), scoreValue, team.id, homeScore, awayScore]`, and each team's id, abbreviation and color. 17 dunks and 9 alley-oops; the big plays test replays it at 10 s reads (recorded 2026-11-08) |
+
+The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`), and the four recorded on 2026-11-03, keep only the fields a schedule parse reads
+(every event, each cut to its date, season type, week, status, notes,
+broadcast and both sides' id, abbreviation, side, winner and score; the
+2026-11-03 ones also keep the status's period, for hockey's overtime losses).
 
 Event ids the tests rely on are listed at the top of `test_parse.cpp`.
+
+`pictures/` holds the picture card's test files (`test_picture.cpp`,
+`fuzz_picture.cpp`, the device page tests), made with Pillow 11.1 on
+2026-10-29: `noise.gif` (64x32, two interlaced frames of 256-color noise,
+so the LZW code size reaches 12 bits), `box_d2.gif` and `box_d3.gif` (a red
+box stepping 20 px right over four 128x64 frames cropped to what changed,
+disposal 2 and 3), `still.gif` (a yellow box on a transparent 40x30),
+`wide.gif` (129x64), `blue.png` (64x32) and `tall.png` (64x65).
+
+Game summaries (`.../summary?event=<id>`, the document the Game leaders card
+reads at halftime and the final), recorded 2026-10-28. Each is trimmed to its
+`header`, `leaders`, `boxscore` and the small top-level objects; the plays,
+drives, videos and news that make up most of the 400 KB to 1.2 MB document are
+emptied but their keys kept, so the filter still skips them.
+
+| File | Source |
+| --- | --- |
+| `summary_nfl_final.json` | 401873009 DAL @ PHI, Final (10/26): passing, rushing and receiving leaders both sides |
+| `summary_ncaa_final.json` | 401858274 PITT @ MIA, Final (10/24), college football's leaders |
+| `summary_nba_final.json` | 401909877 BKN @ BOS, Final/OT (10/27): points, assists and rebounds |
+| `summary_nba_half.json` | 401909887 HOU @ MIL at halftime |
+| `summary_nba_no_leaders.json` | 401909889 DEN @ NO at halftime, with the `leaders` block removed by hand |
+| `summary_nhl_final.json` | 401892585 CBJ @ PHI, Final/OT (10/27): goals, assists and points |
+| `summary_nhl_end2.json` | 401892596 PHI @ WSH at the end of the 2nd |
+| `summary_mlb_final.json` | 401908045 MIL @ TB, Final/12 (10/27): no `leaders`; `boxscore.players` with the batting and pitching groups |
 
 MLB, recorded 2026-10-07 (postseason) from the single-event endpoint
 `.../baseball/mlb/scoreboard/<event id>` that per-event leagues poll:
@@ -70,6 +121,7 @@ NBA (preseason) and WNBA (semifinals), recorded 2026-10-07 from
 | `event_nba_clock.json` | 401908620 MIL @ OKC, 12.3 1st (tenths, no minutes) |
 | `event_nba_end.json` | 401908620, End of 1st |
 | `event_nba_pre.json` | 401914129 GS @ POR, pre-game with odds |
+| `event_nba_pre_leaders.json` | 401909853 MIA @ CHA, regular-season pre-game with each side's points, rebounds and assists per game leaders (recorded 2026-10-24) |
 | `event_wnba_live.json` | 401918297 NY @ ATL, 4.5 2nd, ATL leads series 1-0 |
 | `event_wnba_half.json` | 401918297, Halftime |
 | `event_wnba_ot.json` | 401918297, 20.8 OT |
@@ -94,10 +146,14 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | --- | --- |
 | `event_nhl_live.json` | 401892455 COL @ WPG, 3:21 left in the 1st, 0-0, a delay of game penalty as the last play |
 | `event_nhl_end.json` | 401891830 PIT @ WSH, End of 1st (status END_PERIOD, the intermission), 2-1 WSH |
+| `event_nhl_late_intermission.json` | 401892697 MIN @ TOR, 2026-11-12, late in the second intermission: status IN_PROGRESS, period 3, displayClock "20:00", shortDetail "20:00 - 3rd", the last play still "End of 2nd Period" (type "Period End") before the puck drops, 2-2 |
+| `event_nhl_faceoff.json` | 401892698 COL @ OTT, 2026-11-12, the first read after the puck dropped for the 3rd: 19:41, the faceoff as the last play (the read before was "20:00 - 3rd" with "End of 2nd Period"), 2-1 OTT |
 | `event_nhl_final.json` | 401891830 PIT @ WSH, Final 5-3 WSH |
 | `event_nhl_pre.json` | 401892456 EDM @ ANA, pre-game with odds and O/U |
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |
 | `event_nhl_final_2ot.json` | 401869781 OTT @ CAR, 2026 playoffs, Final/2OT 3-2 CAR, series line (recorded after the fact) |
+| `event_nhl_goal.json` | 401892674 FLA @ BOS, 2026-11-08, 3:55 left in the 1st, 3-0 BOS, a goal as the last play (Geekie, with athletesInvolved; no period or clock on the play) |
+| `event_nhl_hattrick_final.json` | 401892640 DAL @ WSH, 2026-11-03, Final 6-5 DAL, Robertson's hat trick: the game's goal leaders list every scorer with the player's id and count (recorded 2026-11-08, after the fact). test_celeb_hockey.cpp puts it back in the 3rd period with his count at 1 to 4 for the reads around his third goal |
 | `team_nhl_edm.json` | `.../hockey/nhl/teams/6` (next event is the EDM @ ANA game above) |
 
 `football_golden.txt` is written by the host tests (`GOLDEN_WRITE=1`) and
@@ -135,6 +191,15 @@ during FLA @ TEX (halftime):
 | --- | --- |
 | `team_ncaa_tex_live.json` | `.../football/college-football/teams/251`, nextEvent is 401856732 MISS @ TEX on 10/24, group 8 (SEC) |
 | `day_ncaa_20261017.json` | `.../college-football/scoreboard?groups=8&dates=20261017`, 401856724 FLA @ TEX and MSST @ LSU in progress, five SEC games to come |
+| `day_mcbb_20261106.json` | `.../mens-college-basketball/scoreboard?groups=7&dates=20261106` (recorded 2026-11-03), ten Big Ten games to come, every one non-conference: 401920685 CONN vs MICH among them |
+
+The NFL does not. Recorded 2026-10-22 at 10:32 PM Central, NE @ CHI final,
+and two minutes later ECU @ MEM (college) in overtime:
+
+| File | Source |
+| --- | --- |
+| `team_nfl_chi_post.json` | `.../football/nfl/teams/3`, nextEvent is still 401873010 NE @ CHI, Final 30-24 |
+| `team_ncaa_mem_live.json` | `.../football/college-football/teams/235`, nextEvent is 401862814 ARMY @ MEM on 10/31 while 401862807 ECU @ MEM is in overtime |
 
 College football games with no kickoff time yet, recorded 2026-10-14. ESPN
 lists them at midnight Eastern with `timeValid: false` and a `shortDetail` of
@@ -159,3 +224,32 @@ the settings they leave in `/gameday/state`. `test_set.cpp` runs it through
 `set_request.h`, and `tests/web/mock_device.py --selftest` through the device
 page's mock, so the two answer the same way. Add a case there when a set key
 or its limits change.
+
+Not from ESPN either: `api/` is the panel's own HTTP API as the companion
+app sees it. `state.json` is a `GET /gameday/state` document with every key
+the firmware can send, so it has some together that a real panel never sends
+at once (favorites rows next to the team's upcoming games, a reason for an
+empty board next to a live game).
+`wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
+/gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
+(`demo` and `demo_stop` only in demo builds). `settings.json` is `GET
+/gameday/settings`, the backup, and `crash.json` is `GET /gameday/crash`, the
+crash report `scripts/crash_report.py` and the help desk read.
+
+The key lists say which keys exist; two more files say what they hold.
+`types.json` gives the JSON type of every key in `state.json`, `wifi.json`,
+`settings.json` and `crash.json` (`bool`, `int`, `number`, `string`, `object`,
+`array`, or a list like `["int", "null"]`), with `favs[]` for an array's
+elements. `set_forms.json` gives every `POST /gameday/set` parameter's form,
+like `HH:MM` or `league:id`, with values the firmware takes (`ok`) and
+refuses (`bad`). `test_api.cpp` fails when a fixture's value doesn't have
+its type, when the firmware's health and wifi objects don't, and when
+`parse_set` disagrees with an `ok` or `bad` value. `python3
+scripts/api_types.py check <panel>` compares a live panel with `types.json`,
+and `python3 scripts/api_types.py seed` rebuilds it from the fixtures.
+
+`test_api.cpp` fails when the firmware and these files disagree, and the
+companion app's tests read them, so a firmware change to the API updates
+them in the same PR. `GET /gameday/heap` (a bench reading) and
+`/gameday/demo` (demo builds only) are not part of the API the apps use and
+have no fixture.

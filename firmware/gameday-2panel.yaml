@@ -12,3 +12,7 @@ packages:
 esphome:
   # Its own build folder, so switching builds never throws away the other's cache.
   build_path: build/gameday-moonhub75-2panel
+
+# The crash report names this build, so a decode picks its ELF.
+crash_report:
+  variant: "moonhub75-2panel"

@@ -3,8 +3,9 @@
 // and prints, per case, as JSON:
 //   json   the most bytes the JSON documents (filter and parse) held at once,
 //          through the allocator the firmware points at PSRAM
-//   heap   the most bytes everything else held at once (the result vectors
-//          and strings), which on the panel come out of internal RAM
+//   heap   the most bytes everything else held at once through operator new
+//          (the result vectors and strings), which on the panel come out of
+//          internal RAM. Lists on PsramAllocator (a scan's) count in neither.
 // These are host figures (64-bit pointers, glibc), larger than the panel's,
 // and the same on every run of the same code, so CI can compare them with a
 // budget and with the base branch. scripts/size_budget.py reads the output.
@@ -19,6 +20,8 @@
 
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
+#include "game_leaders.h"
+#include "weather.h"
 
 using namespace espn;
 
@@ -126,9 +129,9 @@ template<typename F> static void measure(const char *name, F read) {
 static void scan(const char *name, const std::string &file) {
   std::string json = slurp("fixtures/" + file);
   measure(name, [&] {
-    std::vector<LiveGame> live;
-    std::vector<Final> finals;
-    std::vector<Pending> pending;
+    LiveList live;
+    FinalList finals;
+    PendingList pending;
     int64_t next = 0;
     return parse_live_games(json, live, &next, &finals, &pending);
   });
@@ -146,6 +149,22 @@ static void event(const char *name, const std::string &file, Sport sport) {
   measure(name, [&] {
     GameSnapshot g;
     return parse_event(json, sport, team, g, event_id);
+  });
+}
+
+// The game summary read at halftime and the final. The tracked team is the
+// header's first competitor.
+static void summary(const char *name, const std::string &file, Sport sport) {
+  std::string json = slurp("fixtures/" + file);
+  JsonDocument doc;
+  deserializeJson(doc, json, DeserializationOption::NestingLimit(40));  // the header nests past the default
+  std::string event_id = doc["header"]["id"] | "";
+  uint32_t team = (uint32_t) atol(doc["header"]["competitions"][0]["competitors"][0]["id"] | "0");
+  doc.clear();
+  doc.shrinkToFit();
+  measure(name, [&] {
+    GameLeaders l;
+    return parse_summary(json, sport, team, event_id, LeadersStage::FINAL, l) && l.any();
   });
 }
 
@@ -175,6 +194,13 @@ int main() {
   event("poll_nhl_event", "event_nhl_live.json", Sport::HOCKEY);
   event("poll_soccer_event", "event_soccer_second_half.json", Sport::SOCCER);
 
+  // The game summary at halftime and the final (game_leaders.h), 400 KB to
+  // 1.2 MB on the wire; the fixtures keep its header, leaders and box score.
+  summary("summary_nfl", "summary_nfl_final.json", Sport::FOOTBALL);
+  summary("summary_nba", "summary_nba_final.json", Sport::BASKETBALL);
+  summary("summary_nhl", "summary_nhl_final.json", Sport::HOCKEY);
+  summary("summary_mlb", "summary_mlb_final.json", Sport::BASEBALL);
+
   {
     std::string json = slurp("fixtures/team_nfl_dal.json");
     measure("team_nfl", [&] {
@@ -190,10 +216,49 @@ int main() {
     });
   }
   {
+    std::string json = slurp("fixtures/rankings_cfb_20261025.json");
+    measure("rankings_ncaa", [&] {
+      Poll p;
+      return parse_rankings(json, p);
+    });
+  }
+  // The weather card's reads from Open-Meteo (weather.h): the town's lookup,
+  // once per town, and the forecast every half hour.
+  {
+    std::string json = slurp("fixtures/wx_geocode_paris.json");
+    measure("weather_lookup", [&] {
+      WxPlace p;
+      return parse_geocode(json, p) && !p.name.empty();
+    });
+  }
+  {
+    std::string json = slurp("fixtures/wx_forecast_coppell.json");
+    measure("weather_forecast", [&] {
+      WxForecast f;
+      return parse_forecast(json, f);
+    });
+  }
+  {
+    std::string json = slurp("fixtures/wx_hour_greenbay.json");
+    measure("weather_hour", [&] {
+      WxHour h;
+      return parse_hour(json, h);
+    });
+  }
+  {
     std::string json = slurp("fixtures/schedule_nfl_dal.json");
     measure("schedule_nfl", [&] {
       std::vector<Upcoming> up;
       return parse_upcoming(json, 6, 4, up);
+    });
+  }
+  {
+    // The schedule and recap cards' read (season.h) at its biggest: a whole
+    // NHL season, 82 finals (1.9 MB from ESPN, streamed through the filter).
+    std::string json = slurp("fixtures/schedule_nhl_ana_2026.json");
+    measure("season_nhl", [&] {
+      SeasonRead r;
+      return parse_season_str(json, 25, r);
     });
   }
 

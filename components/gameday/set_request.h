@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The device page's POST /gameday/set: which keys it takes, what each value
 // means and where it is clamped or refused, and the leagues each live mode
 // scans.
@@ -7,30 +9,55 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
+#include "cards.h"
+#include "countdown.h"
+#include "hook.h"
 #include "leagues.h"
+#include "message.h"
+#include "night.h"
 #include "startup.h"
 #include "teams.h"
 #include "timezones.h"
+#include "wake.h"
+#include "weather.h"
 
 namespace espn {
 
 // In the order the firmware applies them, whatever order the request uses.
-constexpr const char *kSetKeys[] = {"team",   "mode",     "rotate", "fav1",    "fav2",    "fav3",
+constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "fav3",
                                     "fav4",   "tz",       "tzauto", "down",    "play",    "odds",
                                     "opp",    "panels",   "bootaddr", "lockon", "release", "collide",
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
-                                    "beta"};
+                                    "beta",   "countdown", "top25", "cdname", "cddate", "gameleaders", "msg",
+                                    "msgurl",
+                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
+                                    "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
+                                    "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
+                                    "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
+                                    "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
+                                    "field",   "winbar",  "spark",   "bigplays"};
 
-// LIVE (5) follows live games in the leagues of the live mask; modes 1-3 are
-// the football-only live modes from before, kept for panels that saved them.
-enum class Mode : uint8_t { MY_TEAM = 0, LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
+// FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
+// the leagues of the live mask. Modes 1-3 are the football-only live modes
+// from before, kept for panels that saved them. 0 was My team, which
+// Favorites replaced: a saved or sent 0 reads as Favorites (read_mode).
+enum class Mode : uint8_t { LIVE_NFL = 1, LIVE_NCAA = 2, LIVE_ANY = 3, FAVORITES = 4, LIVE = 5 };
 
-// Mode 0 (My team) to 5 (Live games).
+// The modes parse_set and a saved setting take, 0 to kModeCount - 1.
 constexpr int kModeCount = 6;
 static_assert((int) Mode::LIVE + 1 == kModeCount, "parse_set takes modes 0 to kModeCount - 1");
+
+// A mode number from the page, an app, a backup or flash, as the panel runs
+// it: My team's 0 is Favorites. -1 when it is out of range.
+inline int read_mode(int m) {
+  if (m < 0 || m >= kModeCount)
+    return -1;
+  return m == 0 ? (int) Mode::FAVORITES : m;
+}
 
 constexpr int kLockonMinMinutes = 5;
 constexpr int kLockonMaxMinutes = 120;
@@ -84,14 +111,10 @@ inline uint16_t live_mask_from_keys(const std::string &keys) {
   return mask;
 }
 
-// The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: the
-// saved team's league and each favorite's. team_league is the league byte
-// the panel keeps, which stays after the team is cleared. NFL when nothing
-// is left.
-inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, const std::vector<uint8_t> &fav_leagues) {
+// The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: each
+// favorite's league, NFL when there are none.
+inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t> &fav_leagues) {
   if (mask == 0) {
-    if (team_league < 16)
-      mask |= (uint16_t) (1u << team_league);
     for (uint8_t l : fav_leagues)
       if (l < 16)
         mask |= (uint16_t) (1u << l);
@@ -105,10 +128,27 @@ inline std::vector<League> live_leagues(uint16_t mask, uint8_t team_league, cons
   return out;
 }
 
+// No team picked: Favorites with no favorite set. Any Live mode counts as a
+// choice. The panel then runs Live games over no_team_leagues() and the
+// state document's live list is that set.
+inline bool no_team_default(uint8_t mode, bool have_favorite) {
+  return mode == (uint8_t) Mode::FAVORITES && !have_favorite;
+}
+
+// The leagues a panel with no team picked scans: every league, in kLeagues
+// order. Men's college basketball is read as ESPN's Top 25 slate there
+// (scan_url's top25), not all of Division I.
+inline std::vector<League> no_team_leagues() {
+  std::vector<League> out;
+  for (const auto &l : kLeagues)
+    out.push_back(l.league);
+  return out;
+}
+
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
-// (live_leagues above). Live anything is also the no-team default. A mode
-// that follows a team scans none.
+// (live_leagues above, or no_team_leagues for the no-team default). A mode
+// that follows teams (Favorites) scans none.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
     case Mode::LIVE_NFL:
@@ -125,16 +165,109 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
 }
 
 // Live games' leagues went from before to after (its list, or with the list
-// on auto the team or favorites it follows). True when the scan now reads
+// on auto the favorites it follows). True when the scan now reads
 // other leagues, so the board has to drop what the old ones put up and scan
 // again; a mode that doesn't read the list never does.
 inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, const std::vector<League> &after) {
   return scan_leagues(mode, before) != scan_leagues(mode, after);
 }
 
+// What a WizMote button 1 to 4 does (wizmote.yaml, remote_number). Each
+// starts at its own favorite (button n is favorite n) and stays there until
+// the owner sets it; nothing in the firmware moves it. As text, in set
+// requests, the state document and the settings backup:
+//   fav              the button's own favorite (its default)
+//   team:nfl:6       a favorite team, followed wherever it moves in the list
+//   list:<name>      one of the owner's playlists, by name
+//   sport:football   a sport row (playlists.h), football to soccer
+//   all              All favorites
+//   none             nothing
+// A button whose team, playlist or sport row is gone does what its default
+// does, and the state says so (playlists.h remote_resolve).
+enum class RemoteKind : uint8_t { FAVORITE = 0, TEAM = 1, LIST = 2, SPORT = 3, ALL = 4, NONE = 5 };
+constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
+struct RemoteTarget {
+  uint8_t kind{0};  // RemoteKind
+  uint8_t league{0};
+  uint32_t id{0};                // TEAM
+  uint8_t sport{0};              // SPORT, a Sport
+  char name[kRemoteNameMax]{};   // LIST, no terminator when full
+} __attribute__((packed));
+
+inline const char *remote_sport_key(uint8_t sport) {
+  static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
+  return sport < 5 ? kWords[sport] : "";
+}
+
+inline std::string remote_name(const RemoteTarget &t) {
+  size_t n = 0;
+  while (n < kRemoteNameMax && t.name[n] != '\0')
+    n++;
+  return std::string(t.name, n);
+}
+
+// The text above into a target; false for anything else. A playlist name
+// is kept as sent, up to kRemoteNameMax bytes; the component cleans it as
+// it cleans a playlist's.
+inline bool remote_parse(const std::string &v, RemoteTarget &t) {
+  t = RemoteTarget{};
+  if (v == "fav")
+    return true;
+  if (v == "all") {
+    t.kind = (uint8_t) RemoteKind::ALL;
+    return true;
+  }
+  if (v == "none") {
+    t.kind = (uint8_t) RemoteKind::NONE;
+    return true;
+  }
+  if (v.compare(0, 5, "team:") == 0) {
+    uint8_t league = 0;
+    uint32_t id = 0;  // not t.id itself: a packed field can't be bound by reference
+    if (!parse_team_ref(v.substr(5), league, id) || !known_team(league, id))
+      return false;
+    t.kind = (uint8_t) RemoteKind::TEAM;
+    t.league = league;
+    t.id = id;
+    return true;
+  }
+  if (v.compare(0, 6, "sport:") == 0) {
+    for (uint8_t s = 0; s < 5; s++)
+      if (v.substr(6) == remote_sport_key(s)) {
+        t.kind = (uint8_t) RemoteKind::SPORT;
+        t.sport = s;
+        return true;
+      }
+    return false;
+  }
+  if (v.compare(0, 5, "list:") == 0 && v.size() > 5) {
+    t.kind = (uint8_t) RemoteKind::LIST;
+    std::string name = v.substr(5, kRemoteNameMax);
+    memcpy(t.name, name.data(), name.size());
+    return true;
+  }
+  return false;
+}
+
+inline std::string remote_text(const RemoteTarget &t) {
+  switch ((RemoteKind) t.kind) {
+    case RemoteKind::TEAM:
+      return std::string("team:") + league_key((League) t.league) + ":" + std::to_string(t.id);
+    case RemoteKind::LIST:
+      return "list:" + remote_name(t);
+    case RemoteKind::SPORT:
+      return std::string("sport:") + remote_sport_key(t.sport);
+    case RemoteKind::ALL:
+      return "all";
+    case RemoteKind::NONE:
+      return "none";
+    default:
+      return "fav";
+  }
+}
+
 enum class SetKind : uint8_t {
-  TEAM,      // team, id 0 clears it
-  MODE,      // value
+  MODE,      // value, read_mode's
   ROTATE,    // value, minutes
   FAV_SLOT,  // slot (1-4), team (id 0 clears the slot)
   TZ,        // value, index into kTimezones
@@ -155,6 +288,44 @@ enum class SetKind : uint8_t {
   COUNT,     // on, baseball
   MATCH,     // on, soccer
   BETA,      // on, release builds only
+  COUNTDOWN,  // on, the next game's countdown card
+  TOP25,      // on, the college Top 25 card (rankings.h)
+  CD_NAME,    // text, the custom countdown's name
+  CD_DATE,    // ymd, the custom countdown's day (0 clears it)
+  GAMELEADERS,  // on, this game's leaders card at halftime and the final (game_leaders.h)
+  MSG,       // text, the message card's own entries (message.h); "" clears it
+  MSGURL,    // text, the list's address; "" clears it
+  MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
+  BEST,      // on, Live games picks the best game (best_game.h)
+  JUMP,      // on, Favorites jumps to the action (favorites.h)
+  BANNER,    // on, Favorites shows a banner when another favorite scores
+  FAVTAKE,   // on, Live games locks onto a favorite's game while it is live (favorites.h)
+  LEADERS,   // on, the season leaders in the pre-game ticker
+  NIGHT,        // on, the night schedule (night.h)
+  NIGHT_START,  // value, minutes after midnight
+  NIGHT_END,    // value, minutes after midnight
+  NIGHT_SCREEN, // on: lit at the night brightness, off: dark
+  NIGHT_LEVEL,  // value, 1 to 255
+  NICK,         // text, the panel's nickname (kNickMax); "" clears it
+  REMOTE,       // slot 1-4, text: what a WizMote button does (RemoteTarget, remote_text)
+  LISTS,        // text, every playlist (playlists.h parse_lists); "" clears them
+  LIST,         // value, the playlist Favorite teams plays, 0 = every favorite
+  SPORT,        // value, the sport row Favorite teams plays, 1 + Sport; 0 = none (every favorite)
+  HOOK,         // text, the game events' webhook address (hook.h); "" turns it off
+  PREGAME,      // value, minutes before the start for the reminder event, 0 = none
+  WAKE,         // on, Game-day wake (wake.h)
+  WAKE_LEAD,    // value, minutes before the start, kWakeLeadMin to kWakeLeadMax
+  AFTER,        // value, After the game: an After
+  NEWS,         // on, the news card between games (news.h)
+  TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
+  WXON,         // on, the weather card between games
+  WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
+  CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
+  FIELD,        // on, football's field strip on the board (game_viz.h)
+  WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
+  SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
+  CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
+  BIGPLAYS,     // on, the big plays' own shows on Full (celeb_<sport>.h)
 };
 
 struct TeamRef {
@@ -164,7 +335,7 @@ struct TeamRef {
 };
 
 struct SetOp {
-  SetKind kind{SetKind::TEAM};
+  SetKind kind{SetKind::MODE};
   int value{0};
   bool on{false};
   uint8_t slot{0};
@@ -172,11 +343,31 @@ struct SetOp {
   TeamRef team;
   std::vector<TeamRef> teams;
   std::vector<std::string> refused;  // favs entries left out, for the log
+  std::string text;
+  uint32_t ymd{0};
 };
+
+// A whole number, the whole value: an optional minus and up to six digits.
+// "abc", "", "5x" and "1.5" are refused rather than read as 0 or 5.
+inline bool parse_whole_int(const std::string &v, int &out) {
+  size_t i = !v.empty() && v[0] == '-' ? 1 : 0;
+  if (v.size() == i || v.size() - i > 6)
+    return false;
+  int n = 0;
+  for (size_t k = i; k < v.size(); k++) {
+    if (v[k] < '0' || v[k] > '9')
+      return false;
+    n = n * 10 + (v[k] - '0');
+  }
+  out = i ? -n : n;
+  return true;
+}
 
 // Decodes one key=value from the request. False when the key is unknown or
 // the value is refused: the firmware logs it and changes nothing. Switches
-// are on for "1" only; numbers read like atoi, so "abc" is 0.
+// are on for "1" only. The mode, panel count, night level and the minute and
+// second settings take a whole number only (parse_whole_int); the other
+// numbers read like atoi.
 inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, size_t fav_max) {
   op = SetOp{};
   auto on = [&](SetKind kind) {
@@ -184,36 +375,38 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.on = v == "1";
     return true;
   };
-  if (k == "team") {
-    op.kind = SetKind::TEAM;
-    if (v == "none")
-      return true;
-    return parse_team_ref(v, op.team.league, op.team.id) && known_team(op.team.league, op.team.id);
-  }
   if (k == "mode") {
     op.kind = SetKind::MODE;
-    op.value = atoi(v.c_str());
-    return op.value >= 0 && op.value < kModeCount;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = read_mode(op.value);
+    return op.value >= 0;
   }
   if (k == "rotate") {
     op.kind = SetKind::ROTATE;
-    op.value = clamp_rotate_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_rotate_minutes(op.value);
     return true;
   }
   if (k == "lockon") {
     op.kind = SetKind::LOCKON;
-    op.value = clamp_lockon_minutes(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_lockon_minutes(op.value);
     return true;
   }
   if (k == "release") {
     op.kind = SetKind::RELEASE;
-    op.value = clamp_release_seconds(atoi(v.c_str()));
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_release_seconds(op.value);
     return true;
   }
   if (k == "panels") {
+    // 1 and up; the panel layout refuses a count past its own limit.
     op.kind = SetKind::PANELS;
-    op.value = atoi(v.c_str());
-    return true;
+    return parse_whole_int(v, op.value) && op.value >= 1 && op.value <= 255;
   }
   if (k == "tz") {
     op.kind = SetKind::TZ;
@@ -256,10 +449,133 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.team = TeamRef{};
     return v == "none" || v.empty();
   }
+  if (k == "msg") {
+    op.kind = SetKind::MSG;
+    op.text = message_clean(v, kMsgTextMax, true);
+    return true;
+  }
+  if (k == "nick") {
+    op.kind = SetKind::NICK;
+    op.text = message_clean(utf8_only(v), kNickMax, false);
+    return true;
+  }
+  if (k == "msgurl") {
+    op.kind = SetKind::MSGURL;
+    op.text = v;
+    return msg_url_ok(v);
+  }
+  if (k == "msgevery") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    op.kind = SetKind::MSGEVERY;
+    op.value = clamp_msg_every(atoi(v.c_str()));
+    return !v.empty() && v[0] >= '0' && v[0] <= '9';
+  }
+  if (k == "nightstart" || k == "nightend") {
+    // "23:00", the form a time field sends; anything else is refused.
+    op.kind = k == "nightstart" ? SetKind::NIGHT_START : SetKind::NIGHT_END;
+    op.value = night_parse_time(v);
+    return op.value >= 0;
+  }
+  if (k == "celebrate") {
+    // 0 off, 1 subtle, 2 full; anything else is refused.
+    op.kind = SetKind::CELEBRATE;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 2;
+  }
+  if (k == "nightlevel") {
+    // A whole number, held to 1..255; text is refused.
+    op.kind = SetKind::NIGHT_LEVEL;
+    int level = 0;
+    if (!parse_whole_int(v, level))
+      return false;
+    op.value = level < 1 ? 1 : level > 255 ? 255 : level;
+    return true;
+  }
+  if (k == "lists") {
+    // Parsed by playlists.h once the request's favorites are in, since a
+    // playlist can only hold favorites.
+    op.kind = SetKind::LISTS;
+    op.text = v;
+    return true;
+  }
+  if (k == "list") {
+    // 0 means something here, so text isn't read as 0 like the other numbers.
+    // A number past the last playlist is refused where the playlists are known.
+    // strtol, not atoi: a number too long for an int saturates, and is refused.
+    op.kind = SetKind::LIST;
+    long n = strtol(v.c_str(), nullptr, 10);
+    op.value = n >= 0 && n <= 16 ? (int) n : -1;
+    return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
+  if (k == "sport") {
+    // A sport row (playlists.h) by its kSportKeys word; "none" stops the one
+    // playing. A sport with no row is refused where the favorites are known.
+    op.kind = SetKind::SPORT;
+    op.value = v == "none" ? 0 : sport_row_from_key(v.c_str());
+    return v == "none" || op.value != 0;
+  }
+  if (k.size() == 7 && k.compare(0, 6, "remote") == 0 && k[6] >= '1' && k[6] <= '4') {
+    RemoteTarget t;
+    if (!remote_parse(v, t))
+      return false;
+    op.kind = SetKind::REMOTE;
+    op.slot = (uint8_t) (k[6] - '0');
+    op.text = remote_text(t);
+    return true;
+  }
+  if (k == "hook") {
+    op.kind = SetKind::HOOK;
+    op.text = v;
+    return hook_url_ok(v);
+  }
+  if (k == "pregame") {
+    op.kind = SetKind::PREGAME;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_pregame_minutes(op.value);
+    return true;
+  }
+  if (k == "wakelead") {
+    op.kind = SetKind::WAKE_LEAD;
+    if (!parse_whole_int(v, op.value))
+      return false;
+    op.value = clamp_wake_lead(op.value);
+    return true;
+  }
+  if (k == "after") {
+    // "off", "clock" or "scoreboard"; a choice this firmware doesn't have is refused.
+    op.kind = SetKind::AFTER;
+    op.value = after_parse(v);
+    return op.value >= 0;
+  }
+  if (k == "wake")
+    return on(SetKind::WAKE);
+  if (k == "town") {
+    op.kind = SetKind::TOWN;
+    op.text = town_clean(v);
+    return true;
+  }
+  if (k == "wxon")
+    return on(SetKind::WXON);
+  if (k == "wxunit") {
+    // 0 auto (the town's country, else the time zone), 1 F, 2 C
+    op.kind = SetKind::WXUNIT;
+    op.value = v == "0" ? kWxUnitAuto : v == "1" ? kWxUnitF : v == "2" ? kWxUnitC : -1;
+    return op.value >= 0;
+  }
+  if (k == "night")
+    return on(SetKind::NIGHT);
+  if (k == "nightscreen")
+    return on(SetKind::NIGHT_SCREEN);
   if (k == "tzauto")
     return on(SetKind::TZ_AUTO);
   if (k == "down")
     return on(SetKind::DOWN);
+  if (k == "field")
+    return on(SetKind::FIELD);
+  if (k == "winbar")
+    return on(SetKind::WINBAR);
+  if (k == "spark")
+    return on(SetKind::SPARK);
   if (k == "count")
     return on(SetKind::COUNT);
   if (k == "match")
@@ -270,6 +586,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::ODDS);
   if (k == "opp")
     return on(SetKind::OPP);
+  if (k == "bigplays")
+    return on(SetKind::BIGPLAYS);
   if (k == "bootaddr")
     return on(SetKind::BOOTADDR);
   if (k == "collide")
@@ -280,6 +598,43 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::AUTOUPD);
   if (k == "beta")
     return on(SetKind::BETA);
+  if (k == "countdown")
+    return on(SetKind::COUNTDOWN);
+  if (k == "top25")
+    return on(SetKind::TOP25);
+  if (k == "news")
+    return on(SetKind::NEWS);
+  if (k == "cards") {
+    op.kind = SetKind::CARDS;
+    uint16_t named = 0, cards_on = 0;
+    if (!parse_cards(v, named, cards_on, op.refused))
+      return false;
+    op.mask = named;
+    op.value = cards_on;
+    return true;
+  }
+  if (k == "cdname") {
+    op.kind = SetKind::CD_NAME;
+    op.text = countdown_name(v);
+    return true;
+  }
+  if (k == "cddate") {
+    // "2026-12-25"; "" or "none" clears it. Anything else is refused.
+    op.kind = SetKind::CD_DATE;
+    return parse_countdown_date(v, op.ymd);
+  }
+  if (k == "gameleaders")
+    return on(SetKind::GAMELEADERS);
+  if (k == "best")
+    return on(SetKind::BEST);
+  if (k == "jump")
+    return on(SetKind::JUMP);
+  if (k == "banner")
+    return on(SetKind::BANNER);
+  if (k == "favtake")
+    return on(SetKind::FAVTAKE);
+  if (k == "leaders")
+    return on(SetKind::LEADERS);
   return false;
 }
 

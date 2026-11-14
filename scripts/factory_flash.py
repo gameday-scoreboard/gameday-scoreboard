@@ -11,18 +11,21 @@ label in factory/labels/<name>.svg, 50 x 25 mm, ready to print.
 The same write also leaves the QC flag in the panel's NVS, so its first boot
 goes straight into QC mode (firmware/pages/qc.yaml). One press of the button
 there passes the button test and clears the flag. Until then the panel runs
-QC on every boot.
+QC on every boot. With a test panel on the ribbon, the script waits for that
+press in the log, asks whether the colors looked right, and only writes the
+label for a unit that passed. --print-cmd sends each label to a printer.
 
 Run it with the ESPHome venv's python, which has esptool and pyserial:
 
     python scripts/factory_flash.py --release v1.5.5
     python scripts/factory_flash.py --image path/to/firmware.factory.bin
     python scripts/factory_flash.py --release v1.5.5 --dry-run
+    python scripts/factory_flash.py --release v1.5.5 --print-cmd "lp {label}"
     python scripts/factory_flash.py --selftest
 
 --release downloads the factory image from the GitHub release once and keeps
 it in factory/firmware/. The version and pinout are read from the image
-itself, and an image built for the other pinout is refused. --dry-run prints
+itself, and an image built for another pinout is refused. --dry-run prints
 the esptool commands with a made-up MAC instead of talking to a board.
 
 Leave out --port for a batch. Each controller has its own USB serial number,
@@ -33,13 +36,16 @@ import argparse
 import csv
 import datetime
 import hashlib
+import io
 import re
 import struct
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -53,6 +59,8 @@ LABEL_H_MM = 25
 BOOT_VERSION_RE = re.compile(r"gameday-scoreboard version (\d+\.\d+\.\d+)")
 # And this as the flag starts QC mode (firmware/pages/qc.yaml)
 BOOT_QC_RE = re.compile(r"QC mode on \(factory flag\)")
+# And this when the QC press clears the flag
+QC_PRESS_RE = re.compile(r"Factory flag cleared")
 # The flag the firmware reads (components/gameday/qc.h). Change both together.
 QC_FLAG_NAMESPACE = "gameday"
 QC_FLAG_KEY = "qc_pending"
@@ -60,10 +68,37 @@ NVS_PAGE_SIZE = 0x1000
 
 
 def release_asset(tag, variant):
-    """File name of the factory image on the GitHub release (see build.yml)."""
-    if variant == "moonhub75":
-        return f"gameday-scoreboard-{tag}.factory.bin"
+    """Local file name for a release's factory image."""
     return f"gameday-scoreboard-{tag}-{variant}.factory.bin"
+
+
+def release_zip(variant):
+    """The release asset that holds a variant's factory image (see build.yml)."""
+    return f"firmware-{variant}.zip"
+
+
+def old_release_assets(tag, variant):
+    """Releases up to v2026.10.2 also carried factory images on their own: MoonHub75's
+    with no board in its name (renamed with -moonhub75 on v2026.10.2), scoreboard75's with it."""
+    names = [f"gameday-scoreboard-{tag}-{variant}.factory.bin"]
+    if variant == "moonhub75":
+        names.append(f"gameday-scoreboard-{tag}.factory.bin")
+    return names
+
+
+def factory_from_zip(data, variant):
+    """The factory image inside a variant zip (<variant>/<name>.factory.bin)."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = sorted(n for n in z.namelist() if n.startswith(f"{variant}/") and n.endswith(".factory.bin"))
+        if not names:
+            raise SystemExit(f"{release_zip(variant)} has no factory image for {variant}")
+        return z.read(names[0])
+
+
+def download(url):
+    print(f"Downloading {url}")
+    with urllib.request.urlopen(url, timeout=120) as r:
+        return r.read()
 
 
 def version_from(text):
@@ -77,6 +112,7 @@ def image_info(data):
     The update manifest URL names the variant, and the boot log line holds the
     project version, both as plain strings in the app.
     """
+    # The Follow beta folders (<variant>-beta/) never match.
     variant = re.search(rb"/firmware/([a-z0-9]+)/manifest\.json", data)
     version = re.search(rb"gameday-scoreboard version (\d+\.\d+\.\d+)", data)
     return (variant.group(1).decode() if variant else "", version.group(1).decode() if version else "")
@@ -228,13 +264,21 @@ def pick_port():
     raise RuntimeError(f"can't tell which port is the controller; pass --port. Ports: {listed}")
 
 
-def watch_boot(port, seconds, want_qc):
-    """(version, qc) from the boot log: the version the firmware logs, or None
-    if it isn't seen in time, and whether QC mode started from the flag.
+# How long to keep waiting for QC to start once the version line is in.
+QC_START_GRACE_S = 10
+
+
+def watch_boot(port, seconds, want_qc, press_wait=0):
+    """(version, qc, pressed) from the boot log: the version the firmware logs,
+    or None if it isn't seen in time, whether QC mode started from the flag,
+    and whether the QC button press cleared it.
 
     Native USB drops off the bus while the chip resets, so keep trying to open
-    the port until the time runs out. QC starts at the end of setup, a moment
-    after the version line, so wait up to 10 s more for it.
+    the port until the time runs out. The two lines can come in either order:
+    QC starts from on_boot inside setup, and ESPHome logs the version when it
+    dumps the config after setup, so on real boards QC is usually first. If
+    the version comes first, wait up to QC_START_GRACE_S more for QC. With
+    press_wait, keep reading that long after QC starts for the operator's press.
     """
     import serial
 
@@ -242,6 +286,7 @@ def watch_boot(port, seconds, want_qc):
     buf = ""
     version = None
     qc = False
+    pressed = False
     while time.monotonic() < deadline:
         try:
             with serial.Serial(port, 115200, timeout=0.5) as ser:
@@ -250,25 +295,65 @@ def watch_boot(port, seconds, want_qc):
                     m = BOOT_VERSION_RE.search(buf)
                     if m and version is None:
                         version = m.group(1)
-                        deadline = min(deadline, time.monotonic() + 10)
-                    qc = qc or bool(BOOT_QC_RE.search(buf))
-                    if version is not None and (qc or not want_qc):
-                        return version, qc
+                        # Once QC is on, its press_wait deadline stands.
+                        if not qc:
+                            deadline = min(deadline, time.monotonic() + QC_START_GRACE_S)
+                    if not qc and BOOT_QC_RE.search(buf):
+                        qc = True
+                        if press_wait:
+                            print(f"  QC is on the panel. Check red, green, blue and white, then press the "
+                                  f"button (waiting {press_wait} s).")
+                            deadline = time.monotonic() + press_wait
+                    pressed = pressed or (qc and bool(QC_PRESS_RE.search(buf)))
+                    if version is not None and (not want_qc or (qc and (pressed or not press_wait))):
+                        return version, qc, pressed
                     buf = buf[-200:]
         except (OSError, serial.SerialException):
             time.sleep(0.5)
-    return version, qc
+    return version, qc, pressed
+
+
+def ask_colors():
+    """The operator's verdict on the QC pattern: True for a pass."""
+    while True:
+        reply = input("  Did the panel show red, green, blue and white, with no dead rows or columns? [y/n]: ")
+        if reply.strip().lower() in ("y", "n"):
+            return reply.strip().lower() == "y"
+
+
+def print_line(cmd, label):
+    """The operator's print command with {label} replaced by the label's path, or the path added at the end."""
+    return cmd.replace("{label}", f'"{label}"') if "{label}" in cmd else f'{cmd} "{label}"'
+
+
+def print_label(cmd, label):
+    line = print_line(cmd, label)
+    print(f"  $ {line}")
+    proc = subprocess.run(line, shell=True)
+    if proc.returncode != 0:
+        print(f"  Print command failed (exit {proc.returncode}). The label is at {label}.")
 
 
 def fetch_release(tag, variant, folder):
     folder.mkdir(parents=True, exist_ok=True)
-    name = release_asset(tag, variant)
-    path = folder / name
+    path = folder / release_asset(tag, variant)
     if not path.exists():
-        url = f"https://github.com/{REPO}/releases/download/{tag}/{name}"
-        print(f"Downloading {url}")
-        with urllib.request.urlopen(url, timeout=60) as r:
-            data = r.read()
+        base = f"https://github.com/{REPO}/releases/download/{tag}"
+        try:
+            data = factory_from_zip(download(f"{base}/{release_zip(variant)}"), variant)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            data = None
+            for name in old_release_assets(tag, variant):
+                try:
+                    data = download(f"{base}/{name}")
+                    break
+                except urllib.error.HTTPError as e2:
+                    if e2.code != 404:
+                        raise
+            if data is None:
+                raise SystemExit(f"{tag} has no factory image for {variant}")
         tmp = path.with_suffix(".part")
         tmp.write_bytes(data)
         tmp.replace(path)
@@ -314,7 +399,8 @@ def flash_one(args, image, image_sha, version, out, qc_flag):
         print(f"  Flashed before, at {earlier[-1]['time']}. Use the label from this run.")
 
     if args.boot_check > 0 and not args.dry_run:
-        seen, qc = watch_boot(port, args.boot_check, bool(qc_flag))
+        press_wait = args.qc_wait if qc_flag else 0
+        seen, qc, pressed = watch_boot(port, args.boot_check, bool(qc_flag), press_wait)
         if seen is None:
             row["boot_log"] = "not seen"
             print("  Boot log: no version line seen. Check the panel lights up.")
@@ -327,12 +413,30 @@ def flash_one(args, image, image_sha, version, out, qc_flag):
                 row["result"] = "wrong version"
                 save(log_path, lambda: append_log(log_path, row))
                 raise RuntimeError(f"{name} runs firmware {seen}, expected {version}. No label printed.")
+        if press_wait and not qc:
+            row["result"] = "no QC"
+            save(log_path, lambda: append_log(log_path, row))
+            raise RuntimeError(f"QC never started on {name}, so it wasn't checked. Run it again, or pass "
+                               "--qc-wait 0 to label without the check. No label printed.")
+        if press_wait:
+            if not pressed:
+                row["result"] = "no QC press"
+                save(log_path, lambda: append_log(log_path, row))
+                raise RuntimeError(f"no button press in {press_wait} s. {name} keeps its QC flag and runs QC "
+                                   "again on its next boot. No label printed.")
+            row["boot_log"] += " pressed"
+            if not ask_colors():
+                row["result"] = "QC failed"
+                save(log_path, lambda: append_log(log_path, row))
+                raise RuntimeError(f"{name} failed the QC pattern. Set it aside. No label printed.")
 
     label = out / "labels" / f"{name}.svg"
     if not args.dry_run:
         label.parent.mkdir(parents=True, exist_ok=True)
         save(label, lambda: label.write_text(label_svg(name, mac, version), encoding="utf-8"))
         save(log_path, lambda: append_log(log_path, row))
+        if args.print_cmd:
+            print_label(args.print_cmd, label)
     print(f"OK {name}  label {label}")
 
 
@@ -349,9 +453,21 @@ def selftest():
     assert panel_name("34:85:18:2f:6a:70") == "gameday-2f6a70"
 
     assert release_asset("v1.5.5", "scoreboard75") == "gameday-scoreboard-v1.5.5-scoreboard75.factory.bin"
-    assert release_asset("v1.5.5", "moonhub75") == "gameday-scoreboard-v1.5.5.factory.bin"
+    assert release_asset("v2026.10.3", "moonhub75") == "gameday-scoreboard-v2026.10.3-moonhub75.factory.bin"
+    assert release_zip("moonhub75") == "firmware-moonhub75.zip"
+    assert old_release_assets("v1.5.5", "moonhub75") == ["gameday-scoreboard-v1.5.5-moonhub75.factory.bin",
+                                                         "gameday-scoreboard-v1.5.5.factory.bin"]
+    assert old_release_assets("v1.5.5", "scoreboard75") == ["gameday-scoreboard-v1.5.5-scoreboard75.factory.bin"]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("moonhub75/manifest.json", "{}")
+        z.writestr("moonhub75/gameday-esp32s3.factory.bin", b"image")
+    assert factory_from_zip(buf.getvalue(), "moonhub75") == b"image"
     assert version_from("gameday-scoreboard-v1.5.5-scoreboard75.factory.bin") == "1.5.5"
     assert version_from("firmware.factory.bin") == ""
+    home = b"\0https://install.gameday-scoreboard.com/firmware/waveshare-beta/manifest.json\0" \
+           b"https://install.gameday-scoreboard.com/firmware/waveshare/manifest.json\0"
+    assert image_info(home)[0] == "waveshare"
 
     good = bytearray(b"\xff" * 0x20000)
     good[0] = 0xE9
@@ -363,7 +479,7 @@ def selftest():
     assert "header" in check_image(b"\x00" * 0x20000)
     assert "too small" in check_image(b"\xe9")
 
-    built = bytes(good) + (b"https://gamedayscoreboard.app/firmware/scoreboard75/manifest.json\x00"
+    built = bytes(good) + (b"https://install.gameday-scoreboard.com/firmware/scoreboard75/manifest.json\x00"
                            b"Project bharvey88.gameday-scoreboard version 1.5.5\x00")
     assert image_info(built) == ("scoreboard75", "1.5.5")
     assert image_info(bytes(good)) == ("", "")
@@ -385,6 +501,65 @@ def selftest():
 
     assert BOOT_QC_RE.search("[I][qc:066]: QC mode on (factory flag)")
     assert not BOOT_QC_RE.search("[I][qc:066]: QC mode on")
+    assert QC_PRESS_RE.search("[I][qc:193]: Factory flag cleared")
+
+    assert print_line("lp {label}", "factory/labels/gameday-2f6a70.svg") == 'lp "factory/labels/gameday-2f6a70.svg"'
+    assert print_line("lp -d dymo", "a.svg") == 'lp -d dymo "a.svg"'
+
+    # The boot watch against a scripted log, through a stand-in for pyserial
+    import types
+
+    class FakeSerial:
+        script = []
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            # "" in the script is a read that times out with nothing.
+            if FakeSerial.script:
+                s = FakeSerial.script.pop(0)
+                if s:
+                    return s.encode()
+            time.sleep(0.01)
+            return b""
+
+    fake = types.ModuleType("serial")
+    fake.Serial = FakeSerial
+    fake.SerialException = OSError
+    real_serial = sys.modules.get("serial")
+    sys.modules["serial"] = fake
+    boot = ["[I][app:100]: Project bharvey88.gameday-scoreboard version 1.5.5\n",
+            "[I][qc:066]: QC mode on (factory flag)\n"]
+    try:
+        FakeSerial.script = boot + ["[I][qc:189]: Button OK\n[I][qc:193]: Factory flag cleared\n"]
+        assert watch_boot("COM7", 5, True, press_wait=5) == ("1.5.5", True, True)
+        FakeSerial.script = list(boot)
+        assert watch_boot("COM7", 5, True) == ("1.5.5", True, False)
+        FakeSerial.script = list(boot)
+        assert watch_boot("COM7", 5, True, press_wait=1) == ("1.5.5", True, False)
+        FakeSerial.script = boot[:1] + ["[I][qc:193]: Factory flag cleared\n"]
+        assert watch_boot("COM7", 1, True, press_wait=5) == ("1.5.5", False, False)
+        # Real boards log QC first and the version after setup. The press then
+        # still gets press_wait, not the short wait for QC to start.
+        global QC_START_GRACE_S
+        grace, QC_START_GRACE_S = QC_START_GRACE_S, 0.1
+        try:
+            FakeSerial.script = [boot[1], boot[0]] + [""] * 30 + ["[I][qc:193]: Factory flag cleared\n"]
+            assert watch_boot("COM7", 5, True, press_wait=5) == ("1.5.5", True, True)
+        finally:
+            QC_START_GRACE_S = grace
+    finally:
+        if real_serial is None:
+            del sys.modules["serial"]
+        else:
+            sys.modules["serial"] = real_serial
 
     attempts = []
 
@@ -429,7 +604,10 @@ def main():
     src = ap.add_mutually_exclusive_group()
     src.add_argument("--release", help="release tag to download the factory image from, e.g. v1.5.5")
     src.add_argument("--image", type=Path, help="local .factory.bin to flash")
-    ap.add_argument("--variant", default="scoreboard75", choices=["scoreboard75", "moonhub75"])
+    # Ready-made scoreboards ship on the Waveshare ESP32-S3-RGB-Matrix. moonhub75 is the
+    # DIY pinout; scoreboard75 is the early test boards.
+    ap.add_argument("--variant", default="waveshare",
+                    choices=["waveshare", "moonhub75", "scoreboard75"])
     ap.add_argument("--port", help="serial port, for one board only (default: find the Espressif USB device "
                     "for each unit)")
     ap.add_argument("--baud", type=int, default=460800)
@@ -438,6 +616,11 @@ def main():
     ap.add_argument("--no-erase", action="store_true", help="skip the full erase (keeps old settings)")
     ap.add_argument("--boot-check", type=int, default=20, metavar="SECONDS",
                     help="watch the boot log this long for the firmware version, 0 to skip")
+    ap.add_argument("--qc-wait", type=int, default=120, metavar="SECONDS",
+                    help="after QC starts, wait this long for the button press and then ask about the colors; "
+                    "0 writes the label without waiting (default 120, QC's own timeout)")
+    ap.add_argument("--print-cmd", metavar="CMD",
+                    help='print each label with this command, {label} standing for its path, e.g. "lp {label}"')
     ap.add_argument("--dry-run", action="store_true", help="print the esptool commands, touch no board")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
@@ -497,7 +680,8 @@ def main():
 
     done = 0
     while not args.count or done < args.count:
-        reply = input(f"\nPlug in controller {done + 1} and press Enter (q to stop): ").strip().lower()
+        reply = input(f"\nPlug in controller {done + 1} (or close it in the jig) and press Enter (q to stop): ")
+        reply = reply.strip().lower()
         if reply == "q":
             break
         try:

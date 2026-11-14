@@ -1,0 +1,142 @@
+# Waveshare ESP32-S3-RGB-Matrix: ESP32-S3-WROOM-2-N32R16V (32MB octal flash,
+# 16MB octal PSRAM), two microphones behind an ES7210 codec on I2C GPIO47/48
+# and I2S, BOOT button on GPIO0. Pin map (ESPHome names):
+#   R1 4, G1 5, B1 6, R2 7, G2 15, B2 16, A 18, B 8, C 3, D 42, E 9,
+#   LAT 40, OE 2, CLK 41
+# Derived from hub75-studio's controller packages (MIT, Wade Edwards). The
+# board's ES8311 speaker codec, RTC, IMU, temperature sensor and TF slot are
+# not used. Not yet run on hardware.
+
+esp32:
+  board: esp32-s3-devkitc-1
+  # IDF's bootloader reads the octal flash type from eFuse, so no flash mode
+  # setting is needed here.
+  flash_size: 32MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    advanced:
+      compiler_optimization: PERF
+      execute_from_psram: true
+      enable_idf_experimental_features: true
+    sdkconfig_options:
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+i2c:
+  id: codec_i2c
+  sda: GPIO47
+  scl: GPIO48
+
+i2s_audio:
+  id: i2s_mic_bus
+  i2s_lrclk_pin: GPIO38
+  i2s_bclk_pin: GPIO43
+  i2s_mclk_pin: GPIO12
+
+audio_adc:
+  - platform: es7210
+    id: mic_adc
+    i2c_id: codec_i2c
+    mic_gain: 30
+
+microphone:
+  - platform: i2s_audio
+    id: mic
+    adc_type: external
+    i2s_din_pin: GPIO39
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    pdm: false
+    channel: left
+    i2s_audio_id: i2s_mic_bus
+
+display:
+  - platform: hub75
+    id: matrix
+    r1_pin: 4
+    g1_pin: 5
+    b1_pin: 6
+    r2_pin: 7
+    g2_pin: 15
+    b2_pin: 16
+    a_pin: 18
+    b_pin: 8
+    c_pin: 3
+    d_pin: 42
+    e_pin: 9
+    lat_pin: 40
+    oe_pin: 2
+    clk_pin: 41
+
+    panel_width: ${display_panel_width}
+    panel_height: ${display_panel_height}
+    layout: ${display_layout}
+    layout_rows: ${display_layout_rows}
+    layout_cols: ${display_layout_cols}
+    scan_wiring: ${display_scan_wiring}
+
+    clock_phase: false
+    latch_blanking: 1
+    clock_speed: 20MHz
+
+    bit_depth: 8
+
+    # for LVGL
+    double_buffer: false
+    auto_clear_enabled: false
+    update_interval: never
+
+switch:
+  - platform: template
+    id: mic_mute_sw
+    name: "Microphone Enabled"
+    icon: "mdi:microphone"
+    restore_mode: ALWAYS_ON
+    lambda: |-
+      return !id(mic).get_mute_state();
+    turn_on_action:
+      - microphone.unmute: mic
+    turn_off_action:
+      - microphone.mute: mic
+
+  # Power for the microphone rail.
+  - platform: gpio
+    id: mic_power_rail
+    internal: true
+    pin: GPIO46
+    restore_mode: ALWAYS_ON
+
+# Boot button (GPIO0) as power toggle. GPIO0 is a strapping pin; it is safe
+# as an input after boot, so the build-time warning is suppressed on purpose.
+binary_sensor:
+  - platform: gpio
+    id: power_button
+    internal: true
+    pin:
+      number: GPIO0
+      ignore_strapping_warning: true
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 10ms
+      - delayed_off: 10ms
+    on_click:
+      then:
+        # QC mode (pages/qc.yaml) has the button while it runs.
+        - if:
+            condition:
+              lambda: 'return !id(qc_active);'
+            then:
+              - switch.toggle: power
+
+lvgl:
+  byte_order: little_endian
+  buffer_size: 100%
+  displays:
+    - matrix

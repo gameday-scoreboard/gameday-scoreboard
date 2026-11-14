@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Pure ESPN parsing and game logic. No ESPHome includes so the host test
 // binary can compile this file directly.
 #pragma once
@@ -7,6 +9,9 @@
 #include <string>
 #include <vector>
 
+#include "psram.h"
+#include "rankings.h"
+#include "season.h"
 #include "teams.h"
 
 namespace espn {
@@ -81,6 +86,9 @@ struct Basketball {
   Phase phase{Phase::OTHER};
   std::string series;                  // ESPN's line: "ATL leads series 1-0"
   int8_t team_wins{-1}, opp_wins{-1};  // series wins so far, -1 outside a series
+  // Each side's points leader in this game, "Edwards 24", while it is on;
+  // "" before anyone scores or when ESPN lists none.
+  std::string team_scorer, opp_scorer;
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
@@ -88,9 +96,60 @@ struct Basketball {
 struct Hockey {
   bool playoffs{false};  // season type 3
   std::string series;    // "CAR leads series 2-0", playoffs
+  // Shots on goal: the other goalie's saves plus the side's goals, so a
+  // shootout's attempts stay out. -1 when ESPN sends no stats.
+  int16_t team_shots{-1}, opp_shots{-1};
+  // The goal in this read's last play, if it is one. ESPN keeps only the
+  // newest play, so GoalHolds keeps it past this read. goal_score is both
+  // sides' goals with it in, 0 for none. Plain arrays, not strings: the
+  // snapshot is copied in many places, and a string adds code to every copy.
+  uint8_t goal_period{0};
+  uint16_t goal_score{0};
+  char goal_clock[6]{};  // "12:04"
+  char goal_name[24]{};  // "McDavid", cut to fit
+  // For the big plays (celeb_hockey.h), while the game is on. ESPN's goal
+  // leaders for this game list every scorer with the id and the count;
+  // these keep each side's players on two goals or more, enough to see a
+  // third. Most games have none.
+  struct Scorer {
+    uint32_t id{0};
+    uint8_t goals{0};
+  };
+  static constexpr uint8_t kScorersMax = 3;
+  Scorer team_scorers[kScorersMax]{}, opp_scorers[kScorersMax]{};
+  uint8_t team_scorer_count{0}, opp_scorer_count{0};
+};
+
+// The latest goal of a hockey game, kept from read to read until the next
+// one. Outside the snapshot, so it outlasts a board that switches games and
+// back, or a reread that starts the board's snapshot over.
+struct GoalHold {
+  uint64_t event{0};  // ESPN's event id, 0 for an empty slot
+  uint16_t score{0};  // both sides' goals with it in
+  uint8_t period{0};
+  char clock[6]{};
+  char name[24]{};
+};
+
+struct GameSnapshot;
+
+// The latest goals of the last few hockey games read (a Live games board
+// that moves between games, or several hockey favorites).
+struct GoalHolds {
+  static constexpr size_t kGames = 4;
+  GoalHold slot[kGames];
+  uint8_t next{0};  // the slot a new game takes, oldest first
+  // Folds in one read: a new goal replaces the held one, the same goal read
+  // again keeps its first clock and takes its scorer once ESPN has one, and
+  // a score that moves without a goal play (a goal taken back, or one ESPN
+  // never showed as the last play) drops it.
+  void update(const GameSnapshot &g);
+  const GoalHold *find(const std::string &event_id) const;
 };
 
 // One scoreboard event, resolved to "us" and "them".
+constexpr int16_t kNoWeatherF = INT16_MIN;
+
 struct GameSnapshot {
   bool valid{false};
   GameState state{GameState::NOT_FOUND};
@@ -105,15 +164,66 @@ struct GameSnapshot {
   uint32_t team_id{0}, opp_id{0};
   int team_score{0}, opp_score{0};
   std::string team_record, opp_record;
+  uint8_t team_rank{99}, opp_rank{99};  // AP rank (college), 99 when unranked
   std::string team_color, opp_color;
+  // ESPN's second color (alternateColor) as RGB, 0 when it has none: the
+  // letters of a side with no logo when its color is too dark (badge.h).
+  uint32_t team_alt{0}, opp_alt{0};
   std::string team_logo, opp_logo;
   bool team_winner{false};
   int possession{0};
   int team_timeouts{0}, opp_timeouts{0};
   std::string last_play, down_distance;
+  // ESPN's id for the last play, 0 when it gives none. It stays the same
+  // when ESPN rewrites the play's words ("... Touchback.", then
+  // "** Injury Update"), so a big play is celebrated once (celebrate.h).
+  int64_t play_id{0};
   std::string short_down_distance;  // "3rd & 10"
   bool is_red_zone{false};
+  // Football, for the field strip (game_viz.h): where the ball is as ESPN
+  // gives it, yards from the HOME team's goal line (home at its own 35 is 35,
+  // away at its own 31 is 69), 255 when the document has none; the down and
+  // the yards to go, 0 when none.
+  uint8_t yard_line{255};
+  uint8_t down{0};
+  uint8_t distance{0};
+  // Football: how the drive went ("4 plays, 58 yards, 1:36"), only while the
+  // last play is a touchdown or field goal, and our side's chance to win
+  // after the last play (1 to 99), -1 when ESPN gives none.
+  std::string drive;
+  int8_t team_win_pct{-1};
   std::string odds, over_under, tv, venue;
+  // The last play's details, for the scoring log (score_log.h): ESPN's play
+  // type ("Rushing Touchdown", "Field Goal Good"), its points, its yards, the
+  // side's team id and the first player named ("J. Grier").
+  std::string play_type, play_athlete;
+  int8_t play_value{0};
+  int16_t play_yards{0};
+  uint32_t play_team{0};
+  // Each side's points by period, quarter or inning, for the line score
+  // (line_score.h). A period past kLinesMax adds into the last one.
+  static constexpr uint8_t kLinesMax = 16;
+  uint8_t team_lines[kLinesMax]{}, opp_lines[kLinesMax]{};
+  uint8_t team_line_count{0}, opp_line_count{0};
+  std::string headline;  // ESPN's story line on a final, "" when it has none
+  // Each side's season leader before the start, ready for the pre-game
+  // ticker: "Prescott 1,381 yds 9 TD", "Machado 30 HR 91 RBI", "Allen 21.0
+  // PPG", "McDavid 9 pts". "" when ESPN lists none, and once the game starts.
+  std::string team_leader, opp_leader;
+  // Before the start: the regular-season week (football, 0 when ESPN gives
+  // none) and the forecast at an outdoor venue ("76F Cloudy", "" indoors or
+  // when the event has none).
+  uint8_t week{0};
+  std::string weather;
+  // The same forecast for the board (weather.h): its temperature in whole
+  // degrees F (kNoWeatherF without one) and AccuWeather's icon number (0
+  // for none). Before the start of a sport played outside, the venue's place
+  // for a forecast of the panel's own when ESPN has none ("Evanston, IL"),
+  // and whether it is indoors: 1, 0, or -1 when ESPN doesn't say.
+  int16_t weather_f{kNoWeatherF};
+  uint8_t weather_accu{0};
+  int8_t venue_indoor{-1};
+  std::string venue_place;
   // Other sports. Football leaves these at their defaults.
   Sport sport{Sport::FOOTBALL};
   bool team_home{false};
@@ -123,6 +233,45 @@ struct GameSnapshot {
   Hockey nhl;
   std::string game_name;  // "Rose Bowl", "Super Bowl LX"; empty for most games
 };
+
+// A soccer shootout that was played and has a winner decides the match,
+// whatever the score says. In the second leg of a two-legged cup tie ESPN's
+// score is that leg's alone (Lille 2-1 Aston Villa, 3-3 on aggregate, Villa
+// won 4-3 on penalties), so a level score is not the test.
+inline bool shootout_decides(const GameSnapshot &g) {
+  return g.sport == Sport::SOCCER && g.soc.team_shootout >= 0 && g.soc.opp_shootout >= 0 &&
+         g.soc.team_shootout != g.soc.opp_shootout;
+}
+
+// Late in a hockey intermission ESPN moves the game on to the next period
+// before the puck drops: "20:00 - 3rd", the clock full, and the last play
+// still "End of 2nd Period" until the faceoff replaces it. The clock has to
+// be full too, since ESPN's last play can trail a clock that is running.
+// Overtime is 5 minutes in the regular season, whose period 5 is the
+// shootout; every period is 20 in the playoffs.
+inline bool hockey_late_intermission(const GameSnapshot &g) {
+  if (g.sport != Sport::HOCKEY || g.state != GameState::IN || g.period < 2 || g.last_play.rfind("End of", 0) != 0)
+    return false;
+  if (g.nhl.playoffs || g.period <= 3)
+    return g.display_clock == "20:00";
+  return g.period == 4 && g.display_clock == "5:00";
+}
+
+// What a hockey intermission is called on the board and in Home Assistant:
+// ESPN's own "End of 1st", and the same words for its late part, when ESPN
+// has moved on to the next period ("End of 2nd", "End of OT", "End of 2OT").
+// "" when the game isn't between periods.
+inline std::string hockey_intermission_text(const GameSnapshot &g) {
+  if (g.sport != Sport::HOCKEY || g.state != GameState::IN)
+    return "";
+  if (g.short_detail.rfind("End of", 0) == 0)
+    return g.short_detail;
+  if (!hockey_late_intermission(g))
+    return "";
+  static const char *const kEnded[] = {"", "1st", "2nd", "3rd", "OT"};
+  int ended = g.period - 1;
+  return std::string("End of ") + (ended <= 4 ? kEnded[ended] : std::to_string(ended - 3) + "OT");
+}
 
 // One future game from the team's schedule endpoint, for the "Up next" list.
 struct Upcoming {
@@ -144,6 +293,11 @@ struct LiveGame {
   uint32_t away_id{0};      // shown on the left, like a broadcast
   uint32_t home_id{0};      // for its logo, fetched as soon as the game is picked
   std::string away_abbr, home_abbr;
+  // Where the game stands, for the best-game pick (best_game.h).
+  int16_t away_score{0}, home_score{0};
+  uint8_t period{0};
+  int32_t clock_s{-1};  // ESPN's status clock: left in the period, or soccer's elapsed
+  uint8_t away_rank{99}, home_rank{99};  // AP rank, 99 when unranked
 };
 
 // A finished game from a day's scoreboard, for the finals rotation (recap.h).
@@ -152,6 +306,7 @@ struct LiveGame {
 struct Final {
   uint8_t league{0};
   uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  uint8_t away_rank{99}, home_rank{99};  // each side's AP rank for its logo, 99 when unranked
   int64_t kickoff_epoch{0};
   std::string detail;  // "Final", "Final/OT"
   uint32_t away_id{0}, home_id{0};
@@ -163,11 +318,6 @@ struct Final {
 
 // The scoreboard card for a final, the away side as "team" like a broadcast.
 GameSnapshot final_snapshot(const Final &f);
-// What a team change puts on the board until the first read lands: the new
-// team's logo and name, no game. It is valid only so the page draws the
-// logo; a failed read drops it (is_team_placeholder) so the board says why.
-GameSnapshot team_placeholder(const Team &t);
-bool is_team_placeholder(const GameSnapshot &g);
 
 // A game later today from a day's scoreboard, for the rotation's "Later
 // today" cards (recap.h). As small as a Final: short strings and ids, the
@@ -175,6 +325,7 @@ bool is_team_placeholder(const GameSnapshot &g);
 struct Pending {
   uint8_t league{0};
   uint8_t rank{99};  // the better AP rank of the two sides, 99 when neither is ranked
+  uint8_t away_rank{99}, home_rank{99};  // each side's AP rank for its logo, 99 when unranked
   int64_t kickoff_epoch{0};
   std::string event_id;
   uint32_t away_id{0}, home_id{0};
@@ -187,6 +338,13 @@ struct Pending {
 // One scan keeps at most this many of a league's games later today: the
 // most a loop of the rotation shows.
 static const size_t kPendingKeep = 8;
+
+// A scan's lists live in PSRAM on the panel. With no team picked it reads
+// every league, and a college Saturday ends with 80 or more finals at about
+// 200 bytes each: one 25 KB block, more than internal RAM has in one piece.
+using LiveList = PsVector<LiveGame>;
+using FinalList = PsVector<Final>;
+using PendingList = PsVector<Pending>;
 
 // Ranked games first (best rank on either side), then by kickoff.
 inline bool pending_before(const Pending &a, const Pending &b) {
@@ -205,6 +363,26 @@ struct TickerOptions {
   bool soccer_stats{true};    // goals, cards, possession and shots
   bool last_play{true};
   bool odds{true};
+  bool leaders{true};  // each side's season leader before the start
+  // A wide board's row under the clock already says these (row_text.h), so
+  // the ticker leaves them out rather than say them twice: the win chance
+  // and the down and distance (football; the field strip, or the row's text
+  // with the strip off). row_timeout: a wide board shows no timeout line at
+  // all in basketball, the stopped clock says it, so the ticker leaves a
+  // timeout as the last play out too.
+  bool row_win{false};
+  // The win chance is news right now (row_text.h WinSwing): after a score,
+  // a turnover or a big move. Off, the ticker leaves it out too.
+  bool win_due{true};
+  bool row_down{false};
+  bool row_timeout{false};
+  // Both records before the start, for a board too narrow to show them
+  // under the logos (one 64-wide panel, pages/gameday-live.yaml).
+  bool records{false};
+  // The forecast as the panel says it before the start ("12C Clear" for an
+  // owner on Celsius, or the panel's own forecast when the event has none,
+  // weather.h). "" says the event's own.
+  std::string weather;
 };
 
 struct Splash {
@@ -216,20 +394,22 @@ const char *league_path(League league);  // the last part of the ESPN path: "nfl
 std::string team_option(const Team &t);  // "NFL: Dallas Cowboys", the Home Assistant option
 std::string team_url(League league, uint32_t espn_id);
 std::string schedule_url(League league, uint32_t espn_id);  // the season's games, ~200KB
+// The season read's (season.h): schedule_url, but a soccer team's results
+// rather than its fixtures with results, for the recap between seasons.
+std::string season_url(League league, uint32_t espn_id, bool results);
 // time_tbd: kickoff_epoch is a TBD game's midnight Eastern placeholder.
 std::string scoreboard_url(League league, uint32_t group, int64_t kickoff_epoch, bool time_tbd = false);
-std::string scan_url(League league, int64_t now_epoch);  // every game of the day for one league
-// How far behind UTC the day scan_url() reads turns over. Football uses the
-// Eastern date. The other leagues play past midnight Eastern on the West
-// Coast (ESPN lists those games under the day they started, and rejects date
-// ranges), and none start between midnight and 6 AM Eastern: their day turns
-// over at 4 AM Eastern instead.
-inline int64_t scan_day_shift(League league) {
-  return league_sport(league) == Sport::FOOTBALL ? 5 * 3600 : 9 * 3600;
-}
+// Every game of the day for one league. top25: men's college basketball
+// reads only ESPN's Top 25 slate (the no-team panel), not all of Division I.
+std::string scan_url(League league, int64_t now_epoch, bool top25 = false);
+// How far behind UTC the day scan_url() reads turns over: 4 AM Eastern, for
+// every league. ESPN lists a game under the Eastern date it started on, keeps
+// it off the next date while it is on, and rejects date ranges. West Coast
+// games run past midnight Eastern (a 10:30 PM college kickoff ends near
+// 2 AM), and no league starts a game between midnight and 6 AM Eastern.
+inline int64_t scan_day_shift(League) { return 9 * 3600; }
 // One game on its own, 8 to 20 KB, where the day's scoreboard it sits in is
-// up to 260 KB (NFL) or 750 KB (college). A LeagueInfo::per_event league
-// polls this.
+// up to 260 KB (NFL) or 750 KB (college). Every league polls this.
 std::string event_url(League league, const std::string &event_id);
 // One day's scoreboard for finding a team's next game (Eastern date of
 // day_epoch). College football and men's college basketball read the team's
@@ -242,10 +422,24 @@ std::string event_url(League league, const std::string &event_id, const char *co
 std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const char *comp_slug);
 std::string dark_logo(const std::string &url);
 std::string team_logo_url(League league, uint32_t espn_id, const char *abbr);  // for a team with no game loaded yet
+// The news feed's latest headlines (news.h): the team's with an id, else the
+// league's. 15 to 170 KB.
+std::string news_url(League league, uint32_t team_id);
 
 bool parse_team_str(const std::string &json, Schedule &out);
 // Up to `max` games not yet started, in date order, from the schedule endpoint.
 bool parse_upcoming_str(const std::string &json, uint32_t our_team_id, size_t max, std::vector<Upcoming> &out);
+// A byte stream for a parse compiled in espn_parse.cpp: a big parse
+// template instantiated in gameday.cpp can overflow that file's literal pool
+// and fail the link ("l32r: literal target out of range").
+struct ByteSource {
+  virtual ~ByteSource() = default;
+  virtual int read() = 0;
+  virtual size_t readBytes(char *dst, size_t n) = 0;
+};
+// parse_season (season.h) from a stream, and from a string for the host tests.
+bool parse_season_from(ByteSource &in, uint32_t our_team_id, SeasonRead &out);
+bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead &out);
 bool parse_scoreboard_str(const std::string &json, const std::string &event_id, uint32_t our_team_id,
                           GameSnapshot &out);
 // The team's next game that is not over yet in a day's scoreboard
@@ -256,25 +450,50 @@ bool parse_team_game_str(const std::string &json, uint32_t our_team_id, Schedule
 // some other game reads as a failure.
 bool parse_event_str(const std::string &json, Sport sport, uint32_t our_team_id, GameSnapshot &out,
                      const std::string &event_id = "");
+// parse_news into a std::string, for the host tests.
+int parse_news_str(const std::string &json, std::string &list);
 
 // neutral = nobody is "our" team (live-game modes): both sides splash with their abbreviation.
 Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral = false);
 uint32_t parse_color(const std::string &hex);
 std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+// "KC 72% to win" for the side ESPN's model favors, "" when it gives no
+// number (football's last play only).
+std::string win_chance(const GameSnapshot &s);
+// ESPN's last play is a timeout ("Official TV Timeout", "Full timeout").
+bool timeout_play(const std::string &text);
+// Whether ESPN has said the board has no game, for no_game_text. In Favorites
+// (favs > 0) only once every favorite's team read has answered (`read` of
+// them): one answered favorite says nothing of the others.
+inline bool no_game_said(size_t favs, size_t read, bool team_said) { return favs > 0 ? read == favs : team_said; }
+// How long after joining Wi-Fi a panel with no clock says "Getting ready".
+// A time server answers in a second or two, and ESPN's Date header is read
+// 5 s after joining; past this, neither has answered.
+constexpr uint32_t kClockGraceMs = 30 * 1000;
+// No clock kClockGraceMs after joining Wi-Fi: neither the time server nor
+// ESPN answered, so the panel has no internet. since_join_ms is 0 off Wi-Fi.
+inline bool clock_late(bool clock_set, uint32_t since_join_ms) {
+  return !clock_set && since_join_ms >= kClockGraceMs;
+}
 // The board and ticker with no game on the board, in place of the page's
 // "No upcoming game": "Getting ready" until the clock is set (nothing can
-// be read from ESPN before it), "Can't reach ESPN" while reads fail and
+// be read from ESPN before it), "No internet" once that has taken
+// kClockGraceMs since joining Wi-Fi, "Can't reach ESPN" while reads fail and
 // ESPN has never said this team has no game. Empty for the default, and in
 // a live mode, which has its own words. captive (captive.h: the Wi-Fi answered
 // with a sign-in page and ESPN has not answered since) wins over all of it,
 // live modes included, since nothing can be read until it ends.
 std::string no_game_text(bool clock_set, bool live_mode, bool no_game_confirmed, uint32_t misses,
-                         bool captive = false);
+                         bool captive = false, uint32_t since_join_ms = 0);
 // Bench only. Every ESPN URL starts with this root; a bench build points
 // it at a host that does not exist to make ESPN unreachable without
 // touching the network. Pass a string literal: only the pointer is kept,
 // and the worker task reads it while the main loop may set it.
 void set_site_root(const char *root);
+// The same for the core API, which only the Top 25 card reads (rankings.h).
+void set_core_root(const char *root);
+// The league's AP poll, this week's.
+std::string rankings_url(League league);
 // Home Assistant's Game Status: the matchup, the state and the score, and
 // nothing that changes every play, so the recorder logs a line when the game
 // starts, scores or ends rather than every poll.
@@ -284,6 +503,16 @@ std::string ha_status_text(const GameSnapshot &s, const std::string &kickoff_loc
 // ("Rose Bowl"). ESPN has no short form of it. Empty for a note that is a
 // kickoff window, not a name.
 std::string short_game_name(const std::string &headline);
+// The local calendar day of a broken-down time, as a number that changes at
+// local midnight and goes up by one a day across New Year too. kickoff_label
+// counts "Today" and "Tomorrow" in these, so a board drawn on an earlier one
+// has a stale label. tm_year * 366 + tm_yday was off by one or two from
+// Dec 31 to Jan 1, so a New Year's Day game seen on Dec 31 read "Fri" rather
+// than "Tomorrow".
+inline int64_t local_day(const struct tm &t) {
+  const int64_t y = (int64_t) t.tm_year + 1899;  // the full year before this one
+  return (int64_t) t.tm_year * 365 + y / 4 - y / 100 + y / 400 + t.tm_yday;
+}
 // "Sat 3:30 PM", or "Sat TBD" with time_tbd, when ESPN has no kickoff time
 // yet (then kick_local is from tbd_day_epoch).
 std::string kickoff_label(const struct tm &kick_local, const struct tm &now_local, bool time_tbd = false);
@@ -319,10 +548,27 @@ std::string baseball_clock_text(const GameSnapshot &s);
 Splash baseball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
 // The count while a half inning is on ("2-1"), else "".
 std::string baseball_count(const GameSnapshot &s);
+// The latest play is a home run.
+bool baseball_home_run(const GameSnapshot &s);
 // Hockey (sport_hockey.cpp).
 std::string hockey_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
 std::string hockey_clock_text(const GameSnapshot &s);
 Splash hockey_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// The 128-wide row under the clock while the puck is in play, at most `max`
+// characters: shots on goal, ours first, then the latest goal held for this
+// game (`goal`, may be null): "Shots on goal 12-16" before the first goal,
+// "Shots 12-16  12:04 Kane" after it. "" between periods, after the final,
+// and when ESPN has neither.
+std::string hockey_situation(const GameSnapshot &s, const GoalHold *goal, size_t max = 25);
+// The same as two lines that can take turns on the row, each longest form
+// first: the shots ("Shots on goal 12-16", "Shots 12-16", "SOG 12-16") and
+// the held goal ("2nd 12:04 Kane", then "12:04 Kane" in the goal's own
+// period or "2nd Kane" after it, then "Kane"). All empty between periods and
+// after the final; the shots empty without ESPN's stats, the goal before one.
+void hockey_row_forms(const GameSnapshot &s, const GoalHold *goal, std::string shots[3], std::string goal_line[3]);
+// A W-L-OTL record for the label under a logo (7 characters wide): as is when
+// it fits, else the NHL points, two a win and one an overtime loss ("70 pts").
+std::string hockey_board_record(const std::string &wlo);
 
 // Soccer (sport_soccer.cpp).
 std::string soccer_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
@@ -354,10 +600,29 @@ namespace detail {
 // Ticker helpers shared by the sport files.
 void add_part(std::string &out, const std::string &part);
 std::string records_line(const GameSnapshot &s);
+// Both records as one pre-game part, ours first: "DAL 2-3, GB 3-2". A side
+// with no record is left out; "" when neither has one.
+std::string pregame_records(const GameSnapshot &s);
+// A football leader for the ticker from ESPN's short name and stat line:
+// "D. Prescott" + "129/192, 1381 YDS, 9 TD, 3 INT" gives "Prescott 1,381 yds
+// 9 TD". "" when the line has no yards.
+std::string leader_line(const std::string &short_name, const std::string &display_value);
+// Another sport's leader from ESPN's short name, the stat ("35.0", "42") and
+// its unit: "Antetokounmpo 35.0 PPG". "" when the stat isn't a number above 0.
+std::string stat_leader(const std::string &short_name, const std::string &value, const char *unit);
+// The pre-game ticker's first part: the game's name ("Rose Bowl", "NLCS -
+// Game 2"), else the week ("Week 8"), else "".
+std::string pregame_name(const GameSnapshot &s);
+// The pre-game ticker's last part: the forecast and the venue, "76F Cloudy at
+// Hard Rock Stadium". A venue that repeats the game's name ("Rose Bowl") is
+// left out.
+std::string venue_line(const GameSnapshot &s, const TickerOptions &o = TickerOptions());
 // The pre-game betting parts when the ticker shows odds: the line, the
 // over/under and the TV listing. Soccer builds its own line.
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o);
 void add_odds(std::string &out, const GameSnapshot &s, const TickerOptions &o, const std::string &odds);
+// Both sides' season leaders before the start, when the ticker shows them.
+void add_leaders(std::string &out, const GameSnapshot &s, const TickerOptions &o);
 // The last play, cut to 160 characters so one long description doesn't fill
 // the ticker.
 void add_last_play(std::string &out, std::string play);
@@ -383,6 +648,12 @@ inline bool today_game_first(const Schedule &team, const Schedule &today) {
     return false;
   return team.event_id.empty() || today.kickoff_epoch < team.kickoff_epoch;
 }
+
+// The NFL's team endpoint keeps naming a game through its final (NE @ CHI on
+// 2026-10-22, while a college team's had moved on from a game still in
+// overtime), so an NFL read never needs the day's scoreboard to find the game
+// on now. That read is the whole NFL day, ~256 KB on a Sunday.
+inline bool team_names_game_on_now(League league) { return league == League::NFL; }
 
 // How long a live mode waits after a scan that found nothing in progress:
 // until the day's next kickoff, but at least min_ms (the game is due and

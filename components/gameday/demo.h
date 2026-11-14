@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The demo build's scripted game, its made-up teams and how it picks a
 // matchup. Only demo.cpp includes this, and only in the demo build
 // (firmware/gameday-demo.yaml), so release firmware carries none of it.
@@ -27,24 +29,30 @@ struct DemoStep {
   bool red_zone;
   const char *play;
   uint32_t hold_ms;
+  // For the field strip and the win bar (game_viz.h): the ball as ESPN
+  // counts it, yards from the home goal line (our side is home), 255 for
+  // none; the yards to go; our win chance, -1 for none.
+  uint8_t yard_line;
+  uint8_t distance;
+  int8_t win;
 };
 
 // A believable drive-by-drive script. Splashes come from decide_splash on the
 // score deltas, so the panel celebrates exactly as it would in a real game.
 // The home side wins: in a bar that is the bar's team.
 constexpr DemoStep kDemoSteps[] = {
-    {GameState::PRE, 0, 0, "", 0, 0, "", false, "", 3500},
-    {GameState::IN, 0, 0, "15:00", 1, 1, "1st & 10", false, "Kickoff", 4000},
-    {GameState::IN, 0, 0, "9:41", 1, 1, "3rd & 4", true, "Pass short left for 8 yards", 3500},
-    {GameState::IN, 7, 0, "9:35", 1, 2, "", false, "Pass deep right for 21 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 7, 3, "2:10", 1, 1, "1st & 10", false, "38 yard field goal is GOOD", 4500},
-    {GameState::IN, 7, 3, "11:22", 2, 2, "2nd & 7", false, "Rush up the middle for 3 yards", 3500},
-    {GameState::IN, 7, 10, "6:48", 2, 1, "", false, "Pass deep middle for 44 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 14, 10, "1:03", 2, 2, "", false, "Rush right end for 12 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 14, 10, "0:00", 2, 0, "", false, "End of the 2nd quarter", 3500},
-    {GameState::IN, 21, 10, "8:15", 4, 2, "", false, "Interception returned 31 yards, TOUCHDOWN", 5000},
-    {GameState::IN, 24, 10, "2:00", 4, 2, "4th & 9", true, "27 yard field goal is GOOD", 4000},
-    {GameState::POST, 24, 10, "", 4, 0, "", false, "", 6000},
+    {GameState::PRE, 0, 0, "", 0, 0, "", false, "", 3500, 255, 0, -1},
+    {GameState::IN, 0, 0, "15:00", 1, 1, "1st & 10", false, "Kickoff", 4000, 25, 10, 55},
+    {GameState::IN, 0, 0, "9:41", 1, 1, "3rd & 4", true, "Pass short left for 8 yards", 3500, 86, 4, 63},
+    {GameState::IN, 7, 0, "9:35", 1, 2, "", false, "Pass deep right for 21 yards, TOUCHDOWN", 5000, 75, 0, 74},
+    {GameState::IN, 7, 3, "2:10", 1, 1, "1st & 10", false, "38 yard field goal is GOOD", 4500, 30, 10, 68},
+    {GameState::IN, 7, 3, "11:22", 2, 2, "2nd & 7", false, "Rush up the middle for 3 yards", 3500, 56, 7, 64},
+    {GameState::IN, 7, 10, "6:48", 2, 1, "", false, "Pass deep middle for 44 yards, TOUCHDOWN", 5000, 25, 0, 47},
+    {GameState::IN, 14, 10, "1:03", 2, 2, "", false, "Rush right end for 12 yards, TOUCHDOWN", 5000, 75, 0, 71},
+    {GameState::IN, 14, 10, "0:00", 2, 0, "", false, "End of the 2nd quarter", 3500, 255, 0, 71},
+    {GameState::IN, 21, 10, "8:15", 4, 2, "", false, "Interception returned 31 yards, TOUCHDOWN", 5000, 75, 0, 91},
+    {GameState::IN, 24, 10, "2:00", 4, 2, "4th & 9", true, "27 yard field goal is GOOD", 4000, 12, 9, 96},
+    {GameState::POST, 24, 10, "", 4, 0, "", false, "", 6000, 255, 0, -1},
 };
 constexpr size_t kDemoStepCount = sizeof(kDemoSteps) / sizeof(kDemoSteps[0]);
 
@@ -53,8 +61,9 @@ constexpr uint32_t kDemoGapMs = 10000;
 
 // Invented teams for filming and for any footage that gets posted: no logos,
 // and abbreviations no real team in teams.h uses (the host tests check).
-// Each side's logo slot shows its abbreviation badge instead (badge.h): rgb
-// is the fill and the splash color, alt the badge's ring.
+// Each side's logo slot shows its abbreviation in rgb instead (badge.h), rgb
+// also the splash color; alt is the second color, for the letters when rgb
+// is too dark and for the app's badge ring.
 struct MadeUpTeam {
   const char *abbr;
   const char *name;
@@ -98,22 +107,21 @@ constexpr uint32_t kDemoProHome = 6, kDemoProAway = 21;
 constexpr uint32_t kDemoCollegeHome = 194, kDemoCollegeAway = 130;
 
 // The two real teams a demo plays. A picked team wins. With no pick, the home
-// side is the panel's own team when it plays in this league, else the stock
-// home team, and the away side is the stock opponent. The two sides are
-// never the same team.
+// side is favorite #1 when it plays in this league, else the stock home team,
+// and the away side is the stock opponent. The two sides are never the same
+// team.
 struct DemoMatchup {
   const Team *home;
   const Team *away;
 };
-inline DemoMatchup demo_matchup(DemoKind kind, uint32_t picked_home, uint32_t picked_away, League panel_league,
-                                uint32_t panel_team) {
+inline DemoMatchup demo_matchup(DemoKind kind, uint32_t picked_home, uint32_t picked_away, const Team *first_fav) {
   League lg = demo_league(kind);
   bool college = kind == DemoKind::COLLEGE;
   uint32_t stock_home = college ? kDemoCollegeHome : kDemoProHome;
   uint32_t stock_away = college ? kDemoCollegeAway : kDemoProAway;
   const Team *home = find_team(lg, picked_home);
-  if (home == nullptr && panel_league == lg)
-    home = find_team(lg, panel_team);
+  if (home == nullptr && first_fav != nullptr && first_fav->league == lg)
+    home = first_fav;
   if (home == nullptr)
     home = find_team(lg, stock_home);
   const Team *away = find_team(lg, picked_away);

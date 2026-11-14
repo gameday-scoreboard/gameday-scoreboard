@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // "Install updates automatically": when an opted-in panel may install a new
 // release on its own. Pure, with no ESPHome includes, so the host tests
 // compile it directly.
@@ -8,10 +10,6 @@
 // is fully written and checked), and the next try is the next night. A
 // release that rolled back on the panel is not installed on its own again
 // (UpdateMark below).
-//
-// The bar build (firmware/pages/bar.yaml) runs the same rules against the
-// beta channel with the setting always on, plus "Install now"
-// (install_now_listed) for pushing a fix to one bar without waiting.
 #pragma once
 
 #include <cstdint>
@@ -38,44 +36,61 @@ inline int auto_update_slot(uint8_t mac4, uint8_t mac5) {
 // A number that changes once per local calendar day, for "tried tonight".
 inline int32_t auto_update_day(int year, int day_of_year) { return (int32_t) year * 1000 + day_of_year; }
 
-// The beta channel's versions are the release number plus "-beta.<build>"
-// ("2026.10.0-beta.812"), and the build number counts as the next part, so
-// each beta is newer than the one before and than the plain number.
+// The beta channel's versions are the next release's number plus
+// "-beta.<build>" ("2026.11.1-beta.812", scripts/beta_version.py), so a
+// beta sits just below the release of the same number: 2026.11.1 is newer
+// than every 2026.11.1 beta, and each beta than the one before it.
 static const char kBetaTag[] = "-beta.";
 
-// Past the separator after a version part: a dot or the beta tag.
-inline const char *next_version_part(const char *p) {
-  if (*p == '.')
-    return p + 1;
-  if (strncmp(p, kBetaTag, sizeof(kBetaTag) - 1) == 0)
-    return p + sizeof(kBetaTag) - 1;
-  return p;
-}
+struct VersionParts {
+  long n[4];
+  bool beta;   // a "-beta.<build>" version
+  long build;  // its build number
+};
 
-// True when `latest` is a higher version than `current`. Both are dotted
-// numbers ("1.5.5", "2026.10.0"); anything after the numbers other than the
-// beta tag ("-dev") is ignored. A panel on a test build newer than the
-// release never "updates" down to it, and a malformed version never installs.
-inline bool version_newer(const std::string &latest, const std::string &current) {
-  const char *a = latest.c_str();
-  const char *b = current.c_str();
-  if (*a < '0' || *a > '9' || *b < '0' || *b > '9')
+// The dotted numbers (up to four) and the beta build of a version that
+// starts with a digit; false otherwise. Anything else after the numbers
+// ("-dev", "-beta" with no build) is ignored.
+inline bool parse_version_parts(const char *p, VersionParts &v) {
+  v = VersionParts{};
+  if (*p < '0' || *p > '9')
     return false;
   for (int part = 0; part < 4; part++) {
-    char *ea;
-    char *eb;
-    long x = strtol(a, &ea, 10);
-    long y = strtol(b, &eb, 10);
-    if (ea == a)
-      x = 0;
-    if (eb == b)
-      y = 0;
-    if (x != y)
-      return x > y;
-    a = next_version_part(ea);
-    b = next_version_part(eb);
+    char *e;
+    long x = strtol(p, &e, 10);
+    if (e == p)
+      break;
+    v.n[part] = x;
+    p = e;
+    if (*p != '.')
+      break;
+    p++;
   }
-  return false;
+  if (strncmp(p, kBetaTag, sizeof(kBetaTag) - 1) == 0) {
+    p += sizeof(kBetaTag) - 1;
+    char *e;
+    long b = strtol(p, &e, 10);
+    if (e != p) {
+      v.beta = true;
+      v.build = b;
+    }
+  }
+  return true;
+}
+
+// True when `latest` is a higher version than `current`. A panel on a test
+// build newer than the release never "updates" down to it, and a malformed
+// version never installs.
+inline bool version_newer(const std::string &latest, const std::string &current) {
+  VersionParts a, b;
+  if (!parse_version_parts(latest.c_str(), a) || !parse_version_parts(current.c_str(), b))
+    return false;
+  for (int part = 0; part < 4; part++)
+    if (a.n[part] != b.n[part])
+      return a.n[part] > b.n[part];
+  if (a.beta != b.beta)
+    return !a.beta;  // the release is newer than its own betas
+  return a.beta && a.build > b.build;
 }
 
 // An update that rolled back. The new image only counts once it has run a
@@ -90,6 +105,11 @@ static const size_t kUpdateVersionLen = 24;  // "2026.10.0-beta.812" with room t
 struct UpdateMark {
   char installing[kUpdateVersionLen];  // the install under way, "" = none
   char failed[kUpdateVersionLen];      // the version that rolled back here, "" = none
+  // The new image was written: the panel shut down cleanly into it. Only
+  // then can a rollback be this install's. The bootloader's invalid-image
+  // flag outlives the rollback that set it, so a crash partway through a
+  // later download would otherwise blame that release.
+  uint8_t written;
 } __attribute__((packed));
 
 inline void update_mark_set(char *dst, const std::string &version) {
@@ -114,10 +134,12 @@ inline UpdateOutcome update_mark_boot(UpdateMark &m, const std::string &running,
     if (running == m.installing) {
       out = UpdateOutcome::PENDING;
     } else {
+      rolled_back = rolled_back && m.written != 0;
       out = rolled_back ? UpdateOutcome::ROLLED_BACK : UpdateOutcome::NOT_INSTALLED;
       if (rolled_back)
         update_mark_set(m.failed, m.installing);
       m.installing[0] = '\0';
+      m.written = 0;
     }
   }
   m.failed[kUpdateVersionLen - 1] = '\0';
@@ -136,33 +158,8 @@ enum class AutoUpdateStep : uint8_t {
   CHECK,      // read the manifest now, then come back
   WAIT_GAME,  // an update is waiting but a followed game is live
   INSTALL,    // record tonight's try, then install
-  INSTALL_NOW,  // record the try for this version, then install (install_now_listed)
   SKIP_FAILED,  // the release on offer rolled back here; leave it to a manual install
 };
-
-// "Install now" for the beta channel: the publisher names panels in the
-// release summary ("... Install now: gameday-aba970 gameday-500ebc", or
-// "all"), and a listed bar panel installs at its next manifest read, any hour,
-// instead of waiting for the night. Names are separated by spaces or commas.
-static const char kInstallNowTag[] = "Install now:";
-
-inline bool install_now_listed(const std::string &summary, const std::string &name) {
-  size_t at = summary.find(kInstallNowTag);
-  if (at == std::string::npos || name.empty())
-    return false;
-  size_t i = at + sizeof(kInstallNowTag) - 1;
-  while (i < summary.size()) {
-    while (i < summary.size() && (summary[i] == ' ' || summary[i] == ','))
-      i++;
-    size_t start = i;
-    while (i < summary.size() && summary[i] != ' ' && summary[i] != ',')
-      i++;
-    std::string word = summary.substr(start, i - start);
-    if (word == name || word == "all")
-      return true;
-  }
-  return false;
-}
 
 struct AutoUpdateInputs {
   bool enabled{false};
@@ -177,13 +174,10 @@ struct AutoUpdateInputs {
   bool available{false};   // the update entity says a different version is out
   bool newer{false};       // and version_newer() agrees it is newer
   bool live{false};        // a game the panel follows is in progress
-  bool now{false};         // install_now_listed() and not tried for this version yet
   bool failed{false};      // update_failed_here() for the release on offer
 };
 
 inline AutoUpdateStep auto_update_step(const AutoUpdateInputs &in) {
-  if (in.enabled && in.now && in.available && in.newer && !in.failed)
-    return in.live ? AutoUpdateStep::WAIT_GAME : AutoUpdateStep::INSTALL_NOW;
   if (!in.enabled || !in.clock_valid || in.tried_day == in.today)
     return AutoUpdateStep::IDLE;
   if (in.hour < kAutoUpdateStartHour || in.hour >= kAutoUpdateEndHour)
@@ -200,6 +194,19 @@ inline AutoUpdateStep auto_update_step(const AutoUpdateInputs &in) {
   if (in.live)
     return AutoUpdateStep::WAIT_GAME;
   return AutoUpdateStep::INSTALL;
+}
+
+// Whether a manifest result came from the manifest at `source`. Our
+// manifests give the ota path relative to their folder, so the updater's
+// firmware URL starts with that folder; one read from the other channel
+// (a check still running when Follow beta switched) starts with the other
+// folder. A result with no firmware URL counts as matching.
+inline bool firmware_from_source(const std::string &firmware_url, const char *source) {
+  if (firmware_url.empty() || source == nullptr)
+    return true;
+  const char *slash = strrchr(source, '/');
+  size_t n = slash != nullptr ? (size_t) (slash - source) + 1 : 0;
+  return firmware_url.compare(0, n, source, n) == 0;
 }
 
 }  // namespace espn

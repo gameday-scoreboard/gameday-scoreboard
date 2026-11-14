@@ -1,0 +1,369 @@
+{
+  "name": "gameday-a1b2c3",
+  "nick": "Living room",
+  "version": "v2026.10.1",
+  "setup": true,
+  "panels": 2,
+  "mode": 4,
+  "rotate": 1,
+  "lockon": 15,
+  "release": 30,
+  "collide": 0,
+  "favs": [
+    {
+      "l": "nfl",
+      "id": 6,
+      "abbr": "DAL",
+      "name": "Dallas Cowboys"
+    },
+    {
+      "l": "ncaa",
+      "id": 251,
+      "abbr": "TEX",
+      "name": "Texas Longhorns"
+    },
+    {
+      "l": "ncaa",
+      "id": 2294,
+      "abbr": "IOWA",
+      "name": "Iowa Hawkeyes"
+    },
+    {}
+  ],
+  "favmax": 16,
+  "lists": [
+    {
+      "n": "Sundays",
+      "f": [
+        0
+      ],
+      "days": "0",
+      "start": "11:00",
+      "end": "23:00",
+      "only": true,
+      "today": false,
+      "color": "blue",
+      "icon": "star"
+    },
+    {
+      "n": "College",
+      "f": [
+        1,
+        2
+      ],
+      "days": "",
+      "start": "00:00",
+      "end": "00:00",
+      "only": false,
+      "color": "",
+      "icon": ""
+    }
+  ],
+  "list": 2,
+  "sched": 0,
+  "remote": [
+    {
+      "v": "fav",
+      "gone": false
+    },
+    {
+      "v": "team:ncaa:2294",
+      "gone": false
+    },
+    {
+      "v": "list:College",
+      "gone": false
+    },
+    {
+      "v": "sport:basketball",
+      "gone": false
+    }
+  ],
+  "listmax": 16,
+  "sports": [],
+  "sport": "",
+  "today": false,
+  "jump": false,
+  "banner": true,
+  "favtake": true,
+  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"],
+  "live_auto": true,
+  "tz": 1,
+  "tz_name": "US Central",
+  "tz_iana": "America/Chicago",
+  "tz_auto": true,
+  "down": true,
+  "count": true,
+  "match": true,
+  "play": true,
+  "odds": true,
+  "leaders": true,
+  "field": true,
+  "winbar": true,
+  "spark": true,
+  "opp": true,
+  "celebrate": 2,
+  "bigplays": true,
+  "best": false,
+  "bootaddr": true,
+  "countdown": true,
+  "top25": true,
+  "news": false,
+  "pics": [
+    {
+      "s": 1,
+      "k": "gif",
+      "w": 128,
+      "h": 64,
+      "f": 12,
+      "b": 23514,
+      "id": 2849137201
+    },
+    {
+      "s": 3,
+      "k": "png",
+      "w": 64,
+      "h": 64,
+      "f": 1,
+      "b": 4180,
+      "id": 117440513
+    }
+  ],
+  "picroom": 65536,
+  "cdname": "Christmas",
+  "cddate": "2026-12-25",
+  "gameleaders": true,
+  "cards": [
+    {"id": "next", "name": "Next game", "on": true, "ok": true, "hint": ""},
+    {"id": "clock", "name": "Clock", "on": false, "ok": true, "hint": ""},
+    {"id": "countdown", "name": "Countdown to the next game", "on": true, "ok": true, "hint": ""},
+    {"id": "custom", "name": "Your own countdown", "on": true, "ok": true, "hint": "Pick its day below first"},
+    {"id": "message", "name": "Message card", "on": true, "ok": true, "hint": "Add text or a list in the Message card first"},
+    {"id": "picture", "name": "Pictures", "on": true, "ok": true, "hint": "Add a picture in the Pictures card first"},
+    {"id": "gameleaders", "name": "Game leaders", "on": true, "ok": true, "hint": ""},
+    {"id": "top25", "name": "College Top 25", "on": true, "ok": true, "hint": "Only while you follow a college football or basketball team"},
+    {"id": "schedule", "name": "Schedule", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
+    {"id": "seasonrecap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
+    {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
+    {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"}
+  ],
+  "town": "75019",
+  "wxon": true,
+  "wxunit": 0,
+  "wx": {
+    "place": "Coppell, Texas",
+    "lat": 32.9546,
+    "lon": -97.015,
+    "lookup": 200,
+    "read": 200,
+    "wait_s": 0,
+    "held": true,
+    "read_s": 412,
+    "unit": "F",
+    "temp": 71,
+    "hi": 81,
+    "lo": 61,
+    "code": 3,
+    "cond": "Cloudy",
+    "night": false,
+    "days": [
+      {"d": "Thu", "hi": 80, "lo": 66, "code": 61},
+      {"d": "Fri", "hi": 75, "lo": 67, "code": 2}
+    ]
+  },
+  "kick": {
+    "src": "open-meteo",
+    "unit": "F",
+    "place": "Evanston, IL",
+    "read": 200,
+    "temp": 56,
+    "cond": "Cloudy"
+  },
+  "night": true,
+  "nightstart": "23:00",
+  "nightend": "07:00",
+  "nightscreen": true,
+  "nightlevel": 16,
+  "night_now": "",
+  "wake": true,
+  "wakelead": 15,
+  "after": "off",
+  "wake_now": "",
+  "autoupd": false,
+  "beta": false,
+  "update_failed": "2026.10.2",
+  "update_important": true,
+  "update_shown": 1793142120,
+  "msg": "",
+  "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
+  "msgevery": 2,
+  "msgread": {
+    "status": 200,
+    "entries": 3
+  },
+  "hook": "http://192.168.1.20:1880/gameday",
+  "pregame": 15,
+  "hookpost": {
+    "status": 200,
+    "sent": 4,
+    "dropped": 0
+  },
+  "misses": 0,
+  "captive": false,
+  "espn_kb": 3241,
+  "espn_reads": 197,
+  "stale_s": 0,
+  "clock_approx": true,
+  "fallback": false,
+  "recap": false,
+  "favlock": {
+    "l": "nfl",
+    "id": 6,
+    "abbr": "DAL",
+    "name": "Dallas Cowboys"
+  },
+  "game": {
+    "s": "IN",
+    "why": "Can't reach ESPN",
+    "l": "nfl",
+    "ta": "DAL",
+    "ti": 6,
+    "ts": 17,
+    "oa": "PHI",
+    "oi": 21,
+    "os": 13,
+    "tr": "4-2",
+    "or": "5-1",
+    "p": 1,
+    "tt": 2,
+    "ot": 3,
+    "rz": false,
+    "tv": "FOX",
+    "venue": "AT&T Stadium",
+    "gn": "",
+    "odds": "PHI -2.5",
+    "ou": "47.5",
+    "detail": "8:42 - 3rd",
+    "done": false,
+    "kick": 1792355100,
+    "tbd": true,
+    "lp": "D.Prescott pass short right to C.Lamb for 12 yards",
+    "dd": "2nd & 7 at PHI 34",
+    "c": "8:42 3rd",
+    "d": "2nd & 7",
+    "k": "",
+    "tc": "003594",
+    "oc": "004C54",
+    "id": "401772845",
+    "leaders": false,
+    "sport": 0,
+    "sit": "",
+    "outs": -1,
+    "bases": 0
+  },
+  "status": "2nd & 7 at PHI 34",
+  "clock": false,
+  "splash": "",
+  "splash_color": "000000",
+  "next": [
+    {
+      "slot": 0,
+      "t": {
+        "l": "nfl",
+        "id": 6,
+        "abbr": "DAL",
+        "name": "Dallas Cowboys"
+      },
+      "id": "401772845",
+      "s": "IN",
+      "kick": 1792355100,
+      "oi": 21,
+      "oa": "PHI",
+      "ts": 17,
+      "os": 13,
+      "tv": "FOX",
+      "detail": "8:42 - 3rd",
+      "done": false
+    },
+    {
+      "slot": 1,
+      "t": {
+        "l": "ncaa",
+        "id": 251,
+        "abbr": "TEX",
+        "name": "Texas Longhorns"
+      },
+      "none": true
+    },
+    {
+      "slot": 2,
+      "t": {
+        "l": "ncaa",
+        "id": 2294,
+        "abbr": "IOWA",
+        "name": "Iowa Hawkeyes"
+      },
+      "id": "401858497",
+      "s": "PRE",
+      "kick": 1792814400,
+      "tbd": true,
+      "oi": 135,
+      "oa": "MINN",
+      "ts": 0,
+      "os": 0,
+      "tv": "",
+      "detail": "TBD",
+      "done": false
+    },
+    {
+      "id": "401772861",
+      "kick": 1792947600,
+      "oi": 28,
+      "oa": "WSH",
+      "on": "Washington Commanders",
+      "home": false,
+      "neutral": false,
+      "tv": "FOX"
+    }
+  ],
+  "shown": 0,
+  "locked": false,
+  "health": {
+    "up": 1708,
+    "start": "update",
+    "boots": 18,
+    "fault": "brownout",
+    "fault_ago": 86400,
+    "heap_kb": 92.2,
+    "block_kb": 31.0,
+    "psram_kb": 5762.3,
+    "rssi": -54,
+    "espn": 200,
+    "espn_ago": 5,
+    "version": "2026.10.1",
+    "built": 1792630693,
+    "channel": "stable",
+    "temp": 45.1,
+    "heat": 0,
+    "brownouts": 1,
+    "power": "ok"
+  },
+  "wifi": {
+    "rssi": -54,
+    "step": 300,
+    "hist": [-53, -53, null, -55, -54, -54],
+    "weak": false,
+    "drops": 6,
+    "day": 5,
+    "causes": {
+      "signal": 2,
+      "router": 1,
+      "password": 1,
+      "roam": 1,
+      "other": 1
+    },
+    "last": "signal",
+    "last_ago": 420,
+    "last_down": 12
+  }
+}

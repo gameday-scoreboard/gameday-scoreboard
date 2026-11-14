@@ -11,11 +11,22 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer
 	./build/test_parse
 	./build/test_networks
+	./build/test_api
+	./build/test_settings
+	./build/test_logo_cache
+	./build/test_logo_cache_asan
+	./build/test_picture
+	./build/test_celebrate
+	./build/test_celeb_football
+	./build/test_celeb_hockey
+	./build/test_celeb_baseball
+	./build/test_celeb_soccer
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
+PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
 build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h
 	@mkdir -p build
@@ -27,9 +38,76 @@ build/miniz.o: miniz.c
 	@mkdir -p build
 	$(CC) -O1 -c miniz.c -o $@
 
-build/test_networks: test_networks.cpp ../components/saved_networks/network_list.h
+# The celebrations: which one a score gets (celebrate.h, over decide_splash)
+# and the animation engine's math (celebrate_fx.h).
+build/test_celebrate: test_celebrate.cpp $(PARSER_ONLY) ../components/gameday/celebrate.h ../components/gameday/celebrate_fx.h $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celebrate.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Football's big plays (celeb_football.h) on recorded ESPN reads, and their
+# frames (celeb_art_index.h).
+build/test_celeb_football: test_celeb_football.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_football.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Hockey's big plays on recorded NHL reads (celeb_hockey.h).
+build/test_celeb_hockey: test_celeb_hockey.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_hockey.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Baseball's big plays (celeb_baseball.h) on recorded ESPN plays.
+build/test_celeb_baseball: test_celeb_baseball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_baseball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Soccer's big plays (celeb_soccer.h) over recorded goals, and their
+# caption over the art (celeb_caption.h).
+build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Not part of `all`: renders every celebration to raw RGB565 frames for
+# render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.
+build/render_celebrations: render_celebrations.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -O2 render_celebrations.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+celebrate-gifs: build/render_celebrations
+	python3 render_celebrations.py build/render_celebrations build/celebrations
+
+build/test_networks: test_networks.cpp $(wildcard ../components/saved_networks/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -I../components/saved_networks test_networks.cpp -o $@ $(LDFLAGS)
+
+# The device API (/gameday/state, set, action, wifi) against fixtures/api/,
+# which the companion app's tests read. It reads gameday.cpp's source when it
+# runs, so a change there needs no rebuild.
+build/test_api: test_api.cpp $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_api.cpp -o $@ $(LDFLAGS)
+
+# The settings backup (GET and POST /gameday/settings) against
+# fixtures/api/settings.json, the export of fixtures/api/state.json.
+build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_settings.cpp -o $@ $(LDFLAGS)
+
+# The logo cache's state machine, with FreeRTOS, http_request and RuntimeImage
+# replaced by the stand-ins in logo_stubs/.
+build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
+
+# The same with the address sanitizer, which stops on a logo freed while the
+# logo task still writes to it (test_full_cache_keeps_busy_logos).
+build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@
+
+# The picture card's GIF player and upload checks, against fixtures/pictures/.
+build/test_picture: test_picture.cpp $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_picture.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the
@@ -54,14 +132,20 @@ build/heap_budget: heap_budget.cpp $(filter-out test_parse.cpp golden_football.c
 
 # Not part of `all`: fuzzing. fuzz_espn runs mutated ESPN documents through
 # every parser, the text code and the finals rotation; fuzz_set runs mutated
-# set requests through the device page's parser. Both build with the address
+# set requests through the device page's parser, fuzz_settings settings
+# backups through the import's checks. Both build with the address
 # and undefined behavior sanitizers, seeded from fixtures/ (fuzz_seeds.cpp).
 # With clang's libFuzzer the run is coverage guided; without it (g++, Apple
-# clang) fuzz_main.cpp mutates at random. A crash leaves its input in
-# build/crash-*; `./build/fuzz_espn build/crash-...` replays it.
+# clang) fuzz_main.cpp mutates at random. A failure leaves its input in
+# build/crash-*, or with libFuzzer timeout-*, leak-* or oom-*;
+# `./build/fuzz_espn build/crash-...` replays it.
 #   make fuzz              about a minute, as CI runs it
 #   make fuzz-long         30 minutes a target (FUZZ_LONG_TIME seconds)
-FUZZ_CXX ?= $(shell command -v clang++ >/dev/null 2>&1 && echo clang++ || echo $(CXX))
+# clang++ only when it can link a sanitized program: without compiler-rt
+# (a bare clang install) it can't, and g++ can.
+ifeq ($(origin FUZZ_CXX),undefined)
+FUZZ_CXX := $(shell echo 'int main() { return 0; }' | clang++ -x c++ -fsanitize=address,undefined - -o /dev/null 2>/dev/null && echo clang++ || echo $(CXX))
+endif
 FUZZ_TIME ?= 30
 FUZZ_LONG_TIME ?= 1800
 FUZZ_CXXFLAGS = -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined \
@@ -77,6 +161,17 @@ FUZZ_DEPS = fuzz_main.cpp
 endif
 PARSER_SRCS = $(filter-out test_parse.cpp golden_football.cpp test_set.cpp,$(SRCS))
 FUZZ_RUN = -max_total_time=$(FUZZ_TIME) -timeout=10 -rss_limit_mb=2048 -artifact_prefix=build/ -print_final_stats=1
+# The longest input each target tries. libFuzzer's own default is its
+# largest seed (at least 4 KB), short of what the panel takes: a settings
+# backup up to kSettingsMaxBytes (8 KB), a picture up to kPicMaxBytes
+# (64 KB). A set request has no cap of its own; 8 KB is more than the
+# page's longest (every favorite and playlist in one save). The ESPN
+# documents are far longer on the wire; 16 KB holds a filtered few-game
+# document, the most the fuzzer gets through quickly.
+FUZZ_MAX_ESPN = 16384
+FUZZ_MAX_SET = 8192
+FUZZ_MAX_SETTINGS = 8192
+FUZZ_MAX_PICTURE = 65536
 
 build/fuzz_espn: fuzz_espn.cpp $(FUZZ_DEPS) $(PARSER_SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
@@ -85,6 +180,14 @@ build/fuzz_espn: fuzz_espn.cpp $(FUZZ_DEPS) $(PARSER_SRCS) $(wildcard ../compone
 build/fuzz_set: fuzz_set.cpp $(FUZZ_DEPS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_set.cpp -o $@
+
+build/fuzz_settings: fuzz_settings.cpp $(FUZZ_DEPS) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_settings.cpp -o $@
+
+build/fuzz_picture: fuzz_picture.cpp $(FUZZ_DEPS) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(FUZZ_CXX) $(FUZZ_CXXFLAGS) $(FUZZ_ENGINE) fuzz_picture.cpp -o $@
 
 build/fuzz_seeds: fuzz_seeds.cpp $(PARSER_SRCS) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
@@ -95,11 +198,16 @@ build/seeds/.done: build/fuzz_seeds $(wildcard fixtures/*.json)
 	./build/fuzz_seeds fixtures build/seeds/espn build/seeds/set
 	@touch $@
 
-fuzz: build/fuzz_espn build/fuzz_set build/seeds/.done
+fuzz: build/fuzz_espn build/fuzz_set build/fuzz_settings build/fuzz_picture build/seeds/.done
 	@echo "Fuzzing with $(if $(LIBFUZZER),libFuzzer,fuzz_main.cpp) ($(FUZZ_CXX))"
 	@mkdir -p build/corpus/espn build/corpus/set
-	./build/fuzz_espn $(FUZZ_RUN) -dict=fuzz_espn.dict build/corpus/espn build/seeds/espn
-	./build/fuzz_set $(FUZZ_RUN) -dict=fuzz_set.dict build/corpus/set build/seeds/set
+	./build/fuzz_espn $(FUZZ_RUN) -max_len=$(FUZZ_MAX_ESPN) -dict=fuzz_espn.dict build/corpus/espn build/seeds/espn
+	./build/fuzz_set $(FUZZ_RUN) -max_len=$(FUZZ_MAX_SET) -dict=fuzz_set.dict build/corpus/set build/seeds/set
+	@mkdir -p build/corpus/settings build/seeds/settings
+	cp fixtures/api/settings.json build/seeds/settings/
+	./build/fuzz_settings $(FUZZ_RUN) -max_len=$(FUZZ_MAX_SETTINGS) -dict=fuzz_settings.dict build/corpus/settings build/seeds/settings
+	@mkdir -p build/corpus/picture
+	./build/fuzz_picture $(FUZZ_RUN) -max_len=$(FUZZ_MAX_PICTURE) build/corpus/picture fixtures/pictures
 
 fuzz-long:
 	$(MAKE) fuzz FUZZ_TIME=$(FUZZ_LONG_TIME)

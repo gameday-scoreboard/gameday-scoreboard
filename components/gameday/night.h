@@ -1,0 +1,209 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
+// The night schedule: between two times the owner sets, the panel runs at
+// its own night brightness or turns the screen off. A live game of the
+// owner's team or one of their favorites lights it at the normal brightness
+// until the game ends, and the owner can skip the rest of a night (a remote
+// press, a team pick, Power on). Off out of the box. Pure, with no ESPHome includes,
+// so the host tests compile it directly.
+#pragma once
+
+#include <cstdint>
+#include <cstdio>
+#include <string>
+
+namespace espn {
+
+// Minutes after local midnight
+static const uint16_t kNightStartDefault = 23 * 60;
+static const uint16_t kNightEndDefault = 7 * 60;
+// Out of 255, like the Brightness setting
+static const uint8_t kNightLevelDefault = 16;
+static const uint16_t kMinutesPerDay = 24 * 60;
+
+// Kept in flash. Its size is fixed: a blob that changes size fails to load
+// and resets every setting in it, so later settings take the spare bytes.
+struct NightPrefs {
+  uint8_t on;           // 1 = the schedule runs
+  uint16_t start;       // minutes after midnight
+  uint16_t end;         // minutes after midnight, may be before start (past midnight)
+  uint8_t screen_off;   // 1 = dark at night, 0 = at level
+  uint8_t level;        // 1 to 255
+  uint8_t spare[3];
+} __attribute__((packed));
+
+inline NightPrefs night_defaults() {
+  NightPrefs p{};
+  p.start = kNightStartDefault;
+  p.end = kNightEndDefault;
+  p.level = kNightLevelDefault;
+  return p;
+}
+
+// A blob from flash that can't be right (a later firmware's, or damage)
+// goes back to the defaults field by field.
+inline void night_sanitize(NightPrefs &p) {
+  const NightPrefs d = night_defaults();
+  if (p.start >= kMinutesPerDay)
+    p.start = d.start;
+  if (p.end >= kMinutesPerDay)
+    p.end = d.end;
+  if (p.level == 0)
+    p.level = d.level;
+  p.on = p.on ? 1 : 0;
+  p.screen_off = p.screen_off ? 1 : 0;
+}
+
+// "23:00" or "7:05" -> minutes after midnight, -1 for anything else
+inline int night_parse_time(const std::string &v) {
+  size_t colon = v.find(':');
+  if (colon == std::string::npos || colon == 0 || colon > 2 || v.size() != colon + 3)
+    return -1;
+  int h = 0, m = 0;
+  for (size_t i = 0; i < v.size(); i++) {
+    if (i == colon)
+      continue;
+    if (v[i] < '0' || v[i] > '9')
+      return -1;
+    if (i < colon)
+      h = h * 10 + (v[i] - '0');
+    else
+      m = m * 10 + (v[i] - '0');
+  }
+  if (h > 23 || m > 59)
+    return -1;
+  return h * 60 + m;
+}
+
+// Minutes after midnight -> "07:00", the form the page's time fields use
+inline std::string night_time_text(uint16_t minutes) {
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%02u:%02u", (unsigned) (minutes / 60 % 24), (unsigned) (minutes % 60));
+  return buf;
+}
+
+// Minutes after midnight -> "7:00 AM", for the log
+inline std::string night_clock12(uint16_t minutes) {
+  const unsigned h = minutes / 60 % 24;
+  char buf[12];
+  snprintf(buf, sizeof(buf), "%u:%02u %s", h % 12 == 0 ? 12 : h % 12, (unsigned) (minutes % 60), h < 12 ? "AM" : "PM");
+  return buf;
+}
+
+// True when the minute is inside [start, end), across midnight when end is
+// earlier than start. The same start and end is an empty window.
+inline bool night_window(uint16_t start, uint16_t end, int minute) {
+  if (start == end)
+    return false;
+  if (start < end)
+    return minute >= start && minute < end;
+  return minute >= start || minute < end;
+}
+
+// A change that would leave the same start and end, a schedule that is on
+// and never runs, keeps the hours it had. The device page refuses it; an
+// app, a script or a restored backup can still send it. True when it kept them.
+inline bool night_keep_hours(NightPrefs &next, const NightPrefs &now) {
+  if (next.start != next.end)
+    return false;
+  next.start = now.start;
+  next.end = now.end;
+  return true;
+}
+
+// What the schedule is doing right now
+enum class Night : uint8_t {
+  DAY = 0,   // off, outside its hours, or no clock yet
+  DIM,       // at the night brightness
+  DARK,      // screen off
+  GAME,      // its hours, but a live game of the owner's has the panel lit
+  SKIPPED,   // its hours, but the owner turned it off for the rest of this night
+};
+
+// clock_valid false (no time yet) never darkens the panel: a dark panel
+// that can't say why looks broken.
+inline Night night_state(const NightPrefs &p, bool clock_valid, int minute, bool owner_live, bool skipped = false) {
+  if (!p.on || !clock_valid || !night_window(p.start, p.end, minute))
+    return Night::DAY;
+  if (skipped)
+    return Night::SKIPPED;
+  if (owner_live)
+    return Night::GAME;
+  return p.screen_off ? Night::DARK : Night::DIM;
+}
+
+// True when the schedule has the panel dim or dark, the states an owner's
+// press takes it out of. A live game already has it lit.
+inline bool night_holding(Night state) { return state == Night::DIM || state == Night::DARK; }
+
+// When a night skipped at `now` (seconds, local minute `minute`) is over:
+// the end of the hours it is in. Kept as a time, not a flag, so a restart
+// inside the same night (the nightly update) still knows it was skipped
+// and the next night can't.
+//
+// `offset` gives the panel's UTC offset, in seconds, at an epoch. Clocks
+// that change before the end move it by the change: on the night they go
+// back, a skip made before 2 AM has an hour more to run, so the panel stays
+// lit until the real 7 AM instead of going dark from 6 to 7. An end inside
+// the hour the clocks skip forward has no local time; the later of the two
+// guesses is kept, and the hours check ends the skip when the clock passes
+// the end. An end inside the hour the clocks go back over comes twice; the
+// skip runs to the second, so the repeated hour stays lit too.
+using NightUtcOffset = int32_t (*)(int64_t epoch);
+inline int64_t night_skip_until(const NightPrefs &p, int64_t now, int minute, int second, NightUtcOffset offset) {
+  const int left = (p.end - minute + kMinutesPerDay) % kMinutesPerDay;
+  const int64_t naive = now - second + (int64_t) left * 60;
+  const int32_t here = offset(now);
+  const int64_t once = naive + here - offset(naive);
+  const int64_t twice = naive + here - offset(once);
+  int64_t end = once > twice ? once : twice;
+  const int32_t back = offset(end) - offset(end + 2 * 3600);
+  if (back > 0 && offset(end + back) == offset(end) - back)
+    end += back;
+  return end;
+}
+
+// The longest the clocks go back, in seconds.
+static const int64_t kNightRepeatSecs = 3600;
+
+// True when a skip that runs to `until` is over at `now` (local minute
+// `minute`): the schedule is off, the end has come, or the clock is outside
+// the hours. Outside them with an hour or less to go is the hour the clocks
+// go back over, between the first pass of the end and the second, and the
+// skip runs on through it.
+inline bool night_skip_over(const NightPrefs &p, int minute, int64_t now, int64_t until) {
+  if (!p.on || now >= until)
+    return true;
+  return !night_window(p.start, p.end, minute) && until - now > kNightRepeatSecs;
+}
+
+// The brightness the owner wants right now, before heat and power have their
+// say (guard.h): the night level, 0 for screen off, or the day setting.
+inline uint8_t night_brightness(uint8_t day, Night state, const NightPrefs &p) {
+  switch (state) {
+    case Night::DIM:
+      return p.level;
+    case Night::DARK:
+      return 0;
+    default:
+      return day;
+  }
+}
+
+// For the state document's night_now and the log
+inline const char *night_word(Night state) {
+  switch (state) {
+    case Night::DIM:
+      return "dim";
+    case Night::DARK:
+      return "off";
+    case Night::GAME:
+      return "game";
+    case Night::SKIPPED:
+      return "skipped";
+    default:
+      return "";
+  }
+}
+
+}  // namespace espn

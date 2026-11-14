@@ -4,6 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Support - Game Day Scoreboard</title>
+  <meta name="description" content="Fixes for Wi-Fi, an app that can't find the panel, a half-blank board, resets and firmware updates, and how to reach support by email.">
+  <link rel="canonical" href="https://install.gameday-scoreboard.com/support/">
+  <meta property="og:site_name" content="Game Day Scoreboard">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Support - Game Day Scoreboard">
+  <meta property="og:description" content="Fixes for Wi-Fi, an app that can't find the panel, a half-blank board, resets and firmware updates, and how to reach support by email.">
+  <meta property="og:url" content="https://install.gameday-scoreboard.com/support/">
+  <meta property="og:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@GameDayScore">
+  <meta name="twitter:image" content="https://install.gameday-scoreboard.com/media/og.jpg">
+  <meta name="twitter:image:alt" content="An LED scoreboard showing a final score, HBR 24, IRN 10, and HBR WINS!">
+  <!-- The FAQPage JSON-LD for these cards is added at deploy (scripts/site_seo.py). -->
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0f14; color: #e6edf3; }
@@ -37,14 +53,12 @@
 
   <div class="card" id="no-iphone">
     <h2>I don't have an iPhone</h2>
-    <p>You can set the panel up from any phone or laptop through its own hotspot. While the panel shows SETUP, join the Wi-Fi network it names, like <code>Game Day 2f6a70</code>, and a setup page opens. Pick your Wi-Fi network, enter the password and save.</p>
-    <p>Once it's on your Wi-Fi, the panel shows its address. Open that in a browser to pick your team and everything else the app would set.</p>
-    <p class="note">More on the hotspot in <a href="/setup/">Setup</a>.</p>
+    <p>You can set the panel up from any phone or laptop through its own hotspot, the Wi-Fi network it names while it shows SETUP, like <code>Game Day 2f6a70</code>. Then pick your team in a browser at the address the panel shows. The steps are under "Without the app" in <a href="https://app.gameday-scoreboard.com/setup/">Setup</a>.</p>
   </div>
 
   <div class="card">
     <h2>Half the board is blank, or the picture shows twice</h2>
-    <p>The panel layout doesn't match your panel. Open the panel's page, find <strong>Setup</strong> and click the picture that matches yours: <strong>One 128x64 panel</strong> for the panel we ship (or two 64x64 panels side by side), <strong>One 64x64 panel</strong> for a single small one. The panel restarts with the new layout.</p>
+    <p>The panel layout doesn't match your panel. Open the panel's page, go to the <strong>Device</strong> tab, open <strong>Matrix</strong> and click the picture that matches yours: <strong>One 128x64 panel</strong> for the panel we ship (or two 64x64 panels side by side), <strong>One 64x64 panel</strong> for a single small one. The panel restarts with the new layout.</p>
   </div>
 
   <div class="card">
@@ -66,8 +80,8 @@
 
   <div class="card">
     <h2>My team's season is over</h2>
-    <p>Between seasons the panel shows your team's next game once the schedule is out, which can be months away, or <strong>No upcoming game</strong> until then. Nothing is wrong with it; it picks the next season up on its own.</p>
-    <p>To keep the board busy, open the panel's page and switch to <strong>Favorite teams</strong> with teams from leagues that are in season, or to <strong>Live games</strong> for whatever is on right now.</p>
+    <p>Between seasons the panel shows a clock in your first favorite's colors. Under the time is the next game once it's on the schedule, like <strong>Next: at PHI Mar 26 7:05 PM</strong>, or the date until then. Nothing is wrong with it; it picks the next season up on its own.</p>
+    <p>To keep the board busy, open the panel's page and add favorites from leagues that are in season, or switch to <strong>Live games</strong> for whatever is on right now.</p>
   </div>
 
   <div class="card">
@@ -82,13 +96,14 @@
 
   <div class="card">
     <h2>The panel won't start</h2>
-    <p>If it stays dark or keeps restarting, reinstall the firmware from the <a href="/">installer page</a>, with a USB cable and a desktop browser such as Chrome or Edge. That erases its settings, so set it up again afterwards.</p>
+    <p>If it stays dark or keeps restarting, reinstall the firmware from the <a href="/">installer page</a>, with a USB cable and a desktop browser such as Chrome or Edge. Pick your board: a Game Day Scoreboard you bought has the <strong>Waveshare ESP32-S3-RGB-Matrix</strong>. On a board you built on the MoonHub75 pinout, click <strong>MoonHub75 pinout</strong>, then <strong>One 128x64 panel</strong> unless yours is a single 64x64 panel. That erases its settings, so set it up again afterwards.</p>
   </div>
 
   <div class="card">
     <h2>Something else</h2>
-    <p>Email <a href="mailto:support@gameday-scoreboard.com">support@gameday-scoreboard.com</a>. Say what the panel or the app was doing, and include the firmware version from the panel's page if you can.</p>
+    <p>Email <a href="mailto:support@gameday-scoreboard.com">support@gameday-scoreboard.com</a>. Say what the panel or the app was doing, and include the firmware version from the panel's page if you can. We reply within one business day.</p>
     <p class="note">Built your own and found a bug? GitHub issues work too: <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/issues">github.com/gameday-scoreboard/gameday-scoreboard/issues</a>.</p>
+    <p class="note">The full guide to setup, every setting, each sport and more fixes is at <a href="https://docs.gameday-scoreboard.com/">docs.gameday-scoreboard.com</a>.</p>
   </div>
 
   <footer>

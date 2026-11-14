@@ -1,0 +1,129 @@
+# The Regulatory screen: the FCC information, shown on the panel itself as
+# its electronic label (47 CFR 2.935). The words are constants in
+# components/gameday/regulatory.h; nothing on the device page, the app or
+# Home Assistant can change them.
+#
+# POST /gameday/action?do=regulatory brings it up, from the device page's
+# "Show FCC information" button or the app. It covers whatever is on screen
+# and goes through its pages, 8 s each, twice, then the board comes back:
+#
+#   page 1      Game Day Scoreboard, Model GDS-1, Contains FCC ID: ...
+#   pages 2-5   the Part 15 statement, a few lines a page
+#
+# Same five pages on both boards: the 5x8 font on 64 px, the 6x12 font on
+# 128 px, with the page number in the bottom right corner. A panel switched
+# off is switched on, and one dimmed or dark for the night lights at its
+# Brightness setting while the screen is up (pages/guard.yaml). Asking again
+# starts over at page 1; the Power switch turned off takes it down. It never
+# covers the QC screen.
+
+globals:
+  - id: reg_active
+    type: bool
+    initial_value: 'false'
+  # Pages shown so far, this one included
+  - id: reg_step
+    type: int
+    initial_value: '0'
+
+script:
+  - id: reg_show
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(qc_active);'
+          then:
+            - lambda: |-
+                ESP_LOGI("regulatory", "FCC information on screen");
+                id(reg_active) = true;
+                id(reg_step) = 0;
+                if (!id(power).state) id(power).turn_on();
+            - hub75.set_brightness:
+                id: matrix
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, false);'
+            - while:
+                condition:
+                  lambda: |-
+                    const auto lay = espn::reg_layout(lv_disp_get_hor_res(lv_disp_get_default()));
+                    const int pages = (int) espn::reg_pages(lay.cols, lay.rows).size();
+                    return id(reg_active) && !id(qc_active) && id(reg_step) < pages * espn::kRegRounds;
+                then:
+                  - script.execute: reg_draw
+                  - delay: !lambda 'return espn::kRegPageMs;'
+                  - lambda: 'id(reg_step)++;'
+            - script.execute: reg_stop
+
+  # reg_show's loop sees reg_active go false and ends at its next page.
+  - id: reg_stop
+    then:
+      - if:
+          condition:
+            lambda: 'return id(reg_active);'
+          then:
+            - lambda: |-
+                id(reg_active) = false;
+                lv_obj_add_flag(id(reg_layer), LV_OBJ_FLAG_HIDDEN);
+                ESP_LOGI("regulatory", "FCC information off");
+            # The night schedule and the heat and power holds apply again.
+            - script.execute: gd_guard
+
+  # Page reg_step of the screen, laid out for the board as it is now.
+  - id: reg_draw
+    then:
+      - lambda: |-
+          const auto lay = espn::reg_layout(lv_disp_get_hor_res(lv_disp_get_default()));
+          const auto pages = espn::reg_pages(lay.cols, lay.rows);
+          if (pages.empty()) return;
+          const size_t page = (size_t) id(reg_step) % pages.size();
+          lv_obj_t *t = id(reg_text);
+          lv_obj_set_style_text_font(t, (lay.big ? id(spleen_12) : id(spleen_8))->get_lv_font(), 0);
+          // The name and the FCC ID centered, the statement from the left edge
+          lv_obj_set_style_text_align(t, page == 0 ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
+          lv_label_set_text(t, pages[page].c_str());
+          lv_obj_align(t, page == 0 ? LV_ALIGN_TOP_MID : LV_ALIGN_TOP_LEFT, 0, 0);
+          char num[12];
+          snprintf(num, sizeof(num), "%u/%u", (unsigned) (page + 1), (unsigned) pages.size());
+          lv_label_set_text(id(reg_num), num);
+          ESP_LOGD("regulatory", "Page %s", num);
+          lv_obj_move_foreground(id(reg_layer));
+          lv_obj_clear_flag(id(reg_layer), LV_OBJ_FLAG_HIDDEN);
+
+switch:
+  - id: !extend power
+    on_turn_off:
+      - script.execute: reg_stop
+
+lvgl:
+  top_layer:
+    widgets:
+      - obj:
+          id: reg_layer
+          scrollbar_mode: "OFF"
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_opa: COVER
+          bg_color: 0x000000
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          hidden: true
+          widgets:
+            # As wide as its longest line: the lines come wrapped from
+            # regulatory.h, and a 13-letter line on 64 px is 65 px with the
+            # last letter's blank column.
+            - label:
+                id: reg_text
+                x: 0
+                y: 0
+                width: SIZE_CONTENT
+                text: ""
+                styles: [st_spleen8]
+            - label:
+                id: reg_num
+                align: BOTTOM_RIGHT
+                text: ""
+                styles: [st_spleen8]
+                text_color: 0x808080

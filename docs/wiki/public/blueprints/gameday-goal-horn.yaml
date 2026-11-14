@@ -1,0 +1,133 @@
+blueprint:
+  name: "Game Day Scoreboard: goal horn on a speaker"
+  description: >-
+    Plays a sound on a speaker when your team scores in the game your Game
+    Day Scoreboard follows, and another when your team wins, if you pick one.
+    The device page's "Send a test event" button plays the score sound, so you
+    can set the volume before the game.
+  domain: automation
+  author: Game Day Scoreboard
+  source_url: https://docs.gameday-scoreboard.com/blueprints/gameday-goal-horn.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    speaker:
+      name: Speaker
+      selector:
+        entity:
+          domain: media_player
+    sound:
+      name: Score sound
+      description: >-
+        A sound file's address or media source, like
+        media-source://media_source/local/goal_horn.mp3 for a file in your
+        Home Assistant media folder.
+      selector:
+        text:
+    win_sound:
+      name: Win sound
+      description: Played at the final when your team wins. Empty for none.
+      default: ""
+      selector:
+        text:
+    plays:
+      name: Plays
+      description: Leave empty for every score of your team's.
+      default: []
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Touchdown
+              value: touchdown
+            - label: Field goal
+              value: field_goal
+            - label: Extra point
+              value: extra_point
+            - label: Two-point try or safety
+              value: two_point
+            - label: Run (baseball)
+              value: run
+            - label: Home run
+              value: home_run
+            - label: Goal (hockey, soccer)
+              value: goal
+            - label: Basket (basketball)
+              value: score
+    volume:
+      name: Volume
+      description: 0 leaves the speaker's volume as it is.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+    announce:
+      name: Play over what's on
+      description: >-
+        Speakers that support announcements play the sound over the music and
+        pick it back up after. Turn it off for one that doesn't.
+      default: true
+      selector:
+        boolean:
+    panel:
+      name: Only this panel
+      description: >-
+        With more than one panel, the panel's name (like gameday-2f6a70), so
+        two panels on the same game don't both sound the horn. Empty for any.
+      default: ""
+      selector:
+        text:
+
+mode: queued
+max: 3
+
+triggers:
+  - trigger: event
+    event_type: esphome.gameday_score
+    id: score
+  - trigger: event
+    event_type: esphome.gameday_test
+    id: score
+  - trigger: event
+    event_type: esphome.gameday_final
+    id: final
+
+variables:
+  plays: !input plays
+  panel: !input panel
+  volume: !input volume
+  sound: !input sound
+  win_sound: !input win_sound
+  data: "{{ trigger.event.data }}"
+  play_sound: >-
+    {{ sound if trigger.id == 'score' else win_sound }}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ data.my_team == 'true'
+         and (panel == '' or data.panel == panel)
+         and play_sound != ''
+         and (trigger.id == 'final' and data.result == 'win'
+              or trigger.id == 'score' and (plays | count == 0 or data.play in plays)) }}
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ volume | int(0) > 0 }}"
+    then:
+      - action: media_player.volume_set
+        target:
+          entity_id: !input speaker
+        data:
+          volume_level: "{{ volume | int(0) / 100 }}"
+  - action: media_player.play_media
+    target:
+      entity_id: !input speaker
+    data:
+      media_content_id: "{{ play_sound }}"
+      media_content_type: music
+      announce: !input announce

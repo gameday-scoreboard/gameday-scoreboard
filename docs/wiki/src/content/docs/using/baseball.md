@@ -1,0 +1,74 @@
+---
+title: "Baseball: MLB"
+description: "What the panel shows for an MLB game: the inning, the count, outs, the runners on a diamond, run and home run splashes, and the final."
+sidebar:
+  order: 6
+---
+
+MLB games get their own board. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
+
+## Before the game
+
+The next-game card shows both logos, your team on the left, with the records under them. The ticker carries:
+
+- the first pitch day and time in the panel's timezone
+- the series, when ESPN has one
+- the probable starting pitchers for both teams, when ESPN lists both
+- the betting line, over/under and TV channel, when ESPN has them and **Odds, TV and win chance** is on
+- the ballpark
+
+Before a playoff game the ticker starts with the round, like "NLCS - Game 2" or "World Series - Game 1".
+
+After the odds the ticker shows each team's home run leader for the season, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI". **Pre-game season leaders** on the device page turns them off. At an open-air ballpark the ballpark comes with ESPN's forecast for the game, like "82F Mostly clear at Petco Park"; a ballpark with a roof shows just its name.
+
+MLB has no Up next list on the device page: a team's season schedule is too large for the panel to read.
+
+## During the game
+
+- **The inning** in the clock row, in ESPN's words, like "Top 5th", "Mid 5th" or "Rain Delay".
+- **The count and outs**: the balls and strikes to the left of a small diamond and the outs, like "2 OUT", to its right.
+- **The runners**: the diamond's bases light gold for each runner. With the bases loaded they turn red.
+- **The ticker** with the count, the outs, the pitcher and the batter, and the last play. Turn them off with **Count and at-bat** and **Last play** under **Ticker** on the device page's Display tab. See [The ticker](/using/ticker/).
+
+Between half innings the ticker shows each team's hits and errors instead, with the series when there is one.
+
+On a single 64x64 panel the diamond sits between the two scores, with the outs as three dots under it. The count is in the ticker.
+
+## Runs and home runs
+
+When the score changes, the panel fills the screen for 4 seconds in the scoring team's color:
+
+| Score | Your team | The other side |
+| --- | --- | --- |
+| One run | RUN | the abbreviation and SCORES, like "NYY SCORES" |
+| Two or more runs in one update | the number and RUNS, like "2 RUNS" | the abbreviation and the runs, like "NYY 2 RUNS" |
+| Home run | HOME RUN, with fireworks | the abbreviation and HOME RUN, with fireworks |
+
+A home run gets fireworks on black with the words in the team's color. Other runs flash the screen in the team's color. The other side's splashes need **Opponent scores too** on.
+
+When your team wins, a victory splash with fireworks says your abbreviation and "WINS".
+
+With **Celebrations** on **Full**, a home run shows the ball arcing up and out over the outfield wall under the stadium lights and bursting in your team's colors as it leaves the park. Other runs sweep a bar of light across the board. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's runs are a dim 2-second flash. **Subtle** keeps every score to the quick flash; **Off** shows no splash at all.
+
+### Big plays
+
+Two plays get their own pixel-art show in your team's colors, drawn for a 128x64 board and for a single 64x64 panel:
+
+- **Grand slam**: a home run with the bases loaded. The batter swings, the ball sails out over the right-center wall, all four runners come around to score while fireworks go off, and "GRAND SLAM!" drops in. 5 seconds, in place of the home run's show.
+- **Walk-off**: your team wins at home on a run in the bottom of the 9th inning or later. The winning run slides home, your team's color floods up from the bottom of the board as the dugout empties onto the field, and "WALK-OFF!" drops in. The victory screen follows. A walk-off grand slam shows the walk-off.
+
+They play only with **Celebrations** on **Full** and **Big plays** on, and only for your team's plays. In the Live games mode the second team's big plays show too when **Opponent scores too** is on. With **Celebrations** on **Subtle** a grand slam still gets the home run's quick flash.
+
+The panel sees a grand slam from ESPN's score for the play or its description; once in a while ESPN's update lands on the next batter instead, and the grand slam shows as four runs. Four runs on a play that isn't a home run, like a bases-loaded triple and an error, get the runs' sweep, not the grand slam.
+
+## The final
+
+The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for ten minutes, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game.
+
+At the final the board takes turns, 10 seconds each, with the line score: runs by inning in groups of three, then runs, hits and errors, like a box score. An inning the home team didn't need to bat in shows an x. A long extra-inning game drops the groups, and a very long one shows runs, hits and errors alone. On a 64x64 panel it's runs, hits and errors, the teams side by side under their abbreviations.
+
+A **Game leaders** card joins the turns: each team's logo and abbreviation with its starting pitcher's line and its top hitter, like "Jax 4.0 IP 2 ER 6 K" and "Diaz 2-4 1 HR". It shows once after the 5th inning and takes its turn at the final. On a 64x64 panel it's the pitcher only, under each abbreviation, shortened to fit, like "Jax 4.0 IP". Turn it off under **Between games** on the [device page](/using/device-page/).
+
+With **Last play** on, the final's ticker also runs the scoring plays the panel saw, like "T6 Riley homered to left, Acuna scored, ATL 2-0", and ESPN's headline for the game when it has one.
+
+A postponed, canceled or suspended game shows ESPN's word for it and gets no victory splash.
