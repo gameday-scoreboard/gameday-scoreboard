@@ -3183,7 +3183,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           const j = r.ok ? await r.json().catch(() => ({})) : null;
           if (!j) toast("Could not forget " + n.ssid);
           else if (j.moving) toast("Forgot " + n.ssid + ". Moving to " + (others.length > 1 ? "the next saved network" : next) + " now");
-          else if (n.connected) toast("Forgot " + n.ssid + ". It's the only saved network, so the panel stays on it");
+          else if (n.connected && !others.length) toast("Forgot " + n.ssid + ". It's the only saved network, so the panel stays on it");
           else toast("Forgot " + n.ssid);
         } catch (_) {
           toast("Could not forget " + n.ssid);
