@@ -2378,6 +2378,80 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   await expect(page.locator("#netsCard")).toBeHidden();
 });
 
+test("a network is added by name, and the page offers to switch when the panel sees it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  const rows = page.locator("#nets .ctl");
+  const msg = page.locator("#netMsg");
+  await expect(rows).toHaveCount(2);
+  const posts = async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi");
+  const add = async (name, pass) => {
+    if (await page.locator("#netAdd").isVisible()) await page.locator("#netAdd").click();
+    await page.locator("#netName").fill(name);
+    await page.locator("#netPass").fill(pass);
+    await page.locator("#netSave").click();
+  };
+
+  // Checked on the page first: nothing is posted.
+  await add("Lake", "short");
+  await expect(msg).toHaveText("A Wi-Fi password is 8 to 63 characters.");
+  await add("Home", "password1");
+  await expect(msg).toHaveText("The panel is on Home now, so its password already works.");
+  expect(await posts()).toEqual([]);
+
+  // Out of range: saved second, behind the network it is on, no offer. The
+  // password goes in the body, not the address.
+  page.on("dialog", (d) => d.accept());
+  await add("Lake", "lakepass1");
+  await expect(msg).toHaveText("Saved Lake. The panel joins it wherever it can't find a network it already knows.");
+  expect(await posts()).toEqual([{ path: "/gameday/wifi", q: {}, form: { ssid: "Lake", password: "lakepass1" } }]);
+  await expect(page.locator("#netForm")).toBeHidden();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(1).locator("label")).toContainText("Lake");
+
+  // In range, but the switch fails: the panel is back on Home.
+  await add("Attic", "atticpass");
+  await expect(msg).toHaveText("The panel couldn't join Attic, so it went back to Home. Check the name and password, then add it again.",
+    { timeout: 15000 });
+  expect((await posts()).map((p) => p.q).filter((q) => q.switch)).toEqual([{ switch: "Attic" }]);
+
+  // In range and it joins.
+  const offers = [];
+  page.removeAllListeners("dialog");
+  page.on("dialog", (d) => { offers.push(d.message()); d.accept(); });
+  await add("Cabin", "cabinpass");
+  await expect(msg).toHaveText("The panel is on Cabin now.", { timeout: 15000 });
+  expect(offers.length).toBe(1);
+  expect(offers[0]).toContain("The panel can see Cabin. Switch to it now?");
+  expect(offers[0]).toContain("it goes back to Home within a minute");
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+  await expect(rows.nth(0).locator("label")).toContainText("Cabin");
+
+  // Declining the offer leaves it saved; a saved name asks before its password changes.
+  page.removeAllListeners("dialog");
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); asked.length === 1 ? d.accept() : d.dismiss(); });
+  await add("Attic", "atticpass2");
+  await expect(msg).toHaveText("Saved Attic. The panel joins it wherever it can't find a network it already knows.");
+  expect(asked[0]).toBe("Attic is already saved. Replace its password?");
+  expect(asked[1]).toContain("The panel can see Attic.");
+
+  // Full: the page says which one drops.
+  page.removeAllListeners("dialog");
+  await reset(request, {}, [], [1, 2, 3, 4, 5].map((i) => ({ ssid: "n" + i, connected: i === 1 })));
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(5);
+  page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await add("Lake", "lakepass1");
+  await expect.poll(() => asked[asked.length - 1]).toBe("The list is full, so adding Lake drops n5. Add it?");
+  expect(await posts()).toEqual([]);
+});
+
 test("the stale tag follows the device's consecutive misses", async ({ page, request }) => {
   await reset(request, { misses: 2 });
   await page.goto("/");

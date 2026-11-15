@@ -303,8 +303,9 @@ ota:
 # hotspot page adds to the list; Factory Reset empties it. "Reset Wi-Fi"
 # keeps it: the panel restarts into setup for 15 minutes (gd_setup_window),
 # and an unplug or the end of the 15 minutes brings it back.
-# GET /gameday/wifi lists them (names only) and POST /gameday/wifi?forget=
-# drops one.
+# GET /gameday/wifi lists them (names only). POST /gameday/wifi forgets one,
+# saves one by name and password without joining it, or switches to one in
+# range (handle_wifi_ in components/gameday).
 saved_networks:
   id: gd_networks
 
@@ -360,7 +361,15 @@ wifi:
   on_disconnect:
     - script.stop: gd_ble_off
     - script.execute: gd_ble_grace
-    - script.execute: boot_wifi_lost_later
+    # Leaving on purpose for another network: JOINING at once, not after
+    # the 10 s that hides a short drop.
+    - if:
+        condition:
+          lambda: 'return id(gd_networks).switching();'
+        then:
+          - script.execute: boot_wifi_lost
+        else:
+          - script.execute: boot_wifi_lost_later
     - script.execute: gd_offline_count
     - lambda: |-
         ESP_LOGW("wifi", "Disconnected. Internal heap free: %u bytes",
@@ -523,6 +532,12 @@ script:
                 const bool app_connected =
                     esp32_ble_server::global_ble_server != nullptr &&
                     esp32_ble_server::global_ble_server->get_connected_client_count() > 0;
+                // Switching to a network from the device page or the app
+                // comes back to the old one by itself if it fails.
+                if (id(gd_networks).switching()) {
+                  id(gd_offline_seconds) = 0;
+                  return;
+                }
                 if (provisioning || app_connected) {
                   if (id(gd_offline_seconds) > 0)
                     ESP_LOGI("wifi", "App connected, holding the offline restart");

@@ -17,7 +17,11 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          to "dim" or "off"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
   POST /gameday/wifi     forget=<ssid>; 404 when it is not saved; "moving" when it was
-                         the connected one and another is left (it moves to that one)
+                         the connected one and another is left (it moves to that one).
+                         ssid= and password= as a form body saves one second in the
+                         list (400 for the one it is on); switch=<ssid> joins one at
+                         once, or fails for a name in WIFI_BAD; scan=1. GET marks the
+                         names in WIFI_NEARBY seen
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
   POST /gameday/settings a backup as a JSON body: checked whole, then applied through
                          apply_set; 400 with "error" when refused
@@ -306,7 +310,10 @@ LOG = []
 # The saved Wi-Fi networks as GET /gameday/wifi lists them, the one tried first
 # first. None: firmware without the list.
 WIFI_INITIAL = [{"ssid": "Home", "connected": True}, {"ssid": "iPhone", "connected": False}]
-WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
+WIFI = {"list": copy.deepcopy(WIFI_INITIAL), "failed": None}
+# The networks the mock panel's scans see, and the ones a switch can't join.
+WIFI_NEARBY = {"Home", "iPhone", "Cabin", "Attic"}
+WIFI_BAD = {"Attic"}
 # Live games' own list (the live mask), kept apart from the state's live list,
 # which shows every league instead while no favorite is picked.
 LIVE_LIST = [[]]
@@ -1371,7 +1378,11 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/gameday/wifi":
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
-            return self._json(200, {"networks": WIFI["list"], "max": 5})
+            doc = {"networks": [dict(n, seen=n["ssid"] in WIFI_NEARBY) for n in WIFI["list"]], "max": 5,
+                   "scanning": False}
+            if WIFI["failed"]:
+                doc["failed"] = WIFI["failed"]
+            return self._json(200, doc)
         if u.path == "/gameday/picture":
             slot = atoi(parse_qs(u.query).get("slot", ["0"])[0])
             if slot not in PIC_FILES:
@@ -1431,6 +1442,7 @@ class Handler(BaseHTTPRequestHandler):
             DEMO.clear()
             DEMO.update(copy.deepcopy(DEMO_INITIAL))
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
+            WIFI["failed"] = None
             for e in ENTITIES:
                 e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
             if "wizmote" in body:
@@ -1448,11 +1460,40 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":
             q = {k: v[0] for k, v in pairs.items()}
-            LOG.append({"path": u.path, "q": q})
+            n = int(self.headers.get("Content-Length") or 0)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace"),
+                                                  keep_blank_values=True).items()}
+            LOG.append({"path": u.path, "q": q, "form": form} if form else {"path": u.path, "q": q})
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
+            nets = WIFI["list"]
+            if "ssid" in form:
+                ssid = form["ssid"]
+                if not ssid or len(ssid.encode()) > 32 or len(form.get("password", "").encode()) > 64:
+                    return self._json(400, {"error": "A network name is 1 to 32 characters, a password up to 64."})
+                if any(x["ssid"] == ssid and x["connected"] for x in nets):
+                    return self._json(400, {"error": "The panel is on that network now."})
+                if any(x["ssid"] == ssid for x in nets):
+                    return self._json(200, {"ok": True, "added": False})
+                nets.insert(1 if nets else 0, {"ssid": ssid, "connected": False})
+                del nets[5:]
+                return self._json(200, {"ok": True, "added": True})
+            if "scan" in q:
+                return self._json(200, {"ok": True})
+            if "switch" in q:
+                to = q["switch"]
+                if not any(x["ssid"] == to and not x["connected"] for x in nets):
+                    return self._json(400, {"error": "The panel can't switch to that network now."})
+                WIFI["failed"] = None
+                if to in WIFI_BAD:
+                    WIFI["failed"] = to
+                else:
+                    for x in nets:
+                        x["connected"] = x["ssid"] == to
+                    nets.sort(key=lambda x: not x["connected"])
+                return self._json(200, {"ok": True})
             if not q.get("forget"):
-                return self._json(400, {"error": "forget is required"})
+                return self._json(400, {"error": "forget, ssid, switch or scan is required"})
             keep = [n for n in WIFI["list"] if n["ssid"] != q["forget"]]
             if len(keep) == len(WIFI["list"]):
                 return self._json(404, {"error": "not a saved network"})

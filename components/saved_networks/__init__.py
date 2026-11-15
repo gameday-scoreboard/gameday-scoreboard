@@ -4,6 +4,7 @@
 ESPHome's one, and tries the last one that worked first."""
 
 import esphome.codegen as cg
+from esphome.components import wifi
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
@@ -31,3 +32,6 @@ async def to_code(config):
     # points, so the other saved networks are not found until a second scan.
     # wifi defines this itself when the YAML lists more than one network.
     cg.add_define("USE_WIFI_MULTI_SSID")
+    # Scan results say which saved networks are in range, so the device page
+    # can offer to switch to one just added.
+    wifi.request_wifi_scan_results_listener()
