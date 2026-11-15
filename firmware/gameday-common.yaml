@@ -99,9 +99,10 @@ esphome:
     # driver exists (the display sets up at 400), and the driver starts at its
     # config default instead. Apply the light's level once the display is up,
     # or the panel lights at the wrong brightness. The light is on at every
-    # start (RESTORE_AND_ON); the ternary is for the sleep check just above. The repaint is belt and braces: nothing has
-    # rendered this early and HUB75Display::setup leaves the driver enabled,
-    # so on this path there should be nothing dropped to redraw.
+    # start (RESTORE_AND_ON); the ternary is for the sleep check just above.
+    # The repaint is belt and braces: nothing has rendered this early and
+    # HUB75Display::setup leaves the driver enabled, so on this path there
+    # should be nothing dropped to redraw.
     - priority: 300.0
       then:
         # After the game turned the panel off and it restarted (the nightly
