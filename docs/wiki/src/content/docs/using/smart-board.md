@@ -18,7 +18,7 @@ Until any row has text, the page says **Smart board** and how to fill it, so the
 
 ## The rows
 
-In Home Assistant the panel has four text entities, **Smart board row 1** to **Smart board row 4**. Set one with the **Text: Set value** action, and the panel shows it right away. The device page has the same four rows under **Showing** while the Smart board is up, for typing a row by hand.
+In Home Assistant the panel has four text entities, **Smart board row 1** to **Smart board row 4**. Set one with the **Text: Set value** action, and the panel shows it right away. While the Smart board is up, the [device page](/using/device-page/)'s Home tab shows the four rows under **Showing**, in their colors. **Edit** or **Add** on a row takes the words and a color picked from the swatches, so there are no tags to type. Home Assistant writes over a row it fills the next time it updates it.
 
 The rows you fill share the panel's height, top to bottom, so fewer rows get bigger text: one row is big, four rows are the panel's usual size. An empty row takes no room. A row too wide for the panel first tries the next size down, and if it still doesn't fit, it scrolls.
 

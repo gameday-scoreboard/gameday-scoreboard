@@ -6298,21 +6298,33 @@ void GamedayComponent::hook_tick_() {
   this->hook_queue_.erase(this->hook_queue_.begin());
   this->hook_task_done_ = false;
   this->hook_running_ = true;
-  // Plain HTTP and no response body: the Wi-Fi check's stack, freed when
-  // the post is done.
-  if (xTaskCreate(&GamedayComponent::hook_task_, "gameday_hook", 6144, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Webhook: could not start the post (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  if (this->hook_task_.is_created()) {
+    xTaskNotifyGive(this->hook_task_.get_handle());
+    return;
+  }
+  // Plain HTTP and no response body: the Wi-Fi check's stack size, kept in
+  // PSRAM like the logo task's. The new task makes this first post at once.
+  if (!this->hook_task_.create(&GamedayComponent::hook_task_fn_, "gameday_hook", 6144, this, 1, true)) {
+    ESP_LOGW(TAG, "Webhook: could not start the post task (largest free PSRAM block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+    std::string().swap(this->hook_task_body_);
     this->hook_running_ = false;
     this->hook_dropped_++;
   }
 }
 
-// The post itself, on its own task: one try, three seconds at most to
-// connect and three for the answer, whose body is never read.
-void GamedayComponent::hook_task_(void *arg) {
+void GamedayComponent::hook_task_fn_(void *arg) {
   auto *self = static_cast<GamedayComponent *>(arg);
-  std::string url = self->hook_task_url_;
+  while (true) {
+    self->hook_post_();
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  }
+}
+
+// The post itself, on the hook task: one try, three seconds at most to
+// connect and three for the answer, whose body is never read.
+void GamedayComponent::hook_post_() {
+  std::string url = this->hook_task_url_;
   std::string host;
 #ifdef USE_MDNS
   // homeassistant.local and the like: lwIP would hand the name to the
@@ -6344,15 +6356,14 @@ void GamedayComponent::hook_task_(void *arg) {
     esp_http_client_set_header(client, "Content-Type", "application/json");
     if (!host.empty())
       esp_http_client_set_header(client, "Host", host.c_str());
-    esp_http_client_set_post_field(client, self->hook_task_body_.data(), (int) self->hook_task_body_.size());
+    esp_http_client_set_post_field(client, this->hook_task_body_.data(), (int) this->hook_task_body_.size());
     if (esp_http_client_perform(client) == ESP_OK)
       status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
   }
-  self->hook_task_status_ = status;
-  self->hook_task_stack_ = (uint32_t) uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
-  self->hook_task_done_ = true;
-  vTaskDelete(nullptr);
+  this->hook_task_status_ = status;
+  this->hook_task_stack_ = (uint32_t) uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
+  this->hook_task_done_ = true;
 }
 
 // Any of the three; a null pointer or a negative every leaves that one as it is.

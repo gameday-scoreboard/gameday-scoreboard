@@ -99,6 +99,10 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
 :::note[Coming in the next app update]
+On iPhone, **Advanced** goes away: **Remote**, **Buttons 1 to 4** and **Matrix** become sections of **Device** itself, and **Free PSRAM** stays under **Diagnostics**. In both apps, **Remote** and **Matrix** come after Wi-Fi networks and before **Diagnostics**, as on the device page.
+:::
+
+:::note[Coming in the next app update]
 On Android, **Forget** on the network the panel is on says what happens before you confirm: the panel moves to your next saved network now, or stays on it if it's the only one. The move needs firmware that does it. A panel that hasn't updated yet stays connected until it restarts. See [Wi-Fi](/using/wifi/).
 :::
 

@@ -103,6 +103,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="sbview" id="sbView" hidden><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbhint">Send rows from Home Assistant</div></div>
       <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
@@ -121,7 +122,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <p class="hint">The effect stays on until you pick another page.</p>
         </div>
         <div id="sbCtls" hidden>
-          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows; start a row with a color like [red] or [#FF6400].</p>
+          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows, and writes over a row you change here the next time it updates it.</p>
+          <div class="sbrows" id="sbRows"></div>
         </div>
       </div>
     </div>
@@ -429,32 +431,6 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
         </div>
       </details>
-      <details class="card fold" id="diagCard">
-        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="cbody">
-          <div id="health" hidden>
-            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
-            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
-            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
-            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
-            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
-            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
-            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
-            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
-          </div>
-          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
-          <div id="wifiDiag" hidden>
-            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
-            <div class="spark" id="wifiSparkBox" hidden>
-              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
-              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
-            </div>
-            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
-          </div>
-          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
-          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
-        </div>
-      </details>
       <details class="card fold" id="remoteCard">
         <summary><h2>Remote</h2><span class="fsum" id="remoteSum">WizMote</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
         <div class="cbody">
@@ -481,6 +457,32 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <small>or two 64x64 side by side</small>
             </button>
           </div>
+        </div>
+      </details>
+      <details class="card fold" id="diagCard">
+        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <div id="health" hidden>
+            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
+            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
+            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
+            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+          </div>
+          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+          <div id="wifiDiag" hidden>
+            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+            <div class="spark" id="wifiSparkBox" hidden>
+              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+            </div>
+            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+          </div>
+          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
+          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
         </div>
       </details>
       <div class="card dangercard">
@@ -865,8 +867,59 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     return g.sit || "";
   };
 
+  // The Smart board (firmware/pages/smart_board.yaml): while the panel shows
+  // it, so does the board here, from the four row entities. Tags parse as in
+  // sb_parse (components/gameday/smart_board.h): [name] or [#RRGGBB] sets
+  // the color of what follows, anything else in brackets is text.
+  const SB_COLORS = { red: "ff2020", orange: "ff8000", yellow: "ffd000", green: "20e040", cyan: "00e0e0",
+    blue: "3070ff", purple: "a040ff", pink: "ff60c0", white: "ffffff", gray: "808080", grey: "808080" };
+  const sbParse = (raw) => {
+    const s = String(raw || "").slice(0, 255);
+    const segs = [{ c: "ffffff", t: "" }];
+    for (let i = 0; i < s.length;) {
+      const m = s[i] === "[" ? /^\[(#[0-9a-fA-F]{6}|[A-Za-z]{1,7})\]/.exec(s.slice(i)) : null;
+      const c = m && (m[1][0] === "#" ? m[1].slice(1).toLowerCase() : SB_COLORS[m[1].toLowerCase()]);
+      if (!c) {
+        // Spaces before the first word don't count, so "[red] Door" lines up.
+        if (!(s[i] === " " && segs.length === 1 && !segs[0].t)) segs[segs.length - 1].t += s[i];
+        i++;
+        continue;
+      }
+      if (!segs[segs.length - 1].t) segs[segs.length - 1].c = c;  // a tag at the start, or two in a row
+      else segs.push({ c, t: "" });
+      i += m[0].length;
+    }
+    while (segs.length > 1 && !segs[segs.length - 1].t) segs.pop();
+    segs[segs.length - 1].t = segs[segs.length - 1].t.replace(/ +$/, "");
+    return segs.some((g) => g.t) ? segs : null;
+  };
+  const entValue = (name) => {
+    const e = ents[byName[name]];
+    return e ? (e.value ?? e.state ?? "") : "";
+  };
+  const renderSmart = () => {
+    const on = entValue("Select Page") === "Smart board";
+    $("#board").classList.toggle("smart", on);
+    $("#sbView").hidden = !on;
+    if (!on) return;
+    let any = false;
+    $("#sbView").querySelectorAll(".sbrow").forEach((row, i) => {
+      const segs = sbParse(entValue("Smart board row " + (i + 1)));
+      row.hidden = !segs;
+      row.textContent = "";
+      (segs || []).forEach((g) => {
+        const span = el("span", null, g.t);
+        span.style.color = "#" + g.c;
+        row.appendChild(span);
+      });
+      any = any || !!segs;
+    });
+    $("#sbView .sbhint").hidden = any;
+  };
+
   const renderBoard = () => {
     const b = $("#board");
+    renderSmart();
     const g = game;
     const st = $("#gstate");
     const msg = $("#msg");
@@ -2245,10 +2298,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       $("#sbCtls").hidden = v !== "Smart board";
     } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
-    { name: "Smart board row 1", into: "#sbCtls", label: "Row 1" },
-    { name: "Smart board row 2", into: "#sbCtls", label: "Row 2" },
-    { name: "Smart board row 3", into: "#sbCtls", label: "Row 3" },
-    { name: "Smart board row 4", into: "#sbCtls", label: "Row 4" },
+    { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },
+    { name: "Smart board row 2", into: "#sbRows", label: "Row 2", sbRow: true },
+    { name: "Smart board row 3", into: "#sbRows", label: "Row 3", sbRow: true },
+    { name: "Smart board row 4", into: "#sbRows", label: "Row 4", sbRow: true },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
@@ -2337,9 +2390,115 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     };
   };
 
+  // A Smart board row on the Home tab: what the panel shows, in its colors,
+  // with an editor that takes plain words and a color, so nobody types tags.
+  // A row with several colors shows them all; saving it from here keeps one.
+  const SB_SWATCHES = ["ffffff", "ff2020", "ff8000", "ffd000", "20e040", "00e0e0", "3070ff", "a040ff", "ff60c0", "808080"];
+  const buildSbRow = (def, e, host) => {
+    const row = el("div", "sbedit");
+    const head = el("div", "sbhead");
+    head.appendChild(el("span", "sbnum", def.label));
+    const line = el("div", "sbline");
+    head.appendChild(line);
+    const edit = el("button", "btn", "Edit");
+    head.appendChild(edit);
+    row.appendChild(head);
+
+    const form = el("div", "sbform");
+    form.hidden = true;
+    const text = el("input");
+    text.type = "text";
+    text.maxLength = 240;
+    text.placeholder = "What the row says";
+    text.setAttribute("aria-label", def.label + " text");
+    const sw = el("div", "sbswatches");
+    sw.setAttribute("role", "radiogroup");
+    sw.setAttribute("aria-label", def.label + " color");
+    const custom = el("input", "sbcustom");
+    custom.type = "color";
+    custom.setAttribute("aria-label", "Another color");
+    let color = "ffffff";
+    const pick = (c) => {
+      color = c;
+      sw.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.c === c)));
+      custom.value = "#" + c;
+      text.style.color = "#" + c;
+    };
+    SB_SWATCHES.forEach((c) => {
+      const b = el("button", "sbsw");
+      b.type = "button";
+      b.dataset.c = c;
+      b.style.background = "#" + c;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", Object.keys(SB_COLORS).find((k) => SB_COLORS[k] === c) || "#" + c);
+      b.onclick = () => pick(c);
+      sw.appendChild(b);
+    });
+    custom.oninput = () => pick(custom.value.slice(1).toLowerCase());
+    sw.appendChild(custom);
+    const many = el("p", "hint", "This row has more than one color. Saving it here gives it one.");
+    const acts = el("div", "sbacts");
+    const save = el("button", "btn", "Save");
+    const clear = el("button", "btn", "Clear row");
+    const cancel = el("button", "btn", "Cancel");
+    acts.append(save, clear, cancel);
+    form.append(el("span", "sbnum", def.label), text, sw, many, acts);
+    row.appendChild(form);
+    host.appendChild(row);
+
+    let raw = "";
+    const show = () => {
+      const segs = sbParse(raw);
+      line.textContent = "";
+      line.classList.toggle("empty", !segs);
+      if (!segs) line.textContent = "Empty";
+      (segs || []).forEach((g) => {
+        const s = el("span", null, g.t);
+        s.style.color = "#" + g.c;
+        line.appendChild(s);
+      });
+      edit.textContent = segs ? "Edit" : "Add";
+      edit.setAttribute("aria-label", (segs ? "Edit " : "Add ") + def.label.toLowerCase());
+    };
+    const close = () => {
+      form.hidden = true;
+      head.hidden = false;
+      show();
+    };
+    edit.onclick = () => {
+      const segs = sbParse(raw);
+      text.value = (segs || []).map((g) => g.t).join("");
+      pick(segs ? segs[0].c : "ffffff");
+      many.hidden = !segs || segs.length < 2;
+      head.hidden = true;
+      form.hidden = false;
+      text.focus();
+    };
+    // A save the panel never got leaves the editor open with what was typed.
+    const send = async (value) => {
+      if (!(await post(e.id, "set", { value }))) return;
+      raw = value;
+      close();
+    };
+    save.onclick = () => {
+      const t = text.value.trim();
+      send(t ? "[#" + color.toUpperCase() + "]" + t : "");
+    };
+    text.onkeydown = (ev) => {
+      if (ev.key === "Enter") save.onclick();
+      if (ev.key === "Escape") close();
+    };
+    clear.onclick = () => send("");
+    cancel.onclick = close;
+    show();
+    // The panel's value waits while the row is being edited.
+    return { update(ev) { raw = String(ev.value ?? ev.state ?? ""); if (form.hidden) show(); } };
+  };
+
   const buildControl = (def, e) => {
     const domain = domainOf(e);
     const host = $(def.into);
+    if (def.sbRow) return buildSbRow(def, e, host);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
       if (def.icon) {
@@ -3311,6 +3470,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       built[e.id].update(ents[e.id]);
       if (def.onValue) def.onValue(ents[e.id].value);
     }
+    if (name === "Select Page" || /^Smart board row [1-4]$/.test(name || "")) renderSmart();
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.
