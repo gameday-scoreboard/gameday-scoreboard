@@ -26,6 +26,21 @@ constexpr uint32_t kSbWhite = 0xFFFFFF;
 constexpr uint32_t kSbStaleRgb = 0x505050;
 constexpr uint32_t kSbStaleMs = 2 * 60 * 1000;
 
+// The Smart board page's state that lasts only until a restart
+// (pages/smart_board.yaml). Plain statics, not ESPHome globals: a global
+// costs internal RAM for its bookkeeping, and internal RAM is tight.
+struct SbFlags {
+  // The next page change is the panel's own (After the game, or putting the
+  // pinned page back at boot), not somebody picking under Showing
+  bool own_change = false;
+  // Home Assistant gone for kSbStaleMs: the rows are drawn gray
+  bool stale = false;
+};
+inline SbFlags &sb_flags() {
+  static SbFlags flags;
+  return flags;
+}
+
 struct SbColorName {
   const char *name;
   uint32_t rgb;
