@@ -24,6 +24,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/preferences.h"
+#include "esphome/core/static_task.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -1341,12 +1342,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void send_game_event_(const ::espn::HaEvent &e);
   void send_test_event_();  // the "event_test" action
   uint32_t ha_tick_ms_{0};
-  // The webhook's posts, one at a time on a short-lived task of their own,
-  // so a slow or missing listener never holds up the board or ESPN's reads.
-  // One try each, a few seconds at most; a full queue drops the oldest.
+  // The webhook's posts, one at a time on a task of their own, so a slow or
+  // missing listener never holds up the board or ESPN's reads. One try each,
+  // a few seconds at most; a full queue drops the oldest. The task starts
+  // with the first post and then waits for the next: a task started and
+  // ended per post kept about 42 bytes of internal RAM each time.
   static constexpr size_t kHookQueueMax = 6;
   std::vector<std::string> hook_queue_;  // main loop only
-  std::string hook_task_url_, hook_task_body_;  // set before the task starts, read only by it
+  StaticTask hook_task_;  // stack in PSRAM
+  std::string hook_task_url_, hook_task_body_;  // set before the task is woken, read only by it
   std::atomic<bool> hook_running_{false};
   std::atomic<bool> hook_task_done_{false};
   std::atomic<int> hook_task_status_{0};
@@ -1355,7 +1359,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t hook_sent_{0}, hook_dropped_{0};
   void queue_hook_(std::string body);
   void hook_tick_();  // main loop: starts the next post, collects the last
-  static void hook_task_(void *arg);
+  static void hook_task_fn_(void *arg);
+  void hook_post_();  // on the hook task: one post
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
