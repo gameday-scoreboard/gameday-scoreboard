@@ -83,6 +83,7 @@ esphome:
               }
               if (sb != id(gd_sb_pinned)) {
                 id(gd_sb_pinned) = sb;
+                id(gd_sb_pin_sync).execute();
                 ESP_LOGI("smart_board", sb ? "Showing the Smart board until somebody picks something else"
                                            : "Smart board no longer picked under Showing");
               }
@@ -94,6 +95,14 @@ esphome:
             }
 
 script:
+  # Into flash at once, like every other setting. The global saves itself on
+  # a 1 s poll and ESPHome writes flash only every 60 s, so a power cut in that
+  # minute brought the panel back on the Scoreboard. Wait out the poll first.
+  - id: gd_sb_pin_sync
+    mode: restart
+    then:
+      - delay: 1100ms
+      - lambda: 'id(gameday_ctl).sync_soon();'
   - id: gd_sb_draw
     mode: queued
     max_runs: 2
