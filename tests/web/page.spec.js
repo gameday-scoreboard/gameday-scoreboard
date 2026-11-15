@@ -637,7 +637,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   // Showing and the effect controls are on the Home tab, under the panel's power and brightness.
   const showing = page.getByRole("combobox", { name: "Showing" });
   await expect(showing).toHaveValue("Scoreboard");
-  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects"]);
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board"]);
   await expect(page.locator("#fxCtls")).toBeHidden();
   // The Panel card's own controls are untouched by the hidden effect rows.
   await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
@@ -2649,6 +2649,36 @@ test("the board's round power button switches Power, and its strip shows brightn
   await expect.poll(paths).toContain("/switch/Power/turn_on");
   await page.getByRole("button", { name: "Refresh scores" }).click();
   await expect.poll(paths).toContain("/button/Refresh%20Now/press");
+});
+
+test("the board shows the Smart board's rows, in their colors, while the panel shows it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const post = (path) => request.post(path);
+  await post("/text/Smart%20board%20row%201/set?value=" + encodeURIComponent("[red] Front Door [#00FF64]Locked"));
+  await post("/text/Smart%20board%20row%203/set?value=" + encodeURIComponent("CO2 547ppm [blink]"));
+  await post("/select/Select%20Page/set?option=Smart%20board");
+  const rows = page.locator("#sbView .sbrow");
+  await expect(page.locator("#sbView")).toBeVisible();
+  await expect(page.locator("#tA")).toBeHidden();
+  await expect(rows.nth(0)).toHaveText("Front Door Locked");
+  await expect(rows.nth(0).locator("span").first()).toHaveCSS("color", "rgb(255, 32, 32)");
+  await expect(rows.nth(0).locator("span").nth(1)).toHaveCSS("color", "rgb(0, 255, 100)");
+  await expect(rows.nth(1)).toBeHidden();
+  // A bracket that isn't a color stays text
+  await expect(rows.nth(2)).toHaveText("CO2 547ppm [blink]");
+  await expect(page.locator("#sbView .sbhint")).toBeHidden();
+  await post("/select/Select%20Page/set?option=Scoreboard");
+  await expect(page.locator("#sbView")).toBeHidden();
+  await expect(page.locator("#tA")).toBeVisible();
+});
+
+test("an empty Smart board says where its rows come from", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await request.post("/select/Select%20Page/set?option=Smart%20board");
+  await expect(page.locator("#sbView .sbhint")).toHaveText("Send rows from Home Assistant");
+  await expect(page.locator("#sbView .sbrow").first()).toBeHidden();
 });
 
 test("the header is the panel's name, and a slim bar keeps it once it scrolls away", async ({ page, request }) => {

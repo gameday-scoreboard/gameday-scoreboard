@@ -211,7 +211,10 @@ ENTITIES = [
     {"id": "number/Scroll Speed", "domain": "number", "name": "Scroll Speed", "state": "5", "value": "5",
      "min_value": "1", "max_value": "10", "step": "1"},
     {"id": "select/Select Page", "domain": "select", "name": "Select Page", "state": "Scoreboard",
-     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects"]},
+     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board"]},
+    # The Smart board's rows (firmware/pages/smart_board.yaml), which Home Assistant fills
+    *({"id": f"text/Smart board row {n}", "domain": "text", "name": f"Smart board row {n}", "state": "",
+       "value": "", "max_length": 255} for n in range(1, 5)),
     # Effects mode (firmware/pages/effects.yaml): wled_fx's entities, shown
     # while Select Page is on Effects.
     {"id": "select/Effect", "domain": "select", "name": "Effect", "state": "Matrix", "value": "Matrix",
@@ -242,6 +245,7 @@ FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
 ENTITIES_INITIAL = copy.deepcopy(ENTITIES)
 # The control actions ESPHome's web server takes for each domain the page posts to.
 ENTITY_ACTIONS = {"switch": ("turn_on", "turn_off", "toggle"), "number": ("set",), "select": ("set",),
+                  "text": ("set",),
                   "button": ("press",), "update": ("install",)}
 
 
@@ -278,6 +282,8 @@ def entity_post(path, q):
         if q.get("option") not in e["option"]:
             return False
         e["state"] = e["value"] = q["option"]
+    elif domain == "text":
+        e["state"] = e["value"] = q.get("value", "")[:e["max_length"]]
     else:
         return True
     PUSHED.append(copy.deepcopy(e))
@@ -1237,6 +1243,7 @@ def selftest():
     yaml = (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8")
     yaml += (REPO / "firmware/pages/effects.yaml").read_text(encoding="utf-8")
     yaml += (REPO / "firmware/pages/wizmote.yaml").read_text(encoding="utf-8")
+    yaml += (REPO / "firmware/pages/smart_board.yaml").read_text(encoding="utf-8")
     for e in ENTITIES:
         if e["domain"] in ENTITY_ACTIONS and f'name: "{e["name"]}"' not in yaml:
             bad += 1
@@ -1372,10 +1379,12 @@ class Handler(BaseHTTPRequestHandler):
             # that long here too.
             ping = {"title": "Game Day Scoreboard", "comment": STATE["version"]}
             self.wfile.write(("retry: 30000\nevent: ping\ndata: " + json.dumps(ping) + "\n\n").encode())
+            # Marked before the dump: a post that lands while it is written is
+            # sent again after it, not lost between the two.
+            sent = len(PUSHED)
             for e in ENTITIES:
                 self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
             self.wfile.flush()
-            sent = len(PUSHED)
             for tick in itertools.count():
                 time.sleep(0.5)
                 if "down" in FAIL or "events" in FAIL:

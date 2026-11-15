@@ -156,6 +156,16 @@ button { font: inherit; color: inherit; }
 .board.dim .row, .board.dim .state, .board.dim .stale, .board.dim .gname, .board.dim .msg,
 .board.dim .ticker, .board.dim .play { opacity: .35; filter: grayscale(1); }
 .board .msg { text-align: center; color: var(--muted); padding: 22px 0 8px; }
+/* The panel is showing the Smart board: its rows in place of the game */
+.board.smart .row, .board.smart .state, .board.smart .stale, .board.smart .gname, .board.smart .msg,
+.board.smart .ticker, .board.smart .play, .board.smart .splash { display: none; }
+.board.smart { padding-top: 18px; }
+.sbview { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 150px; }
+.sbrow, .sbhint {
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 22px; font-weight: 700;
+}
+.sbhint { color: var(--muted); font-size: 15px; font-weight: 600; }
 /* Power, brightness and refresh, on a strip that is part of the board */
 .boardctl {
   display: flex; align-items: center; gap: 12px; padding: 10px 14px; color: #cfd6e0;

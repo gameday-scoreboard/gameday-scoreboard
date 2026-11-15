@@ -103,6 +103,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="sbview" id="sbView" hidden><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbhint">Send rows from Home Assistant</div></div>
       <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
@@ -865,8 +866,59 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     return g.sit || "";
   };
 
+  // The Smart board (firmware/pages/smart_board.yaml): while the panel shows
+  // it, so does the board here, from the four row entities. Tags parse as in
+  // sb_parse (components/gameday/smart_board.h): [name] or [#RRGGBB] sets
+  // the color of what follows, anything else in brackets is text.
+  const SB_COLORS = { red: "ff2020", orange: "ff8000", yellow: "ffd000", green: "20e040", cyan: "00e0e0",
+    blue: "3070ff", purple: "a040ff", pink: "ff60c0", white: "ffffff", gray: "808080", grey: "808080" };
+  const sbParse = (raw) => {
+    const s = String(raw || "").slice(0, 255);
+    const segs = [{ c: "ffffff", t: "" }];
+    for (let i = 0; i < s.length;) {
+      const m = s[i] === "[" ? /^\[(#[0-9a-fA-F]{6}|[A-Za-z]{1,7})\]/.exec(s.slice(i)) : null;
+      const c = m && (m[1][0] === "#" ? m[1].slice(1).toLowerCase() : SB_COLORS[m[1].toLowerCase()]);
+      if (!c) {
+        // Spaces before the first word don't count, so "[red] Door" lines up.
+        if (!(s[i] === " " && segs.length === 1 && !segs[0].t)) segs[segs.length - 1].t += s[i];
+        i++;
+        continue;
+      }
+      if (!segs[segs.length - 1].t) segs[segs.length - 1].c = c;  // a tag at the start, or two in a row
+      else segs.push({ c, t: "" });
+      i += m[0].length;
+    }
+    while (segs.length > 1 && !segs[segs.length - 1].t) segs.pop();
+    segs[segs.length - 1].t = segs[segs.length - 1].t.replace(/ +$/, "");
+    return segs.some((g) => g.t) ? segs : null;
+  };
+  const entValue = (name) => {
+    const e = ents[byName[name]];
+    return e ? (e.value ?? e.state ?? "") : "";
+  };
+  const renderSmart = () => {
+    const on = entValue("Select Page") === "Smart board";
+    $("#board").classList.toggle("smart", on);
+    $("#sbView").hidden = !on;
+    if (!on) return;
+    let any = false;
+    $("#sbView").querySelectorAll(".sbrow").forEach((row, i) => {
+      const segs = sbParse(entValue("Smart board row " + (i + 1)));
+      row.hidden = !segs;
+      row.textContent = "";
+      (segs || []).forEach((g) => {
+        const span = el("span", null, g.t);
+        span.style.color = "#" + g.c;
+        row.appendChild(span);
+      });
+      any = any || !!segs;
+    });
+    $("#sbView .sbhint").hidden = any;
+  };
+
   const renderBoard = () => {
     const b = $("#board");
+    renderSmart();
     const g = game;
     const st = $("#gstate");
     const msg = $("#msg");
@@ -3244,6 +3296,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       built[e.id].update(ents[e.id]);
       if (def.onValue) def.onValue(ents[e.id].value);
     }
+    if (name === "Select Page" || /^Smart board row [1-4]$/.test(name || "")) renderSmart();
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.
