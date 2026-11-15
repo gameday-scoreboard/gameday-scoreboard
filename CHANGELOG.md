@@ -47,6 +47,7 @@ The new Smart board shows up to four rows of your own text from Home Assistant, 
 
 - ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league
 - 📶 **Forget** on the Wi-Fi network the panel is on moves it to your next saved network right away, instead of staying on the forgotten one until the next restart
+- 🪝 A webhook address no longer takes a little of the panel's memory with every event it posts, which over a week of game days without a restart could run the panel low
 
 ## v2026.11.3
 

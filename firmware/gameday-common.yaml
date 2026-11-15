@@ -84,6 +84,13 @@ esp32:
       # the settings partition, which cost about 2.6 KB of internal RAM with
       # four kept; in PSRAM the settings' own index moves out too.
       CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM: y
+      # Wi-Fi code in flash instead of internal RAM. These two keep the
+      # driver's hot paths in IRAM for peak throughput, which a panel reading
+      # a few KB at a time never needs; on the ESP32-S3 IRAM is the same
+      # internal RAM as data, so this gives it back. The 3 MB firmware update
+      # is the biggest download.
+      CONFIG_ESP_WIFI_IRAM_OPT: n
+      CONFIG_ESP_WIFI_RX_IRAM_OPT: n
 
 esphome:
   name: "${name}"
