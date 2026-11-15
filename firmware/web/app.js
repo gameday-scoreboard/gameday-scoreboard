@@ -422,32 +422,6 @@
           <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
         </div>
       </details>
-      <details class="card fold" id="diagCard">
-        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="cbody">
-          <div id="health" hidden>
-            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
-            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
-            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
-            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
-            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
-            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
-            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
-            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
-          </div>
-          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
-          <div id="wifiDiag" hidden>
-            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
-            <div class="spark" id="wifiSparkBox" hidden>
-              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
-              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
-            </div>
-            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
-          </div>
-          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
-          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
-        </div>
-      </details>
       <details class="card fold" id="remoteCard">
         <summary><h2>Remote</h2><span class="fsum" id="remoteSum">WizMote</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
         <div class="cbody">
@@ -474,6 +448,32 @@
               <small>or two 64x64 side by side</small>
             </button>
           </div>
+        </div>
+      </details>
+      <details class="card fold" id="diagCard">
+        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <div id="health" hidden>
+            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
+            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
+            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
+            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+          </div>
+          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+          <div id="wifiDiag" hidden>
+            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+            <div class="spark" id="wifiSparkBox" hidden>
+              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+            </div>
+            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+          </div>
+          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
+          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
         </div>
       </details>
       <div class="card dangercard">
