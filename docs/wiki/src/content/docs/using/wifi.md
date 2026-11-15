@@ -1,6 +1,6 @@
 ---
 title: "Wi-Fi"
-description: "The networks the panel joins, the up to five it remembers, its setup hotspot, what it does when Wi-Fi drops, and its .local address."
+description: "The networks the panel joins, an IoT network, IoT VLAN or IoT subnet, the up to five it remembers, its setup hotspot, what it does when Wi-Fi drops, and its .local address."
 sidebar:
   order: 15
 ---
@@ -11,7 +11,33 @@ The panel needs Wi-Fi to read scores from ESPN. Once it's on your network, it ne
 
 The panel only joins 2.4 GHz networks. If your router has separate names for 2.4 GHz and 5 GHz, pick the 2.4 GHz one.
 
-Use your main network, not a guest network. A guest network can let the panel join but keep your phone from reaching it afterwards, so the app and the device page can't find it.
+Use your main network, not a guest network. A guest network can let the panel join but keep your phone from reaching it afterwards, so the app and the device page can't find it. A network of its own for smart home devices is different, see below.
+
+## IoT network, IoT VLAN or IoT subnet
+
+Many people keep smart home devices on a network of their own: an IoT network, IoT VLAN or IoT subnet, often with its own Wi-Fi name like "Home-IoT". The panel works there with your phone on your main network, as long as your router lets the two reach each other:
+
+| From | To | Allow | For |
+| --- | --- | --- | --- |
+| Your main network | The panel | TCP port 80 | The app, the device page and live scores in the app |
+| Your main network | The panel | TCP port 6053 | [Home Assistant](/using/home-assistant/) |
+| The panel | The internet | TCP port 443 (HTTPS) | Scores, weather and firmware updates |
+| The panel | The internet | UDP port 123 (NTP) | The clock |
+| The panel | Your router | Port 53 (DNS) | Looking up those addresses |
+
+Your phone and Home Assistant start every connection, so the panel never has to reach your main network on its own. The one exception is [Game events](/using/game-events/) sent to a web address on your main network: allow the panel to reach that address and port too.
+
+Also turn on **mDNS** between the two networks, if your router has it. Routers call it Multicast DNS, mDNS reflector, mDNS repeater or Bonjour gateway. With it on, the app lists the panel under **Found on your network**, Home Assistant discovers it, and `gameday-xxxxxx.local` works from your main network.
+
+Without mDNS between the networks:
+
+- Set the panel up from the Game Day app over Bluetooth.
+- Give the panel a fixed IP address in your router, so that address doesn't change.
+- Add it anywhere else by that IP address: **+** on the app's panel list, the device page in a browser, or the ESPHome integration in Home Assistant.
+
+To move a panel that's already set up onto your IoT network, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) and give it the IoT network from the app. Your settings stay, and the panel keeps your main network saved too.
+
+If the app says your phone is on a different network from the panel and the panel is on your IoT network on purpose, the router is blocking the way between them. Check the table above.
 
 ## Saved networks
 

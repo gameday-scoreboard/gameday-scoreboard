@@ -11,6 +11,8 @@ Nothing about the panel needs Home Assistant. It reads ESPN, runs its own device
 
 With Home Assistant on the same network, it discovers the panel as a new ESPHome device and offers to add it. The prebuilt firmware has no API encryption key, so there is no key to enter.
 
+With the panel on an IoT network or IoT VLAN and Home Assistant on your main network, Home Assistant needs TCP port 6053 to the panel. With mDNS on between the networks it discovers the panel the same way and follows it to a new IP address by itself. Without mDNS, add it by IP address under **Settings > Devices & services > Add integration > ESPHome**, and give the panel a fixed IP address in your router. See [IoT network, IoT VLAN or IoT subnet](/using/wifi/#iot-network-iot-vlan-or-iot-subnet).
+
 Picking a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
 
 ## What appears

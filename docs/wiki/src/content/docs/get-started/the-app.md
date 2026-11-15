@@ -172,7 +172,7 @@ With no panel saved yet, the panel list has **Try a demo panel**. It opens a dem
 
 Add it by address. On the panel list, tap **+** and enter the panel's name, like `gameday-2f6a70.local`, or its IP address, like `192.168.1.50`. Both show on the panel when it starts. To see them again, hold the button on the controller for about 1.5 seconds.
 
-The phone has to be on the same Wi-Fi network as the panel. A guest network can keep the two apart. More in [Troubleshooting](/help/troubleshooting/).
+The phone has to be on the same Wi-Fi network as the panel, or on a network your router lets reach it, like a main network reaching an [IoT network or VLAN](/using/wifi/#iot-network-iot-vlan-or-iot-subnet). A guest network can keep the two apart. More in [Troubleshooting](/help/troubleshooting/).
 
 ## The QR code on the panel
 
