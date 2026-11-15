@@ -2633,7 +2633,7 @@ test("the Look switch picks Phone, Light or Dark, and this browser keeps it", as
   await expect(look.getByRole("radio", { checked: true })).toHaveText("Light");
 });
 
-test("the board's round power button switches Power, and its strip shows brightness as a percent", async ({ page, request }) => {
+test("the board's round power button turns the panel's light on and off, and its strip shows brightness as a percent", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   const power = page.locator("#quickCtls .sw.round");
@@ -2643,12 +2643,23 @@ test("the board's round power button switches Power, and its strip shows brightn
   const paths = async () => (await entityPosts(request)).map((p) => p.path);
   await power.click();
   await expect(power).toHaveAttribute("aria-checked", "false");
-  await expect.poll(paths).toContain("/switch/Power/turn_off");
+  await expect.poll(paths).toContain("/light/Game%20Day%20Scoreboard%202f6a70/turn_off");
   await power.click();
   await expect(power).toHaveAttribute("aria-checked", "true");
-  await expect.poll(paths).toContain("/switch/Power/turn_on");
+  await expect.poll(paths).toContain("/light/Game%20Day%20Scoreboard%202f6a70/turn_on");
   await page.getByRole("button", { name: "Refresh scores" }).click();
   await expect.poll(paths).toContain("/button/Refresh%20Now/press");
+});
+
+test("the Brightness slider sets the panel's light's brightness, 1 to 255", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "Brightness" });
+  await expect(slider).toHaveValue("128");
+  await slider.fill("200");
+  await slider.dispatchEvent("change");
+  await expect.poll(async () => (await entityPosts(request)).some((p) => p.path === "/light/Game%20Day%20Scoreboard%202f6a70/turn_on" && JSON.stringify(p.q).includes("200"))).toBe(true);
+  await expect(page.locator(".boardctl .val")).toHaveText("78%");
 });
 
 test("the board shows the Smart board's rows, in their colors, while the panel shows it", async ({ page, request }) => {
@@ -3132,12 +3143,12 @@ test("Live pictures and update switches hold their tap through a slow read", asy
     expect(await beta.getAttribute("aria-checked")).toBe("true");
 });
 
-test("a Power tap the panel never gets goes back", async ({ page, request }) => {
+test("a Panel on tap the panel never gets goes back", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   const power = page.locator("#quickCtls .sw");
   await expect(power).toHaveAttribute("aria-checked", "true");
-  await page.route("**/switch/**", (route) => route.abort());
+  await page.route("**/light/**", (route) => route.abort());
   await power.click();
   await expect(page.locator("#toast")).toContainText("Device did not respond");
   await expect(power).toHaveAttribute("aria-checked", "true");

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "esphome/components/http_request/http_request.h"
+#include "esphome/components/light/light_state.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/panel_layout/panel_layout.h"
 #include "esphome/components/select/select.h"
@@ -259,8 +260,26 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
   void set_web_server_base(web_server_base::WebServerBase *base) { this->base_ = base; }
   void set_panel_layout(panel_layout::PanelLayout *p) { this->panels_ = p; }
-  // Brightness and Scroll Speed, kept in the settings backup (settings_doc.h).
-  void set_brightness_number(number::Number *n) { this->brightness_number_ = n; }
+  // The Display light, the panel's on/off and brightness in one entity
+  // (gameday-common.yaml). Its brightness and Scroll Speed are kept in the
+  // settings backup (settings_doc.h).
+  void set_display_light(light::LightState *l) { this->display_ = l; }
+  // Where the light is headed, not where a fade has it right now.
+  bool display_on() const { return this->display_ != nullptr && this->display_->remote_values.is_on(); }
+  // Its brightness on the panel's 1 to 255 scale, on or off.
+  uint8_t display_level() const {
+    if (this->display_ == nullptr)
+      return 128;
+    long v = lroundf(this->display_->remote_values.get_brightness() * 255.0f);
+    return (uint8_t) (v < 1 ? 1 : v > 255 ? 255 : v);
+  }
+  // Sets the brightness and leaves on/off as it is, like the old slider.
+  void set_display_level(int level) {
+    if (this->display_ == nullptr)
+      return;
+    level = level < 1 ? 1 : level > 255 ? 255 : level;
+    this->display_->make_call().set_brightness((float) level / 255.0f).set_transition_length(0).perform();
+  }
   void set_scroll_number(number::Number *n) { this->scroll_number_ = n; }
   void add_on_action_callback(std::function<void(std::string)> &&cb) {
     this->action_callbacks_.push_back(std::move(cb));
@@ -773,7 +792,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   UpdateFields last_fields_;
   web_server_base::WebServerBase *base_{nullptr};
   panel_layout::PanelLayout *panels_{nullptr};
-  number::Number *brightness_number_{nullptr};
+  light::LightState *display_{nullptr};
   number::Number *scroll_number_{nullptr};
   // An import's body as it arrives (HTTP task only), freed once handled.
   PsString settings_body_;

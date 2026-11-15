@@ -677,7 +677,7 @@ script:
             if (held >= 1500 && id(boot_hold_stage) < 1) {
               id(boot_hold_stage) = 1;
               // A panel switched off with a click would show none of this.
-              if (!id(power).state) id(power).turn_on();
+              if (!id(gameday_ctl).display_on()) id(gd_display).turn_on().perform();
               // In front of whatever else is up (a banner, the heat mark), or
               // the countdown would run where nobody can read it.
               lv_obj_move_foreground(id(boot_overlay));

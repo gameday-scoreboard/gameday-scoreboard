@@ -102,15 +102,14 @@ esphome:
     name: bharvey88.gameday-scoreboard
     version: "${version}"
   on_boot:
-    # The Brightness number restores its saved value before the HUB75 driver
-    # exists (template entities set up at priority ~800, the display at 400),
-    # and the driver starts at its config default instead. Apply the number
-    # once the display is up, or the panel lights at the wrong brightness.
-    # The Power switch is ALWAYS_ON now, so there is no saved off state to
-    # restore; the ternary stays because the switch can be turned off in the
-    # moment it takes to get here. The repaint is belt and braces: nothing has
-    # rendered this early and HUB75Display::setup leaves the driver enabled,
-    # so on this path there should be nothing dropped to redraw.
+    # The Display light can restore its saved brightness before the HUB75
+    # driver exists (the display sets up at 400), and the driver starts at its
+    # config default instead. Apply the light's level once the display is up,
+    # or the panel lights at the wrong brightness. The light is on at every
+    # start (RESTORE_AND_ON); the ternary is for the sleep check just above.
+    # The repaint is belt and braces: nothing has rendered this early and
+    # HUB75Display::setup leaves the driver enabled, so on this path there
+    # should be nothing dropped to redraw.
     - priority: 300.0
       then:
         # After the game turned the panel off and it restarted (the nightly
@@ -119,13 +118,13 @@ esphome:
             condition:
               lambda: 'return gameday::GamedayComponent::asleep_at_boot();'
             then:
-              - switch.turn_off: power
+              - light.turn_off: gd_display
         - hub75.set_brightness:
             id: matrix
-            brightness: !lambda 'return id(power).state ? id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state) : 0;'
+            brightness: !lambda 'return id(gameday_ctl).display_on() ? id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level()) : 0;'
         - if:
             condition:
-              switch.is_on: power
+              lambda: 'return id(gameday_ctl).display_on();'
             then:
               - script.execute: gd_repaint
     # Name the hotspot after this panel, "Game Day 2f6a70", so two panels
@@ -692,8 +691,8 @@ gameday:
   http_request_id: http_client
   time_id: ha_time
   panel_layout_id: gd_panels
-  # Kept in the settings backup with the component's own settings.
-  brightness_id: brightness
+  # Its brightness is kept in the settings backup with the component's own settings.
+  display_id: gd_display
   scroll_speed_id: shared_scroll_speed
   # "Follow beta" on the device page switches the update entity between these.
   beta_channel:
@@ -712,14 +711,14 @@ gameday:
         condition:
           and:
             - lambda: 'return x == "wake_on";'
-            - switch.is_off: power
+            - lambda: 'return !id(gameday_ctl).display_on();'
         then:
-          - switch.turn_on: power
+          - light.turn_on: gd_display
     - if:
         condition:
           lambda: 'return x == "wake_off";'
         then:
-          - switch.turn_off: power
+          - light.turn_off: gd_display
     # The heat or power hold changed (pages/guard.yaml)
     - if:
         condition:
@@ -842,9 +841,9 @@ gameday:
         condition:
           and:
             - lambda: 'return x == "user_pick";'
-            - switch.is_off: power
+            - lambda: 'return !id(gameday_ctl).display_on();'
         then:
-          - switch.turn_on: power
+          - light.turn_on: gd_display
   on_update:
     # Published on every update, though the value often repeats: Home
     # Assistant only logs a change, and the device page takes each Game
@@ -966,36 +965,66 @@ select:
     name: "Playlist"
     icon: "mdi:playlist-star"
 
-switch:
+# Power and Brightness in one light, so Home Assistant can put the panel in a
+# light group or an area, dim it with a remote, and fade it. The light's level
+# goes to the panel through display_out, capped by the heat guard and the
+# night schedule (guard_brightness). Brightness is on the panel's 1 to 255
+# scale (display_level in components/gameday).
+output:
   - platform: template
-    name: "Power"
-    id: power
-    icon: "mdi:power"
-    restore_mode: ALWAYS_ON
-    optimistic: true
+    id: display_out
+    type: float
+    # Every step of a fade lands here. QC and the FCC screen light the panel
+    # past the night schedule, and QC with the light off too (pages/qc.yaml,
+    # pages/regulatory.yaml).
+    write_action:
+      - lambda: |-
+          if (state <= 0.0f) {
+            if (!id(qc_active)) id(matrix).set_brightness(0);
+            return;
+          }
+          long v = lroundf(state * 255.0f);
+          const uint8_t want = (uint8_t) (v < 1 ? 1 : v > 255 ? 255 : v);
+          id(matrix).set_brightness(id(gameday_ctl).guard_brightness(want, !id(qc_active) && !id(reg_active)));
+
+light:
+  - platform: monochromatic
+    # No name of its own: the panel's main entity takes the device's name in
+    # Home Assistant ("Game Day Scoreboard 2f6a70"), as its naming rules ask.
+    # The web server finds it by that name, so the device page looks it up
+    # by its domain instead (firmware/web/app.js).
+    name: None
+    id: gd_display
+    output: display_out
+    icon: "mdi:television"
+    # On at every start with the brightness it had, like the Power switch
+    # before it. The boot step at priority 300 turns it off again after a
+    # night the game put the panel to sleep.
+    restore_mode: RESTORE_AND_ON
+    initial_state:
+      brightness: 50%
+    # The panel's own scale: brightness 128 is half the LEDs' drive, as it
+    # was on the old slider.
+    gamma_correct: 1.0
+    # Instant unless Home Assistant asks for a fade.
+    default_transition_length: 0s
     # set_power: Game-day wake follows every turn, wherever it came from.
-    # The QC and FCC screens light the panel past the night schedule, and
-    # QC with Power off too (pages/qc.yaml, pages/regulatory.yaml).
-    turn_on_action:
+    on_turn_on:
       - lambda: 'id(gameday_ctl).set_power(true);'
-      - hub75.set_brightness:
-          id: matrix
-          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, !id(qc_active) && !id(reg_active));'
       - script.execute: gd_repaint
-    turn_off_action:
+    # After a fade out reaches dark. An effect would keep rendering to a dark
+    # panel, and the scoreboard is what turning it on should bring back
+    # (pages/effects.yaml).
+    on_turn_off:
       - lambda: 'id(gameday_ctl).set_power(false);'
-      - if:
-          condition:
-            lambda: 'return !id(qc_active);'
-          then:
-            - hub75.set_brightness:
-                id: matrix
-                brightness: 0
-      # An effect would keep rendering to a dark panel, and the scoreboard
-      # is what Power on should bring back (pages/effects.yaml).
       - script.execute:
           id: gd_fx_yield
           reason: "Power off"
+    # Into flash at once, like every other setting.
+    on_state:
+      - lambda: 'id(gameday_ctl).sync_soon();'
+
+switch:
   # Off unless the owner turns it on. The setting itself lives in the gameday
   # component (auto_update.h) with the rest of the device page's settings;
   # this switch is how Home Assistant sees and changes it.
@@ -1012,29 +1041,6 @@ switch:
     turn_off_action:
       - lambda: 'id(gameday_ctl).set_auto_update(false);'
 number:
-  - platform: template
-    name: "Brightness"
-    id: brightness
-    icon: "mdi:brightness-6"
-    min_value: 1
-    max_value: 255
-    step: 1
-    optimistic: true
-    restore_value: true
-    initial_value: 128
-    # Into flash at once, like every other setting (the number saves its
-    # own value after this runs, so the write waits for the next loop).
-    set_action:
-      - lambda: 'id(gameday_ctl).sync_soon();'
-    on_value:
-      then:
-        - if:
-            condition:
-              lambda: 'return id(power).state || id(qc_active);'
-            then:
-              - hub75.set_brightness:
-                  id: matrix
-                  brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) x, !id(qc_active) && !id(reg_active));'
   - platform: template
     name: "Scroll Speed"
     id: shared_scroll_speed

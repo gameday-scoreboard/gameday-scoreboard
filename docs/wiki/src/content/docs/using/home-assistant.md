@@ -18,8 +18,7 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | Entity | What it is |
 | --- | --- |
 | **Mode** | Favorite teams or Live games. A panel on one of the older football-only live modes shows Live games. |
-| **Power** | The panel's lights on or off. |
-| **Brightness** | 1 to 255. |
+| The panel's light | The panel on or off, and its brightness. It has the panel's own name, like **Game Day Scoreboard 2f6a70**. See [The panel's light](#the-panels-light). |
 | **Scroll Speed** | The ticker speed, 1 to 10. |
 | **Select Page** | The Scoreboard or the Clock page, with **Page Next** and **Page Previous** buttons. |
 | **Game Status** | The game in one line: the matchup, whether it's upcoming, live or final, and the score. |
@@ -112,12 +111,22 @@ The **Message** text entity puts a banner on the panel: set it, from a dashboard
 
 Use your panel's own name in the action. Like the other device actions, it needs no "Allow the device to perform Home Assistant actions" option. The message card that takes turns between games is set on the device page. See [Your own messages](/using/messages/).
 
+## The panel's light
+
+The panel shows up in Home Assistant as a light with the panel's own name, like **Game Day Scoreboard 2f6a70**. It's **Panel on** and **Brightness** in one light, so it works like the other lights in your home:
+
+- Turn it on or off, or set its brightness, from a light card, a scene, a voice assistant or an automation. Its brightness is the same setting as **Brightness** on the device page, shown in Home Assistant as a percent.
+- Put it in a light group, or give it an area, and it turns on and off with that room's lights. A dimmer remote on the group dims it too.
+- Ask for a fade (a transition) and it fades in or out over that time. Without one it turns on and off at once.
+
+Because it's a light, anything that turns off every light, or every light in its area, turns the panel off too. If you don't want that, leave it out of those automations, or give it no area.
+
 ## What you can automate
 
 Game Status changes when a game starts, when someone scores and when it ends, not on every play, so it makes a good trigger and keeps your history small. Some ideas:
 
 - Flash the room lights or play a sound when Game Status changes during your team's game.
-- Turn the panel on before kickoff and off at bedtime with **Power**, or turn **Brightness** down at night.
+- Turn the panel on before kickoff and off at bedtime with the panel's light, or turn its brightness down at night.
 - Switch **Team** or **Mode** for the evening's game.
 - Install updates on your own schedule with the **Firmware** entity.
 

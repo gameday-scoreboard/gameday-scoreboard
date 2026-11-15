@@ -39,6 +39,10 @@ through `update_important` in the panel's state.
 
 The new Smart board shows up to four rows of your own text from Home Assistant, in colors you pick, all the time or between games. Live games also puts a game on the board sooner.
 
+### ⚠️ Heads up
+
+- 💡 In Home Assistant, **Power** and **Brightness** are now one light with the panel's name that can join a light group or an area and fade; an automation or dashboard that used either needs the light instead
+
 ### ✨ New
 
 - 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**

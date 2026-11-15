@@ -194,8 +194,8 @@ script:
                 id(gd_fx_on) = true;
                 // Whoever asked for an effect wants to see it, as a team pick
                 // lights a dark panel (user_pick in gameday-common.yaml).
-                if (!id(power).state)
-                  id(power).turn_on();
+                if (!id(gameday_ctl).display_on())
+                  id(gd_display).turn_on().perform();
                 // ESPHome's 16 ms tick rounds a 23 ms frame up to 32 ms. Ask
                 // for a shorter tick only while an effect runs.
                 id(gd_fx_saved_loop_ms) = App.get_loop_interval();

@@ -2284,10 +2284,11 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
 
   // ---- controls --------------------------------------------------------
   const controlDefs = [
-    // icon: drawn as a round button (Power, Refresh) or before a slider
-    // (Brightness, whose number shows as a percent of its range).
-    { name: "Power", into: "#quickCtls", label: "Panel on", icon: "power" },
-    { name: "Brightness", into: "#quickCtls", label: "Brightness", icon: "sun", pct: true },
+    // icon: drawn as a round button (Panel on, Refresh) or before a slider.
+    // The panel's light is both: its on/off as the round button, its
+    // brightness as a slider shown as a percent. It has the panel's own
+    // name, so it is matched by its domain (the only light).
+    { domain: "light", into: "#quickCtls", label: "Panel on", icon: "power", slider: { label: "Brightness", icon: "sun" } },
     { name: "Scroll Speed", into: "#panelCtls", label: "Ticker speed" },
     // onValue: the effect controls show only while the panel is on its Effects
     // page, whoever put it there (this page, Home Assistant, or the panel
@@ -2323,6 +2324,71 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     refresh: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/>',
   };
   const icon = (k) => `<svg class="cico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
+
+  // A slider row: the value waits while a finger or the mouse holds the
+  // thumb, and follows the panel again after that, focused or not.
+  const sliderRow = (labelText, iconName, min, max, step, pct, onSet) => {
+    const row = el("div", iconName ? "ctl c-" + iconName : "ctl");
+    const label = el("label", null, labelText);
+    const r = el("input");
+    r.id = label.htmlFor = "ctl-" + labelText.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    r.type = "range";
+    r.min = min;
+    r.max = max;
+    r.step = step;
+    const val = el("span", "val");
+    val.setAttribute("aria-hidden", "true");
+    const show = (v) => (val.textContent = pct ? Math.round((v - r.min) / (r.max - r.min) * 100) + "%" : v);
+    let dragging = false;
+    r.onpointerdown = () => {
+      dragging = true;
+      const end = () => {
+        dragging = false;
+        window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
+      };
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+    };
+    r.oninput = () => show(r.value);
+    r.onchange = () => onSet(r.value);
+    row.appendChild(label);
+    if (iconName) row.insertAdjacentHTML("beforeend", icon(iconName));
+    row.appendChild(r);
+    row.appendChild(val);
+    return { row, set(v) { if (!dragging) { r.value = v; show(v); } } };
+  };
+
+  // The panel's light: on/off as a round button, brightness 1 to 255 as a
+  // slider. Moving the slider on a dark panel turns it on, as it does in
+  // Home Assistant.
+  const buildLight = (def, e, host) => {
+    const row = el("div", "ctl c-" + def.icon);
+    row.appendChild(el("label", null, def.label));
+    const sw = el("button", "sw round");
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-label", def.label);
+    sw.innerHTML = icon(def.icon);
+    setOn(sw, false, "aria-checked");
+    let known = false;  // what the panel last said
+    sw.onclick = async () => {
+      const on = !sw.classList.contains("on");
+      setOn(sw, on, "aria-checked");
+      if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
+      if (on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
+    };
+    row.appendChild(sw);
+    host.appendChild(row);
+    const level = sliderRow(def.slider.label, def.slider.icon, 1, 255, 1, true, (v) => post(e.id, "turn_on", { brightness: v }));
+    host.appendChild(level.row);
+    return {
+      update(ev) {
+        known = ev.state === "ON" || ev.value === true;
+        setOn(sw, known, "aria-checked");
+        if (ev.brightness != null) level.set(Math.max(1, ev.brightness));
+      },
+    };
+  };
 
   // A Smart board row on the Home tab: what the panel shows, in its colors,
   // with an editor that takes plain words and a color, so nobody types tags.
@@ -2454,6 +2520,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       host.appendChild(b);
       return { update() {} };
     }
+    if (domain === "light") return buildLight(def, e, host);
     const row = el("div", def.icon ? "ctl c-" + def.icon : "ctl");
     const label = el("label", null, def.label);
     const id ="ctl-" + def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -2473,7 +2540,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         setOn(sw, on, "aria-checked");
         // A tap the panel never got goes back to what it last said.
         if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
-        if (def.name === "Power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
+        if (def.icon === "power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
       };
       row.appendChild(sw);
       host.appendChild(row);
@@ -3397,7 +3464,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     ents[e.id] = Object.assign(ents[e.id] || {}, e);
     if (e.name) byName[e.name] = e.id;
     const name = ents[e.id].name;
-    const def = controlDefs.find((d) => d.name === name);
+    const def = controlDefs.find((d) => (d.domain ? d.domain === domainOf(ents[e.id]) : d.name === name));
     if (def) {
       if (!built[e.id]) built[e.id] = buildControl(def, ents[e.id]);
       built[e.id].update(ents[e.id]);
