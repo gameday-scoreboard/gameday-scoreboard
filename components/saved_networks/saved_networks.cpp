@@ -218,6 +218,14 @@ void SavedNetworks::note_connected(const wifi::WiFiAP &ap) {
     this->cancel_timeout("switch");
     ESP_LOGI(TAG, "Switched to %s", ssid.c_str());
   }
+  // A join that landed just after the fallback gave up on it did work.
+  if (this->switch_failed_ms_ != 0) {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    if (ssid == this->switch_failed_.ssid) {
+      this->switch_failed_ = {};
+      this->switch_failed_ms_ = 0;
+    }
+  }
   // The pending new password worked, so put_front() below stores it.
   if (this->pending_.ssid[0] != '\0' && ssid == this->pending_.ssid &&
       strcmp(ap.get_password().c_str(), this->pending_.password) == 0) {
@@ -346,6 +354,7 @@ bool SavedNetworks::switch_to(const std::string &ssid) {
     this->switch_failed_ = {};
   }
   this->switch_failed_ms_ = 0;
+  this->switch_grace_ = false;
   this->switching_ = true;
   // A moment first, so the answer to the request that asked for this is out
   // before the panel leaves the network it came in on.
@@ -376,22 +385,43 @@ bool SavedNetworks::switch_to(const std::string &ssid) {
 
 // The network switch_to() was given has not connected: back to the whole
 // list, starting with the network the panel was on, still at the front.
+// Left the same way switch_to() leaves: hand ESPHome the list and drop the
+// link, and its reconnect picks the front network. Not start_connecting():
+// a join that finished at the deadline is a live link, and that call while
+// one is up reset DHCP on it and left the panel associated but unreachable,
+// with ESPHome never noticing the drop (bench, 2026-11-15).
 void SavedNetworks::switch_timeout_() {
   if (!this->switching_)
     return;
+  wifi_list::Network target{};
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
-    this->switch_failed_ = this->switch_to_;
+    target = this->switch_to_;
+  }
+#ifdef USE_ESP32
+  // Already associated with it, still getting an address: once, a little
+  // longer, rather than pulling it off a network that is working.
+  wifi_ap_record_t ap{};
+  if (!this->switch_grace_ && esp_wifi_sta_get_ap_info(&ap) == ESP_OK &&
+      strncmp(reinterpret_cast<const char *>(ap.ssid), target.ssid, wifi_list::SSID_SIZE) == 0) {
+    this->switch_grace_ = true;
+    ESP_LOGI(TAG, "On %s but not connected yet; %u s more", target.ssid, (unsigned) (SWITCH_GRACE_MS / 1000));
+    this->set_timeout("switch", SWITCH_GRACE_MS, [this]() { this->switch_timeout_(); });
+    return;
+  }
+#endif
+  {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    this->switch_failed_ = target;
     this->switch_to_ = {};
   }
   this->switch_failed_ms_ = std::max<uint32_t>(millis(), 1);
   this->switching_ = false;
-  ESP_LOGW(TAG, "%s did not connect in %u s; back to the saved networks", this->switch_failed_.ssid,
-           (unsigned) (SWITCH_MS / 1000));
+  ESP_LOGW(TAG, "%s did not connect; back to the saved networks", target.ssid);
   this->apply_();
-  auto *w = wifi::global_wifi_component;
-  if (w != nullptr && w->has_sta())
-    w->start_connecting(w->get_sta());
+#ifdef USE_ESP32
+  esp_wifi_disconnect();
+#endif
 }
 
 std::string SavedNetworks::switching_ssid() {
