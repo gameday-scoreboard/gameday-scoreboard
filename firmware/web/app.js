@@ -99,6 +99,7 @@
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="sbview" id="sbView" hidden><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbhint">Send rows from Home Assistant</div></div>
       <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
@@ -115,6 +116,10 @@
         <div id="showCtls"></div>
         <div id="fxCtls" hidden>
           <p class="hint">The effect stays on until you pick another page.</p>
+        </div>
+        <div id="sbCtls" hidden>
+          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows, and writes over a row you change here the next time it updates it.</p>
+          <div class="sbrows" id="sbRows"></div>
         </div>
       </div>
     </div>
@@ -224,7 +229,7 @@
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option>
             </select></div>
           </div>
         </div>
@@ -858,8 +863,59 @@
     return g.sit || "";
   };
 
+  // The Smart board (firmware/pages/smart_board.yaml): while the panel shows
+  // it, so does the board here, from the four row entities. Tags parse as in
+  // sb_parse (components/gameday/smart_board.h): [name] or [#RRGGBB] sets
+  // the color of what follows, anything else in brackets is text.
+  const SB_COLORS = { red: "ff2020", orange: "ff8000", yellow: "ffd000", green: "20e040", cyan: "00e0e0",
+    blue: "3070ff", purple: "a040ff", pink: "ff60c0", white: "ffffff", gray: "808080", grey: "808080" };
+  const sbParse = (raw) => {
+    const s = String(raw || "").slice(0, 255);
+    const segs = [{ c: "ffffff", t: "" }];
+    for (let i = 0; i < s.length;) {
+      const m = s[i] === "[" ? /^\[(#[0-9a-fA-F]{6}|[A-Za-z]{1,7})\]/.exec(s.slice(i)) : null;
+      const c = m && (m[1][0] === "#" ? m[1].slice(1).toLowerCase() : SB_COLORS[m[1].toLowerCase()]);
+      if (!c) {
+        // Spaces before the first word don't count, so "[red] Door" lines up.
+        if (!(s[i] === " " && segs.length === 1 && !segs[0].t)) segs[segs.length - 1].t += s[i];
+        i++;
+        continue;
+      }
+      if (!segs[segs.length - 1].t) segs[segs.length - 1].c = c;  // a tag at the start, or two in a row
+      else segs.push({ c, t: "" });
+      i += m[0].length;
+    }
+    while (segs.length > 1 && !segs[segs.length - 1].t) segs.pop();
+    segs[segs.length - 1].t = segs[segs.length - 1].t.replace(/ +$/, "");
+    return segs.some((g) => g.t) ? segs : null;
+  };
+  const entValue = (name) => {
+    const e = ents[byName[name]];
+    return e ? (e.value ?? e.state ?? "") : "";
+  };
+  const renderSmart = () => {
+    const on = entValue("Select Page") === "Smart board";
+    $("#board").classList.toggle("smart", on);
+    $("#sbView").hidden = !on;
+    if (!on) return;
+    let any = false;
+    $("#sbView").querySelectorAll(".sbrow").forEach((row, i) => {
+      const segs = sbParse(entValue("Smart board row " + (i + 1)));
+      row.hidden = !segs;
+      row.textContent = "";
+      (segs || []).forEach((g) => {
+        const span = el("span", null, g.t);
+        span.style.color = "#" + g.c;
+        row.appendChild(span);
+      });
+      any = any || !!segs;
+    });
+    $("#sbView .sbhint").hidden = any;
+  };
+
   const renderBoard = () => {
     const b = $("#board");
+    renderSmart();
     const g = game;
     const st = $("#gstate");
     const msg = $("#msg");
@@ -1918,7 +1974,8 @@
     $("#afterHint").textContent = S.after === "off"
       ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
       : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
-        : "The final, then your next game, as before.";
+        : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
+          : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2231,8 +2288,15 @@
     // onValue: the effect controls show only while the panel is on its Effects
     // page, whoever put it there (this page, Home Assistant, or the panel
     // taking the screen back), so it follows the entity's value, not the tap.
-    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => {
+      $("#fxCtls").hidden = v !== "Effects";
+      $("#sbCtls").hidden = v !== "Smart board";
+    } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
+    { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },
+    { name: "Smart board row 2", into: "#sbRows", label: "Row 2", sbRow: true },
+    { name: "Smart board row 3", into: "#sbRows", label: "Row 3", sbRow: true },
+    { name: "Smart board row 4", into: "#sbRows", label: "Row 4", sbRow: true },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
@@ -2256,9 +2320,115 @@
   };
   const icon = (k) => `<svg class="cico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 
+  // A Smart board row on the Home tab: what the panel shows, in its colors,
+  // with an editor that takes plain words and a color, so nobody types tags.
+  // A row with several colors shows them all; saving it from here keeps one.
+  const SB_SWATCHES = ["ffffff", "ff2020", "ff8000", "ffd000", "20e040", "00e0e0", "3070ff", "a040ff", "ff60c0", "808080"];
+  const buildSbRow = (def, e, host) => {
+    const row = el("div", "sbedit");
+    const head = el("div", "sbhead");
+    head.appendChild(el("span", "sbnum", def.label));
+    const line = el("div", "sbline");
+    head.appendChild(line);
+    const edit = el("button", "btn", "Edit");
+    head.appendChild(edit);
+    row.appendChild(head);
+
+    const form = el("div", "sbform");
+    form.hidden = true;
+    const text = el("input");
+    text.type = "text";
+    text.maxLength = 240;
+    text.placeholder = "What the row says";
+    text.setAttribute("aria-label", def.label + " text");
+    const sw = el("div", "sbswatches");
+    sw.setAttribute("role", "radiogroup");
+    sw.setAttribute("aria-label", def.label + " color");
+    const custom = el("input", "sbcustom");
+    custom.type = "color";
+    custom.setAttribute("aria-label", "Another color");
+    let color = "ffffff";
+    const pick = (c) => {
+      color = c;
+      sw.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.c === c)));
+      custom.value = "#" + c;
+      text.style.color = "#" + c;
+    };
+    SB_SWATCHES.forEach((c) => {
+      const b = el("button", "sbsw");
+      b.type = "button";
+      b.dataset.c = c;
+      b.style.background = "#" + c;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", Object.keys(SB_COLORS).find((k) => SB_COLORS[k] === c) || "#" + c);
+      b.onclick = () => pick(c);
+      sw.appendChild(b);
+    });
+    custom.oninput = () => pick(custom.value.slice(1).toLowerCase());
+    sw.appendChild(custom);
+    const many = el("p", "hint", "This row has more than one color. Saving it here gives it one.");
+    const acts = el("div", "sbacts");
+    const save = el("button", "btn", "Save");
+    const clear = el("button", "btn", "Clear row");
+    const cancel = el("button", "btn", "Cancel");
+    acts.append(save, clear, cancel);
+    form.append(el("span", "sbnum", def.label), text, sw, many, acts);
+    row.appendChild(form);
+    host.appendChild(row);
+
+    let raw = "";
+    const show = () => {
+      const segs = sbParse(raw);
+      line.textContent = "";
+      line.classList.toggle("empty", !segs);
+      if (!segs) line.textContent = "Empty";
+      (segs || []).forEach((g) => {
+        const s = el("span", null, g.t);
+        s.style.color = "#" + g.c;
+        line.appendChild(s);
+      });
+      edit.textContent = segs ? "Edit" : "Add";
+      edit.setAttribute("aria-label", (segs ? "Edit " : "Add ") + def.label.toLowerCase());
+    };
+    const close = () => {
+      form.hidden = true;
+      head.hidden = false;
+      show();
+    };
+    edit.onclick = () => {
+      const segs = sbParse(raw);
+      text.value = (segs || []).map((g) => g.t).join("");
+      pick(segs ? segs[0].c : "ffffff");
+      many.hidden = !segs || segs.length < 2;
+      head.hidden = true;
+      form.hidden = false;
+      text.focus();
+    };
+    // A save the panel never got leaves the editor open with what was typed.
+    const send = async (value) => {
+      if (!(await post(e.id, "set", { value }))) return;
+      raw = value;
+      close();
+    };
+    save.onclick = () => {
+      const t = text.value.trim();
+      send(t ? "[#" + color.toUpperCase() + "]" + t : "");
+    };
+    text.onkeydown = (ev) => {
+      if (ev.key === "Enter") save.onclick();
+      if (ev.key === "Escape") close();
+    };
+    clear.onclick = () => send("");
+    cancel.onclick = close;
+    show();
+    // The panel's value waits while the row is being edited.
+    return { update(ev) { raw = String(ev.value ?? ev.state ?? ""); if (form.hidden) show(); } };
+  };
+
   const buildControl = (def, e) => {
     const domain = domainOf(e);
     const host = $(def.into);
+    if (def.sbRow) return buildSbRow(def, e, host);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
       if (def.icon) {
@@ -2335,6 +2505,18 @@
       row.appendChild(val);
       host.appendChild(row);
       return { update(ev) { if (!dragging) { r.value = ev.value; show(ev.value); } } };
+    }
+    if (domain === "text") {
+      const t = el("input");
+      t.id = label.htmlFor = id;
+      t.type = "text";
+      t.maxLength = e.max_length ?? 255;
+      t.spellcheck = false;
+      t.onchange = () => post(e.id, "set", { value: t.value });
+      row.appendChild(t);
+      host.appendChild(row);
+      // The panel's value waits while somebody is typing in the box.
+      return { update(ev) { if (document.activeElement !== t) t.value = ev.value ?? ev.state ?? ""; } };
     }
     if (domain === "select") {
       const s = el("select");
@@ -3217,6 +3399,7 @@
       built[e.id].update(ents[e.id]);
       if (def.onValue) def.onValue(ents[e.id].value);
     }
+    if (name === "Select Page" || /^Smart board row [1-4]$/.test(name || "")) renderSmart();
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.

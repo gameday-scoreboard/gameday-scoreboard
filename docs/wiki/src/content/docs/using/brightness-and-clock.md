@@ -71,6 +71,7 @@ The panel can turn itself on before your games and decide what it does once they
 - **Stay on the scoreboard**: the final, then your next game's card, as before.
 - **Turn off**: the panel turns off. With **Game-day wake** on, it comes back on before your next game. If your next game starts within the **Turns on** time, the panel stays on for it instead.
 - **Show the clock**: the time and your next game, in that team's colors, until the **Turns on** time before that game, then the scoreboard. The countdown to the next game waits while the clock is up; the other cards you turned on under **Between games**, like your own countdown, the weather, the message card and pictures, still get their turns.
+- **Show the Smart board**: your own rows of text, usually from Home Assistant, until the **Turns on** time before your next game, then the scoreboard. It only takes over while **Showing** is on the Scoreboard. See [Smart board](/using/smart-board/).
 
 Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
 
@@ -78,7 +79,7 @@ The app and the settings backup have the same settings.
 
 ## Showing: the scoreboard or the clock
 
-**Showing** picks the page the panel shows: the **Scoreboard**, or a **Clock** page. The scoreboard is the page that follows your games; the clock page is a plain clock for when you want one. Home Assistant has the same choice as **Select Page**.
+**Showing** picks the page the panel shows: the **Scoreboard**, a **Clock** page, [Effects](/using/effects/) or the [Smart board](/using/smart-board/). The scoreboard is the page that follows your games; the clock page is a plain clock for when you want one. Home Assistant has the same choice as **Select Page**.
 
 ### The off-season clock
 

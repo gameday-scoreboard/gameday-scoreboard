@@ -37,7 +37,11 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Live games puts a game on the board sooner: the panel shows the first game in progress it finds, instead of reading every league before it shows anything.
+The new Smart board shows up to four rows of your own text from Home Assistant, in colors you pick, all the time or between games. Live games also puts a game on the board sooner.
+
+### ✨ New
+
+- 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**
 
 ### 🐛 Fixes
 
