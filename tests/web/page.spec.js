@@ -2579,7 +2579,7 @@ test("the Device tab's rarely used cards are folded shut, each with a line on wh
   await page.goto("/");
   await tab(page, "device");
   const folds = page.locator("#pane-device details.card");
-  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Diagnostics", "Remote", "Matrix", "FCC information"]);
+  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Remote", "Matrix", "Diagnostics", "FCC information"]);
   for (const d of await folds.all()) expect(await d.evaluate((n) => n.open)).toBe(false);
   await expect(page.locator("#setupCard .fsum")).toHaveText("Time zone, startup, backup");
   await expect(page.locator("#netsSum")).toHaveText("2 saved");
