@@ -50,7 +50,7 @@ You can also turn it off and on with:
 
 - a quick press of the boot button on the controller
 - **ON** and **OFF** on a WizMote
-- **Power** in Home Assistant
+- the panel's light in Home Assistant
 
 A few things turn a dark panel back on by themselves, since they mean someone wants to look at it: picking a team or a mode in the app, on the device page or in Home Assistant, a numbered button or **NIGHT** on the remote, and the brighter button on the remote, which brings back the brightness the panel had. During the night schedule's hours the panel comes back at its night setting instead: at the night brightness, or with **Screen at night** off, still dark until the hours end or a game of yours goes live.
 

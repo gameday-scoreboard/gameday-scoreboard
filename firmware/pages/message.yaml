@@ -4,7 +4,7 @@
 # the app, or Home Assistant through the Message text entity below or the
 # show_message action (gameday-common.yaml). The gameday component sends
 # "say" (gameday-common.yaml on_action) with the text in say_text(). It is on
-# the top layer, so the panel's Power switch still decides whether anything
+# the top layer, so the panel's Display light still decides whether anything
 # lights up.
 #
 # The message card, which takes turns with the board between games, is on

@@ -7691,9 +7691,7 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
       return;
     }
     JsonDocument out(::espn::detail::json_allocator());
-    int brightness = this->brightness_number_ != nullptr && this->brightness_number_->has_state()
-                         ? (int) this->brightness_number_->state
-                         : -1;
+    int brightness = this->display_ != nullptr ? (int) this->display_level() : -1;
     int scroll =
         this->scroll_number_ != nullptr && this->scroll_number_->has_state() ? (int) this->scroll_number_->state : -1;
     // The live mask isn't in the state (its live list is what the panel scans
@@ -7746,7 +7744,7 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
 #ifdef GAMEDAY_BETA_CHANNEL
       target.beta = true;
 #endif
-      target.brightness = this->brightness_number_ != nullptr;
+      target.brightness = this->display_ != nullptr;
       target.scroll = this->scroll_number_ != nullptr;
       ::espn::parse_settings(doc.as<JsonVariantConst>(), target, in);
     }
@@ -7767,12 +7765,12 @@ void GamedayComponent::apply_settings_(const ::espn::SettingsImport &in) {
     ESP_LOGW(TAG, "Left out of the import: %s", s.c_str());
   for (const auto &k : in.kept)
     ESP_LOGI(TAG, "Kept this panel's own %s", k.c_str());
-  // One flash write for the whole restore, the two numbers' own saved
-  // values included, so a panel unplugged right after "Restored" keeps it.
+  // One flash write for the whole restore, the Display light's brightness and
+  // Scroll Speed included, so a panel unplugged right after "Restored" keeps it.
   this->sync_gate_.begin();
   this->apply_ops_(in.ops);
-  if (in.brightness >= 0 && this->brightness_number_ != nullptr)
-    this->brightness_number_->make_call().set_value((float) in.brightness).perform();
+  if (in.brightness >= 0)
+    this->set_display_level(in.brightness);
   if (in.scroll >= 0 && this->scroll_number_ != nullptr)
     this->scroll_number_->make_call().set_value((float) in.scroll).perform();
   this->sync_gate_.request();
