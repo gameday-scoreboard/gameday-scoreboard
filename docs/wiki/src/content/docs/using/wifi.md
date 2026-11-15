@@ -23,20 +23,42 @@ If it's the only saved network, the panel stays on it, and the device page says 
 
 A new password for a saved network, saved on the hotspot's setup page, doesn't replace the one that worked until the panel joins with it, in case it was mistyped. If the panel restarts before that, it tries the new password first for a minute, then goes back to the old one.
 
-When the list is full, adding a sixth network drops the one at the bottom. The panel always keeps one network to join, so forgetting the last one doesn't take it off Wi-Fi. [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) and [Factory reset](/using/buttons-and-resets/#factory-reset) clear them all.
-
-Reset Wi-Fi keeps the saved networks. Only Factory reset clears them.
+When the list is full, adding a sixth network drops the one at the bottom. The panel always keeps one network to join, so forgetting the last one doesn't take it off Wi-Fi. [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) keeps the saved networks. Only [Factory reset](/using/buttons-and-resets/#factory-reset) clears them.
 
 ## Adding a network
 
-Every network you set the panel up on is added to the top of the list. There are two ways:
+There are three ways to add a network:
 
+- **Add network on the device page**, while the panel is on Wi-Fi. Nothing gets reset. See [Add a network from the device page](#add-a-network-from-the-device-page) below.
 - **The Game Day app** finds the panel over Bluetooth and hands it the network and password. While the panel joins, it shows **JOINING** and the network's name. See [The Game Day app](/get-started/the-app/).
 - **The panel's hotspot.** While it shows **SETUP**, the panel starts its own Wi-Fi network named **Game Day** and six letters and numbers, like **Game Day 2f6a70**. The screen shows the name. Join it from any phone or laptop and a setup page opens. Pick your Wi-Fi network, enter the password and save.
 
-The six characters are the same as in the panel's address, so two panels in one house are easy to tell apart. See [Set up your panel](/get-started/setup/).
+A network the panel joins through the app or the hotspot goes to the top of the list. The six characters in the hotspot's name are the same as in the panel's address, so two panels in one house are easy to tell apart. See [Set up your panel](/get-started/setup/).
 
-Taking the panel somewhere new? When it can't find any saved network, it says **Wi-Fi lost** and the app can reach it over Bluetooth, as below, so you can give it the new network there. To put it into setup straight away, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi).
+Taking the panel somewhere new? Add that network on the device page before you go, and the panel joins it when it gets there. If you didn't, it says **Wi-Fi lost** when it can't find any saved network, and the app can reach it over Bluetooth, as below, so you can give it the new network there. To put it into setup straight away, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi).
+
+### Add a network from the device page
+
+1. Open **Wi-Fi networks** on the device page's Device tab and tap **Add network**.
+2. Type the network's name and password, and tap **Save**. Leave the password blank for an open network.
+
+The panel saves the network second in the list, right behind the one it's on, and stays on its Wi-Fi. It joins the new network wherever it can't find one it already knows, like a phone hotspot, a cabin or a friend's house. A network that doesn't show its name (a hidden network) works too, as long as the name is typed exactly.
+
+Typing a saved network's name again replaces its password. The network the panel is on now can't be changed this way, because its password already works.
+
+### Switch to it now
+
+After you save, the panel checks which networks it can see. If the new one is in range, the page asks whether to switch to it now. If you say yes:
+
+- The panel leaves its network and shows **JOINING** and the new network's name.
+- If it joins, the page says the panel is on the new network.
+- If it can't join within 30 seconds, the panel goes back to the network it was on and shows **Can't join** and the name for a moment. The page says so once it can reach the panel again. Check the name and password, then add it again.
+
+If your phone isn't on the new network, the page can't reach the panel after the switch. Join your phone to that network, then open the panel's address again.
+
+:::note[Coming in the next app update]
+The Game Day app gets **Add network** too.
+:::
 
 ## When Wi-Fi drops
 

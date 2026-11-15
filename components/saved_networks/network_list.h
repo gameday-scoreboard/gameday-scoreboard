@@ -102,6 +102,40 @@ inline bool put_front(NetworkList &list, const char *ssid, const char *password)
   return true;
 }
 
+enum class Added { NONE, NEW, UPDATED };
+
+// Saves a network typed in on the device page or in the app, which the panel
+// has not joined. A new one goes second, behind the front network (the one
+// the panel is on), so a typo in it never comes ahead of a network that
+// works; when the list is full the last one drops off. A network already in
+// the list keeps its place and takes the password given here. A blank or too
+// long name or password is refused (NONE).
+inline Added add_second(NetworkList &list, const char *ssid, const char *password) {
+  if (ssid == nullptr || ssid[0] == '\0' || strlen(ssid) >= SSID_SIZE)
+    return Added::NONE;
+  if (password == nullptr)
+    password = "";
+  if (strlen(password) >= PASSWORD_SIZE)
+    return Added::NONE;
+  const int at = find(list, ssid);
+  if (at >= 0) {
+    memset(list.nets[at].password, 0, PASSWORD_SIZE);
+    strncpy(list.nets[at].password, password, PASSWORD_SIZE - 1);
+    return Added::UPDATED;
+  }
+  const size_t pos = list.count == 0 ? 0 : 1;
+  const size_t last = list.count < MAX_NETWORKS ? list.count : MAX_NETWORKS - 1;
+  for (size_t i = last; i > pos; i--)
+    list.nets[i] = list.nets[i - 1];
+  Network entry{};
+  strncpy(entry.ssid, ssid, SSID_SIZE - 1);
+  strncpy(entry.password, password, PASSWORD_SIZE - 1);
+  list.nets[pos] = entry;
+  if (list.count < MAX_NETWORKS)
+    list.count++;
+  return Added::NEW;
+}
+
 // Takes a network out. Returns true when it was there.
 inline bool remove(NetworkList &list, const char *ssid) {
   const int at = find(list, ssid);

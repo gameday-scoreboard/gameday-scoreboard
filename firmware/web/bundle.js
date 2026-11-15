@@ -426,9 +426,18 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       <details class="card fold" id="netsCard" hidden>
         <summary><h2>Wi-Fi networks</h2><span class="fsum" id="netsSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
         <div class="cbody">
-          <p class="hint">Networks this panel knows. Add more in the Game Day app.</p>
+          <p class="hint">Networks this panel knows, in the order it tries them.</p>
           <div id="nets"></div>
           <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
+          <p class="hint" id="netMsg" role="status" hidden></p>
+          <div class="actions" id="netAddRow"><button class="btn" id="netAdd">Add network</button></div>
+          <div id="netForm" hidden>
+            <label class="fl" for="netName">Network name<small>2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
+            <input type="text" id="netName" class="field" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
+            <label class="fl" for="netPass">Password<small>Blank for an open network.</small></label>
+            <input type="password" id="netPass" class="field" maxlength="64" autocomplete="new-password" enterkeyhint="done">
+            <div class="actions"><button class="btn primary" id="netSave">Save</button><button class="btn" id="netCancel">Cancel</button></div>
+          </div>
         </div>
       </details>
       <details class="card fold" id="remoteCard">
@@ -3402,7 +3411,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // GET /gameday/wifi lists the networks the panel remembers, names only, in
   // the order it tries them. Firmware without the list answers 404 and the
   // section stays hidden.
+  let netsDoc = { networks: [], max: 5 };  // the last list the panel gave
   const renderNetworks = (j) => {
+    netsDoc = j;
     const nets = j.networks || [];
     const list = $("#nets");
     list.innerHTML = "";
@@ -3457,6 +3468,131 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     } catch (_) {
       if (tries > 0) setTimeout(() => loadNetworks(tries - 1), 5000);
     }
+  };
+
+  // Add network saves a name and password without joining it (POST
+  // ssid=&password=, a form body so the password stays out of the address).
+  // The panel then scans; when it can see the network, the page offers to
+  // switch to it now (POST switch=). The panel goes back to the network it
+  // was on if it can't join in 30 s, and GET then names it as failed.
+  const netMsg = (t) => {
+    const m = $("#netMsg");
+    m.textContent = t || "";
+    m.hidden = !t;
+  };
+  const wifiDoc = async (ms) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), ms);
+    try {
+      const r = await fetch("/gameday/wifi?_=" + Date.now(), { cache: "no-store", signal: ctl.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+  const bytes = (s) => new TextEncoder().encode(s).length;
+  const openNetForm = (open) => {
+    $("#netForm").hidden = !open;
+    $("#netAddRow").hidden = open;
+    if (!open) return;
+    $("#netName").value = "";
+    $("#netPass").value = "";
+    $("#netName").focus();
+  };
+  $("#netAdd").onclick = () => {
+    netMsg("");
+    openNetForm(true);
+  };
+  $("#netCancel").onclick = () => openNetForm(false);
+  $("#netName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netPass").focus(); });
+  $("#netPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netSave").click(); });
+
+  const switchTo = async (ssid, home) => {
+    let r = null;
+    try {
+      r = await fetch("/gameday/wifi?switch=" + encodeURIComponent(ssid), { method: "POST" });
+    } catch (_) {}
+    if (!r || !r.ok) return netMsg("The panel can't switch to " + ssid + " right now. It's still on " + home + ".");
+    netMsg("Switching to " + ssid + ". The panel shows JOINING while it tries.");
+    // The panel is off Wi-Fi for a few seconds at least, longer when the new
+    // network doesn't work. Ask until it answers with how it went.
+    const until = Date.now() + 90000;
+    await nap(5000);
+    while (Date.now() < until) {
+      let j;
+      try {
+        j = await wifiDoc(3000);
+      } catch (_) {
+        await nap(3000);
+        continue;
+      }
+      if (!j.switching) {
+        renderNetworks(j);
+        if ((j.networks || []).some((n) => n.ssid === ssid && n.connected)) return netMsg("The panel is on " + ssid + " now.");
+        if (j.failed === ssid)
+          return netMsg("The panel couldn't join " + ssid + ", so it went back to " + home + ". Check the name and password, then add it again.");
+      }
+      await nap(3000);
+    }
+    netMsg("This page can't reach the panel. If your phone isn't on " + ssid + ", join it, then open the panel's address again.");
+  };
+
+  // After a save: wait for the panel's scan (about 4 s), then offer the
+  // switch when the network is in range.
+  const offerSwitch = async (ssid) => {
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      await nap(1500);
+      try {
+        j = await wifiDoc(4000);
+      } catch (_) {
+        j = null;
+        continue;
+      }
+      if (!j.scanning) break;
+    }
+    if (j) renderNetworks(j);
+    const list = (j && j.networks) || [];
+    const n = list.find((x) => x.ssid === ssid);
+    const on = list.find((x) => x.connected);
+    const home = on ? on.ssid : "its network";
+    const saved = "Saved " + ssid + ". The panel joins it wherever it can't find a network it already knows.";
+    if (!n || !n.seen || n.connected) return netMsg(saved);
+    if (!confirm("The panel can see " + ssid + ". Switch to it now?\n\nIf your phone isn't on " + ssid + ", this page loses the panel until your phone joins it too. If the panel can't join " + ssid + ", it goes back to " + home + " within a minute."))
+      return netMsg(saved);
+    switchTo(ssid, home);
+  };
+
+  $("#netSave").onclick = async () => {
+    const ssid = $("#netName").value.trim();
+    const pass = $("#netPass").value;
+    if (!ssid || bytes(ssid) > 32) return netMsg("A network name is 1 to 32 characters.");
+    if (pass && (pass.length < 8 || bytes(pass) > 64 || (pass.length === 64 && !/^[0-9a-f]{64}$/i.test(pass))))
+      return netMsg("A Wi-Fi password is 8 to 63 characters.");
+    const list = netsDoc.networks || [];
+    if (list.some((n) => n.ssid === ssid && n.connected)) return netMsg("The panel is on " + ssid + " now, so its password already works.");
+    const known = list.some((n) => n.ssid === ssid);
+    if (known && !confirm(ssid + " is already saved. Replace its password?")) return;
+    if (!known && list.length >= (netsDoc.max || 5) &&
+        !confirm("The list is full, so adding " + ssid + " drops " + list[list.length - 1].ssid + ". Add it?")) return;
+    $("#netSave").disabled = true;
+    let r = null;
+    try {
+      r = await fetch("/gameday/wifi", { method: "POST", body: new URLSearchParams({ ssid, password: pass }) });
+    } catch (_) {}
+    $("#netSave").disabled = false;
+    if (!r || !r.ok) {
+      let why = "";
+      try {
+        why = (await r.json()).error || "";
+      } catch (_) {}
+      return netMsg(why || "The panel didn't save " + ssid + ". Try again.");
+    }
+    openNetForm(false);
+    netMsg("Saved " + ssid + ". Checking whether the panel can see it…");
+    offerSwitch(ssid);
   };
 
   // ---- event stream ------------------------------------------------------

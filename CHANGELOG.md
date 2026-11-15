@@ -46,6 +46,7 @@ The new Smart board shows up to four rows of your own text from Home Assistant, 
 ### ✨ New
 
 - 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**
+- 📶 **Add network** under **Wi-Fi networks** on the device page saves a network by name and password while the panel stays on its Wi-Fi, and offers to switch to it now when it's in range
 
 ### 🐛 Fixes
 

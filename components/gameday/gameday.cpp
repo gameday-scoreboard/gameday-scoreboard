@@ -7322,6 +7322,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
 // The saved networks, names only: a password never leaves the panel. The
 // list is in the order the panel tries them, the last one that worked first.
+// POST takes one of: forget=<ssid>; ssid= and password= (a form body, so the
+// password stays out of the address) to save a network without joining it;
+// switch=<ssid> to join a saved one now; scan=1 to look for the networks in
+// range, which GET then marks seen.
 void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
   auto *nets = saved_networks::global_saved_networks;
   if (nets == nullptr) {
@@ -7329,9 +7333,39 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     return;
   }
   if (request->method() == HTTP_POST) {
+    if (request->hasArg("ssid")) {
+      switch (nets->add(request->arg("ssid"), request->arg("password"))) {
+        case saved_networks::AddResult::ADDED:
+          request->send(200, "application/json", "{\"ok\":true,\"added\":true}");
+          return;
+        case saved_networks::AddResult::UPDATED:
+          request->send(200, "application/json", "{\"ok\":true,\"added\":false}");
+          return;
+        case saved_networks::AddResult::ON_IT:
+          request->send(400, "application/json", "{\"error\":\"The panel is on that network now.\"}");
+          return;
+        default:
+          request->send(400, "application/json",
+                        "{\"error\":\"A network name is 1 to 32 characters, a password up to 64.\"}");
+          return;
+      }
+    }
+    if (request->hasArg("switch")) {
+      if (!nets->switch_to(request->arg("switch"))) {
+        request->send(400, "application/json", "{\"error\":\"The panel can't switch to that network now.\"}");
+        return;
+      }
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+    if (request->hasArg("scan")) {
+      nets->scan();
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
     std::string ssid = request->arg("forget");
     if (ssid.empty()) {
-      request->send(400, "application/json", "{\"error\":\"forget is required\"}");
+      request->send(400, "application/json", "{\"error\":\"forget, ssid, switch or scan is required\"}");
       return;
     }
     const saved_networks::Forgot forgot = nets->forget(ssid);
@@ -7355,8 +7389,16 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     JsonObject o = list.add<JsonObject>();
     o["ssid"] = e.ssid;
     o["connected"] = e.connected;
+    o["seen"] = e.seen;
   }
   doc["max"] = (int) saved_networks::SavedNetworks::max();
+  doc["scanning"] = nets->scanning();
+  const std::string switching = nets->switching_ssid();
+  if (!switching.empty())
+    doc["switching"] = switching;
+  const std::string failed = nets->switch_failed();
+  if (!failed.empty())
+    doc["failed"] = failed;
   std::string body;
   serializeJson(doc, body);
   request->send(200, "application/json", body.c_str());

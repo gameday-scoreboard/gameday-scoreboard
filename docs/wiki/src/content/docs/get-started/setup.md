@@ -86,8 +86,6 @@ A panel that can't get back on its Wi-Fi restarts itself once, a minute into the
 
 Every network you set up is added to a list of up to five. Set the panel up on a phone hotspot for a tailgate, and it still knows your home network when it gets back. When it starts, it joins whichever saved network it can see, trying the last one that worked first.
 
-**Wi-Fi networks** on the device page's Device tab lists the saved networks. **Connected** marks the one in use, and **Tried first** marks the one it tries first. **Forget** takes a network off the list.
-
-**Reset Wi-Fi** and **Factory reset** on the device page clear the whole list. See [Wi-Fi](/using/wifi/) for more.
+**Wi-Fi networks** on the device page's Device tab lists the saved networks. **Connected** marks the one in use, and **Tried first** marks the one it tries first. **Forget** takes a network off the list, and **Add network** saves another one without setting the panel up again. See [Wi-Fi](/using/wifi/) for more.
 
 **Reset Wi-Fi** keeps the saved networks. The panel restarts into setup for 15 minutes so you can give it a new network. If you unplug it and plug it back in, or the 15 minutes run out, it goes back to the networks it already knows. While it's in setup, the panel takes a turn saying **Unplug it to rejoin saved Wi-Fi**. **Factory reset** still erases everything.

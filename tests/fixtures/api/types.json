@@ -267,11 +267,15 @@
     "wifi.weak": "bool"
   },
   "wifi": {
+    "failed": "string",
     "max": "int",
     "networks": "array",
     "networks[]": "object",
     "networks[].connected": "bool",
-    "networks[].ssid": "string"
+    "networks[].seen": "bool",
+    "networks[].ssid": "string",
+    "scanning": "bool",
+    "switching": "string"
   },
   "settings": {
     "after": "string",

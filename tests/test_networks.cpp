@@ -464,7 +464,61 @@ static void test_names_that_share_a_start() {
   CHECK(strcmp(l.nets[1].password, "pw-home") == 0);
 }
 
+// A network typed in on the device page or in the app goes second, behind
+// the one the panel is on, and joining it later moves it up as usual.
+static void test_add_second() {
+  NetworkList l;
+  clear(l);
+  // Nothing saved: it is the only one.
+  CHECK(add_second(l, "Home", "pw-home") == Added::NEW);
+  CHECK(names(l) == "Home");
+  CHECK(add_second(l, "iPhone", "pw-phone") == Added::NEW);
+  CHECK(names(l) == "Home,iPhone");
+  CHECK(add_second(l, "Cabin", "pw-cabin") == Added::NEW);
+  CHECK(names(l) == "Home,Cabin,iPhone");
+  // A saved one keeps its place and takes the new password, shorter too.
+  CHECK(add_second(l, "iPhone", "pw2") == Added::UPDATED);
+  CHECK(names(l) == "Home,Cabin,iPhone");
+  CHECK(strcmp(l.nets[2].password, "pw2") == 0);
+  CHECK(l.nets[2].password[4] == '\0' && l.nets[2].password[6] == '\0');
+  // An open network has no password.
+  CHECK(add_second(l, "Library", nullptr) == Added::NEW);
+  CHECK(names(l) == "Home,Library,Cabin,iPhone");
+  CHECK(l.nets[1].password[0] == '\0');
+  // Full: the last one drops off, the front one stays.
+  CHECK(add_second(l, "Bar", "pw-bar") == Added::NEW);
+  CHECK(l.count == MAX_NETWORKS);
+  CHECK(add_second(l, "Friend", "pw-friend") == Added::NEW);
+  CHECK(l.count == MAX_NETWORKS);
+  CHECK(names(l) == "Home,Friend,Bar,Library,Cabin");
+  CHECK(find(l, "iPhone") == -1);
+  // Joining it puts it at the front.
+  CHECK(put_front(l, "Friend", "pw-friend"));
+  CHECK(names(l) == "Friend,Home,Bar,Library,Cabin");
+  CHECK(valid(l));
+  // Blank and too long names and passwords change nothing.
+  const std::string before = names(l);
+  CHECK(add_second(l, "", "pw") == Added::NONE);
+  CHECK(add_second(l, nullptr, "pw") == Added::NONE);
+  CHECK(add_second(l, std::string(SSID_SIZE, 'n').c_str(), "pw") == Added::NONE);
+  CHECK(add_second(l, "Long", std::string(PASSWORD_SIZE, 'p').c_str()) == Added::NONE);
+  CHECK(add_second(l, std::string(SSID_SIZE - 1, 'n').c_str(), std::string(PASSWORD_SIZE - 1, 'p').c_str()) ==
+        Added::NEW);
+  CHECK(l.nets[1].ssid[SSID_SIZE - 2] == 'n' && l.nets[1].password[PASSWORD_SIZE - 2] == 'p');
+  CHECK(names(l) != before);
+  CHECK(valid(l));
+  // A slot hash is untouched: adding writes nothing to ESPHome's slot.
+  clear(l);
+  CHECK(merge_slot(l, "Home", "pw-home"));
+  const uint32_t h = l.slot_hash;
+  add_second(l, "Cabin", "pw-cabin");
+  CHECK(l.slot_hash == h);
+  CHECK(!merge_slot(l, "Home", "pw-home"));
+  CHECK(names(l) == "Home,Cabin");
+}
+
 int main() {
+  test_add_second();
   test_put_front_and_order();
   test_names_that_share_a_start();
   test_cap_at_max();
