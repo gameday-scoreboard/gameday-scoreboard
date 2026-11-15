@@ -118,7 +118,8 @@
           <p class="hint">The effect stays on until you pick another page.</p>
         </div>
         <div id="sbCtls" hidden>
-          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows; start a row with a color like [red] or [#FF6400].</p>
+          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows, and writes over a row you change here the next time it updates it.</p>
+          <div class="sbrows" id="sbRows"></div>
         </div>
       </div>
     </div>
@@ -2292,10 +2293,10 @@
       $("#sbCtls").hidden = v !== "Smart board";
     } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
-    { name: "Smart board row 1", into: "#sbCtls", label: "Row 1" },
-    { name: "Smart board row 2", into: "#sbCtls", label: "Row 2" },
-    { name: "Smart board row 3", into: "#sbCtls", label: "Row 3" },
-    { name: "Smart board row 4", into: "#sbCtls", label: "Row 4" },
+    { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },
+    { name: "Smart board row 2", into: "#sbRows", label: "Row 2", sbRow: true },
+    { name: "Smart board row 3", into: "#sbRows", label: "Row 3", sbRow: true },
+    { name: "Smart board row 4", into: "#sbRows", label: "Row 4", sbRow: true },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
@@ -2319,9 +2320,115 @@
   };
   const icon = (k) => `<svg class="cico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 
+  // A Smart board row on the Home tab: what the panel shows, in its colors,
+  // with an editor that takes plain words and a color, so nobody types tags.
+  // A row with several colors shows them all; saving it from here keeps one.
+  const SB_SWATCHES = ["ffffff", "ff2020", "ff8000", "ffd000", "20e040", "00e0e0", "3070ff", "a040ff", "ff60c0", "808080"];
+  const buildSbRow = (def, e, host) => {
+    const row = el("div", "sbedit");
+    const head = el("div", "sbhead");
+    head.appendChild(el("span", "sbnum", def.label));
+    const line = el("div", "sbline");
+    head.appendChild(line);
+    const edit = el("button", "btn", "Edit");
+    head.appendChild(edit);
+    row.appendChild(head);
+
+    const form = el("div", "sbform");
+    form.hidden = true;
+    const text = el("input");
+    text.type = "text";
+    text.maxLength = 240;
+    text.placeholder = "What the row says";
+    text.setAttribute("aria-label", def.label + " text");
+    const sw = el("div", "sbswatches");
+    sw.setAttribute("role", "radiogroup");
+    sw.setAttribute("aria-label", def.label + " color");
+    const custom = el("input", "sbcustom");
+    custom.type = "color";
+    custom.setAttribute("aria-label", "Another color");
+    let color = "ffffff";
+    const pick = (c) => {
+      color = c;
+      sw.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.c === c)));
+      custom.value = "#" + c;
+      text.style.color = "#" + c;
+    };
+    SB_SWATCHES.forEach((c) => {
+      const b = el("button", "sbsw");
+      b.type = "button";
+      b.dataset.c = c;
+      b.style.background = "#" + c;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", Object.keys(SB_COLORS).find((k) => SB_COLORS[k] === c) || "#" + c);
+      b.onclick = () => pick(c);
+      sw.appendChild(b);
+    });
+    custom.oninput = () => pick(custom.value.slice(1).toLowerCase());
+    sw.appendChild(custom);
+    const many = el("p", "hint", "This row has more than one color. Saving it here gives it one.");
+    const acts = el("div", "sbacts");
+    const save = el("button", "btn", "Save");
+    const clear = el("button", "btn", "Clear row");
+    const cancel = el("button", "btn", "Cancel");
+    acts.append(save, clear, cancel);
+    form.append(el("span", "sbnum", def.label), text, sw, many, acts);
+    row.appendChild(form);
+    host.appendChild(row);
+
+    let raw = "";
+    const show = () => {
+      const segs = sbParse(raw);
+      line.textContent = "";
+      line.classList.toggle("empty", !segs);
+      if (!segs) line.textContent = "Empty";
+      (segs || []).forEach((g) => {
+        const s = el("span", null, g.t);
+        s.style.color = "#" + g.c;
+        line.appendChild(s);
+      });
+      edit.textContent = segs ? "Edit" : "Add";
+      edit.setAttribute("aria-label", (segs ? "Edit " : "Add ") + def.label.toLowerCase());
+    };
+    const close = () => {
+      form.hidden = true;
+      head.hidden = false;
+      show();
+    };
+    edit.onclick = () => {
+      const segs = sbParse(raw);
+      text.value = (segs || []).map((g) => g.t).join("");
+      pick(segs ? segs[0].c : "ffffff");
+      many.hidden = !segs || segs.length < 2;
+      head.hidden = true;
+      form.hidden = false;
+      text.focus();
+    };
+    // A save the panel never got leaves the editor open with what was typed.
+    const send = async (value) => {
+      if (!(await post(e.id, "set", { value }))) return;
+      raw = value;
+      close();
+    };
+    save.onclick = () => {
+      const t = text.value.trim();
+      send(t ? "[#" + color.toUpperCase() + "]" + t : "");
+    };
+    text.onkeydown = (ev) => {
+      if (ev.key === "Enter") save.onclick();
+      if (ev.key === "Escape") close();
+    };
+    clear.onclick = () => send("");
+    cancel.onclick = close;
+    show();
+    // The panel's value waits while the row is being edited.
+    return { update(ev) { raw = String(ev.value ?? ev.state ?? ""); if (form.hidden) show(); } };
+  };
+
   const buildControl = (def, e) => {
     const domain = domainOf(e);
     const host = $(def.into);
+    if (def.sbRow) return buildSbRow(def, e, host);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
       if (def.icon) {

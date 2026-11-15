@@ -2673,6 +2673,35 @@ test("the board shows the Smart board's rows, in their colors, while the panel s
   await expect(page.locator("#tA")).toBeVisible();
 });
 
+test("Smart board rows show in their colors and edit with words and a color, no tags", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await request.post("/text/Smart%20board%20row%201/set?value=" + encodeURIComponent("[red]Front Door"));
+  await request.post("/select/Select%20Page/set?option=Smart%20board");
+  const lines = page.locator("#sbRows .sbline");
+  await expect(lines.nth(0)).toHaveText("Front Door");
+  await expect(lines.nth(0).locator("span")).toHaveCSS("color", "rgb(255, 32, 32)");
+  await expect(lines.nth(1)).toHaveText("Empty");
+  await expect(page.getByRole("button", { name: "Add row 2" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit row 1" }).click();
+  const text = page.getByRole("textbox", { name: "Row 1 text" });
+  await expect(text).toHaveValue("Front Door");
+  await expect(page.getByRole("radio", { name: "red" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: "blue" }).click();
+  await text.fill("Back Door");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/text/Smart%20board%20row%201/set", q: { value: "[#3070FF]Back Door" } });
+  await expect(lines.nth(0)).toHaveText("Back Door");
+  await expect(lines.nth(0).locator("span")).toHaveCSS("color", "rgb(48, 112, 255)");
+
+  // Clear row empties it on the panel
+  await page.getByRole("button", { name: "Edit row 1" }).click();
+  await page.getByRole("button", { name: "Clear row" }).click();
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/text/Smart%20board%20row%201/set", q: { value: "" } });
+  await expect(lines.nth(0)).toHaveText("Empty");
+});
+
 test("an empty Smart board says where its rows come from", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
