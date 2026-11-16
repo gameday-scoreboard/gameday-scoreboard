@@ -637,7 +637,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   // Showing and the effect controls are on the Home tab, under the panel's power and brightness.
   const showing = page.getByRole("combobox", { name: "Showing" });
   await expect(showing).toHaveValue("Scoreboard");
-  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects"]);
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board"]);
   await expect(page.locator("#fxCtls")).toBeHidden();
   // The Panel card's own controls are untouched by the hidden effect rows.
   await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
@@ -2321,11 +2321,54 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   await expect(rows).toHaveCount(1);
   await expect(rows.nth(0).locator("label")).toContainText("Home");
 
-  // Forgetting the last one leaves the empty line.
-  page.once("dialog", (d) => d.accept());
+  // Forgetting the last one, which it's on, says it stays on it, and leaves the empty line.
+  let asked = "";
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
   await rows.nth(0).locator("button").click();
   await expect(rows).toHaveCount(0);
+  expect(asked).toContain("only saved network, so the panel stays on it");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. It's the only saved network");
   await expect(page.locator("#netsEmpty")).toBeVisible();
+
+  // Forgetting the one it's on with others left names the next one and moves there.
+  await reset(request, {}, [], [
+    { ssid: "Home", connected: true },
+    { ssid: "iPhone", connected: false },
+  ]);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(2);
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
+  await rows.nth(0).locator("button").click();
+  await expect.poll(() => asked).toBe("Forget Home? The panel moves to iPhone now.");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. Moving to iPhone now");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+
+  // With more than one left, the next one is named and the rest are a fallback.
+  await reset(request, {}, [], [
+    { ssid: "Home", connected: true },
+    { ssid: "iPhone", connected: false },
+    { ssid: "Friend", connected: false },
+  ]);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(3);
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
+  await rows.nth(0).locator("button").click();
+  await expect.poll(() => asked).toBe("Forget Home? The panel moves to iPhone now, or another saved network if it can't see iPhone.");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. Moving to the next saved network now");
 
   // Firmware without the list: the section stays hidden.
   await reset(request, {}, [], null);
@@ -2333,6 +2376,80 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#netsCard")).toBeHidden();
+});
+
+test("a network is added by name, and the page offers to switch when the panel sees it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  const rows = page.locator("#nets .ctl");
+  const msg = page.locator("#netMsg");
+  await expect(rows).toHaveCount(2);
+  const posts = async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi");
+  const add = async (name, pass) => {
+    if (await page.locator("#netAdd").isVisible()) await page.locator("#netAdd").click();
+    await page.locator("#netName").fill(name);
+    await page.locator("#netPass").fill(pass);
+    await page.locator("#netSave").click();
+  };
+
+  // Checked on the page first: nothing is posted.
+  await add("Lake", "short");
+  await expect(msg).toHaveText("A Wi-Fi password is 8 to 63 characters.");
+  await add("Home", "password1");
+  await expect(msg).toHaveText("The panel is on Home now, so its password already works.");
+  expect(await posts()).toEqual([]);
+
+  // Out of range: saved second, behind the network it is on, no offer. The
+  // password goes in the body, not the address.
+  page.on("dialog", (d) => d.accept());
+  await add("Lake", "lakepass1");
+  await expect(msg).toHaveText("Saved Lake. The panel joins it wherever it can't find a network it already knows.");
+  expect(await posts()).toEqual([{ path: "/gameday/wifi", q: {}, form: { ssid: "Lake", password: "lakepass1" } }]);
+  await expect(page.locator("#netForm")).toBeHidden();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(1).locator("label")).toContainText("Lake");
+
+  // In range, but the switch fails: the panel is back on Home.
+  await add("Attic", "atticpass");
+  await expect(msg).toHaveText("The panel couldn't join Attic, so it went back to Home. Check the name and password, then add it again.",
+    { timeout: 15000 });
+  expect((await posts()).map((p) => p.q).filter((q) => q.switch)).toEqual([{ switch: "Attic" }]);
+
+  // In range and it joins.
+  const offers = [];
+  page.removeAllListeners("dialog");
+  page.on("dialog", (d) => { offers.push(d.message()); d.accept(); });
+  await add("Cabin", "cabinpass");
+  await expect(msg).toHaveText("The panel is on Cabin now.", { timeout: 15000 });
+  expect(offers.length).toBe(1);
+  expect(offers[0]).toContain("The panel can see Cabin. Switch to it now?");
+  expect(offers[0]).toContain("it goes back to Home within a minute");
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+  await expect(rows.nth(0).locator("label")).toContainText("Cabin");
+
+  // Declining the offer leaves it saved; a saved name asks before its password changes.
+  page.removeAllListeners("dialog");
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); asked.length === 1 ? d.accept() : d.dismiss(); });
+  await add("Attic", "atticpass2");
+  await expect(msg).toHaveText("Saved Attic. The panel joins it wherever it can't find a network it already knows.");
+  expect(asked[0]).toBe("Attic is already saved. Replace its password?");
+  expect(asked[1]).toContain("The panel can see Attic.");
+
+  // Full: the page says which one drops.
+  page.removeAllListeners("dialog");
+  await reset(request, {}, [], [1, 2, 3, 4, 5].map((i) => ({ ssid: "n" + i, connected: i === 1 })));
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(5);
+  page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await add("Lake", "lakepass1");
+  await expect.poll(() => asked[asked.length - 1]).toBe("The list is full, so adding Lake drops n5. Add it?");
+  expect(await posts()).toEqual([]);
 });
 
 test("the stale tag follows the device's consecutive misses", async ({ page, request }) => {
@@ -2536,7 +2653,7 @@ test("the Device tab's rarely used cards are folded shut, each with a line on wh
   await page.goto("/");
   await tab(page, "device");
   const folds = page.locator("#pane-device details.card");
-  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Diagnostics", "Remote", "Matrix", "FCC information"]);
+  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Remote", "Matrix", "Diagnostics", "FCC information"]);
   for (const d of await folds.all()) expect(await d.evaluate((n) => n.open)).toBe(false);
   await expect(page.locator("#setupCard .fsum")).toHaveText("Time zone, startup, backup");
   await expect(page.locator("#netsSum")).toHaveText("2 saved");
@@ -2590,7 +2707,7 @@ test("the Look switch picks Phone, Light or Dark, and this browser keeps it", as
   await expect(look.getByRole("radio", { checked: true })).toHaveText("Light");
 });
 
-test("the board's round power button switches Power, and its strip shows brightness as a percent", async ({ page, request }) => {
+test("the board's round power button turns the panel's light on and off, and its strip shows brightness as a percent", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   const power = page.locator("#quickCtls .sw.round");
@@ -2600,12 +2717,82 @@ test("the board's round power button switches Power, and its strip shows brightn
   const paths = async () => (await entityPosts(request)).map((p) => p.path);
   await power.click();
   await expect(power).toHaveAttribute("aria-checked", "false");
-  await expect.poll(paths).toContain("/switch/Power/turn_off");
+  await expect.poll(paths).toContain("/light/Game%20Day%20Scoreboard%202f6a70/turn_off");
   await power.click();
   await expect(power).toHaveAttribute("aria-checked", "true");
-  await expect.poll(paths).toContain("/switch/Power/turn_on");
+  await expect.poll(paths).toContain("/light/Game%20Day%20Scoreboard%202f6a70/turn_on");
   await page.getByRole("button", { name: "Refresh scores" }).click();
   await expect.poll(paths).toContain("/button/Refresh%20Now/press");
+});
+
+test("the Brightness slider sets the panel's light's brightness, 1 to 255", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "Brightness" });
+  await expect(slider).toHaveValue("128");
+  await slider.fill("200");
+  await slider.dispatchEvent("change");
+  await expect.poll(async () => (await entityPosts(request)).some((p) => p.path === "/light/Game%20Day%20Scoreboard%202f6a70/turn_on" && JSON.stringify(p.q).includes("200"))).toBe(true);
+  await expect(page.locator(".boardctl .val")).toHaveText("78%");
+});
+
+test("the board shows the Smart board's rows, in their colors, while the panel shows it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const post = (path) => request.post(path);
+  await post("/text/Smart%20board%20row%201/set?value=" + encodeURIComponent("[red] Front Door [#00FF64]Locked"));
+  await post("/text/Smart%20board%20row%203/set?value=" + encodeURIComponent("CO2 547ppm [blink]"));
+  await post("/select/Select%20Page/set?option=Smart%20board");
+  const rows = page.locator("#sbView .sbrow");
+  await expect(page.locator("#sbView")).toBeVisible();
+  await expect(page.locator("#tA")).toBeHidden();
+  await expect(rows.nth(0)).toHaveText("Front Door Locked");
+  await expect(rows.nth(0).locator("span").first()).toHaveCSS("color", "rgb(255, 32, 32)");
+  await expect(rows.nth(0).locator("span").nth(1)).toHaveCSS("color", "rgb(0, 255, 100)");
+  await expect(rows.nth(1)).toBeHidden();
+  // A bracket that isn't a color stays text
+  await expect(rows.nth(2)).toHaveText("CO2 547ppm [blink]");
+  await expect(page.locator("#sbView .sbhint")).toBeHidden();
+  await post("/select/Select%20Page/set?option=Scoreboard");
+  await expect(page.locator("#sbView")).toBeHidden();
+  await expect(page.locator("#tA")).toBeVisible();
+});
+
+test("Smart board rows show in their colors and edit with words and a color, no tags", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await request.post("/text/Smart%20board%20row%201/set?value=" + encodeURIComponent("[red]Front Door"));
+  await request.post("/select/Select%20Page/set?option=Smart%20board");
+  const lines = page.locator("#sbRows .sbline");
+  await expect(lines.nth(0)).toHaveText("Front Door");
+  await expect(lines.nth(0).locator("span")).toHaveCSS("color", "rgb(255, 32, 32)");
+  await expect(lines.nth(1)).toHaveText("Empty");
+  await expect(page.getByRole("button", { name: "Add row 2" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit row 1" }).click();
+  const text = page.getByRole("textbox", { name: "Row 1 text" });
+  await expect(text).toHaveValue("Front Door");
+  await expect(page.getByRole("radio", { name: "red" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: "blue" }).click();
+  await text.fill("Back Door");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/text/Smart%20board%20row%201/set", q: { value: "[#3070FF]Back Door" } });
+  await expect(lines.nth(0)).toHaveText("Back Door");
+  await expect(lines.nth(0).locator("span")).toHaveCSS("color", "rgb(48, 112, 255)");
+
+  // Clear row empties it on the panel
+  await page.getByRole("button", { name: "Edit row 1" }).click();
+  await page.getByRole("button", { name: "Clear row" }).click();
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/text/Smart%20board%20row%201/set", q: { value: "" } });
+  await expect(lines.nth(0)).toHaveText("Empty");
+});
+
+test("an empty Smart board says where its rows come from", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await request.post("/select/Select%20Page/set?option=Smart%20board");
+  await expect(page.locator("#sbView .sbhint")).toHaveText("Send rows from Home Assistant");
+  await expect(page.locator("#sbView .sbrow").first()).toBeHidden();
 });
 
 test("the header is the panel's name, and a slim bar keeps it once it scrolls away", async ({ page, request }) => {
@@ -3030,12 +3217,12 @@ test("Live pictures and update switches hold their tap through a slow read", asy
     expect(await beta.getAttribute("aria-checked")).toBe("true");
 });
 
-test("a Power tap the panel never gets goes back", async ({ page, request }) => {
+test("a Panel on tap the panel never gets goes back", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   const power = page.locator("#quickCtls .sw");
   await expect(power).toHaveAttribute("aria-checked", "true");
-  await page.route("**/switch/**", (route) => route.abort());
+  await page.route("**/light/**", (route) => route.abort());
   await power.click();
   await expect(page.locator("#toast")).toContainText("Device did not respond");
   await expect(power).toHaveAttribute("aria-checked", "true");

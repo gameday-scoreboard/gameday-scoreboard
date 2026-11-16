@@ -99,6 +99,14 @@ In both apps, Settings has three pages for the panel, like the device page's tab
 - **Device**: the nickname, address and firmware first, then **Setup**, **Backup**, **Game events**, Wi-Fi networks and **Diagnostics**, then **Advanced** on iPhone, or **Remote** and **Matrix** (the panel layout) on Android. **Reboot**, **Reset Wi-Fi** and **Factory reset** are near the bottom, and **FCC information** is last.
 
 :::note[Coming in the next app update]
+On iPhone, **Advanced** goes away: **Remote**, **Buttons 1 to 4** and **Matrix** become sections of **Device** itself, and **Free PSRAM** stays under **Diagnostics**. In both apps, **Remote** and **Matrix** come after Wi-Fi networks and before **Diagnostics**, as on the device page.
+:::
+
+:::note[Coming in the next app update]
+On Android, **Forget** on the network the panel is on says what happens before you confirm: the panel moves to your next saved network now, or stays on it if it's the only one. The move needs firmware that does it. A panel that hasn't updated yet stays connected until it restarts. See [Wi-Fi](/using/wifi/).
+:::
+
+:::note[Coming in the next app update]
 The iPhone app gets the **Celebrations** choice too, so it's in both apps: **Full**, **Subtle** or **Off**, above **Opponent scores too** in **Celebrations** under **Display**, as on Android. It shows once the panel runs firmware with that setting.
 :::
 
@@ -144,6 +152,14 @@ On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone
 
 The panel list is **Settings > Panels**, and it's what the Board shows until you have a panel. It shows each panel's nickname, with a dot for online and **Offline** next to a panel the app can't reach.
 
+:::note[Coming in the next app update]
+On iPhone:
+
+- When the app can't reach any of your panels at once, the rows say **Reconnecting** and the app tries again every few seconds. A phone that was asleep can take a moment to find your panels on the network, even though they're fine. If none answers for three minutes, the rows say **Offline** and the list suggests turning Wi-Fi off and on in Control Center.
+- The dots start fresh each time you open the app, so you never see one left over from earlier.
+- A panel you give a new name in its own config stays in your list under the new name, with its nickname.
+:::
+
 - **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
 - **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
 
@@ -164,7 +180,7 @@ With no panel saved yet, the panel list has **Try a demo panel**. It opens a dem
 
 Add it by address. On the panel list, tap **+** and enter the panel's name, like `gameday-2f6a70.local`, or its IP address, like `192.168.1.50`. Both show on the panel when it starts. To see them again, hold the button on the controller for about 1.5 seconds.
 
-The phone has to be on the same Wi-Fi network as the panel. A guest network can keep the two apart. More in [Troubleshooting](/help/troubleshooting/).
+The phone has to be on the same Wi-Fi network as the panel, or on a network your router lets reach it, like a main network reaching an [IoT network or VLAN](/using/wifi/#iot-network-iot-vlan-or-iot-subnet). A guest network can keep the two apart. More in [Troubleshooting](/help/troubleshooting/).
 
 ## The QR code on the panel
 

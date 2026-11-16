@@ -35,6 +35,27 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## v2026.11.4
+
+The new Smart board shows up to four rows of your own text from Home Assistant, in colors you pick, all the time or between games. Live games also puts a game on the board sooner.
+
+### ⚠️ Heads up
+
+- 💡 In Home Assistant, **Power** and **Brightness** are now one light with the panel's name that can join a light group or an area and fade; an automation or dashboard that used either needs the light instead
+
+### ✨ New
+
+- 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**
+- 📶 **Add network** under **Wi-Fi networks** on the device page saves a network by name and password while the panel stays on its Wi-Fi, and offers to switch to it now when it's in range
+- 📉 The panel downloads a fifth of the data from ESPN or less: it asks for the scores compressed, so **ESPN data** on the device page climbs much slower
+
+### 🐛 Fixes
+
+- ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league
+- 📶 **Forget** on the Wi-Fi network the panel is on moves it to your next saved network right away, instead of staying on the forgotten one until the next restart
+- 🎮 A WizMote paired or unpaired just before a power cut stays that way, instead of the old pairing coming back
+- 🪝 A webhook address no longer takes a little of the panel's memory with every event it posts, which over a week of game days without a restart could run the panel low
+
 ## v2026.11.3
 
 Pick the best game now starts off, so Live games shows a random game until you turn it on. Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.

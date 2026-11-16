@@ -41,6 +41,8 @@ The app's QR code still comes back every 3 minutes, now with **Pick your team in
 
 The panel follows a game in progress, picked at random from the leagues you choose, and moves to another one when that game ends or after **Switch every** minutes (1 to 30). When it moves on, it picks a different game from the one it showed last, if another one is on. When it's the only game on, the panel stays on it, and a score right as **Switch every** comes around still gets its splash. Splashes name the team that scored, like "DAL TOUCHDOWN", since there is no "your team" here. With **Opponent scores too** off, only the team on the left gets them.
 
+To find a game, the panel reads each league's scoreboard in turn, starting with the leagues that had a game on the last time it looked. When the board has no game on it (at startup, after you change the mode, the leagues or your favorites, or when the first game of the day starts), the panel shows the first game in progress it finds and reads the other leagues behind it, so a game is up within seconds even with every league on. With **Pick the best game** off, that game stays until it ends or **Switch every** comes around. With it on, the panel moves once more if a clearly better game turns up in the other leagues.
+
 **Pick the best game**, under **Switch every**, starts off. Turn it on and Live games follows the best game on instead of a random one:
 
 - **The best game** is the closest one with the least time left. A game in overtime or extra innings comes first, and in college a ranked team, more so a top-ranked one, moves a game up.

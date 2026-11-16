@@ -16,7 +16,12 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          night_now to "skipped" and night_resume a "skipped" one back
                          to "dim" or "off"
   GET  /gameday/wifi     the saved networks (components/saved_networks), names only
-  POST /gameday/wifi     forget=<ssid>; 404 when it is not saved
+  POST /gameday/wifi     forget=<ssid>; 404 when it is not saved; "moving" when it was
+                         the connected one and another is left (it moves to that one).
+                         ssid= and password= as a form body saves one second in the
+                         list (400 for the one it is on); switch=<ssid> joins one at
+                         once, or fails for a name in WIFI_BAD; scan=1. GET marks the
+                         names in WIFI_NEARBY seen
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
   POST /gameday/settings a backup as a JSON body: checked whole, then applied through
                          apply_set; 400 with "error" when refused
@@ -204,13 +209,16 @@ INITIAL = {
 
 # ESPHome 2026.x state events (detail=all shape) for the entities app.js uses.
 ENTITIES = [
-    {"id": "switch/Power", "domain": "switch", "name": "Power", "state": "ON", "value": True},
-    {"id": "number/Brightness", "domain": "number", "name": "Brightness", "state": "128", "value": "128",
-     "min_value": "1", "max_value": "255", "step": "1"},
+    # The panel's light has no name of its own, so ESPHome gives it the device's.
+    {"id": "light/Game Day Scoreboard 2f6a70", "domain": "light", "name": "Game Day Scoreboard 2f6a70", "state": "ON", "brightness": 128,
+     "color_mode": "brightness"},
     {"id": "number/Scroll Speed", "domain": "number", "name": "Scroll Speed", "state": "5", "value": "5",
      "min_value": "1", "max_value": "10", "step": "1"},
     {"id": "select/Select Page", "domain": "select", "name": "Select Page", "state": "Scoreboard",
-     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects"]},
+     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board"]},
+    # The Smart board's rows (firmware/pages/smart_board.yaml), which Home Assistant fills
+    *({"id": f"text/Smart board row {n}", "domain": "text", "name": f"Smart board row {n}", "state": "",
+       "value": "", "max_length": 255} for n in range(1, 5)),
     # Effects mode (firmware/pages/effects.yaml): wled_fx's entities, shown
     # while Select Page is on Effects.
     {"id": "select/Effect", "domain": "select", "name": "Effect", "state": "Matrix", "value": "Matrix",
@@ -240,7 +248,8 @@ ENTITIES = [
 FIRMWARE = next(e for e in ENTITIES if e["name"] == "Firmware")
 ENTITIES_INITIAL = copy.deepcopy(ENTITIES)
 # The control actions ESPHome's web server takes for each domain the page posts to.
-ENTITY_ACTIONS = {"switch": ("turn_on", "turn_off", "toggle"), "number": ("set",), "select": ("set",),
+ENTITY_ACTIONS = {"switch": ("turn_on", "turn_off", "toggle"), "light": ("turn_on", "turn_off", "toggle"),
+                  "number": ("set",), "select": ("set",), "text": ("set",),
                   "button": ("press",), "update": ("install",)}
 
 
@@ -268,6 +277,17 @@ def entity_post(path, q):
     if domain == "switch":
         on = action == "turn_on" or (action == "toggle" and e["state"] != "ON")
         e["state"], e["value"] = ("ON", True) if on else ("OFF", False)
+    elif domain == "light":
+        # brightness= is 0 to 255; turn_on with it also turns the light on.
+        if "brightness" in q:
+            if not re.fullmatch(r"\d+", q["brightness"]) or not 0 <= int(q["brightness"]) <= 255:
+                return False
+            if int(q["brightness"]) == 0:
+                action = "turn_off"
+            else:
+                e["brightness"] = int(q["brightness"])
+        on = action == "turn_on" or (action == "toggle" and e["state"] != "ON")
+        e["state"] = "ON" if on else "OFF"
     elif domain == "number":
         m = re.fullmatch(r"-?\d+(\.\d+)?", q.get("value", ""))
         if not m or not float(e["min_value"]) <= float(m.group()) <= float(e["max_value"]):
@@ -277,6 +297,8 @@ def entity_post(path, q):
         if q.get("option") not in e["option"]:
             return False
         e["state"] = e["value"] = q["option"]
+    elif domain == "text":
+        e["state"] = e["value"] = q.get("value", "")[:e["max_length"]]
     else:
         return True
     PUSHED.append(copy.deepcopy(e))
@@ -288,7 +310,10 @@ LOG = []
 # The saved Wi-Fi networks as GET /gameday/wifi lists them, the one tried first
 # first. None: firmware without the list.
 WIFI_INITIAL = [{"ssid": "Home", "connected": True}, {"ssid": "iPhone", "connected": False}]
-WIFI = {"list": copy.deepcopy(WIFI_INITIAL)}
+WIFI = {"list": copy.deepcopy(WIFI_INITIAL), "failed": None}
+# The networks the mock panel's scans see, and the ones a switch can't join.
+WIFI_NEARBY = {"Home", "iPhone", "Cabin", "Attic"}
+WIFI_BAD = {"Attic"}
 # Live games' own list (the live mask), kept apart from the state's live list,
 # which shows every league instead while no favorite is picked.
 LIVE_LIST = [[]]
@@ -873,7 +898,7 @@ def settings_doc():
             out[k] = s[k]
     if s.get("panels"):
         out["panels"] = s["panels"]
-    out["brightness"] = int(entity("Brightness")["value"])
+    out["brightness"] = int(entity("Game Day Scoreboard 2f6a70")["brightness"])
     out["scroll"] = int(entity("Scroll Speed")["value"])
     return out
 
@@ -1087,7 +1112,7 @@ def import_settings(doc):
     if len(hours) == 2 and night_time(hours["nightstart"]) == night_time(hours["nightend"]):
         kv = [p for p in kv if p[0] != "nightend"]
         skipped.append("nightend=" + night_time(hours["nightend"]))
-    for name, ent, lo, hi in (("brightness", "Brightness", 1, 255), ("scroll", "Scroll Speed", 1, 10)):
+    for name, ent, lo, hi in (("brightness", "Game Day Scoreboard 2f6a70", 1, 255), ("scroll", "Scroll Speed", 1, 10)):
         if name in doc and doc[name] is not None:
             if not is_int(doc[name]):
                 return fail(name + " should be a whole number.")
@@ -1104,7 +1129,11 @@ def import_settings(doc):
         STATE["favs"] = [team(*r) if r else {} for r in favs] + [{}] * (4 - len(favs))
     apply_set([p for p in kv if SET_KEYS.index(p[0]) > SET_KEYS.index("favs")])
     for ent, value in numbers.items():
-        entity(ent)["value"] = entity(ent)["state"] = str(value)
+        # The light's brightness alone: a restore leaves it on or off.
+        if ent == "Game Day Scoreboard 2f6a70":
+            entity(ent)["brightness"] = value
+        else:
+            entity(ent)["value"] = entity(ent)["state"] = str(value)
     return 200, {"ok": True, "restart": restart, "skipped": skipped, "kept": kept}
 
 
@@ -1176,7 +1205,7 @@ def selftest():
     reset_state(fixture_state)
     STATE["live"] = fixture_state["live"]
     LIVE_LIST[0] = []
-    entity("Brightness")["value"], entity("Scroll Speed")["value"] = str(want["brightness"]), str(want["scroll"])
+    entity("Game Day Scoreboard 2f6a70")["brightness"], entity("Scroll Speed")["value"] = want["brightness"], str(want["scroll"])
     have = settings_doc()
     if have != want or list(have) != list(want):
         bad += 1
@@ -1225,10 +1254,10 @@ def selftest():
         e.update(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"]))
     print(f"settings backup: {bad} failures in all")
 
-    for path, want in (("/button/Reset%20Wi-Fi/press", True), ("/switch/Power/turn_off", True),
+    for path, want in (("/button/Reset%20Wi-Fi/press", True), ("/light/Game%20Day%20Scoreboard%202f6a70/turn_off", True),
                        ("/number/Scroll%20Speed/set", True), ("/update/Firmware/install", True),
                        ("/button/Reset%20WiFi/press", False), ("/button/Reboot/turn_on", False),
-                       ("/switch/Brightness/turn_on", False), ("/text_sensor/IP/set", False)):
+                       ("/switch/Power/turn_on", False), ("/text_sensor/IP/set", False)):
         if entity_post_ok(path) != want:
             bad += 1
             print(f"FAIL POST {path} should {'pass' if want else 'get a 404'}")
@@ -1236,8 +1265,10 @@ def selftest():
     yaml = (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8")
     yaml += (REPO / "firmware/pages/effects.yaml").read_text(encoding="utf-8")
     yaml += (REPO / "firmware/pages/wizmote.yaml").read_text(encoding="utf-8")
+    yaml += (REPO / "firmware/pages/smart_board.yaml").read_text(encoding="utf-8")
     for e in ENTITIES:
-        if e["domain"] in ENTITY_ACTIONS and f'name: "{e["name"]}"' not in yaml:
+        named = "name: None" if e["domain"] == "light" else f'name: "{e["name"]}"'
+        if e["domain"] in ENTITY_ACTIONS and named not in yaml:
             bad += 1
             print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml, pages/effects.yaml or pages/wizmote.yaml")
     # Control posts change the entity and are pushed to the event stream.
@@ -1347,7 +1378,11 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/gameday/wifi":
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
-            return self._json(200, {"networks": WIFI["list"], "max": 5})
+            doc = {"networks": [dict(n, seen=n["ssid"] in WIFI_NEARBY) for n in WIFI["list"]], "max": 5,
+                   "scanning": False}
+            if WIFI["failed"]:
+                doc["failed"] = WIFI["failed"]
+            return self._json(200, doc)
         if u.path == "/gameday/picture":
             slot = atoi(parse_qs(u.query).get("slot", ["0"])[0])
             if slot not in PIC_FILES:
@@ -1371,10 +1406,12 @@ class Handler(BaseHTTPRequestHandler):
             # that long here too.
             ping = {"title": "Game Day Scoreboard", "comment": STATE["version"]}
             self.wfile.write(("retry: 30000\nevent: ping\ndata: " + json.dumps(ping) + "\n\n").encode())
+            # Marked before the dump: a post that lands while it is written is
+            # sent again after it, not lost between the two.
+            sent = len(PUSHED)
             for e in ENTITIES:
                 self.wfile.write(("event: state\ndata: " + json.dumps(e) + "\n\n").encode())
             self.wfile.flush()
-            sent = len(PUSHED)
             for tick in itertools.count():
                 time.sleep(0.5)
                 if "down" in FAIL or "events" in FAIL:
@@ -1405,6 +1442,7 @@ class Handler(BaseHTTPRequestHandler):
             DEMO.clear()
             DEMO.update(copy.deepcopy(DEMO_INITIAL))
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
+            WIFI["failed"] = None
             for e in ENTITIES:
                 e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
             if "wizmote" in body:
@@ -1422,16 +1460,51 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         if u.path == "/gameday/wifi":
             q = {k: v[0] for k, v in pairs.items()}
-            LOG.append({"path": u.path, "q": q})
+            n = int(self.headers.get("Content-Length") or 0)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace"),
+                                                  keep_blank_values=True).items()}
+            LOG.append({"path": u.path, "q": q, "form": form} if form else {"path": u.path, "q": q})
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
+            nets = WIFI["list"]
+            if "ssid" in form:
+                ssid = form["ssid"]
+                if not ssid or len(ssid.encode()) > 32 or len(form.get("password", "").encode()) > 64:
+                    return self._json(400, {"error": "A network name is 1 to 32 characters, a password up to 64."})
+                if any(x["ssid"] == ssid and x["connected"] for x in nets):
+                    return self._json(400, {"error": "The panel is on that network now."})
+                if any(x["ssid"] == ssid for x in nets):
+                    return self._json(200, {"ok": True, "added": False})
+                nets.insert(1 if nets else 0, {"ssid": ssid, "connected": False})
+                del nets[5:]
+                return self._json(200, {"ok": True, "added": True})
+            if "scan" in q:
+                return self._json(200, {"ok": True})
+            if "switch" in q:
+                to = q["switch"]
+                if not any(x["ssid"] == to and not x["connected"] for x in nets):
+                    return self._json(400, {"error": "The panel can't switch to that network now."})
+                WIFI["failed"] = None
+                if to in WIFI_BAD:
+                    WIFI["failed"] = to
+                else:
+                    for x in nets:
+                        x["connected"] = x["ssid"] == to
+                    nets.sort(key=lambda x: not x["connected"])
+                return self._json(200, {"ok": True})
             if not q.get("forget"):
-                return self._json(400, {"error": "forget is required"})
+                return self._json(400, {"error": "forget, ssid, switch or scan is required"})
             keep = [n for n in WIFI["list"] if n["ssid"] != q["forget"]]
             if len(keep) == len(WIFI["list"]):
                 return self._json(404, {"error": "not a saved network"})
+            # Forgetting the network the panel is on, with another left, moves
+            # it to the top one left (saved_networks.cpp, leave_()).
+            gone = next(n for n in WIFI["list"] if n["ssid"] == q["forget"])
+            moving = gone["connected"] and len(keep) > 0
+            if moving:
+                keep = [dict(n, connected=(i == 0)) for i, n in enumerate(keep)]
             WIFI["list"] = keep
-            return self._json(200, {"ok": True})
+            return self._json(200, {"ok": True, "moving": moving})
         if u.path == "/gameday/picture":
             n = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(n)

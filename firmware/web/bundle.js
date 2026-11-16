@@ -103,6 +103,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="sbview" id="sbView" hidden><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbhint">Send rows from Home Assistant</div></div>
       <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
@@ -119,6 +120,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         <div id="showCtls"></div>
         <div id="fxCtls" hidden>
           <p class="hint">The effect stays on until you pick another page.</p>
+        </div>
+        <div id="sbCtls" hidden>
+          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows, and writes over a row you change here the next time it updates it.</p>
+          <div class="sbrows" id="sbRows"></div>
         </div>
       </div>
     </div>
@@ -228,7 +233,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option>
             </select></div>
           </div>
         </div>
@@ -421,35 +426,18 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       <details class="card fold" id="netsCard" hidden>
         <summary><h2>Wi-Fi networks</h2><span class="fsum" id="netsSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
         <div class="cbody">
-          <p class="hint">Networks this panel knows. Add more in the Game Day app.</p>
+          <p class="hint">Networks this panel knows, in the order it tries them.</p>
           <div id="nets"></div>
           <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
-        </div>
-      </details>
-      <details class="card fold" id="diagCard">
-        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="cbody">
-          <div id="health" hidden>
-            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
-            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
-            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
-            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
-            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
-            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
-            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
-            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+          <p class="hint" id="netMsg" role="status" hidden></p>
+          <div class="actions" id="netAddRow"><button class="btn" id="netAdd">Add network</button></div>
+          <div id="netForm" hidden>
+            <label class="fl" for="netName">Network name<small>2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
+            <input type="text" id="netName" class="field" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
+            <label class="fl" for="netPass">Password<small>Blank for an open network.</small></label>
+            <input type="password" id="netPass" class="field" maxlength="64" autocomplete="new-password" enterkeyhint="done">
+            <div class="actions"><button class="btn primary" id="netSave">Save</button><button class="btn" id="netCancel">Cancel</button></div>
           </div>
-          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
-          <div id="wifiDiag" hidden>
-            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
-            <div class="spark" id="wifiSparkBox" hidden>
-              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
-              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
-            </div>
-            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
-          </div>
-          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
-          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
         </div>
       </details>
       <details class="card fold" id="remoteCard">
@@ -478,6 +466,32 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <small>or two 64x64 side by side</small>
             </button>
           </div>
+        </div>
+      </details>
+      <details class="card fold" id="diagCard">
+        <summary><h2>Diagnostics</h2><span class="fsum" id="diagSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <div id="health" hidden>
+            <div class="ctl"><label>Last restart<small id="hBoots"></small></label><span class="val" id="hStart"></span></div>
+            <div class="ctl"><label>Trouble since power on<small>Crashes, freezes and power dips</small></label><span class="val" id="hFault"></span></div>
+            <div class="ctl"><label>Free memory</label><span class="val" id="hHeap"></span></div>
+            <div class="ctl" id="hTempRow" hidden><label>Chip temperature<small>At 75 C the panel shows a thermometer until it cools</small></label><span class="val" id="hTemp"></span></div>
+            <div class="ctl" id="hPowerRow" hidden><label>Power dips<small>Brownout restarts since the panel was made</small></label><span class="val" id="hPower"></span></div>
+            <div class="ctl"><label>Last ESPN read</label><span class="val" id="hEspn"></span></div>
+            <div class="ctl" id="hNudgeRow" hidden><label>Update ready on the ticker<small>An hour a day from 5 PM while a release waits, never during a live game</small></label><span class="val" id="hNudge"></span></div>
+            <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
+          </div>
+          <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+          <div id="wifiDiag" hidden>
+            <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
+            <div class="spark" id="wifiSparkBox" hidden>
+              <svg id="wifiSpark" viewBox="0 0 288 48" preserveAspectRatio="none" role="img"></svg>
+              <div class="sparklbl"><span id="wifiFrom"></span><span>Dashed: weak below -75 dBm</span><span>Now</span></div>
+            </div>
+            <div class="ctl"><label>Wi-Fi drops<small id="wifiLast"></small></label><span class="val" id="wifiDrops"></span></div>
+          </div>
+          <div class="ctl"><label>Free PSRAM</label><span class="val" id="psram"></span></div>
+          <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
         </div>
       </details>
       <div class="card dangercard">
@@ -862,8 +876,59 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     return g.sit || "";
   };
 
+  // The Smart board (firmware/pages/smart_board.yaml): while the panel shows
+  // it, so does the board here, from the four row entities. Tags parse as in
+  // sb_parse (components/gameday/smart_board.h): [name] or [#RRGGBB] sets
+  // the color of what follows, anything else in brackets is text.
+  const SB_COLORS = { red: "ff2020", orange: "ff8000", yellow: "ffd000", green: "20e040", cyan: "00e0e0",
+    blue: "3070ff", purple: "a040ff", pink: "ff60c0", white: "ffffff", gray: "808080", grey: "808080" };
+  const sbParse = (raw) => {
+    const s = String(raw || "").slice(0, 255);
+    const segs = [{ c: "ffffff", t: "" }];
+    for (let i = 0; i < s.length;) {
+      const m = s[i] === "[" ? /^\[(#[0-9a-fA-F]{6}|[A-Za-z]{1,7})\]/.exec(s.slice(i)) : null;
+      const c = m && (m[1][0] === "#" ? m[1].slice(1).toLowerCase() : SB_COLORS[m[1].toLowerCase()]);
+      if (!c) {
+        // Spaces before the first word don't count, so "[red] Door" lines up.
+        if (!(s[i] === " " && segs.length === 1 && !segs[0].t)) segs[segs.length - 1].t += s[i];
+        i++;
+        continue;
+      }
+      if (!segs[segs.length - 1].t) segs[segs.length - 1].c = c;  // a tag at the start, or two in a row
+      else segs.push({ c, t: "" });
+      i += m[0].length;
+    }
+    while (segs.length > 1 && !segs[segs.length - 1].t) segs.pop();
+    segs[segs.length - 1].t = segs[segs.length - 1].t.replace(/ +$/, "");
+    return segs.some((g) => g.t) ? segs : null;
+  };
+  const entValue = (name) => {
+    const e = ents[byName[name]];
+    return e ? (e.value ?? e.state ?? "") : "";
+  };
+  const renderSmart = () => {
+    const on = entValue("Select Page") === "Smart board";
+    $("#board").classList.toggle("smart", on);
+    $("#sbView").hidden = !on;
+    if (!on) return;
+    let any = false;
+    $("#sbView").querySelectorAll(".sbrow").forEach((row, i) => {
+      const segs = sbParse(entValue("Smart board row " + (i + 1)));
+      row.hidden = !segs;
+      row.textContent = "";
+      (segs || []).forEach((g) => {
+        const span = el("span", null, g.t);
+        span.style.color = "#" + g.c;
+        row.appendChild(span);
+      });
+      any = any || !!segs;
+    });
+    $("#sbView .sbhint").hidden = any;
+  };
+
   const renderBoard = () => {
     const b = $("#board");
+    renderSmart();
     const g = game;
     const st = $("#gstate");
     const msg = $("#msg");
@@ -1922,7 +1987,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#afterHint").textContent = S.after === "off"
       ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
       : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
-        : "The final, then your next game, as before.";
+        : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
+          : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2227,16 +2293,24 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
 
   // ---- controls --------------------------------------------------------
   const controlDefs = [
-    // icon: drawn as a round button (Power, Refresh) or before a slider
-    // (Brightness, whose number shows as a percent of its range).
-    { name: "Power", into: "#quickCtls", label: "Panel on", icon: "power" },
-    { name: "Brightness", into: "#quickCtls", label: "Brightness", icon: "sun", pct: true },
+    // icon: drawn as a round button (Panel on, Refresh) or before a slider.
+    // The panel's light is both: its on/off as the round button, its
+    // brightness as a slider shown as a percent. It has the panel's own
+    // name, so it is matched by its domain (the only light).
+    { domain: "light", into: "#quickCtls", label: "Panel on", icon: "power", slider: { label: "Brightness", icon: "sun" } },
     { name: "Scroll Speed", into: "#panelCtls", label: "Ticker speed" },
     // onValue: the effect controls show only while the panel is on its Effects
     // page, whoever put it there (this page, Home Assistant, or the panel
     // taking the screen back), so it follows the entity's value, not the tap.
-    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => {
+      $("#fxCtls").hidden = v !== "Effects";
+      $("#sbCtls").hidden = v !== "Smart board";
+    } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
+    { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },
+    { name: "Smart board row 2", into: "#sbRows", label: "Row 2", sbRow: true },
+    { name: "Smart board row 3", into: "#sbRows", label: "Row 3", sbRow: true },
+    { name: "Smart board row 4", into: "#sbRows", label: "Row 4", sbRow: true },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
@@ -2260,9 +2334,180 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   };
   const icon = (k) => `<svg class="cico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 
+  // A slider row: the value waits while a finger or the mouse holds the
+  // thumb, and follows the panel again after that, focused or not.
+  const sliderRow = (labelText, iconName, min, max, step, pct, onSet) => {
+    const row = el("div", iconName ? "ctl c-" + iconName : "ctl");
+    const label = el("label", null, labelText);
+    const r = el("input");
+    r.id = label.htmlFor = "ctl-" + labelText.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    r.type = "range";
+    r.min = min;
+    r.max = max;
+    r.step = step;
+    const val = el("span", "val");
+    val.setAttribute("aria-hidden", "true");
+    const show = (v) => (val.textContent = pct ? Math.round((v - r.min) / (r.max - r.min) * 100) + "%" : v);
+    let dragging = false;
+    r.onpointerdown = () => {
+      dragging = true;
+      const end = () => {
+        dragging = false;
+        window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
+      };
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+    };
+    r.oninput = () => show(r.value);
+    r.onchange = () => onSet(r.value);
+    row.appendChild(label);
+    if (iconName) row.insertAdjacentHTML("beforeend", icon(iconName));
+    row.appendChild(r);
+    row.appendChild(val);
+    return { row, set(v) { if (!dragging) { r.value = v; show(v); } } };
+  };
+
+  // The panel's light: on/off as a round button, brightness 1 to 255 as a
+  // slider. Moving the slider on a dark panel turns it on, as it does in
+  // Home Assistant.
+  const buildLight = (def, e, host) => {
+    const row = el("div", "ctl c-" + def.icon);
+    row.appendChild(el("label", null, def.label));
+    const sw = el("button", "sw round");
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-label", def.label);
+    sw.innerHTML = icon(def.icon);
+    setOn(sw, false, "aria-checked");
+    let known = false;  // what the panel last said
+    sw.onclick = async () => {
+      const on = !sw.classList.contains("on");
+      setOn(sw, on, "aria-checked");
+      if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
+      if (on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
+    };
+    row.appendChild(sw);
+    host.appendChild(row);
+    const level = sliderRow(def.slider.label, def.slider.icon, 1, 255, 1, true, (v) => post(e.id, "turn_on", { brightness: v }));
+    host.appendChild(level.row);
+    return {
+      update(ev) {
+        known = ev.state === "ON" || ev.value === true;
+        setOn(sw, known, "aria-checked");
+        if (ev.brightness != null) level.set(Math.max(1, ev.brightness));
+      },
+    };
+  };
+
+  // A Smart board row on the Home tab: what the panel shows, in its colors,
+  // with an editor that takes plain words and a color, so nobody types tags.
+  // A row with several colors shows them all; saving it from here keeps one.
+  const SB_SWATCHES = ["ffffff", "ff2020", "ff8000", "ffd000", "20e040", "00e0e0", "3070ff", "a040ff", "ff60c0", "808080"];
+  const buildSbRow = (def, e, host) => {
+    const row = el("div", "sbedit");
+    const head = el("div", "sbhead");
+    head.appendChild(el("span", "sbnum", def.label));
+    const line = el("div", "sbline");
+    head.appendChild(line);
+    const edit = el("button", "btn", "Edit");
+    head.appendChild(edit);
+    row.appendChild(head);
+
+    const form = el("div", "sbform");
+    form.hidden = true;
+    const text = el("input");
+    text.type = "text";
+    text.maxLength = 240;
+    text.placeholder = "What the row says";
+    text.setAttribute("aria-label", def.label + " text");
+    const sw = el("div", "sbswatches");
+    sw.setAttribute("role", "radiogroup");
+    sw.setAttribute("aria-label", def.label + " color");
+    const custom = el("input", "sbcustom");
+    custom.type = "color";
+    custom.setAttribute("aria-label", "Another color");
+    let color = "ffffff";
+    const pick = (c) => {
+      color = c;
+      sw.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.c === c)));
+      custom.value = "#" + c;
+      text.style.color = "#" + c;
+    };
+    SB_SWATCHES.forEach((c) => {
+      const b = el("button", "sbsw");
+      b.type = "button";
+      b.dataset.c = c;
+      b.style.background = "#" + c;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", Object.keys(SB_COLORS).find((k) => SB_COLORS[k] === c) || "#" + c);
+      b.onclick = () => pick(c);
+      sw.appendChild(b);
+    });
+    custom.oninput = () => pick(custom.value.slice(1).toLowerCase());
+    sw.appendChild(custom);
+    const many = el("p", "hint", "This row has more than one color. Saving it here gives it one.");
+    const acts = el("div", "sbacts");
+    const save = el("button", "btn", "Save");
+    const clear = el("button", "btn", "Clear row");
+    const cancel = el("button", "btn", "Cancel");
+    acts.append(save, clear, cancel);
+    form.append(el("span", "sbnum", def.label), text, sw, many, acts);
+    row.appendChild(form);
+    host.appendChild(row);
+
+    let raw = "";
+    const show = () => {
+      const segs = sbParse(raw);
+      line.textContent = "";
+      line.classList.toggle("empty", !segs);
+      if (!segs) line.textContent = "Empty";
+      (segs || []).forEach((g) => {
+        const s = el("span", null, g.t);
+        s.style.color = "#" + g.c;
+        line.appendChild(s);
+      });
+      edit.textContent = segs ? "Edit" : "Add";
+      edit.setAttribute("aria-label", (segs ? "Edit " : "Add ") + def.label.toLowerCase());
+    };
+    const close = () => {
+      form.hidden = true;
+      head.hidden = false;
+      show();
+    };
+    edit.onclick = () => {
+      const segs = sbParse(raw);
+      text.value = (segs || []).map((g) => g.t).join("");
+      pick(segs ? segs[0].c : "ffffff");
+      many.hidden = !segs || segs.length < 2;
+      head.hidden = true;
+      form.hidden = false;
+      text.focus();
+    };
+    // A save the panel never got leaves the editor open with what was typed.
+    const send = async (value) => {
+      if (!(await post(e.id, "set", { value }))) return;
+      raw = value;
+      close();
+    };
+    save.onclick = () => {
+      const t = text.value.trim();
+      send(t ? "[#" + color.toUpperCase() + "]" + t : "");
+    };
+    text.onkeydown = (ev) => {
+      if (ev.key === "Enter") save.onclick();
+      if (ev.key === "Escape") close();
+    };
+    clear.onclick = () => send("");
+    cancel.onclick = close;
+    show();
+    // The panel's value waits while the row is being edited.
+    return { update(ev) { raw = String(ev.value ?? ev.state ?? ""); if (form.hidden) show(); } };
+  };
+
   const buildControl = (def, e) => {
     const domain = domainOf(e);
     const host = $(def.into);
+    if (def.sbRow) return buildSbRow(def, e, host);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
       if (def.icon) {
@@ -2284,6 +2529,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       host.appendChild(b);
       return { update() {} };
     }
+    if (domain === "light") return buildLight(def, e, host);
     const row = el("div", def.icon ? "ctl c-" + def.icon : "ctl");
     const label = el("label", null, def.label);
     const id ="ctl-" + def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -2303,7 +2549,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         setOn(sw, on, "aria-checked");
         // A tap the panel never got goes back to what it last said.
         if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
-        if (def.name === "Power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
+        if (def.icon === "power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
       };
       row.appendChild(sw);
       host.appendChild(row);
@@ -2339,6 +2585,18 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       row.appendChild(val);
       host.appendChild(row);
       return { update(ev) { if (!dragging) { r.value = ev.value; show(ev.value); } } };
+    }
+    if (domain === "text") {
+      const t = el("input");
+      t.id = label.htmlFor = id;
+      t.type = "text";
+      t.maxLength = e.max_length ?? 255;
+      t.spellcheck = false;
+      t.onchange = () => post(e.id, "set", { value: t.value });
+      row.appendChild(t);
+      host.appendChild(row);
+      // The panel's value waits while somebody is typing in the box.
+      return { update(ev) { if (document.activeElement !== t) t.value = ev.value ?? ev.state ?? ""; } };
     }
     if (domain === "select") {
       const s = el("select");
@@ -3153,7 +3411,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // GET /gameday/wifi lists the networks the panel remembers, names only, in
   // the order it tries them. Firmware without the list answers 404 and the
   // section stays hidden.
+  let netsDoc = { networks: [], max: 5 };  // the last list the panel gave
   const renderNetworks = (j) => {
+    netsDoc = j;
     const nets = j.networks || [];
     const list = $("#nets");
     list.innerHTML = "";
@@ -3164,12 +3424,27 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       else if (i === 0) label.appendChild(el("small", null, "Tried first"));
       row.appendChild(label);
       const b = el("button", "btn danger", "Forget");
+      // Forgetting the network the panel is on moves it to the others now,
+      // the top one first. The only one stays: the panel always keeps a
+      // network to join, so it saves that one again when it next joins.
+      const others = nets.filter((o) => o !== n);
+      const next = others.length ? others[0].ssid : "";
       b.onclick = async () => {
-        if (!confirm("Forget " + n.ssid + "?")) return;
+        let ask = "Forget " + n.ssid + "?";
+        if (n.connected && next) {
+          ask += " The panel moves to " + next + " now" + (others.length > 1 ? ", or another saved network if it can't see " + next + "." : ".");
+        } else if (n.connected) {
+          ask += " It's the only saved network, so the panel stays on it and saves it again after a restart. Reset Wi-Fi takes the panel off it.";
+        }
+        if (!confirm(ask)) return;
         b.disabled = true;
         try {
           const r = await fetch("/gameday/wifi?forget=" + encodeURIComponent(n.ssid), { method: "POST" });
-          toast(r.ok ? "Forgot " + n.ssid + (n.connected ? "; it stays connected until the next restart" : "") : "Could not forget " + n.ssid);
+          const j = r.ok ? await r.json().catch(() => ({})) : null;
+          if (!j) toast("Could not forget " + n.ssid);
+          else if (j.moving) toast("Forgot " + n.ssid + ". Moving to " + (others.length > 1 ? "the next saved network" : next) + " now");
+          else if (n.connected && !others.length) toast("Forgot " + n.ssid + ". It's the only saved network, so the panel stays on it");
+          else toast("Forgot " + n.ssid);
         } catch (_) {
           toast("Could not forget " + n.ssid);
         }
@@ -3195,17 +3470,143 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     }
   };
 
+  // Add network saves a name and password without joining it (POST
+  // ssid=&password=, a form body so the password stays out of the address).
+  // The panel then scans; when it can see the network, the page offers to
+  // switch to it now (POST switch=). The panel goes back to the network it
+  // was on if it can't join in 30 s, and GET then names it as failed.
+  const netMsg = (t) => {
+    const m = $("#netMsg");
+    m.textContent = t || "";
+    m.hidden = !t;
+  };
+  const wifiDoc = async (ms) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), ms);
+    try {
+      const r = await fetch("/gameday/wifi?_=" + Date.now(), { cache: "no-store", signal: ctl.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+  const bytes = (s) => new TextEncoder().encode(s).length;
+  const openNetForm = (open) => {
+    $("#netForm").hidden = !open;
+    $("#netAddRow").hidden = open;
+    if (!open) return;
+    $("#netName").value = "";
+    $("#netPass").value = "";
+    $("#netName").focus();
+  };
+  $("#netAdd").onclick = () => {
+    netMsg("");
+    openNetForm(true);
+  };
+  $("#netCancel").onclick = () => openNetForm(false);
+  $("#netName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netPass").focus(); });
+  $("#netPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netSave").click(); });
+
+  const switchTo = async (ssid, home) => {
+    let r = null;
+    try {
+      r = await fetch("/gameday/wifi?switch=" + encodeURIComponent(ssid), { method: "POST" });
+    } catch (_) {}
+    if (!r || !r.ok) return netMsg("The panel can't switch to " + ssid + " right now. It's still on " + home + ".");
+    netMsg("Switching to " + ssid + ". The panel shows JOINING while it tries.");
+    // The panel is off Wi-Fi for a few seconds at least, longer when the new
+    // network doesn't work. Ask until it answers with how it went.
+    const until = Date.now() + 90000;
+    await nap(5000);
+    while (Date.now() < until) {
+      let j;
+      try {
+        j = await wifiDoc(3000);
+      } catch (_) {
+        await nap(3000);
+        continue;
+      }
+      if (!j.switching) {
+        renderNetworks(j);
+        if ((j.networks || []).some((n) => n.ssid === ssid && n.connected)) return netMsg("The panel is on " + ssid + " now.");
+        if (j.failed === ssid)
+          return netMsg("The panel couldn't join " + ssid + ", so it went back to " + home + ". Check the name and password, then add it again.");
+      }
+      await nap(3000);
+    }
+    netMsg("This page can't reach the panel. If your phone isn't on " + ssid + ", join it, then open the panel's address again.");
+  };
+
+  // After a save: wait for the panel's scan (about 4 s), then offer the
+  // switch when the network is in range.
+  const offerSwitch = async (ssid) => {
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      await nap(1500);
+      try {
+        j = await wifiDoc(4000);
+      } catch (_) {
+        j = null;
+        continue;
+      }
+      if (!j.scanning) break;
+    }
+    if (j) renderNetworks(j);
+    const list = (j && j.networks) || [];
+    const n = list.find((x) => x.ssid === ssid);
+    const on = list.find((x) => x.connected);
+    const home = on ? on.ssid : "its network";
+    const saved = "Saved " + ssid + ". The panel joins it wherever it can't find a network it already knows.";
+    if (!n || !n.seen || n.connected) return netMsg(saved);
+    if (!confirm("The panel can see " + ssid + ". Switch to it now?\n\nIf your phone isn't on " + ssid + ", this page loses the panel until your phone joins it too. If the panel can't join " + ssid + ", it goes back to " + home + " within a minute."))
+      return netMsg(saved);
+    switchTo(ssid, home);
+  };
+
+  $("#netSave").onclick = async () => {
+    const ssid = $("#netName").value.trim();
+    const pass = $("#netPass").value;
+    if (!ssid || bytes(ssid) > 32) return netMsg("A network name is 1 to 32 characters.");
+    if (pass && (pass.length < 8 || bytes(pass) > 64 || (pass.length === 64 && !/^[0-9a-f]{64}$/i.test(pass))))
+      return netMsg("A Wi-Fi password is 8 to 63 characters.");
+    const list = netsDoc.networks || [];
+    if (list.some((n) => n.ssid === ssid && n.connected)) return netMsg("The panel is on " + ssid + " now, so its password already works.");
+    const known = list.some((n) => n.ssid === ssid);
+    if (known && !confirm(ssid + " is already saved. Replace its password?")) return;
+    if (!known && list.length >= (netsDoc.max || 5) &&
+        !confirm("The list is full, so adding " + ssid + " drops " + list[list.length - 1].ssid + ". Add it?")) return;
+    $("#netSave").disabled = true;
+    let r = null;
+    try {
+      r = await fetch("/gameday/wifi", { method: "POST", body: new URLSearchParams({ ssid, password: pass }) });
+    } catch (_) {}
+    $("#netSave").disabled = false;
+    if (!r || !r.ok) {
+      let why = "";
+      try {
+        why = (await r.json()).error || "";
+      } catch (_) {}
+      return netMsg(why || "The panel didn't save " + ssid + ". Try again.");
+    }
+    openNetForm(false);
+    netMsg("Saved " + ssid + ". Checking whether the panel can see it…");
+    offerSwitch(ssid);
+  };
+
   // ---- event stream ------------------------------------------------------
   const onState = (e) => {
     ents[e.id] = Object.assign(ents[e.id] || {}, e);
     if (e.name) byName[e.name] = e.id;
     const name = ents[e.id].name;
-    const def = controlDefs.find((d) => d.name === name);
+    const def = controlDefs.find((d) => (d.domain ? d.domain === domainOf(ents[e.id]) : d.name === name));
     if (def) {
       if (!built[e.id]) built[e.id] = buildControl(def, ents[e.id]);
       built[e.id].update(ents[e.id]);
       if (def.onValue) def.onValue(ents[e.id].value);
     }
+    if (name === "Select Page" || /^Smart board row [1-4]$/.test(name || "")) renderSmart();
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.

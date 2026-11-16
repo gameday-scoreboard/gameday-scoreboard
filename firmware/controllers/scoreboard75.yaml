@@ -81,7 +81,7 @@ binary_sensor:
             condition:
               lambda: 'return !id(qc_active);'
             then:
-              - switch.toggle: power
+              - light.toggle: gd_display
 
 lvgl:
   byte_order: little_endian

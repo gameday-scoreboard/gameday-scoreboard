@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "esphome/components/http_request/http_request.h"
+#include "esphome/components/light/light_state.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/panel_layout/panel_layout.h"
 #include "esphome/components/select/select.h"
@@ -24,6 +25,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/preferences.h"
+#include "esphome/core/static_task.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -45,6 +47,7 @@
 #include "health.h"
 #include "hook.h"
 #include "line_score.h"
+#include "live_scan.h"
 #include "message.h"
 #include "news.h"
 #include "season.h"
@@ -62,6 +65,7 @@
 #include "settings_change.h"
 #include "startup.h"
 #include "wake.h"
+#include "smart_board.h"
 #include "update_nudge.h"
 #include "weather.h"
 #include "wifi_history.h"
@@ -193,6 +197,7 @@ using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<
 static constexpr uint8_t FAV_MAX = 16;
 
 class GamedayComponent;
+class EspnFetch;
 
 using ::espn::parse_team_ref;
 
@@ -236,7 +241,9 @@ class GamedaySelect : public select::Select, public Component {
 //                                    400 with "error" when refused or past 4 KB
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
 //                                    names only (components/saved_networks)
-//   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved
+//   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved.
+//                                    "moving": true when it was the one the panel is on and
+//                                    the panel leaves it now for another saved network
 //   GET  /gameday/crash              the last crash, watchdog or brownout restart and its
 //                                    backtrace, kept in flash (components/crash_report)
 //   POST /gameday/crash?clear=1      empties it
@@ -254,8 +261,26 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_time(time::RealTimeClock *time) { this->time_ = time; }
   void set_web_server_base(web_server_base::WebServerBase *base) { this->base_ = base; }
   void set_panel_layout(panel_layout::PanelLayout *p) { this->panels_ = p; }
-  // Brightness and Scroll Speed, kept in the settings backup (settings_doc.h).
-  void set_brightness_number(number::Number *n) { this->brightness_number_ = n; }
+  // The Display light, the panel's on/off and brightness in one entity
+  // (gameday-common.yaml). Its brightness and Scroll Speed are kept in the
+  // settings backup (settings_doc.h).
+  void set_display_light(light::LightState *l) { this->display_ = l; }
+  // Where the light is headed, not where a fade has it right now.
+  bool display_on() const { return this->display_ != nullptr && this->display_->remote_values.is_on(); }
+  // Its brightness on the panel's 1 to 255 scale, on or off.
+  uint8_t display_level() const {
+    if (this->display_ == nullptr)
+      return 128;
+    long v = lroundf(this->display_->remote_values.get_brightness() * 255.0f);
+    return (uint8_t) (v < 1 ? 1 : v > 255 ? 255 : v);
+  }
+  // Sets the brightness and leaves on/off as it is, like the old slider.
+  void set_display_level(int level) {
+    if (this->display_ == nullptr)
+      return;
+    level = level < 1 ? 1 : level > 255 ? 255 : level;
+    this->display_->make_call().set_brightness((float) level / 255.0f).set_transition_length(0).perform();
+  }
   void set_scroll_number(number::Number *n) { this->scroll_number_ = n; }
   void add_on_action_callback(std::function<void(std::string)> &&cb) {
     this->action_callbacks_.push_back(std::move(cb));
@@ -480,6 +505,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // white and no icon.
   void say(const std::string &text, int secs, uint8_t mark = 0);
   const std::string &say_text() const { return this->say_text_; }
+  // After the game is Smart board and it is between games: the Smart board
+  // page goes up until the next game is near (pages/smart_board.yaml, on
+  // the "smartboard" action, which fires each time this changes).
+  bool smart_between() const { return this->wake_smart_; }
   int say_secs() const { return this->say_secs_; }
   // The banner's look: a playlist's color and icon (playlists.h ListColor,
   // ListIcon) while it shows that playlist's name, white and no icon for
@@ -764,7 +793,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   UpdateFields last_fields_;
   web_server_base::WebServerBase *base_{nullptr};
   panel_layout::PanelLayout *panels_{nullptr};
-  number::Number *brightness_number_{nullptr};
+  light::LightState *display_{nullptr};
   number::Number *scroll_number_{nullptr};
   // An import's body as it arrives (HTTP task only), freed once handled.
   PsString settings_body_;
@@ -1033,6 +1062,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool need_scan{false};
     bool rotate{false};  // the scan is the Switch every look, not a kickoff or a game that ended
     std::vector<League> scan_leagues;
+    // The board has no game on it: stop at the first league with one, leave
+    // the leagues not read yet in scan_rest, and the main loop shows a game
+    // while a second job (scan_cont) reads them (live_scan.h).
+    bool scan_early{false};
+    bool scan_cont{false};
+    std::vector<League> scan_rest;
     bool top25{false};  // no team picked: college basketball's Top 25 slate (scan_url)
     ::espn::LiveList live;
     bool scan_ok{false};
@@ -1212,7 +1247,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
   uint32_t our_id_() const;     // worker: the job's team id the snapshot is oriented around
   uint32_t orient_id_() const;  // main loop: works that id out for start_job_
-  std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
+  // Sends the request; on a 200, returns the reply to read. With a fetch whose
+  // PSRAM came through, it asks ESPN for gzip.
+  std::shared_ptr<http_request::HttpContainer> open_(const std::string &url, const EspnFetch *fetch = nullptr);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
   uint32_t linger_ms_() const;  // how long a final stays up before the next game
@@ -1332,12 +1369,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void send_game_event_(const ::espn::HaEvent &e);
   void send_test_event_();  // the "event_test" action
   uint32_t ha_tick_ms_{0};
-  // The webhook's posts, one at a time on a short-lived task of their own,
-  // so a slow or missing listener never holds up the board or ESPN's reads.
-  // One try each, a few seconds at most; a full queue drops the oldest.
+  // The webhook's posts, one at a time on a task of their own, so a slow or
+  // missing listener never holds up the board or ESPN's reads. One try each,
+  // a few seconds at most; a full queue drops the oldest. The task starts
+  // with the first post and then waits for the next: a task started and
+  // ended per post kept about 42 bytes of internal RAM each time.
   static constexpr size_t kHookQueueMax = 6;
   std::vector<std::string> hook_queue_;  // main loop only
-  std::string hook_task_url_, hook_task_body_;  // set before the task starts, read only by it
+  StaticTask hook_task_;  // stack in PSRAM
+  std::string hook_task_url_, hook_task_body_;  // set before the task is woken, read only by it
   std::atomic<bool> hook_running_{false};
   std::atomic<bool> hook_task_done_{false};
   std::atomic<int> hook_task_status_{0};
@@ -1346,7 +1386,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t hook_sent_{0}, hook_dropped_{0};
   void queue_hook_(std::string body);
   void hook_tick_();  // main loop: starts the next post, collects the last
-  static void hook_task_(void *arg);
+  static void hook_task_fn_(void *arg);
+  void hook_post_();  // on the hook task: one post
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
@@ -1427,17 +1468,39 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t league;
   };
   std::vector<LiveSide, PsramAllocator<LiveSide>> scan_live_sides_;
+  // The leagues with a game on at the last scan, read first by the next one
+  // (live_scan.h). Kept across a settings change: the games are still on.
+  uint16_t scan_live_leagues_{0};
+  // A scan that showed its first game early: what it had read, kept while
+  // that game's own read runs, then handed to the job that reads the rest.
+  struct ScanRest {
+    uint8_t stage{0};  // 0 none, 1 the shown game's read is next, 2 the rest of the scan is next
+    uint32_t generation{0};
+    std::vector<League> leagues;
+    ::espn::LiveList live;
+    ::espn::FinalList finals;
+    ::espn::PendingList pending;
+    int64_t next_kickoff{0};
+    int64_t fav_kickoff{0};
+    bool scan_ok{false};
+    bool want_finals{false};
+  };
+  ScanRest scan_rest_;
+  void keep_scan_rest_();         // main loop, after a job's answer was applied
+  bool start_scan_rest_(Job &j);  // start_job_: the shown game's read, then the rest
   void load_night_();
   void set_night_(const ::espn::NightPrefs &p);
   void night_tick_();  // from loop(), every AUTO_UPDATE_TICK
   // Game-day wake (wake.h), its own blob, and its state, kept in RTC memory
   // through a restart. wake_clock_ is the clock between games, on the board
-  // now (clock_fields_).
+  // now (clock_fields_); wake_smart_ the Smart board between games, which
+  // pages/smart_board.yaml puts up on the "smartboard" action.
   ESPPreferenceObject wake_pref_;
   ::espn::WakePrefs wake_{};
   ::espn::WakeState wake_state_{};
   bool wake_loaded_{false};
   bool wake_clock_{false};
+  bool wake_smart_{false};
   bool power_on_{true};
   // Live games with Favorites take over: the next start of a favorite's
   // game from the last scan, 0 for none.
