@@ -523,7 +523,7 @@ def remap_lists(before):
 
 def remote_parse(v):
     """remote_parse(): the text of a button's target, canonical, or None when the panel refuses it."""
-    if v in ("fav", "all", "none"):
+    if v in ("fav", "all", "live", "none"):
         return v
     if v.startswith("team:"):
         ref = parse_team_ref(v[5:])

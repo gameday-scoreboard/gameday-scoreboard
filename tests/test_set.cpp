@@ -1019,6 +1019,8 @@ void test_remote() {
          "a sport row");
   SCHECK(!remote_parse("sport:Hockey", t) && !remote_parse("sport:curling", t), "an unknown sport is refused");
   SCHECK(remote_parse("all", t) && remote_text(t) == "all" && remote_parse("none", t) && remote_text(t) == "none", "all, none");
+  SCHECK(remote_parse("live", t) && t.kind == (uint8_t) RemoteKind::LIVE && remote_text(t) == "live", "live");
+  SCHECK(!remote_parse("Live", t) && !remote_parse("live:nfl", t), "live takes no leagues");
   SCHECK(!remote_parse("", t) && !remote_parse("nfl:6", t) && !remote_parse("favorite", t), "anything else is refused");
   SetOp op;
   SCHECK(parse_set("remote2", "team:nfl:6", op, kFavMax) && op.kind == SetKind::REMOTE && op.slot == 2 &&
@@ -1059,6 +1061,9 @@ void test_remote() {
   remote_parse("none", t);
   a = remote_resolve(3, t, favs, names);
   SCHECK(a.kind == RemoteKind::NONE && !a.gone, "nothing");
+  remote_parse("live", t);
+  a = remote_resolve(2, t, {}, {});
+  SCHECK(a.kind == RemoteKind::LIVE && !a.gone, "Live games, with no favorites or playlists at all");
 }
 
 }  // namespace

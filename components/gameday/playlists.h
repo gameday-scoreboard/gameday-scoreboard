@@ -460,6 +460,9 @@ inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const 
     case RemoteKind::NONE:
       a.kind = RemoteKind::NONE;
       return a;
+    case RemoteKind::LIVE:
+      a.kind = RemoteKind::LIVE;
+      return a;
     default:
       return a;
   }

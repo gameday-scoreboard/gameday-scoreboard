@@ -35,6 +35,14 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+A WizMote button can now bring the panel back to Live games.
+
+### ✨ New
+
+- 🎮 **Live games** in the **Remote** button pickers: a press switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip
+
 ## v2026.11.4
 
 The new Smart board shows up to four rows of your own text from Home Assistant, in colors you pick, all the time or between games. Live games also puts a game on the board sooner.

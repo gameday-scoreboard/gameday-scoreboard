@@ -498,7 +498,7 @@ void GamedayComponent::setup() {
   if (!this->pref12_.load(&this->prefs12_))
     this->prefs12_ = Prefs12{};  // no colors or icons
   for (auto &b : this->prefs11_.btn)
-    if (b.kind > (uint8_t) ::espn::RemoteKind::NONE)
+    if (b.kind > ::espn::kRemoteKindLast)
       b = ::espn::RemoteTarget{};
   this->load_msg_();
   this->load_nick_();
@@ -1019,6 +1019,12 @@ void GamedayComponent::remote_number(uint8_t n) {
   switch (a.kind) {
     case ::espn::RemoteKind::NONE:
       ESP_LOGI(TAG, "Remote button %u: nothing", (unsigned) n);
+      return;
+    case ::espn::RemoteKind::LIVE:
+      // Back to Live games with the leagues it had; already there, it stays put.
+      ESP_LOGI(TAG, "Remote button %u: Live games", (unsigned) n);
+      if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES)
+        this->set_mode_((uint8_t) Mode::LIVE);
       return;
     case ::espn::RemoteKind::SPORT:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, ::espn::kSportRowNames[a.sport_row - 1]);

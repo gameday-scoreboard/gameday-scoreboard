@@ -54,4 +54,8 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 - **All favorites**: back to every favorite.
 - **Nothing**.
 
+:::note[Coming in the next release]
+A button can also be **Live games**: a press switches the panel back to Live games, with the leagues it already has. Pressing it in Live games leaves the panel as it is. Set a button to it, and a favorite's button in Live games is no longer a one-way trip into Favorite teams. The picker on the device page has it first; Remote in the Game Day app gets it in a later app update.
+:::
+
 A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A button set to a playlist follows it when you rename it. A settings backup carries the four buttons.
