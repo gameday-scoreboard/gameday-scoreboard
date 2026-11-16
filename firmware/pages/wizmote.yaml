@@ -189,6 +189,9 @@ text:
           }
           if (!valid)
             ESP_LOGW("wizmote", "Invalid MAC %s (expected aa:bb:cc:dd:ee:ff)", x.c_str());
+          // Into flash at once: a pairing or an unpair followed by a power cut
+          // within ESPHome's 60 s flash timer brought the old remote back.
+          id(gameday_ctl).sync_soon();
       - if:
           condition:
             lambda: 'return id(wizmote_previous_mac) != "" && id(wizmote_previous_mac) != "00:00:00:00:00:00";'
