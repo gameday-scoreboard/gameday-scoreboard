@@ -48,6 +48,10 @@ The new Smart board shows up to four rows of your own text from Home Assistant, 
 - 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**
 - 📶 **Add network** under **Wi-Fi networks** on the device page saves a network by name and password while the panel stays on its Wi-Fi, and offers to switch to it now when it's in range
 
+### ✨ New
+
+- 📉 The panel downloads a fifth of the data from ESPN or less: it asks for the scores compressed, so **ESPN data** on the device page climbs much slower
+
 ### 🐛 Fixes
 
 - ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league

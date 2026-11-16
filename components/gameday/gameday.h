@@ -197,6 +197,7 @@ using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<
 static constexpr uint8_t FAV_MAX = 16;
 
 class GamedayComponent;
+class EspnFetch;
 
 using ::espn::parse_team_ref;
 
@@ -1246,7 +1247,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
   uint32_t our_id_() const;     // worker: the job's team id the snapshot is oriented around
   uint32_t orient_id_() const;  // main loop: works that id out for start_job_
-  std::shared_ptr<http_request::HttpContainer> open_(const std::string &url);
+  // Sends the request; on a 200, returns the reply to read. With a fetch whose
+  // PSRAM came through, it asks ESPN for gzip.
+  std::shared_ptr<http_request::HttpContainer> open_(const std::string &url, const EspnFetch *fetch = nullptr);
   void schedule_next_(uint32_t ms) { this->next_fetch_ms_ = millis() + ms; }
   uint32_t interval_for_phase_() const;
   uint32_t linger_ms_() const;  // how long a final stays up before the next game

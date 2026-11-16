@@ -48,7 +48,7 @@ In Live games with nothing on, the panel waits for the next start time instead o
 
 Nothing beyond the panel and its electricity. There's no subscription and no account. The scores come from ESPN's public feed, and the panel reads them itself over your Wi-Fi.
 
-If your internet plan has a data cap, **ESPN data** under **Diagnostics** on the device page's Device tab shows how much the panel has downloaded since it started.
+If your internet plan has a data cap, **ESPN data** under **Diagnostics** on the device page's Device tab shows how much the panel has downloaded since it started. The panel asks ESPN for its scores compressed, so following a live game takes a few kilobytes a read.
 
 ## Can I follow more than one team?
 
