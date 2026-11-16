@@ -1371,7 +1371,7 @@
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
   // The WizMote's buttons (state remote, set remote1 to remote4): what each is
   // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
-  // sport:football, all or none. A held post stands in until the panel answers.
+  // sport:football, all, live or none. A held post stands in until the panel answers.
   const remoteTargets = () => [1, 2, 3, 4].map((b) => {
     const h = S && S["remote" + b];
     const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
@@ -1710,7 +1710,8 @@
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
   // The Remote card's four pickers, one per button, grouped: its own
-  // favorite, each favorite team, the sport rows, the playlists, all, nothing.
+  // favorite, each favorite team, the sport rows, the playlists, all, Live
+  // games, nothing.
   let remoteSig = "";
   const renderRemote = () => {
     const host = $("#remoteBtns");
@@ -1719,7 +1720,7 @@
       ["Favorites", favKeys.map((k) => { const t = teamByKey(k); return ["team:" + k, t ? t[3] : k]; })],
       ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
       ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
-      ["", [["all", "All favorites"], ["none", "Nothing"]]]];
+      ["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]];
     const sig = JSON.stringify([groups, targets, favSlots]);
     if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
     remoteSig = sig;

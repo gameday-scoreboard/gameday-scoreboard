@@ -181,10 +181,14 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 //   list:<name>      one of the owner's playlists, by name
 //   sport:football   a sport row (playlists.h), football to soccer
 //   all              All favorites
+//   live             Live games, with the leagues it has
 //   none             nothing
 // A button whose team, playlist or sport row is gone does what its default
 // does, and the state says so (playlists.h remote_resolve).
-enum class RemoteKind : uint8_t { FAVORITE = 0, TEAM = 1, LIST = 2, SPORT = 3, ALL = 4, NONE = 5 };
+enum class RemoteKind : uint8_t { FAVORITE = 0, TEAM = 1, LIST = 2, SPORT = 3, ALL = 4, NONE = 5, LIVE = 6 };
+// The highest kind this firmware knows; a saved button past it (flash from a
+// newer build) goes back to its own favorite at boot.
+constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::LIVE;
 constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
 struct RemoteTarget {
   uint8_t kind{0};  // RemoteKind
@@ -219,6 +223,10 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
   }
   if (v == "none") {
     t.kind = (uint8_t) RemoteKind::NONE;
+    return true;
+  }
+  if (v == "live") {
+    t.kind = (uint8_t) RemoteKind::LIVE;
     return true;
   }
   if (v.compare(0, 5, "team:") == 0) {
@@ -261,6 +269,8 @@ inline std::string remote_text(const RemoteTarget &t) {
       return "all";
     case RemoteKind::NONE:
       return "none";
+    case RemoteKind::LIVE:
+      return "live";
     default:
       return "fav";
   }

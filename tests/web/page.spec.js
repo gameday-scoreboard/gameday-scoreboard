@@ -919,7 +919,7 @@ test("a playlist's options survive a rename and a reorder, and the bar says when
   await expectSet(request, { lists: "Sunday ball=nfl:34,@d:0,@t:11:00-23:00,@only,@today:0;A=nfl:6", list: "1" });
 });
 
-test("the Remote card sets each button: a favorite, a sport, a playlist, all or nothing, and marks the favorite it lands on", async ({ page, request }) => {
+test("the Remote card sets each button: a favorite, a sport, a playlist, all, Live games or nothing, and marks the favorite it lands on", async ({ page, request }) => {
   const t = (l, id, abbr, name) => ({ l, id, abbr, name });
   await reset(request, {
     favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("nba", 6, "DAL", "Dallas Mavericks"), t("ncaa", 251, "TEX", "Texas Longhorns"), {}],
@@ -931,7 +931,7 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  await expect(b1.locator("option")).toHaveText(["Its own favorite", "Dallas Cowboys", "Dallas Mavericks", "Texas Longhorns", "All football", "All basketball", "Sundays", "All favorites", "Nothing"]);
+  await expect(b1.locator("option")).toHaveText(["Its own favorite", "Dallas Cowboys", "Dallas Mavericks", "Texas Longhorns", "All football", "All basketball", "Sundays", "All favorites", "Live games", "Nothing"]);
   await expect(b1).toHaveValue("fav");
   await expect(btns.nth(0).locator("label small")).toHaveText("Favorite 1: Dallas Cowboys.");
   await expect(btns.nth(3).locator("label small")).toHaveText("Favorite 4 (empty).");
@@ -948,6 +948,8 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
   await btns.nth(2).locator("select").selectOption("list:Sundays");
   await expectSet(request, { remote3: "list:Sundays" });
   await expect(page.locator("#listCtls .plist").nth(0).locator(".pbtn")).toHaveText("Button 3");
+  await btns.nth(3).locator("select").selectOption("live");
+  await expectSet(request, { remote4: "live" });
   await btns.nth(3).locator("select").selectOption("none");
   await expectSet(request, { remote4: "none" });
   // Making another playlist leaves the buttons as they are.

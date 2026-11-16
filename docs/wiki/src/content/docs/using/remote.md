@@ -1,6 +1,6 @@
 ---
 title: "WizMote remote"
-description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and four buttons you set to a favorite, a playlist or a sport."
+description: "Pair a WiZ WizMote with the panel and use it for power, brightness, night mode and four buttons you set to a favorite, a playlist, a sport or Live games."
 sidebar:
   order: 12
 ---
@@ -39,12 +39,10 @@ During the night schedule's hours the remote can always light the panel. **ON**,
 Buttons 1 to 4 are the first four teams in your favorites list, in order. While the remote is paired, the device page marks them **remote button 1** to **4** under **Favorites** on the Teams tab. Each button also turns on a panel that is off.
 
 - In **Favorite teams**, a button jumps to that favorite. If its game is on, the panel stays on it; otherwise its card shows for a moment and the panel carries on through your favorites.
-- In **Live games**, a button switches the panel to Favorite teams and jumps to that favorite.
+- In **Live games**, a button switches the panel to Favorite teams and jumps to that favorite. A button set to **Live games** (below) switches it back.
 - A button for an empty slot does nothing.
 
 To change what a button does, reorder your favorites on the device page or in the app. See [Favorite teams](/using/favorites/).
-
-With playlists, buttons 1 to 4 play your first four playlists instead of your first four favorites. A press turns the panel on, switches it to Favorite teams, plays that playlist and shows its name on the board for a moment. A button with no playlist does nothing. Reorder the playlists on the device page to change what each button plays. See [Playlists](/using/favorites/#playlists).
 
 **Set each button yourself.** **Remote** on the device page's Device tab, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons. Each can be:
 
@@ -52,6 +50,11 @@ With playlists, buttons 1 to 4 play your first four playlists instead of your fi
 - A **favorite team**: that team, wherever it sits in your list.
 - A **playlist** or a **sport** (one of the sport rows under Playing): the panel switches to Favorite teams, plays it and shows its name on the board for a moment, in the playlist's [color and icon](/using/favorites/#playlists) if you gave it one.
 - **All favorites**: back to every favorite.
+- **Live games**: back to Live games, with the leagues it already has. In Live games it leaves the panel as it is. With one button on Live games, a favorite's button pressed during Live games is no longer a one-way trip into Favorite teams.
 - **Nothing**.
+
+:::note[Coming in the next app update]
+Remote in the Game Day app gets the **Live games** choice in a later app update. Until then, set it on the device page.
+:::
 
 A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. Set it to something else, or bring the team or playlist back, and it works again. A button set to a playlist follows it when you rename it. A settings backup carries the four buttons.
