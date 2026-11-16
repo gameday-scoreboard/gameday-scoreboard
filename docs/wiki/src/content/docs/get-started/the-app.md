@@ -152,6 +152,14 @@ On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone
 
 The panel list is **Settings > Panels**, and it's what the Board shows until you have a panel. It shows each panel's nickname, with a dot for online and **Offline** next to a panel the app can't reach.
 
+:::note[Coming in the next app update]
+On iPhone:
+
+- When the app can't reach any of your panels at once, the rows say **Reconnecting** and the app tries again every few seconds. A phone that was asleep can take a moment to find your panels on the network, even though they're fine. If none answers for three minutes, the rows say **Offline** and the list suggests turning Wi-Fi off and on in Control Center.
+- The dots start fresh each time you open the app, so you never see one left over from earlier.
+- A panel you give a new name in its own config stays in your list under the new name, with its nickname.
+:::
+
 - **Nickname**: give each panel a name like "Living room", in **Settings > Device > Nickname**. The nickname is saved on the panel, so every phone and the device page see the same name.
 - **Order**: with two or more panels, put the list in your own order (**Edit** on iPhone, the handle on each row on Android). The order is kept on each phone.
 
