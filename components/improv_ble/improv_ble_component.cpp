@@ -67,6 +67,10 @@ static constexpr uint32_t NETWORKS_SCAN_TIMEOUT_MS = 10000;
 // replaces the last one. Leave the phone time to receive each before the next.
 static constexpr uint32_t NETWORKS_SEND_INTERVAL_MS = 100;
 static constexpr size_t NETWORKS_MAX = 20;
+// A second request on the same connection (the app's refresh) scans again when
+// the results are older than this. A phone's Personal Hotspot only shows up
+// while its settings screen is open, so the list from the last scan can miss it.
+static constexpr uint32_t NETWORKS_REFRESH_AGE_MS = 10000;
 // GAMEDAY: end
 
 // GAMEDAY: begin
@@ -109,6 +113,7 @@ void ImprovBLEComponent::setup() {
     this->set_error_(improv::ERROR_NONE);
     // GAMEDAY: begin
     this->cancel_wifi_networks_();
+    this->networks_answered_ = false;  // the next phone's first ask uses the last scan
     // Half a command from a phone that left must not prefix the next one's.
     this->incoming_data_.clear();
     // GAMEDAY: end
@@ -759,8 +764,16 @@ void ImprovBLEComponent::handle_get_wifi_networks_() {
   auto *wifi = wifi::global_wifi_component;
   // Answer with the networks the Wi-Fi component already found. In setup mode
   // it has scanned since boot, and a fresh scan with Bluetooth connected takes
-  // about 9 s. Never scan in the middle of joining a network, or with Wi-Fi off.
-  if (!wifi->get_scan_result().empty() || this->state_ == improv::STATE_PROVISIONING || wifi->is_disabled()) {
+  // about 9 s. A refresh (a second ask on this connection) scans again when
+  // those results are old. Never scan in the middle of joining a network, or
+  // with Wi-Fi off.
+  bool refresh = this->networks_answered_;
+  this->networks_answered_ = true;
+  // millis() here as where networks_results_at_ is set: the loop's start
+  // time can be older than a result stamped earlier in the same loop.
+  bool stale = !this->networks_results_seen_ || millis() - this->networks_results_at_ > NETWORKS_REFRESH_AGE_MS;
+  bool have_results = !wifi->get_scan_result().empty() && !(refresh && stale);
+  if (have_results || this->state_ == improv::STATE_PROVISIONING || wifi->is_disabled()) {
     this->queue_wifi_networks_();
     return;
   }
@@ -788,7 +801,7 @@ void ImprovBLEComponent::handle_get_wifi_networks_() {
     // which on_wifi_scan_results() receives too, instead of answering empty.
     ESP_LOGD(TAG, "Wi-Fi scan not started (%s); waiting for the running one", esp_err_to_name(err));
   } else {
-    ESP_LOGD(TAG, "Scanning for Wi-Fi networks");
+    ESP_LOGD(TAG, "Scanning for Wi-Fi networks%s", refresh ? " (refresh)" : "");
   }
   this->networks_wait_scan_ = true;
   this->networks_scan_start_ = App.get_loop_component_start_time();
@@ -800,6 +813,8 @@ void ImprovBLEComponent::on_wifi_connect_state(StringRef ssid, std::span<const u
 }
 
 void ImprovBLEComponent::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+  this->networks_results_at_ = millis();
+  this->networks_results_seen_ = true;
   if (this->networks_wait_scan_)
     this->queue_wifi_networks_();
 }
