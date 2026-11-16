@@ -43,6 +43,10 @@ A WizMote button can now bring the panel back to Live games.
 
 - 🎮 **Live games** in the **Remote** button pickers: a press switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip
 
+### 🐛 Fixes
+
+- 📶 Scan again in the app's Wi-Fi list now has the panel look for networks afresh, so a phone hotspot turned on after the panel started shows up
+
 ## v2026.11.4
 
 The new Smart board shows up to four rows of your own text from Home Assistant, in colors you pick, all the time or between games. Live games also puts a game on the board sooner.
