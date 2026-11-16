@@ -152,6 +152,9 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   static constexpr uint32_t PENDING_MS = 60000;
   // How long switch_to() gives the new network, as long as the app gets.
   static constexpr uint32_t SWITCH_MS = 30000;
+  // Once more, when the panel is on the new network but has no address yet
+  // at SWITCH_MS.
+  static constexpr uint32_t SWITCH_GRACE_MS = 15000;
   // How long a scan counts as showing what is in range now.
   static constexpr uint32_t SEEN_MS = 120000;
   // How long switch_failed() names a network that would not join.
@@ -180,6 +183,7 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   uint32_t scanned_ms_{0};
   std::atomic<bool> scanning_{false};
   std::atomic<bool> switching_{false};
+  std::atomic<bool> switch_grace_{false};  // switch_timeout_() gave the extra time
   // The network being switched to, and the one that would not join; both
   // under mutex_.
   wifi_list::Network switch_to_{};
