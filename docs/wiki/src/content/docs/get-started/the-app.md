@@ -147,7 +147,7 @@ On iPhone and Android, **Customize** has **Pictures** after the message card, li
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
 
 :::note[Coming in the next app update]
-On Android, the pickers also offer **Live games**, after **All favorites**: a press switches the panel back to Live games with the leagues it already has (see [The numbered buttons](/using/remote/#the-numbered-buttons)). It shows once the panel runs firmware with that choice.
+On iPhone and Android, the pickers also offer **Live games**, after **All favorites**: a press switches the panel to Live games with the leagues it already has (see [The numbered buttons](/using/remote/#the-numbered-buttons)). It shows once the panel runs firmware with that choice.
 :::
 
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
