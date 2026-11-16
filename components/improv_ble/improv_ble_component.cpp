@@ -769,8 +769,9 @@ void ImprovBLEComponent::handle_get_wifi_networks_() {
   // with Wi-Fi off.
   bool refresh = this->networks_answered_;
   this->networks_answered_ = true;
-  bool stale = !this->networks_results_seen_ ||
-               App.get_loop_component_start_time() - this->networks_results_at_ > NETWORKS_REFRESH_AGE_MS;
+  // millis() here as where networks_results_at_ is set: the loop's start
+  // time can be older than a result stamped earlier in the same loop.
+  bool stale = !this->networks_results_seen_ || millis() - this->networks_results_at_ > NETWORKS_REFRESH_AGE_MS;
   bool have_results = !wifi->get_scan_result().empty() && !(refresh && stale);
   if (have_results || this->state_ == improv::STATE_PROVISIONING || wifi->is_disabled()) {
     this->queue_wifi_networks_();

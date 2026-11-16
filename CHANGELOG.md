@@ -45,7 +45,7 @@ A WizMote button can now bring the panel back to Live games.
 
 ### 🐛 Fixes
 
-- 📶 Scan again in the app's Wi-Fi list now has the panel look for networks afresh, so a phone hotspot turned on after the panel started shows up
+- 📶 The round arrow above the app's Wi-Fi list now has the panel look for networks again, so a phone hotspot turned on after the panel started shows up
 
 ## v2026.11.4
 
