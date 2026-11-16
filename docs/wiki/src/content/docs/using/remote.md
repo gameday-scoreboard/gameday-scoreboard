@@ -15,7 +15,7 @@ The panel works with a WiZ WizMote, the small battery remote sold for WiZ smart 
 
 The panel pairs with that remote and turns Discovery off by itself. The status line says **Paired:** and the remote's address. The press that pairs the remote does nothing else, so pairing with **OFF** leaves the panel on. Pressing the remote that is already paired while Discovery is on turns Discovery off and does nothing else either.
 
-The panel pairs with one remote at a time. Pairing another one replaces the first. **Unpair remote** in the same section forgets the paired remote, and the status says **No remote paired**. Discovery always starts off after the panel restarts, so a remote you haven't paired can't take over the panel.
+The panel pairs with one remote at a time. Pairing another one replaces the first. **Unpair remote** in the same section forgets the paired remote, and the status says **No remote paired**. A pairing or an unpair is saved the moment it happens, so it stays through a power cut right after. Discovery always starts off after the panel restarts, so a remote you haven't paired can't take over the panel.
 
 ## The buttons
 
