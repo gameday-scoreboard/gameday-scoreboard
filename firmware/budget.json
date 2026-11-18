@@ -6,12 +6,12 @@
     "heap": 20480
   },
   "release": {
-    "tag": "v2026.11.0",
+    "tag": "v2026.11.3",
     "flash": {
-      "moonhub75": 2564784,
-      "moonhub75-2panel": 2564800,
-      "scoreboard75": 2541264,
-      "waveshare": 2584592
+      "moonhub75": 3016768,
+      "moonhub75-2panel": 3016800,
+      "scoreboard75": 2992992,
+      "waveshare": 3036416
     },
     "allowance_flash": 524288
   },
