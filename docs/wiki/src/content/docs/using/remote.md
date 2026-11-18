@@ -63,7 +63,7 @@ The rest of the choices:
 - A page under **Showing**: **Scoreboard**, **Clock**, **Smart board** or **Effects**. The button puts the panel on that page, the same as picking it under **Showing** on the device page. Pressing it while that page is already up leaves it there.
 
 :::note[Coming in the next app update]
-Remote in the Game Day app gets the **Live games** choice, the sports with **All NFL live games** and **Another NFL team...**, the **Showing** pages and an Effects button's own effect in a later app update. Until then, set them on the device page.
+Remote in the Game Day app gets the **Live games** choice, the **Showing** pages and an Effects button's own effect in the next app update. The sports, with **All NFL live games** and **Another NFL team...**, come to the Android app in its next update and to the iPhone app in a later one. Until then, set them on the device page.
 :::
 
 A button set to a team, a playlist, a sport, a league, **All favorites** or **Live games** also brings the panel back to the scoreboard when another page is up, so the press always shows. If the [Clock](/using/brightness-and-clock/#showing-the-scoreboard-or-the-clock), the [Smart board](/using/smart-board/) or an [effect](/using/effects/) is up, the button switches **Showing** back to **Scoreboard** and shows what you pressed. If **After the game** has the clock or the Smart board up between games, the press ends that too: the panel stays on what you pressed, and the clock or Smart board comes back only after your next game's final. A button set to **Nothing** still does nothing.
