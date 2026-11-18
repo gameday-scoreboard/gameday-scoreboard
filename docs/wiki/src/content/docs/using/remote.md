@@ -67,7 +67,7 @@ Remote in the Game Day app gets the sports, **All NFL live games** and **Another
 
 ### One league's live games
 
-A button set to **All NFL live games** switches the panel to Live games and follows only NFL games, the same way Live games follows any league: a live game when there is one, recent finals when there isn't. The leagues you picked for Live games stay as they are. The device page's Live games bar says **Remote button 2: NFL games only** while it's on.
+A button set to **All NFL live games** switches the panel to Live games and follows only NFL games, the same way Live games follows any league. With no NFL game on, it shows what Live games shows between games: your first favorite's card, or recent NFL finals if you have no favorites. The leagues you picked for Live games stay as they are. The device page's Live games bar says **Remote button 2: NFL games only** while it's on.
 
 It stays on through a restart, and ends when you pick a mode, a playlist or another button. A button set to **Live games** goes back to your own leagues.
 
