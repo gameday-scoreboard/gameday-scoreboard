@@ -81,7 +81,17 @@ is the short version.
   owner's approval. JSON documents fail only when one grows more than
   `max_growth.json` against dev's last build. The job summary has the
   tables, room left in the OTA slot and the section diff; the
-  `budget-report` artifact has the same figures as JSON.
+  `budget-report` artifact has the same figures as JSON. To see what
+  moved the bytes, read "Where the bytes went" at the end of that summary:
+  on a pull request into dev it lists, for moonhub75, each component whose
+  flash or RAM changed against the same dev run, and the 20 symbols that
+  changed most. It is ESPHome's `analyze-memory` analysis, run by
+  `scripts/memory_report.py` on the finished build (the `memory-moonhub75`
+  artifact has every symbol), and it never fails the job. Locally:
+  after a compile, run `python scripts/memory_report.py extract
+  firmware/.esphome/build/gameday-moonhub75 a.json` with the ESPHome
+  venv's python, the same on the other build, then
+  `python3 scripts/memory_report.py diff a.json b.json`.
   `python3 scripts/size_budget.py seed <sizes folder>` prints caps with
   10% headroom (at least 1 KB); `release-baseline <sizes folder> <tag>`
   resets the release block when a release is cut; CI checks that the new
