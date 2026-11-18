@@ -39,7 +39,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
-                                    "field",   "winbar",  "spark",   "bigplays"};
+                                    "field",   "winbar",  "spark",   "bigplays", "fxlists", "fxlist"};
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -336,6 +336,8 @@ enum class SetKind : uint8_t {
   SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
   BIGPLAYS,     // on, the big plays' own shows on Full (celeb_<sport>.h)
+  FX_LISTS,     // text, every effect playlist (fx_playlists.h parse_fx_lists); "" clears them
+  FX_LIST,      // value, the effect playlist to play from the top, 0 = stop the one playing
 };
 
 struct TeamRef {
@@ -515,6 +517,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     long n = strtol(v.c_str(), nullptr, 10);
     op.value = n >= 0 && n <= 16 ? (int) n : -1;
     return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
+  if (k == "fxlists") {
+    // Parsed where the panel's effects and palettes are known (fx_playlists.h).
+    op.kind = SetKind::FX_LISTS;
+    op.text = v;
+    return true;
+  }
+  if (k == "fxlist") {
+    // 0 to 4 (fx_playlists.h kFxListMax), a whole number; one past the last
+    // playlist is refused where the playlists are known.
+    op.kind = SetKind::FX_LIST;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 4;
   }
   if (k == "sport") {
     // A sport row (playlists.h) by its kSportKeys word; "none" stops the one

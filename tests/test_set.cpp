@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "fx_playlists.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -83,8 +84,33 @@ struct Settings {
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
   WakePrefs wake{wake_defaults()};
+  // Effect playlists (fx_playlists.h) and the one playing.
+  FxStore fx{};
+  FxPlayer player;
 };
 constexpr int kFavMax = 16;
+
+// The panel's effect and palette lists for the fixture's cases: its own
+// fx_effects and fx_palettes, which tests/web/mock_device.py's Effect selects
+// also offer.
+std::vector<std::string> fx_effects, fx_palettes;
+FxNames fixture_fx_names() {
+  FxNames n;
+  n.effect = [](const std::string &s) {
+    for (const auto &e : fx_effects)
+      if (e == s)
+        return e;
+    return std::string();
+  };
+  n.palette_index = [](const std::string &s) {
+    for (size_t i = 0; i < fx_palettes.size(); i++)
+      if (fx_palettes[i] == s)
+        return (int) i;
+    return -1;
+  };
+  n.palette_name = [](uint8_t i) { return i < fx_palettes.size() ? fx_palettes[i] : std::string(); };
+  return n;
+}
 constexpr int kMaxCols = 2;
 
 TeamRef team_ref(const char *s) {
@@ -254,6 +280,23 @@ void load(Settings &s, JsonObjectConst o) {
   s.wake.lead = (uint8_t) lead;
   if (o["after"].is<const char *>())
     s.wake.after = (uint8_t) after_parse(o["after"].as<const char *>());
+  // Effect playlists as the state has them, through their set text.
+  if (o["fxlists"].is<JsonArrayConst>()) {
+    std::string text;
+    for (JsonObjectConst l : o["fxlists"].as<JsonArrayConst>()) {
+      text += (text.empty() ? "" : ";") + std::string(l["n"] | "") + "=";
+      std::string body;
+      for (JsonObjectConst e : l["fx"].as<JsonArrayConst>())
+        body += (body.empty() ? "" : ",") + std::string(e["e"] | "") + "|" + (e["p"] | "") + "|" +
+                std::to_string(e["s"] | 128) + "|" + std::to_string(e["i"] | 128) + "|" + std::to_string(e["w"] | 15);
+      if (l["shuffle"] | false)
+        body += body.empty() ? "@shuffle" : ",@shuffle";
+      text += body;
+    }
+    parse_fx_lists(text, fixture_fx_names(), s.fx);
+  }
+  if (o["fxlist"].is<int>() && !fx_start(s.fx, s.player, (uint8_t) o["fxlist"].as<int>(), 0))
+    s.player = FxPlayer{};
 }
 
 std::vector<TeamRef> fav_refs(const Settings &s) { return std::vector<TeamRef>(s.favs, s.favs + kFavMax); }
@@ -379,6 +422,22 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::WINBAR: s.winbar = op.on; break;
     case SetKind::SPARK: s.spark = op.on; break;
     case SetKind::BIGPLAYS: s.bigplays = op.on; break;
+    case SetKind::FX_LISTS: {
+      // set_fx_lists_: the one playing follows fx_after_edit; a changed one
+      // starts over (still playing).
+      FxList before{};
+      if (s.player.list >= 1 && s.player.list <= s.fx.count)
+        before = s.fx.list[s.player.list - 1];
+      parse_fx_lists(op.text, fixture_fx_names(), s.fx);
+      if (fx_after_edit(s.fx, s.player, before) == FxEdit::RESTART)
+        fx_start(s.fx, s.player, s.player.list, 0);
+      break;
+    }
+    case SetKind::FX_LIST:
+      // play_fx_list_: past the last one is refused; 0 stops; an empty one doesn't start.
+      if (op.value <= s.fx.count && !fx_start(s.fx, s.player, (uint8_t) op.value, 0))
+        s.player = FxPlayer{};
+      break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
@@ -460,6 +519,25 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     o["icon"] = list_icon_key(l.mark);
   }
   doc["list"] = s.list;
+  // rebuild_state_'s effect playlists.
+  FxNames fxn = fixture_fx_names();
+  JsonArray fxl = doc["fxlists"].to<JsonArray>();
+  for (uint8_t n = 0; n < s.fx.count; n++) {
+    JsonObject o = fxl.add<JsonObject>();
+    o["n"] = s.fx.list[n].name;
+    o["shuffle"] = (s.fx.list[n].flags & FXLIST_SHUFFLE) != 0;
+    JsonArray fx = o["fx"].to<JsonArray>();
+    for (uint8_t i = 0; i < s.fx.list[n].count; i++) {
+      const FxEntry &e = s.fx.list[n].fx[i];
+      JsonObject x = fx.add<JsonObject>();
+      x["e"] = e.effect;
+      x["p"] = fxn.palette_name(e.palette);
+      x["s"] = e.speed;
+      x["i"] = e.intensity;
+      x["w"] = kFxWaitSeconds[e.wait];
+    }
+  }
+  doc["fxlist"] = s.player.list;
   std::vector<std::string> names;
   for (const auto &l : s.lists)
     names.push_back(l.first);
@@ -539,6 +617,13 @@ void test_fixture_cases() {
   JsonDocument fx;
   DeserializationError err = deserializeJson(fx, slurp("fixtures/set_cases.json"));
   SCHECK(!err, "fixtures/set_cases.json: %s", err.c_str());
+  fx_effects.clear();
+  fx_palettes.clear();
+  for (JsonVariantConst e : fx["fx_effects"].as<JsonArrayConst>())
+    fx_effects.push_back(e.as<const char *>());
+  for (JsonVariantConst p : fx["fx_palettes"].as<JsonArrayConst>())
+    fx_palettes.push_back(p.as<const char *>());
+  SCHECK(!fx_effects.empty() && !fx_palettes.empty(), "set_cases.json has no fx_effects or fx_palettes");
   int n = 0;
   for (JsonObjectConst c : fx["cases"].as<JsonArrayConst>()) {
     n++;

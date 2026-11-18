@@ -100,6 +100,40 @@
   "remote2": "team:ncaa:2294",
   "remote3": "list:College",
   "remote4": "sport:basketball",
+  "fxlists": [
+    {
+      "n": "Party",
+      "shuffle": true,
+      "fx": [
+        {
+          "e": "Matrix",
+          "p": "Party",
+          "s": 200,
+          "i": 100,
+          "w": 30
+        },
+        {
+          "e": "Plasma Ball",
+          "p": "Lava",
+          "s": 128,
+          "i": 128,
+          "w": 15
+        }
+      ]
+    },
+    {
+      "n": "Calm",
+      "fx": [
+        {
+          "e": "Drift",
+          "p": "Ocean",
+          "s": 64,
+          "i": 128,
+          "w": 300
+        }
+      ]
+    }
+  ],
   "panels": 2,
   "brightness": 128,
   "scroll": 5

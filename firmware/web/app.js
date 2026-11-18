@@ -2207,10 +2207,10 @@
   // GET /gameday/settings is the file; POST takes one back, checked whole on
   // the panel before anything changes. Firmware without it answers 404 and the
   // section stays hidden.
-  // The panel takes a backup of up to 8192 bytes (settings_doc.h
+  // The panel takes a backup of up to 12288 bytes (settings_doc.h
   // kSettingsMaxBytes), sent compact. A file can be bigger than that on disk:
   // pages before this one saved it indented.
-  const BACKUP_MAX = 8192;
+  const BACKUP_MAX = 12288;
   const BACKUP_FILE_MAX = 65536;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
   // tries: how many more times to ask when the panel doesn't answer.

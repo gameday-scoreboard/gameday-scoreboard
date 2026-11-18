@@ -13,6 +13,7 @@
 #include "esphome/core/log.h"
 
 #include <cstring>
+#include <new>
 #include <optional>
 #include <type_traits>
 #include <strings.h>
@@ -351,6 +352,8 @@ void GamedaySelect::control(const std::string &value) {
     this->parent_->select_mode(value);
   else if (this->type_ == SelectType::PLAYLIST)
     this->parent_->select_playlist(value);
+  else if (this->type_ == SelectType::FX_PLAYLIST)
+    this->parent_->select_fx_playlist(value);
   else
     this->parent_->select_timezone(value);
 }
@@ -497,6 +500,7 @@ void GamedayComponent::setup() {
   this->pref12_ = global_preferences->make_preference<Prefs12>(fnv1_hash("gameday_prefs12_v1"));
   if (!this->pref12_.load(&this->prefs12_))
     this->prefs12_ = Prefs12{};  // no colors or icons
+  this->load_fx_();
   for (auto &b : this->prefs11_.btn)
     if (b.kind > ::espn::kRemoteKindLast)
       b = ::espn::RemoteTarget{};
@@ -981,6 +985,204 @@ std::vector<std::string> GamedayComponent::list_names_() const {
   for (uint8_t n = 1; n <= this->prefs9_.count; n++)
     names.push_back(this->list_name_(n));
   return names;
+}
+
+// ---- Effect playlists (fx_playlists.h) -----------------------------------------
+
+GamedayComponent::FxState &GamedayComponent::fx_() {
+  if (this->fx_state_ == nullptr) {
+    // PSRAM, zeroed by the value-initialization: no playlists yet.
+    this->fx_state_ = new (::espn::psram_alloc(sizeof(FxState))) FxState();
+    this->fx_state_->store.version = ::espn::kFxStoreVersion;
+  }
+  return *this->fx_state_;
+}
+
+void GamedayComponent::load_fx_() {
+  FxState &f = this->fx_();
+  f.pref = global_preferences->make_preference<::espn::FxStore>(fnv1_hash("gameday_fxlists_v1"));
+  ::espn::FxStore &st = f.store;
+  if (!f.pref.load(&st) || st.version != ::espn::kFxStoreVersion || st.count > ::espn::kFxListMax) {
+    memset(&st, 0, sizeof(st));
+    st.version = ::espn::kFxStoreVersion;
+  }
+  for (auto &l : st.list) {
+    l.name[::espn::kListNameMax] = '\0';
+    if (l.count > ::espn::kFxEntryMax)
+      l.count = ::espn::kFxEntryMax;
+    for (auto &e : l.fx) {
+      e.effect[::espn::kFxEffectNameMax] = '\0';
+      if (e.wait >= ::espn::kFxWaitCount)
+        e.wait = ::espn::kFxWaitDefault;
+    }
+  }
+}
+
+// The effect and palette lists are the Effects page's own selects, so a
+// name is one the panel offers, in its spelling.
+::espn::FxNames GamedayComponent::fx_names_() const {
+  const FxState *f = this->fx_state_;
+  ::espn::FxNames n;
+  n.effect = [f](const std::string &s) -> std::string {
+    if (f == nullptr || f->effect == nullptr)
+      return "";
+    auto i = f->effect->index_of(s);
+    return i.has_value() ? std::string(f->effect->option_at(*i)) : std::string();
+  };
+  n.palette_index = [f](const std::string &s) -> int {
+    if (f == nullptr || f->palette == nullptr)
+      return -1;
+    auto i = f->palette->index_of(s);
+    return i.has_value() ? (int) *i : -1;
+  };
+  n.palette_name = [f](uint8_t i) -> std::string {
+    if (f == nullptr || f->palette == nullptr || i >= f->palette->size())
+      return "";
+    return f->palette->option_at(i);
+  };
+  return n;
+}
+
+void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *palette, number::Number *speed,
+                                       number::Number *intensity, select::Select *page) {
+  FxState &f = this->fx_();
+  f.effect = effect;
+  f.palette = palette;
+  f.speed = speed;
+  f.intensity = intensity;
+  f.page = page;
+  // Any of the four changing while a playlist plays is somebody picking by
+  // hand (the device page, the app, Home Assistant), unless the player is
+  // writing them itself (the guard flag, fx_playlists.h fx_hand_pick).
+  auto hand = [this]() {
+    if (::espn::fx_hand_pick(this->fx_player_)) {
+      ESP_LOGI(TAG, "Effect playlist off: an effect setting was picked by hand");
+      this->fx_changed_();
+    }
+  };
+  effect->add_on_state_callback([hand](size_t) { hand(); });
+  palette->add_on_state_callback([hand](size_t) { hand(); });
+  speed->add_on_state_callback([hand](float) { hand(); });
+  intensity->add_on_state_callback([hand](float) { hand(); });
+  // Showing left Effects, whoever moved it (a hand pick, or the panel taking
+  // the screen back for a banner, the night or Wi-Fi): the playlist ends
+  // with the effect, which never comes back on its own.
+  page->add_on_state_callback([this](size_t i) {
+    const FxState *f = this->fx_state_;
+    if (f != nullptr && f->page != nullptr && strcmp(f->page->option_at(i), "Effects") != 0)
+      this->stop_fx_list_("Showing left Effects");
+  });
+  this->fx_changed_();
+}
+
+void GamedayComponent::set_fx_lists_(const std::string &text) {
+  FxState &f = this->fx_();
+  ::espn::FxList before{};
+  if (this->fx_player_.list >= 1 && this->fx_player_.list <= f.store.count)
+    before = f.store.list[this->fx_player_.list - 1];
+  ::espn::parse_fx_lists(text, this->fx_names_(), f.store);
+  f.pref.save(&f.store);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Effect playlists: %u", (unsigned) f.store.count);
+  switch (::espn::fx_after_edit(f.store, this->fx_player_, before)) {
+    case ::espn::FxEdit::RESTART:
+      // The one playing was changed: it starts over with the change.
+      this->play_fx_list_(this->fx_player_.list);
+      return;
+    case ::espn::FxEdit::STOP:
+      ESP_LOGI(TAG, "Effect playlist off: it was deleted, renamed or emptied");
+      break;
+    default:
+      break;
+  }
+  this->fx_changed_();
+}
+
+void GamedayComponent::play_fx_list_(uint8_t n) {
+  if (n == 0) {
+    this->stop_fx_list_("stopped");
+    return;
+  }
+  FxState &f = this->fx_();
+  if (!::espn::fx_start(f.store, this->fx_player_, n, random_uint32())) {
+    ESP_LOGW(TAG, "Effect playlist %u has no effects", (unsigned) n);
+    this->fx_changed_();
+    return;
+  }
+  ESP_LOGI(TAG, "Effect playlist on: %s", f.store.list[n - 1].name);
+  this->fx_show_();
+  // Showing goes to Effects for it, as picking Effects there does; the
+  // Effects page's own checks (the heat mark, a Wi-Fi sign-in) can still
+  // send it back, which stops the playlist.
+  if (f.page != nullptr) {
+    auto at = f.page->active_index();
+    if (!at.has_value() || strcmp(f.page->option_at(*at), "Effects") != 0)
+      f.page->make_call().set_option("Effects").perform();
+  }
+  this->fx_changed_();
+}
+
+void GamedayComponent::stop_fx_list_(const char *why) {
+  if (this->fx_player_.list == 0)
+    return;
+  ESP_LOGI(TAG, "Effect playlist off: %s", why);
+  this->fx_player_ = ::espn::FxPlayer{};
+  this->fx_changed_();
+}
+
+// Puts the effect up now on the panel through the Effects page's own
+// entities, so Home Assistant and the device page follow it.
+void GamedayComponent::fx_show_() {
+  FxState &f = this->fx_();
+  ::espn::fx_show(f.store, this->fx_player_, millis(), [&f](const ::espn::FxEntry &e) {
+    if (f.effect != nullptr && f.effect->has_option(e.effect))
+      f.effect->make_call().set_option(e.effect).perform();
+    if (f.palette != nullptr && e.palette < f.palette->size())
+      f.palette->make_call().set_index(e.palette).perform();
+    if (f.speed != nullptr)
+      f.speed->make_call().set_value(e.speed).perform();
+    if (f.intensity != nullptr)
+      f.intensity->make_call().set_value(e.intensity).perform();
+  });
+}
+
+void GamedayComponent::fx_tick_() {
+  if (!::espn::fx_due(this->fx_player_, millis()))
+    return;
+  ::espn::fx_advance(this->fx_().store, this->fx_player_, random_uint32());
+  this->fx_show_();
+}
+
+void GamedayComponent::select_fx_playlist(const std::string &option) {
+  const FxState &f = this->fx_();
+  for (uint8_t n = 1; n <= f.store.count; n++)
+    if (option == f.store.list[n - 1].name) {
+      this->play_fx_list_(n);
+      return;
+    }
+  if (option == "None")
+    this->stop_fx_list_("None picked");
+  else
+    ESP_LOGW(TAG, "Unknown effect playlist '%s'", option.c_str());
+  this->fx_changed_();
+}
+
+// Home Assistant's select ("None", then the playlists by name, pointing at
+// their names in PSRAM) and the state document follow a start, a stop or
+// an edit. Home Assistant reads the options when it connects.
+void GamedayComponent::fx_changed_() {
+  const FxState &f = this->fx_();
+  if (f.select != nullptr) {
+    FixedVector<const char *> options;
+    options.init(f.store.count + 1);
+    options.push_back("None");
+    for (uint8_t n = 0; n < f.store.count; n++)
+      options.push_back(f.store.list[n].name);
+    f.select->traits.set_options(options);
+    uint8_t p = this->fx_player_.list;
+    f.select->publish_state(p >= 1 && p <= f.store.count ? f.store.list[p - 1].name : "None");
+  }
+  this->rebuild_state_(&this->last_fields_);
 }
 
 ::espn::RemoteAction GamedayComponent::remote_action_(uint8_t button) const {
@@ -1695,6 +1897,7 @@ void GamedayComponent::loop() {
     this->fire_action_("guard");  // the dim start is over: pages/guard.yaml applies the owner's brightness
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
+  this->fx_tick_();  // the effect playlist's next effect, when one is due
   if (this->logo_held_ && this->logo_hold_done_())
     this->draw_(this->last_fields_);
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
@@ -5657,6 +5860,37 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     o["gone"] = this->remote_action_(b).gone;
   }
   doc["listmax"] = ::espn::kListMax;
+  // Effect playlists (fx_playlists.h): each one's name, Shuffle and effects,
+  // an effect as its name, palette name, speed, intensity and seconds up;
+  // fxlist the one playing (0 none), and the limits and wait steps the page
+  // and the apps offer.
+  {
+    const FxState &f = this->fx_();
+    ::espn::FxNames names = this->fx_names_();
+    JsonArray fxl = doc["fxlists"].to<JsonArray>();
+    for (uint8_t n = 0; n < f.store.count; n++) {
+      const ::espn::FxList &l = f.store.list[n];
+      JsonObject o = fxl.add<JsonObject>();
+      o["n"] = l.name;
+      o["shuffle"] = (l.flags & ::espn::FXLIST_SHUFFLE) != 0;
+      JsonArray fx = o["fx"].to<JsonArray>();
+      for (uint8_t i = 0; i < l.count; i++) {
+        const ::espn::FxEntry &e = l.fx[i];
+        JsonObject x = fx.add<JsonObject>();
+        x["e"] = e.effect;
+        x["p"] = names.palette_name(e.palette);
+        x["s"] = e.speed;
+        x["i"] = e.intensity;
+        x["w"] = ::espn::kFxWaitSeconds[e.wait < ::espn::kFxWaitCount ? e.wait : ::espn::kFxWaitDefault];
+      }
+    }
+    doc["fxlist"] = this->fx_player_.list;
+    doc["fxlistmax"] = ::espn::kFxListMax;
+    doc["fxmax"] = ::espn::kFxEntryMax;
+    JsonArray waits = doc["fxwaits"].to<JsonArray>();
+    for (uint16_t w : ::espn::kFxWaitSeconds)
+      waits.add(w);
+  }
   // The sport rows Playing offers, worked out from the favorites, and the one
   // playing ("" for none; list is then 0).
   JsonArray sports = doc["sports"].to<JsonArray>();
@@ -7672,6 +7906,15 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         break;
       case ::espn::SetKind::BIGPLAYS:
         this->set_big_plays(op.on);
+        break;
+      case ::espn::SetKind::FX_LISTS:
+        this->set_fx_lists_(op.text);
+        break;
+      case ::espn::SetKind::FX_LIST:
+        if (op.value > this->fx_().store.count)
+          ESP_LOGW(TAG, "No effect playlist %d", op.value);
+        else
+          this->play_fx_list_((uint8_t) op.value);
         break;
       case ::espn::SetKind::CELEBRATE:
         this->set_celebrations((::espn::CelebLevel) op.value);

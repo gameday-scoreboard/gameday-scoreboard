@@ -80,6 +80,19 @@
     }
   ],
   "listmax": 16,
+  "fxlists": [
+    {"n": "Party", "shuffle": true, "fx": [
+      {"e": "Matrix", "p": "Party", "s": 200, "i": 100, "w": 30},
+      {"e": "Plasma Ball", "p": "Lava", "s": 128, "i": 128, "w": 15}
+    ]},
+    {"n": "Calm", "shuffle": false, "fx": [
+      {"e": "Drift", "p": "Ocean", "s": 64, "i": 128, "w": 300}
+    ]}
+  ],
+  "fxlist": 1,
+  "fxlistmax": 4,
+  "fxmax": 8,
+  "fxwaits": [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 120, 300, 600, 900, 1800, 3600],
   "sports": [],
   "sport": "",
   "today": false,

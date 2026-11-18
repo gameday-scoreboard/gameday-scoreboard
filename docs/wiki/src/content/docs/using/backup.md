@@ -57,7 +57,7 @@ The panel checks the whole file before it changes anything. If a setting in it h
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 
-**That backup is too big for the panel to take** means the settings in it add up to more than the panel holds, about 8 KB. Only a panel with nearly every favorite and playlist slot full gets there.
+**That backup is too big for the panel to take** means the settings in it add up to more than the panel holds, about 12 KB. Only a panel with nearly every favorite, playlist and effect playlist slot full gets there.
 
 **This backup is from newer firmware** means the file came from a panel on a release that saves backups differently. [Update the panel](/using/updates/), then restore it.
 
