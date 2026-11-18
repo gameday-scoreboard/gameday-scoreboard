@@ -410,20 +410,71 @@ inline bool sport_row_has(uint8_t rows, uint8_t row) {
   return row >= 1 && row <= kSportCount && ((rows >> (row - 1)) & 1u) != 0;
 }
 
+// ---- Button-only teams -----------------------------------------------------
+
+// A remote button set to a team that isn't a favorite adds it to the
+// favorites as a button-only team: it is kept with them so the panel reads
+// ESPN for it, and counts toward their 16, but it is no favorite anywhere
+// else. It stays out of All favorites, playlists, the sport rows, Favorites
+// take over, Live games' automatic leagues and game-day wake, and shows only
+// while its button is in use. The mark is a bit per favorite (bit i =
+// favs[i]), moved with the list like a playlist's mask (remap_mask), and the
+// team leaves the favorites when no button is set to it any more.
+
+// Is favorite i a team that counts as a favorite: there, and not button-only?
+inline bool fav_counts(const std::vector<TeamRef> &favs, uint16_t solo, size_t i) {
+  return i < favs.size() && favs[i].id != 0 && !(i < 16 && ((solo >> i) & 1u));
+}
+
+// Where a button-only team goes: the first empty place after the last team,
+// else the first gap; -1 when all 16 are taken.
+inline int solo_slot(const std::vector<TeamRef> &favs) {
+  int last = -1;
+  for (size_t i = 0; i < favs.size(); i++)
+    if (favs[i].id != 0)
+      last = (int) i;
+  for (size_t i = (size_t) (last + 1); i < favs.size(); i++)
+    if (favs[i].id == 0)
+      return (int) i;
+  for (size_t i = 0; i < favs.size(); i++)
+    if (favs[i].id == 0)
+      return (int) i;
+  return -1;
+}
+
+// The button-only teams no button is set to now: a bit each, to take out.
+inline uint16_t solo_unused(uint16_t solo, const std::vector<TeamRef> &favs, const RemoteTarget *btn, size_t buttons) {
+  uint16_t out = 0;
+  for (size_t i = 0; i < favs.size() && i < 16; i++) {
+    if (!((solo >> i) & 1u) || favs[i].id == 0)
+      continue;
+    bool used = false;
+    for (size_t b = 0; b < buttons; b++)
+      used = used || (btn[b].kind == (uint8_t) RemoteKind::TEAM && btn[b].league == favs[i].league &&
+                      btn[b].id == favs[i].id);
+    if (!used)
+      out |= (uint16_t) (1u << i);
+  }
+  return out;
+}
+
 // What a WizMote button does now (set_request.h RemoteTarget), against the
 // favorites, the playlists' names and the sport rows the favorites make. A
 // target that is gone (its team left the favorites, its playlist its name,
 // its sport its favorites, its effect the build) falls back to the button's
-// default, favorite n.
+// default, favorite n. solo marks the button-only teams: no sport row counts
+// them.
 struct RemoteAction {
   RemoteKind kind{RemoteKind::FAVORITE};
   int fav_slot{0};        // FAVORITE, TEAM: the favorite to jump to, 1-based
   int list{0};            // LIST: the playlist to play; ALL: 0
   uint8_t sport_row{0};   // SPORT: the row to play, 1 + Sport
+  uint8_t league{0};      // LEAGUE: the league Live games reads
+  bool solo{false};       // TEAM: a button-only team, played on its own while the button is in use
   bool gone{false};       // the target is gone: this is the default instead
 };
 inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const std::vector<TeamRef> &favs,
-                                   const std::vector<std::string> &names) {
+                                   const std::vector<std::string> &names, uint16_t solo = 0) {
   RemoteAction a;
   a.fav_slot = button;
   switch ((RemoteKind) t.kind) {
@@ -432,6 +483,7 @@ inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const 
         if (favs[i].id != 0 && favs[i].league == t.league && favs[i].id == t.id) {
           a.kind = RemoteKind::TEAM;
           a.fav_slot = (int) i + 1;
+          a.solo = i < 16 && ((solo >> i) & 1u) != 0;
           return a;
         }
       break;
@@ -445,9 +497,9 @@ inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const 
       break;
     case RemoteKind::SPORT: {
       uint8_t sports = 0;
-      for (const auto &f : favs)
-        if (f.id != 0)
-          sports |= sport_bit(f.league);
+      for (size_t i = 0; i < favs.size(); i++)
+        if (fav_counts(favs, solo, i))
+          sports |= sport_bit(favs[i].league);
       if (sport_row_has(sport_rows(sports), (uint8_t) (t.sport + 1))) {
         a.kind = RemoteKind::SPORT;
         a.sport_row = (uint8_t) (t.sport + 1);
@@ -477,6 +529,12 @@ inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const 
       }
       break;
     }
+    case RemoteKind::LEAGUE:
+      if (league_info((League) t.league) == nullptr)
+        break;
+      a.kind = RemoteKind::LEAGUE;
+      a.league = t.league;
+      return a;
     default:
       return a;
   }

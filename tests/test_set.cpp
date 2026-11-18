@@ -1186,6 +1186,69 @@ void test_remote() {
   remote_parse("live", t);
   a = remote_resolve(2, t, {}, {});
   SCHECK(a.kind == RemoteKind::LIVE && !a.gone, "Live games, with no favorites or playlists at all");
+
+  // league:<key>, Live games in that league only.
+  SCHECK(remote_parse("league:nfl", t) && t.kind == (uint8_t) RemoteKind::LEAGUE && t.league == NFL &&
+             remote_text(t) == "league:nfl",
+         "league:nfl both ways");
+  SCHECK(remote_parse("league:mcbb", t) && t.league == (uint8_t) League::MCBB && remote_text(t) == "league:mcbb",
+         "every league the panel knows");
+  SCHECK(!remote_parse("league:", t) && !remote_parse("league:NFL", t) && !remote_parse("league:curling", t),
+         "an unknown league is refused");
+  remote_parse("league:nhl", t);
+  a = remote_resolve(3, t, {}, {});
+  SCHECK(a.kind == RemoteKind::LEAGUE && a.league == NHL && !a.gone, "a league needs no favorites");
+  RemoteTarget future;
+  future.kind = (uint8_t) RemoteKind::LEAGUE;
+  future.league = 200;
+  a = remote_resolve(2, future, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.gone, "a league this firmware doesn't know: the default");
+  SCHECK(kRemoteKindLast == (uint8_t) RemoteKind::LEAGUE, "LEAGUE is the last kind a saved button can hold");
+
+  // Button-only teams: the solo mask marks them among the favorites.
+  const uint16_t solo = 1u << 3;  // favs[3], NHL 25
+  remote_parse("team:nhl:25", t);
+  a = remote_resolve(1, t, favs, names, solo);
+  SCHECK(a.kind == RemoteKind::TEAM && a.fav_slot == 4 && a.solo, "a button-only team resolves as solo");
+  remote_parse("team:nfl:6", t);
+  a = remote_resolve(1, t, favs, names, solo);
+  SCHECK(a.kind == RemoteKind::TEAM && !a.solo, "a full favorite is not solo");
+  remote_parse("sport:hockey", t);
+  SCHECK(!remote_resolve(1, t, favs, names).gone, "hockey has a row while the NHL team counts");
+  SCHECK(remote_resolve(1, t, favs, names, solo).gone, "a button-only team makes no sport row");
+  SCHECK(fav_counts(favs, solo, 0) && !fav_counts(favs, solo, 2) && !fav_counts(favs, solo, 3) &&
+             !fav_counts(favs, solo, 20),
+         "fav_counts: there and not button-only");
+
+  // Where a button-only team goes, and when it leaves.
+  std::vector<TeamRef> sixteen(16);
+  SCHECK(solo_slot(sixteen) == 0, "an empty list: the first place");
+  sixteen[0] = {NFL, 6};
+  sixteen[2] = {NBA, 6};
+  SCHECK(solo_slot(sixteen) == 3, "after the last team, not in the gap");
+  sixteen[15] = {NHL, 25};
+  SCHECK(solo_slot(sixteen) == 1, "the last place taken: the first gap");
+  for (size_t i = 0; i < 16; i++)
+    sixteen[i] = {NBA, (uint32_t) (i + 1)};
+  SCHECK(solo_slot(sixteen) == -1, "16 teams: no room");
+  RemoteTarget btn[4];
+  remote_parse("team:nhl:25", btn[1]);
+  remote_parse("league:nfl", btn[2]);
+  SCHECK(solo_unused(solo, favs, btn, 4) == 0, "a team a button is set to stays");
+  btn[1] = RemoteTarget{};
+  SCHECK(solo_unused(solo, favs, btn, 4) == solo, "set to nothing now: it leaves");
+  SCHECK(solo_unused(1u << 2, favs, btn, 4) == 0, "an empty place is nothing to take out");
+  SCHECK(solo_unused(1u << 0, favs, btn, 4) == 1, "the mark alone decides, not where it is");
+  remote_parse("team:nhl:25", btn[3]);
+  SCHECK(solo_unused(solo, favs, btn, 4) == 0, "any of the four buttons keeps it");
+
+  SCHECK(parse_set("keepfav", "nfl:21", op, kFavMax) && op.kind == SetKind::KEEPFAV && op.team.league == NFL &&
+             op.team.id == 21,
+         "keepfav names a team");
+  SCHECK(!parse_set("keepfav", "eagles", op, kFavMax) && !parse_set("keepfav", "nfl:99999", op, kFavMax),
+         "keepfav refuses a team it doesn't know");
+  SCHECK(parse_set("remote1", "league:wnba", op, kFavMax) && op.kind == SetKind::REMOTE && op.text == "league:wnba",
+         "remote1 takes a league");
   test_remote_pages();
 }
 

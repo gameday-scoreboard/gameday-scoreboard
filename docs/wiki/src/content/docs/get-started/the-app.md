@@ -142,12 +142,20 @@ The iPhone app gets **Degrees** in its **Weather** section and the kickoff forec
 
 On iPhone and Android, **Display** has the device page's **Game-day wake** and **After the game**, under the night schedule in **Screen** on iPhone and under ticker speed in the **Screen** card on Android: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
 
+:::note[Coming in the next app update]
+On Android, **After the game** also has **Show the Smart board**: your [Smart board](/using/smart-board/) rows between games, until the **Turns on** time before your next game, then the scoreboard. **Turns on** shows with it too. It shows once the panel runs firmware with the Smart board.
+:::
+
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
 
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
 
 :::note[Coming in the next app update]
 On iPhone and Android, the pickers also offer **Live games**, after **All favorites**: a press switches the panel to Live games with the leagues it already has (see [The numbered buttons](/using/remote/#the-numbered-buttons)). It shows once the panel runs firmware with that choice.
+:::
+
+:::note[Coming in the next app update]
+On iPhone and Android, the pickers also offer the pages under **Showing**, after **Nothing**: **Scoreboard**, **Clock**, **Smart board** and **Effects**. A press puts the panel on that page. Picking **Effects** saves the effect the panel is set to right then, and the picker shows it with its palette, like **Effects: Rain, Ocean**. Tap **Change** under that button to open its own **Effect**, **Palette**, **Speed** and **Intensity**. Changing them changes only the button, not what the panel is playing now. Tap **Done** to close them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with those choices.
 :::
 
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).

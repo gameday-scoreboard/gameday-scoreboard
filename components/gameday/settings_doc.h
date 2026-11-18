@@ -69,7 +69,7 @@ inline SettingType setting_type(const char *k) {
                                       "field",   "winbar", "spark", "bigplays"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
-                                     "wakelead", "celebrate", "wxunit", "fxlist"};
+                                     "wakelead", "celebrate", "wxunit"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
                                       "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
@@ -133,12 +133,13 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
-      // the empty slots at the end are left off.
+      // the empty slots at the end are left off. A button-only team (btn)
+      // is left out too: its remote button's team brings it back as one.
       if (!s["favs"].is<JsonArrayConst>())
         continue;
       std::vector<std::string> favs;
       for (JsonVariantConst f : s["favs"].as<JsonArrayConst>())
-        favs.push_back(f.is<JsonObjectConst>() ? team_ref_text(f) : std::string());
+        favs.push_back(f.is<JsonObjectConst>() && !(f["btn"] | false) ? team_ref_text(f) : std::string());
       while (!favs.empty() && favs.back().empty())
         favs.pop_back();
       JsonArray list = out["favs"].to<JsonArray>();
@@ -331,7 +332,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     if (v.isNull())
       continue;
     std::string k = key;
-    if (k == "sport" && !favorites)
+    if ((k == "sport" && !favorites) || set_key_once(key))
       continue;
     SettingType type = setting_type(key);
     SetOp op;
@@ -664,7 +665,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     bool known = strcmp(k, "schema") == 0 || strcmp(k, "version") == 0 || strcmp(k, "name") == 0 ||
                  strcmp(k, "brightness") == 0 || strcmp(k, "scroll") == 0;
     for (const char *s : kSetKeys)
-      known = known || strcmp(k, s) == 0;
+      known = known || (strcmp(k, s) == 0 && !set_key_once(s));
     if (!known)
       out.skipped.push_back(k);
   }

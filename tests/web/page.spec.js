@@ -1046,7 +1046,21 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  await expect(b1.locator("option")).toHaveText(["Its own favorite", "Dallas Cowboys", "Dallas Mavericks", "Texas Longhorns", "All football", "All basketball", "Sundays", "All favorites", "Live games", "Nothing", "Scoreboard", "Clock", "Smart board", "Effects"]);
+  // Grouped by sport, all nine leagues: each league's live games, the sport
+  // row with two favorites in it, the favorites, then another team of each
+  // league; the pages under Showing last.
+  await expect(b1.locator("optgroup")).toHaveCount(7);
+  expect(await b1.locator("optgroup").evaluateAll((gs) => gs.map((g) => g.label))).toEqual(
+    ["Your playlists", "Football", "Baseball", "Basketball", "Hockey", "Soccer", "Showing"]);
+  await expect(b1.locator("optgroup[label=Football] option")).toHaveText(["All NFL live games", "All college football live games",
+    "My football teams", "Dallas Cowboys", "Texas Longhorns", "Another NFL team...", "Another college football team..."]);
+  // One basketball favorite: no row of its own.
+  await expect(b1.locator("optgroup[label=Basketball] option")).toHaveText(["All NBA live games", "All WNBA live games",
+    "All men's college basketball live games", "Dallas Mavericks", "Another NBA team...", "Another WNBA team...",
+    "Another men's college basketball team..."]);
+  await expect(b1.locator("optgroup[label=Hockey] option")).toHaveText(["All NHL live games", "Another NHL team..."]);
+  await expect(b1.locator("optgroup[label=Showing] option")).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects"]);
+  await expect(b1.locator(":scope > option")).toHaveText(["Its own favorite", "All favorites", "Live games", "Nothing"]);
   await expect(b1).toHaveValue("fav");
   await expect(btns.nth(0).locator("label small")).toHaveText("Favorite 1: Dallas Cowboys.");
   await expect(btns.nth(3).locator("label small")).toHaveText("Favorite 4 (empty).");
@@ -1058,8 +1072,8 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   await expect(rows.nth(2).locator("small")).toHaveText("College football · remote button 1, 3");
   await expect(rows.nth(0).locator("small")).toHaveText("NFL");
   await expect(btns.nth(0).locator("label small")).toHaveCount(0);
-  await btns.nth(1).locator("select").selectOption("sport:basketball");
-  await expectSet(request, { remote2: "sport:basketball" });
+  await btns.nth(1).locator("select").selectOption("sport:football");
+  await expectSet(request, { remote2: "sport:football" });
   await btns.nth(2).locator("select").selectOption("list:Sundays");
   await expectSet(request, { remote3: "list:Sundays" });
   await expect(page.locator("#listCtls .plist").nth(0).locator(".pbtn")).toHaveText("Button 3");
@@ -1072,7 +1086,98 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   await page.locator("#listAdd").click();
   await expectSet(request, { lists: "Sundays=nfl:6;Playlist 2=" });
   const st = await deviceState(request);
-  expect(st.remote.map((r) => r.v)).toEqual(["team:ncaa:251", "sport:basketball", "list:Sundays", "none"]);
+  expect(st.remote.map((r) => r.v)).toEqual(["team:ncaa:251", "sport:football", "list:Sundays", "none"]);
+});
+
+test("a remote button plays one league's live games, leaving the owner's own leagues alone", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, { favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), {}, {}, {}] });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  await btns.nth(1).locator("select").selectOption("league:nhl");
+  await expectSet(request, { remote2: "league:nhl" });
+  await expect(btns.nth(1).locator("label small")).toHaveText("Leaves your own Live games leagues as they are.");
+  const st = await deviceState(request);
+  expect(st.favs.filter((f) => f.id).length).toBe(1);
+  expect(st.remote[1]).toEqual({ v: "league:nhl", gone: false });
+});
+
+test("a team that isn't a favorite goes on a button only: marked, counted, out of playlists, and kept as a favorite with a tap", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("ncaa", 251, "TEX", "Texas Longhorns"), {}, {}],
+    lists: [{ n: "Sundays", f: [0] }],
+  });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  const b1 = btns.nth(0).locator("select").first();
+  // Another NFL team opens the NFL's list; nothing is posted until a team is picked.
+  await b1.selectOption("pick:nfl");
+  const team = btns.nth(0).locator("select.rteam");
+  await expect(team).toBeVisible();
+  await expect(team.locator("option").first()).toHaveText("Pick a team");
+  await expect(team.locator("option", { hasText: "Philadelphia Eagles" })).toHaveCount(1);
+  await team.selectOption("nfl:21");
+  await expectSet(request, { remote1: "team:nfl:21" });
+  let st = await deviceState(request);
+  expect(st.favs[2]).toMatchObject({ l: "nfl", id: 21, btn: true });
+  // The button shows it as Another NFL team, the Eagles picked.
+  await expect(b1).toHaveValue("pick:nfl");
+  await expect(btns.nth(0).locator("select.rteam")).toHaveValue("nfl:21");
+  await expect(btns.nth(0).locator("label small")).toHaveText("Button only: not in All favorites, playlists or take over.");
+  // Button 3's own favorite is that place: it counts as empty.
+  await expect(btns.nth(2).locator("label small")).toHaveText("Favorite 3 (empty).");
+  // The Favorites card marks it; playlists don't offer it; no Eagles in the football sport row's picks.
+  await tab(page, "teams");
+  const rows = page.locator("#favCtls .ctl.fav");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(2)).toHaveClass(/btnonly/);
+  await expect(rows.nth(2).locator("small")).toHaveText("NFL · Button only (button 1)");
+  await expect(page.locator("#listCtls .plist").nth(0).locator(".pteams .chip")).toHaveCount(2);
+  // A tap on it in the team picker keeps it as a favorite.
+  await page.locator("#favAdd").click();
+  await page.locator("#q").fill("eagles");
+  const tile = page.locator("#tiles [data-key='nfl:21']");
+  await expect(tile).toHaveAttribute("aria-pressed", "false");
+  await tile.click();
+  await expectSet(request, { keepfav: "nfl:21" });
+  st = await deviceState(request);
+  expect(st.favs[2].btn).toBeUndefined();
+  await expect(tile).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a button-only team leaves the favorites when no button is set to it, and a full list adds none", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), {}, {}, {}],
+    remote: [{ v: "team:nfl:21" }, { v: "fav" }, { v: "fav" }, { v: "fav" }],
+  });
+  await request.post("/gameday/set", { form: { remote1: "team:nfl:21" } });
+  let st = await deviceState(request);
+  expect(st.favs[1]).toMatchObject({ id: 21, btn: true });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  await btns.nth(0).locator("select").first().selectOption("live");
+  await expectSet(request, { remote1: "live" });
+  st = await deviceState(request);
+  expect(st.favs.filter((f) => f.id).map((f) => f.id)).toEqual([6]);
+  // Sixteen favorites: the picker says so and posts nothing.
+  const nfl = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((id) => t("nfl", id, "T" + id, "Team " + id));
+  await reset(request, { favs: nfl });
+  await page.reload();
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  await btns.nth(0).locator("select").first().selectOption("pick:nfl");
+  await btns.nth(0).locator("select.rteam").selectOption("nfl:21");
+  await expect(page.locator("#toast")).toContainText("Your favorites are full (16)");
+  st = await deviceState(request);
+  expect(st.remote[0].v).toBe("fav");
 });
 
 test("a remote button picks a page under Showing; an Effects button saves the effect playing now, and Change edits its own without touching the panel", async ({ page, request }) => {

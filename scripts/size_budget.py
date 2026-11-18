@@ -44,9 +44,17 @@ the allowance. Approval never passes the 90% limit or a cap overrun.
         Whether the figures are a whole base: every build and read that
         budget lists, every metric. CI skips a base branch run that stopped
         part way, so growth is never checked against half its figures.
-    python3 scripts/size_budget.py release-baseline <sizes dir> <tag>
+    python3 scripts/size_budget.py release-baseline <sizes dir> <tag> [--current <sizes dir>]
         Rewrites budget.json's release block from a release's figures (the
         sizes-* artifacts of the tag's Build run). Run it when a release is cut.
+        With --current (the latest dev Build run's sizes-* artifacts) it also
+        runs the ratchet below on dev's figures.
+    python3 scripts/size_budget.py ratchet <sizes dir>
+        Lowers each static_ram and heap cap that sits more than 1 KB above
+        what those figures (the latest dev Build run's) use, to use plus
+        1 KB, so RAM a change saved can't be spent again without the
+        owner's approval. Never raises a cap. Run it after a change that
+        saves RAM merges, and at each release.
     python3 scripts/size_budget.py seed <sizes dir>
         Prints static_ram and heap caps with 10% headroom (at least 1 KB).
     python3 scripts/size_budget.py --selftest
@@ -458,22 +466,46 @@ def summary(report: dict) -> str:
 
 # ---------------------------------------------------------------- budget file
 
+def with_headroom(v: int) -> int:
+    return max(math.ceil(v * (1 + HEADROOM)), v + HEADROOM_MIN)
+
+
 def seed(sizes: dict) -> dict:
     out = {}
     for group in ("firmware", "host"):
-        out[group] = {name: {m: max(math.ceil(v * (1 + HEADROOM)), v + HEADROOM_MIN)
-                             for m, v in sorted(figs.items()) if m in CAPPED}
+        out[group] = {name: {m: with_headroom(v) for m, v in sorted(figs.items()) if m in CAPPED}
                       for name, figs in sorted(sizes.get(group, {}).items())}
     return out
 
 
-def release_baseline(budget: dict, sizes: dict, tag: str) -> dict:
+def ratchet(budget: dict, sizes: dict) -> list:
+    """Lowers each capped figure to its use plus HEADROOM_MIN when that is under
+    the cap, so saved RAM can't be spent again without the owner's approval.
+    sizes are dev's newest figures; a cap with no figure stays. Never raises a
+    cap. Returns "group.name.metric old -> new" lines."""
+    lowered = []
+    for group in ("firmware", "host"):
+        for name, caps in sorted(budget.get(group, {}).items()):
+            for m in CAPPED:
+                used = sizes.get(group, {}).get(name, {}).get(m)
+                if m not in caps or used is None:
+                    continue
+                want = used + HEADROOM_MIN
+                if want < caps[m]:
+                    lowered.append(f"{group}.{name}.{m} {caps[m]:,} -> {want:,}")
+                    caps[m] = want
+    return lowered
+
+
+def release_baseline(budget: dict, sizes: dict, tag: str, current: dict = None) -> dict:
     flash = {name: figs["flash"] for name, figs in sorted(sizes.get("firmware", {}).items()) if "flash" in figs}
     if not flash:
         raise SystemExit("no firmware flash figures in that folder")
     old = budget.get("release", {})
     budget["release"] = {"tag": tag, "flash": flash,
                          "allowance_flash": old.get("allowance_flash", DEFAULT_ALLOWANCE)}
+    for line in ratchet(budget, current or {}):
+        print(f"lowered {line}")
     return budget
 
 
@@ -533,10 +565,24 @@ def run_complete(args: list) -> int:
     return 1 if gaps else 0
 
 
+def run_ratchet(args: list) -> int:
+    budget = json.loads(BUDGET.read_text(encoding="utf-8"))
+    lowered = ratchet(budget, load_sizes(Path(args[0])))
+    for line in lowered:
+        print(f"lowered {line}")
+    if lowered:
+        BUDGET.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8", newline="\n")
+    else:
+        print("every cap is within 1 KB of use; nothing to lower")
+    return 0
+
+
 def run_release_baseline(args: list) -> int:
     budget = json.loads(BUDGET.read_text(encoding="utf-8"))
-    budget = release_baseline(budget, load_sizes(Path(args[0])), args[1])
-    BUDGET.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+    current = load_sizes(Path(arg(args, "--current"))) if "--current" in args else None
+    budget = release_baseline(budget, load_sizes(Path(args[0])), args[1], current)
+    # newline="\n": on Windows write_text would write CRLF and the PR would rewrite every line.
+    BUDGET.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(budget["release"], indent=2))
     return 0
 
@@ -703,6 +749,17 @@ def selftest() -> None:
     assert seed({"host": {"x": {"json": 20000, "heap": 18}}}) == {"firmware": {}, "host": {"x": {"heap": 1042}}}
     assert release_baseline({"release": {"allowance_flash": 7}}, sizes(5), "v9")["release"] == \
         {"tag": "v9", "flash": {"a": 5}, "allowance_flash": 7}
+    # The ratchet: a cap more than 1 KB above use drops to use plus 1 KB, never
+    # rises, and a cap with no figure stays.
+    caps = {"firmware": {"a": {"static_ram": 173431}, "b": {"static_ram": 9}},
+            "host": {"x": {"heap": 1100}, "y": {"heap": 5000}}}
+    dev = {"firmware": {"a": {"static_ram": 155792}}, "host": {"x": {"heap": 80}, "y": {"heap": 1000}}}
+    assert ratchet(caps, dev) == ["firmware.a.static_ram 173,431 -> 156,816", "host.y.heap 5,000 -> 2,024"]
+    assert caps["firmware"]["b"]["static_ram"] == 9 and caps["host"]["x"]["heap"] == 1100
+    assert ratchet({"firmware": {"a": {"static_ram": 156000}}}, dev) == []
+    assert ratchet({"firmware": {"a": {"static_ram": 150000}}}, dev) == []
+    rb = release_baseline({"release": {}, "firmware": {"a": {"static_ram": 173431}}}, sizes(5), "v9", dev)
+    assert rb["firmware"]["a"]["static_ram"] == 156816
     assert "no base section figures yet" in summary(pr(was=old))
 
     with tempfile.TemporaryDirectory() as d:
@@ -741,8 +798,10 @@ def main(argv: list) -> int:
         return run_check(argv[1:])
     if argv[:1] == ["complete"] and len(argv) == 3:
         return run_complete(argv[1:])
-    if argv[:1] == ["release-baseline"] and len(argv) == 3:
+    if argv[:1] == ["release-baseline"] and len(argv) in (3, 5):
         return run_release_baseline(argv[1:])
+    if argv[:1] == ["ratchet"] and len(argv) == 2:
+        return run_ratchet(argv[1:])
     if argv[:1] == ["seed"] and len(argv) == 2:
         print(json.dumps(seed(load_sizes(Path(argv[1]))), indent=2))
         return 0
