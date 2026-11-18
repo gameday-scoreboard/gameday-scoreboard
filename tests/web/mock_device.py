@@ -222,9 +222,9 @@ ENTITIES = [
     # Effects mode (firmware/pages/effects.yaml): wled_fx's entities, shown
     # while Select Page is on Effects.
     {"id": "select/Effect", "domain": "select", "name": "Effect", "state": "Matrix", "value": "Matrix",
-     "option": ["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]},
+     "option": ["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall", "Distortion Waves"]},
     {"id": "select/Effect Palette", "domain": "select", "name": "Effect Palette", "state": "Default",
-     "value": "Default", "option": ["Default", "Rainbow", "Ocean", "Fire"]},
+     "value": "Default", "option": ["Default", "Rainbow", "Ocean", "Fire", "Red & Blue"]},
     {"id": "number/Effect Speed", "domain": "number", "name": "Effect Speed", "state": "128", "value": "128",
      "min_value": "0", "max_value": "255", "step": "1"},
     {"id": "number/Effect Intensity", "domain": "number", "name": "Effect Intensity", "state": "128",
@@ -521,10 +521,36 @@ def remap_lists(before):
         STATE["sport"] = ""
 
 
+def remote_fx_parse(v):
+    """remote_fx_parse(): "Rain,Party,40,200" (after fx:) as the panel writes it back, or None.
+    The names are the Effect and Effect Palette entities' options, in any case."""
+    parts = v.split(",")
+    if len(parts) > 4:
+        return None
+    parts += [""] * (4 - len(parts))
+    effects = entity("Effect")["option"]
+    palettes = entity("Effect Palette")["option"]
+    effect = next((e for e in effects if e.lower() == parts[0].lower()), None)
+    palette = palettes[0] if not parts[1] else next((p for p in palettes if p.lower() == parts[1].lower()), None)
+    if effect is None or palette is None:
+        return None
+    nums = []
+    for n in parts[2:]:
+        if not n:
+            nums.append(128)
+        elif re.fullmatch(r"\d{1,3}", n) and int(n) <= 255:
+            nums.append(int(n))
+        else:
+            return None
+    return f"fx:{effect},{palette},{nums[0]},{nums[1]}"
+
+
 def remote_parse(v):
     """remote_parse(): the text of a button's target, canonical, or None when the panel refuses it."""
-    if v in ("fav", "all", "live", "none"):
+    if v in ("fav", "all", "live", "none", "scoreboard", "clock", "smartboard"):
         return v
+    if v.startswith("fx:"):
+        return remote_fx_parse(v[3:])
     if v.startswith("team:"):
         ref = parse_team_ref(v[5:])
         return f"team:{ref[0]}:{ref[1]}" if ref else None
@@ -544,6 +570,8 @@ def remote_gone(button, v):
         return v[5:] not in [pl["n"] for pl in STATE["lists"]]
     if v.startswith("sport:"):
         return v[6:] not in sport_rows()
+    if v.startswith("fx:"):
+        return v[3:].split(",")[0] not in entity("Effect")["option"]
     return False
 
 
