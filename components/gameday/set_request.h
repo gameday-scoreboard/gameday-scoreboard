@@ -198,10 +198,12 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 //                    Showing: Effects, with this effect, palette, speed and
 //                    intensity. Only the effect is needed: the palette
 //                    defaults to Default, speed and intensity to 128.
-// The pages (scoreboard to fx:) pick what Showing shows; the rest pick what
-// the panel follows. A button whose team, playlist, sport row or effect is
-// gone does what its default does, and the state says so (playlists.h
-// remote_resolve).
+//   fxlist:<name>    Showing: Effects, playing one of the effect playlists
+//                    (fx_playlists.h) by name from its start
+// The pages (scoreboard to fxlist:) pick what Showing shows; the rest pick
+// what the panel follows. A button whose team, playlist, sport row, effect
+// or effect playlist is gone does what its default does, and the state says
+// so (playlists.h remote_resolve).
 enum class RemoteKind : uint8_t {
   FAVORITE = 0,
   TEAM = 1,
@@ -215,11 +217,12 @@ enum class RemoteKind : uint8_t {
   SMART = 9,
   EFFECTS = 10,
   LEAGUE = 11,
+  FXLIST = 12,
 };
 // The highest kind this firmware knows; a saved button past it (flash from a
 // newer build) goes back to its own favorite at boot.
-constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::LEAGUE;
-constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
+constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::FXLIST;
+constexpr size_t kRemoteNameMax = 16;  // a playlist's or effect playlist's name (playlists.h kListNameMax)
 // EFFECTS keeps its setup in the fields the other kinds use, so a saved
 // button stays the same size: name is the effect (the panel's spelling; the
 // longest it offers is 16 letters), league the palette (a WLED palette id),
@@ -229,14 +232,15 @@ struct RemoteTarget {
   uint8_t league{0};             // TEAM, LEAGUE
   uint32_t id{0};                // TEAM
   uint8_t sport{0};              // SPORT, a Sport
-  char name[kRemoteNameMax]{};   // LIST, no terminator when full
+  char name[kRemoteNameMax]{};   // LIST, FXLIST, no terminator when full
 } __attribute__((packed));
 
 constexpr uint8_t kRemoteFxDefault = 128;  // speed and intensity left out of fx:
 
 // A button that changes Showing, rather than what the panel follows.
 inline bool remote_is_page(uint8_t kind) {
-  return kind >= (uint8_t) RemoteKind::SCOREBOARD && kind <= (uint8_t) RemoteKind::EFFECTS;
+  return (kind >= (uint8_t) RemoteKind::SCOREBOARD && kind <= (uint8_t) RemoteKind::EFFECTS) ||
+         kind == (uint8_t) RemoteKind::FXLIST;
 }
 
 // The effects and palettes this build has, which only the effects package
@@ -320,9 +324,9 @@ inline bool remote_fx_parse(const std::string &v, RemoteTarget &t) {
   return true;
 }
 
-// The text above into a target; false for anything else. A playlist name
-// is kept as sent, up to kRemoteNameMax bytes; the component cleans it as
-// it cleans a playlist's.
+// The text above into a target; false for anything else. A playlist or
+// effect playlist name is kept as sent, up to kRemoteNameMax bytes; the
+// component cleans it as it cleans a playlist's.
 inline bool remote_parse(const std::string &v, RemoteTarget &t) {
   t = RemoteTarget{};
   if (v == "fav")
@@ -374,6 +378,12 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     memcpy(t.name, name.data(), name.size());
     return true;
   }
+  if (v.compare(0, 7, "fxlist:") == 0 && v.size() > 7) {
+    t.kind = (uint8_t) RemoteKind::FXLIST;
+    std::string name = v.substr(7, kRemoteNameMax);
+    memcpy(t.name, name.data(), name.size());
+    return true;
+  }
   if (v.compare(0, 3, "fx:") == 0) {
     if (remote_fx_parse(v.substr(3), t))
       return true;
@@ -414,6 +424,8 @@ inline std::string remote_text(const RemoteTarget &t) {
              std::to_string((unsigned) (t.id & 0xFF));
     case RemoteKind::LEAGUE:
       return std::string("league:") + league_key((League) t.league);
+    case RemoteKind::FXLIST:
+      return "fxlist:" + remote_name(t);
     default:
       return "fav";
   }

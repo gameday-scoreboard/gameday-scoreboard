@@ -461,20 +461,24 @@ inline uint16_t solo_unused(uint16_t solo, const std::vector<TeamRef> &favs, con
 // What a WizMote button does now (set_request.h RemoteTarget), against the
 // favorites, the playlists' names and the sport rows the favorites make. A
 // target that is gone (its team left the favorites, its playlist its name,
-// its sport its favorites, its effect the build) falls back to the button's
+// its sport its favorites, its effect the build, its effect playlist its
+// name or its effects) falls back to the button's
 // default, favorite n. solo marks the button-only teams: no sport row counts
 // them.
 struct RemoteAction {
   RemoteKind kind{RemoteKind::FAVORITE};
   int fav_slot{0};        // FAVORITE, TEAM: the favorite to jump to, 1-based
-  int list{0};            // LIST: the playlist to play; ALL: 0
+  int list{0};            // LIST: the playlist to play; ALL: 0; FXLIST: the effect playlist, 1-based
   uint8_t sport_row{0};   // SPORT: the row to play, 1 + Sport
   uint8_t league{0};      // LEAGUE: the league Live games reads
   bool solo{false};       // TEAM: a button-only team, played on its own while the button is in use
   bool gone{false};       // the target is gone: this is the default instead
 };
+// fx_lists: the effect playlists' names in order, "" for one with no
+// effects (it can't play, so a button on it counts as gone).
 inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const std::vector<TeamRef> &favs,
-                                   const std::vector<std::string> &names, uint16_t solo = 0) {
+                                   const std::vector<std::string> &names, uint16_t solo = 0,
+                                   const std::vector<std::string> &fx_lists = {}) {
   RemoteAction a;
   a.fav_slot = button;
   switch ((RemoteKind) t.kind) {
@@ -535,6 +539,14 @@ inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const 
       a.kind = RemoteKind::LEAGUE;
       a.league = t.league;
       return a;
+    case RemoteKind::FXLIST:
+      for (size_t n = 0; n < fx_lists.size(); n++)
+        if (!fx_lists[n].empty() && fx_lists[n] == remote_name(t)) {
+          a.kind = RemoteKind::FXLIST;
+          a.list = (int) n + 1;
+          return a;
+        }
+      break;
     default:
       return a;
   }

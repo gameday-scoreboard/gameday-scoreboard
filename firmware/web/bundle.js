@@ -1778,7 +1778,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     if (document.activeElement !== pick) pick.value = String(S.fxlist || 0);
     // Redrawn only when something changed, so a name being typed keeps its place.
     const sig = JSON.stringify(fxLists()) + "|" + (S.fxlist || 0) + "|" + fxOptions("Effect").length + "|" +
-      fxOptions("Effect Palette").length;
+      fxOptions("Effect Palette").length + "|" + JSON.stringify(remoteTargets());
     const host = $("#fxListCtls");
     if (sig === fxSig || (document.activeElement && host.contains(document.activeElement) &&
         document.activeElement.matches("input, select"))) return;
@@ -1805,6 +1805,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         name.blur();
       };
       row.appendChild(name);
+      const btns = remoteTargets().map((r, b) => (r.v === "fxlist:" + l.n ? b + 1 : 0)).filter(Boolean);
+      if (btns.length) row.appendChild(el("small", "pbtn", (btns.length > 1 ? "Buttons " : "Button ") + btns.join(", ")));
       const playing = S.fxlist === i + 1;
       const play = el("button", "btn" + (playing ? "" : " primary"), playing ? "Stop" : "Play");
       play.setAttribute("aria-label", (playing ? "Stop " : "Play ") + l.n);
@@ -2008,7 +2010,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       groups.push([title, opts]);
     }
     groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
-    groups.push(["Showing", [["scoreboard", "Scoreboard"], ["clock", "Clock"], ["smartboard", "Smart board"], ["fx", "Effects"]]]);
+    // Effect playlists, in full so they never read as a team playlist; one
+    // with no effects can't play, so it isn't offered.
+    groups.push(["Showing", [["scoreboard", "Scoreboard"], ["clock", "Clock"], ["smartboard", "Smart board"], ["fx", "Effects"]]
+      .concat(fxLists().filter((l) => l.fx.length).map((l) => ["fxlist:" + l.n, "Effect playlist: " + l.n]))]);
     return groups;
   };
   const setRemoteTeam = (b, key) => {
@@ -2112,6 +2117,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       const solo = r.v.startsWith("team:") && btnKeys.includes(r.v.slice(5));
       const inUse = S.held === b + 1 ? " In use now." : "";
       const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now"
+        : r.v.startsWith("fxlist:") ? "That effect playlist is gone or has no effects"
         : isFx ? "This panel doesn't have that effect" : "That team left your favorites")
         + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "."
           : solo ? "Button only: not in All favorites, playlists or take over." + inUse
@@ -2141,7 +2147,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       }
       if (!found) {
         // Set to something that is gone: shown as it is, so it comes back when its target does.
-        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^sport:/, "") + " (gone)");
+        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^fxlist:/, "Effect playlist: ")
+          .replace(/^sport:/, "") + " (gone)");
         o.value = r.v;
         sel.appendChild(o);
       }
