@@ -1718,7 +1718,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const fxLists = () => (S && S.fxlists) || [];
   const fxWaits = () => (S && S.fxwaits) || [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 120, 300, 600, 900, 1800, 3600];
   const FX_WAIT_NEW = 15;  // fx_playlists.h kFxWaitDefault
-  const fxText = (ls) => ls.map((l) => l.n + "=" + l.fx.map((e) => [e.e, e.p, e.s, e.i, e.w].join("|"))
+  const fxListsText = (ls) => ls.map((l) => l.n + "=" + l.fx.map((e) => [e.e, e.p, e.s, e.i, e.w].join("|"))
     .concat(l.shuffle ? ["@shuffle"] : []).join(",")).join(";");
   function fxFromText(v) {
     return v.split(";").filter(Boolean).map((p) => {
@@ -1734,7 +1734,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       };
     });
   }
-  const postFx = (ls) => setGD({ fxlists: fxText(ls) });
+  const postFx = (ls) => setGD({ fxlists: fxListsText(ls) });
   // "1 s", "45 s", "1 min", "1 hour"
   const waitText = (w) => (w < 60 ? w + " s" : w < 3600 ? w / 60 + " min" : w / 3600 + (w === 3600 ? " hour" : " hours"));
   const fxOptions = (name) => { const e = ents[byName[name]]; return (e && e.option) || []; };
