@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "fx_names_stub.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -999,6 +1000,70 @@ void test_list_options() {
   SCHECK(!st.restore, "over, but locked: wait");
 }
 
+// The buttons that pick a page under Showing: Scoreboard, Clock, Smart
+// board, and Effects with an effect of its own (fx_names_stub.h names them).
+void test_remote_pages() {
+  RemoteTarget t;
+  SCHECK(remote_parse("scoreboard", t) && t.kind == (uint8_t) RemoteKind::SCOREBOARD && remote_text(t) == "scoreboard" &&
+             remote_parse("clock", t) && t.kind == (uint8_t) RemoteKind::CLOCK && remote_text(t) == "clock" &&
+             remote_parse("smartboard", t) && t.kind == (uint8_t) RemoteKind::SMART && remote_text(t) == "smartboard",
+         "the three plain pages");
+  SCHECK(!remote_parse("Clock", t) && !remote_parse("smart board", t) && !remote_parse("effects", t) &&
+             !remote_parse("page:clock", t),
+         "a page by any other word is refused");
+  SCHECK(remote_is_page((uint8_t) RemoteKind::SCOREBOARD) && remote_is_page((uint8_t) RemoteKind::EFFECTS) &&
+             !remote_is_page((uint8_t) RemoteKind::LIVE) && !remote_is_page((uint8_t) RemoteKind::NONE),
+         "which kinds pick a page");
+  SCHECK(remote_parse("fx:DNA,Ocean,40,200", t) && t.kind == (uint8_t) RemoteKind::EFFECTS && remote_name(t) == "DNA" &&
+             t.league == 2 && t.sport == 40 && t.id == 200 && remote_text(t) == "fx:DNA,Ocean,40,200",
+         "an effect with its palette, speed and intensity");
+  SCHECK(remote_parse("fx:snow fall,red & blue,0,255", t) && remote_text(t) == "fx:Snow Fall,Red & Blue,0,255",
+         "names in any case come back in the panel's spelling");
+  SCHECK(remote_parse("fx:Fireworks", t) && remote_text(t) == "fx:Fireworks,Default,128,128" &&
+             remote_parse("fx:Fireworks,,,", t) && remote_text(t) == "fx:Fireworks,Default,128,128" &&
+             remote_parse("fx:Fireworks,Fire", t) && remote_text(t) == "fx:Fireworks,Fire,128,128",
+         "left out: the Default palette, speed and intensity 128");
+  SCHECK(remote_parse("fx:Distortion Waves,Fire,1,2", t) && remote_name(t) == "Distortion Waves" &&
+             remote_text(t) == "fx:Distortion Waves,Fire,1,2",
+         "a 16-letter effect fills the name with no terminator");
+  SCHECK(!remote_parse("fx:", t) && !remote_parse("fx:Lava Lamp", t) && !remote_parse("fx:DNA,Lava", t) &&
+             !remote_parse("fx:DNA,Ocean,256", t) && !remote_parse("fx:DNA,Ocean,-1", t) &&
+             !remote_parse("fx:DNA,Ocean,1,2,3", t) && !remote_parse("fx:DNA,Ocean,fast", t) &&
+             !remote_parse("fx:DNA,Ocean, 40", t),
+         "an effect or palette this panel lacks, or a speed outside 0 to 255, is refused");
+  SCHECK(t.kind == (uint8_t) RemoteKind::FAVORITE, "a refused fx: leaves the target cleared");
+  SetOp op;
+  SCHECK(parse_set("remote3", "fx:dna,ocean,40,200", op, kFavMax) && op.kind == SetKind::REMOTE && op.slot == 3 &&
+             op.text == "fx:DNA,Ocean,40,200",
+         "remote3=fx: comes back in the panel's spelling");
+  SCHECK(parse_set("remote1", "smartboard", op, kFavMax) && op.text == "smartboard", "remote1=smartboard");
+
+  const uint8_t NFL = (uint8_t) League::NFL;
+  RemoteAction a;
+  for (const char *v : {"scoreboard", "clock", "smartboard", "fx:Matrix"}) {
+    remote_parse(v, t);
+    a = remote_resolve(2, t, {{NFL, 6}}, {});
+    SCHECK(a.kind == (RemoteKind) t.kind && !a.gone, "%s does what it says", v);
+  }
+  // A saved button whose effect this build doesn't offer: its default.
+  remote_parse("fx:Matrix", t);
+  memcpy(t.name, "Lava Lamp\0", 10);
+  a = remote_resolve(2, t, {{NFL, 6}}, {});
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 2 && a.gone, "an effect the build lacks is gone");
+  // A build without the names yet (before the effects package sets them) refuses fx: and keeps a saved one.
+  FxNames saved = fx_names();
+  fx_names() = FxNames{};
+  SCHECK(!remote_parse("fx:Matrix", t), "fx: is refused before the panel knows its effects");
+  RemoteTarget kept{};
+  kept.kind = (uint8_t) RemoteKind::EFFECTS;
+  memcpy(kept.name, "Matrix", 6);
+  kept.league = 3;
+  a = remote_resolve(1, kept, {}, {});
+  SCHECK(a.kind == RemoteKind::EFFECTS && !a.gone && remote_text(kept) == "fx:Matrix,3,0,0",
+         "a saved Effects button with no names yet: kept, its palette by id");
+  fx_names() = saved;
+}
+
 // The WizMote's buttons (set_request.h RemoteTarget, playlists.h
 // remote_resolve): the text both ways and what a button does now.
 void test_remote() {
@@ -1127,11 +1192,13 @@ void test_remote() {
          "keepfav refuses a team it doesn't know");
   SCHECK(parse_set("remote1", "league:wnba", op, kFavMax) && op.kind == SetKind::REMOTE && op.text == "league:wnba",
          "remote1 takes a league");
+  test_remote_pages();
 }
 
 }  // namespace
 
 int run_set_tests(int &total_checks) {
+  fx_stub::install();
   test_remote();
   test_list_options();
   test_list_marks();

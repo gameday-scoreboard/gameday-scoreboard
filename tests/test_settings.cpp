@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "fx_names_stub.h"
 #include "settings_doc.h"
 
 using namespace espn;
@@ -550,6 +551,10 @@ void test_remote() {
   SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:curling") &&
              in.ops.size() == 1,
          "an unknown team or sport isn't left out and listed");
+  in = import(R"({"schema":1,"remote1":"clock","remote2":"fx:DNA,Ocean,40,200","remote3":"smartboard","remote4":"fx:Lava Lamp,Fire,1,2"})");
+  SCHECK(in.error.empty() && in.ops.size() == 3 && in.ops[1].text == "fx:DNA,Ocean,40,200" &&
+             skipped(in, "remote4=fx:Lava Lamp,Fire,1,2"),
+         "pages come back, and an effect this panel lacks is left out and listed: %s", in.error.c_str());
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
   in = import(R"({"schema":1,"remote1":"league:nhl","keepfav":"nfl:21"})");
   SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "league:nhl" && skipped(in, "keepfav"),
@@ -684,6 +689,7 @@ void test_best_default() {
 }
 
 int main() {
+  fx_stub::install();
   test_types();
   test_export();
   test_round_trip();

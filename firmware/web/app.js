@@ -446,7 +446,7 @@
           <div class="ctl"><label>Status</label><span class="val" id="wizStatus" style="min-width:0;text-align:left"></span></div>
           <div id="remoteCtls"></div>
           <div class="actions" id="remoteActions" style="margin-top:8px"></div>
-          <p class="hint" id="remoteBtnHint">Choose what remote buttons 1 to 4 show.</p>
+          <p class="hint" id="remoteBtnHint">Choose what remote buttons 1 to 4 show. A button that picks teams, a playlist or Live games also brings the panel back to the scoreboard.</p>
           <div id="remoteBtns"></div>
         </div>
       </details>
@@ -1385,7 +1385,9 @@
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
   // The WizMote's buttons (state remote, set remote1 to remote4): what each is
   // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
-  // sport:football, all, live, league:nfl or none. A held post stands in until the panel answers.
+  // sport:football, all, live, league:nfl, none, or a page under Showing:
+  // scoreboard, clock, smartboard, fx:Effect,Palette,speed,intensity. A held
+  // post stands in until the panel answers.
   const remoteTargets = () => [1, 2, 3, 4].map((b) => {
     const h = S && S["remote" + b];
     const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
@@ -1736,9 +1738,13 @@
   // playlists, then a group per sport, all nine leagues: its leagues' live
   // games, the sport row (My football teams), its favorites and "Another
   // NFL team", which opens a second list with every team in that league.
-  // Then All favorites, Live games, Nothing. A team that isn't a favorite
-  // joins the favorites as a button-only team (playlists.h), so 16 saved
-  // already leave no room for one.
+  // Then All favorites, Live games, Nothing, and the pages under Showing. A
+  // team that isn't a favorite joins the favorites as a button-only team
+  // (playlists.h), so 16 saved already leave no room for one. An Effects button keeps an
+  // effect of its own (fx:Effect,Palette,speed,intensity): picking Effects
+  // saves what Effects is set to now, and Change opens its own controls,
+  // which change the button, not what the panel is playing.
+  let remoteSig = "";
   const SPORTS = [["football", "Football"], ["baseball", "Baseball"], ["basketball", "Basketball"],
     ["hockey", "Hockey"], ["soccer", "Soccer"]];
   // A team's league, from a target or key ("team:nfl:6", "nfl:6").
@@ -1762,6 +1768,7 @@
       groups.push([title, opts]);
     }
     groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
+    groups.push(["Showing", [["scoreboard", "Scoreboard"], ["clock", "Clock"], ["smartboard", "Smart board"], ["fx", "Effects"]]]);
     return groups;
   };
   const setRemoteTeam = (b, key) => {
@@ -1780,26 +1787,93 @@
     setGD({ ["remote" + (b + 1)]: "team:" + key });
     toast("The " + (t ? t[3] : key) + " are on button " + (b + 1) + " only, not in your favorites elsewhere");
   };
-  let remoteSig = "";
-  const renderRemote = () => {
+  const fxOpen = new Set();  // buttons whose Change controls are open
+  const fxParse = (v) => {
+    const [e, p, sp, it] = v.slice(3).split(",");
+    return { e: e || "", p: p || "Default", sp: Number(sp || 128), it: Number(it || 128) };
+  };
+  const fxText = (f) => "fx:" + [f.e, f.p, f.sp, f.it].join(",");
+  // What the Effects page is set to now, from its own entities.
+  const fxNow = () => ({ e: entValue("Effect") || "Matrix", p: entValue("Effect Palette") || "Default",
+    sp: Math.round(Number(entValue("Effect Speed") || 128)), it: Math.round(Number(entValue("Effect Intensity") || 128)) });
+  const entOptions = (name) => { const e = ents[byName[name]]; return (e && e.option) || []; };
+  // sel: the button's picker, whose Effects choice follows each change.
+  const renderFxEdit = (host, b, f, sel) => {
+    const save = (part) => {
+      // From what the button holds now: the controls aren't redrawn while one has focus.
+      const v = fxText(Object.assign(fxParse(remoteTargets()[b].v), part));
+      const o = sel.querySelector("option[data-fx]");
+      if (o) {
+        const g = fxParse(v);
+        o.value = v;
+        o.textContent = "Effects: " + g.e + ", " + g.p;
+        sel.value = v;
+      }
+      setGD({ ["remote" + (b + 1)]: v });
+    };
+    const pick = (label, name, key) => {
+      const row = el("div", "ctl");
+      row.appendChild(el("label", null, label));
+      const sel = el("select");
+      sel.setAttribute("aria-label", "Button " + (b + 1) + " " + label.toLowerCase());
+      const opts = entOptions(name);
+      for (const o of opts.includes(f[key]) ? opts : [f[key], ...opts]) {
+        const x = el("option", null, o);
+        x.value = o;
+        sel.appendChild(x);
+      }
+      sel.value = f[key];
+      sel.onchange = () => save({ [key]: sel.value });
+      row.appendChild(sel);
+      host.appendChild(row);
+    };
+    const slide = (label, key) => {
+      const row = el("div", "ctl");
+      row.appendChild(el("label", null, label));
+      const r = el("input");
+      r.type = "range";
+      r.min = 0;
+      r.max = 255;
+      r.step = 1;
+      r.value = f[key];
+      r.setAttribute("aria-label", "Button " + (b + 1) + " " + label.toLowerCase());
+      const val = el("span", "val", String(f[key]));
+      val.setAttribute("aria-hidden", "true");
+      r.oninput = () => { val.textContent = r.value; };
+      r.onchange = () => save({ [key]: Number(r.value) });
+      row.appendChild(r);
+      row.appendChild(val);
+      host.appendChild(row);
+    };
+    pick("Effect", "Effect", "e");
+    pick("Palette", "Effect Palette", "p");
+    slide("Speed", "sp");
+    slide("Intensity", "it");
+  };
+  // force: redraw even with focus in the card (its own Change link).
+  const renderRemote = (force) => {
     const host = $("#remoteBtns");
     const targets = remoteTargets();
     const groups = remoteGroups();
-    const sig = JSON.stringify([groups, targets, favSlots, btnKeys, remotePick, S.held || 0]);
-    if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
+    const sig = JSON.stringify([groups, targets, favSlots, btnKeys, remotePick, S.held || 0, [...fxOpen],
+      entOptions("Effect").length, entOptions("Effect Palette").length]);
+    if (!force && (sig === remoteSig || (document.activeElement && host.contains(document.activeElement)))) return;
     remoteSig = sig;
     host.innerHTML = "";
     targets.forEach((r, b) => {
+      const isFx = r.v.startsWith("fx:");
+      const f = isFx ? fxParse(r.v) : null;
       const row = el("div", "ctl rbtn");
       const label = el("label", null, "Button " + (b + 1));
-      const own = favSlots[b] && !btnKeys.includes(favSlots[b]) ? favSlots[b] : "";
-      const t = teamByKey(own);
-      const ownText = "Favorite " + (b + 1) + (t ? ": " + t[3] : " (empty)");
+      // A button-only team's place counts as empty for its own favorite.
+      const ownKey = favSlots[b] && !btnKeys.includes(favSlots[b]) ? favSlots[b] : "";
+      const t = teamByKey(ownKey);
+      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : ownKey ? "" : " (empty)");
       const solo = r.v.startsWith("team:") && btnKeys.includes(r.v.slice(5));
       const inUse = S.held === b + 1 ? " In use now." : "";
-      const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now" : "That team left your favorites")
-        + ", so it is " + ownText.toLowerCase() + " for now."
-        : r.v === "fav" ? ownText + "."
+      const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now"
+        : isFx ? "This panel doesn't have that effect" : "That team left your favorites")
+        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "."
           : solo ? "Button only: not in All favorites, playlists or take over." + inUse
             : r.v.startsWith("league:") ? "Leaves your own Live games leagues as they are." + inUse : "";
       if (note) label.appendChild(el("small", null, note));
@@ -1815,9 +1889,12 @@
         if (!opts.length) continue;
         const into = g ? el("optgroup") : sel;
         if (g) { into.label = g; sel.appendChild(into); }
-        for (const [v, text] of opts) {
-          const o = el("option", null, text);
+        for (const [v0, text] of opts) {
+          // The Effects choice stands for this button's own effect.
+          const v = v0 === "fx" && isFx ? r.v : v0;
+          const o = el("option", null, v0 === "fx" && isFx ? "Effects: " + f.e + ", " + f.p : text);
           o.value = v;
+          if (v0 === "fx") o.dataset.fx = "";
           found = found || v === shown;
           into.appendChild(o);
         }
@@ -1841,7 +1918,12 @@
           return;
         }
         remotePick[b] = "";
-        setGD({ ["remote" + (b + 1)]: sel.value });
+        if (sel.value === "fx") {
+          fxOpen.delete(b);
+          setGD({ ["remote" + (b + 1)]: fxText(fxNow()) });
+        } else {
+          setGD({ ["remote" + (b + 1)]: sel.value });
+        }
       };
       const pickers = el("span", "rpick");
       pickers.appendChild(sel);
@@ -1868,6 +1950,26 @@
       }
       row.appendChild(pickers);
       host.appendChild(row);
+      if (!isFx) return;
+      const more = el("div", "rfx");
+      const change = el("button", "linkbtn", fxOpen.has(b) ? "Done" : "Change");
+      change.type = "button";
+      change.dataset.b = b;
+      change.setAttribute("aria-expanded", fxOpen.has(b) ? "true" : "false");
+      change.onclick = () => {
+        if (fxOpen.has(b)) fxOpen.delete(b); else fxOpen.add(b);
+        renderRemote(true);
+        const again = host.querySelector('.rfx .linkbtn[data-b="' + b + '"]');
+        if (again) again.focus();
+      };
+      more.appendChild(change);
+      host.appendChild(more);
+      if (fxOpen.has(b)) {
+        const edit = el("div", "rfxedit");
+        edit.appendChild(el("p", "hint", "Button " + (b + 1) + "'s own effect. Changing it here doesn't change what the panel is playing."));
+        renderFxEdit(edit, b, f, sel);
+        host.appendChild(edit);
+      }
     });
   };
   const renderSettings = () => {
@@ -3716,6 +3818,8 @@
       if (def.onValue) def.onValue(ents[e.id].value);
     }
     if (name === "Select Page" || /^Smart board row [1-4]$/.test(name || "")) renderSmart();
+    // The Effects buttons' Change controls list these entities' options.
+    if ((name === "Effect" || name === "Effect Palette") && S) renderRemote();
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.
