@@ -37,11 +37,12 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A WizMote button can now bring the panel back to Live games.
+A WizMote button can now bring the panel back to Live games, follow one league's live games, or play any team, not only your favorites.
 
 ### ✨ New
 
 - 🎮 **Live games** in the **Remote** button pickers: a press switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip
+- 🏈 The **Remote** button pickers are grouped by sport, with every league: **All NFL live games** follows that league only, leaving your own Live games leagues as they are, and **Another NFL team...** puts any team on a button, marked **Button only** under **Favorites**
 
 ### 🐛 Fixes
 
