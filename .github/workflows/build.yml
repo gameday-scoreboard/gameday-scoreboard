@@ -323,6 +323,16 @@ jobs:
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: ${{ steps.beta.outputs.url }}
+      # ESPHome passes our raw sdkconfig_options to ESP-IDF unchecked, so an
+      # ESP-IDF rename (an ESPHome pin bump) would drop one with a green
+      # build. This fails naming any option the generated sdkconfig lacks,
+      # has with another value, or keeps only under its deprecated name.
+      - name: Our ESP-IDF options took effect
+        if: needs.changes.outputs.firmware == 'true'
+        env:
+          YAML: ${{ steps.yaml.outputs.file }}
+          VARIANT: ${{ matrix.variant }}
+        run: python3 scripts/sdkconfig_check.py "$YAML" "firmware/.esphome/build/gameday-$VARIANT"
       - name: Stage output under a stable folder name
         if: needs.changes.outputs.firmware == 'true'
         run: |
@@ -606,6 +616,7 @@ jobs:
           python3 scripts/changelog_check.py --selftest
           python3 scripts/promote.py --selftest
           python3 scripts/restore_sync_lint.py --selftest
+          python3 scripts/sdkconfig_check.py --selftest
       - name: Restored YAML values reach flash at once
         run: python3 scripts/restore_sync_lint.py .
       - name: Site pages have their search and sharing tags
