@@ -3845,6 +3845,9 @@
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.
       case "Game Status": scheduleState(150); break;
+      // The panel publishes it whenever an effect playlist starts or stops
+      // (a hand pick, Showing leaving Effects): re-read which one plays.
+      case "Effect playlist": if (S && S.fxlists !== undefined) scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": {
         $("#wizStatus").textContent = e.value || "";

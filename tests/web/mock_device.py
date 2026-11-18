@@ -329,6 +329,9 @@ def entity_post(path, q):
     else:
         return True
     PUSHED.append(copy.deepcopy(e))
+    # fx_changed_(): Home Assistant's Effect playlist select follows a start or stop.
+    if domain in ("select", "number"):
+        state_doc()
     return True
 
 STATE = copy.deepcopy(INITIAL)
