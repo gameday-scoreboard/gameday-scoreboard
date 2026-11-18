@@ -111,7 +111,11 @@ static_assert(std::is_trivially_copyable<::espn::WakeState>::value, "WakeState i
 // the mark too, or the first boot after it reads the old bytes as the new
 // layout; the size check catches most such changes.
 static_assert(sizeof(::espn::WakeState) == 24, "WakeState changed: change WAKE_MARK and this size");
-static const uint32_t WAKE_MARK = 0x57414B31;
+static const uint32_t WAKE_MARK = 0x57414B32;
+// The layout before WakeState had held, in the same 24 bytes: read as it is,
+// with held off, so the update that adds it keeps a panel After the game
+// turned off still off.
+static const uint32_t WAKE_MARK_V1 = 0x57414B31;
 RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
@@ -545,8 +549,10 @@ void GamedayComponent::setup() {
   if (night_skip_rtc.mark == NIGHT_SKIP_MARK)
     this->night_skip_until_ = night_skip_rtc.until;
   this->defer([this]() { this->night_tick_(); });
-  if (wake_rtc.mark == WAKE_MARK) {
+  if (wake_rtc.mark == WAKE_MARK || wake_rtc.mark == WAKE_MARK_V1) {
     memcpy(&this->wake_state_, wake_rtc.state, sizeof(this->wake_state_));
+    if (wake_rtc.mark == WAKE_MARK_V1)
+      this->wake_state_.held = false;
     if (this->wake_state_.asleep)
       ESP_LOGI(TAG, "Game-day wake: off since the last game, as After the game asks");
   }
@@ -1008,9 +1014,22 @@ void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t
   this->rebuild_state_(&this->last_fields_);
 }
 
+void GamedayComponent::remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx) {
+  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_) && !this->wake_state_.held) {
+    ESP_LOGI(TAG, "After the game: the remote asked for the scoreboard, so no %s until the next game's final",
+             this->wake_clock_ ? "clock" : "Smart board");
+    this->wake_state_.held = true;
+    this->wake_tick_();
+  }
+  this->remote_page_ = (uint8_t) page;
+  this->remote_fx_ = fx;
+  this->fire_action_("remote_page");
+}
+
 #ifndef GAMEDAY_DEMO
 // Each button does what the owner set it to; its own favorite until then,
-// and again while what it was set to is gone.
+// and again while what it was set to is gone. One that follows something
+// also brings Showing back to the Scoreboard, so the press shows.
 void GamedayComponent::remote_number(uint8_t n) {
   ::espn::RemoteAction a = this->remote_action_(n);
   if (a.gone)
@@ -1020,33 +1039,43 @@ void GamedayComponent::remote_number(uint8_t n) {
     case ::espn::RemoteKind::NONE:
       ESP_LOGI(TAG, "Remote button %u: nothing", (unsigned) n);
       return;
+    case ::espn::RemoteKind::SCOREBOARD:
+    case ::espn::RemoteKind::CLOCK:
+    case ::espn::RemoteKind::SMART:
+    case ::espn::RemoteKind::EFFECTS:
+      ESP_LOGI(TAG, "Remote button %u: Showing %s", (unsigned) n,
+               ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str());
+      this->remote_show_(a.kind, this->prefs11_.btn[n - 1]);
+      return;
     case ::espn::RemoteKind::LIVE:
       // Back to Live games with the leagues it had; already there, it stays put.
       ESP_LOGI(TAG, "Remote button %u: Live games", (unsigned) n);
       if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES)
         this->set_mode_((uint8_t) Mode::LIVE);
-      return;
+      break;
     case ::espn::RemoteKind::SPORT:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, ::espn::kSportRowNames[a.sport_row - 1]);
       this->set_sport_row_(a.sport_row, true);
-      return;
+      break;
     case ::espn::RemoteKind::LIST:
     case ::espn::RemoteKind::ALL:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, a.list == 0 ? "every favorite" : this->list_name_((uint8_t) a.list).c_str());
       this->set_active_list_((uint8_t) a.list, true);
-      return;
+      break;
     default:
-      this->press_favorite((uint8_t) a.fav_slot);
-      return;
+      if (!this->press_favorite((uint8_t) a.fav_slot))
+        return;
+      break;
   }
+  this->remote_show_(::espn::RemoteKind::SCOREBOARD);
 }
 #endif
 
-void GamedayComponent::press_favorite(uint8_t slot) {
+bool GamedayComponent::press_favorite(uint8_t slot) {
   std::string option = this->favorite_option_(slot);
   if (option == "None") {
     ESP_LOGI(TAG, "Favorite %u is empty", (unsigned) slot);
-    return;
+    return false;
   }
   ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) slot, option.c_str());
   // In Live games the button switches to Favorites, on that team.
@@ -1069,9 +1098,10 @@ void GamedayComponent::press_favorite(uint8_t slot) {
       this->emit_({});
       this->end_backoff_wait_();
       this->schedule_next_(0);
-      return;
+      return true;
     }
   }
+  return true;
 }
 
 // Push the stored choices into the selects. Runs at setup and once more
@@ -2483,7 +2513,7 @@ void GamedayComponent::save_night_skip_() {
 }
 
 bool GamedayComponent::asleep_at_boot() {
-  if (wake_rtc.mark != WAKE_MARK)
+  if (wake_rtc.mark != WAKE_MARK && wake_rtc.mark != WAKE_MARK_V1)
     return false;
   ::espn::WakeState s;
   memcpy(&s, wake_rtc.state, sizeof(s));

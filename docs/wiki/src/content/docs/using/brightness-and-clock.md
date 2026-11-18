@@ -73,6 +73,12 @@ The panel can turn itself on before your games and decide what it does once they
 - **Show the clock**: the time and your next game, in that team's colors, until the **Turns on** time before that game, then the scoreboard. The countdown to the next game waits while the clock is up; the other cards you turned on under **Between games**, like your own countdown, the weather, the message card and pictures, still get their turns.
 - **Show the Smart board**: your own rows of text, usually from Home Assistant, until the **Turns on** time before your next game, then the scoreboard. It only takes over while **Showing** is on the Scoreboard. See [Smart board](/using/smart-board/).
 
+A [remote](/using/remote/#the-numbered-buttons) button set to a team, a playlist, a sport or Live games, or to the **Scoreboard** page, ends the clock or the Smart board between games: the panel shows what you pressed and stays there, and the clock or Smart board comes back after your next game's final.
+
+:::note[Coming in the next release]
+Until then, a remote button pressed between games leaves the clock or Smart board up.
+:::
+
 Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
 
 The app and the settings backup have the same settings.

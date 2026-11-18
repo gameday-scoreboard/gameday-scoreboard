@@ -487,6 +487,11 @@ button { font: inherit; color: inherit; }
 .popts .chip.look .pmark { width: 20px; height: 20px; }
 .popts .chip.look .pmark.dot { width: 14px; height: 14px; margin: 0 3px; }
 .rbtn select { max-width: 60%; }
+/* An Effects button's Change link, and its own effect controls under it */
+.rfx { text-align: right; margin: -6px 0 4px; }
+.rfx .linkbtn { margin-top: 0; }
+.rfxedit { margin: 0 0 8px; padding-left: 12px; border-left: 2px solid var(--rule); }
+.rfxedit .ctl select { max-width: 60%; }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }
 /* The same steppers as rows in the Teams cards */
