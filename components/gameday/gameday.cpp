@@ -1009,6 +1009,18 @@ std::vector<std::string> GamedayComponent::list_names_() const {
   return names;
 }
 
+// The effect playlists' names in order, "" for one with no effects, for a
+// remote button set to one (remote_resolve).
+std::vector<std::string> GamedayComponent::fx_list_names_() const {
+  std::vector<std::string> names;
+  const FxState *f = this->fx_state_;
+  if (f == nullptr)
+    return names;
+  for (uint8_t n = 0; n < f->store.count && n < ::espn::kFxListMax; n++)
+    names.push_back(f->store.list[n].count > 0 ? f->store.list[n].name : "");
+  return names;
+}
+
 // ---- Effect playlists (fx_playlists.h) -----------------------------------------
 
 GamedayComponent::FxState &GamedayComponent::fx_() {
@@ -1077,8 +1089,28 @@ void GamedayComponent::set_fx_lists_(const std::string &text) {
   ::espn::FxList before{};
   if (this->fx_player_.list >= 1 && this->fx_player_.list <= f.store.count)
     before = f.store.list[this->fx_player_.list - 1];
+  std::vector<std::string> old_names, new_names;
+  for (uint8_t n = 0; n < f.store.count && n < ::espn::kFxListMax; n++)
+    old_names.push_back(f.store.list[n].name);
   ::espn::parse_fx_lists(text, ::espn::fx_names(), f.store);
   f.pref.save(&f.store);
+  for (uint8_t n = 0; n < f.store.count && n < ::espn::kFxListMax; n++)
+    new_names.push_back(f.store.list[n].name);
+  // A WizMote button set to a renamed effect playlist follows it, as one
+  // set to a team playlist does (set_lists_).
+  bool btn_moved = false;
+  for (auto &b : this->prefs11_.btn) {
+    if (b.kind != (uint8_t) ::espn::RemoteKind::FXLIST)
+      continue;
+    std::string to = ::espn::list_renamed(old_names, new_names, ::espn::remote_name(b));
+    if (to.empty())
+      continue;
+    memset(b.name, 0, sizeof(b.name));
+    memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+    btn_moved = true;
+  }
+  if (btn_moved)
+    this->pref11_.save(&this->prefs11_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Effect playlists: %u", (unsigned) f.store.count);
   switch (::espn::fx_after_edit(f.store, this->fx_player_, before)) {
@@ -1185,8 +1217,11 @@ void GamedayComponent::fx_changed_() {
 ::espn::RemoteAction GamedayComponent::remote_action_(uint8_t button) const {
   if (button < 1 || button > 4)
     return ::espn::RemoteAction{};
-  return ::espn::remote_resolve(button, this->prefs11_.btn[button - 1], this->fav_refs_all_(), this->list_names_(),
-                                this->prefs11_.solo);
+  const ::espn::RemoteTarget &t = this->prefs11_.btn[button - 1];
+  // The effect playlists' names only for a button set to one.
+  return ::espn::remote_resolve(button, t, this->fav_refs_all_(), this->list_names_(), this->prefs11_.solo,
+                                t.kind == (uint8_t) ::espn::RemoteKind::FXLIST ? this->fx_list_names_()
+                                                                                : std::vector<std::string>{});
 }
 
 int GamedayComponent::held_fav_() const {
@@ -1251,8 +1286,8 @@ void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t
   if (button < 1 || button > 4)
     return;
   ::espn::RemoteTarget c = t;
-  if (c.kind == (uint8_t) ::espn::RemoteKind::LIST) {
-    // A playlist's name as the playlists keep it.
+  if (c.kind == (uint8_t) ::espn::RemoteKind::LIST || c.kind == (uint8_t) ::espn::RemoteKind::FXLIST) {
+    // A playlist's or effect playlist's name as the playlists keep it.
     std::string name = ::espn::list_name_clean(::espn::remote_name(c));
     memset(c.name, 0, sizeof(c.name));
     memcpy(c.name, name.data(), name.size());
@@ -1369,6 +1404,13 @@ void GamedayComponent::remote_number(uint8_t n) {
       ESP_LOGI(TAG, "Remote button %u: Showing %s", (unsigned) n,
                ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str());
       this->remote_show_(a.kind, this->prefs11_.btn[n - 1]);
+      return;
+    case ::espn::RemoteKind::FXLIST:
+      // Showing goes to Effects and the playlist plays from its start, as
+      // picking it on the device page does; a hand pick stops it as ever.
+      ESP_LOGI(TAG, "Remote button %u: Showing %s", (unsigned) n,
+               ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str());
+      this->play_fx_list_((uint8_t) a.list);
       return;
     case ::espn::RemoteKind::LIVE:
       // Back to Live games with the leagues it had; already there, it stays put.

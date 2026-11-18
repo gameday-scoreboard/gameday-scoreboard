@@ -606,6 +606,8 @@ def remote_parse(v):
         return v if v[7:] in LEAGUES else None
     if v.startswith("list:") and len(v) > 5:
         return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
+    if v.startswith("fxlist:") and len(v) > 7:
+        return "fxlist:" + v[7:].encode("utf-8")[:16].decode("utf-8", "ignore")
     return None
 
 
@@ -620,6 +622,9 @@ def remote_gone(button, v):
         return v[6:] not in sport_rows()
     if v.startswith("fx:"):
         return v[3:].split(",")[0] not in entity("Effect")["option"]
+    if v.startswith("fxlist:"):
+        # An effect playlist with no effects can't play: gone too.
+        return not any(pl["n"] == v[7:] and pl["fx"] for pl in STATE.get("fxlists", []))
     return False
 
 
@@ -900,7 +905,15 @@ def apply_set(kv):
             # changed, and stops when it is gone or empty.
             n = STATE.get("fxlist", 0)
             before = STATE["fxlists"][n - 1] if n else None
+            old_names = [pl["n"] for pl in STATE["fxlists"]]
             STATE["fxlists"] = parse_fx_lists(v)
+            # A WizMote button on a renamed effect playlist follows it (list_renamed()).
+            new_names = [pl["n"] for pl in STATE["fxlists"]]
+            for b in STATE["remote"]:
+                if b["v"].startswith("fxlist:"):
+                    to = list_renamed(old_names, new_names, b["v"][7:])
+                    if to:
+                        b["v"] = "fxlist:" + to
             STATE["fxlist"] = 0
             if before:
                 same = lambda a, b: a["fx"] == b["fx"] and a["shuffle"] == b["shuffle"]  # noqa: E731
@@ -980,9 +993,10 @@ def apply_set(kv):
             v = remote_parse(v)
             if v is None:
                 continue
-            if v.startswith("list:"):
-                name = message_clean(v[5:].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
-                v = "list:" + name if name else "fav"
+            if v.startswith("list:") or v.startswith("fxlist:"):
+                kind, raw = v.split(":", 1)
+                name = message_clean(raw.replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
+                v = kind + ":" + name if name else "fav"
             if v.startswith("team:") and parse_team_ref(v[5:]) not in fav_refs():
                 # A team that isn't a favorite joins them as a button-only
                 # team (solo_slot): after the last team, else the first gap,

@@ -43,6 +43,8 @@ The playlist stops, and the panel stays on the effect it was showing, when:
 
 Every time the panel starts it shows the Scoreboard, so a playlist never comes back on its own after a restart. The effect playlists themselves are kept, and a [settings backup](/using/backup/) saves them.
 
+A [WizMote remote](/using/remote/#a-button-that-plays-an-effect-playlist) button can start one too: set it to **Effect playlist:** and the playlist's name under **Showing**.
+
 In [Home Assistant](/using/home-assistant/), the **Effect playlist** select lists **None** and your effect playlists by name. Picking one plays it, so an automation can start the party playlist at 7 PM. Home Assistant reads the names when it connects, so one you add or rename shows up there after the next reconnect.
 
 ## What the panel does while an effect runs

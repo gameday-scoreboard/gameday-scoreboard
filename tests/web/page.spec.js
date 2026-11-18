@@ -1250,6 +1250,60 @@ test("a remote button whose target is gone falls back to its own favorite and th
   await expect(rows.nth(1).locator("small")).toHaveText("NFL · remote button 1, 2");
 });
 
+test("a remote button picks an effect playlist; an emptied or deleted one says so", async ({ page, request }) => {
+  const fx = (e) => ({ e, p: "Default", s: 128, i: 128, w: 15 });
+  await reset(request, {
+    favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}],
+    lists: [{ n: "Party", f: [] }],
+    fxlists: [{ n: "Party", shuffle: false, fx: [fx("Matrix"), fx("DNA")] }, { n: "Calm", shuffle: true, fx: [fx("Drift")] },
+      { n: "Empty", shuffle: false, fx: [] }],
+  });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  const b1 = btns.nth(0).locator("select");
+  // Under Showing, in full, beside the team playlist of the same name; one with no effects isn't offered.
+  const showing = b1.locator('optgroup[label="Showing"] option');
+  await expect(showing).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects", "Effect playlist: Party", "Effect playlist: Calm"]);
+  await expect(b1.locator('optgroup[label="Your playlists"] option')).toHaveText(["Party"]);
+  await b1.selectOption("fxlist:Party");
+  await expectSet(request, { remote1: "fxlist:Party" });
+  await btns.nth(1).locator("select").selectOption("fxlist:Calm");
+  await expectSet(request, { remote2: "fxlist:Calm" });
+  await expect.poll(async () => (await deviceState(request)).remote.slice(0, 2)).toEqual(
+    [{ v: "fxlist:Party", gone: false }, { v: "fxlist:Calm", gone: false }]);
+  await expect(b1).toHaveValue("fxlist:Party");
+  await expect(b1.locator("option:checked")).toHaveText("Effect playlist: Party");
+  // The effect playlist's row says which button plays it.
+  await tab(page, "customize");
+  await expect(page.locator("#fxListCtls .fxlist").nth(0).locator(".pbtn")).toHaveText("Button 1");
+  await expect(page.locator("#fxListCtls .fxlist").nth(1).locator(".pbtn")).toHaveText("Button 2");
+  // Calm emptied and Party deleted: both buttons fall back to their own favorites, and say so.
+  await request.post("/gameday/set", { form: { fxlists: "Calm=;Empty=" } });
+  await tab(page, "device");
+  await expect(btns.nth(0).locator("label small")).toHaveText("That effect playlist is gone or has no effects, so it is favorite 1: dallas cowboys for now.");
+  await expect(btns.nth(1).locator("label small")).toHaveText("That effect playlist is gone or has no effects, so it is favorite 2 (empty) for now.");
+  await expect(b1).toHaveValue("fxlist:Party");
+  await expect(b1.locator("option:checked")).toHaveText("Effect playlist: Party (gone)");
+});
+
+test("a remote button set to an effect playlist follows it through a rename", async ({ page, request }) => {
+  await reset(request, {
+    fxlists: [{ n: "Party", shuffle: false, fx: [{ e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }],
+    remote: [{ v: "fav" }, { v: "fav" }, { v: "fxlist:Party" }, { v: "fav" }],
+  });
+  await page.goto("/");
+  await tab(page, "customize");
+  const name = page.locator("#fxListCtls .fxlist").nth(0).locator(".pname");
+  await name.fill("Disco");
+  await name.press("Enter");
+  await expect.poll(async () => (await deviceState(request)).remote[2]).toEqual({ v: "fxlist:Disco", gone: false });
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  await expect(page.locator("#remoteBtns .rbtn").nth(2).locator("select")).toHaveValue("fxlist:Disco");
+});
+
 test("a remote button set to a playlist follows it through a rename", async ({ page, request }) => {
   const t = (l, id, abbr, name) => ({ l, id, abbr, name });
   await reset(request, {

@@ -593,6 +593,9 @@ void test_remote() {
   SCHECK(in.error.empty() && in.ops.size() == 3 && in.ops[1].text == "fx:DNA,Ocean,40,200" &&
              skipped(in, "remote4=fx:Lava Lamp,Fire,1,2"),
          "pages come back, and an effect this panel lacks is left out and listed: %s", in.error.c_str());
+  in = import(R"({"schema":1,"remote1":"fxlist:Party","remote2":"fxlist:"})");
+  SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "fxlist:Party" && skipped(in, "remote2=fxlist:"),
+         "an effect playlist button comes back, one with no name is left out and listed: %s", in.error.c_str());
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
   in = import(R"({"schema":1,"remote1":"league:nhl","keepfav":"nfl:21"})");
   SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "league:nhl" && skipped(in, "keepfav"),

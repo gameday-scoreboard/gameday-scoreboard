@@ -1114,6 +1114,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint8_t remote_page_{(uint8_t) ::espn::RemoteKind::NONE};
   ::espn::RemoteTarget remote_fx_{};
   std::vector<std::string> list_names_() const;
+  std::vector<std::string> fx_list_names_() const;
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
