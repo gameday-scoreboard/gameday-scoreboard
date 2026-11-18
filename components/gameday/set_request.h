@@ -183,13 +183,37 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 //   all              All favorites
 //   live             Live games, with the leagues it has
 //   none             nothing
-// A button whose team, playlist or sport row is gone does what its default
-// does, and the state says so (playlists.h remote_resolve).
-enum class RemoteKind : uint8_t { FAVORITE = 0, TEAM = 1, LIST = 2, SPORT = 3, ALL = 4, NONE = 5, LIVE = 6 };
+//   scoreboard       Showing: the Scoreboard
+//   clock            Showing: the Clock
+//   smartboard       Showing: the Smart board
+//   fx:Rain,Party,128,200
+//                    Showing: Effects, with this effect, palette, speed and
+//                    intensity. Only the effect is needed: the palette
+//                    defaults to Default, speed and intensity to 128.
+// The first seven pick what the panel follows; the last four pick a page.
+// A button whose team, playlist, sport row or effect is gone does what its
+// default does, and the state says so (playlists.h remote_resolve).
+enum class RemoteKind : uint8_t {
+  FAVORITE = 0,
+  TEAM = 1,
+  LIST = 2,
+  SPORT = 3,
+  ALL = 4,
+  NONE = 5,
+  LIVE = 6,
+  SCOREBOARD = 7,
+  CLOCK = 8,
+  SMART = 9,
+  EFFECTS = 10,
+};
 // The highest kind this firmware knows; a saved button past it (flash from a
 // newer build) goes back to its own favorite at boot.
-constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::LIVE;
+constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::EFFECTS;
 constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
+// EFFECTS keeps its setup in the fields the other kinds use, so a saved
+// button stays the same size: name is the effect (the panel's spelling; the
+// longest it offers is 16 letters), league the palette (a WLED palette id),
+// sport the speed and id the intensity.
 struct RemoteTarget {
   uint8_t kind{0};  // RemoteKind
   uint8_t league{0};
@@ -197,6 +221,29 @@ struct RemoteTarget {
   uint8_t sport{0};              // SPORT, a Sport
   char name[kRemoteNameMax]{};   // LIST, no terminator when full
 } __attribute__((packed));
+
+constexpr uint8_t kRemoteFxDefault = 128;  // speed and intensity left out of fx:
+
+// A button that changes Showing, rather than what the panel follows.
+inline bool remote_is_page(uint8_t kind) {
+  return kind >= (uint8_t) RemoteKind::SCOREBOARD && kind <= (uint8_t) RemoteKind::EFFECTS;
+}
+
+// The effects and palettes this build has, which only the effects package
+// knows (pages/effects.yaml sets these at boot; the host tests set their
+// own). While they are unset an fx: button is refused.
+struct FxNames {
+  // The effect as the panel spells it, "" for one it can't run
+  std::string (*effect)(const std::string &name){nullptr};
+  // A palette's id by name (any case), -1 for none
+  int (*palette_id)(const std::string &name){nullptr};
+  // A palette id's name, "" past the last
+  std::string (*palette_name)(uint8_t id){nullptr};
+};
+inline FxNames &fx_names() {
+  static FxNames n;
+  return n;
+}
 
 inline const char *remote_sport_key(uint8_t sport) {
   static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
@@ -210,6 +257,59 @@ inline std::string remote_name(const RemoteTarget &t) {
   return std::string(t.name, n);
 }
 
+// "200" into 200; false for anything but 0 to 255 in digits.
+inline bool remote_byte(const std::string &v, uint8_t &out) {
+  if (v.empty() || v.size() > 3)
+    return false;
+  int n = 0;
+  for (char c : v) {
+    if (c < '0' || c > '9')
+      return false;
+    n = n * 10 + (c - '0');
+  }
+  if (n > 255)
+    return false;
+  out = (uint8_t) n;
+  return true;
+}
+
+// "Rain,Party,128,200" (after fx:) into an EFFECTS target. Empty fields
+// take their defaults.
+inline bool remote_fx_parse(const std::string &v, RemoteTarget &t) {
+  const FxNames &fx = fx_names();
+  if (fx.effect == nullptr || fx.palette_id == nullptr)
+    return false;
+  std::vector<std::string> parts;
+  size_t start = 0;
+  while (true) {
+    size_t comma = v.find(',', start);
+    parts.push_back(v.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+    if (comma == std::string::npos)
+      break;
+    start = comma + 1;
+  }
+  if (parts.size() > 4)
+    return false;
+  parts.resize(4);
+  std::string effect = fx.effect(parts[0]);
+  if (effect.empty() || effect.size() > kRemoteNameMax)
+    return false;
+  int palette = parts[1].empty() ? 0 : fx.palette_id(parts[1]);
+  if (palette < 0 || palette > 255)
+    return false;
+  uint8_t speed = kRemoteFxDefault, intensity = kRemoteFxDefault;
+  if (!parts[2].empty() && !remote_byte(parts[2], speed))
+    return false;
+  if (!parts[3].empty() && !remote_byte(parts[3], intensity))
+    return false;
+  t.kind = (uint8_t) RemoteKind::EFFECTS;
+  t.league = (uint8_t) palette;
+  t.sport = speed;
+  t.id = intensity;
+  memcpy(t.name, effect.data(), effect.size());
+  return true;
+}
+
 // The text above into a target; false for anything else. A playlist name
 // is kept as sent, up to kRemoteNameMax bytes; the component cleans it as
 // it cleans a playlist's.
@@ -217,18 +317,20 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
   t = RemoteTarget{};
   if (v == "fav")
     return true;
-  if (v == "all") {
-    t.kind = (uint8_t) RemoteKind::ALL;
-    return true;
-  }
-  if (v == "none") {
-    t.kind = (uint8_t) RemoteKind::NONE;
-    return true;
-  }
-  if (v == "live") {
-    t.kind = (uint8_t) RemoteKind::LIVE;
-    return true;
-  }
+  static const struct {
+    const char *word;
+    RemoteKind kind;
+  } kWords[] = {{"all", RemoteKind::ALL},
+                {"none", RemoteKind::NONE},
+                {"live", RemoteKind::LIVE},
+                {"scoreboard", RemoteKind::SCOREBOARD},
+                {"clock", RemoteKind::CLOCK},
+                {"smartboard", RemoteKind::SMART}};
+  for (const auto &w : kWords)
+    if (v == w.word) {
+      t.kind = (uint8_t) w.kind;
+      return true;
+    }
   if (v.compare(0, 5, "team:") == 0) {
     uint8_t league = 0;
     uint32_t id = 0;  // not t.id itself: a packed field can't be bound by reference
@@ -254,7 +356,19 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     memcpy(t.name, name.data(), name.size());
     return true;
   }
+  if (v.compare(0, 3, "fx:") == 0) {
+    if (remote_fx_parse(v.substr(3), t))
+      return true;
+    t = RemoteTarget{};
+  }
   return false;
+}
+
+// An EFFECTS button's palette by name, or by id when this build can't name it.
+inline std::string remote_fx_palette(const RemoteTarget &t) {
+  const FxNames &fx = fx_names();
+  std::string name = fx.palette_name != nullptr ? fx.palette_name(t.league) : std::string();
+  return name.empty() ? std::to_string((unsigned) t.league) : name;
 }
 
 inline std::string remote_text(const RemoteTarget &t) {
@@ -271,6 +385,15 @@ inline std::string remote_text(const RemoteTarget &t) {
       return "none";
     case RemoteKind::LIVE:
       return "live";
+    case RemoteKind::SCOREBOARD:
+      return "scoreboard";
+    case RemoteKind::CLOCK:
+      return "clock";
+    case RemoteKind::SMART:
+      return "smartboard";
+    case RemoteKind::EFFECTS:
+      return "fx:" + remote_name(t) + "," + remote_fx_palette(t) + "," + std::to_string((unsigned) t.sport) + "," +
+             std::to_string((unsigned) (t.id & 0xFF));
     default:
       return "fav";
   }

@@ -40,7 +40,7 @@ FxNames names() {
         return e;
     return std::string();
   };
-  n.palette_index = [](const std::string &s) {
+  n.palette_id = [](const std::string &s) {
     for (size_t i = 0; i < kPalettes.size(); i++)
       if (kPalettes[i] == s)
         return (int) i;

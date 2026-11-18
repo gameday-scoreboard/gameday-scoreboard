@@ -112,7 +112,11 @@ static_assert(std::is_trivially_copyable<::espn::WakeState>::value, "WakeState i
 // the mark too, or the first boot after it reads the old bytes as the new
 // layout; the size check catches most such changes.
 static_assert(sizeof(::espn::WakeState) == 24, "WakeState changed: change WAKE_MARK and this size");
-static const uint32_t WAKE_MARK = 0x57414B31;
+static const uint32_t WAKE_MARK = 0x57414B32;
+// The layout before WakeState had held, in the same 24 bytes: read as it is,
+// with held off, so the update that adds it keeps a panel After the game
+// turned off still off.
+static const uint32_t WAKE_MARK_V1 = 0x57414B31;
 RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
@@ -549,8 +553,10 @@ void GamedayComponent::setup() {
   if (night_skip_rtc.mark == NIGHT_SKIP_MARK)
     this->night_skip_until_ = night_skip_rtc.until;
   this->defer([this]() { this->night_tick_(); });
-  if (wake_rtc.mark == WAKE_MARK) {
+  if (wake_rtc.mark == WAKE_MARK || wake_rtc.mark == WAKE_MARK_V1) {
     memcpy(&this->wake_state_, wake_rtc.state, sizeof(this->wake_state_));
+    if (wake_rtc.mark == WAKE_MARK_V1)
+      this->wake_state_.held = false;
     if (this->wake_state_.asleep)
       ESP_LOGI(TAG, "Game-day wake: off since the last game, as After the game asks");
   }
@@ -1018,31 +1024,6 @@ void GamedayComponent::load_fx_() {
   }
 }
 
-// The effect and palette lists are the Effects page's own selects, so a
-// name is one the panel offers, in its spelling.
-::espn::FxNames GamedayComponent::fx_names_() const {
-  const FxState *f = this->fx_state_;
-  ::espn::FxNames n;
-  n.effect = [f](const std::string &s) -> std::string {
-    if (f == nullptr || f->effect == nullptr)
-      return "";
-    auto i = f->effect->index_of(s);
-    return i.has_value() ? std::string(f->effect->option_at(*i)) : std::string();
-  };
-  n.palette_index = [f](const std::string &s) -> int {
-    if (f == nullptr || f->palette == nullptr)
-      return -1;
-    auto i = f->palette->index_of(s);
-    return i.has_value() ? (int) *i : -1;
-  };
-  n.palette_name = [f](uint8_t i) -> std::string {
-    if (f == nullptr || f->palette == nullptr || i >= f->palette->size())
-      return "";
-    return f->palette->option_at(i);
-  };
-  return n;
-}
-
 void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *palette, number::Number *speed,
                                        number::Number *intensity, select::Select *page) {
   FxState &f = this->fx_();
@@ -1080,7 +1061,7 @@ void GamedayComponent::set_fx_lists_(const std::string &text) {
   ::espn::FxList before{};
   if (this->fx_player_.list >= 1 && this->fx_player_.list <= f.store.count)
     before = f.store.list[this->fx_player_.list - 1];
-  ::espn::parse_fx_lists(text, this->fx_names_(), f.store);
+  ::espn::parse_fx_lists(text, ::espn::fx_names(), f.store);
   f.pref.save(&f.store);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Effect playlists: %u", (unsigned) f.store.count);
@@ -1210,9 +1191,22 @@ void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t
   this->rebuild_state_(&this->last_fields_);
 }
 
+void GamedayComponent::remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx) {
+  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_) && !this->wake_state_.held) {
+    ESP_LOGI(TAG, "After the game: the remote asked for the scoreboard, so no %s until the next game's final",
+             this->wake_clock_ ? "clock" : "Smart board");
+    this->wake_state_.held = true;
+    this->wake_tick_();
+  }
+  this->remote_page_ = (uint8_t) page;
+  this->remote_fx_ = fx;
+  this->fire_action_("remote_page");
+}
+
 #ifndef GAMEDAY_DEMO
 // Each button does what the owner set it to; its own favorite until then,
-// and again while what it was set to is gone.
+// and again while what it was set to is gone. One that follows something
+// also brings Showing back to the Scoreboard, so the press shows.
 void GamedayComponent::remote_number(uint8_t n) {
   ::espn::RemoteAction a = this->remote_action_(n);
   if (a.gone)
@@ -1222,33 +1216,43 @@ void GamedayComponent::remote_number(uint8_t n) {
     case ::espn::RemoteKind::NONE:
       ESP_LOGI(TAG, "Remote button %u: nothing", (unsigned) n);
       return;
+    case ::espn::RemoteKind::SCOREBOARD:
+    case ::espn::RemoteKind::CLOCK:
+    case ::espn::RemoteKind::SMART:
+    case ::espn::RemoteKind::EFFECTS:
+      ESP_LOGI(TAG, "Remote button %u: Showing %s", (unsigned) n,
+               ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str());
+      this->remote_show_(a.kind, this->prefs11_.btn[n - 1]);
+      return;
     case ::espn::RemoteKind::LIVE:
       // Back to Live games with the leagues it had; already there, it stays put.
       ESP_LOGI(TAG, "Remote button %u: Live games", (unsigned) n);
       if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES)
         this->set_mode_((uint8_t) Mode::LIVE);
-      return;
+      break;
     case ::espn::RemoteKind::SPORT:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, ::espn::kSportRowNames[a.sport_row - 1]);
       this->set_sport_row_(a.sport_row, true);
-      return;
+      break;
     case ::espn::RemoteKind::LIST:
     case ::espn::RemoteKind::ALL:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, a.list == 0 ? "every favorite" : this->list_name_((uint8_t) a.list).c_str());
       this->set_active_list_((uint8_t) a.list, true);
-      return;
+      break;
     default:
-      this->press_favorite((uint8_t) a.fav_slot);
-      return;
+      if (!this->press_favorite((uint8_t) a.fav_slot))
+        return;
+      break;
   }
+  this->remote_show_(::espn::RemoteKind::SCOREBOARD);
 }
 #endif
 
-void GamedayComponent::press_favorite(uint8_t slot) {
+bool GamedayComponent::press_favorite(uint8_t slot) {
   std::string option = this->favorite_option_(slot);
   if (option == "None") {
     ESP_LOGI(TAG, "Favorite %u is empty", (unsigned) slot);
-    return;
+    return false;
   }
   ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) slot, option.c_str());
   // In Live games the button switches to Favorites, on that team.
@@ -1271,9 +1275,10 @@ void GamedayComponent::press_favorite(uint8_t slot) {
       this->emit_({});
       this->end_backoff_wait_();
       this->schedule_next_(0);
-      return;
+      return true;
     }
   }
+  return true;
 }
 
 // Push the stored choices into the selects. Runs at setup and once more
@@ -2686,7 +2691,7 @@ void GamedayComponent::save_night_skip_() {
 }
 
 bool GamedayComponent::asleep_at_boot() {
-  if (wake_rtc.mark != WAKE_MARK)
+  if (wake_rtc.mark != WAKE_MARK && wake_rtc.mark != WAKE_MARK_V1)
     return false;
   ::espn::WakeState s;
   memcpy(&s, wake_rtc.state, sizeof(s));
@@ -5866,7 +5871,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // and the apps offer.
   {
     const FxState &f = this->fx_();
-    ::espn::FxNames names = this->fx_names_();
+    const ::espn::FxNames &names = ::espn::fx_names();
     JsonArray fxl = doc["fxlists"].to<JsonArray>();
     for (uint8_t n = 0; n < f.store.count; n++) {
       const ::espn::FxList &l = f.store.list[n];
@@ -5878,7 +5883,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
         const ::espn::FxEntry &e = l.fx[i];
         JsonObject x = fx.add<JsonObject>();
         x["e"] = e.effect;
-        x["p"] = names.palette_name(e.palette);
+        x["p"] = names.palette_name != nullptr ? names.palette_name(e.palette) : std::string();
         x["s"] = e.speed;
         x["i"] = e.intensity;
         x["w"] = ::espn::kFxWaitSeconds[e.wait < ::espn::kFxWaitCount ? e.wait : ::espn::kFxWaitDefault];

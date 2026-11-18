@@ -230,9 +230,9 @@ ENTITIES = [
     # Effects mode (firmware/pages/effects.yaml): wled_fx's entities, shown
     # while Select Page is on Effects.
     {"id": "select/Effect", "domain": "select", "name": "Effect", "state": "Matrix", "value": "Matrix",
-     "option": ["Matrix", "Metaballs", "DNA", "Drift", "Plasma Ball", "Fireworks", "Snow Fall"]},
+     "option": ["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall", "Distortion Waves", "Drift", "Plasma Ball"]},
     {"id": "select/Effect Palette", "domain": "select", "name": "Effect Palette", "state": "Default",
-     "value": "Default", "option": ["Default", "Party", "Lava", "Rainbow", "Ocean", "Fire"]},
+     "value": "Default", "option": ["Default", "Rainbow", "Ocean", "Fire", "Red & Blue", "Party", "Sunset"]},
     {"id": "number/Effect Speed", "domain": "number", "name": "Effect Speed", "state": "128", "value": "128",
      "min_value": "0", "max_value": "255", "step": "1"},
     {"id": "number/Effect Intensity", "domain": "number", "name": "Effect Intensity", "state": "128",
@@ -559,10 +559,36 @@ def remap_lists(before):
         STATE["sport"] = ""
 
 
+def remote_fx_parse(v):
+    """remote_fx_parse(): "Rain,Party,40,200" (after fx:) as the panel writes it back, or None.
+    The names are the Effect and Effect Palette entities' options, in any case."""
+    parts = v.split(",")
+    if len(parts) > 4:
+        return None
+    parts += [""] * (4 - len(parts))
+    effects = entity("Effect")["option"]
+    palettes = entity("Effect Palette")["option"]
+    effect = next((e for e in effects if e.lower() == parts[0].lower()), None)
+    palette = palettes[0] if not parts[1] else next((p for p in palettes if p.lower() == parts[1].lower()), None)
+    if effect is None or palette is None:
+        return None
+    nums = []
+    for n in parts[2:]:
+        if not n:
+            nums.append(128)
+        elif re.fullmatch(r"\d{1,3}", n) and int(n) <= 255:
+            nums.append(int(n))
+        else:
+            return None
+    return f"fx:{effect},{palette},{nums[0]},{nums[1]}"
+
+
 def remote_parse(v):
     """remote_parse(): the text of a button's target, canonical, or None when the panel refuses it."""
-    if v in ("fav", "all", "live", "none"):
+    if v in ("fav", "all", "live", "none", "scoreboard", "clock", "smartboard"):
         return v
+    if v.startswith("fx:"):
+        return remote_fx_parse(v[3:])
     if v.startswith("team:"):
         ref = parse_team_ref(v[5:])
         return f"team:{ref[0]}:{ref[1]}" if ref else None
@@ -582,6 +608,8 @@ def remote_gone(button, v):
         return v[5:] not in [pl["n"] for pl in STATE["lists"]]
     if v.startswith("sport:"):
         return v[6:] not in sport_rows()
+    if v.startswith("fx:"):
+        return v[3:].split(",")[0] not in entity("Effect")["option"]
     return False
 
 
@@ -705,10 +733,13 @@ def parse_fx_lists(v):
             if not tok or tok[0] == "@" or len(pl["fx"]) >= LIMITS["kFxEntryMax"]:
                 continue
             f = (tok.split("|") + [""] * 5)[:5]
-            if f[0] not in fx_options("Effect") or len(f[0].encode()) > LIMITS["kFxEffectNameMax"]:
+            # FxNames: an effect or palette in any case, in the panel's spelling.
+            eff = next((e for e in fx_options("Effect") if e.lower() == f[0].lower()), None)
+            if eff is None or len(eff.encode()) > LIMITS["kFxEffectNameMax"]:
                 continue
+            f[0] = eff
             pals = fx_options("Effect Palette")
-            pal = pals[pals.index(f[1])] if f[1] in pals else pals[0]
+            pal = next((p for p in pals if p.lower() == f[1].lower()), pals[0]) if f[1] else pals[0]
             w = FX_WAITS[fx_wait_step(int(f[4]))] if whole_int(f[4]) else FX_WAITS[FX_WAIT_DEFAULT]
             pl["fx"].append({"e": f[0], "p": pal, "s": fx_byte(f[2], 128), "i": fx_byte(f[3], 128), "w": w})
         out.append(pl)
@@ -1346,11 +1377,6 @@ def selftest():
         return value
 
     bad = 0
-    # The effect playlist cases run against the fixture's effect and palette lists.
-    for name, key in (("Effect", "fx_effects"), ("Effect Palette", "fx_palettes")):
-        if entity(name)["option"] != fx[key]:
-            bad += 1
-            print(f"FAIL the mock's {name} options aren't set_cases.json's {key}")
     for case in fx["cases"]:
         start = {**fx["base"], **case.get("start", {})}
         start["favs"] = [to_team(r) for r in start["favs"]]

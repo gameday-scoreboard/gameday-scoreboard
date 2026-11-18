@@ -654,7 +654,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   const speed = page.getByRole("slider", { name: "Speed", exact: true });
   const intensity = page.getByRole("slider", { name: "Intensity", exact: true });
   await expect(effect).toHaveValue("Matrix");
-  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Drift", "Plasma Ball", "Fireworks", "Snow Fall"]);
+  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall", "Distortion Waves", "Drift", "Plasma Ball"]);
   await expect(palette).toHaveValue("Default");
   await expect(speed).toHaveValue("128");
   await expect(speed).toHaveAttribute("max", "255");
@@ -715,8 +715,8 @@ test("effect playlists: made, edited, played, stopped by a hand pick, deleted", 
   // The second effect: another effect and palette, a speed, a minute, then Shuffle.
   await card.getByRole("combobox", { name: "Effect 2 in Party" }).selectOption("Drift");
   await expect.poll(async () => (await lastFx(request))[0].fx[1].e).toBe("Drift");
-  await card.getByRole("combobox", { name: "Palette 2 in Party" }).selectOption("Lava");
-  await expect.poll(async () => (await lastFx(request))[0].fx[1].p).toBe("Lava");
+  await card.getByRole("combobox", { name: "Palette 2 in Party" }).selectOption("Sunset");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].p).toBe("Sunset");
   const speed = card.getByRole("spinbutton", { name: "Speed 2 in Party" });
   await speed.fill("200");
   await speed.press("Enter");
@@ -734,7 +734,7 @@ test("effect playlists: made, edited, played, stopped by a hand pick, deleted", 
   await expect.poll(async () => (await lastFx(request))[0].fx.map((e) => e.e)).toEqual(["Drift", "Matrix"]);
   const st = await deviceState(request);
   expect(st.fxlists).toEqual([{ n: "Party", shuffle: true, fx: [
-    { e: "Drift", p: "Lava", s: 200, i: 128, w: 60 }, { e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }]);
+    { e: "Drift", p: "Sunset", s: 200, i: 128, w: 60 }, { e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }]);
 
   // Play: the panel goes to Effects, and the page says which one plays.
   await card.getByRole("button", { name: "Play Party" }).click();
@@ -1046,7 +1046,7 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  await expect(b1.locator("option")).toHaveText(["Its own favorite", "Dallas Cowboys", "Dallas Mavericks", "Texas Longhorns", "All football", "All basketball", "Sundays", "All favorites", "Live games", "Nothing"]);
+  await expect(b1.locator("option")).toHaveText(["Its own favorite", "Dallas Cowboys", "Dallas Mavericks", "Texas Longhorns", "All football", "All basketball", "Sundays", "All favorites", "Live games", "Nothing", "Scoreboard", "Clock", "Smart board", "Effects"]);
   await expect(b1).toHaveValue("fav");
   await expect(btns.nth(0).locator("label small")).toHaveText("Favorite 1: Dallas Cowboys.");
   await expect(btns.nth(3).locator("label small")).toHaveText("Favorite 4 (empty).");
@@ -1073,6 +1073,50 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   await expectSet(request, { lists: "Sundays=nfl:6;Playlist 2=" });
   const st = await deviceState(request);
   expect(st.remote.map((r) => r.v)).toEqual(["team:ncaa:251", "sport:basketball", "list:Sundays", "none"]);
+});
+
+test("a remote button picks a page under Showing; an Effects button saves the effect playing now, and Change edits its own without touching the panel", async ({ page, request }) => {
+  await reset(request, {});
+  // What Effects is set to on the panel now, before the page reads it
+  await request.post("/select/Effect/set?option=DNA");
+  await request.post("/select/Effect%20Palette/set?option=Ocean");
+  await request.post("/number/Effect%20Speed/set?value=40");
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  await expect(btns).toHaveCount(4);
+  await btns.nth(0).locator("select").selectOption("clock");
+  await expectSet(request, { remote1: "clock" });
+  await btns.nth(1).locator("select").selectOption("smartboard");
+  await expectSet(request, { remote2: "smartboard" });
+  await btns.nth(2).locator("select").selectOption("scoreboard");
+  await expectSet(request, { remote3: "scoreboard" });
+  await btns.nth(3).locator("select").selectOption("fx");
+  await expectSet(request, { remote4: "fx:DNA,Ocean,40,128" });
+  const b4 = btns.nth(3).locator("select");
+  await expect(b4).toHaveValue("fx:DNA,Ocean,40,128");
+  await expect(b4.locator("option:checked")).toHaveText("Effects: DNA, Ocean");
+  // Change opens the button's own controls; editing them changes the button only.
+  const before = (await entityPosts(request)).length;
+  const change = page.locator("#remoteBtns .rfx .linkbtn");
+  await expect(change).toHaveText("Change");
+  await expect(page.locator("#remoteBtns .rfxedit")).toHaveCount(0);
+  await change.click();
+  const edit = page.locator("#remoteBtns .rfxedit");
+  await expect(edit).toBeVisible();
+  await edit.locator("select").nth(0).selectOption("Snow Fall");
+  await expectSet(request, { remote4: "fx:Snow Fall,Ocean,40,128" });
+  await edit.locator("select").nth(1).selectOption("Red & Blue");
+  await expectSet(request, { remote4: "fx:Snow Fall,Red & Blue,40,128" });
+  await edit.locator("input[type=range]").nth(1).fill("200");
+  await expectSet(request, { remote4: "fx:Snow Fall,Red & Blue,40,200" });
+  expect((await entityPosts(request)).length).toBe(before);
+  const st = await deviceState(request);
+  expect(st.remote.map((r) => r.v)).toEqual(["clock", "smartboard", "scoreboard", "fx:Snow Fall,Red & Blue,40,200"]);
+  await expect(b4.locator("option:checked")).toHaveText("Effects: Snow Fall, Red & Blue");
+  await page.locator("#remoteBtns .rfx .linkbtn").click();
+  await expect(page.locator("#remoteBtns .rfxedit")).toHaveCount(0);
 });
 
 test("a remote button whose target is gone falls back to its own favorite and the page says so", async ({ page, request }) => {

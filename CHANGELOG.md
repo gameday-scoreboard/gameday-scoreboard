@@ -37,12 +37,13 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Effect playlists step the panel through your own list of effects, and a WizMote button can now bring the panel back to Live games.
+Effect playlists step the panel through your own list of effects, and a WizMote button can now bring the panel back to Live games, or put up the Clock, the Smart board or an effect of its own.
 
 ### ✨ New
 
 - 🎆 **Effect playlists**: up to 4 named lists of effects, each one up for 1 second to an hour, in order or shuffled, made on the Customize tab and played from there, the Home tab or Home Assistant
-- 🎮 **Live games** in the **Remote** button pickers: a press switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip
+- 🎮 **Live games**, **Scoreboard**, **Clock**, **Smart board** and **Effects** in the **Remote** button pickers: Live games switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip; a page choice puts that page up, and an Effects button keeps its own effect, palette, speed and intensity, set with **Change** under it
+- 🔁 A remote button set to a team, playlist, sport or Live games now brings the panel back to the scoreboard when the Clock, Smart board or an effect is up, and ends **After the game**'s clock or Smart board until the next game's final
 
 ### 🐛 Fixes
 

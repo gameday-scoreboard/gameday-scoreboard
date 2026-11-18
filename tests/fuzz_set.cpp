@@ -113,7 +113,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         // and Home Assistant's select points at the terminated names.
         FxNames names;
         names.effect = [](const std::string &s) { return s == "Matrix" || s == "Drift" ? s : std::string(); };
-        names.palette_index = [](const std::string &s) { return s == "Party" ? 6 : -1; };
+        names.palette_id = [](const std::string &s) { return s == "Party" ? 6 : -1; };
         names.palette_name = [](uint8_t i) { return std::to_string(i); };
         FxStore st = parse_fx_lists(op.text, names);
         require(st.count <= kFxListMax, "more effect playlists than kFxListMax", k, v);

@@ -127,6 +127,27 @@ globals:
 
 esphome:
   on_boot:
+    # Before the gameday component sets up: the names of the effects and
+    # palettes this build has, which a remote button set to Effects is saved
+    # and shown by (set_request.h FxNames).
+    - priority: 800.0
+      then:
+        - lambda: |-
+            auto &n = ::espn::fx_names();
+            n.effect = [](const std::string &name) -> std::string {
+              const int i = esphome::wled_fx::EffectRegistry::index_of(name.c_str());
+              if (i < 0 || !id(gd_fx).effect_offered((size_t) i))
+                return "";
+              char buf[64];
+              esphome::wled_fx::effect_name(*esphome::wled_fx::EffectRegistry::at((size_t) i), buf, sizeof(buf));
+              return buf;
+            };
+            n.palette_id = [](const std::string &name) -> int {
+              return esphome::wled_fx::palette_id_by_name(name.c_str());
+            };
+            n.palette_name = [](uint8_t p) -> std::string {
+              return p < esphome::wled_fx::palette_count() ? esphome::wled_fx::PALETTE_NAMES[p] : "";
+            };
     # wled_fx sets up at LATE (-100). Park its loop so an idle panel never
     # renders a frame, then let the page scripts run.
     - priority: -200.0

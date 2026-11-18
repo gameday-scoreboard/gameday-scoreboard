@@ -6812,6 +6812,36 @@ static void test_wake() {
     p.after = (uint8_t) After::SCOREBOARD;
     CHECK(!wake_clock(p, s, in));
   }
+
+  // A remote press that follows a team or asks for the Scoreboard ends the
+  // clock or Smart board between games; it comes back only after the next
+  // game's final.
+  for (uint8_t after : {(uint8_t) After::CLOCK, (uint8_t) After::SMART}) {
+    p.after = after;
+    auto page = [&](const WakeState &s) { return after == (uint8_t) After::CLOCK ? wake_clock(p, s, in) : wake_smart(p, s, in); };
+    WakeState s;
+    in.kick = kick;
+    at(kick - 3 * 3600);
+    wake_step(p, s, in);
+    CHECK(page(s));
+    s.held = true;
+    CHECK(!page(s));
+    at(kick - 2 * 3600);
+    wake_step(p, s, in);
+    CHECK(!page(s));  // still held, hours later
+    at(kick + 60, true);
+    wake_step(p, s, in);
+    CHECK(!s.held);  // the next game went live
+    in.kick = kick + 86400;
+    at(kick + 3 * 3600);
+    wake_step(p, s, in);
+    CHECK(!page(s));  // its final is up
+    at(kick + 3 * 3600 + 30 * 60);
+    wake_step(p, s, in);
+    CHECK(page(s));  // and after it, the page is back
+  }
+  p.after = (uint8_t) After::SCOREBOARD;
+  in.kick = kick;
   CHECK_EQ(std::string(wake_word(true, false)), std::string("asleep"));
   CHECK_EQ(std::string(wake_word(false, true)), std::string("clock"));
   CHECK_EQ(std::string(wake_word(false, false)), std::string(""));

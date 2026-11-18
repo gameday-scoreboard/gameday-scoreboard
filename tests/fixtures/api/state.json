@@ -83,7 +83,7 @@
   "fxlists": [
     {"n": "Party", "shuffle": true, "fx": [
       {"e": "Matrix", "p": "Party", "s": 200, "i": 100, "w": 30},
-      {"e": "Plasma Ball", "p": "Lava", "s": 128, "i": 128, "w": 15}
+      {"e": "Plasma Ball", "p": "Sunset", "s": 128, "i": 128, "w": 15}
     ]},
     {"n": "Calm", "shuffle": false, "fx": [
       {"e": "Drift", "p": "Ocean", "s": 64, "i": 128, "w": 300}

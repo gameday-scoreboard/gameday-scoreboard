@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "fx_names_stub.h"
 #include "settings_doc.h"
 
 using namespace espn;
@@ -200,7 +201,7 @@ void test_round_trip() {
                "seasonrecap:1,news:0,weather:1";
         break;
       case SettingType::FX_PLAYLISTS:
-        text = "Party=Matrix|Party|200|100|30,Plasma Ball|Lava|128|128|15,@shuffle;Calm=Drift|Ocean|64|128|300";
+        text = "Party=Matrix|Party|200|100|30,Plasma Ball|Sunset|128|128|15,@shuffle;Calm=Drift|Ocean|64|128|300";
         break;
       case SettingType::NONE:
         break;
@@ -465,11 +466,11 @@ void test_night_hours() {
 // and listed, a wrong type refusing the document.
 void test_fx_playlists() {
   SettingsImport in = import(R"({"schema":1,"fxlists":[
-    {"n":"Party","shuffle":true,"fx":[{"e":"Matrix"},{"e":"Drift","p":"Lava","s":1,"i":2,"w":50},{"e":"Bad|Name"}]},
+    {"n":"Party","shuffle":true,"fx":[{"e":"Matrix"},{"e":"Drift","p":"Sunset","s":1,"i":2,"w":50},{"e":"Bad|Name"}]},
     {"n":" ; "},{"n":"B","fx":[]},{"n":"C"},{"n":"D","shuffle":false},{"n":"E"}]})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   const SetOp *fx = find(in, SetKind::FX_LISTS);
-  SCHECK(fx != nullptr && fx->text == "Party=Matrix||128|128|15,Drift|Lava|1|2|45,@shuffle;B=;C=;D=",
+  SCHECK(fx != nullptr && fx->text == "Party=Matrix||128|128|15,Drift|Sunset|1|2|45,@shuffle;B=;C=;D=",
          "fxlists came back as %s", fx != nullptr ? fx->text.c_str() : "nothing");
   std::string skipped;
   for (const auto &s : in.skipped)
@@ -585,6 +586,10 @@ void test_remote() {
   SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:curling") &&
              in.ops.size() == 1,
          "an unknown team or sport isn't left out and listed");
+  in = import(R"({"schema":1,"remote1":"clock","remote2":"fx:DNA,Ocean,40,200","remote3":"smartboard","remote4":"fx:Lava Lamp,Fire,1,2"})");
+  SCHECK(in.error.empty() && in.ops.size() == 3 && in.ops[1].text == "fx:DNA,Ocean,40,200" &&
+             skipped(in, "remote4=fx:Lava Lamp,Fire,1,2"),
+         "pages come back, and an effect this panel lacks is left out and listed: %s", in.error.c_str());
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
 }
 
@@ -720,6 +725,7 @@ void test_best_default() {
 }
 
 int main() {
+  fx_stub::install();
   test_types();
   test_export();
   test_round_trip();

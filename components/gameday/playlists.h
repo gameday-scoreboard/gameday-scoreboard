@@ -413,7 +413,8 @@ inline bool sport_row_has(uint8_t rows, uint8_t row) {
 // What a WizMote button does now (set_request.h RemoteTarget), against the
 // favorites, the playlists' names and the sport rows the favorites make. A
 // target that is gone (its team left the favorites, its playlist its name,
-// its sport its favorites) falls back to the button's default, favorite n.
+// its sport its favorites, its effect the build) falls back to the button's
+// default, favorite n.
 struct RemoteAction {
   RemoteKind kind{RemoteKind::FAVORITE};
   int fav_slot{0};        // FAVORITE, TEAM: the favorite to jump to, 1-based
@@ -461,8 +462,21 @@ inline RemoteAction remote_resolve(uint8_t button, const RemoteTarget &t, const 
       a.kind = RemoteKind::NONE;
       return a;
     case RemoteKind::LIVE:
-      a.kind = RemoteKind::LIVE;
+    case RemoteKind::SCOREBOARD:
+    case RemoteKind::CLOCK:
+    case RemoteKind::SMART:
+      a.kind = (RemoteKind) t.kind;
       return a;
+    case RemoteKind::EFFECTS: {
+      // An effect this build doesn't offer (a saved button from another
+      // build) is gone; while the names aren't known it counts as there.
+      const FxNames &fx = fx_names();
+      if (fx.effect == nullptr || !fx.effect(remote_name(t)).empty()) {
+        a.kind = RemoteKind::EFFECTS;
+        return a;
+      }
+      break;
+    }
     default:
       return a;
   }

@@ -22,7 +22,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <functional>
 #include <string>
 
 #include "playlists.h"
@@ -88,14 +87,9 @@ inline uint32_t fx_wait_ms(const FxEntry &e) {
   return (uint32_t) kFxWaitSeconds[e.wait < kFxWaitCount ? e.wait : kFxWaitDefault] * 1000u;
 }
 
-// What the panel's effect list and palette list are: the effect's own
-// spelling for a name it offers ("" for one it doesn't), and a palette's
-// number by name (-1 for none) and its name by number ("" past the end).
-struct FxNames {
-  std::function<std::string(const std::string &)> effect;
-  std::function<int(const std::string &)> palette_index;
-  std::function<std::string(uint8_t)> palette_name;
-};
+// The panel's effects and palettes are set_request.h's FxNames, which the
+// effects package fills at boot: an effect's own spelling ("" for one this
+// panel doesn't offer), a palette's number by name and its name by number.
 
 namespace detail {
 inline void fx_copy(char *dst, size_t cap, const std::string &s) {
@@ -130,12 +124,14 @@ inline std::string fx_field(const std::string &s, size_t &p, char sep) {
 inline bool parse_fx_entry(const std::string &text, const FxNames &names, FxEntry &e) {
   e = FxEntry{};
   size_t p = 0;
+  if (names.effect == nullptr)
+    return false;  // the effects package hasn't said which effects there are
   std::string effect = names.effect(detail::fx_field(text, p, '|'));
   if (effect.empty() || effect.size() > kFxEffectNameMax)
     return false;
   detail::fx_copy(e.effect, kFxEffectNameMax, effect);
   std::string pal = detail::fx_field(text, p, '|');
-  int pi = pal.empty() ? 0 : names.palette_index(pal);
+  int pi = pal.empty() || names.palette_id == nullptr ? 0 : names.palette_id(pal);
   e.palette = (uint8_t) (pi >= 0 && pi <= 255 ? pi : 0);
   e.speed = detail::fx_byte(detail::fx_field(text, p, '|'), kFxSpeedDefault);
   e.intensity = detail::fx_byte(detail::fx_field(text, p, '|'), kFxIntensityDefault);
@@ -204,7 +200,7 @@ inline std::string fx_lists_text(const FxStore &st, const FxNames &names) {
       if (i > 0)
         out += ',';
       out += e.effect;
-      out += '|' + names.palette_name(e.palette) + '|' + std::to_string(e.speed) + '|' +
+      out += '|' + (names.palette_name != nullptr ? names.palette_name(e.palette) : std::string()) + '|' + std::to_string(e.speed) + '|' +
              std::to_string(e.intensity) + '|' + std::to_string(kFxWaitSeconds[e.wait < kFxWaitCount ? e.wait : 0]);
     }
     if (l.flags & FXLIST_SHUFFLE)

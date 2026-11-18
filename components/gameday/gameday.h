@@ -313,7 +313,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void select_mode(const std::string &option);
   std::string hostname() const;  // the device name, with its MAC suffix
   // Favorites: the first four slots are the remote's numbered buttons.
-  void press_favorite(uint8_t slot);
+  // False for an empty slot, which does nothing.
+  bool press_favorite(uint8_t slot);
   // Playlists (playlists.h): the Home Assistant select's option, a name or
   // "All favorites".
   void select_playlist(const std::string &option);
@@ -347,6 +348,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // RemoteTarget), its own favorite until then. The demo build gives them to
   // the demo (demo.cpp).
   void remote_number(uint8_t n);
+  // The page the last button press asked Showing for (a RemoteKind:
+  // SCOREBOARD, CLOCK, SMART or EFFECTS; NONE for none), read by
+  // pages/wizmote.yaml on the "remote_page" action. A follow button asks
+  // for the Scoreboard. An Effects button's setup comes with it: its effect,
+  // palette (a WLED palette id), speed and intensity.
+  uint8_t remote_page() const { return this->remote_page_; }
+  std::string remote_fx_effect() const { return ::espn::remote_name(this->remote_fx_); }
+  uint8_t remote_fx_palette() const { return this->remote_fx_.league; }
+  uint8_t remote_fx_speed() const { return this->remote_fx_.sport; }
+  uint8_t remote_fx_intensity() const { return (uint8_t) (this->remote_fx_.id & 0xFF); }
   // Favorites with no favorite set: the panel follows live games and the
   // finals rotation, and the boot screen gives the app's QR code a turn
   // every few minutes (boot.yaml, boot_app_qr_turn) until a team is picked.
@@ -1054,7 +1065,6 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   FxState *fx_state_{nullptr};
   ::espn::FxPlayer fx_player_;
   FxState &fx_();
-  ::espn::FxNames fx_names_() const;
   void load_fx_();
   // Plays effect playlist n (1..count) from the top, putting the panel on
   // its Effects page; 0 stops the one playing.
@@ -1071,6 +1081,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_remote_(uint8_t button, const ::espn::RemoteTarget &t);
   // What button n does now (playlists.h remote_resolve).
   ::espn::RemoteAction remote_action_(uint8_t button) const;
+  // Ask pages/wizmote.yaml to put Showing on a page (remote_page()). For the
+  // Scoreboard this also ends After the game's clock or Smart board until
+  // the next game's final (wake.h WakeState held).
+  void remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx = {});
+  uint8_t remote_page_{(uint8_t) ::espn::RemoteKind::NONE};
+  ::espn::RemoteTarget remote_fx_{};
   std::vector<std::string> list_names_() const;
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
