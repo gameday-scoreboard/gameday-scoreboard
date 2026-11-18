@@ -1107,6 +1107,8 @@ void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t
     favs_changed = true;
   }
   // A button-only team no button is set to any more leaves the favorites.
+  // The list as it is now, the new team in it: the remap below then keeps
+  // its mark, and drops only a team that leaves.
   std::vector<::espn::TeamRef> now = this->fav_refs_all_();
   uint16_t unused = ::espn::solo_unused(this->prefs11_.solo, now, this->prefs11_.btn, 4);
   for (uint8_t i = 0; i < FAV_MAX && unused != 0; i++) {
@@ -1122,7 +1124,7 @@ void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t
   if (favs_changed) {
     this->pref3_.save(&this->prefs3_);
     this->pref7_.save(&this->prefs7_);
-    this->remap_lists_(before);
+    this->remap_lists_(now);
     this->sync_prefs_();
     this->favorites_changed_(false, live_before);
     return;
