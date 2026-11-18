@@ -37,10 +37,11 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A WizMote button can now bring the panel back to Live games.
+Effect playlists step the panel through your own list of effects, and a WizMote button can now bring the panel back to Live games.
 
 ### ✨ New
 
+- 🎆 **Effect playlists**: up to 4 named lists of effects, each one up for 1 second to an hour, in order or shuffled, made on the Customize tab and played from there, the Home tab or Home Assistant
 - 🎮 **Live games** in the **Remote** button pickers: a press switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip
 
 ### 🐛 Fixes

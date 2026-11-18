@@ -654,7 +654,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   const speed = page.getByRole("slider", { name: "Speed", exact: true });
   const intensity = page.getByRole("slider", { name: "Intensity", exact: true });
   await expect(effect).toHaveValue("Matrix");
-  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]);
+  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Drift", "Plasma Ball", "Fireworks", "Snow Fall"]);
   await expect(palette).toHaveValue("Default");
   await expect(speed).toHaveValue("128");
   await expect(speed).toHaveAttribute("max", "255");
@@ -676,6 +676,121 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   await showing.selectOption("Scoreboard");
   await expect(page.locator("#fxCtls")).toBeHidden();
   await expect(page.locator("#showCtls .ctl")).toHaveCount(1);
+});
+
+// Effect playlists post to the settings import as {"schema": 1, "fxlists": [...]}.
+const fxPosts = async (request) =>
+  (await (await request.get("/_log")).json())
+    .filter((p) => p.path === "/gameday/settings")
+    .map((p) => { try { return JSON.parse(p.body); } catch (_) { return null; } })
+    .filter((d) => d && Array.isArray(d.fxlists))
+    .map((d) => d.fxlists);
+const lastFx = async (request) => (await fxPosts(request)).pop();
+
+test("effect playlists: made, edited, played, stopped by a hand pick, deleted", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "customize");
+  const card = page.locator("#fxCard");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("heading")).toHaveText("Effect playlists");
+  await expect(card).toContainText("No effect playlists yet.");
+  // The Home tab's picker waits for a playlist.
+  await expect(page.locator("#fxPickRow")).toBeHidden();
+
+  await card.getByRole("button", { name: "New effect playlist" }).click();
+  await expect.poll(() => lastFx(request)).toEqual([{ n: "Effects 1", shuffle: false, fx: [] }]);
+  await expect(card.getByRole("textbox", { name: "Effect playlist name" })).toHaveValue("Effects 1");
+  await expect(card.getByRole("button", { name: "Play Effects 1" })).toBeDisabled();
+
+  // Renamed; a new effect starts as what the panel shows now, for 15 seconds.
+  await card.getByRole("textbox", { name: "Effect playlist name" }).fill("Party");
+  await card.getByRole("textbox", { name: "Effect playlist name" }).press("Enter");
+  await expect.poll(() => lastFx(request)).toEqual([{ n: "Party", shuffle: false, fx: [] }]);
+  await card.getByRole("button", { name: "Add an effect to Party" }).click();
+  await expect.poll(() => lastFx(request)).toEqual([{ n: "Party", shuffle: false, fx: [{ e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }]);
+  await card.getByRole("button", { name: "Add an effect to Party" }).click();
+  await expect(card.getByRole("combobox", { name: "Effect 2 in Party" })).toBeVisible();
+
+  // The second effect: another effect and palette, a speed, a minute, then Shuffle.
+  await card.getByRole("combobox", { name: "Effect 2 in Party" }).selectOption("Drift");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].e).toBe("Drift");
+  await card.getByRole("combobox", { name: "Palette 2 in Party" }).selectOption("Lava");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].p).toBe("Lava");
+  const speed = card.getByRole("spinbutton", { name: "Speed 2 in Party" });
+  await speed.fill("200");
+  await speed.press("Enter");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].s).toBe(200);
+  const time = card.getByRole("combobox", { name: "Time 2 in Party" });
+  await expect(time.locator("option")).toHaveCount(16);
+  await expect(time.locator("option").first()).toHaveText("1 s");
+  await expect(time.locator("option").last()).toHaveText("1 hour");
+  await time.selectOption({ label: "1 min" });
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].w).toBe(60);
+  await card.getByRole("switch", { name: "Shuffle Party" }).click();
+  await expect.poll(async () => (await lastFx(request))[0].shuffle).toBe(true);
+  // Moved up: Drift first.
+  await card.getByRole("button", { name: "Move up effect 2 in Party" }).click();
+  await expect.poll(async () => (await lastFx(request))[0].fx.map((e) => e.e)).toEqual(["Drift", "Matrix"]);
+  const st = await deviceState(request);
+  expect(st.fxlists).toEqual([{ n: "Party", shuffle: true, fx: [
+    { e: "Drift", p: "Lava", s: 200, i: 128, w: 60 }, { e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }]);
+
+  // Play: the panel goes to Effects, and the page says which one plays.
+  await card.getByRole("button", { name: "Play Party" }).click();
+  await expectSet(request, { fxlist: "1" });
+  await expect(card.getByRole("button", { name: "Stop Party" })).toBeVisible();
+  await expect(card).toContainText("Playing now");
+  await tab(page, "board");
+  await expect(page.getByRole("combobox", { name: "Showing" })).toHaveValue("Effects");
+  const pick = page.getByRole("combobox", { name: "Effect playlist" });
+  await expect(pick).toHaveValue("1");
+  await expect(pick.locator("option")).toHaveText(["None", "Party"]);
+  await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("Drift");
+
+  // A hand pick of the effect stops the playlist and keeps the pick.
+  await page.getByRole("combobox", { name: "Effect", exact: true }).selectOption("DNA");
+  await expect.poll(async () => (await deviceState(request)).fxlist).toBe(0);
+  await expect(pick).toHaveValue("0");
+  await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("DNA");
+
+  // The picker starts it again, and None stops it.
+  await pick.selectOption("1");
+  await expectSet(request, { fxlist: "1" });
+  await expect.poll(async () => (await deviceState(request)).fxlist).toBe(1);
+  await pick.selectOption("0");
+  await expectSet(request, { fxlist: "0" });
+  await expect.poll(async () => (await deviceState(request)).fxlist).toBe(0);
+
+  // Deleted, after a yes.
+  await tab(page, "customize");
+  page.once("dialog", (d) => d.accept());
+  await card.getByRole("button", { name: "Delete Party" }).click();
+  await expect.poll(() => lastFx(request)).toEqual([]);
+  await expect(card).toContainText("No effect playlists yet.");
+});
+
+test("effect playlists: four at most, eight effects each, and none on older firmware", async ({ page, request }) => {
+  const fx = (e) => ({ e, p: "Default", s: 128, i: 128, w: 15 });
+  const eight = Array.from({ length: 8 }, () => fx("Matrix"));
+  await reset(request, { fxlists: ["A", "B", "C", "D"].map((n) => ({ n, shuffle: false, fx: n === "A" ? eight : [fx("DNA")] })) });
+  await page.goto("/#customize");
+  const card = page.locator("#fxCard");
+  await expect(card.getByRole("textbox", { name: "Effect playlist name" })).toHaveCount(4);
+  await expect(card.getByRole("button", { name: "New effect playlist" })).toBeHidden();
+  await expect(card.getByRole("button", { name: "Add an effect to A" })).toBeHidden();
+  await expect(card.getByRole("button", { name: "Add an effect to B" })).toBeVisible();
+  // A name another one has is refused here.
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).fill("A");
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).press("Enter");
+  await expect(page.locator("#toast")).toContainText("Another effect playlist has that name");
+  expect(await fxPosts(request)).toEqual([]);
+
+  // Firmware without effect playlists: no card, no picker.
+  await reset(request, { fxlists: null, fxlist: null, fxlistmax: null, fxmax: null, fxwaits: null });
+  await page.reload();
+  await expect(page.locator("#fxCard")).toBeHidden();
+  await expect(page.locator("#fxPickRow")).toBeHidden();
 });
 
 test("a screen reader gets each control's name, role and state", async ({ page, request }) => {

@@ -24,6 +24,11 @@
 # (gameday-common.yaml ota), the night schedule's screen-off, and Power off.
 # The brightness, Brightness number and night dimming are the HUB75 driver's,
 # so they apply to an effect too.
+#
+# Effect playlists (components/gameday/fx_playlists.h) step through saved
+# effects on this page: the gameday component writes the four effect
+# controls below for each step, and stops the playlist when one of them
+# changes outside its own step (a hand pick) or the page leaves Effects.
 
 external_components:
   - source: github://bharvey88/esphome-wled-fx@v0.6.0

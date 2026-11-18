@@ -45,6 +45,8 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 
 The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. It also keeps the [news card](/using/news/)'s **News headlines** switch, and the [weather card](/using/weather/)'s town and switch, and every switch in the **Between games** list. A restored town is looked up again only if the panel doesn't have it already, and a backup from older firmware leaves the cards it doesn't name as they are.
 
+Your [effect playlists](/using/effects/#effect-playlists) are in it too, each with its effects, their times and its Shuffle switch. Which one is playing isn't: a restore leaves the panel on the page it's showing. An effect the panel you restore onto doesn't have drops out of its playlist.
+
 ## What isn't
 
 - **Wi-Fi networks.** Passwords never leave the panel. A new or reset panel joins Wi-Fi through the Game Day app or its own setup hotspot first, then you restore. See [Wi-Fi](/using/wifi/).
