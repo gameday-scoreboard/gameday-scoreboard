@@ -423,20 +423,25 @@ def timezone_index(v):
     return next((i for i, (name, _posix, iana) in enumerate(TZ_ROWS) if v in (name, iana)), -1) if v else -1
 
 
+def counts(t):
+    """fav_counts(): a team there and not button-only (playlists.h)."""
+    return bool(t) and not t.get("btn")
+
+
 def live_auto_leagues():
     """live_leagues() with a mask of 0: the favorites' leagues, NFL with none."""
-    used = {t["l"] for t in STATE["favs"] if t}
+    used = {t["l"] for t in STATE["favs"] if counts(t)}
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
 def no_team_default():
     """set_request.h no_team_default(): Favorites with none set."""
-    return STATE["mode"] == 4 and not any(STATE["favs"])
+    return STATE["mode"] == 4 and not any(counts(t) for t in STATE["favs"])
 
 
 def sport_rows():
     """sport_rows_(): a row per sport among the favorites, with two sports or more."""
-    have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if t}
+    have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if counts(t)}
     rows = [k for k in SPORT_KEYS if k in have]
     return rows if len(rows) >= 2 else []
 
@@ -462,6 +467,9 @@ def state_doc():
             STATE["cards"].append({"id": cid, "name": name, "on": on[cid], "ok": card_ok(cid), "hint": hint})
     STATE["lists"] = [norm_list(pl) for pl in STATE["lists"]]
     STATE.setdefault("sched", 0)
+    # No remote presses here: no button is ever in use.
+    STATE.setdefault("held", 0)
+    STATE.setdefault("live_only", "")
     STATE["remote"] = [{"v": b.get("v", "fav"), "gone": remote_gone(i + 1, b.get("v", "fav"))}
                        for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
     return STATE
@@ -487,7 +495,7 @@ def card_ok(cid):
     if cid == "weather":
         return bool((STATE.get("wx") or {}).get("place"))
     if cid == "top25":
-        leagues = {t["l"] for t in STATE["favs"] if t} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
+        leagues = {t["l"] for t in STATE["favs"] if counts(t)} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
         return not no_team_default() and bool(leagues & {"ncaa", "mcbb"})
     return True
 
@@ -530,6 +538,8 @@ def remote_parse(v):
         return f"team:{ref[0]}:{ref[1]}" if ref else None
     if v.startswith("sport:"):
         return v if v[6:] in SPORT_KEYS else None
+    if v.startswith("league:"):
+        return v if v[7:] in LEAGUES else None
     if v.startswith("list:") and len(v) > 5:
         return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
     return None
@@ -710,7 +720,9 @@ def apply_set(kv):
                 if ref and ref not in refs:
                     refs.append(ref)
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
-            STATE["favs"] = [team(*r) for r in refs] + [{}] * (4 - len(refs))
+            # A button-only team keeps its mark wherever it moved (remap_lists_).
+            solo = {r for r, t in zip(before, STATE["favs"]) if r and t.get("btn")}
+            STATE["favs"] = [dict(team(*r), **({"btn": True} if r in solo else {})) for r in refs] + [{}] * (4 - len(refs))
             remap_lists(before)
         elif k in ("fav1", "fav2", "fav3", "fav4"):
             ref = parse_team_ref(v)
@@ -812,7 +824,31 @@ def apply_set(kv):
             if v.startswith("list:"):
                 name = message_clean(v[5:].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
                 v = "list:" + name if name else "fav"
+            if v.startswith("team:") and parse_team_ref(v[5:]) not in fav_refs():
+                # A team that isn't a favorite joins them as a button-only
+                # team (solo_slot): after the last team, else the first gap,
+                # and with 16 taken the button stays as it was.
+                refs = fav_refs() + [None] * (FAV_MAX - len(STATE["favs"]))
+                last = max([i for i, r in enumerate(refs) if r] or [-1])
+                free = [i for i in range(last + 1, FAV_MAX) if not refs[i]] or [i for i, r in enumerate(refs) if not r]
+                if not free:
+                    continue
+                STATE["favs"] += [{}] * (free[0] + 1 - len(STATE["favs"]))
+                STATE["favs"][free[0]] = dict(team(*parse_team_ref(v[5:])), btn=True)
             STATE["remote"][int(k[6]) - 1] = {"v": v}
+            # solo_unused(): a button-only team no button is set to leaves.
+            used = {b["v"] for b in STATE["remote"]}
+            for i, t in enumerate(STATE["favs"]):
+                if t.get("btn") and f"team:{t['l']}:{t['id']}" not in used:
+                    STATE["favs"][i] = {}
+            while len(STATE["favs"]) > 4 and not STATE["favs"][-1]:
+                STATE["favs"].pop()
+        elif k == "keepfav":
+            # keep_favorite_(): a button-only team becomes a full favorite.
+            ref = parse_team_ref(v)
+            for t in STATE["favs"]:
+                if t and (t["l"], t["id"]) == ref:
+                    t.pop("btn", None)
         elif k == "hook":
             if hook_url_ok(v):
                 STATE["hook"] = v
@@ -856,7 +892,8 @@ def settings_doc():
     out = {"schema": SETTINGS_SCHEMA, "version": s["version"], "name": s["name"]}
     for k in SETTINGS_ORDER:
         if k == "favs":
-            favs = [team_text(t) for t in s["favs"]]
+            # A button-only team stays out: its button's team brings it back.
+            favs = [team_text(t) if counts(t) else "" for t in s["favs"]]
             while favs and not favs[-1]:
                 favs.pop()
             out["favs"] = favs
@@ -963,7 +1000,7 @@ def import_settings(doc):
     for k in SET_KEYS:
         if k not in doc or doc[k] is None:
             continue
-        if k == "sport" and not favorites:
+        if (k == "sport" and not favorites) or k == "keepfav":  # set_key_once: no setting to restore
             continue
         v, kind = doc[k], SETTINGS_TYPES.get(k)
         if k == "lists":
@@ -1120,7 +1157,7 @@ def import_settings(doc):
                 skipped.append(f"{name}={doc[name]}")
                 continue
             numbers[ent] = doc[name]
-    known = set(SET_KEYS) | {"schema", "version", "name", "brightness", "scroll"}
+    known = (set(SET_KEYS) - {"keepfav"}) | {"schema", "version", "name", "brightness", "scroll"}
     skipped += [k for k in doc if k not in known]
     restart = any(k == "panels" and int(v) != STATE.get("panels") for k, v in kv)
     # Applied in kSetKeys order; favs slot by slot, keeping empty slots.

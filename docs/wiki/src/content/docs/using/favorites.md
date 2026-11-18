@@ -100,7 +100,11 @@ A favorite you take out of your list leaves every playlist it was in. Adding it 
 
 Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorite teams, the panel shows that favorite's card at once. If its game is locked on, the panel stays on it; otherwise the card stays up for its 10 seconds and the cards carry on from there. A button for an empty slot does nothing. See [WizMote remote](/using/remote/).
 
-Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to a favorite team, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to any team, one league's live games, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+
+### Button only
+
+A team you put on a remote button that isn't one of your favorites shows in **Favorites** with **Button only** under its name. It counts toward the 16, so the panel can read its games, but it plays only when you press its button: it isn't in All favorites, your playlists, the sport rows, Favorites take over or Game-day wake. If its place is one of the first four, that button's own favorite counts as empty. Tap the team in the team picker to make it a full favorite. It leaves the list by itself once no button is set to it. See [A team on a button only](/using/remote/#a-team-on-a-button-only).
 
 ## On the device page
 

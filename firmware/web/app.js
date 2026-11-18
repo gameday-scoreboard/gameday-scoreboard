@@ -49,6 +49,9 @@
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
+  // The league's name in "All NFL live games": its short name, or the long one
+  // where the short one is an abbreviation owners don't use.
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
   const logoUrl = (league, id, abbr) => {
     const l = lgInfo(league);
     return `https://a.espncdn.com/i/teamlogos/${l.logo}/500-dark/${l.byId ? id : String(abbr).toLowerCase()}.png`;
@@ -1054,8 +1057,10 @@
         : S.recap ? "Nothing live right now. Showing recent finals."
           : S.best ? "Showing the best game on. It moves only at a break in play."
             : "Showing a random live game. A new one every " + everyMin(S.rotate) + ", or when it ends.";
-    $("#liveLg").textContent = auto ? "Leagues follow your favorites. Tap one to choose by hand." : "";
-    $("#liveLg").hidden = !auto;
+    // A league button in use: its one league, the owner's own chips stay as they are.
+    const only = S.live_only ? "Remote button " + S.held + ": " + liveName(S.live_only) + " games only, until you pick a mode, a playlist or another button." : "";
+    $("#liveLg").textContent = only || (auto ? "Leagues follow your favorites. Tap one to choose by hand." : "");
+    $("#liveLg").hidden = !only && !auto;
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
@@ -1115,7 +1120,12 @@
       // Says why the board shows what it does. Locked covers the lead-in
       // before kickoff and the stretch after the final, not only the game.
       const team = shown ? shown.t.name || shown.t.abbr : "";
-      $("#favName").textContent = !set
+      // A button-only team on its own while its button is in use.
+      const heldV = S.held && !S.live_only && S.remote && S.remote[S.held - 1] ? S.remote[S.held - 1].v : "";
+      const held = heldV.startsWith("team:") ? teamByKey(heldV.slice(5)) : null;
+      $("#favName").textContent = held && !S.locked
+        ? "Showing the " + held[3] + " from remote button " + S.held + ", until you pick a mode, a playlist or another button"
+        : !set
         ? "Add a team to get started"
         : S.locked && shown
           ? team + (shown.s === "PRE" ? " play soon" : shown.s === "POST" ? " just finished" : " are on")
@@ -1362,6 +1372,10 @@
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
   let favSlots = [];
+  // The button-only teams among them (state favs[].btn): a remote button
+  // added each, it counts toward the 16 but plays only on its button.
+  let btnKeys = [];
+  const realFavKeys = () => favKeys.filter((k) => !btnKeys.includes(k));
   // From the WizMote Status entity. Without a paired remote the favorite
   // rows leave out which button lands on them.
   let remotePaired = false;
@@ -1371,7 +1385,7 @@
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
   // The WizMote's buttons (state remote, set remote1 to remote4): what each is
   // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
-  // sport:football, all, live or none. A held post stands in until the panel answers.
+  // sport:football, all, live, league:nfl or none. A held post stands in until the panel answers.
   const remoteTargets = () => [1, 2, 3, 4].map((b) => {
     const h = S && S["remote" + b];
     const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
@@ -1381,7 +1395,8 @@
   // favorite by default, or the team it was set to. Buttons whose target is
   // gone are on their own favorite for now.
   const remoteButtonFor = (key, i) => remoteTargets()
-    .map((r, b) => ((r.v === "fav" || r.gone ? b === i : r.v === "team:" + key) ? b + 1 : 0)).filter(Boolean).join(", ");
+    .map((r, b) => ((r.v === "fav" || r.gone ? b === i && !btnKeys.includes(key) : r.v === "team:" + key) ? b + 1 : 0))
+    .filter(Boolean).join(", ");
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
@@ -1395,7 +1410,11 @@
       row.appendChild(img);
       const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
       const btn = remoteButtonFor(key, favSlots.indexOf(key));
-      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
+      if (btnKeys.includes(key)) {
+        // Added by a remote button: shown, marked, and no favorite anywhere else.
+        row.classList.add("btnonly");
+        name.appendChild(el("small", null, (t ? lgInfo(t[0]).name + " · " : "") + "Button only" + (btn ? " (button " + btn + ")" : "")));
+      } else if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -1425,6 +1444,10 @@
   // already in the list (checked).
   const toggleFav = (t) => {
     const key = keyOf(t);
+    if (btnKeys.includes(key)) {
+      setGD({ keepfav: key });
+      return toast("The " + t[3] + " are a favorite now");
+    }
     if (favKeys.includes(key)) {
       postFavs(favKeys.filter((k) => k !== key));
       return toast("Removed the " + t[3]);
@@ -1559,7 +1582,7 @@
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favSlots.forEach((key, fi) => {
-        if (!key) return;
+        if (!key || btnKeys.includes(key)) return;
         const t = teamByKey(key);
         const on = l.f.includes(fi);
         const c = el("button", "chip", t ? t[2] : key);
@@ -1709,31 +1732,82 @@
   listPick.onchange = () => setGD(listPick.value.startsWith("s:")
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
-  // The Remote card's four pickers, one per button, grouped: its own
-  // favorite, each favorite team, the sport rows, the playlists, all, Live
-  // games, nothing.
+  // The Remote card's four pickers, one per button: its own favorite and the
+  // playlists, then a group per sport, all nine leagues: its leagues' live
+  // games, the sport row (My football teams), its favorites and "Another
+  // NFL team", which opens a second list with every team in that league.
+  // Then All favorites, Live games, Nothing. A team that isn't a favorite
+  // joins the favorites as a button-only team (playlists.h), so 16 saved
+  // already leave no room for one.
+  const SPORTS = [["football", "Football"], ["baseball", "Baseball"], ["basketball", "Basketball"],
+    ["hockey", "Hockey"], ["soccer", "Soccer"]];
+  // A team's league, from a target or key ("team:nfl:6", "nfl:6").
+  const keyLeague = (k) => k.replace(/^team:/, "").split(":")[0];
+  // Which league's team list a button shows ("" for none): one picked with
+  // Another NFL team, kept while the page is open, or the league of the
+  // button's own team when that team is button-only.
+  const remotePick = ["", "", "", ""];
+  const remoteGroups = () => {
+    const real = realFavKeys();
+    const rows = sportRows();
+    const groups = [["", [["fav", "Its own favorite"]]], ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])]];
+    for (const [sp, title] of SPORTS) {
+      const lgs = Object.keys(LEAGUES).filter((lg) => sportOf(lg) === sp && TEAMS.some((t) => t[0] === lg));
+      if (!lgs.length) continue;
+      const opts = lgs.map((lg) => ["league:" + lg, "All " + liveName(lg) + " live games"]);
+      const mine = real.filter((k) => lgs.includes(keyLeague(k)));
+      if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
+      for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      groups.push([title, opts]);
+    }
+    groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
+    return groups;
+  };
+  const setRemoteTeam = (b, key) => {
+    const t = teamByKey(key);
+    if (favKeys.includes(key)) {
+      setGD({ ["remote" + (b + 1)]: "team:" + key });
+      return;
+    }
+    if (favKeys.length >= favMax()) {
+      toast("Your favorites are full (" + favMax() + "). Remove one to put another team on a button.");
+      remotePick[b] = "";
+      remoteSig = "";
+      if (document.activeElement) document.activeElement.blur();
+      return renderRemote();
+    }
+    setGD({ ["remote" + (b + 1)]: "team:" + key });
+    toast("The " + (t ? t[3] : key) + " are on button " + (b + 1) + " only, not in your favorites elsewhere");
+  };
   let remoteSig = "";
   const renderRemote = () => {
     const host = $("#remoteBtns");
     const targets = remoteTargets();
-    const groups = [["", [["fav", "Its own favorite"]]],
-      ["Favorites", favKeys.map((k) => { const t = teamByKey(k); return ["team:" + k, t ? t[3] : k]; })],
-      ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
-      ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
-      ["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]];
-    const sig = JSON.stringify([groups, targets, favSlots]);
+    const groups = remoteGroups();
+    const sig = JSON.stringify([groups, targets, favSlots, btnKeys, remotePick, S.held || 0]);
     if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
     remoteSig = sig;
     host.innerHTML = "";
     targets.forEach((r, b) => {
       const row = el("div", "ctl rbtn");
       const label = el("label", null, "Button " + (b + 1));
-      const t = teamByKey(favSlots[b] || "");
-      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favSlots[b] ? "" : " (empty)");
+      const own = favSlots[b] && !btnKeys.includes(favSlots[b]) ? favSlots[b] : "";
+      const t = teamByKey(own);
+      const ownText = "Favorite " + (b + 1) + (t ? ": " + t[3] : " (empty)");
+      const solo = r.v.startsWith("team:") && btnKeys.includes(r.v.slice(5));
+      const inUse = S.held === b + 1 ? " In use now." : "";
       const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now" : "That team left your favorites")
-        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "." : "";
+        + ", so it is " + ownText.toLowerCase() + " for now."
+        : r.v === "fav" ? ownText + "."
+          : solo ? "Button only: not in All favorites, playlists or take over." + inUse
+            : r.v.startsWith("league:") ? "Leaves your own Live games leagues as they are." + inUse : "";
       if (note) label.appendChild(el("small", null, note));
       row.appendChild(label);
+      // A button-only team shows as Another NFL team with the team picked in
+      // the second list; a favorite shows in its sport.
+      const pickLg = remotePick[b] || (solo ? keyLeague(r.v) : "");
+      const shown = pickLg ? "pick:" + pickLg : r.v;
       const sel = el("select");
       sel.setAttribute("aria-label", "Remote button " + (b + 1));
       let found = false;
@@ -1744,7 +1818,7 @@
         for (const [v, text] of opts) {
           const o = el("option", null, text);
           o.value = v;
-          found = found || v === r.v;
+          found = found || v === shown;
           into.appendChild(o);
         }
       }
@@ -1754,9 +1828,45 @@
         o.value = r.v;
         sel.appendChild(o);
       }
-      sel.value = r.v;
-      sel.onchange = () => setGD({ ["remote" + (b + 1)]: sel.value });
-      row.appendChild(sel);
+      sel.value = shown;
+      sel.onchange = () => {
+        if (sel.value.startsWith("pick:")) {
+          // Opens the league's team list; nothing changes until a team is picked.
+          remotePick[b] = sel.value.slice(5);
+          remoteSig = "";
+          sel.blur();  // a redraw waits while focus is in the card
+          renderRemote();
+          const next = $("#rteam" + b);
+          if (next) next.focus();
+          return;
+        }
+        remotePick[b] = "";
+        setGD({ ["remote" + (b + 1)]: sel.value });
+      };
+      const pickers = el("span", "rpick");
+      pickers.appendChild(sel);
+      if (pickLg) {
+        const team = el("select", "rteam");
+        team.id = "rteam" + b;
+        team.setAttribute("aria-label", "Remote button " + (b + 1) + " team");
+        const first = el("option", null, "Pick a team");
+        first.value = "";
+        team.appendChild(first);
+        for (const tm of TEAMS.filter((x) => x[0] === pickLg).slice().sort((x, y) => x[3].localeCompare(y[3]))) {
+          const o = el("option", null, tm[3]);
+          o.value = keyOf(tm);
+          team.appendChild(o);
+        }
+        team.value = r.v.startsWith("team:") && keyLeague(r.v) === pickLg ? r.v.slice(5) : "";
+        // The league's list stays open with the pick, also while the panel answers.
+        team.onchange = () => {
+          if (!team.value) return;
+          team.blur();  // so the card redraws with the panel's answer
+          setRemoteTeam(b, team.value);
+        };
+        pickers.appendChild(team);
+      }
+      row.appendChild(pickers);
       host.appendChild(row);
     });
   };
@@ -1764,9 +1874,10 @@
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
     favSlots = (S.favs || []).map(refKey);
+    btnKeys = (S.favs || []).filter((f) => f && f.id && f.btn).map(refKey);
     const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = favSlots.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets());
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -2751,7 +2862,7 @@
   // After a favorites change, mark the tiles in place so the list keeps its scroll.
   const markPicked = () => {
     document.querySelectorAll("#tiles [data-key]").forEach((b) => {
-      const on = favKeys.includes(b.dataset.key);
+      const on = realFavKeys().includes(b.dataset.key);
       b.classList.toggle("on", on);
       b.setAttribute("aria-pressed", String(on));
     });
@@ -2767,9 +2878,10 @@
   const searchTeams = (q) => TEAMS.filter((t) => (t[3] + " " + t[2]).toLowerCase().includes(q));
   // One team's tile: logo, name, league and abbreviation; a tap adds or takes it out.
   const teamTile = (t) => {
-    const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
+    const on = realFavKeys().includes(keyOf(t));
+    const tile = el("button", "tile" + (on ? " on" : ""));
     tile.dataset.key = keyOf(t);
-    tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+    tile.setAttribute("aria-pressed", String(on));
     const img = el("img");
     img.loading = "lazy";
     img.src = logoUrl(t[0], t[1], t[2]);

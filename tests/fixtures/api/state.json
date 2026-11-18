@@ -28,7 +28,13 @@
       "abbr": "IOWA",
       "name": "Iowa Hawkeyes"
     },
-    {}
+    {
+      "l": "nfl",
+      "id": 21,
+      "abbr": "PHI",
+      "name": "Philadelphia Eagles",
+      "btn": true
+    }
   ],
   "favmax": 16,
   "lists": [
@@ -61,6 +67,7 @@
   ],
   "list": 2,
   "sched": 0,
+  "held": 0,
   "remote": [
     {
       "v": "fav",
@@ -88,6 +95,7 @@
   "favtake": true,
   "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"],
   "live_auto": true,
+  "live_only": "",
   "tz": 1,
   "tz_name": "US Central",
   "tz_iana": "America/Chicago",

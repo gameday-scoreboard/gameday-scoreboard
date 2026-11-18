@@ -486,7 +486,9 @@ button { font: inherit; color: inherit; }
 .popts .chip.look { display: inline-flex; align-items: center; min-height: 30px; padding: 3px 6px; }
 .popts .chip.look .pmark { width: 20px; height: 20px; }
 .popts .chip.look .pmark.dot { width: 14px; height: 14px; margin: 0 3px; }
-.rbtn select { max-width: 60%; }
+.rbtn .rpick { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 60%; }
+.rbtn .rpick select { max-width: 100%; }
+.fav.btnonly label small { color: var(--accent); }
 .livebar .stepper input { width: 58px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; text-align: center; }
 .livebar .stepper small { flex-basis: 100%; max-width: 260px; margin-top: -4px; font-size: 12px; line-height: 1.35; }
 /* The same steppers as rows in the Teams cards */
