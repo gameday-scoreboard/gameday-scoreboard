@@ -753,6 +753,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     ::espn::SeasonRead read;
   };
   std::vector<SeasonEntry, PsramAllocator<SeasonEntry>> season_;
+  // Gap between two loop() calls, newest last, for the loop timing log line.
+  std::vector<uint32_t> loop_gaps_;
+  uint32_t last_loop_ms_{0};
   // A team the cards follow now: Favorite teams' teams in the playlist
   // playing, MLB's aside (season_cards), and whether each is between seasons.
   struct SeasonTeam {

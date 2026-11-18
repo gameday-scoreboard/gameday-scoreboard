@@ -2133,6 +2133,14 @@ void GamedayComponent::on_shutdown() {
 }
 
 void GamedayComponent::loop() {
+  const uint32_t now_ms = millis();
+  this->loop_gaps_.push_back(now_ms - this->last_loop_ms_);
+  this->last_loop_ms_ = now_ms;
+  if (this->loop_gaps_.size() % 1000 == 0) {
+    std::string line = "loop gaps: " + std::to_string(this->loop_gaps_.size()) + " samples, last " +
+                       std::to_string(this->loop_gaps_.back()) + " ms";
+    ESP_LOGD(TAG, "%s", line.c_str());
+  }
   if (this->power_dip_.tick(millis()))
     this->fire_action_("guard");  // the dim start is over: pages/guard.yaml applies the owner's brightness
   if (this->logos_.loop())
