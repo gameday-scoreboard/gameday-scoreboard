@@ -75,10 +75,6 @@ The panel can turn itself on before your games and decide what it does once they
 
 A [remote](/using/remote/#the-numbered-buttons) button set to a team, a playlist, a sport or Live games, or to the **Scoreboard** page, ends the clock or the Smart board between games: the panel shows what you pressed and stays there, and the clock or Smart board comes back after your next game's final.
 
-:::note[Coming in the next release]
-Until then, a remote button pressed between games leaves the clock or Smart board up.
-:::
-
 Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
 
 The app and the settings backup have the same settings.

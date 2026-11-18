@@ -962,12 +962,12 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
 
 test("a remote button picks a page under Showing; an Effects button saves the effect playing now, and Change edits its own without touching the panel", async ({ page, request }) => {
   await reset(request, {});
-  await page.goto("/");
-  await tab(page, "device");
-  // What Effects is set to on the panel now
+  // What Effects is set to on the panel now, before the page reads it
   await request.post("/select/Effect/set?option=DNA");
   await request.post("/select/Effect%20Palette/set?option=Ocean");
   await request.post("/number/Effect%20Speed/set?value=40");
+  await page.goto("/");
+  await tab(page, "device");
   await unfold(page, "#remoteCard");
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
