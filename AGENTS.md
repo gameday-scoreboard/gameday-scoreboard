@@ -139,8 +139,9 @@ over is its own PR, never a side effect of another change.
 - **Sizes known at build time** use `std::array`, or ESPHome's
   `StaticVector<T, N>` for a `push_back` interface. A size known once at
   startup uses `FixedVector<T>` with one `init(n)`. A byte buffer is a
-  `std::unique_ptr<uint8_t[]>` or a `psram_alloc` pointer, not a
-  `std::vector<uint8_t>`, unless it has to grow.
+  single allocation, not a `std::vector<uint8_t>` unless it has to grow:
+  a `psram_alloc` pointer, or a `std::unique_ptr<uint8_t[]>` for a small
+  one (plain `new[]` is internal RAM, so the 1 KB rule below applies).
 - **No growing `std::vector` in internal RAM.** A list that grows at run
   time (teams, games, logos, messages) is a `PsVector` with a cap, and
   calls `reserve` once when the cap is known.
@@ -158,12 +159,14 @@ over is its own PR, never a side effect of another change.
 - **Never `new (std::nothrow)`.** Exceptions are off, so a failed
   allocation aborts either way. Use `psram_alloc`, or `RAMAllocator` and
   check for `nullptr` where the code can carry on without the memory.
-- **Host-tested files** (what `tests/Makefile` compiles: the parser,
-  `sport_*.cpp` and the headers they include) can't include ESPHome
-  headers. They use `std::array` and `psram.h`, which is the plain heap
-  on the host. `StaticVector`, `FixedVector`, `StringRef` and
-  `RAMAllocator` are for the ESPHome-side files (`gameday.cpp`,
-  `logo_cache.cpp` and the like).
+- **Host-tested files** build without ESPHome: everything
+  `tests/Makefile` compiles (`espn_parse.cpp`, `sport_*.cpp`,
+  `logo_cache.cpp`) and the headers they and the tests include.
+  `logo_cache.cpp` builds against the small stand-ins in
+  `tests/logo_stubs/`, which have none of ESPHome's containers. These
+  files use `std::array` and `psram.h`, which is the plain heap on the
+  host. `StaticVector`, `FixedVector`, `StringRef` and `RAMAllocator` are
+  for files only the firmware build compiles, such as `gameday.cpp`.
 - **To check a PR,** read "Where the bytes went" in its Size budget
   summary: a new `_M_realloc_insert`, `_M_default_append`, `_Rb_tree`,
   `_Hashtable` or `deque` symbol there points at one of the patterns
