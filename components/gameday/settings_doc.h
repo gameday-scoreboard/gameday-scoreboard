@@ -14,7 +14,9 @@
 // "end" ("11:00"), "only" and "today" (playlists.h ListOpt), "color" and
 // "icon" ("blue", "star": playlists.h kListColors, kListIcons); cards the
 // between-games cards by id, {"next": true, "clock": false} (cards.h); remote1 to
-// remote4 what the WizMote's buttons do (set_request.h RemoteTarget). Brightness and
+// remote4 what the WizMote's buttons do (set_request.h RemoteTarget); fxlists the
+// effect playlists, [{"n": "Party", "shuffle": true, "fx": [{"e": "Matrix", "p": "Party",
+// "s": 128, "i": 128, "w": 15}]}] (fx_playlists.h; w is seconds). Brightness and
 // scroll are the Home Assistant numbers of the same names.
 //
 // An import is checked whole before anything changes: a value of the wrong
@@ -39,6 +41,7 @@
 
 #include "auto_update.h"
 #include "espn_parse.h"
+#include "fx_playlists.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -48,14 +51,14 @@ namespace espn {
 // older firmware lists what it doesn't know and restores the rest.
 constexpr int kSettingsSchema = 1;
 // The largest import the panel reads. A typical document is about 1 KB; one
-// with every favorite in all 16 playlists is about 6 KB (test_settings.cpp
-// checks the fullest export fits). The buffer is PSRAM, held only during an
-// import.
-constexpr size_t kSettingsMaxBytes = 8192;
+// with every favorite in all 16 playlists is about 6 KB, and four full
+// effect playlists add about 3 KB (test_settings.cpp checks the fullest
+// export fits). The buffer is PSRAM, held only during an import.
+constexpr size_t kSettingsMaxBytes = 12288;
 constexpr int kScrollMin = 1;
 constexpr int kScrollMax = 10;
 
-enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS, CARDS };
+enum class SettingType : uint8_t { NONE, BOOL, INT, TEXT, LIST, PLAYLISTS, CARDS, FX_PLAYLISTS };
 
 // The JSON type of each set key in a settings document.
 inline SettingType setting_type(const char *k) {
@@ -87,6 +90,8 @@ inline SettingType setting_type(const char *k) {
     return SettingType::PLAYLISTS;
   if (strcmp(k, "cards") == 0)
     return SettingType::CARDS;
+  if (strcmp(k, "fxlists") == 0)
+    return SettingType::FX_PLAYLISTS;
   return SettingType::NONE;
 }
 
@@ -123,7 +128,8 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "after",    "cards",    "countdown",
                                       "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
-                                      "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4"};
+                                      "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4",
+                                      "fxlists"};
   for (const char *k : kKeys) {
     if (strcmp(k, "favs") == 0) {
       // An empty slot is "", kept so the teams after it keep their buttons;
@@ -174,6 +180,24 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
           const char *v = l[key] | "";
           if (*v != '\0')
             o[key] = v;
+        }
+      }
+    } else if (strcmp(k, "fxlists") == 0) {
+      // Effect playlists as the state has them (fx_playlists.h), Shuffle
+      // only when on. Which one plays now isn't kept, as Showing isn't.
+      if (!s["fxlists"].is<JsonArrayConst>())
+        continue;
+      JsonArray lists = out["fxlists"].to<JsonArray>();
+      for (JsonObjectConst l : s["fxlists"].as<JsonArrayConst>()) {
+        JsonObject o = lists.add<JsonObject>();
+        o["n"] = l["n"];
+        if (l["shuffle"] | false)
+          o["shuffle"] = true;
+        JsonArray fx = o["fx"].to<JsonArray>();
+        for (JsonObjectConst e : l["fx"].as<JsonArrayConst>()) {
+          JsonObject x = fx.add<JsonObject>();
+          for (const char *key : {"e", "p", "s", "i", "w"})
+            x[key] = e[key];
         }
       }
     } else if (strcmp(k, "cards") == 0) {
@@ -546,6 +570,57 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
         }
         if (!parse_set(k, text, op, target.fav_max))
           continue;  // it names no card this firmware has
+        break;
+      }
+      case SettingType::FX_PLAYLISTS: {
+        // Into fxlists= text (fx_playlists.h): "Name=effect|palette|speed|
+        // intensity|seconds,...,@shuffle;Name2=...". A wrong type refuses the
+        // document; a nameless playlist, any past the most, an effect past
+        // the most and a name holding a separator are left out and listed.
+        // An effect this panel doesn't offer drops out when it is applied.
+        const char *bad =
+            "fxlists should be effect playlists like {\"n\": \"Party\", \"fx\": [{\"e\": \"Matrix\", \"w\": 15}]}.";
+        if (!v.is<JsonArrayConst>())
+          return detail::settings_fail(out, bad);
+        std::string text;
+        size_t kept = 0;
+        for (JsonVariantConst l : v.as<JsonArrayConst>()) {
+          if (!l.is<JsonObjectConst>() || !l["n"].is<const char *>() ||
+              !(l["fx"].isNull() || l["fx"].is<JsonArrayConst>()) || !(l["shuffle"].isNull() || l["shuffle"].is<bool>()))
+            return detail::settings_fail(out, bad);
+          std::string name = list_name_clean(l["n"].as<const char *>());
+          if (name.empty() || kept == (size_t) kFxListMax) {
+            out.skipped.push_back("fxlists=" + name);
+            continue;
+          }
+          std::string body;
+          size_t effects = 0;
+          for (JsonVariantConst e : l["fx"].as<JsonArrayConst>()) {
+            if (!e.is<JsonObjectConst>() || !e["e"].is<const char *>() || !(e["p"].isNull() || e["p"].is<const char *>()))
+              return detail::settings_fail(out, bad);
+            std::string fx = e["e"].as<const char *>(), pal = e["p"] | "";
+            for (const char *key : {"s", "i", "w"})
+              if (!e[key].isNull() && !e[key].is<int>())
+                return detail::settings_fail(out, std::string("fxlists ") + key + " should be a whole number.");
+            int sp = e["s"] | (int) kFxSpeedDefault, in = e["i"] | (int) kFxIntensityDefault;
+            int w = e["w"] | (int) kFxWaitSeconds[kFxWaitDefault];
+            if (sp < 0 || sp > 255 || in < 0 || in > 255)
+              return detail::settings_fail(out, "fxlists speed and intensity should be 0 to 255.");
+            if (effects == (size_t) kFxEntryMax || fx.find_first_of("|,;=") != std::string::npos ||
+                pal.find_first_of("|,;=") != std::string::npos) {
+              out.skipped.push_back("fxlists=" + name + ":" + fx);
+              continue;
+            }
+            effects++;
+            body += (body.empty() ? "" : ",") + fx + "|" + pal + "|" + std::to_string(sp) + "|" + std::to_string(in) +
+                    "|" + std::to_string(kFxWaitSeconds[fx_wait_step(w)]);
+          }
+          if (l["shuffle"] | false)
+            body += body.empty() ? "@shuffle" : ",@shuffle";
+          kept++;
+          text += (text.empty() ? "" : ";") + name + "=" + body;
+        }
+        parse_set(k, text, op, target.fav_max);
         break;
       }
       case SettingType::NONE:

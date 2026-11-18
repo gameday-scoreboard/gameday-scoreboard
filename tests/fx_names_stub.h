@@ -12,8 +12,9 @@
 
 namespace fx_stub {
 
-inline const char *const kEffects[] = {"Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall", "Distortion Waves"};
-inline const char *const kPalettes[] = {"Default", "Rainbow", "Ocean", "Fire", "Red & Blue"};
+inline const char *const kEffects[] = {"Matrix", "Metaballs", "DNA",   "Fireworks", "Snow Fall", "Distortion Waves",
+                                       "Drift",  "Plasma Ball"};
+inline const char *const kPalettes[] = {"Default", "Rainbow", "Ocean", "Fire", "Red & Blue", "Party", "Sunset"};
 
 inline bool same_ci(const std::string &a, const char *b) {
   size_t i = 0;

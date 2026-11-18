@@ -39,6 +39,7 @@
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "fx_playlists.h"
 #include "game_leaders.h"
 #include "row_text.h"
 #include "guard.h"
@@ -187,7 +188,7 @@ struct UpdateFields {
   uint8_t kick_icon{::espn::kWxIconNone};
 };
 
-enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
+enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST, FX_PLAYLIST };
 
 // PSRAM text (psram.h): the message card's list, the state document.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
@@ -228,6 +229,8 @@ class GamedaySelect : public select::Select, public Component {
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
 //                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
+//                                    fxlists=Name=Matrix|Party|128|128|15,...,@shuffle;Name2=... (every
+//                                    effect playlist, fx_playlists.h) fxlist=0-4 (play one, 0 stops)
 //                                    remote1..remote4=fav|team:nfl:6|list:Name|sport:football|all|none
 //                                    (what a WizMote button does, set_request.h RemoteTarget)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
@@ -288,6 +291,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_timezone_select(select::Select *s) { this->timezone_select_ = s; }
   void set_mode_select(select::Select *s) { this->mode_select_ = s; }
   void set_playlist_select(select::Select *s) { this->playlist_select_ = s; }
+  // Effect playlists (fx_playlists.h). The Effects page (pages/effects.yaml)
+  // hands over its four effect controls and the page select at boot; the
+  // component writes the controls itself for each step and stops the
+  // playlist when one changes outside a step, or the page leaves Effects.
+  void set_fx_playlist_select(select::Select *s) { this->fx_().select = s; }
+  void set_fx_controls(select::Select *effect, select::Select *palette, number::Number *speed,
+                       number::Number *intensity, select::Select *page);
+  // The Home Assistant select's option: a playlist's name, or "None" to stop.
+  void select_fx_playlist(const std::string &option);
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
   }
@@ -1059,6 +1071,32 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static_assert(sizeof(Prefs12) == 16, "Prefs12 is a fixed-size blob");
   ESPPreferenceObject pref12_;
   Prefs12 prefs12_{};
+
+  // Effect playlists (fx_playlists.h): the saved playlists, their flash
+  // blob and the entities they drive, in PSRAM, made on first use. Only
+  // the player (8 bytes) is internal RAM.
+  struct FxState {
+    ::espn::FxStore store;
+    ESPPreferenceObject pref;
+    select::Select *select{nullptr};  // Home Assistant's "Effect playlist"
+    select::Select *effect{nullptr};
+    select::Select *palette{nullptr};
+    number::Number *speed{nullptr};
+    number::Number *intensity{nullptr};
+    select::Select *page{nullptr};  // "Select Page" (Showing)
+  };
+  FxState *fx_state_{nullptr};
+  ::espn::FxPlayer fx_player_;
+  FxState &fx_();
+  void load_fx_();
+  // Plays effect playlist n (1..count) from the top, putting the panel on
+  // its Effects page; 0 stops the one playing.
+  void play_fx_list_(uint8_t n);
+  void stop_fx_list_(const char *why);
+  void set_fx_lists_(const std::string &text);
+  void fx_tick_();
+  void fx_show_();
+  void fx_changed_();
   // The color and icon of playlist n (1..count); 0 for anything else.
   uint8_t list_mark_(uint8_t n) const {
     return n >= 1 && n <= this->prefs9_.count ? this->prefs12_.mark[n - 1] : 0;
