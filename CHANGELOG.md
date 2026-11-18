@@ -41,8 +41,7 @@ A WizMote button can now bring the panel back to Live games, or put up the Clock
 
 ### ✨ New
 
-- 🎮 **Live games** in the **Remote** button pickers: a press switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip
-- 🎨 **Scoreboard**, **Clock**, **Smart board** and **Effects** in the **Remote** button pickers; an Effects button keeps its own effect, palette, speed and intensity, set with **Change** under it
+- 🎮 **Live games**, **Scoreboard**, **Clock**, **Smart board** and **Effects** in the **Remote** button pickers: Live games switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip; a page choice puts that page up, and an Effects button keeps its own effect, palette, speed and intensity, set with **Change** under it
 - 🔁 A remote button set to a team, playlist, sport or Live games now brings the panel back to the scoreboard when the Clock, Smart board or an effect is up, and ends **After the game**'s clock or Smart board until the next game's final
 
 ### 🐛 Fixes

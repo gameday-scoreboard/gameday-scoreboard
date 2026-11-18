@@ -55,19 +55,15 @@ To change what a button does, reorder your favorites on the device page or in th
 - A page under **Showing**: **Scoreboard**, **Clock**, **Smart board** or **Effects**. The button puts the panel on that page, the same as picking it under **Showing** on the device page. Pressing it while that page is already up leaves it there.
 
 :::note[Coming in the next app update]
-Remote in the Game Day app gets the **Showing** pages and an Effects button's own effect in a later app update. Until then, set them on the device page.
+Remote in the Game Day app gets the **Live games** choice, the **Showing** pages and an Effects button's own effect in a later app update. Until then, set them on the device page.
 :::
 
 A button set to a team, a playlist, a sport, **All favorites** or **Live games** also brings the panel back to the scoreboard when another page is up, so the press always shows. If the [Clock](/using/brightness-and-clock/#showing-the-scoreboard-or-the-clock), the [Smart board](/using/smart-board/) or an [effect](/using/effects/) is up, the button switches **Showing** back to **Scoreboard** and shows what you pressed. If **After the game** has the clock or the Smart board up between games, the press ends that too: the panel stays on what you pressed, and the clock or Smart board comes back only after your next game's final. A button set to **Nothing** still does nothing.
 
 ### A button with its own effect
 
-A button set to **Effects** keeps an effect of its own: the effect, its palette, speed and intensity. Two buttons can hold two different effects, like Fire on 3 and Rain on 4. Pressing it puts that effect on and switches to **Effects**, so the effect from before doesn't flash up first.
+A button set to **Effects** keeps an effect of its own: the effect, its palette, speed and intensity. Two buttons can hold two different effects, like PS Fire on 3 and Rain on 4. Pressing it puts that effect on and switches to **Effects**, so the effect from before doesn't flash up first.
 
-When you pick **Effects** for a button, it saves what **Effects** is set to right then, and the picker shows it as **Effects:** with the effect and palette, like **Effects: Fire, Ocean**. To change it, tap **Change** under that button: it opens the button's own **Effect**, **Palette**, **Speed** and **Intensity**. Changing them changes only the button, not what the panel is playing now. Tap **Done** to close them.
-
-:::note[Coming in the next app update]
-Remote in the Game Day app gets the **Live games** choice in a later app update. Until then, set it on the device page.
-:::
+When you pick **Effects** for a button, it saves what **Effects** is set to right then, and the picker shows it as **Effects:** with the effect and palette, like **Effects: Rain, Ocean**. To change it, tap **Change** under that button: it opens the button's own **Effect**, **Palette**, **Speed** and **Intensity**. Changing them changes only the button, not what the panel is playing now. Tap **Done** to close them.
 
 A button set to a team you later remove, a playlist you delete or a sport you no longer have favorites in goes back to its own favorite for now, and **Remote** on the device page says so. So does a button whose effect the panel's firmware doesn't have, after going back to an older version. Set it to something else, or bring the team or playlist back, and it works again. A button set to a playlist follows it when you rename it. A settings backup carries the four buttons.
