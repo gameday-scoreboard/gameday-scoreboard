@@ -3525,14 +3525,22 @@ static esp_err_t probe_event(esp_http_client_event_t *evt) {
   return ESP_OK;
 }
 
-// Probe task. Its own esp_http_client rather than http_request, which follows
-// redirects: a portal's redirect is the answer, and following it to an HTTPS
-// sign-in page with its own certificate would only fail.
-void GamedayComponent::probe_task_(void *arg) {
+void GamedayComponent::probe_task_fn_(void *arg) {
   auto *self = static_cast<GamedayComponent *>(arg);
+  while (true) {
+    self->run_probe_();
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  }
+}
+
+// One probe, on the probe task. Its own esp_http_client rather than
+// http_request, which follows redirects: a portal's redirect is the answer,
+// and following it to an HTTPS sign-in page with its own certificate would
+// only fail.
+void GamedayComponent::run_probe_() {
   ProbeHeaders h;
   esp_http_client_config_t cfg = {};
-  cfg.url = self->probe_url_.load();
+  cfg.url = this->probe_url_.load();
   cfg.timeout_ms = 10000;
   cfg.disable_auto_redirect = true;
   cfg.event_handler = &probe_event;
@@ -3557,9 +3565,8 @@ void GamedayComponent::probe_task_(void *arg) {
   const bool redirect = status >= 300 && status < 400 && !h.location.empty();
   ESP_LOGI(TAG, "Wi-Fi check: %s (HTTP %d%s%s)", ::espn::probe_name(r), status, redirect ? ", to " : "",
            redirect ? ::espn::detail::url_host(h.location).c_str() : "");
-  self->probe_result_ = (uint8_t) r;
-  self->probe_done_ = true;
-  vTaskDelete(nullptr);
+  this->probe_result_ = (uint8_t) r;
+  this->probe_done_ = true;
 }
 
 void GamedayComponent::start_probe_() {
@@ -3568,10 +3575,15 @@ void GamedayComponent::start_probe_() {
   this->probe_ok_mark_ = this->espn_ok_reads_.load();
   this->probe_done_ = false;
   this->probe_running_ = true;
-  // Plain HTTP and a 256 byte read, no TLS: a small stack is plenty.
-  if (xTaskCreate(&GamedayComponent::probe_task_, "gameday_probe", 6144, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the Wi-Fi check (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  if (this->probe_task_.is_created()) {
+    xTaskNotifyGive(this->probe_task_.get_handle());
+    return;
+  }
+  // Plain HTTP and a 256 byte read, no TLS: a small stack is plenty. The new
+  // task makes this first probe at once.
+  if (!this->probe_task_.create(&GamedayComponent::probe_task_fn_, "gameday_probe", 6144, this, 1, true)) {
+    ESP_LOGW(TAG, "Could not start the Wi-Fi check (largest free PSRAM block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
     this->probe_running_ = false;
   }
 }
@@ -4073,29 +4085,56 @@ void GamedayComponent::start_worker_() {
   this->job_done_ = false;
   this->busy_ = true;
   this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-  // TLS plus a nested JSON parse needs a roomy stack; 16KB has headroom.
-  if (xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the fetch task (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  // A fetch task waiting for its next job takes this one (fetch_slots_).
+  for (auto &s : this->fetch_slots_) {
+    if (s.task.is_created() && s.idle.load()) {
+      s.idle = false;
+      xTaskNotifyGive(s.task.get_handle());
+      return;
+    }
+  }
+  // None is free: start one, which runs this job at once. TLS plus a nested
+  // JSON parse needs a roomy stack; 16KB has headroom.
+  for (auto &s : this->fetch_slots_) {
+    if (s.task.is_created())
+      continue;
+    s.owner = this;
+    s.idle = false;
+    if (s.task.create(&GamedayComponent::worker_, "gameday_fetch", 16384, &s, 1, true))
+      return;
+    ESP_LOGW(TAG, "Could not start the fetch task (largest free PSRAM block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
     this->busy_ = false;
     this->schedule_next_(RETRY_INTERVAL);
+    return;
   }
+  ESP_LOGW(TAG, "Could not start a fetch task: the %u jobs given up on are still running", (unsigned) kFetchSlots);
+  this->busy_ = false;
+  this->schedule_next_(RETRY_INTERVAL);
 }
 
 void GamedayComponent::worker_(void *arg) {
-  auto *self = static_cast<GamedayComponent *>(arg);
-  uint32_t mine = self->worker_seq_;
-  self->run_job_();
-  // A worker the loop gave up on must not hand back a result: the Job it
-  // was writing into belongs to a later cycle by now.
-  if (self->worker_seq_ == mine)
-    self->job_done_ = true;
-  // The least stack a fetch task has left untouched, for /gameday/heap.
-  uint32_t left = uxTaskGetStackHighWaterMark(nullptr);
-  uint32_t low = self->fetch_stack_low_.load();
-  while (left < low && !self->fetch_stack_low_.compare_exchange_weak(low, left)) {
+  auto *slot = static_cast<FetchSlot *>(arg);
+  GamedayComponent *self = slot->owner;
+  while (true) {
+    uint32_t mine = self->worker_seq_;
+    self->run_job_();
+    // The least stack a fetch task has left untouched, for /gameday/heap.
+    uint32_t left = uxTaskGetStackHighWaterMark(nullptr);
+    uint32_t low = self->fetch_stack_low_.load();
+    while (left < low && !self->fetch_stack_low_.compare_exchange_weak(low, left)) {
+    }
+    // Free for the next job before the loop hears this one is done, so the
+    // loop never starts a second task for a job this one could take. The
+    // loop only reuses it once job_done_ is set, or once it has given up
+    // on this job, and a notification sent early is kept for the take below.
+    slot->idle = true;
+    // A worker the loop gave up on must not hand back a result: the Job it
+    // was writing into belongs to a later cycle by now.
+    if (self->worker_seq_ == mine)
+      self->job_done_ = true;
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
   }
-  vTaskDelete(nullptr);
 }
 
 // A scan that stopped at its first game (live_scan.h) left the leagues it
