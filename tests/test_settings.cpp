@@ -109,7 +109,7 @@ void test_export() {
   for (const char *k : kSetKeys) {
     std::string key = k;
     bool slot = key.size() == 4 && key.compare(0, 3, "fav") == 0;
-    SCHECK(slot || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
+    SCHECK(slot || set_key_once(k) || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
   }
 
   // An empty slot between two favorites, a live list of its own, and a build
@@ -130,7 +130,7 @@ void test_export() {
 
 void test_types() {
   for (const char *k : kSetKeys)
-    SCHECK(setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
+    SCHECK(set_key_once(k) || setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
   SCHECK(setting_type("brightness") == SettingType::NONE, "brightness is not a set key");
 }
 
@@ -141,8 +141,11 @@ void test_round_trip() {
   SCHECK(in.error.empty(), "the settings fixture was refused: %s", in.error.c_str());
   SCHECK(in.skipped.empty(), "the settings fixture left out %zu keys, the first %s", in.skipped.size(),
          in.skipped.empty() ? "" : in.skipped[0].c_str());
-  // Every set key but fav1 to fav4, which favs covers
+  // Every set key but fav1 to fav4, which favs covers, and the ones that
+  // only do something once (set_key_once)
   size_t want = sizeof(kSetKeys) / sizeof(kSetKeys[0]) - 4;
+  for (const char *k : kSetKeys)
+    want -= set_key_once(k) ? 1 : 0;
   SCHECK(in.ops.size() == want, "the fixture gives %zu ops, not %zu", in.ops.size(), want);
   SCHECK(in.brightness == 128 && in.scroll == 5, "brightness %d scroll %d", in.brightness, in.scroll);
   SCHECK(!in.restart, "the same panel count restarts the panel");
@@ -165,7 +168,7 @@ void test_round_trip() {
   size_t j = 0;
   for (const char *key : kSetKeys) {
     std::string k = key;
-    if (k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs")  // fav1 to fav4: favs has them
+    if ((k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs") || set_key_once(key))  // fav1 to fav4: favs has them
       continue;
     JsonVariantConst v = fx[key];
     SCHECK(!v.isNull(), "the fixture has no %s", key);
@@ -553,6 +556,21 @@ void test_remote() {
              skipped(in, "remote4=fx:Lava Lamp,Fire,1,2"),
          "pages come back, and an effect this panel lacks is left out and listed: %s", in.error.c_str());
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
+  in = import(R"({"schema":1,"remote1":"league:nhl","keepfav":"nfl:21"})");
+  SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "league:nhl" && skipped(in, "keepfav"),
+         "a league button comes back, and keepfav is no setting to restore");
+
+  // A button-only team (btn) stays out of the backup's favs; its button's
+  // team brings it back as one. The slots around it keep their places.
+  JsonDocument s, out;
+  deserializeJson(s, R"({"favs":[{"l":"nfl","id":6},{"l":"nfl","id":21,"btn":true},{"l":"mlb","id":15},
+    {"l":"nba","id":6,"btn":true}],"remote":[{"v":"team:nfl:21"},{"v":"fav"},{"v":"fav"},{"v":"team:nba:6"}]})");
+  settings_from_state(s.as<JsonObjectConst>(), 0, -1, -1, out);
+  std::string got;
+  serializeJson(out["favs"], got);
+  SCHECK(got == R"(["nfl:6","","mlb:15"])", "button-only teams in the backup's favs: %s", got.c_str());
+  SCHECK(std::string(out["remote1"] | "") == "team:nfl:21" && std::string(out["remote4"] | "") == "team:nba:6",
+         "their buttons stay in the backup");
 }
 
 // The fullest export the panel can write comes back through its own import:

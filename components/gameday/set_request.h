@@ -39,7 +39,11 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
-                                    "field",   "winbar",  "spark",   "bigplays"};
+                                    "field",   "winbar",  "spark",   "bigplays", "keepfav"};
+
+// Set keys that do something once rather than hold a setting, so the
+// settings backup (settings_doc.h) has nothing of theirs to write or restore.
+inline bool set_key_once(const char *k) { return strcmp(k, "keepfav") == 0; }
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -177,11 +181,14 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 // the owner sets it; nothing in the firmware moves it. As text, in set
 // requests, the state document and the settings backup:
 //   fav              the button's own favorite (its default)
-//   team:nfl:6       a favorite team, followed wherever it moves in the list
+//   team:nfl:6       a team, followed wherever it moves in the favorites; one
+//                    that isn't a favorite joins them as a button-only team
 //   list:<name>      one of the owner's playlists, by name
 //   sport:football   a sport row (playlists.h), football to soccer
 //   all              All favorites
 //   live             Live games, with the leagues it has
+//   league:nfl       Live games in that league only, leaving the owner's
+//                    own Live games leagues as they are
 //   none             nothing
 //   scoreboard       Showing: the Scoreboard
 //   clock            Showing: the Clock
@@ -190,9 +197,10 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 //                    Showing: Effects, with this effect, palette, speed and
 //                    intensity. Only the effect is needed: the palette
 //                    defaults to Default, speed and intensity to 128.
-// The first seven pick what the panel follows; the last four pick a page.
-// A button whose team, playlist, sport row or effect is gone does what its
-// default does, and the state says so (playlists.h remote_resolve).
+// The pages (scoreboard to fx:) pick what Showing shows; the rest pick what
+// the panel follows. A button whose team, playlist, sport row or effect is
+// gone does what its default does, and the state says so (playlists.h
+// remote_resolve).
 enum class RemoteKind : uint8_t {
   FAVORITE = 0,
   TEAM = 1,
@@ -205,10 +213,11 @@ enum class RemoteKind : uint8_t {
   CLOCK = 8,
   SMART = 9,
   EFFECTS = 10,
+  LEAGUE = 11,
 };
 // The highest kind this firmware knows; a saved button past it (flash from a
 // newer build) goes back to its own favorite at boot.
-constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::EFFECTS;
+constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::LEAGUE;
 constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
 // EFFECTS keeps its setup in the fields the other kinds use, so a saved
 // button stays the same size: name is the effect (the panel's spelling; the
@@ -216,7 +225,7 @@ constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListName
 // sport the speed and id the intensity.
 struct RemoteTarget {
   uint8_t kind{0};  // RemoteKind
-  uint8_t league{0};
+  uint8_t league{0};             // TEAM, LEAGUE
   uint32_t id{0};                // TEAM
   uint8_t sport{0};              // SPORT, a Sport
   char name[kRemoteNameMax]{};   // LIST, no terminator when full
@@ -341,6 +350,14 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     t.id = id;
     return true;
   }
+  if (v.compare(0, 7, "league:") == 0) {
+    const LeagueInfo *l = league_by_key(v.substr(7).c_str());
+    if (l == nullptr)
+      return false;
+    t.kind = (uint8_t) RemoteKind::LEAGUE;
+    t.league = (uint8_t) l->league;
+    return true;
+  }
   if (v.compare(0, 6, "sport:") == 0) {
     for (uint8_t s = 0; s < 5; s++)
       if (v.substr(6) == remote_sport_key(s)) {
@@ -394,6 +411,8 @@ inline std::string remote_text(const RemoteTarget &t) {
     case RemoteKind::EFFECTS:
       return "fx:" + remote_name(t) + "," + remote_fx_palette(t) + "," + std::to_string((unsigned) t.sport) + "," +
              std::to_string((unsigned) (t.id & 0xFF));
+    case RemoteKind::LEAGUE:
+      return std::string("league:") + league_key((League) t.league);
     default:
       return "fav";
   }
@@ -459,6 +478,7 @@ enum class SetKind : uint8_t {
   SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
   BIGPLAYS,     // on, the big plays' own shows on Full (celeb_<sport>.h)
+  KEEPFAV,      // team: a button-only team (playlists.h) becomes a full favorite
 };
 
 struct TeamRef {
@@ -581,6 +601,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
       return true;
     op.team = TeamRef{};
     return v == "none" || v.empty();
+  }
+  if (k == "keepfav") {
+    // A team a remote button added (a button-only team), kept as a full
+    // favorite. Any other team does nothing where the favorites are known.
+    op.kind = SetKind::KEEPFAV;
+    return parse_team_ref(v, op.team.league, op.team.id) && known_team(op.team.league, op.team.id);
   }
   if (k == "msg") {
     op.kind = SetKind::MSG;
