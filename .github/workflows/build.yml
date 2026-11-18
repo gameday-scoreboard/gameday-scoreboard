@@ -438,13 +438,15 @@ jobs:
           cat approvals/*.json
           # A change that moves the release block to another tag resets the
           # flash allowance, so the check compares its baseline with the
-          # figures that tag's own Build run measured.
+          # figures that tag's own Build run measured. Any event counts:
+          # tag.yml starts a release tag's Build with workflow_dispatch,
+          # since GitHub runs no push workflows for a tag its token pushed.
           old_tag=$(jq -r '.release.tag // ""' pr-base-budget.json)
           new_tag=$(jq -r '.release.tag // ""' firmware/budget.json)
           mkdir -p release-sizes
           if [ -n "$new_tag" ] && [ "$new_tag" != "$old_tag" ]; then
             if git ls-remote --exit-code --tags origin "refs/tags/$new_tag" > /dev/null; then
-              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&event=push&status=success&per_page=1" \
+              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&status=success&per_page=1" \
                 --jq '.workflow_runs[0].id // empty')
               if [ -n "$id" ]; then
                 gh run download "$id" -p 'sizes-*' -D release-sizes || true
