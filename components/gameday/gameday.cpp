@@ -7536,15 +7536,18 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     // The stack figures are bytes each task has never touched since boot, the
     // margin left in its worst moment so far: the loop (16 KB, gameday-common.yaml),
     // this web server task (5,632 B, web_stack.h) and the fetch tasks (16 KB); -1
-    // before there is a reading. This handler runs on the web server task,
-    // whose stack is the tightest, so the buffer stays at 128 (the longest
-    // reply is 105 bytes).
+    // before there is a reading. "min" is the least free internal heap since
+    // boot (KiB), for the nightly watch: a reading every few minutes misses
+    // the short dip each ESPN read makes. This handler runs on the web server
+    // task, whose stack is the tightest, so the buffer stays at 128 (the
+    // longest reply is 115 bytes).
     char body[128];
     const uint32_t fetch = this->fetch_stack_low_.load();
     snprintf(body, sizeof(body),
-             "{\"internal\":%.1f,\"block\":%.1f,\"psram\":%.1f,\"loop_stack\":%d,\"web_stack\":%u,"
-             "\"fetch_stack\":%d}",
+             "{\"internal\":%.1f,\"min\":%.1f,\"block\":%.1f,\"psram\":%.1f,\"loop_stack\":%d,"
+             "\"web_stack\":%u,\"fetch_stack\":%d}",
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024.0f,
+             heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024.0f,
              heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024.0f,
              heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f,
              this->loop_task_ == nullptr ? -1 : (int) uxTaskGetStackHighWaterMark(this->loop_task_),
