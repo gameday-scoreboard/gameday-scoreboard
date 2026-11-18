@@ -158,6 +158,10 @@ On iPhone and Android, the pickers also offer **Live games**, after **All favori
 On iPhone and Android, the pickers also offer the pages under **Showing**, after **Nothing**: **Scoreboard**, **Clock**, **Smart board** and **Effects**. A press puts the panel on that page. Picking **Effects** saves the effect the panel is set to right then, and the picker shows it with its palette, like **Effects: Rain, Ocean**. Tap **Change** under that button to open its own **Effect**, **Palette**, **Speed** and **Intensity**. Changing them changes only the button, not what the panel is playing now. Tap **Done** to close them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with those choices.
 :::
 
+:::note[Coming in the next app update]
+On iPhone, the pickers group their choices by sport, as on the device page: your playlists first, then under each sport **All NFL live games** for each league, **My football teams**, your favorites in that sport, and **Another NFL team...**, which opens every team in that league. A team that isn't one of your favorites goes on the button only: **Favorites** marks it **Button only**, and tapping it in **Add a favorite** makes it a full favorite. With 16 favorites already, the app says your favorites are full and leaves the button as it was. See [One league's live games](/using/remote/#one-leagues-live-games) and [A team on a button only](/using/remote/#a-team-on-a-button-only). They show once the panel runs firmware with those choices.
+:::
+
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).
 
 ## Your panels
