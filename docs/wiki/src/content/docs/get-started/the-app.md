@@ -46,6 +46,10 @@ In both apps the Board follows the device page's Home tab:
 - **Panel on**, **Brightness** and **Showing** sit together, with **Refresh scores**. When **Showing** is on **Effects**, the effect, palette, speed and intensity show under it.
 - **Customize** takes the place of **Message**. On Android it's in **Settings**, next to **Display** and **Device**.
 
+:::note[Coming in the next app update]
+On Android, when **Showing** is on **Effects** and the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** shows under the effect controls. Pick one to play it from the top, or **None** to stop it. While one plays, the line under it names it. Picking an effect, palette, speed or intensity yourself stops it, and the panel keeps your pick. You make and change effect playlists on the device page.
+:::
+
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
 
 When the panel shows its thermometer or plug in the corner, the Board shows the same words under the game, **Running warm** or **Power dipped**, with what to do. There's nothing to press: it goes when the panel's icon does. See [Icons in the corner](/help/panel-messages/#icons-in-the-corner).
