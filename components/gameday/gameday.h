@@ -216,7 +216,8 @@ class GamedaySelect : public select::Select, public Component {
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
 //   GET  /gameday/state              full snapshot + settings, and "wifi" (wifi_history.h)
-//   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB);
+//   GET  /gameday/heap               free heap now: internal, least internal since boot, largest
+//                                    internal block, PSRAM (KiB);
 //                                    stack never touched since boot (bytes): loop, web server, fetch task
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
