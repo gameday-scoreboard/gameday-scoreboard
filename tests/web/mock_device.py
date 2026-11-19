@@ -1103,6 +1103,9 @@ def settings_doc():
                 for key in ("color", "icon"):
                     if pl.get(key):
                         e[key] = pl[key]
+                # Its sports, [] for none, so a restore sets them.
+                if isinstance(pl.get("lg"), list):
+                    e["lg"] = list(pl["lg"])
                 out["lists"].append(e)
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
