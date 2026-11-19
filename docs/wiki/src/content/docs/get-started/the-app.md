@@ -167,6 +167,10 @@ On iPhone and Android, the pickers also offer the pages under **Showing**, after
 :::
 
 :::note[Coming in the next app update]
+On Android, the pickers also offer your [effect playlists](/using/effects/#effect-playlists) under **Showing**, after **Effects**, each by name, like **Effect playlist: Party**. A press puts the panel on Effects and plays that playlist from its first effect. Only effect playlists with effects in them are listed. A button on one you delete or take every effect out of says so and plays its own favorite for now, and the picker shows it as **Effect playlist: Party (gone)**. See [A button that plays an effect playlist](/using/remote/#a-button-that-plays-an-effect-playlist). They show once the panel runs firmware with effect playlists.
+:::
+
+:::note[Coming in the next app update]
 On iPhone, the pickers group their choices by sport, as on the device page: your playlists first, then under each sport **All NFL live games** for each league, **My football teams**, your favorites in that sport, and **Another NFL team...**, which opens every team in that league. A team that isn't one of your favorites goes on the button only: **Favorites** marks it **Button only**, and tapping it in **Add a favorite** makes it a full favorite. With 16 favorites already, the app says your favorites are full and leaves the button as it was. See [One league's live games](/using/remote/#one-leagues-live-games) and [A team on a button only](/using/remote/#a-team-on-a-button-only). They show once the panel runs firmware with those choices.
 :::
 
