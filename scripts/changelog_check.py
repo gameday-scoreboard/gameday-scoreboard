@@ -19,7 +19,7 @@ its released shape:
 With --base, every released `## vX.Y.Z` section in the base must be the same
 in this file: a released section stays as it shipped. A version section counts
 as released once its `vX.Y.Z` tag exists; until then (prepped, on beta, not
-shipped) it can still take a line. --need-change also
+shipped) it can still take a line, or fold into the next version's. --need-change also
 fails when the Unreleased section is the same as the base's, for a PR that
 changes the firmware and so owes the section a line.
 """
@@ -97,7 +97,11 @@ def check_against(base_text, text, need_change, tags=None):
         if heading == "Unreleased" or not heading.startswith("v"):
             continue
         if heading not in head:
-            problems.append(f"The released section `## {heading}` is gone.")
+            if tags is not None and heading not in tags:
+                # Never tagged, so never shipped: folded into the next version's section.
+                pending_changed = True
+            else:
+                problems.append(f"The released section `## {heading}` is gone.")
         elif tags is not None and heading not in tags:
             pending_changed = pending_changed or head[heading] != body
         elif head[heading] != body:
@@ -153,6 +157,10 @@ def selftest():
     # and that line counts as the PR's changelog change.
     assert check_against(good, edited, True, tags=set()) == []
     assert any("v2026.11.1" in p for p in check_against(good, edited, False, tags={"v2026.11.1"}))
+    # An untagged section folded away is fine; a tagged one stays.
+    gone = good.replace(v1, "")
+    assert check_against(good, gone, True, tags=set()) == []
+    assert any("gone" in p for p in check_against(good, gone, False, tags={"v2026.11.1"}))
     print("selftest ok")
 
 
