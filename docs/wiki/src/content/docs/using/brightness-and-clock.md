@@ -44,7 +44,7 @@ A running [effect](/using/effects/) dims with the night brightness like the boar
 
 ## Turning the panel off and on
 
-**Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game, so the board is up to date the moment it comes back on.
+**Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game and takes the [Smart board](/using/smart-board/) rows Home Assistant sends, so the whole screen is up to date the moment it comes back on.
 
 You can also turn it off and on with:
 

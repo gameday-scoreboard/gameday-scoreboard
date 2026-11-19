@@ -50,6 +50,7 @@ Effect playlists step the panel through your own list of effects, and a WizMote 
 ### 🐛 Fixes
 
 - 📶 The round arrow above the app's Wi-Fi list now has the panel look for networks again, so a phone hotspot turned on after the panel started shows up
+- 🌅 A panel turned back on now shows what's current: a Smart board row no longer stays frozen mid-scroll on the text it had when it went dark
 
 ## v2026.11.4
 

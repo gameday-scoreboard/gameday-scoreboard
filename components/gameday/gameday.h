@@ -1288,6 +1288,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   };
   void start_job_();
   void start_worker_();
+  // ESPN's reads run on a fetch task whose stack is in PSRAM, which is safe
+  // because nothing a job runs reads or writes flash (an NVS read counts:
+  // it turns the cache off, and IDF aborts a task whose stack is in PSRAM
+  // when it tries). The task stays up after its job and waits for the next,
+  // like the logo and webhook tasks, so a job allocates no internal RAM.
+  // A job the loop gave up on keeps its task until it ends, and the next job
+  // starts on another; three tasks at most, each made only when it's needed.
+  struct FetchSlot {
+    StaticTask task;
+    GamedayComponent *owner{nullptr};
+    std::atomic<bool> idle{false};  // its job ended and it waits for the next
+  };
+  static constexpr size_t kFetchSlots = 3;
+  FetchSlot fetch_slots_[kFetchSlots];
   static void worker_(void *arg);
   void run_job_();
   void apply_job_();
@@ -1861,12 +1875,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::atomic<int> espn_status_{0};
   std::atomic<uint32_t> espn_answer_ms_{0};
 
-  // Sign-in Wi-Fi (captive.h). The probe runs on its own short task, since
-  // it is needed before the clock is set, when no fetch job runs.
+  // Sign-in Wi-Fi (captive.h). The probe runs on its own task, since it is
+  // needed before the clock is set, when no fetch job runs. The task starts
+  // with the first probe and then waits for the next, its stack in PSRAM: a
+  // probe is one plain HTTP read and never touches flash.
   void captive_tick_();
   void set_captive_(bool on);
   void start_probe_();
-  static void probe_task_(void *arg);
+  void run_probe_();
+  static void probe_task_fn_(void *arg);
+  StaticTask probe_task_;
   bool captive_{false};
   // The probe saw a sign-in page while ESPN reads were still fine: ESPN is
   // asked at once, and captive_ is set only if that read fails.
@@ -1887,7 +1905,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::atomic<uint32_t> espn_ok_reads_{0};
   // The loop task, for its stack reading in /gameday/heap (set in setup()).
   TaskHandle_t loop_task_{nullptr};
-  // The least stack any fetch task left untouched, read as it ends; UINT32_MAX
+  // The least stack any fetch task left untouched, read as each job ends; UINT32_MAX
   // until one has run.
   std::atomic<uint32_t> fetch_stack_low_{UINT32_MAX};
 };
