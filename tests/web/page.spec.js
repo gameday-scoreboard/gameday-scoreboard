@@ -38,8 +38,9 @@ const playlistsPost = (p) => {
   // A playlist's options come back as its @ tokens, in the firmware's order.
   const opts = (l) => (l.days ? ",@d:" + l.days + (l.start !== undefined ? ",@t:" + l.start + "-" + l.end : "") : "")
     + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
-    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
-  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",") + opts(l)).join(";") };
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "")
+    + (l.lg || []).map((lg) => ",@lg:" + lg).join("");
+  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",") + opts(l) + (l.lg === undefined ? ",@lg" : "")).join(";") };
   if (d.list !== undefined) q.list = String(d.list);
   return q;
 };
@@ -968,7 +969,7 @@ test("a playlist's options post as tokens: days, hours, only this list, only tod
   await expect(box.locator(".phours")).toHaveCount(0);
   // The state reads back what the mock kept.
   const st = await deviceState(request);
-  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true, color: "", icon: "" });
+  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true, color: "", icon: "", lg: [] });
 });
 
 test("a playlist's color and icon post as tokens and show beside its name and in Playing", async ({ page, request }) => {
@@ -993,7 +994,7 @@ test("a playlist's color and icon post as tokens and show beside its name and in
   await expect(box.locator(".ctl > .pmark svg path")).toHaveAttribute("fill", "#3070ff");
   // The state reads back what the mock kept, in the firmware's key order.
   const st = await deviceState(request);
-  expect(JSON.stringify(st.lists[0])).toBe(JSON.stringify({ n: "Sundays", f: [0], days: "0", start: "00:00", end: "00:00", only: false, color: "blue", icon: "star" }));
+  expect(JSON.stringify(st.lists[0])).toBe(JSON.stringify({ n: "Sundays", f: [0], days: "0", start: "00:00", end: "00:00", only: false, color: "blue", icon: "star", lg: [] }));
   // A rename and a move keep them.
   await box.getByRole("button", { name: "Move down Sundays" }).click();
   await expectSet(request, { lists: "Hoops=nfl:34;Sundays=nfl:6,@d:0,@c:blue,@i:star" });
@@ -1359,12 +1360,68 @@ test("all 16 playlists with every favorite save", async ({ page, request }) => {
   await expect(page.locator("#toast")).not.toContainText("did not respond");
 });
 
-test("playlists wait for favorites", async ({ page, request }) => {
+test("a playlist needs no favorites: sports alone", async ({ page, request }) => {
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
   await tab(page, "teams");
-  await expect(page.locator("#listCtls")).toHaveText("Add favorites first, then group them here.");
-  await expect(page.locator("#listActions")).toBeHidden();
+  await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Playlist 1=" });
+  const box = page.locator("#listCtls .plist").nth(0);
+  await expect(box.locator(".pteams .chip")).toHaveCount(0);
+  await box.getByRole("group", { name: "Sports in Playlist 1" }).getByRole("button", { name: "NHL" }).click();
+  await expectSet(request, { lists: "Playlist 1=,@lg:nhl" });
+  await expect(box.locator(".psports small")).toHaveText("Plays live NHL games. Add teams to have them take over while they play.");
+});
+
+test("a playlist's sports post as @lg tokens beside its teams, and the bar says it plays their live games", async ({ page, request }) => {
+  await reset(request, {
+    mode: 4,
+    favs: [
+      { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" },
+      { l: "nba", id: 6, abbr: "DAL", name: "Dallas Mavericks" },
+      {},
+      {},
+    ],
+    lists: [{ n: "Sunday", f: [0, 1] }],
+    list: 1,
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  const box = page.locator("#listCtls .plist").nth(0);
+  const sports = box.getByRole("group", { name: "Sports in Sunday" }).getByRole("button");
+  // Every league the panel knows, in kLeagues order.
+  await expect(sports).toHaveText(["NFL", "College football", "MLB", "MLS", "Premier League", "NBA", "WNBA",
+    "Men's college basketball", "NHL"]);
+  await expect(box.locator(".psports small")).toHaveCount(0);
+  await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
+  await box.getByRole("button", { name: "NFL", exact: true }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@lg:nfl" });
+  await expect(box.getByRole("button", { name: "NFL", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(box.locator(".psports small")).toHaveText("Plays live NFL games. Its teams take over while their game is on.");
+  // Favorite teams' own rules don't apply to live games.
+  await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toHaveCount(0);
+  await expect(box.getByLabel("Only today's games Sunday")).toHaveCount(0);
+  // A second sport goes in kLeagues order, after the options and look.
+  await box.getByRole("button", { name: "Blue" }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue,@lg:nfl" });
+  await box.getByRole("button", { name: "NHL" }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue,@lg:nfl,@lg:nhl" });
+  const st = await deviceState(request);
+  expect(st.lists[0].lg).toEqual(["nfl", "nhl"]);
+  // An app that doesn't know sports yet sends none: the playlist keeps its own.
+  await request.post("/gameday/settings", { data: { schema: 1, lists: [{ n: "Sunday", t: ["nfl:6"] }] } });
+  expect((await deviceState(request)).lists[0].lg).toEqual(["nfl", "nhl"]);
+  await request.post("/gameday/settings", { data: { schema: 1, lists: [{ n: "Sunday", t: ["nfl:6", "nba:6"], color: "blue", lg: ["nfl", "nhl"] }] } });
+  await tab(page, "board");
+  await expect(page.locator("#favName")).toHaveText("Playing your Sunday playlist: live NFL and NHL games, and its teams while they play");
+  // Taking the sports back out makes it a playlist of teams again.
+  await tab(page, "teams");
+  await box.getByRole("button", { name: "NFL", exact: true }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue,@lg:nhl" });
+  await box.getByRole("button", { name: "NHL" }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue" });
+  await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
 });
 
 test("Favorite teams plays a playlist: the picker posts it, the bar names it, the others dim", async ({ page, request }) => {

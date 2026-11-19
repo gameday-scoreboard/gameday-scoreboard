@@ -504,6 +504,9 @@ void GamedayComponent::setup() {
   this->pref12_ = global_preferences->make_preference<Prefs12>(fnv1_hash("gameday_prefs12_v1"));
   if (!this->pref12_.load(&this->prefs12_))
     this->prefs12_ = Prefs12{};  // no colors or icons
+  this->pref13_ = global_preferences->make_preference<Prefs13>(fnv1_hash("gameday_prefs13_v1"));
+  if (!this->pref13_.load(&this->prefs13_))
+    this->prefs13_ = Prefs13{};  // no sports: every playlist plays its teams
   this->load_fx_();
   for (auto &b : this->prefs11_.btn)
     if (b.kind > ::espn::kRemoteKindLast)
@@ -807,6 +810,10 @@ void GamedayComponent::schedule_tick_() {
 }
 
 void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
+  // A sport playlist playing: its sports and its teams, to see below whether
+  // the board follows something else now.
+  const uint16_t sport_was = this->sport_list_();
+  const std::vector<::espn::TeamRef> sport_teams_was = this->sport_list_teams_();
   std::string active_name = this->list_name_(this->prefs9_.active);
   bool was_active = this->prefs9_.active != 0;
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
@@ -838,9 +845,11 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   Prefs10 p10 = this->prefs10_;
   Prefs12 p12{};
+  Prefs13 p13{};
   for (uint8_t n = 0; n < ::espn::kListMax; n++) {
     p10.opt[n] = n < p.count ? lists[n].opt : ::espn::ListOpt{};
     p12.mark[n] = n < p.count ? lists[n].mark : 0;
+    p13.leagues[n] = n < p.count ? ::espn::list_leagues_after(lists, n, old_names, this->prefs13_.leagues) : 0;
   }
   for (uint8_t n = 0; n < p.count; n++) {
     strncpy(p.name[n], lists[n].name.c_str(), ::espn::kListNameMax);
@@ -884,10 +893,20 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   this->pref10_.save(&this->prefs10_);
   this->prefs12_ = p12;
   this->pref12_.save(&this->prefs12_);
+  this->prefs13_ = p13;
+  this->pref13_.save(&this->prefs13_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
   uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
+  // A sport playlist playing that gained or lost a sport or a team, or a
+  // playlist that became one or stopped being one: it plays again.
+  const uint16_t sport_now = this->sport_list_();
+  if ((sport_was != 0 || sport_now != 0) &&
+      (sport_was != sport_now || this->sport_list_teams_() != sport_teams_was || (active != 0) != was_active)) {
+    this->set_active_list_(active, false);
+    return;
+  }
   // A rename alone plays the same teams, so the board stays as it is.
   if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask || p.sport != sport_before))
     this->set_active_list_(active, false);  // other teams play now: pick again
@@ -900,6 +919,7 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
 // starts playing it, from its first card.
 void GamedayComponent::play_list_(uint8_t n, uint8_t row, bool announce) {
   this->clear_held_(false);  // the pick below plays the list from its first card
+  const uint16_t sport_was = this->sport_list_();
   if (n > this->prefs9_.count)
     n = 0;
   if (n != 0)
@@ -918,6 +938,17 @@ void GamedayComponent::play_list_(uint8_t n, uint8_t row, bool announce) {
               this->list_mark_(n));
   if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES) {
     this->set_mode_((uint8_t) Mode::FAVORITES);
+    return;
+  }
+  if (sport_was != 0 || this->sport_list_() != 0) {
+    // To or from a sport playlist: the board scans its sports, or picks
+    // from the favorites again, from nothing, as a mode change does.
+    if (this->sport_list_() != 0)
+      ESP_LOGI(TAG, "Playlist %s: live games over%s, and its teams take over",
+               this->list_name_(n).c_str(), ::espn::list_leagues_text(this->sport_list_()).c_str());
+    this->board_ready_ = false;
+    this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+    this->restart_board_();
     return;
   }
   // As a change to the favorites list: drop the board and pick again from
@@ -1439,11 +1470,14 @@ void GamedayComponent::remote_number(uint8_t n) {
         // A button-only team plays on its own while its button is in use.
         ESP_LOGI(TAG, "Remote button %u: %s, on its own", (unsigned) n,
                  this->favorite_option_((uint8_t) a.fav_slot).c_str());
+        const bool sport_was = this->sport_list_() != 0;
         this->prefs11_.held = n;
         this->pref11_.save(&this->prefs11_);
         this->sync_prefs_();
         if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES)
           this->set_mode_((uint8_t) Mode::FAVORITES);
+        else if (sport_was)
+          this->restart_board_();  // from a sport playlist's live games
         else
           this->repick_favorites_();
         break;
@@ -1481,6 +1515,9 @@ bool GamedayComponent::press_favorite(uint8_t slot) {
   // In Live games the button switches to Favorites, on that team.
   if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES)
     this->set_mode_((uint8_t) Mode::FAVORITES);
+  // Over a sport playlist, Favorite teams plays every favorite again, from that team.
+  if (this->sport_list_() != 0)
+    this->set_active_list_(0, false);
   if (this->favorites_mode_()) {
     // Jump to that favorite and pin it: a live game holds, a card seeds the playlist.
     for (size_t i = 0; i < this->fav_.size(); i++) {
@@ -1601,8 +1638,13 @@ void GamedayComponent::set_favorites_take_over(bool on) {
 // In fav_ order (every entry has a team), so a rank is an index into fav_.
 std::vector<::espn::FavRef> GamedayComponent::fav_refs_() const {
   std::vector<::espn::FavRef> out;
-  for (const auto &e : this->fav_)  // a button-only team takes nothing over: no id to match
-    out.push_back({(uint8_t) e.team->league, e.solo ? 0u : e.team->espn_id});
+  // A sport playlist: only its own teams take over.
+  const bool sport = this->sport_list_() != 0;
+  const uint16_t mask = sport ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
+  for (const auto &e : this->fav_) {  // a button-only team takes nothing over: no id to match
+    bool takes = !e.solo && (!sport || (e.slot >= 1 && e.slot <= 16 && ((mask >> (e.slot - 1)) & 1u)));
+    out.push_back({(uint8_t) e.team->league, takes ? e.team->espn_id : 0u});
+  }
   return out;
 }
 
@@ -1634,7 +1676,29 @@ std::vector<League> GamedayComponent::live_leagues_() const {
   int held = this->held_league_();
   if (held >= 0)
     return {(League) held};
+  // A sport playlist: its sports, and its teams' leagues for their games.
+  uint16_t sport = this->sport_list_();
+  if (sport != 0)
+    return ::espn::sport_list_scan(sport, this->sport_list_teams_());
   return this->own_live_leagues_();
+}
+
+std::vector<::espn::TeamRef> GamedayComponent::sport_list_teams_() const {
+  if (this->sport_list_() == 0)
+    return {};
+  return ::espn::sport_list_teams(this->prefs9_.mask[this->prefs9_.active - 1], this->fav_refs_all_(),
+                                  this->prefs11_.solo);
+}
+
+const ::espn::Team *GamedayComponent::live_team_() const {
+  if (this->sport_list_() == 0)
+    return this->fallback_team_();
+  std::vector<::espn::TeamRef> teams = this->sport_list_teams_();
+  for (const auto &e : this->fav_)  // in the favorites' order, as favorite #1 is
+    for (const auto &t : teams)
+      if (!e.solo && (uint8_t) e.team->league == t.league && e.team->espn_id == t.id)
+        return e.team;
+  return nullptr;
 }
 
 std::vector<League> GamedayComponent::own_live_leagues_() const {
@@ -2097,7 +2161,7 @@ uint32_t GamedayComponent::orient_id_() const {
   uint8_t m = this->job_.mode;
   if (is_live_mode_(m) && !this->live_fallback_)
     return this->live_away_id_;
-  const ::espn::Team *t = this->fallback_team_();
+  const ::espn::Team *t = is_live_mode_(m) ? this->live_team_() : this->fallback_team_();
   return t ? t->espn_id : 0;
 }
 
@@ -3882,7 +3946,7 @@ void GamedayComponent::start_job_() {
   Job &j = this->job_;
   ::espn::reset_in_place(j);
   j.generation = this->generation_;
-  j.team = this->fallback_team_();
+  j.team = this->live_mode_() ? this->live_team_() : this->fallback_team_();
   j.mode = this->effective_mode_();
   j.our_id = this->orient_id_();
   j.scan_leagues = ::espn::scan_order(this->scan_leagues_(), this->scan_live_leagues_);
@@ -3922,6 +3986,7 @@ void GamedayComponent::start_job_() {
     j.fav_watch = this->fav_refs_();
     take_due = this->take_scan_at_ != 0 && (int64_t) this->time_->timestamp_now() >= this->take_scan_at_;
   }
+  j.sport_lg = this->sport_list_();
   if (j.team == nullptr && !this->live_mode_()) {
     this->schedule_next_(SCHEDULE_INTERVAL);
     return;
@@ -4260,9 +4325,25 @@ void GamedayComponent::run_job_() {
       for (const auto &f : j.fav_watch)
         if (f.league == (uint8_t) l)
           watch.push_back(f.id);
+      const size_t had = j.live.size();
       j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending, 0, j.top25,
                                           watch.empty() ? nullptr : &watch, &j.fav_kickoff) &&
                   j.scan_ok;
+      if (j.sport_lg != 0 && !((j.sport_lg >> (uint8_t) l) & 1u)) {
+        // A sport playlist reads this league for its own teams' games alone.
+        std::vector<::espn::TeamRef> mine;
+        for (uint32_t id : watch)
+          mine.push_back({(uint8_t) l, id});
+        size_t keep = had;
+        for (size_t g = had; g < j.live.size(); g++)
+          if (::espn::sport_list_keeps(j.sport_lg, mine, j.live[g].league, j.live[g].away_id, j.live[g].home_id)) {
+            if (keep != g)
+              j.live[keep] = std::move(j.live[g]);
+            keep++;
+          }
+        while (j.live.size() > keep)
+          j.live.pop_back();
+      }
       // The board has no game on it and this league has one: hand it over
       // now, and read the leagues left in a job of their own.
       if (::espn::scan_show_now(j.scan_early, j.live.size(), j.scan_leagues.size() - li - 1) && !this->job_moot_) {
@@ -4467,7 +4548,7 @@ void GamedayComponent::apply_job_() {
                                                         NO_LIVE_RESCAN, NO_GAMES_RESCAN);
       if (this->live_rescan_ms_ > NO_LIVE_RESCAN)
         ESP_LOGI(TAG, "Next scan in %u min", (unsigned) (this->live_rescan_ms_ / MINUTE));
-      const ::espn::Team *saved = this->fallback_team_();
+      const ::espn::Team *saved = this->live_team_();
       if (saved != nullptr) {
         // Nothing live, but the owner has a team: show that team's card and
         // keep scanning. The mode they picked is untouched.
@@ -5033,7 +5114,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.ha_status_text = showing + why;
     f.message = why;
   }
-  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
+  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && this->sport_list_() == 0 &&
+      !this->demo_playing_()) {
     f.status_text = "Favorites: add teams in the app or on the page | " + f.status_text;
     f.ha_status_text = "Favorites: add teams in the app or on the page | " + f.ha_status_text;
   }
@@ -6131,6 +6213,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     // Its color and icon by key (playlists.h kListColors, kListIcons), "" for none.
     o["color"] = ::espn::list_color_key(this->prefs12_.mark[n - 1]);
     o["icon"] = ::espn::list_icon_key(this->prefs12_.mark[n - 1]);
+    // Its sports by league key, in kLeagues order (playlists.h list_league_token).
+    JsonArray lg = o["lg"].to<JsonArray>();
+    for (const auto &info : ::espn::kLeagues)
+      if ((this->prefs13_.leagues[n - 1] >> (uint8_t) info.league) & 1u)
+        lg.add(info.key);
   }
   doc["list"] = this->prefs9_.active;
   doc["sched"] = this->prefs10_.sched_applied;  // the playlist a schedule put on, 0 = none

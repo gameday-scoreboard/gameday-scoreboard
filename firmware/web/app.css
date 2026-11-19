@@ -483,6 +483,10 @@ button { font: inherit; color: inherit; }
 #favListRow .pmark { margin-right: 6px; }
 .popts .plook { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; }
 .popts .plook .chips { margin-top: 0; }
+.plist .psports { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; }
+.plist .psports .plabel, .plist .psports .phint { color: var(--muted); font-size: 12px; }
+.plist .psports .chips { margin-top: 0; }
+.plist .psports .phint { flex-basis: 100%; }
 .popts .chip.look { display: inline-flex; align-items: center; min-height: 30px; padding: 3px 6px; }
 .popts .chip.look .pmark { width: 20px; height: 20px; }
 .popts .chip.look .pmark.dot { width: 14px; height: 14px; margin: 0 3px; }

@@ -1073,6 +1073,26 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ESPPreferenceObject pref12_;
   Prefs12 prefs12_{};
 
+  // Each playlist's sports (playlists.h list_league_token), a bit per
+  // League, in their own fixed-size blob: leagues[n] belongs to playlist
+  // n + 1 and is rewritten with the playlists. Firmware without it plays
+  // the playlist's teams alone.
+  struct Prefs13 {
+    uint16_t leagues[::espn::kListMax];
+  } __attribute__((packed));
+  static_assert(sizeof(Prefs13) == 32, "Prefs13 is a fixed-size blob");
+  ESPPreferenceObject pref13_;
+  Prefs13 prefs13_{};
+  // The playing playlist's sports, 0 when Favorite teams plays its teams as
+  // ever (playlists.h sport_list_playing). Not 0: the panel runs Live games
+  // over them, and the playlist's own teams take over.
+  uint16_t sport_list_() const {
+    return ::espn::sport_list_playing(this->prefs2_.mode == (uint8_t) Mode::FAVORITES, this->held_fav_() >= 0,
+                                      this->prefs9_.active, this->prefs9_.count, this->prefs13_.leagues);
+  }
+  // The playing sport playlist's own teams (sport_list_teams), none without one.
+  std::vector<::espn::TeamRef> sport_list_teams_() const;
+
   // Effect playlists (fx_playlists.h): the saved playlists, their flash
   // blob and the entities they drive, in PSRAM, made on first use. Only
   // the player (8 bytes) is internal RAM.
@@ -1137,6 +1157,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
         return e.team;
     return nullptr;
   }
+  // The team Live games shows when nothing is live: fallback_team_(), or
+  // with a sport playlist playing its first team (nullptr with none: the
+  // finals of its sports instead).
+  const ::espn::Team *live_team_() const;
   // A favorite that counts (not button-only), or the button-only one in use.
   bool fav_any_() const { return this->fallback_team_() != nullptr || this->held_fav_() >= 0; }
 
@@ -1166,6 +1190,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // kickoff not started yet of a game one plays, 0 for none.
     std::vector<::espn::FavRef> fav_watch;
     int64_t fav_kickoff{0};
+    // A sport playlist playing: its sports, a bit per League. A league the
+    // scan reads only for the playlist's teams (fav_watch) keeps only their
+    // games (playlists.h sport_list_keeps). 0: every game stays.
+    uint16_t sport_lg{0};
     bool need_schedule{false};
     Schedule schedule;
     bool schedule_ok{false};
@@ -1327,8 +1355,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
                          const std::vector<uint32_t> *watch = nullptr, int64_t *watch_kickoff = nullptr);
   // The mode the panel runs: the saved one, except that Favorites with none
   // set runs as Live games over every league (live_leagues_).
+  // A sport playlist plays as Live games over its sports (sport_list_).
   uint8_t effective_mode_() const {
-    return this->no_team_default() ? (uint8_t) Mode::LIVE : this->prefs2_.mode;
+    return this->no_team_default() || this->sport_list_() != 0 ? (uint8_t) Mode::LIVE : this->prefs2_.mode;
   }
   static bool is_live_mode_(uint8_t m) {
     return (m >= (uint8_t) Mode::LIVE_NFL && m <= (uint8_t) Mode::LIVE_ANY) || m == (uint8_t) Mode::LIVE;
@@ -1348,7 +1377,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   }
   // Mode 4 with at least one favorite set; with none it runs as Live games
   // (no_team_default).
-  bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_any_(); }
+  // A sport playlist playing runs as Live games instead.
+  bool favorites_mode_() const {
+    return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_any_() && this->sport_list_() == 0;
+  }
   uint32_t our_id_() const;     // worker: the job's team id the snapshot is oriented around
   uint32_t orient_id_() const;  // main loop: works that id out for start_job_
   // Sends the request; on a 200, returns the reply to read. With a fetch whose
@@ -1719,7 +1751,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // keeps scanning. The mode the owner picked does not change.
   bool live_fallback_{false};
   // Favorites take over: on, with favorites to look for, in a live mode.
-  bool take_over_() const { return this->favorites_take_over() && this->live_mode_() && !this->fav_.empty(); }
+  // A sport playlist has it on for its own teams, whatever the switch says.
+  bool take_over_() const {
+    return (this->favorites_take_over() || this->sport_list_() != 0) && this->live_mode_() && !this->fav_.empty();
+  }
   std::vector<::espn::FavRef> fav_refs_() const;
   int live_fav_{-1};          // the fav_ entry whose game took the board, -1 for none
   bool break_looked_{false};  // Pick the best game looked at this break and kept the game (rotate_due)

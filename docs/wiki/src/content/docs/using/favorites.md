@@ -56,11 +56,29 @@ The checks behind Jump to the action and Score banner no longer affect the game 
 
 ## Playlists
 
-A playlist is a group of your favorites with a name, like your football teams or your basketball teams. Favorite teams can play one playlist instead of every favorite.
+A playlist is a group of your favorites with a name, like your football teams or your basketball teams. It can hold whole sports too, like all NFL games. Favorite teams can play one playlist instead of every favorite.
 
 - **Playlists** on the device page's Teams tab makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
 - Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
 - **Playing**, under the mode cards on the device page's Home tab, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
+
+### Sports in a playlist
+
+Under each playlist's teams, **Sports** lists every league the panel follows: NFL, College football, MLB, MLS, Premier League, NBA, WNBA, Men's college basketball and NHL. Tap one to put it in the playlist, and tap it again to take it out. A playlist can hold sports, teams or both, and needs no favorites to hold only sports.
+
+A playlist with a sport in it plays like Live games over its sports:
+
+- The panel shows the live games in those leagues, with your **Live games** settings for switching between them and picking the best game. Your own Live games leagues stay as they are.
+- The playlist's teams take over while their game is on, even a team whose sport isn't in the playlist. A playlist of NFL, the Cowboys and the Mavericks shows NFL games, and the Mavericks game while it's on, but no other NBA game. This works whether **Take over** is on or off, and only the playlist's teams take over.
+- With nothing live, it shows what Live games shows then: the playlist's first team's next game, or recent finals in its sports when it has no teams.
+- **Only this list's games** and **Only today's games** don't apply to live games, so they're hidden for a playlist with a sport in it.
+- The bar on the Home tab says what it plays, like **Playing your Sunday playlist: live NFL games, and its teams while they play**.
+
+Its schedule, color, icon and remote button work as with any playlist, and a settings backup carries its sports. A playlist of teams only plays exactly as before.
+
+:::note[Coming in the next app update]
+The Game Day app shows a playlist's sports and lets you change them. Until then, add or take out sports on the device page. Editing a playlist in the app keeps the sports it has.
+:::
 
 ### A row for each sport
 
