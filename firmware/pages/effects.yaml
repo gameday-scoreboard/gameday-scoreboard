@@ -24,6 +24,11 @@
 # (gameday-common.yaml ota), the night schedule's screen-off, and Power off.
 # The brightness, Brightness number and night dimming are the HUB75 driver's,
 # so they apply to an effect too.
+#
+# Effect playlists (components/gameday/fx_playlists.h) step through saved
+# effects on this page: the gameday component writes the four effect
+# controls below for each step, and stops the playlist when one of them
+# changes outside its own step (a hand pick) or the page leaves Effects.
 
 external_components:
   - source: github://bharvey88/esphome-wled-fx@v0.6.0
@@ -158,6 +163,11 @@ esphome:
               if (strcmp(id(page_manager).option_at(index), "Effects") != 0)
                 id(gd_fx_stop).execute();
             });
+            // Effect playlists (components/gameday/fx_playlists.h) step
+            // through these four controls, and stop when one is picked by
+            // hand or Showing leaves Effects.
+            id(gameday_ctl).set_fx_controls(id(gd_fx_effect), id(gd_fx_palette), id(gd_fx_speed),
+                                            id(gd_fx_intensity), id(page_manager));
 
 script:
   # The screen goes back to the scoreboard: something the owner should see,
@@ -333,6 +343,14 @@ select:
     name: "Effect Palette"
     id: gd_fx_palette
     icon: "mdi:palette"
+  # The owner's effect playlists by name, made on the device page; picking
+  # one plays it on the Effects page, "None" stops it. Beside the team
+  # "Playlist" select, so its name says which kind it is.
+  - platform: gameday
+    gameday_id: gameday_ctl
+    type: fx_playlist
+    name: "Effect playlist"
+    icon: "mdi:playlist-play"
 
 number:
   - platform: wled_fx

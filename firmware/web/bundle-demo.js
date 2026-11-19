@@ -53,6 +53,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
+  // The league's name in "All NFL live games": its short name, or the long one
+  // where the short one is an abbreviation owners don't use.
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
   const logoUrl = (league, id, abbr) => {
     const l = lgInfo(league);
     return `https://a.espncdn.com/i/teamlogos/${l.logo}/500-dark/${l.byId ? id : String(abbr).toLowerCase()}.png`;
@@ -119,6 +122,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       <div class="cbody">
         <div id="showCtls"></div>
         <div id="fxCtls" hidden>
+          <div class="ctl" id="fxPickRow" hidden><label for="fxPick">Effect playlist</label><select id="fxPick"></select></div>
           <p class="hint">The effect stays on until you pick another page.</p>
         </div>
         <div id="sbCtls" hidden>
@@ -349,6 +353,14 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
           <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
           <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+        </div>
+      </div>
+      <div class="card" id="fxCard" hidden>
+        <h2>Effect playlists</h2>
+        <div class="cbody">
+          <p class="hint">Effects the panel steps through on its Effects page, each for as long as you pick. Changing the effect by hand stops the playlist.</p>
+          <div id="fxListCtls"></div>
+          <div class="actions" id="fxListActions"><button class="btn" id="fxListAdd">New effect playlist</button></div>
         </div>
       </div>
     </div>
@@ -666,6 +678,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       return Object.assign({ n, f: favSlots.map((k, i) => (k && keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, listOpts(keys));
     }),
     list: Number,
+    // Effect playlists (fx_playlists.h) from their set text, as the state lists them.
+    fxlists: (v) => fxFromText(v),
+    fxlist: Number,
     sport: (v) => (v === "none" ? "" : v),
     remote1: String, remote2: String, remote3: String, remote4: String,
     msg: String, msgurl: String, msgevery: Number, nick: String,
@@ -679,6 +694,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
     lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
     list: (a, b) => (a || 0) === (b || 0),
+    fxlists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
+    fxlist: (a, b) => (a || 0) === (b || 0),
     cards: (a, b) => (a || []).map((c) => c.id + ":" + c.on).join() === (b || []).map((c) => c.id + ":" + c.on).join(),
   };
   const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
@@ -733,6 +750,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // short). They go to the settings import instead, which reads a JSON body
   // whole, as {"schema": 1, "lists": [{"n": "Football", "t": ["nfl:6"]}], "list": 2}.
   const setRequest = (params) => {
+    // Effect playlists run to about 3 KB, so they go the same way, as
+    // {"schema": 1, "fxlists": [{"n": "Party", "shuffle": true, "fx": [...]}]}.
+    if (params.fxlists !== undefined) {
+      const doc = { schema: 1, fxlists: fxFromText(String(params.fxlists)) };
+      return ["/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) }];
+    }
     if (params.lists === undefined) return ["/gameday/set?" + qs(params), { method: "POST" }];
     const doc = {
       schema: 1,
@@ -1058,8 +1081,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         : S.recap ? "Nothing live right now. Showing recent finals."
           : S.best ? "Showing the best game on. It moves only at a break in play."
             : "Showing a random live game. A new one every " + everyMin(S.rotate) + ", or when it ends.";
-    $("#liveLg").textContent = auto ? "Leagues follow your favorites. Tap one to choose by hand." : "";
-    $("#liveLg").hidden = !auto;
+    // A league button in use: its one league, the owner's own chips stay as they are.
+    const only = S.live_only ? "Remote button " + S.held + ": " + liveName(S.live_only) + " games only, until you pick a mode, a playlist or another button." : "";
+    $("#liveLg").textContent = only || (auto ? "Leagues follow your favorites. Tap one to choose by hand." : "");
+    $("#liveLg").hidden = !only && !auto;
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
@@ -1119,7 +1144,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       // Says why the board shows what it does. Locked covers the lead-in
       // before kickoff and the stretch after the final, not only the game.
       const team = shown ? shown.t.name || shown.t.abbr : "";
-      $("#favName").textContent = !set
+      // A button-only team on its own while its button is in use.
+      const heldV = S.held && !S.live_only && S.remote && S.remote[S.held - 1] ? S.remote[S.held - 1].v : "";
+      const held = heldV.startsWith("team:") ? teamByKey(heldV.slice(5)) : null;
+      $("#favName").textContent = held && !S.locked
+        ? "Showing the " + held[3] + " from remote button " + S.held + ", until you pick a mode, a playlist or another button"
+        : !set
         ? "Add a team to get started"
         : S.locked && shown
           ? team + (shown.s === "PRE" ? " play soon" : shown.s === "POST" ? " just finished" : " are on")
@@ -1366,6 +1396,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
   let favSlots = [];
+  // The button-only teams among them (state favs[].btn): a remote button
+  // added each, it counts toward the 16 but plays only on its button.
+  let btnKeys = [];
+  const realFavKeys = () => favKeys.filter((k) => !btnKeys.includes(k));
   // From the WizMote Status entity. Without a paired remote the favorite
   // rows leave out which button lands on them.
   let remotePaired = false;
@@ -1375,9 +1409,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
   // The WizMote's buttons (state remote, set remote1 to remote4): what each is
   // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
-  // sport:football, all, live, none, or a page under Showing: scoreboard,
-  // clock, smartboard, fx:Effect,Palette,speed,intensity. A held post stands
-  // in until the panel answers.
+  // sport:football, all, live, league:nfl, none, or a page under Showing:
+  // scoreboard, clock, smartboard, fx:Effect,Palette,speed,intensity. A held
+  // post stands in until the panel answers.
   const remoteTargets = () => [1, 2, 3, 4].map((b) => {
     const h = S && S["remote" + b];
     const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
@@ -1387,7 +1421,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // favorite by default, or the team it was set to. Buttons whose target is
   // gone are on their own favorite for now.
   const remoteButtonFor = (key, i) => remoteTargets()
-    .map((r, b) => ((r.v === "fav" || r.gone ? b === i : r.v === "team:" + key) ? b + 1 : 0)).filter(Boolean).join(", ");
+    .map((r, b) => ((r.v === "fav" || r.gone ? b === i && !btnKeys.includes(key) : r.v === "team:" + key) ? b + 1 : 0))
+    .filter(Boolean).join(", ");
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
@@ -1401,7 +1436,11 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       row.appendChild(img);
       const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
       const btn = remoteButtonFor(key, favSlots.indexOf(key));
-      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
+      if (btnKeys.includes(key)) {
+        // Added by a remote button: shown, marked, and no favorite anywhere else.
+        row.classList.add("btnonly");
+        name.appendChild(el("small", null, (t ? lgInfo(t[0]).name + " · " : "") + "Button only" + (btn ? " (button " + btn + ")" : "")));
+      } else if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -1431,6 +1470,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // already in the list (checked).
   const toggleFav = (t) => {
     const key = keyOf(t);
+    if (btnKeys.includes(key)) {
+      setGD({ keepfav: key });
+      return toast("The " + t[3] + " are a favorite now");
+    }
     if (favKeys.includes(key)) {
       postFavs(favKeys.filter((k) => k !== key));
       return toast("Removed the " + t[3]);
@@ -1565,7 +1608,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favSlots.forEach((key, fi) => {
-        if (!key) return;
+        if (!key || btnKeys.includes(key)) return;
         const t = teamByKey(key);
         const on = l.f.includes(fi);
         const c = el("button", "chip", t ? t[2] : key);
@@ -1688,6 +1731,226 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     while (ls.some((l) => l.n === "Playlist " + n)) n++;
     postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
   };
+  // ---- effect playlists ------------------------------------------------------
+  // Effect playlists (components/gameday/fx_playlists.h): named lists of
+  // effects the panel steps through on its Effects page. The state lists
+  // them as [{n, shuffle, fx: [{e, p, s, i, w}]}], an effect and a palette
+  // by name, w in seconds; fxlist is the one playing (0 none). Every change
+  // posts them all as set text: Name=effect|palette|speed|intensity|seconds,
+  // ...,@shuffle;Name2=...
+  const fxLists = () => (S && S.fxlists) || [];
+  const fxWaits = () => (S && S.fxwaits) || [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 120, 300, 600, 900, 1800, 3600];
+  const FX_WAIT_NEW = 15;  // fx_playlists.h kFxWaitDefault
+  const fxListsText = (ls) => ls.map((l) => l.n + "=" + l.fx.map((e) => [e.e, e.p, e.s, e.i, e.w].join("|"))
+    .concat(l.shuffle ? ["@shuffle"] : []).join(",")).join(";");
+  function fxFromText(v) {
+    return v.split(";").filter(Boolean).map((p) => {
+      const at = p.indexOf("=");
+      const toks = (at < 0 ? "" : p.slice(at + 1)).split(",").filter(Boolean);
+      return {
+        n: at < 0 ? p : p.slice(0, at),
+        shuffle: toks.includes("@shuffle"),
+        fx: toks.filter((t) => t[0] !== "@").map((t) => {
+          const [e, pal, s, i, w] = t.split("|");
+          return { e, p: pal || "", s: Number(s), i: Number(i), w: Number(w) };
+        }),
+      };
+    });
+  }
+  const postFx = (ls) => setGD({ fxlists: fxListsText(ls) });
+  // "1 s", "45 s", "1 min", "1 hour"
+  const waitText = (w) => (w < 60 ? w + " s" : w < 3600 ? w / 60 + " min" : w / 3600 + (w === 3600 ? " hour" : " hours"));
+  const fxOptions = (name) => { const e = ents[byName[name]]; return (e && e.option) || []; };
+  const fxMade = () => S && S.fxlists !== undefined;
+  let fxSig = "";
+  const renderFxLists = () => {
+    $("#fxCard").hidden = !fxMade();
+    const pick = $("#fxPick");
+    $("#fxPickRow").hidden = !fxMade() || !fxLists().length;
+    if (!fxMade()) return;
+    // The Home tab's picker: None, then the playlists, as Home Assistant's
+    // Effect playlist select lists them.
+    const opts = [["0", "None"]].concat(fxLists().map((l, i) => [String(i + 1), l.n]));
+    if (opts.map((o) => o.join("=")).join("\n") !== Array.from(pick.options).map((o) => o.value + "=" + o.text).join("\n")) {
+      pick.innerHTML = "";
+      opts.forEach(([v, t]) => { const o = el("option", null, t); o.value = v; pick.appendChild(o); });
+    }
+    if (document.activeElement !== pick) pick.value = String(S.fxlist || 0);
+    // Redrawn only when something changed, so a name being typed keeps its place.
+    const sig = JSON.stringify(fxLists()) + "|" + (S.fxlist || 0) + "|" + fxOptions("Effect").length + "|" +
+      fxOptions("Effect Palette").length + "|" + JSON.stringify(remoteTargets());
+    const host = $("#fxListCtls");
+    if (sig === fxSig || (document.activeElement && host.contains(document.activeElement) &&
+        document.activeElement.matches("input, select"))) return;
+    fxSig = sig;
+    host.innerHTML = "";
+    const ls = fxLists();
+    const effects = fxOptions("Effect"), palettes = fxOptions("Effect Palette");
+    ls.forEach((l, i) => {
+      // Every change posts the playlists whole, from the playlists as they are now.
+      const cur = () => fxLists()[i] || l;
+      const put = (patch) => postFx(fxLists().map((o, k) => (k === i ? Object.assign({}, o, patch) : o)));
+      const box = el("div", "plist fxlist");
+      const row = el("div", "ctl");
+      const name = el("input", "field pname");
+      name.value = l.n;
+      name.maxLength = 16;
+      name.setAttribute("aria-label", "Effect playlist name");
+      name.onchange = () => {
+        const n = cleanName(name.value);
+        if (!n || n === l.n) { name.value = l.n; return; }
+        if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another effect playlist has that name"); }
+        // "None" is Home Assistant's choice to stop a playlist.
+        if (n === "None") { name.value = l.n; return toast("That name is taken"); }
+        put({ n });
+        // Done typing: let the card redraw under its new name.
+        name.blur();
+      };
+      row.appendChild(name);
+      const btns = remoteTargets().map((r, b) => (r.v === "fxlist:" + l.n ? b + 1 : 0)).filter(Boolean);
+      if (btns.length) row.appendChild(el("small", "pbtn", (btns.length > 1 ? "Buttons " : "Button ") + btns.join(", ")));
+      const playing = S.fxlist === i + 1;
+      const play = el("button", "btn" + (playing ? "" : " primary"), playing ? "Stop" : "Play");
+      play.setAttribute("aria-label", (playing ? "Stop " : "Play ") + l.n);
+      play.disabled = !l.fx.length;
+      play.onclick = () => setGD({ fxlist: playing ? 0 : i + 1 });
+      row.appendChild(play);
+      const ctl = el("span", "favmove");
+      const mk = (label, title, fn) => {
+        const b = el("button", null, label);
+        b.title = title;
+        b.setAttribute("aria-label", title + " " + l.n);
+        b.onclick = fn;
+        ctl.appendChild(b);
+      };
+      const swap = (j) => {
+        if (j < 0 || j >= ls.length) return;
+        const next = ls.slice();
+        next[i] = ls[j];
+        next[j] = ls[i];
+        postFx(next);
+      };
+      mk("▲", "Move up", () => swap(i - 1));
+      mk("▼", "Move down", () => swap(i + 1));
+      mk("✕", "Delete", () => { if (confirm("Delete the effect playlist " + l.n + "?")) postFx(ls.filter((_, k) => k !== i)); });
+      row.appendChild(ctl);
+      box.appendChild(row);
+      if (playing) box.appendChild(el("p", "hint fxplaying", "Playing now"));
+      // Its effects: each one's effect, palette, speed, intensity and how
+      // long it stays up, in order.
+      const list = el("div", "fxentries");
+      list.setAttribute("role", "group");
+      list.setAttribute("aria-label", "Effects in " + l.n);
+      const putFx = (fx) => put({ fx });
+      l.fx.forEach((e, j) => {
+        const r = el("div", "fxentry");
+        const sel = (label, items, value, onSet) => {
+          const s = el("select");
+          s.setAttribute("aria-label", label + " " + (j + 1) + " in " + l.n);
+          // One the panel no longer offers stays listed, so the row says what it holds.
+          (items.includes(value) || !value ? items : [value].concat(items)).forEach((o) => s.appendChild(el("option", null, o)));
+          s.value = value;
+          s.onchange = () => onSet(s.value);
+          return s;
+        };
+        const set = (patch) => putFx(cur().fx.map((x, k) => (k === j ? Object.assign({}, x, patch) : x)));
+        const top = el("div", "fxrow");
+        top.appendChild(el("span", "fxnum", String(j + 1)));
+        top.appendChild(sel("Effect", effects, e.e, (v) => set({ e: v })));
+        top.appendChild(sel("Palette", palettes, e.p, (v) => set({ p: v })));
+        r.appendChild(top);
+        const bottom = el("div", "fxrow");
+        const num = (label, key) => {
+          const wrap = el("label", "fxval");
+          wrap.appendChild(el("span", null, label));
+          const n = el("input", "num");
+          n.type = "number";
+          n.min = 0;
+          n.max = 255;
+          n.step = 1;
+          n.value = e[key];
+          n.setAttribute("aria-label", label + " " + (j + 1) + " in " + l.n);
+          n.onchange = () => {
+            const v = Math.round(Number(n.value));
+            if (!Number.isFinite(v) || v < 0 || v > 255) { n.value = e[key]; return toast(label + " is 0 to 255"); }
+            set({ [key]: v });
+          };
+          wrap.appendChild(n);
+          return wrap;
+        };
+        bottom.appendChild(num("Speed", "s"));
+        bottom.appendChild(num("Intensity", "i"));
+        const wait = el("label", "fxval");
+        wait.appendChild(el("span", null, "For"));
+        const ws = el("select");
+        ws.setAttribute("aria-label", "Time " + (j + 1) + " in " + l.n);
+        fxWaits().forEach((w) => { const o = el("option", null, waitText(w)); o.value = String(w); ws.appendChild(o); });
+        ws.value = String(e.w);
+        ws.onchange = () => set({ w: Number(ws.value) });
+        wait.appendChild(ws);
+        bottom.appendChild(wait);
+        const mv = el("span", "favmove");
+        const mkFx = (label, title, fn) => {
+          const b = el("button", null, label);
+          b.title = title;
+          b.setAttribute("aria-label", title + " effect " + (j + 1) + " in " + l.n);
+          b.onclick = fn;
+          mv.appendChild(b);
+        };
+        const swapFx = (k) => {
+          const f = cur().fx;
+          if (k < 0 || k >= f.length) return;
+          const next = f.slice();
+          next[j] = f[k];
+          next[k] = f[j];
+          putFx(next);
+        };
+        mkFx("▲", "Move up", () => swapFx(j - 1));
+        mkFx("▼", "Move down", () => swapFx(j + 1));
+        mkFx("✕", "Remove", () => putFx(cur().fx.filter((_, k) => k !== j)));
+        bottom.appendChild(mv);
+        r.appendChild(bottom);
+        list.appendChild(r);
+      });
+      if (!l.fx.length) list.appendChild(el("p", "hint", "No effects yet."));
+      box.appendChild(list);
+      const acts = el("div", "fxacts");
+      // A new effect starts as what the panel shows now, for 15 seconds.
+      const add = el("button", "btn", "Add an effect");
+      add.setAttribute("aria-label", "Add an effect to " + l.n);
+      add.hidden = l.fx.length >= ((S && S.fxmax) || 8) || !effects.length;
+      add.onclick = () => {
+        const now = (name, dflt) => { const v = entValue(name); return v === "" ? dflt : v; };
+        const e = now("Effect", effects[0]);
+        putFx(cur().fx.concat([{
+          e: effects.includes(e) ? e : effects[0], p: now("Effect Palette", palettes[0] || ""),
+          s: Number(now("Effect Speed", 128)), i: Number(now("Effect Intensity", 128)), w: FX_WAIT_NEW,
+        }]));
+      };
+      acts.appendChild(add);
+      box.appendChild(acts);
+      const shuffle = el("div", "ctl");
+      shuffle.appendChild(el("label", null, "Shuffle"));
+      const sw = el("button", "sw");
+      sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-label", "Shuffle " + l.n);
+      setOn(sw, !!l.shuffle, "aria-checked");
+      sw.onclick = () => put({ shuffle: !cur().shuffle });
+      shuffle.appendChild(sw);
+      box.appendChild(shuffle);
+      host.appendChild(box);
+    });
+    if (!ls.length) host.appendChild(el("p", "hint", "No effect playlists yet."));
+    $("#fxListAdd").hidden = ls.length >= ((S && S.fxlistmax) || 4);
+  };
+  $("#fxListAdd").onclick = () => {
+    const ls = fxLists();
+    let n = ls.length + 1;
+    while (ls.some((l) => l.n === "Effects " + n)) n++;
+    postFx(ls.concat([{ n: "Effects " + n, shuffle: false, fx: [] }]));
+  };
+  $("#fxPick").onchange = () => setGD({ fxlist: Number($("#fxPick").value) });
+
   const listPick = $("#favList");
   // All favorites, the sport rows, then the owner's playlists, as the panel's
   // Home Assistant select lists them. A sport row's value is "s:" + its sport.
@@ -1715,13 +1978,62 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   listPick.onchange = () => setGD(listPick.value.startsWith("s:")
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
-  // The Remote card's four pickers, one per button, grouped: its own
-  // favorite, each favorite team, the sport rows, the playlists, all, Live
-  // games, nothing, then the pages under Showing. An Effects button keeps an
+  // The Remote card's four pickers, one per button: its own favorite and the
+  // playlists, then a group per sport, all nine leagues: its leagues' live
+  // games, the sport row (My football teams), its favorites and "Another
+  // NFL team", which opens a second list with every team in that league.
+  // Then All favorites, Live games, Nothing, and the pages under Showing. A
+  // team that isn't a favorite joins the favorites as a button-only team
+  // (playlists.h), so 16 saved already leave no room for one. An Effects button keeps an
   // effect of its own (fx:Effect,Palette,speed,intensity): picking Effects
   // saves what Effects is set to now, and Change opens its own controls,
   // which change the button, not what the panel is playing.
   let remoteSig = "";
+  const SPORTS = [["football", "Football"], ["baseball", "Baseball"], ["basketball", "Basketball"],
+    ["hockey", "Hockey"], ["soccer", "Soccer"]];
+  // A team's league, from a target or key ("team:nfl:6", "nfl:6").
+  const keyLeague = (k) => k.replace(/^team:/, "").split(":")[0];
+  // Which league's team list a button shows ("" for none): one picked with
+  // Another NFL team, kept while the page is open, or the league of the
+  // button's own team when that team is button-only.
+  const remotePick = ["", "", "", ""];
+  const remoteGroups = () => {
+    const real = realFavKeys();
+    const rows = sportRows();
+    const groups = [["", [["fav", "Its own favorite"]]], ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])]];
+    for (const [sp, title] of SPORTS) {
+      const lgs = Object.keys(LEAGUES).filter((lg) => sportOf(lg) === sp && TEAMS.some((t) => t[0] === lg));
+      if (!lgs.length) continue;
+      const opts = lgs.map((lg) => ["league:" + lg, "All " + liveName(lg) + " live games"]);
+      const mine = real.filter((k) => lgs.includes(keyLeague(k)));
+      if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
+      for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      groups.push([title, opts]);
+    }
+    groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
+    // Effect playlists, in full so they never read as a team playlist; one
+    // with no effects can't play, so it isn't offered.
+    groups.push(["Showing", [["scoreboard", "Scoreboard"], ["clock", "Clock"], ["smartboard", "Smart board"], ["fx", "Effects"]]
+      .concat(fxLists().filter((l) => l.fx.length).map((l) => ["fxlist:" + l.n, "Effect playlist: " + l.n]))]);
+    return groups;
+  };
+  const setRemoteTeam = (b, key) => {
+    const t = teamByKey(key);
+    if (favKeys.includes(key)) {
+      setGD({ ["remote" + (b + 1)]: "team:" + key });
+      return;
+    }
+    if (favKeys.length >= favMax()) {
+      toast("Your favorites are full (" + favMax() + "). Remove one to put another team on a button.");
+      remotePick[b] = "";
+      remoteSig = "";
+      if (document.activeElement) document.activeElement.blur();
+      return renderRemote();
+    }
+    setGD({ ["remote" + (b + 1)]: "team:" + key });
+    toast("The " + (t ? t[3] : key) + " are on button " + (b + 1) + " only, not in your favorites elsewhere");
+  };
   const fxOpen = new Set();  // buttons whose Change controls are open
   const fxParse = (v) => {
     const [e, p, sp, it] = v.slice(3).split(",");
@@ -1789,13 +2101,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const renderRemote = (force) => {
     const host = $("#remoteBtns");
     const targets = remoteTargets();
-    const groups = [["", [["fav", "Its own favorite"]]],
-      ["Favorites", favKeys.map((k) => { const t = teamByKey(k); return ["team:" + k, t ? t[3] : k]; })],
-      ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
-      ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
-      ["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]],
-      ["Showing", [["scoreboard", "Scoreboard"], ["clock", "Clock"], ["smartboard", "Smart board"], ["fx", "Effects"]]]];
-    const sig = JSON.stringify([groups, targets, favSlots, [...fxOpen], entOptions("Effect").length, entOptions("Effect Palette").length]);
+    const groups = remoteGroups();
+    const sig = JSON.stringify([groups, targets, favSlots, btnKeys, remotePick, S.held || 0, [...fxOpen],
+      entOptions("Effect").length, entOptions("Effect Palette").length]);
     if (!force && (sig === remoteSig || (document.activeElement && host.contains(document.activeElement)))) return;
     remoteSig = sig;
     host.innerHTML = "";
@@ -1804,13 +2112,24 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       const f = isFx ? fxParse(r.v) : null;
       const row = el("div", "ctl rbtn");
       const label = el("label", null, "Button " + (b + 1));
-      const t = teamByKey(favSlots[b] || "");
-      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favSlots[b] ? "" : " (empty)");
+      // A button-only team's place counts as empty for its own favorite.
+      const ownKey = favSlots[b] && !btnKeys.includes(favSlots[b]) ? favSlots[b] : "";
+      const t = teamByKey(ownKey);
+      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : ownKey ? "" : " (empty)");
+      const solo = r.v.startsWith("team:") && btnKeys.includes(r.v.slice(5));
+      const inUse = S.held === b + 1 ? " In use now." : "";
       const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now"
+        : r.v.startsWith("fxlist:") ? "That effect playlist is gone or has no effects"
         : isFx ? "This panel doesn't have that effect" : "That team left your favorites")
-        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "." : "";
+        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "."
+          : solo ? "Button only: not in All favorites, playlists or take over." + inUse
+            : r.v.startsWith("league:") ? "Leaves your own Live games leagues as they are." + inUse : "";
       if (note) label.appendChild(el("small", null, note));
       row.appendChild(label);
+      // A button-only team shows as Another NFL team with the team picked in
+      // the second list; a favorite shows in its sport.
+      const pickLg = remotePick[b] || (solo ? keyLeague(r.v) : "");
+      const shown = pickLg ? "pick:" + pickLg : r.v;
       const sel = el("select");
       sel.setAttribute("aria-label", "Remote button " + (b + 1));
       let found = false;
@@ -1824,18 +2143,30 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           const o = el("option", null, v0 === "fx" && isFx ? "Effects: " + f.e + ", " + f.p : text);
           o.value = v;
           if (v0 === "fx") o.dataset.fx = "";
-          found = found || v === r.v;
+          found = found || v === shown;
           into.appendChild(o);
         }
       }
       if (!found) {
         // Set to something that is gone: shown as it is, so it comes back when its target does.
-        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^sport:/, "") + " (gone)");
+        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^fxlist:/, "Effect playlist: ")
+          .replace(/^sport:/, "") + " (gone)");
         o.value = r.v;
         sel.appendChild(o);
       }
-      sel.value = r.v;
+      sel.value = shown;
       sel.onchange = () => {
+        if (sel.value.startsWith("pick:")) {
+          // Opens the league's team list; nothing changes until a team is picked.
+          remotePick[b] = sel.value.slice(5);
+          remoteSig = "";
+          sel.blur();  // a redraw waits while focus is in the card
+          renderRemote();
+          const next = $("#rteam" + b);
+          if (next) next.focus();
+          return;
+        }
+        remotePick[b] = "";
         if (sel.value === "fx") {
           fxOpen.delete(b);
           setGD({ ["remote" + (b + 1)]: fxText(fxNow()) });
@@ -1843,7 +2174,30 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           setGD({ ["remote" + (b + 1)]: sel.value });
         }
       };
-      row.appendChild(sel);
+      const pickers = el("span", "rpick");
+      pickers.appendChild(sel);
+      if (pickLg) {
+        const team = el("select", "rteam");
+        team.id = "rteam" + b;
+        team.setAttribute("aria-label", "Remote button " + (b + 1) + " team");
+        const first = el("option", null, "Pick a team");
+        first.value = "";
+        team.appendChild(first);
+        for (const tm of TEAMS.filter((x) => x[0] === pickLg).slice().sort((x, y) => x[3].localeCompare(y[3]))) {
+          const o = el("option", null, tm[3]);
+          o.value = keyOf(tm);
+          team.appendChild(o);
+        }
+        team.value = r.v.startsWith("team:") && keyLeague(r.v) === pickLg ? r.v.slice(5) : "";
+        // The league's list stays open with the pick, also while the panel answers.
+        team.onchange = () => {
+          if (!team.value) return;
+          team.blur();  // so the card redraws with the panel's answer
+          setRemoteTeam(b, team.value);
+        };
+        pickers.appendChild(team);
+      }
+      row.appendChild(pickers);
       host.appendChild(row);
       if (!isFx) return;
       const more = el("div", "rfx");
@@ -1871,9 +2225,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
     favSlots = (S.favs || []).map(refKey);
+    btnKeys = (S.favs || []).filter((f) => f && f.id && f.btn).map(refKey);
     const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = favSlots.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets());
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -2314,10 +2669,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // GET /gameday/settings is the file; POST takes one back, checked whole on
   // the panel before anything changes. Firmware without it answers 404 and the
   // section stays hidden.
-  // The panel takes a backup of up to 8192 bytes (settings_doc.h
+  // The panel takes a backup of up to 12288 bytes (settings_doc.h
   // kSettingsMaxBytes), sent compact. A file can be bigger than that on disk:
   // pages before this one saved it indented.
-  const BACKUP_MAX = 8192;
+  const BACKUP_MAX = 12288;
   const BACKUP_FILE_MAX = 65536;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
   // tries: how many more times to ask when the panel doesn't answer.
@@ -2858,7 +3213,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // After a favorites change, mark the tiles in place so the list keeps its scroll.
   const markPicked = () => {
     document.querySelectorAll("#tiles [data-key]").forEach((b) => {
-      const on = favKeys.includes(b.dataset.key);
+      const on = realFavKeys().includes(b.dataset.key);
       b.classList.toggle("on", on);
       b.setAttribute("aria-pressed", String(on));
     });
@@ -2874,9 +3229,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const searchTeams = (q) => TEAMS.filter((t) => (t[3] + " " + t[2]).toLowerCase().includes(q));
   // One team's tile: logo, name, league and abbreviation; a tap adds or takes it out.
   const teamTile = (t) => {
-    const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
+    const on = realFavKeys().includes(keyOf(t));
+    const tile = el("button", "tile" + (on ? " on" : ""));
     tile.dataset.key = keyOf(t);
-    tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+    tile.setAttribute("aria-pressed", String(on));
     const img = el("img");
     img.loading = "lazy";
     img.src = logoUrl(t[0], t[1], t[2]);
@@ -3113,6 +3469,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     renderData();
     renderHealth();
     renderWifi();
+    renderFxLists();
   };
 
   const renderData = () => {
@@ -3717,6 +4074,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.
       case "Game Status": scheduleState(150); break;
+      // The panel publishes it whenever an effect playlist starts or stops
+      // (a hand pick, Showing leaving Effects): re-read which one plays.
+      case "Effect playlist": if (S && S.fxlists !== undefined) scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": {
         $("#wizStatus").textContent = e.value || "";

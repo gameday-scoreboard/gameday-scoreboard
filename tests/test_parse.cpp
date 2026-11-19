@@ -4135,6 +4135,7 @@ static void test_lookahead() {
 
 int run_football_golden();  // golden_football.cpp
 int run_set_tests(int &checks);  // test_set.cpp
+int run_fx_tests(int &checks);   // test_fx_playlists.cpp
 
 static void test_logo_lru() {
   using espn::LogoSlot;
@@ -9614,6 +9615,7 @@ int main() {
   test_live_scan();
   test_best_game_switch();
   failures += run_set_tests(checks);
+  failures += run_fx_tests(checks);
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

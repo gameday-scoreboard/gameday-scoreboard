@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,7 @@
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "fx_playlists.h"
 #include "game_leaders.h"
 #include "row_text.h"
 #include "guard.h"
@@ -187,10 +189,20 @@ struct UpdateFields {
   uint8_t kick_icon{::espn::kWxIconNone};
 };
 
-enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST };
+enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST, FX_PLAYLIST };
 
 // PSRAM text (psram.h): the message card's list, the state document.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
+
+// One object for the component's whole life, put in PSRAM once at startup
+// (internal RAM only if PSRAM is full) and never freed. Built in place, so
+// it starts with the same values it would have as a plain member.
+template<class T> T &psram_object() {
+  T *p = RAMAllocator<T>().allocate(1);
+  if (p == nullptr)
+    abort();
+  return *new (p) T();
+}
 
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
 // jump to the first four.
@@ -215,7 +227,8 @@ class GamedaySelect : public select::Select, public Component {
 // The component is also the web handler for /gameday/*: the device page reads
 // one JSON document and posts settings there instead of driving entities.
 //   GET  /gameday/state              full snapshot + settings, and "wifi" (wifi_history.h)
-//   GET  /gameday/heap               free heap now: internal, largest internal block, PSRAM (KiB);
+//   GET  /gameday/heap               free heap now: internal, least internal since boot, largest
+//                                    internal block, PSRAM (KiB);
 //                                    stack never touched since boot (bytes): loop, web server, fetch task
 //   POST /gameday/set?key=value...   team=nfl:6|none mode=0-4 rotate=2-30 fav1..fav4=nfl:6|none
 //                                    tz=<name, IANA name or index> tzauto=0/1
@@ -228,6 +241,8 @@ class GamedaySelect : public select::Select, public Component {
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
 //                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
+//                                    fxlists=Name=Matrix|Party|128|128|15,...,@shuffle;Name2=... (every
+//                                    effect playlist, fx_playlists.h) fxlist=0-4 (play one, 0 stops)
 //                                    remote1..remote4=fav|team:nfl:6|list:Name|sport:football|all|none
 //                                    (what a WizMote button does, set_request.h RemoteTarget)
 //   POST /gameday/action?do=refresh|qc   (qc: the factory check, firmware/pages/qc.yaml)
@@ -288,6 +303,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_timezone_select(select::Select *s) { this->timezone_select_ = s; }
   void set_mode_select(select::Select *s) { this->mode_select_ = s; }
   void set_playlist_select(select::Select *s) { this->playlist_select_ = s; }
+  // Effect playlists (fx_playlists.h). The Effects page (pages/effects.yaml)
+  // hands over its four effect controls and the page select at boot; the
+  // component writes the controls itself for each step and stops the
+  // playlist when one changes outside a step, or the page leaves Effects.
+  void set_fx_playlist_select(select::Select *s) { this->fx_().select = s; }
+  void set_fx_controls(select::Select *effect, select::Select *palette, number::Number *speed,
+                       number::Number *intensity, select::Select *page);
+  // The Home Assistant select's option: a playlist's name, or "None" to stop.
+  void select_fx_playlist(const std::string &option);
   void add_on_update_callback(std::function<void(const UpdateFields &)> &&cb) {
     this->callbacks_.push_back(std::move(cb));
   }
@@ -322,7 +346,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Live mode's leagues as keys ("nfl,mlb"); "" = the leagues you follow.
   void set_live_leagues(const std::string &keys);
   void set_live_mask_(uint16_t mask);
-  std::vector<League> live_leagues_() const;  // the leagues Live mode scans
+  // The leagues Live mode scans: a league button's one while it is in use
+  // (held_league_), else the owner's own (own_live_leagues_).
+  std::vector<League> live_leagues_() const;
+  std::vector<League> own_live_leagues_() const;
   bool today_only() const { return (this->prefs7_.flags & FAV7_TODAY) != 0; }
   bool jump_to_action() const { return (this->prefs7_.flags & FAV7_JUMP) != 0; }
   bool score_banner() const { return (this->prefs7_.flags & FAV7_NO_BANNER) == 0; }
@@ -801,7 +828,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // favorites it is 6 KB or more, and a copy in internal RAM grown for the
   // health numbers needed a block twice that while the favorites were read.
   PsString state_json_{"{}"};
-  UpdateFields last_fields_;
+  // The large plain data below lives in PSRAM (psram_object): read once
+  // per update, it has no need of the internal RAM Wi-Fi and TLS run on.
+  UpdateFields &last_fields_{psram_object<UpdateFields>()};
   web_server_base::WebServerBase *base_{nullptr};
   panel_layout::PanelLayout *panels_{nullptr};
   light::LightState *display_{nullptr};
@@ -1016,14 +1045,34 @@ class GamedayComponent : public Component, public AsyncWebHandler {
 
   // The four WizMote buttons' targets (set_request.h RemoteTarget), in
   // their own fixed-size blob. A panel without it has each button on its
-  // own favorite, as before.
+  // own favorite, as before. solo and held took its spare bytes, zero in a
+  // blob saved before them: no button-only teams, no button in use.
   struct Prefs11 {
     ::espn::RemoteTarget btn[4];
-    uint8_t spare[4];
+    // The favorites a button added (playlists.h, button-only teams), bit i =
+    // favorite i, moved with the list like a playlist's mask.
+    uint16_t solo;
+    // The button in use, 1-4, 0 none: its league (league:) or its
+    // button-only team holds the panel until a mode, a playlist or another
+    // button is picked, through a restart too.
+    uint8_t held;
+    uint8_t spare[1];
   } __attribute__((packed));
   static_assert(sizeof(Prefs11) == 96, "Prefs11 is a fixed-size blob");
   ESPPreferenceObject pref11_;
   Prefs11 prefs11_{};
+  bool fav_solo_(uint8_t i) const { return i < 16 && ((this->prefs11_.solo >> i) & 1u) != 0; }
+  // Favorite i is there and not button-only: a favorite everywhere.
+  bool fav_counts_(uint8_t i) const { return this->fav_id_(i) != 0 && !this->fav_solo_(i); }
+  // While its button is in use: the button-only favorite playing on its own
+  // in Favorite teams (0-based), or the league Live games reads; -1 for none.
+  int held_fav_() const;
+  int held_league_() const;
+  // A mode, a playlist or another button was picked: the button in use lets
+  // go. refresh: the board picks or scans again for what it held.
+  void clear_held_(bool refresh);
+  // Plays what Favorite teams plays now from its first card, as a playlist pick does.
+  void repick_favorites_();
 
   // Each playlist's color and icon (playlists.h list_color, list_icon), a
   // byte per playlist in their own fixed-size blob: mark[n] belongs to
@@ -1036,11 +1085,39 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   static_assert(sizeof(Prefs12) == 16, "Prefs12 is a fixed-size blob");
   ESPPreferenceObject pref12_;
   Prefs12 prefs12_{};
+
+  // Effect playlists (fx_playlists.h): the saved playlists, their flash
+  // blob and the entities they drive, in PSRAM, made on first use. Only
+  // the player (8 bytes) is internal RAM.
+  struct FxState {
+    ::espn::FxStore store;
+    ESPPreferenceObject pref;
+    select::Select *select{nullptr};  // Home Assistant's "Effect playlist"
+    select::Select *effect{nullptr};
+    select::Select *palette{nullptr};
+    number::Number *speed{nullptr};
+    number::Number *intensity{nullptr};
+    select::Select *page{nullptr};  // "Select Page" (Showing)
+  };
+  FxState *fx_state_{nullptr};
+  ::espn::FxPlayer fx_player_;
+  FxState &fx_();
+  void load_fx_();
+  // Plays effect playlist n (1..count) from the top, putting the panel on
+  // its Effects page; 0 stops the one playing.
+  void play_fx_list_(uint8_t n);
+  void stop_fx_list_(const char *why);
+  void set_fx_lists_(const std::string &text);
+  void fx_tick_();
+  void fx_show_();
+  void fx_changed_();
   // The color and icon of playlist n (1..count); 0 for anything else.
   uint8_t list_mark_(uint8_t n) const {
     return n >= 1 && n <= this->prefs9_.count ? this->prefs12_.mark[n - 1] : 0;
   }
   void set_remote_(uint8_t button, const ::espn::RemoteTarget &t);
+  // keepfav: a button-only team becomes a full favorite.
+  void keep_favorite_(uint8_t league, uint32_t id);
   // What button n does now (playlists.h remote_resolve).
   ::espn::RemoteAction remote_action_(uint8_t button) const;
   // Ask pages/wizmote.yaml to put Showing on a page (remote_page()). For the
@@ -1050,6 +1127,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint8_t remote_page_{(uint8_t) ::espn::RemoteKind::NONE};
   ::espn::RemoteTarget remote_fx_{};
   std::vector<std::string> list_names_() const;
+  std::vector<std::string> fx_list_names_() const;
 
   bool flag_(uint8_t f) const { return (this->prefs_.flags & f) != 0; }
   void set_flag_(uint8_t f, bool on);
@@ -1065,7 +1143,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void apply_timezone_();
   // The team Live games shows when nothing is live: favorite #1, the first
   // team in the list. nullptr with no favorites.
-  const ::espn::Team *fallback_team_() const { return this->fav_.empty() ? nullptr : this->fav_[0].team; }
+  // Favorite #1, the first that isn't button-only.
+  const ::espn::Team *fallback_team_() const {
+    for (const auto &e : this->fav_)
+      if (!e.solo)
+        return e.team;
+    return nullptr;
+  }
+  // A favorite that counts (not button-only), or the button-only one in use.
+  bool fav_any_() const { return this->fallback_team_() != nullptr || this->held_fav_() >= 0; }
 
   // One fetch cycle runs on its own FreeRTOS task so the display loop never
   // waits on the network. The main loop fills a Job, the worker performs the
@@ -1202,6 +1288,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   };
   void start_job_();
   void start_worker_();
+  // ESPN's reads run on a fetch task whose stack is in PSRAM, which is safe
+  // because nothing a job runs reads or writes flash (an NVS read counts:
+  // it turns the cache off, and IDF aborts a task whose stack is in PSRAM
+  // when it tries). The task stays up after its job and waits for the next,
+  // like the logo and webhook tasks, so a job allocates no internal RAM.
+  // A job the loop gave up on keeps its task until it ends, and the next job
+  // starts on another; three tasks at most, each made only when it's needed.
+  struct FetchSlot {
+    StaticTask task;
+    GamedayComponent *owner{nullptr};
+    std::atomic<bool> idle{false};  // its job ended and it waits for the next
+  };
+  static constexpr size_t kFetchSlots = 3;
+  FetchSlot fetch_slots_[kFetchSlots];
   static void worker_(void *arg);
   void run_job_();
   void apply_job_();
@@ -1261,7 +1361,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   }
   // Mode 4 with at least one favorite set; with none it runs as Live games
   // (no_team_default).
-  bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && !this->fav_.empty(); }
+  bool favorites_mode_() const { return this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_any_(); }
   uint32_t our_id_() const;     // worker: the job's team id the snapshot is oriented around
   uint32_t orient_id_() const;  // main loop: works that id out for start_job_
   // Sends the request; on a 200, returns the reply to read. With a fetch whose
@@ -1585,7 +1685,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int64_t action_epoch{0};  // the last poll that found the game at its action, 0 = none
     uint32_t side_ms{0};      // the last poll while another favorite had the board
     uint8_t side_fails{0};    // those polls failed in a row (poll_timing.h, side_poll_wait_ms)
+    bool solo{false};         // a button-only team (playlists.h): plays only while its button is in use
   };
+  // A button-only entry that isn't the one in use: no favorite anywhere.
+  bool fav_off_(const FavEntry &e) const { return e.solo && this->held_fav_() != (int) e.slot - 1; }
   // The favorite cards are ~1 KB each and internal heap is the panel's
   // scarcest resource: PSRAM (psram.h).
   using FavList = std::vector<FavEntry, PsramAllocator<FavEntry>>;
@@ -1725,8 +1828,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void handle_demo_(AsyncWebServerRequest *request);
   void apply_demo_(const std::vector<std::pair<std::string, std::string>> &kv);
 #endif
-  GameSnapshot game_;
-  GameSnapshot prev_;
+  GameSnapshot &game_{psram_object<GameSnapshot>()};  // PSRAM, as last_fields_
+  GameSnapshot &prev_{psram_object<GameSnapshot>()};
   uint32_t post_since_ms_{0};
   uint32_t next_fetch_ms_{0};
   uint8_t misses_{0};
@@ -1744,7 +1847,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t gave_up_ms_{0};     // millis() when the loop last wrote a worker off, 0 = never
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
-  Job job_;
+  Job &job_{psram_object<Job>()};  // PSRAM, as last_fields_
   // Bumped by the main loop when what the board follows changes. Atomic, so
   // a worker in the middle of a many-read job can see it and stop early.
   std::atomic<uint32_t> generation_{0};
@@ -1772,12 +1875,16 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::atomic<int> espn_status_{0};
   std::atomic<uint32_t> espn_answer_ms_{0};
 
-  // Sign-in Wi-Fi (captive.h). The probe runs on its own short task, since
-  // it is needed before the clock is set, when no fetch job runs.
+  // Sign-in Wi-Fi (captive.h). The probe runs on its own task, since it is
+  // needed before the clock is set, when no fetch job runs. The task starts
+  // with the first probe and then waits for the next, its stack in PSRAM: a
+  // probe is one plain HTTP read and never touches flash.
   void captive_tick_();
   void set_captive_(bool on);
   void start_probe_();
-  static void probe_task_(void *arg);
+  void run_probe_();
+  static void probe_task_fn_(void *arg);
+  StaticTask probe_task_;
   bool captive_{false};
   // The probe saw a sign-in page while ESPN reads were still fine: ESPN is
   // asked at once, and captive_ is set only if that read fails.
@@ -1798,7 +1905,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::atomic<uint32_t> espn_ok_reads_{0};
   // The loop task, for its stack reading in /gameday/heap (set in setup()).
   TaskHandle_t loop_task_{nullptr};
-  // The least stack any fetch task left untouched, read as it ends; UINT32_MAX
+  // The least stack any fetch task left untouched, read as each job ends; UINT32_MAX
   // until one has run.
   std::atomic<uint32_t> fetch_stack_low_{UINT32_MAX};
 };

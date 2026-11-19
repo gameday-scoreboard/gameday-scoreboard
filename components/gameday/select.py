@@ -16,6 +16,7 @@ SelectType = gameday_ns.enum("SelectType", is_class=True)
 SELECT_TYPES = {
     "mode": SelectType.MODE,
     "playlist": SelectType.PLAYLIST,
+    "fx_playlist": SelectType.FX_PLAYLIST,
 }
 # Must match gameday.cpp's MODE_FAVORITES and MODE_LIVE. A panel still on one
 # of the older live modes (1 to 3) shows Live games.
@@ -44,11 +45,18 @@ async def to_code(config):
     # and comparing them with == is always truthy.
     kind = config[CONF_TYPE]
     # The playlists are the owner's own: the component sets the names at boot.
-    options = ["All favorites"] if kind == "playlist" else MODE_OPTIONS
+    if kind == "playlist":
+        options = ["All favorites"]
+    elif kind == "fx_playlist":
+        options = ["None"]
+    else:
+        options = MODE_OPTIONS
     await select.register_select(var, config, options=options)
     cg.add(var.set_type(SELECT_TYPES[kind]))
     cg.add(var.set_parent(parent))
     if kind == "playlist":
         cg.add(parent.set_playlist_select(var))
+    elif kind == "fx_playlist":
+        cg.add(parent.set_fx_playlist_select(var))
     else:
         cg.add(parent.set_mode_select(var))

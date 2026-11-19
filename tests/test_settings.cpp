@@ -105,12 +105,14 @@ void test_export() {
     bool own = k == "schema" || k == "version" || k == "name" || k == "brightness" || k == "scroll";
     SCHECK(own || set_keys.count(k), "the export writes %s, which POST /gameday/set doesn't take", k.c_str());
   }
-  // Every set key but the remote's four slots (favs has them) is exported.
+  // Every set key but the remote's four slots (favs has them) is exported,
+  // and the ones that only do something once (set_key_once), like fxlist.
   for (const char *k : kSetKeys) {
     std::string key = k;
     bool slot = key.size() == 4 && key.compare(0, 3, "fav") == 0;
-    SCHECK(slot || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
+    SCHECK(slot || set_key_once(k) || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
   }
+  SCHECK(out["fxlist"].isNull(), "the export keeps which effect playlist plays");
 
   // An empty slot between two favorites, a live list of its own, and a build
   // without the numbers or a panel layout. With no favorite picked the
@@ -130,7 +132,7 @@ void test_export() {
 
 void test_types() {
   for (const char *k : kSetKeys)
-    SCHECK(setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
+    SCHECK(set_key_once(k) || setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
   SCHECK(setting_type("brightness") == SettingType::NONE, "brightness is not a set key");
 }
 
@@ -141,8 +143,11 @@ void test_round_trip() {
   SCHECK(in.error.empty(), "the settings fixture was refused: %s", in.error.c_str());
   SCHECK(in.skipped.empty(), "the settings fixture left out %zu keys, the first %s", in.skipped.size(),
          in.skipped.empty() ? "" : in.skipped[0].c_str());
-  // Every set key but fav1 to fav4, which favs covers
+  // Every set key but fav1 to fav4, which favs covers, and the ones that
+  // only do something once (set_key_once)
   size_t want = sizeof(kSetKeys) / sizeof(kSetKeys[0]) - 4;
+  for (const char *k : kSetKeys)
+    want -= set_key_once(k) ? 1 : 0;
   SCHECK(in.ops.size() == want, "the fixture gives %zu ops, not %zu", in.ops.size(), want);
   SCHECK(in.brightness == 128 && in.scroll == 5, "brightness %d scroll %d", in.brightness, in.scroll);
   SCHECK(!in.restart, "the same panel count restarts the panel");
@@ -165,7 +170,7 @@ void test_round_trip() {
   size_t j = 0;
   for (const char *key : kSetKeys) {
     std::string k = key;
-    if (k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs")  // fav1 to fav4: favs has them
+    if ((k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs") || set_key_once(key))  // fav1 to fav4: favs has them
       continue;
     JsonVariantConst v = fx[key];
     SCHECK(!v.isNull(), "the fixture has no %s", key);
@@ -195,6 +200,9 @@ void test_round_trip() {
       case SettingType::CARDS:
         text = "next:1,clock:0,countdown:1,custom:1,message:1,picture:1,gameleaders:1,top25:1,schedule:1,"
                "seasonrecap:1,news:0,weather:1";
+        break;
+      case SettingType::FX_PLAYLISTS:
+        text = "Party=Matrix|Party|200|100|30,Plasma Ball|Sunset|128|128|15,@shuffle;Calm=Drift|Ocean|64|128|300";
         break;
       case SettingType::NONE:
         break;
@@ -454,6 +462,39 @@ void test_night_hours() {
          "good hours didn't come back");
 }
 
+// Effect playlists come back as fxlists= text: the defaults filled in, the
+// seconds snapped to a step, the extras, a separator in a name and the name
+// "None" left out and listed, a wrong type refusing the document.
+void test_fx_playlists() {
+  SettingsImport in = import(R"({"schema":1,"fxlists":[
+    {"n":"Party","shuffle":true,"fx":[{"e":"Matrix"},{"e":"Drift","p":"Sunset","s":1,"i":2,"w":50},{"e":"Bad|Name"}]},
+    {"n":" ; "},{"n":"None"},{"n":"B","fx":[]},{"n":"C"},{"n":"D","shuffle":false},{"n":"E"}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  const SetOp *fx = find(in, SetKind::FX_LISTS);
+  SCHECK(fx != nullptr && fx->text == "Party=Matrix||128|128|15,Drift|Sunset|1|2|45,@shuffle;B=;C=;D=",
+         "fxlists came back as %s", fx != nullptr ? fx->text.c_str() : "nothing");
+  std::string skipped;
+  for (const auto &s : in.skipped)
+    skipped += s + " ";
+  SCHECK(skipped == "fxlists=Party:Bad|Name fxlists= fxlists=None fxlists=E ", "skipped: %s", skipped.c_str());
+  std::string nine;
+  for (int i = 0; i < 9; i++)
+    nine += std::string(i ? "," : "") + "{\"e\":\"Matrix\"}";
+  in = import(R"({"schema":1,"fxlists":[{"n":"Nine","fx":[)" + nine + "]}]}");
+  SCHECK(in.skipped.size() == 1 && in.skipped[0] == "fxlists=Nine:Matrix", "the ninth effect isn't left out");
+  refused(R"({"schema":1,"fxlists":{"n":"Party"}})", "effect playlists as an object");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","fx":[{"e":5}]}]})", "an effect as a number");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","fx":[{"e":"Matrix","s":"fast"}]}]})", "speed as text");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","fx":[{"e":"Matrix","i":300}]}]})", "intensity past 255");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","shuffle":1}]})", "shuffle as a number");
+  // Which one plays isn't a setting (set_key_once): a document naming one
+  // plays nothing and lists it as left out.
+  in = import(R"({"schema":1,"fxlist":2})");
+  SCHECK(in.error.empty() && find(in, SetKind::FX_LIST) == nullptr && in.skipped.size() == 1 &&
+             in.skipped[0] == "fxlist",
+         "fxlist in a backup should be left out");
+}
+
 // Playlists come back by name and team, as lists= text in the order given.
 void test_playlists() {
   SettingsImport in = import(R"({"schema":1,"lists":[{"n":"Pros","t":["nfl:6","mlb:999999"]},{"n":" ; ","t":["nfl:6"]},
@@ -552,7 +593,25 @@ void test_remote() {
   SCHECK(in.error.empty() && in.ops.size() == 3 && in.ops[1].text == "fx:DNA,Ocean,40,200" &&
              skipped(in, "remote4=fx:Lava Lamp,Fire,1,2"),
          "pages come back, and an effect this panel lacks is left out and listed: %s", in.error.c_str());
+  in = import(R"({"schema":1,"remote1":"fxlist:Party","remote2":"fxlist:"})");
+  SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "fxlist:Party" && skipped(in, "remote2=fxlist:"),
+         "an effect playlist button comes back, one with no name is left out and listed: %s", in.error.c_str());
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
+  in = import(R"({"schema":1,"remote1":"league:nhl","keepfav":"nfl:21"})");
+  SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "league:nhl" && skipped(in, "keepfav"),
+         "a league button comes back, and keepfav is no setting to restore");
+
+  // A button-only team (btn) stays out of the backup's favs; its button's
+  // team brings it back as one. The slots around it keep their places.
+  JsonDocument s, out;
+  deserializeJson(s, R"({"favs":[{"l":"nfl","id":6},{"l":"nfl","id":21,"btn":true},{"l":"mlb","id":15},
+    {"l":"nba","id":6,"btn":true}],"remote":[{"v":"team:nfl:21"},{"v":"fav"},{"v":"fav"},{"v":"team:nba:6"}]})");
+  settings_from_state(s.as<JsonObjectConst>(), 0, -1, -1, out);
+  std::string got;
+  serializeJson(out["favs"], got);
+  SCHECK(got == R"(["nfl:6","","mlb:15"])", "button-only teams in the backup's favs: %s", got.c_str());
+  SCHECK(std::string(out["remote1"] | "") == "team:nfl:21" && std::string(out["remote4"] | "") == "team:nba:6",
+         "their buttons stay in the backup");
 }
 
 // The fullest export the panel can write comes back through its own import:
@@ -583,6 +642,22 @@ void test_fullest_fits() {
     l["icon"] = "trophy";
   }
   state["list"] = kListMax;
+  // Four effect playlists of eight effects, every name at its cap.
+  JsonArray fxl = state["fxlists"].to<JsonArray>();
+  for (int i = 0; i < kFxListMax; i++) {
+    JsonObject l = fxl.add<JsonObject>();
+    l["n"] = std::string(kListNameMax, '"');
+    l["shuffle"] = true;
+    JsonArray fx = l["fx"].to<JsonArray>();
+    for (int j = 0; j < kFxEntryMax; j++) {
+      JsonObject e = fx.add<JsonObject>();
+      e["e"] = std::string(kFxEffectNameMax, 'W');
+      e["p"] = "* Color Gradient";  // the longest palette name
+      e["s"] = 255;
+      e["i"] = 255;
+      e["w"] = 3600;
+    }
+  }
   state["msg"] = std::string(kMsgTextMax, '"');
   state["msgurl"] = "http://" + std::string(kMsgUrlMax - 7, 'a');
   state["nick"] = std::string(kNickMax, '"');
@@ -682,6 +757,7 @@ int main() {
   test_other_panel();
   test_night_hours();
   test_playlists();
+  test_fx_playlists();
   test_remote();
   test_fullest_fits();
   test_reply();

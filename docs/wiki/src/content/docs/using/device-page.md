@@ -44,7 +44,7 @@ A strip along the bottom edge of the board has:
 
 Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects** or **Smart board**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
 
-**Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. See [Effects](/using/effects/).
+**Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. Once you have an effect playlist, an **Effect playlist** picker there starts or stops one; you make them on the Customize tab under **Effect playlists**. See [Effects](/using/effects/).
 
 A line under the board says when the panel is holding its brightness down: **Too warm, dimming**, or **Check the power supply** with a **Clear** button after two restarts in a row from a power dip. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
 
@@ -192,6 +192,7 @@ Your own words, pictures and dates on the panel.
 - **Message card**: your own text, or a list from a web address, that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
 - **Pictures**: up to 4 of your own pictures or GIFs for the panel to show between games. **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
 - **Date countdown**: a **Name** and a **Day** to count down to, like Christmas, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/#your-own-countdown).
+- **Effect playlists**: up to 4 named lists of effects the panel steps through on its Effects page, each effect with its own palette, speed, intensity and time on screen, and a **Shuffle** switch. **Play** starts one. See [Effects](/using/effects/#effect-playlists).
 
 The Message card, Pictures and Date countdown each have a **Show between games** switch at the top, the same switch as that card's row in [Between games](#between-games).
 

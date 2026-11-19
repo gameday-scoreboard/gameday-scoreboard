@@ -37,16 +37,21 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A WizMote button can now bring the panel back to Live games, or put up the Clock, the Smart board or an effect of its own.
+Effect playlists step the panel through your own list of effects, and a WizMote button can now bring back Live games, follow one league's live games, play any team, or put up the Clock, the Smart board, an effect or an effect playlist.
 
 ### ✨ New
 
+- 🎆 **Effect playlists**: up to 4 named lists of effects (any name but **None**, the choice that stops one), each one up for 1 second to an hour, in order or shuffled, made on the Customize tab and played from there, the Home tab, a **Remote** button or Home Assistant
 - 🎮 **Live games**, **Scoreboard**, **Clock**, **Smart board** and **Effects** in the **Remote** button pickers: Live games switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip; a page choice puts that page up, and an Effects button keeps its own effect, palette, speed and intensity, set with **Change** under it
+- 🏈 The **Remote** button pickers are grouped by sport, with every league: **All NFL live games** follows that league only, leaving your own Live games leagues as they are, and **Another NFL team...** puts any team on a button, marked **Button only** under **Favorites**
 - 🔁 A remote button set to a team, playlist, sport or Live games now brings the panel back to the scoreboard when the Clock, Smart board or an effect is up, and ends **After the game**'s clock or Smart board until the next game's final
+
 
 ### 🐛 Fixes
 
 - 📶 The round arrow above the app's Wi-Fi list now has the panel look for networks again, so a phone hotspot turned on after the panel started shows up
+- 🔓 After **Reset Wi-Fi** the panel stays in setup for the app instead of joining an open Wi-Fi network nearby that it never saved
+- 🌅 A panel turned back on now shows what's current: a Smart board row no longer stays frozen mid-scroll on the text it had when it went dark
 
 ## v2026.11.4
 

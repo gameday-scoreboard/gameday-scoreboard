@@ -93,6 +93,15 @@ back, a night on two panels with no restarts and steady memory, and a
 live game on screen. A new monthly ESPHome release waits for its first
 patch release.
 
+ESPHome passes the raw ESP-IDF options under `sdkconfig_options` (in
+`gameday-common.yaml` and the controller files) to ESP-IDF unchecked, so a
+renamed or dropped option would still build. Each board's build in CI runs
+`scripts/sdkconfig_check.py` after the compile, the bump PR's included: it
+fails, naming the option, when the generated sdkconfig is missing one we
+set, has another value, or keeps it only under a deprecated name. Run it
+after a local build with
+`python3 scripts/sdkconfig_check.py firmware/gameday.yaml firmware/.esphome/build/gameday-moonhub75`.
+
 A fix we want that is only in an ESPHome beta, in order:
 
 1. Copy the component into `components/` and stay on the final release.

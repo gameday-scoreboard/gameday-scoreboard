@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "fx_names_stub.h"
+#include "fx_playlists.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -84,8 +85,12 @@ struct Settings {
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
   WakePrefs wake{wake_defaults()};
+  // Effect playlists (fx_playlists.h) and the one playing.
+  FxStore fx{};
+  FxPlayer player;
 };
 constexpr int kFavMax = 16;
+
 constexpr int kMaxCols = 2;
 
 TeamRef team_ref(const char *s) {
@@ -255,6 +260,23 @@ void load(Settings &s, JsonObjectConst o) {
   s.wake.lead = (uint8_t) lead;
   if (o["after"].is<const char *>())
     s.wake.after = (uint8_t) after_parse(o["after"].as<const char *>());
+  // Effect playlists as the state has them, through their set text.
+  if (o["fxlists"].is<JsonArrayConst>()) {
+    std::string text;
+    for (JsonObjectConst l : o["fxlists"].as<JsonArrayConst>()) {
+      text += (text.empty() ? "" : ";") + std::string(l["n"] | "") + "=";
+      std::string body;
+      for (JsonObjectConst e : l["fx"].as<JsonArrayConst>())
+        body += (body.empty() ? "" : ",") + std::string(e["e"] | "") + "|" + (e["p"] | "") + "|" +
+                std::to_string(e["s"] | 128) + "|" + std::to_string(e["i"] | 128) + "|" + std::to_string(e["w"] | 15);
+      if (l["shuffle"] | false)
+        body += body.empty() ? "@shuffle" : ",@shuffle";
+      text += body;
+    }
+    parse_fx_lists(text, fx_names(), s.fx);
+  }
+  if (o["fxlist"].is<int>() && !fx_start(s.fx, s.player, (uint8_t) o["fxlist"].as<int>(), 0))
+    s.player = FxPlayer{};
 }
 
 std::vector<TeamRef> fav_refs(const Settings &s) { return std::vector<TeamRef>(s.favs, s.favs + kFavMax); }
@@ -333,7 +355,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       // set_remote_: a playlist's name as the playlists keep it.
       RemoteTarget t;
       remote_parse(op.text, t);
-      if (t.kind == (uint8_t) RemoteKind::LIST) {
+      if (t.kind == (uint8_t) RemoteKind::LIST || t.kind == (uint8_t) RemoteKind::FXLIST) {
         std::string name = list_name_clean(remote_name(t));
         memset(t.name, 0, sizeof(t.name));
         memcpy(t.name, name.data(), name.size());
@@ -380,6 +402,37 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::WINBAR: s.winbar = op.on; break;
     case SetKind::SPARK: s.spark = op.on; break;
     case SetKind::BIGPLAYS: s.bigplays = op.on; break;
+    case SetKind::FX_LISTS: {
+      // set_fx_lists_: the one playing follows fx_after_edit; a changed one
+      // starts over (still playing).
+      FxList before{};
+      if (s.player.list >= 1 && s.player.list <= s.fx.count)
+        before = s.fx.list[s.player.list - 1];
+      std::vector<std::string> old_names, new_names;
+      for (uint8_t n = 0; n < s.fx.count; n++)
+        old_names.push_back(s.fx.list[n].name);
+      parse_fx_lists(op.text, fx_names(), s.fx);
+      for (uint8_t n = 0; n < s.fx.count; n++)
+        new_names.push_back(s.fx.list[n].name);
+      // A WizMote button on a renamed effect playlist follows it.
+      for (auto &b : s.remote) {
+        if (b.kind != (uint8_t) RemoteKind::FXLIST)
+          continue;
+        std::string to = list_renamed(old_names, new_names, remote_name(b));
+        if (to.empty())
+          continue;
+        memset(b.name, 0, sizeof(b.name));
+        memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+      }
+      if (fx_after_edit(s.fx, s.player, before) == FxEdit::RESTART)
+        fx_start(s.fx, s.player, s.player.list, 0);
+      break;
+    }
+    case SetKind::FX_LIST:
+      // play_fx_list_: past the last one is refused; 0 stops; an empty one doesn't start.
+      if (op.value <= s.fx.count && !fx_start(s.fx, s.player, (uint8_t) op.value, 0))
+        s.player = FxPlayer{};
+      break;
     case SetKind::BOOTADDR: s.bootaddr = op.on; break;
     case SetKind::AUTOUPD: s.autoupd = op.on; break;
     case SetKind::BETA: s.beta = op.on; break;
@@ -461,14 +514,35 @@ void state_doc(const Settings &s, JsonDocument &doc) {
     o["icon"] = list_icon_key(l.mark);
   }
   doc["list"] = s.list;
-  std::vector<std::string> names;
+  // rebuild_state_'s effect playlists.
+  FxNames fxn = fx_names();
+  JsonArray fxl = doc["fxlists"].to<JsonArray>();
+  for (uint8_t n = 0; n < s.fx.count; n++) {
+    JsonObject o = fxl.add<JsonObject>();
+    o["n"] = s.fx.list[n].name;
+    o["shuffle"] = (s.fx.list[n].flags & FXLIST_SHUFFLE) != 0;
+    JsonArray fx = o["fx"].to<JsonArray>();
+    for (uint8_t i = 0; i < s.fx.list[n].count; i++) {
+      const FxEntry &e = s.fx.list[n].fx[i];
+      JsonObject x = fx.add<JsonObject>();
+      x["e"] = e.effect;
+      x["p"] = fxn.palette_name(e.palette);
+      x["s"] = e.speed;
+      x["i"] = e.intensity;
+      x["w"] = kFxWaitSeconds[e.wait];
+    }
+  }
+  doc["fxlist"] = s.player.list;
+  std::vector<std::string> names, fx_lists;
   for (const auto &l : s.lists)
     names.push_back(l.first);
+  for (uint8_t n = 0; n < s.fx.count; n++)
+    fx_lists.push_back(s.fx.list[n].count > 0 ? s.fx.list[n].name : "");
   JsonArray remote = doc["remote"].to<JsonArray>();
   for (int b = 1; b <= 4; b++) {
     JsonObject o = remote.add<JsonObject>();
     o["v"] = remote_text(s.remote[b - 1]);
-    o["gone"] = remote_resolve((uint8_t) b, s.remote[b - 1], fav_refs(s), names).gone;
+    o["gone"] = remote_resolve((uint8_t) b, s.remote[b - 1], fav_refs(s), names, 0, fx_lists).gone;
   }
   JsonArray sports = doc["sports"].to<JsonArray>();
   for (uint8_t row = 1; row <= kSportCount; row++)
@@ -1064,6 +1138,38 @@ void test_remote_pages() {
   fx_names() = saved;
 }
 
+// A button set to an effect playlist (fxlist:<name>): Showing goes to
+// Effects and the playlist plays; one gone or emptied is its default.
+void test_remote_fx_playlist() {
+  RemoteTarget t;
+  SCHECK(remote_parse("fxlist:Party", t) && t.kind == (uint8_t) RemoteKind::FXLIST && remote_name(t) == "Party" &&
+             remote_text(t) == "fxlist:Party",
+         "fxlist:Party both ways");
+  SCHECK(remote_parse("fxlist:ABCDEFGHIJKLMNOPQRST", t) && remote_name(t) == "ABCDEFGHIJKLMNOP" &&
+             remote_text(t) == "fxlist:ABCDEFGHIJKLMNOP",
+         "a name is cut to 16 bytes and fills the field");
+  SCHECK(!remote_parse("fxlist:", t) && !remote_parse("fxlist", t) && !remote_parse("FXLIST:Party", t),
+         "an effect playlist with no name, or by another word, is refused");
+  SCHECK(remote_is_page((uint8_t) RemoteKind::FXLIST), "an effect playlist picks a page");
+  SCHECK((uint8_t) RemoteKind::FXLIST <= kRemoteKindLast, "a saved effect playlist button survives a restart");
+  SetOp op;
+  SCHECK(parse_set("remote2", "fxlist:Calm", op, kFavMax) && op.kind == SetKind::REMOTE && op.slot == 2 &&
+             op.text == "fxlist:Calm",
+         "remote2=fxlist:Calm");
+
+  const uint8_t NFL = (uint8_t) League::NFL;
+  remote_parse("fxlist:Calm", t);
+  RemoteAction a = remote_resolve(3, t, {{NFL, 6}}, {"Calm"}, 0, {"Party", "Calm"});
+  SCHECK(a.kind == RemoteKind::FXLIST && a.list == 2 && !a.gone, "plays the second effect playlist");
+  a = remote_resolve(3, t, {{NFL, 6}}, {"Calm"}, 0, {"Party"});
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.fav_slot == 3 && a.gone,
+         "a deleted effect playlist is gone: its own favorite, not the team playlist of that name");
+  a = remote_resolve(3, t, {{NFL, 6}}, {}, 0, {"Party", ""});
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.gone, "an emptied effect playlist is gone too");
+  a = remote_resolve(3, t, {{NFL, 6}}, {});
+  SCHECK(a.gone, "with no effect playlists, gone");
+}
+
 // The WizMote's buttons (set_request.h RemoteTarget, playlists.h
 // remote_resolve): the text both ways and what a button does now.
 void test_remote() {
@@ -1129,7 +1235,71 @@ void test_remote() {
   remote_parse("live", t);
   a = remote_resolve(2, t, {}, {});
   SCHECK(a.kind == RemoteKind::LIVE && !a.gone, "Live games, with no favorites or playlists at all");
+
+  // league:<key>, Live games in that league only.
+  SCHECK(remote_parse("league:nfl", t) && t.kind == (uint8_t) RemoteKind::LEAGUE && t.league == NFL &&
+             remote_text(t) == "league:nfl",
+         "league:nfl both ways");
+  SCHECK(remote_parse("league:mcbb", t) && t.league == (uint8_t) League::MCBB && remote_text(t) == "league:mcbb",
+         "every league the panel knows");
+  SCHECK(!remote_parse("league:", t) && !remote_parse("league:NFL", t) && !remote_parse("league:curling", t),
+         "an unknown league is refused");
+  remote_parse("league:nhl", t);
+  a = remote_resolve(3, t, {}, {});
+  SCHECK(a.kind == RemoteKind::LEAGUE && a.league == NHL && !a.gone, "a league needs no favorites");
+  RemoteTarget future;
+  future.kind = (uint8_t) RemoteKind::LEAGUE;
+  future.league = 200;
+  a = remote_resolve(2, future, favs, names);
+  SCHECK(a.kind == RemoteKind::FAVORITE && a.gone, "a league this firmware doesn't know: the default");
+  SCHECK(kRemoteKindLast == (uint8_t) RemoteKind::FXLIST, "FXLIST is the last kind a saved button can hold");
+
+  // Button-only teams: the solo mask marks them among the favorites.
+  const uint16_t solo = 1u << 3;  // favs[3], NHL 25
+  remote_parse("team:nhl:25", t);
+  a = remote_resolve(1, t, favs, names, solo);
+  SCHECK(a.kind == RemoteKind::TEAM && a.fav_slot == 4 && a.solo, "a button-only team resolves as solo");
+  remote_parse("team:nfl:6", t);
+  a = remote_resolve(1, t, favs, names, solo);
+  SCHECK(a.kind == RemoteKind::TEAM && !a.solo, "a full favorite is not solo");
+  remote_parse("sport:hockey", t);
+  SCHECK(!remote_resolve(1, t, favs, names).gone, "hockey has a row while the NHL team counts");
+  SCHECK(remote_resolve(1, t, favs, names, solo).gone, "a button-only team makes no sport row");
+  SCHECK(fav_counts(favs, solo, 0) && !fav_counts(favs, solo, 2) && !fav_counts(favs, solo, 3) &&
+             !fav_counts(favs, solo, 20),
+         "fav_counts: there and not button-only");
+
+  // Where a button-only team goes, and when it leaves.
+  std::vector<TeamRef> sixteen(16);
+  SCHECK(solo_slot(sixteen) == 0, "an empty list: the first place");
+  sixteen[0] = {NFL, 6};
+  sixteen[2] = {NBA, 6};
+  SCHECK(solo_slot(sixteen) == 3, "after the last team, not in the gap");
+  sixteen[15] = {NHL, 25};
+  SCHECK(solo_slot(sixteen) == 1, "the last place taken: the first gap");
+  for (size_t i = 0; i < 16; i++)
+    sixteen[i] = {NBA, (uint32_t) (i + 1)};
+  SCHECK(solo_slot(sixteen) == -1, "16 teams: no room");
+  RemoteTarget btn[4];
+  remote_parse("team:nhl:25", btn[1]);
+  remote_parse("league:nfl", btn[2]);
+  SCHECK(solo_unused(solo, favs, btn, 4) == 0, "a team a button is set to stays");
+  btn[1] = RemoteTarget{};
+  SCHECK(solo_unused(solo, favs, btn, 4) == solo, "set to nothing now: it leaves");
+  SCHECK(solo_unused(1u << 2, favs, btn, 4) == 0, "an empty place is nothing to take out");
+  SCHECK(solo_unused(1u << 0, favs, btn, 4) == 1, "the mark alone decides, not where it is");
+  remote_parse("team:nhl:25", btn[3]);
+  SCHECK(solo_unused(solo, favs, btn, 4) == 0, "any of the four buttons keeps it");
+
+  SCHECK(parse_set("keepfav", "nfl:21", op, kFavMax) && op.kind == SetKind::KEEPFAV && op.team.league == NFL &&
+             op.team.id == 21,
+         "keepfav names a team");
+  SCHECK(!parse_set("keepfav", "eagles", op, kFavMax) && !parse_set("keepfav", "nfl:99999", op, kFavMax),
+         "keepfav refuses a team it doesn't know");
+  SCHECK(parse_set("remote1", "league:wnba", op, kFavMax) && op.kind == SetKind::REMOTE && op.text == "league:wnba",
+         "remote1 takes a league");
   test_remote_pages();
+  test_remote_fx_playlist();
 }
 
 }  // namespace

@@ -47,7 +47,7 @@ In both apps the Board follows the device page's Home tab:
 - **Customize** takes the place of **Message**. On Android it's in **Settings**, next to **Display** and **Device**.
 
 :::note[Coming in the next app update]
-On iPhone, when the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** sits under the effect controls, as on the device page's Home tab. It shows which one is playing; pick one to play it from the top, or **None** to stop it. You make and edit effect playlists on the device page's **Customize** tab.
+When **Showing** is on **Effects** and the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** shows under the effect controls, as on the device page's Home tab. Pick one to play it from the top, or **None** to stop it. While one plays, the picker names it. Picking an effect, palette, speed or intensity yourself stops it, and the panel keeps your pick. You make and change effect playlists on the device page's **Customize** tab.
 :::
 
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
@@ -146,9 +146,17 @@ The iPhone app gets **Degrees** in its **Weather** section and the kickoff forec
 
 On iPhone and Android, **Display** has the device page's **Game-day wake** and **After the game**, under the night schedule in **Screen** on iPhone and under ticker speed in the **Screen** card on Android: the **Game-day wake** switch, **Turns on** (5 minutes to 2 hours before the start) and **After the game**: **Stay on the scoreboard**, **Turn off** or **Show the clock**. **Turns on** shows while **Game-day wake** is on, or with **After the game** on **Turn off** or **Show the clock**, and the line under **After the game** says what the panel will do. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). They show once the panel runs firmware with them.
 
+:::note[Coming in the next app update]
+On iPhone and Android, **After the game** also has **Show the Smart board**: your [Smart board](/using/smart-board/) rows between games, until the **Turns on** time before your next game, then the scoreboard. **Turns on** shows with it too. It shows once the panel runs firmware with the Smart board.
+:::
+
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
 
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
+
+:::note[Coming in the next app update]
+On Android, once the panel runs firmware with them, the pickers group their choices by sport, as on the device page: your playlists first, then under each sport **All NFL live games** for each league, **My football teams**, your favorites in that sport, and **Another NFL team...**, which opens the team chooser on that league. A team that isn't one of your favorites goes on the button only: **Favorites** on **Teams** marks it **Button only**, and tapping it in **Add a favorite** makes it a full favorite. With 16 favorites already, the app says your favorites are full and leaves the button as it was. While a league button is in use, the Board says so under **Live games**. See [One league's live games](/using/remote/#one-leagues-live-games) and [A team on a button only](/using/remote/#a-team-on-a-button-only).
+:::
 
 :::note[Coming in the next app update]
 On iPhone and Android, the pickers also offer **Live games**, after **All favorites**: a press switches the panel to Live games with the leagues it already has (see [The numbered buttons](/using/remote/#the-numbered-buttons)). It shows once the panel runs firmware with that choice.
@@ -156,6 +164,14 @@ On iPhone and Android, the pickers also offer **Live games**, after **All favori
 
 :::note[Coming in the next app update]
 On iPhone and Android, the pickers also offer the pages under **Showing**, after **Nothing**: **Scoreboard**, **Clock**, **Smart board** and **Effects**. A press puts the panel on that page. Picking **Effects** saves the effect the panel is set to right then, and the picker shows it with its palette, like **Effects: Rain, Ocean**. Tap **Change** under that button to open its own **Effect**, **Palette**, **Speed** and **Intensity**. Changing them changes only the button, not what the panel is playing now. Tap **Done** to close them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with those choices.
+:::
+
+:::note[Coming in the next app update]
+On Android, the pickers also offer your [effect playlists](/using/effects/#effect-playlists) under **Showing**, after **Effects**, each by name, like **Effect playlist: Party**. A press puts the panel on Effects and plays that playlist from its first effect. Only effect playlists with effects in them are listed. A button on one you delete or take every effect out of says so and plays its own favorite for now, and the picker shows it as **Effect playlist: Party (gone)**. See [A button that plays an effect playlist](/using/remote/#a-button-that-plays-an-effect-playlist). They show once the panel runs firmware with effect playlists.
+:::
+
+:::note[Coming in the next app update]
+On iPhone, the pickers group their choices by sport, as on the device page: your playlists first, then under each sport **All NFL live games** for each league, **My football teams**, your favorites in that sport, and **Another NFL team...**, which opens every team in that league. A team that isn't one of your favorites goes on the button only: **Favorites** marks it **Button only**, and tapping it in **Add a favorite** makes it a full favorite. With 16 favorites already, the app says your favorites are full and leaves the button as it was. See [One league's live games](/using/remote/#one-leagues-live-games) and [A team on a button only](/using/remote/#a-team-on-a-button-only). They show once the panel runs firmware with those choices.
 :::
 
 **Settings > Device** also has **Game events**: how long before your game starts the panel sends its heads-up, a web address on your network the events also go to, and **Send a test event**. See [Game events for your smart home](/using/game-events/).

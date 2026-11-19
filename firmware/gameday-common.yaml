@@ -992,15 +992,28 @@ output:
     # Every step of a fade lands here. QC and the FCC screen light the panel
     # past the night schedule, and QC with the light off too (pages/qc.yaml,
     # pages/regulatory.yaml).
+    # Lit again after dark, the screen is repainted here, once the driver
+    # takes frames again (gd_repaint). A repaint in the light's on_turn_on
+    # came before this write and was dropped: the panel woke on the frame it
+    # went dark with, a Smart board row frozen mid-scroll from the night before.
     write_action:
       - lambda: |-
+          static bool dark = true;
           if (state <= 0.0f) {
-            if (!id(qc_active)) id(matrix).set_brightness(0);
+            if (!id(qc_active)) {
+              id(matrix).set_brightness(0);
+              dark = true;
+            }
             return;
           }
           long v = lroundf(state * 255.0f);
           const uint8_t want = (uint8_t) (v < 1 ? 1 : v > 255 ? 255 : v);
-          id(matrix).set_brightness(id(gameday_ctl).guard_brightness(want, !id(qc_active) && !id(reg_active)));
+          const uint8_t level = id(gameday_ctl).guard_brightness(want, !id(qc_active) && !id(reg_active));
+          id(matrix).set_brightness(level);
+          if (dark && level > 0) {
+            dark = false;
+            id(gd_repaint).execute();
+          }
 
 light:
   - platform: monochromatic
@@ -1024,9 +1037,9 @@ light:
     # Instant unless Home Assistant asks for a fade.
     default_transition_length: 0s
     # set_power: Game-day wake follows every turn, wherever it came from.
+    # The repaint for coming back on is in display_out, after the brightness.
     on_turn_on:
       - lambda: 'id(gameday_ctl).set_power(true);'
-      - script.execute: gd_repaint
     # After a fade out reaches dark. An effect would keep rendering to a dark
     # panel, and the scoreboard is what turning it on should bring back
     # (pages/effects.yaml).
