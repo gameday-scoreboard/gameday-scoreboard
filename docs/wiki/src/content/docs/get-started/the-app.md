@@ -47,7 +47,7 @@ In both apps the Board follows the device page's Home tab:
 - **Customize** takes the place of **Message**. On Android it's in **Settings**, next to **Display** and **Device**.
 
 :::note[Coming in the next app update]
-On Android, when **Showing** is on **Effects** and the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** shows under the effect controls. Pick one to play it from the top, or **None** to stop it. While one plays, the line under it names it. Picking an effect, palette, speed or intensity yourself stops it, and the panel keeps your pick. You make and change effect playlists on the device page.
+When **Showing** is on **Effects** and the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** shows under the effect controls, as on the device page's Home tab. Pick one to play it from the top, or **None** to stop it. While one plays, the picker names it. Picking an effect, palette, speed or intensity yourself stops it, and the panel keeps your pick. You make and change effect playlists on the device page's **Customize** tab.
 :::
 
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
