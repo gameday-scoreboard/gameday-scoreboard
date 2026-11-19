@@ -77,7 +77,7 @@ A playlist with a sport in it plays like Live games over its sports:
 Its schedule, color, icon and remote button work as with any playlist, and a settings backup carries its sports. A playlist of teams only plays exactly as before.
 
 :::note[Coming in the next app update]
-The Game Day app shows a playlist's sports and lets you change them. Until then, add or take out sports on the device page. Editing a playlist in the app keeps the sports it has.
+On Android, the Game Day app shows a playlist's sports under its teams and lets you change them. On iPhone, add or take out sports on the device page for now. Editing a playlist in the iPhone app keeps the sports it has.
 :::
 
 ### A row for each sport
