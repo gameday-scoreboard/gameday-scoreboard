@@ -95,7 +95,7 @@ void SavedNetworks::setup() {
   if (reset && (this->list_.count > 0 || !w->get_sta().get_ssid().empty())) {
     this->in_setup_ = true;
     this->pending_ = {};
-    w->set_sta(wifi::WiFiAP{});
+    w->set_sta(setup_network());
 #ifdef USE_IMPROV_BLE
     // A wrong name or password from the app keeps the panel in setup for
     // another try, and the advert says it has networks, so the app lists it
@@ -108,6 +108,11 @@ void SavedNetworks::setup() {
     ESP_LOGI(TAG, "Wi-Fi was reset: in setup mode, %u saved network(s) kept for the next boot", this->list_.count);
     return;
   }
+  // A blank slot from older firmware's "Reset Wi-Fi" with nothing saved:
+  // that panel is in setup too, so it gets the setup network, which joins
+  // nothing by itself (setup_network.h).
+  if (this->list_.count == 0 && w->has_sta() && w->get_sta().get_ssid().empty())
+    w->set_sta(setup_network());
   this->apply_();
   if (this->pending_.ssid[0] != '\0')
     this->set_timeout("pending", PENDING_MS, [this]() { this->pending_timeout_(); });
@@ -471,7 +476,7 @@ Forgot SavedNetworks::forget(const std::string &ssid) {
         // Hand the rest back, or keep setup mode's blank network.
         w->save_wifi_sta(front.ssid, front.password);
         if (this->in_setup_)
-          w->set_sta(wifi::WiFiAP{});
+          w->set_sta(setup_network());
         else
           this->apply_();
       }
