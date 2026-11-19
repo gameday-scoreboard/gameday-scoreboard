@@ -35,7 +35,7 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
-## Unreleased
+## v2026.11.5
 
 Effect playlists step the panel through your own list of effects, and a WizMote button can now bring back Live games, follow one league's live games, play any team, or put up the Clock, the Smart board, an effect or an effect playlist.
 
