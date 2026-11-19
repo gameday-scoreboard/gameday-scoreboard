@@ -19,7 +19,7 @@ On the [device page](/using/device-page/)'s Home tab, under the board:
 
 Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
 
-In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. The Game Day app gets the same controls in a later release.
+In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. In the [Game Day app](/get-started/the-app/), the same controls show under **Showing** when it is on **Effects**.
 
 ## Effect playlists
 
@@ -37,7 +37,7 @@ Tap **Play** to start it. The panel switches **Showing** to **Effects** if it is
 
 The playlist stops, and the panel stays on the effect it was showing, when:
 
-- you pick an effect, palette, speed or intensity yourself, on the device page or in Home Assistant. The panel keeps what you picked. Pick the playlist again to start it over.
+- you pick an effect, palette, speed or intensity yourself, on the device page, in the app or in Home Assistant. The panel keeps what you picked. Pick the playlist again to start it over.
 - **Showing** leaves **Effects**, whether you pick another page or the panel takes the screen back for one of the reasons below.
 - you delete the playlist or take out all its effects. Editing the one that's playing starts it over with your change; renaming it or moving it in the list doesn't interrupt it.
 
