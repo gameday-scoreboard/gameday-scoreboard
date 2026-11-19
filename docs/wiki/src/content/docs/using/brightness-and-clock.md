@@ -44,7 +44,7 @@ A running [effect](/using/effects/) dims with the night brightness like the boar
 
 ## Turning the panel off and on
 
-**Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game, so the board is up to date the moment it comes back on.
+**Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game and takes the [Smart board](/using/smart-board/) rows Home Assistant sends, so the whole screen is up to date the moment it comes back on.
 
 You can also turn it off and on with:
 
@@ -72,6 +72,8 @@ The panel can turn itself on before your games and decide what it does once they
 - **Turn off**: the panel turns off. With **Game-day wake** on, it comes back on before your next game. If your next game starts within the **Turns on** time, the panel stays on for it instead.
 - **Show the clock**: the time and your next game, in that team's colors, until the **Turns on** time before that game, then the scoreboard. The countdown to the next game waits while the clock is up; the other cards you turned on under **Between games**, like your own countdown, the weather, the message card and pictures, still get their turns.
 - **Show the Smart board**: your own rows of text, usually from Home Assistant, until the **Turns on** time before your next game, then the scoreboard. It only takes over while **Showing** is on the Scoreboard. See [Smart board](/using/smart-board/).
+
+A [remote](/using/remote/#the-numbered-buttons) button set to a team, a playlist, a sport or Live games, or to the **Scoreboard** page, ends the clock or the Smart board between games: the panel shows what you pressed and stays there, and the clock or Smart board comes back after your next game's final.
 
 Anything that turns the panel on still does: **Panel on**, the remote, picking a team, or Home Assistant. With **Game-day wake** on, a panel that **Turn off** put to sleep also comes back on by itself when a game of yours goes live without a start time to wake for, like one ESPN lists as TBD.
 

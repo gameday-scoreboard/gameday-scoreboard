@@ -204,6 +204,12 @@ class ImprovBLEComponent final : public Component,
   // its listeners. Set on the event task, read in loop().
   std::atomic<bool> networks_scan_empty_{false};
   bool networks_scan_handler_{false};  // the event handler is registered
+  // This connection already asked once, so another ask is a refresh.
+  bool networks_answered_{false};
+  // millis() of the last scan results the Wi-Fi component passed on, from its
+  // own scans or ours.
+  uint32_t networks_results_at_{0};
+  bool networks_results_seen_{false};
   // GAMEDAY: end
 #if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_DEBUG
   const char *state_to_string_(improv::State state);

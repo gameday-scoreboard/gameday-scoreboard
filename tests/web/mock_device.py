@@ -101,6 +101,7 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
                                              SET_H + MESSAGE_H +
                                              (REPO / "components/gameday/startup.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8") +
+                                             (REPO / "components/gameday/fx_playlists.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/hook.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/weather.h").read_text(encoding="utf-8") +
                                              (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"))}
@@ -108,6 +109,10 @@ LIMITS = {k: int(v) for k, v in re.findall(r"(?:constexpr|static const) (?:int|s
 PLAYLISTS_H = (REPO / "components/gameday/playlists.h").read_text(encoding="utf-8")
 LIST_COLORS = tuple(re.findall(r'\{"(\w+)",\s*0x[0-9A-Fa-f]{6}\}', PLAYLISTS_H))
 LIST_ICONS = tuple(re.findall(r'\{"(\w+)",\s*\{\s*GD_ROW', PLAYLISTS_H))
+# Effect playlists (fx_playlists.h): the wait steps in seconds and a new effect's.
+FX_H = (REPO / "components/gameday/fx_playlists.h").read_text(encoding="utf-8")
+FX_WAITS = [int(x) for x in re.search(r"kFxWaitSeconds\[kFxWaitCount\] = \{(.*?)\};", FX_H, re.S)[1].split(",")]
+FX_WAIT_DEFAULT = int(re.search(r"kFxWaitDefault = (\d+);", FX_H)[1])
 # After the game's choices (wake.h after_word), in no particular order.
 AFTER = tuple(re.findall(r'return "(\w+)";', re.search(r"after_word\(.*?\n}\n",
                          (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"), re.S).group(0)))
@@ -159,7 +164,10 @@ INITIAL = {
     "favs": [team("nfl", 6), team("nfl", 34), team("ncaa", 145), {}],
     "favmax": FAV_MAX, "lists": [], "list": 0, "listmax": LIMITS["kListMax"], "sports": [], "sport": "", "sched": 0,
     # The WizMote's buttons (set_request.h RemoteTarget), each on its own favorite until set.
-    "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}], "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
+    "remote": [{"v": "fav"}, {"v": "fav"}, {"v": "fav"}, {"v": "fav"}],
+    # Effect playlists (fx_playlists.h), the one playing (0 none), the limits and wait steps.
+    "fxlists": [], "fxlist": 0, "fxlistmax": LIMITS["kFxListMax"], "fxmax": LIMITS["kFxEntryMax"],
+    "fxwaits": FX_WAITS, "today": False, "jump": False, "banner": True, "favtake": False, "live": ["nfl", "ncaa"], "live_auto": True,
     "tz": 1, "tz_name": "US Central", "tz_auto": True,
     "down": True, "count": True, "match": True, "play": True, "odds": True, "leaders": True, "field": True, "winbar": True, "spark": True, "opp": True, "celebrate": 2, "bigplays": True, "best": False, "bootaddr": True,
     "autoupd": False, "beta": False, "countdown": True, "top25": True, "news": False, "cdname": "", "cddate": "",
@@ -222,13 +230,17 @@ ENTITIES = [
     # Effects mode (firmware/pages/effects.yaml): wled_fx's entities, shown
     # while Select Page is on Effects.
     {"id": "select/Effect", "domain": "select", "name": "Effect", "state": "Matrix", "value": "Matrix",
-     "option": ["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]},
+     "option": ["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall", "Distortion Waves", "Drift", "Plasma Ball"]},
     {"id": "select/Effect Palette", "domain": "select", "name": "Effect Palette", "state": "Default",
-     "value": "Default", "option": ["Default", "Rainbow", "Ocean", "Fire"]},
+     "value": "Default", "option": ["Default", "Rainbow", "Ocean", "Fire", "Red & Blue", "Party", "Sunset"]},
     {"id": "number/Effect Speed", "domain": "number", "name": "Effect Speed", "state": "128", "value": "128",
      "min_value": "0", "max_value": "255", "step": "1"},
     {"id": "number/Effect Intensity", "domain": "number", "name": "Effect Intensity", "state": "128",
      "value": "128", "min_value": "0", "max_value": "255", "step": "1"},
+    # Home Assistant's effect playlist select (components/gameday select.py fx_playlist):
+    # None, then the playlists by name; state_doc() keeps it in step.
+    {"id": "select/Effect playlist", "domain": "select", "name": "Effect playlist", "state": "None",
+     "value": "None", "option": ["None"]},
     {"id": "text_sensor/Game Status", "domain": "text_sensor", "name": "Game Status",
      "state": INITIAL["status"], "value": INITIAL["status"]},
     {"id": "update/Firmware", "domain": "update", "name": "Firmware", "state": "NO UPDATE", "value": "1.5.4",
@@ -292,16 +304,34 @@ def entity_post(path, q):
         m = re.fullmatch(r"-?\d+(\.\d+)?", q.get("value", ""))
         if not m or not float(e["min_value"]) <= float(m.group()) <= float(e["max_value"]):
             return False
+        # A hand pick of the effect's speed or intensity stops the effect playlist.
+        if e["name"] in ("Effect Speed", "Effect Intensity") and float(e["value"]) != float(m.group()):
+            STATE["fxlist"] = 0
         e["state"] = e["value"] = m.group()
     elif domain == "select":
         if q.get("option") not in e["option"]:
             return False
+        was = e["value"]
         e["state"] = e["value"] = q["option"]
+        # Showing leaving Effects ends the effect playlist (set_fx_controls).
+        if e["name"] == "Select Page" and q["option"] != "Effects":
+            STATE["fxlist"] = 0
+        # The Home Assistant select: a name plays it, None stops it.
+        if e["name"] == "Effect playlist":
+            names = [pl["n"] for pl in STATE["fxlists"]]
+            fx_play(names.index(q["option"]) + 1 if q["option"] in names else 0)
+        elif e["name"] == "Effect" and was != q["option"]:
+            STATE["fxlist"] = 0  # a hand pick stops the effect playlist
+        elif e["name"] == "Effect Palette" and was != q["option"]:
+            STATE["fxlist"] = 0
     elif domain == "text":
         e["state"] = e["value"] = q.get("value", "")[:e["max_length"]]
     else:
         return True
     PUSHED.append(copy.deepcopy(e))
+    # fx_changed_(): Home Assistant's Effect playlist select follows a start or stop.
+    if domain in ("select", "number"):
+        state_doc()
     return True
 
 STATE = copy.deepcopy(INITIAL)
@@ -423,20 +453,25 @@ def timezone_index(v):
     return next((i for i, (name, _posix, iana) in enumerate(TZ_ROWS) if v in (name, iana)), -1) if v else -1
 
 
+def counts(t):
+    """fav_counts(): a team there and not button-only (playlists.h)."""
+    return bool(t) and not t.get("btn")
+
+
 def live_auto_leagues():
     """live_leagues() with a mask of 0: the favorites' leagues, NFL with none."""
-    used = {t["l"] for t in STATE["favs"] if t}
+    used = {t["l"] for t in STATE["favs"] if counts(t)}
     return [lg for lg in LEAGUES if lg in used] or ["nfl"]
 
 
 def no_team_default():
     """set_request.h no_team_default(): Favorites with none set."""
-    return STATE["mode"] == 4 and not any(STATE["favs"])
+    return STATE["mode"] == 4 and not any(counts(t) for t in STATE["favs"])
 
 
 def sport_rows():
     """sport_rows_(): a row per sport among the favorites, with two sports or more."""
-    have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if t}
+    have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if counts(t)}
     rows = [k for k in SPORT_KEYS if k in have]
     return rows if len(rows) >= 2 else []
 
@@ -462,6 +497,17 @@ def state_doc():
             STATE["cards"].append({"id": cid, "name": name, "on": on[cid], "ok": card_ok(cid), "hint": hint})
     STATE["lists"] = [norm_list(pl) for pl in STATE["lists"]]
     STATE.setdefault("sched", 0)
+    if "fxlists" in STATE:
+        # fx_changed_(): Home Assistant's select follows the playlists and the one playing.
+        sel = entity("Effect playlist")
+        names = [pl["n"] for pl in STATE["fxlists"]]
+        playing = names[STATE["fxlist"] - 1] if 0 < STATE.get("fxlist", 0) <= len(names) else "None"
+        if sel["option"] != ["None"] + names or sel["value"] != playing:
+            sel["option"], sel["state"], sel["value"] = ["None"] + names, playing, playing
+            PUSHED.append(copy.deepcopy(sel))
+    # No remote presses here: no button is ever in use.
+    STATE.setdefault("held", 0)
+    STATE.setdefault("live_only", "")
     STATE["remote"] = [{"v": b.get("v", "fav"), "gone": remote_gone(i + 1, b.get("v", "fav"))}
                        for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
     return STATE
@@ -487,7 +533,7 @@ def card_ok(cid):
     if cid == "weather":
         return bool((STATE.get("wx") or {}).get("place"))
     if cid == "top25":
-        leagues = {t["l"] for t in STATE["favs"] if t} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
+        leagues = {t["l"] for t in STATE["favs"] if counts(t)} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
         return not no_team_default() and bool(leagues & {"ncaa", "mcbb"})
     return True
 
@@ -521,17 +567,47 @@ def remap_lists(before):
         STATE["sport"] = ""
 
 
+def remote_fx_parse(v):
+    """remote_fx_parse(): "Rain,Party,40,200" (after fx:) as the panel writes it back, or None.
+    The names are the Effect and Effect Palette entities' options, in any case."""
+    parts = v.split(",")
+    if len(parts) > 4:
+        return None
+    parts += [""] * (4 - len(parts))
+    effects = entity("Effect")["option"]
+    palettes = entity("Effect Palette")["option"]
+    effect = next((e for e in effects if e.lower() == parts[0].lower()), None)
+    palette = palettes[0] if not parts[1] else next((p for p in palettes if p.lower() == parts[1].lower()), None)
+    if effect is None or palette is None:
+        return None
+    nums = []
+    for n in parts[2:]:
+        if not n:
+            nums.append(128)
+        elif re.fullmatch(r"\d{1,3}", n) and int(n) <= 255:
+            nums.append(int(n))
+        else:
+            return None
+    return f"fx:{effect},{palette},{nums[0]},{nums[1]}"
+
+
 def remote_parse(v):
     """remote_parse(): the text of a button's target, canonical, or None when the panel refuses it."""
-    if v in ("fav", "all", "none"):
+    if v in ("fav", "all", "live", "none", "scoreboard", "clock", "smartboard"):
         return v
+    if v.startswith("fx:"):
+        return remote_fx_parse(v[3:])
     if v.startswith("team:"):
         ref = parse_team_ref(v[5:])
         return f"team:{ref[0]}:{ref[1]}" if ref else None
     if v.startswith("sport:"):
         return v if v[6:] in SPORT_KEYS else None
+    if v.startswith("league:"):
+        return v if v[7:] in LEAGUES else None
     if v.startswith("list:") and len(v) > 5:
         return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
+    if v.startswith("fxlist:") and len(v) > 7:
+        return "fxlist:" + v[7:].encode("utf-8")[:16].decode("utf-8", "ignore")
     return None
 
 
@@ -544,6 +620,11 @@ def remote_gone(button, v):
         return v[5:] not in [pl["n"] for pl in STATE["lists"]]
     if v.startswith("sport:"):
         return v[6:] not in sport_rows()
+    if v.startswith("fx:"):
+        return v[3:].split(",")[0] not in entity("Effect")["option"]
+    if v.startswith("fxlist:"):
+        # An effect playlist with no effects can't play: gone too.
+        return not any(pl["n"] == v[7:] and pl["fx"] for pl in STATE.get("fxlists", []))
     return False
 
 
@@ -563,6 +644,8 @@ def norm_list(pl):
         out["today"] = pl["today"]
     out["color"] = pl.get("color", "")
     out["icon"] = pl.get("icon", "")
+    # Its sports by league key, in kLeagues order (list_league_token).
+    out["lg"] = [lg for lg in LEAGUES if lg in pl.get("lg", [])]
     return out
 
 
@@ -583,6 +666,13 @@ def list_opt_token(tok, opt):
         opt["color"] = tok[3:] if tok[3:] in LIST_COLORS else ""
     elif tok.startswith("@i:"):
         opt["icon"] = tok[3:] if tok[3:] in LIST_ICONS else ""
+    elif tok == "@lg":
+        # list_league_token(): keep the sports the playlist of this name has.
+        opt["keep_lg"] = True
+    elif tok.startswith("@lg:"):
+        # list_league_token(): a league it doesn't know drops.
+        if tok[4:] in LEAGUES and tok[4:] not in opt.setdefault("lg", []):
+            opt["lg"].append(tok[4:])
 
 
 def list_opt_text(pl):
@@ -602,6 +692,9 @@ def list_opt_text(pl):
         out += ",@c:" + pl["color"]
     if pl["icon"]:
         out += ",@i:" + pl["icon"]
+    # list_leagues_text(): its sports, in kLeagues order.
+    for lg in pl["lg"]:
+        out += ",@lg:" + lg
     return out
 
 
@@ -631,8 +724,84 @@ def parse_lists(v):
             ref = parse_team_ref(r)
             if ref and ref not in teams and len(teams) < FAV_MAX:
                 teams.append(ref)
+        if opt.pop("keep_lg", False):
+            # list_leagues_after(): the sports of the playlist of that name now.
+            had = next((pl.get("lg", []) for pl in STATE["lists"] if pl["n"] == name), [])
+            opt["lg"] = list(dict.fromkeys(opt.get("lg", []) + had))
         out.append(norm_list({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams], **opt}))
     return out
+
+
+def fx_options(name):
+    return entity(name)["option"]
+
+
+def fx_wait_step(s):
+    """fx_wait_step(): the nearest step, ties to the shorter one."""
+    return min(range(len(FX_WAITS)), key=lambda i: (abs(s - FX_WAITS[i]), i))
+
+
+def fx_byte(v, dflt):
+    return int(v) if re.fullmatch(r"\d{1,3}", v) and int(v) <= 255 else dflt
+
+
+def parse_fx_lists(v):
+    """parse_fx_lists() in components/gameday/fx_playlists.h, as the state document
+    writes the result: an effect by name, its palette by name, w in seconds."""
+    out = []
+    for part in v.split(";") if v else []:
+        if len(out) >= LIMITS["kFxListMax"]:
+            break
+        name, _eq, body = part.partition("=")
+        name = message_clean(name, LIMITS["kListNameMax"], False)
+        # "None" is kFxListStop, Home Assistant's stop choice.
+        if not name or name == "None" or any(pl["n"] == name for pl in out):
+            continue
+        pl = {"n": name, "shuffle": False, "fx": []}
+        for tok in body.split(",") if body else []:
+            if tok == "@shuffle":
+                pl["shuffle"] = True
+                continue
+            if not tok or tok[0] == "@" or len(pl["fx"]) >= LIMITS["kFxEntryMax"]:
+                continue
+            f = (tok.split("|") + [""] * 5)[:5]
+            # FxNames: an effect or palette in any case, in the panel's spelling.
+            eff = next((e for e in fx_options("Effect") if e.lower() == f[0].lower()), None)
+            if eff is None or len(eff.encode()) > LIMITS["kFxEffectNameMax"]:
+                continue
+            f[0] = eff
+            pals = fx_options("Effect Palette")
+            pal = next((p for p in pals if p.lower() == f[1].lower()), pals[0]) if f[1] else pals[0]
+            w = FX_WAITS[fx_wait_step(int(f[4]))] if whole_int(f[4]) else FX_WAITS[FX_WAIT_DEFAULT]
+            pl["fx"].append({"e": f[0], "p": pal, "s": fx_byte(f[2], 128), "i": fx_byte(f[3], 128), "w": w})
+        out.append(pl)
+    return out
+
+
+def fx_show(pl, pos):
+    """fx_show(): the playlist writes the four effect controls itself (the guard flag
+    keeps that from counting as a hand pick)."""
+    e = pl["fx"][pos]
+    for name, v in (("Effect", e["e"]), ("Effect Palette", e["p"]), ("Effect Speed", str(e["s"])),
+                    ("Effect Intensity", str(e["i"]))):
+        ent = entity(name)
+        if ent["value"] != v:
+            ent["state"] = ent["value"] = v
+            PUSHED.append(copy.deepcopy(ent))
+
+
+def fx_play(n):
+    """play_fx_list_(): from the top, and Showing goes to Effects. An empty one doesn't start."""
+    lists = STATE["fxlists"]
+    if n == 0 or n > len(lists) or not lists[n - 1]["fx"]:
+        STATE["fxlist"] = 0
+        return
+    STATE["fxlist"] = n
+    fx_show(lists[n - 1], 0)
+    page = entity("Select Page")
+    if page["value"] != "Effects":
+        page["state"] = page["value"] = "Effects"
+        PUSHED.append(copy.deepcopy(page))
 
 
 def night_time(v):
@@ -710,7 +879,9 @@ def apply_set(kv):
                 if ref and ref not in refs:
                     refs.append(ref)
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
-            STATE["favs"] = [team(*r) for r in refs] + [{}] * (4 - len(refs))
+            # A button-only team keeps its mark wherever it moved (remap_lists_).
+            solo = {r for r, t in zip(before, STATE["favs"]) if r and t.get("btn")}
+            STATE["favs"] = [dict(team(*r), **({"btn": True} if r in solo else {})) for r in refs] + [{}] * (4 - len(refs))
             remap_lists(before)
         elif k in ("fav1", "fav2", "fav3", "fav4"):
             ref = parse_team_ref(v)
@@ -745,6 +916,36 @@ def apply_set(kv):
                 STATE["list"] = atoi(v)
                 STATE["sport"] = ""
                 STATE["mode"] = 4
+        elif k == "fxlists":
+            # set_fx_lists_() and fx_after_edit(): the one playing keeps playing when it
+            # is there unchanged (moved or renamed in its place), starts over when it
+            # changed, and stops when it is gone or empty.
+            n = STATE.get("fxlist", 0)
+            before = STATE["fxlists"][n - 1] if n else None
+            old_names = [pl["n"] for pl in STATE["fxlists"]]
+            STATE["fxlists"] = parse_fx_lists(v)
+            # A WizMote button on a renamed effect playlist follows it (list_renamed()).
+            new_names = [pl["n"] for pl in STATE["fxlists"]]
+            for b in STATE["remote"]:
+                if b["v"].startswith("fxlist:"):
+                    to = list_renamed(old_names, new_names, b["v"][7:])
+                    if to:
+                        b["v"] = "fxlist:" + to
+            STATE["fxlist"] = 0
+            if before:
+                same = lambda a, b: a["fx"] == b["fx"] and a["shuffle"] == b["shuffle"]  # noqa: E731
+                at = next((i for i, pl in enumerate(STATE["fxlists"]) if pl["n"] == before["n"]), -1)
+                if at >= 0 and STATE["fxlists"][at]["fx"]:
+                    STATE["fxlist"] = at + 1
+                    if not same(before, STATE["fxlists"][at]):
+                        fx_play(at + 1)
+                elif at < 0 and n <= len(STATE["fxlists"]) and STATE["fxlists"][n - 1]["fx"] and \
+                        same(before, STATE["fxlists"][n - 1]):
+                    STATE["fxlist"] = n
+        elif k == "fxlist":
+            # play_fx_list_(): 0 stops; one past the last playlist is refused.
+            if whole_int(v) and 0 <= int(v) <= LIMITS["kFxListMax"] and int(v) <= len(STATE["fxlists"]):
+                fx_play(int(v))
         elif k == "sport":
             # set_sport_row_() plays a row the favorites give; none stops the one
             # playing unless list= says what plays.
@@ -809,10 +1010,35 @@ def apply_set(kv):
             v = remote_parse(v)
             if v is None:
                 continue
-            if v.startswith("list:"):
-                name = message_clean(v[5:].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
-                v = "list:" + name if name else "fav"
+            if v.startswith("list:") or v.startswith("fxlist:"):
+                kind, raw = v.split(":", 1)
+                name = message_clean(raw.replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
+                v = kind + ":" + name if name else "fav"
+            if v.startswith("team:") and parse_team_ref(v[5:]) not in fav_refs():
+                # A team that isn't a favorite joins them as a button-only
+                # team (solo_slot): after the last team, else the first gap,
+                # and with 16 taken the button stays as it was.
+                refs = fav_refs() + [None] * (FAV_MAX - len(STATE["favs"]))
+                last = max([i for i, r in enumerate(refs) if r] or [-1])
+                free = [i for i in range(last + 1, FAV_MAX) if not refs[i]] or [i for i, r in enumerate(refs) if not r]
+                if not free:
+                    continue
+                STATE["favs"] += [{}] * (free[0] + 1 - len(STATE["favs"]))
+                STATE["favs"][free[0]] = dict(team(*parse_team_ref(v[5:])), btn=True)
             STATE["remote"][int(k[6]) - 1] = {"v": v}
+            # solo_unused(): a button-only team no button is set to leaves.
+            used = {b["v"] for b in STATE["remote"]}
+            for i, t in enumerate(STATE["favs"]):
+                if t.get("btn") and f"team:{t['l']}:{t['id']}" not in used:
+                    STATE["favs"][i] = {}
+            while len(STATE["favs"]) > 4 and not STATE["favs"][-1]:
+                STATE["favs"].pop()
+        elif k == "keepfav":
+            # keep_favorite_(): a button-only team becomes a full favorite.
+            ref = parse_team_ref(v)
+            for t in STATE["favs"]:
+                if t and (t["l"], t["id"]) == ref:
+                    t.pop("btn", None)
         elif k == "hook":
             if hook_url_ok(v):
                 STATE["hook"] = v
@@ -856,7 +1082,8 @@ def settings_doc():
     out = {"schema": SETTINGS_SCHEMA, "version": s["version"], "name": s["name"]}
     for k in SETTINGS_ORDER:
         if k == "favs":
-            favs = [team_text(t) for t in s["favs"]]
+            # A button-only team stays out: its button's team brings it back.
+            favs = [team_text(t) if counts(t) else "" for t in s["favs"]]
             while favs and not favs[-1]:
                 favs.pop()
             out["favs"] = favs
@@ -877,6 +1104,9 @@ def settings_doc():
                 for key in ("color", "icon"):
                     if pl.get(key):
                         e[key] = pl[key]
+                # Its sports, [] for none, so a restore sets them.
+                if isinstance(pl.get("lg"), list):
+                    e["lg"] = list(pl["lg"])
                 out["lists"].append(e)
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
@@ -892,6 +1122,12 @@ def settings_doc():
         elif k == "cards":
             if "cards" in s:
                 out["cards"] = {c["id"]: c["on"] for c in s["cards"]}
+        elif k == "fxlists":
+            # Shuffle only when on; which one plays isn't kept.
+            if "fxlists" in s:
+                out["fxlists"] = [dict({"n": pl["n"]}, **({"shuffle": True} if pl.get("shuffle") else {}),
+                                       fx=[{key: e[key] for key in ("e", "p", "s", "i", "w")} for e in pl["fx"]])
+                                  for pl in s["fxlists"]]
         elif re.fullmatch(r"remote[1-4]", k):
             out[k] = s["remote"][int(k[6]) - 1]["v"]
         elif k in s:
@@ -963,7 +1199,7 @@ def import_settings(doc):
     for k in SET_KEYS:
         if k not in doc or doc[k] is None:
             continue
-        if k == "sport" and not favorites:
+        if (k == "sport" and not favorites) or k in ("keepfav", "fxlist"):  # set_key_once: no setting to restore
             continue
         v, kind = doc[k], SETTINGS_TYPES.get(k)
         if k == "lists":
@@ -1015,11 +1251,59 @@ def import_settings(doc):
                         skipped.append(f"lists={name}:{key}={e[key]}")
                     elif e[key]:
                         opt[key] = e[key]
+                # Its sports; a league this firmware doesn't have is left out and listed.
+                # No lg at all keeps the playlist's sports ('@lg').
+                keep = ",@lg" if e.get("lg") is None else ""
+                if e.get("lg") is not None:
+                    if not isinstance(e["lg"], list) or not all(isinstance(k, str) for k in e["lg"]):
+                        return fail('lists lg should be leagues like ["nfl"].')
+                    for k in e["lg"]:
+                        if k in LEAGUES:
+                            list_opt_token("@lg:" + k, opt)
+                        else:
+                            skipped.append(f"lists={name}:lg={k}")
                 if not name or len(parts) == LIMITS["kListMax"]:
                     skipped.append("lists=" + name)
                     continue
-                parts.append(name + "=" + ",".join(refs) + list_opt_text({"n": name, "f": [], **opt}))
+                parts.append(name + "=" + ",".join(refs) + list_opt_text({"n": name, "f": [], **opt}) + keep)
             kv.append(("lists", ";".join(parts)))
+            continue
+        if k == "fxlists":
+            # The FX_PLAYLISTS case: into fxlists= text, the defaults filled in, nameless
+            # playlists, one named "None", any past kFxListMax, effects past kFxEntryMax
+            # and names holding a separator left out and listed.
+            bad = 'fxlists should be effect playlists like {"n": "Party", "fx": [{"e": "Matrix", "w": 15}]}.'
+            if not isinstance(v, list):
+                return fail(bad)
+            parts = []
+            for pl in v:
+                if not isinstance(pl, dict) or not isinstance(pl.get("n"), str) or \
+                        not isinstance(pl.get("fx") or [], list) or \
+                        not (pl.get("shuffle") is None or isinstance(pl["shuffle"], bool)):
+                    return fail(bad)
+                name = message_clean(pl["n"].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
+                if not name or name == "None" or len(parts) == LIMITS["kFxListMax"]:
+                    skipped.append("fxlists=" + name)
+                    continue
+                body = []
+                for e in pl.get("fx") or []:
+                    if not isinstance(e, dict) or not isinstance(e.get("e"), str) or \
+                            not isinstance(e.get("p", ""), str):
+                        return fail(bad)
+                    for key in ("s", "i", "w"):
+                        if e.get(key) is not None and not is_int(e[key]):
+                            return fail(f"fxlists {key} should be a whole number.")
+                    sp, it, w = e.get("s", 128), e.get("i", 128), e.get("w", FX_WAITS[FX_WAIT_DEFAULT])
+                    if not 0 <= sp <= 255 or not 0 <= it <= 255:
+                        return fail("fxlists speed and intensity should be 0 to 255.")
+                    if len(body) == LIMITS["kFxEntryMax"] or re.search(r"[|,;=]", e["e"] + e.get("p", "")):
+                        skipped.append(f"fxlists={name}:{e['e']}")
+                        continue
+                    body.append(f"{e['e']}|{e.get('p', '')}|{sp}|{it}|{FX_WAITS[fx_wait_step(w)]}")
+                if pl.get("shuffle"):
+                    body.append("@shuffle")
+                parts.append(name + "=" + ",".join(body))
+            kv.append(("fxlists", ";".join(parts)))
             continue
         if k == "cards":
             # The CARDS case: into cards= text, a card this firmware lacks left out and listed.
@@ -1047,7 +1331,7 @@ def import_settings(doc):
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255), "celebrate": (0, 2),
                       "pregame": (0, LIMITS["kPregameMax"]), "wxunit": (0, 2),
-                      "list": (0, LIMITS["kListMax"])}.get(k, (None, None))
+                      "list": (0, LIMITS["kListMax"]), "fxlist": (0, LIMITS["kFxListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
             # Out of range is left out and listed (newer firmware may take more).
@@ -1120,7 +1404,7 @@ def import_settings(doc):
                 skipped.append(f"{name}={doc[name]}")
                 continue
             numbers[ent] = doc[name]
-    known = set(SET_KEYS) | {"schema", "version", "name", "brightness", "scroll"}
+    known = (set(SET_KEYS) - {"keepfav", "fxlist"}) | {"schema", "version", "name", "brightness", "scroll"}
     skipped += [k for k in doc if k not in known]
     restart = any(k == "panels" and int(v) != STATE.get("panels") for k, v in kv)
     # Applied in kSetKeys order; favs slot by slot, keeping empty slots.
@@ -1272,6 +1556,7 @@ def selftest():
             bad += 1
             print(f"FAIL {e['id']} isn't an entity in firmware/gameday-common.yaml, pages/effects.yaml or pages/wizmote.yaml")
     # Control posts change the entity and are pushed to the event stream.
+    PUSHED.clear()
     entity_post("/select/Select%20Page/set", {"option": "Effects"})
     entity_post("/number/Effect%20Speed/set", {"value": "40"})
     if entity("Select Page")["value"] != "Effects" or entity("Effect Speed")["value"] != "40" or len(PUSHED) != 2:

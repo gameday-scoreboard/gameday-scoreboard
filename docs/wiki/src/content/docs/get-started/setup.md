@@ -23,6 +23,16 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 2. Pick your Wi-Fi network from the list. The list comes from the panel itself, strongest network first, so it shows what the panel can actually reach.
 3. Enter the password.
 
+Setting it up on your phone's hotspot? An iPhone's Personal Hotspot only shows up while its settings screen is open, so open **Settings > Personal Hotspot** on that iPhone and leave it open while you pick from the list. If it's still missing, tap the round arrow above the list. The panel looks again, which takes about 10 seconds. A hotspot you just turned on can take a minute to show, so tap it again if you need to.
+
+:::note[Coming in the next app and panel updates]
+In the iPhone and Android apps the list refreshes by itself. While it's on screen the app asks the panel to look again every 30 seconds, so a hotspot you just turned on shows up within about a minute with no tap. Networks already on the list keep their place, new ones are added under them, and the network you picked stays picked. The round arrow still looks again right away.
+:::
+
+:::note[Coming in the next app update]
+Right after **Reset Wi-Fi** the panel can take a few seconds to see any networks. The iPhone and Android apps keep asking until the list comes in, which takes up to about 20 seconds. If the panel still sees none, the app says so: tap the round arrow to look again, or type your network's name.
+:::
+
 While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app opens it so you can add your teams. On iPhone a short walkthrough takes you through your teams, what the panel shows, the ticker and the timezone.
 
 :::note[Coming in the next app update]

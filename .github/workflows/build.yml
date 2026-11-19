@@ -323,6 +323,16 @@ jobs:
           complete-manifest: true
           release-summary: ${{ steps.beta.outputs.summary }}
           release-url: ${{ steps.beta.outputs.url }}
+      # ESPHome passes our raw sdkconfig_options to ESP-IDF unchecked, so an
+      # ESP-IDF rename (an ESPHome pin bump) would drop one with a green
+      # build. This fails naming any option the generated sdkconfig lacks,
+      # has with another value, or keeps only under its deprecated name.
+      - name: Our ESP-IDF options took effect
+        if: needs.changes.outputs.firmware == 'true'
+        env:
+          YAML: ${{ steps.yaml.outputs.file }}
+          VARIANT: ${{ matrix.variant }}
+        run: python3 scripts/sdkconfig_check.py "$YAML" "firmware/.esphome/build/gameday-$VARIANT"
       - name: Stage output under a stable folder name
         if: needs.changes.outputs.firmware == 'true'
         run: |
@@ -349,6 +359,33 @@ jobs:
         with:
           name: sizes-${{ matrix.variant }}
           path: sizes
+      # For the budget job's "Where the bytes went": flash and RAM per
+      # component and per symbol (scripts/memory_report.py), from ESPHome's
+      # own memory analysis. It runs in the image that built the firmware,
+      # which left its xtensa toolchain under $HOME, on the build folder as
+      # it stands, so nothing compiles again. One board is enough to say
+      # where bytes went. It never fails the build: the budget check owns
+      # pass and fail, and a missing figure only leaves the tables out.
+      - name: Flash and RAM by component
+        if: needs.changes.outputs.firmware == 'true' && matrix.variant == 'moonhub75'
+        continue-on-error: true
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          docker run --rm --workdir /github/workspace \
+            -v "$PWD:/github/workspace" -v "$HOME:$HOME" -e HOME \
+            --user "$(id -u):$(id -g)" --entrypoint python3 \
+            "ghcr.io/esphome/esphome:$ESPHOME_VERSION" \
+            scripts/memory_report.py extract "firmware/.esphome/build/gameday-$VARIANT" "memory/$VARIANT.json"
+      # The name stays outside the sizes-* and firmware-* patterns: the budget
+      # check reads every JSON file it downloads, and publish ships firmware-*.
+      - uses: actions/upload-artifact@v7
+        if: needs.changes.outputs.firmware == 'true' && matrix.variant == 'moonhub75'
+        continue-on-error: true
+        with:
+          name: memory-${{ matrix.variant }}
+          path: memory
+          if-no-files-found: warn
 
   budget:
     # Flash, static internal RAM and the memory each ESPN read takes, against
@@ -408,6 +445,7 @@ jobs:
               continue
             fi
             echo "label=$BASE_REF ${sha::7} (run $id)" >> "$GITHUB_OUTPUT"
+            echo "run=$id" >> "$GITHUB_OUTPUT"
             echo "Base figures from run $id ($sha)"
             exit 0
           done <<< "$runs"
@@ -438,13 +476,15 @@ jobs:
           cat approvals/*.json
           # A change that moves the release block to another tag resets the
           # flash allowance, so the check compares its baseline with the
-          # figures that tag's own Build run measured.
+          # figures that tag's own Build run measured. Any event counts:
+          # tag.yml starts a release tag's Build with workflow_dispatch,
+          # since GitHub runs no push workflows for a tag its token pushed.
           old_tag=$(jq -r '.release.tag // ""' pr-base-budget.json)
           new_tag=$(jq -r '.release.tag // ""' firmware/budget.json)
           mkdir -p release-sizes
           if [ -n "$new_tag" ] && [ "$new_tag" != "$old_tag" ]; then
             if git ls-remote --exit-code --tags origin "refs/tags/$new_tag" > /dev/null; then
-              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&event=push&status=success&per_page=1" \
+              id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?branch=$new_tag&status=success&per_page=1" \
                 --jq '.workflow_runs[0].id // empty')
               if [ -n "$id" ]; then
                 gh run download "$id" -p 'sizes-*' -D release-sizes || true
@@ -471,6 +511,33 @@ jobs:
           name: budget-report
           path: budget-report.json
           if-no-files-found: ignore
+      # Which components and symbols moved the bytes, for moonhub75, against
+      # the same base run the growth check used (scripts/memory_report.py).
+      # It runs when the check fails too, since that is when it's wanted, and
+      # can't fail the job: a missing analysis prints why and moves on.
+      - uses: actions/download-artifact@v8
+        if: always() && needs.changes.outputs.firmware == 'true' && github.event_name == 'pull_request' && github.base_ref == 'dev'
+        continue-on-error: true
+        with:
+          name: memory-moonhub75
+          path: memory/pr
+      - name: Where the bytes went
+        if: always() && needs.changes.outputs.firmware == 'true' && github.event_name == 'pull_request' && github.base_ref == 'dev'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_RUN: ${{ steps.base.outputs.run }}
+          BASE_LABEL: ${{ steps.base.outputs.label }}
+        run: |
+          set -uo pipefail
+          rm -rf memory/base
+          mkdir -p memory/base
+          if [ -n "$BASE_RUN" ]; then
+            gh run download "$BASE_RUN" -n memory-moonhub75 -D memory/base || echo "Base run $BASE_RUN has no memory-moonhub75 artifact."
+          fi
+          python3 scripts/memory_report.py diff memory/base/moonhub75.json memory/pr/moonhub75.json \
+            --base-label "$BASE_LABEL" --variant moonhub75 | tee -a "$GITHUB_STEP_SUMMARY" \
+            || echo "memory_report.py stopped; the budget above still holds."
 
   build-demo:
     # The demo build (firmware/pages/demo.yaml) for showing panels in person and
@@ -595,6 +662,7 @@ jobs:
       - name: Script selftests
         run: |
           python3 scripts/size_budget.py --selftest
+          python3 scripts/memory_report.py --selftest
           python3 scripts/factory_flash.py --selftest
           python3 scripts/burnin_monitor.py --selftest
           python3 scripts/improv_scan.py --selftest
@@ -604,6 +672,7 @@ jobs:
           python3 scripts/changelog_check.py --selftest
           python3 scripts/promote.py --selftest
           python3 scripts/restore_sync_lint.py --selftest
+          python3 scripts/sdkconfig_check.py --selftest
       - name: Restored YAML values reach flash at once
         run: python3 scripts/restore_sync_lint.py .
       - name: Site pages have their search and sharing tags

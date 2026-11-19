@@ -19,7 +19,33 @@ On the [device page](/using/device-page/)'s Home tab, under the board:
 
 Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
 
-In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. The Game Day app gets the same controls in a later release.
+In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. In the [Game Day app](/get-started/the-app/), the same controls show under **Showing** when it is on **Effects**.
+
+## Effect playlists
+
+An effect playlist is a list of effects the panel steps through on its own, each for as long as you choose, like a playlist in WLED: a few calm patterns for an evening, or fireworks, bursts and rain for a party. You can keep up to 4 effect playlists of up to 8 effects each. They are separate from the [team playlists](/using/favorites/) on the Teams tab, which is why everything about them says **Effect playlist** in full.
+
+To make one, open the device page's **Customize** tab and find **Effect playlists**:
+
+1. Tap **New effect playlist** and give it a name of up to 16 characters. Any name works except one another effect playlist has and **None**, which is the choice that stops a playlist.
+2. Tap **Add an effect**. The new effect starts as whatever the panel is showing now, so you can try an effect, palette, speed and intensity on the Home tab first and then add it. Change any of them in the row after.
+3. Pick how long it stays up from **For**, from 1 second to 1 hour. A new effect stays up for 15 seconds.
+4. Use the arrows to put the effects in order, and the **✕** to take one out.
+5. Turn on **Shuffle** to play them in a random order instead. Shuffle shows every effect once before any of them comes round again, and never the same one twice in a row.
+
+Tap **Play** to start it. The panel switches **Showing** to **Effects** if it isn't there already, and the card says **Playing now**. On the Home tab, the **Effect playlist** picker under the effect controls shows which one is playing and starts or stops one too (**None** stops it).
+
+The playlist stops, and the panel stays on the effect it was showing, when:
+
+- you pick an effect, palette, speed or intensity yourself, on the device page, in the app or in Home Assistant. The panel keeps what you picked. Pick the playlist again to start it over.
+- **Showing** leaves **Effects**, whether you pick another page or the panel takes the screen back for one of the reasons below.
+- you delete the playlist or take out all its effects. Editing the one that's playing starts it over with your change; renaming it or moving it in the list doesn't interrupt it.
+
+Every time the panel starts it shows the Scoreboard, so a playlist never comes back on its own after a restart. The effect playlists themselves are kept, and a [settings backup](/using/backup/) saves them.
+
+A [WizMote remote](/using/remote/#a-button-that-plays-an-effect-playlist) button can start one too: set it to **Effect playlist:** and the playlist's name under **Showing**.
+
+In [Home Assistant](/using/home-assistant/), the **Effect playlist** select lists **None** and your effect playlists by name. Picking one plays it, so an automation can start the party playlist at 7 PM. Home Assistant reads the names when it connects, so one you add or rename shows up there after the next reconnect.
 
 ## What the panel does while an effect runs
 

@@ -94,6 +94,11 @@ struct WakeState {
   uint32_t linger_s{0};  // how long that final stays up
   bool was_live{false};
   bool asleep{false};  // After the game turned the panel off and nothing has turned it on since
+  // A remote button that follows something (a team, a playlist, Live games)
+  // or asks for the Scoreboard ended this stretch between games: the clock
+  // or Smart board stays down until a game of the owner's is live again,
+  // so it comes back after that game's final.
+  bool held{false};
 };
 
 struct WakeInputs {
@@ -118,6 +123,7 @@ inline WakeStep wake_step(const WakePrefs &p, WakeState &s, const WakeInputs &in
   if (in.owner_live) {
     s.was_live = true;
     s.ended_at = 0;
+    s.held = false;
     // A panel After the game put to sleep comes back for a game that went
     // live with no start time to wake for (a TBD start, a restart mid-game).
     if (p.on && s.asleep) {
@@ -155,14 +161,19 @@ inline bool wake_between(const WakePrefs &p, const WakeState &s, const WakeInput
          !wake_window(in.kick, in.now, p.lead);
 }
 
+// The clock or Smart board between games, unless a remote press ended it.
+inline bool wake_page_between(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return !s.held && wake_between(p, s, in);
+}
+
 // After the game is Clock and it is between games.
 inline bool wake_clock(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
-  return p.after == (uint8_t) After::CLOCK && wake_between(p, s, in);
+  return p.after == (uint8_t) After::CLOCK && wake_page_between(p, s, in);
 }
 
 // After the game is Smart board and it is between games.
 inline bool wake_smart(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
-  return p.after == (uint8_t) After::SMART && wake_between(p, s, in);
+  return p.after == (uint8_t) After::SMART && wake_page_between(p, s, in);
 }
 
 // For the state document's wake_now and the log: "asleep" (After the game

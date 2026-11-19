@@ -28,7 +28,13 @@
       "abbr": "IOWA",
       "name": "Iowa Hawkeyes"
     },
-    {}
+    {
+      "l": "nfl",
+      "id": 21,
+      "abbr": "PHI",
+      "name": "Philadelphia Eagles",
+      "btn": true
+    }
   ],
   "favmax": 16,
   "lists": [
@@ -43,7 +49,10 @@
       "only": true,
       "today": false,
       "color": "blue",
-      "icon": "star"
+      "icon": "star",
+      "lg": [
+        "nfl"
+      ]
     },
     {
       "n": "College",
@@ -56,11 +65,13 @@
       "end": "00:00",
       "only": false,
       "color": "",
-      "icon": ""
+      "icon": "",
+      "lg": []
     }
   ],
   "list": 2,
   "sched": 0,
+  "held": 0,
   "remote": [
     {
       "v": "fav",
@@ -80,6 +91,19 @@
     }
   ],
   "listmax": 16,
+  "fxlists": [
+    {"n": "Party", "shuffle": true, "fx": [
+      {"e": "Matrix", "p": "Party", "s": 200, "i": 100, "w": 30},
+      {"e": "Plasma Ball", "p": "Sunset", "s": 128, "i": 128, "w": 15}
+    ]},
+    {"n": "Calm", "shuffle": false, "fx": [
+      {"e": "Drift", "p": "Ocean", "s": 64, "i": 128, "w": 300}
+    ]}
+  ],
+  "fxlist": 1,
+  "fxlistmax": 4,
+  "fxmax": 8,
+  "fxwaits": [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 120, 300, 600, 900, 1800, 3600],
   "sports": [],
   "sport": "",
   "today": false,
@@ -88,6 +112,7 @@
   "favtake": true,
   "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"],
   "live_auto": true,
+  "live_only": "",
   "tz": 1,
   "tz_name": "US Central",
   "tz_iana": "America/Chicago",
