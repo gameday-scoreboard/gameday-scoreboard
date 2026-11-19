@@ -505,8 +505,9 @@ void GamedayComponent::setup() {
   if (!this->pref12_.load(&this->prefs12_))
     this->prefs12_ = Prefs12{};  // no colors or icons
   this->pref13_ = global_preferences->make_preference<Prefs13>(fnv1_hash("gameday_prefs13_v1"));
-  if (!this->pref13_.load(&this->prefs13_))
-    this->prefs13_ = Prefs13{};  // no sports: every playlist plays its teams
+  if (!this->pref13_.load(&this->prefs13_) ||
+      this->prefs13_.names != ::espn::list_names_sum(this->prefs9_.name, this->prefs9_.count))
+    this->prefs13_ = Prefs13{};  // no sports (or sports of playlists since changed): every playlist plays its teams
   this->load_fx_();
   for (auto &b : this->prefs11_.btn)
     if (b.kind > ::espn::kRemoteKindLast)
@@ -893,6 +894,7 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   this->pref10_.save(&this->prefs10_);
   this->prefs12_ = p12;
   this->pref12_.save(&this->prefs12_);
+  p13.names = ::espn::list_names_sum(this->prefs9_.name, this->prefs9_.count);
   this->prefs13_ = p13;
   this->pref13_.save(&this->prefs13_);
   this->sync_prefs_();

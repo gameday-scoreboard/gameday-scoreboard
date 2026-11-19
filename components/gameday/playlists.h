@@ -452,6 +452,20 @@ inline uint16_t list_leagues_after(const std::vector<ListDef> &lists, size_t n, 
   return list_leagues_known(d.leagues);
 }
 
+// The playlists' names and count in one number (FNV-1a), saved beside
+// their sports: firmware without sports edits the playlists and leaves the
+// sports as they were, so a mismatch on load means they belong to other
+// playlists now, and they go.
+inline uint32_t list_names_sum(const char (*names)[kListNameMax], uint8_t count) {
+  uint32_t h = 2166136261u;
+  auto add = [&h](uint8_t b) { h = (h ^ b) * 16777619u; };
+  add(count);
+  for (uint8_t n = 0; n < count && n < kListMax; n++)
+    for (size_t i = 0; i < kListNameMax; i++)
+      add((uint8_t) names[n][i]);
+  return h;
+}
+
 // A bit per favorite (bit i = favs[i]) for the teams of a playlist that are
 // favorites. A team that isn't one has nowhere to go and is left out.
 inline uint16_t list_mask(const std::vector<TeamRef> &teams, const std::vector<TeamRef> &favs) {

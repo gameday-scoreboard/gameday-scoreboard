@@ -1035,6 +1035,21 @@ void test_list_sports() {
   l = parse_lists("Sundays=@lg;Hockey=@lg;Teams=", kFavMax);
   SCHECK(list_leagues_after(l, 0, old_names, old_lg) == NFL, "a rename keeps them: Sunday is Sundays now");
   SCHECK(list_leagues_text(l[0].leagues).empty(), "keep writes no token back of its own");
+
+  // The names' sum: the same playlists give the same number, a rename, a
+  // move, one more or one less a different one.
+  char names[kListMax][kListNameMax] = {};
+  strncpy(names[0], "Sunday", kListNameMax);
+  strncpy(names[1], "Hockey", kListNameMax);
+  const uint32_t two = list_names_sum(names, 2);
+  SCHECK(two == list_names_sum(names, 2), "the same playlists, the same sum");
+  SCHECK(two != list_names_sum(names, 1) && two != list_names_sum(names, 3), "a playlist more or less");
+  strncpy(names[1], "Sunday", kListNameMax);
+  strncpy(names[0], "Hockey", kListNameMax);
+  SCHECK(two != list_names_sum(names, 2), "a move");
+  strncpy(names[0], "Hockeys", kListNameMax);
+  SCHECK(two != list_names_sum(names, 2), "a rename");
+  SCHECK(list_names_sum(names, 0) != two, "no playlists");
 }
 
 // Local day of the week (0 Sunday) and minute after midnight of an epoch in

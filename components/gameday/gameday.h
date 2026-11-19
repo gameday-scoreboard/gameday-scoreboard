@@ -1076,11 +1076,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Each playlist's sports (playlists.h list_league_token), a bit per
   // League, in their own fixed-size blob: leagues[n] belongs to playlist
   // n + 1 and is rewritten with the playlists. Firmware without it plays
-  // the playlist's teams alone.
+  // the playlist's teams alone and leaves the blob as it was; names (the
+  // playlists' list_names_sum when it was written) drops it on load when
+  // the playlists changed there.
   struct Prefs13 {
     uint16_t leagues[::espn::kListMax];
-  };  // 16-bit fields alone: no padding to pack, and a pointer to them stays aligned
-  static_assert(sizeof(Prefs13) == 32, "Prefs13 is a fixed-size blob");
+    uint32_t names;
+  };  // no padding to pack, and a pointer to the masks stays aligned
+  static_assert(sizeof(Prefs13) == 36, "Prefs13 is a fixed-size blob");
   ESPPreferenceObject pref13_;
   Prefs13 prefs13_{};
   // The playing playlist's sports, 0 when Favorite teams plays its teams as
