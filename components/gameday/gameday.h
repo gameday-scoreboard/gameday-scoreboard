@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -192,6 +193,16 @@ enum class SelectType : uint8_t { TIMEZONE, MODE, PLAYLIST, FX_PLAYLIST };
 
 // PSRAM text (psram.h): the message card's list, the state document.
 using PsString = std::basic_string<char, std::char_traits<char>, PsramAllocator<char>>;
+
+// One object for the component's whole life, put in PSRAM once at startup
+// (internal RAM only if PSRAM is full) and never freed. Built in place, so
+// it starts with the same values it would have as a plain member.
+template<class T> T &psram_object() {
+  T *p = RAMAllocator<T>().allocate(1);
+  if (p == nullptr)
+    abort();
+  return *new (p) T();
+}
 
 // Favorite Teams mode holds up to this many teams. The WizMote's buttons 1-4
 // jump to the first four.
@@ -817,7 +828,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // favorites it is 6 KB or more, and a copy in internal RAM grown for the
   // health numbers needed a block twice that while the favorites were read.
   PsString state_json_{"{}"};
-  UpdateFields last_fields_;
+  // The large plain data below lives in PSRAM (psram_object): read once
+  // per update, it has no need of the internal RAM Wi-Fi and TLS run on.
+  UpdateFields &last_fields_{psram_object<UpdateFields>()};
   web_server_base::WebServerBase *base_{nullptr};
   panel_layout::PanelLayout *panels_{nullptr};
   light::LightState *display_{nullptr};
@@ -1815,8 +1828,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void handle_demo_(AsyncWebServerRequest *request);
   void apply_demo_(const std::vector<std::pair<std::string, std::string>> &kv);
 #endif
-  GameSnapshot game_;
-  GameSnapshot prev_;
+  GameSnapshot &game_{psram_object<GameSnapshot>()};  // PSRAM, as last_fields_
+  GameSnapshot &prev_{psram_object<GameSnapshot>()};
   uint32_t post_since_ms_{0};
   uint32_t next_fetch_ms_{0};
   uint8_t misses_{0};
@@ -1834,7 +1847,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t busy_since_ms_{0};  // millis() when the worker task was started
   uint32_t gave_up_ms_{0};     // millis() when the loop last wrote a worker off, 0 = never
   uint32_t worker_seq_{0};     // bumped when a worker is abandoned
-  Job job_;
+  Job &job_{psram_object<Job>()};  // PSRAM, as last_fields_
   // Bumped by the main loop when what the board follows changes. Atomic, so
   // a worker in the middle of a many-read job can see it and stop early.
   std::atomic<uint32_t> generation_{0};

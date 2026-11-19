@@ -17,16 +17,16 @@
   },
   "firmware": {
     "moonhub75": {
-      "static_ram": 151917
+      "static_ram": 145157
     },
     "moonhub75-2panel": {
       "static_ram": 156816
     },
     "scoreboard75": {
-      "static_ram": 151109
+      "static_ram": 144349
     },
     "waveshare": {
-      "static_ram": 157784
+      "static_ram": 151088
     }
   },
   "host": {
