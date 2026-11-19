@@ -18,6 +18,11 @@
 #ifdef USE_PROVISIONING
 #include "esphome/components/provisioning/provisioning.h"
 #endif
+// GAMEDAY: begin
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+#include "esphome/components/saved_networks/setup_network.h"
+#endif
+// GAMEDAY: end
 
 #ifdef USE_ESP32
 
@@ -552,8 +557,13 @@ void ImprovBLEComponent::on_wifi_connect_timeout_() {
     // it in setup (components/saved_networks). Put that back rather than
     // clearing the list: Bluetooth and the hotspot stay up, the app can send
     // the name and password again, and gd_setup_window takes the panel back
-    // to its saved networks once the owner has gone.
+    // to its saved networks once the owner has gone. setup_network() is
+    // blank too but matches no open network nearby (setup_network.h).
+#ifdef USE_GAMEDAY_SAVED_NETWORKS
+    wifi::global_wifi_component->set_sta(saved_networks::setup_network());
+#else
     wifi::global_wifi_component->set_sta(wifi::WiFiAP{});
+#endif
   } else if (!this->restore_sta_.get_ssid().empty()) {
     // Go back to the network the panel had, which is still the one saved in
     // flash. Upstream clears the list here, which left a panel with a wrong

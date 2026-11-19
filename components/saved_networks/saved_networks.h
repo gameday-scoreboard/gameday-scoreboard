@@ -63,6 +63,7 @@
 #include "esphome/core/preferences.h"
 
 #include "network_list.h"
+#include "setup_network.h"
 #include "setup_window.h"
 
 namespace esphome {
