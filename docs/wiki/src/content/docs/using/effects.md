@@ -19,7 +19,7 @@ On the [device page](/using/device-page/)'s Home tab, under the board:
 
 Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
 
-In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. The Game Day app gets the same controls in a later release.
+In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. In the [Game Day app](/get-started/the-app/), the same controls show under **Showing** when it is on **Effects**.
 
 ## Effect playlists
 
@@ -27,7 +27,7 @@ An effect playlist is a list of effects the panel steps through on its own, each
 
 To make one, open the device page's **Customize** tab and find **Effect playlists**:
 
-1. Tap **New effect playlist** and give it a name of up to 16 characters.
+1. Tap **New effect playlist** and give it a name of up to 16 characters. Any name works except one another effect playlist has and **None**, which is the choice that stops a playlist.
 2. Tap **Add an effect**. The new effect starts as whatever the panel is showing now, so you can try an effect, palette, speed and intensity on the Home tab first and then add it. Change any of them in the row after.
 3. Pick how long it stays up from **For**, from 1 second to 1 hour. A new effect stays up for 15 seconds.
 4. Use the arrows to put the effects in order, and the **✕** to take one out.

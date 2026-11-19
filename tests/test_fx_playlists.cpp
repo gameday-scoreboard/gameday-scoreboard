@@ -98,6 +98,10 @@ void test_parse() {
   FCHECK(st.count == 4, "four playlists, got %u", (unsigned) st.count);
   FCHECK(strcmp(st.list[1].name, "Two") == 0 && strcmp(st.list[3].name, "Four") == 0, "repeats and blanks gone");
   FCHECK(st.list[0].count == 0, "the first One kept, empty");
+  // "None" is Home Assistant's choice to stop, so no playlist takes it.
+  st = parse_fx_lists("None=Matrix;Party=Drift; None =DNA;none=", n);
+  FCHECK(st.count == 2 && strcmp(st.list[0].name, "Party") == 0 && strcmp(st.list[1].name, "none") == 0,
+         "None left out, got %u", (unsigned) st.count);
   std::string nine = "Nine=";
   for (int i = 0; i < 9; i++)
     nine += std::string(i ? "," : "") + "Matrix";

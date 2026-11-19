@@ -1800,6 +1800,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         const n = cleanName(name.value);
         if (!n || n === l.n) { name.value = l.n; return; }
         if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another effect playlist has that name"); }
+        // "None" is Home Assistant's choice to stop a playlist.
+        if (n === "None") { name.value = l.n; return toast("That name is taken"); }
         put({ n });
         // Done typing: let the card redraw under its new name.
         name.blur();

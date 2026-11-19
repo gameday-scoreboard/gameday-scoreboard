@@ -738,7 +738,8 @@ def parse_fx_lists(v):
             break
         name, _eq, body = part.partition("=")
         name = message_clean(name, LIMITS["kListNameMax"], False)
-        if not name or any(pl["n"] == name for pl in out):
+        # "None" is kFxListStop, Home Assistant's stop choice.
+        if not name or name == "None" or any(pl["n"] == name for pl in out):
             continue
         pl = {"n": name, "shuffle": False, "fx": []}
         for tok in body.split(",") if body else []:
@@ -1239,8 +1240,8 @@ def import_settings(doc):
             continue
         if k == "fxlists":
             # The FX_PLAYLISTS case: into fxlists= text, the defaults filled in, nameless
-            # playlists, any past kFxListMax, effects past kFxEntryMax and names holding a
-            # separator left out and listed.
+            # playlists, one named "None", any past kFxListMax, effects past kFxEntryMax
+            # and names holding a separator left out and listed.
             bad = 'fxlists should be effect playlists like {"n": "Party", "fx": [{"e": "Matrix", "w": 15}]}.'
             if not isinstance(v, list):
                 return fail(bad)
@@ -1251,7 +1252,7 @@ def import_settings(doc):
                         not (pl.get("shuffle") is None or isinstance(pl["shuffle"], bool)):
                     return fail(bad)
                 name = message_clean(pl["n"].replace(";", "").replace("=", ""), LIMITS["kListNameMax"], False)
-                if not name or len(parts) == LIMITS["kFxListMax"]:
+                if not name or name == "None" or len(parts) == LIMITS["kFxListMax"]:
                     skipped.append("fxlists=" + name)
                     continue
                 body = []

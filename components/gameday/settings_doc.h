@@ -575,8 +575,9 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
       case SettingType::FX_PLAYLISTS: {
         // Into fxlists= text (fx_playlists.h): "Name=effect|palette|speed|
         // intensity|seconds,...,@shuffle;Name2=...". A wrong type refuses the
-        // document; a nameless playlist, any past the most, an effect past
-        // the most and a name holding a separator are left out and listed.
+        // document; a nameless playlist, one named "None" (kFxListStop), any
+        // past the most, an effect past the most and a name holding a
+        // separator are left out and listed.
         // An effect this panel doesn't offer drops out when it is applied.
         const char *bad =
             "fxlists should be effect playlists like {\"n\": \"Party\", \"fx\": [{\"e\": \"Matrix\", \"w\": 15}]}.";
@@ -589,7 +590,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
               !(l["fx"].isNull() || l["fx"].is<JsonArrayConst>()) || !(l["shuffle"].isNull() || l["shuffle"].is<bool>()))
             return detail::settings_fail(out, bad);
           std::string name = list_name_clean(l["n"].as<const char *>());
-          if (name.empty() || kept == (size_t) kFxListMax) {
+          if (name.empty() || name == kFxListStop || kept == (size_t) kFxListMax) {
             out.skipped.push_back("fxlists=" + name);
             continue;
           }

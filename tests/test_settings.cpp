@@ -463,12 +463,12 @@ void test_night_hours() {
 }
 
 // Effect playlists come back as fxlists= text: the defaults filled in, the
-// seconds snapped to a step, the extras and a separator in a name left out
-// and listed, a wrong type refusing the document.
+// seconds snapped to a step, the extras, a separator in a name and the name
+// "None" left out and listed, a wrong type refusing the document.
 void test_fx_playlists() {
   SettingsImport in = import(R"({"schema":1,"fxlists":[
     {"n":"Party","shuffle":true,"fx":[{"e":"Matrix"},{"e":"Drift","p":"Sunset","s":1,"i":2,"w":50},{"e":"Bad|Name"}]},
-    {"n":" ; "},{"n":"B","fx":[]},{"n":"C"},{"n":"D","shuffle":false},{"n":"E"}]})");
+    {"n":" ; "},{"n":"None"},{"n":"B","fx":[]},{"n":"C"},{"n":"D","shuffle":false},{"n":"E"}]})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   const SetOp *fx = find(in, SetKind::FX_LISTS);
   SCHECK(fx != nullptr && fx->text == "Party=Matrix||128|128|15,Drift|Sunset|1|2|45,@shuffle;B=;C=;D=",
@@ -476,7 +476,7 @@ void test_fx_playlists() {
   std::string skipped;
   for (const auto &s : in.skipped)
     skipped += s + " ";
-  SCHECK(skipped == "fxlists=Party:Bad|Name fxlists= fxlists=E ", "skipped: %s", skipped.c_str());
+  SCHECK(skipped == "fxlists=Party:Bad|Name fxlists= fxlists=None fxlists=E ", "skipped: %s", skipped.c_str());
   std::string nine;
   for (int i = 0; i < 9; i++)
     nine += std::string(i ? "," : "") + "{\"e\":\"Matrix\"}";
