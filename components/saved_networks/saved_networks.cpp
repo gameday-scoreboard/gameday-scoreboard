@@ -10,7 +10,11 @@
 #ifdef USE_IMPROV_BLE
 #include "esphome/components/improv_ble/improv_ble_component.h"
 #endif
+#ifdef USE_ESP32
+#include <esp_wifi.h>
+#endif
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <span>
@@ -56,6 +60,9 @@ void SavedNetworks::setup() {
   auto *w = wifi::global_wifi_component;
   if (w == nullptr)
     return;
+  // Every scan, the Wi-Fi component's own and scan()'s, says which saved
+  // networks are in range.
+  w->add_scan_results_listener(this);
 #ifdef USE_IMPROV_BLE
   // A failed setup from the app hands the whole list back, not just the
   // network it was on.
@@ -88,7 +95,7 @@ void SavedNetworks::setup() {
   if (reset && (this->list_.count > 0 || !w->get_sta().get_ssid().empty())) {
     this->in_setup_ = true;
     this->pending_ = {};
-    w->set_sta(wifi::WiFiAP{});
+    w->set_sta(setup_network());
 #ifdef USE_IMPROV_BLE
     // A wrong name or password from the app keeps the panel in setup for
     // another try, and the advert says it has networks, so the app lists it
@@ -101,6 +108,11 @@ void SavedNetworks::setup() {
     ESP_LOGI(TAG, "Wi-Fi was reset: in setup mode, %u saved network(s) kept for the next boot", this->list_.count);
     return;
   }
+  // A blank slot from older firmware's "Reset Wi-Fi" with nothing saved:
+  // that panel is in setup too, so it gets the setup network, which joins
+  // nothing by itself (setup_network.h).
+  if (this->list_.count == 0 && w->has_sta() && w->get_sta().get_ssid().empty())
+    w->set_sta(setup_network());
   this->apply_();
   if (this->pending_.ssid[0] != '\0')
     this->set_timeout("pending", PENDING_MS, [this]() { this->pending_timeout_(); });
@@ -197,6 +209,28 @@ void SavedNetworks::note_connected(const wifi::WiFiAP &ap) {
   const std::string ssid = ap.get_ssid().str();
   if (ssid.empty())
     return;
+  // switch_to() worked. It narrowed the live list to this network, so the
+  // whole list goes back below, with this one now at the front.
+  bool switched = false;
+  if (this->switching_) {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    switched = ssid == this->switch_to_.ssid;
+    if (switched)
+      this->switch_to_ = {};
+  }
+  if (switched) {
+    this->switching_ = false;
+    this->cancel_timeout("switch");
+    ESP_LOGI(TAG, "Switched to %s", ssid.c_str());
+  }
+  // A join that landed just after the fallback gave up on it did work.
+  if (this->switch_failed_ms_ != 0) {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    if (ssid == this->switch_failed_.ssid) {
+      this->switch_failed_ = {};
+      this->switch_failed_ms_ = 0;
+    }
+  }
   // The pending new password worked, so put_front() below stores it.
   if (this->pending_.ssid[0] != '\0' && ssid == this->pending_.ssid &&
       strcmp(ap.get_password().c_str(), this->pending_.password) == 0) {
@@ -208,23 +242,220 @@ void SavedNetworks::note_connected(const wifi::WiFiAP &ap) {
     std::lock_guard<std::mutex> lock(this->mutex_);
     changed = wifi_list::put_front(this->list_, ssid.c_str(), ap.get_password().c_str());
   }
-  if (!changed)
-    return;
-  ESP_LOGI(TAG, "%s is now the first network to try", ssid.c_str());
-  this->save_();
+  if (changed) {
+    ESP_LOGI(TAG, "%s is now the first network to try", ssid.c_str());
+    this->save_();
+  }
+  if (switched)
+    this->apply_();
 }
 
-bool SavedNetworks::forget(const std::string &ssid) {
+static bool app_provisioning() {
+#ifdef USE_IMPROV_BLE
+  return improv_ble::global_improv_component != nullptr &&
+         improv_ble::global_improv_component->get_improv_state() == improv::STATE_PROVISIONING;
+#else
+  return false;
+#endif
+}
+
+AddResult SavedNetworks::add(const std::string &ssid, const std::string &password) {
+  // Its password is the one that works.
+  if (ssid == this->connected_ssid_().data())
+    return AddResult::ON_IT;
+  wifi_list::Added added;
+  {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    added = wifi_list::add_second(this->list_, ssid.c_str(), password.c_str());
+  }
+  if (added == wifi_list::Added::NONE)
+    return AddResult::BAD;
+  ESP_LOGI(TAG, "%s %s", added == wifi_list::Added::NEW ? "Added" : "New password for", ssid.c_str());
+  this->defer([this, ssid]() {
+    // The password typed in now replaces one from a setup that has not
+    // connected yet.
+    if (ssid == this->pending_.ssid) {
+      this->pending_ = {};
+      this->cancel_timeout("pending");
+    }
+    this->save_();
+    // Into the live list, so a drop from this network can land on it. Not
+    // while a switch or a setup from the app has the live list narrowed.
+    if (!this->switching_ && !app_provisioning())
+      this->reapply();
+  });
+  this->scan();
+  return added == wifi_list::Added::NEW ? AddResult::ADDED : AddResult::UPDATED;
+}
+
+void SavedNetworks::scan() {
+  this->defer([this]() {
+    auto *w = wifi::global_wifi_component;
+    if (w == nullptr || !w->is_connected() || this->switching_ || this->scanning_)
+      return;
+    // In the driver, as improv_ble does, rather than with the Wi-Fi
+    // component's start_scanning(), which would take the panel off its
+    // network. The component stores the results and hands them to
+    // on_wifi_scan_results(). Same settings as its own scans.
+#ifdef USE_ESP32
+    wifi_scan_config_t config{};
+    config.show_hidden = false;
+    config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    config.scan_time.active.min = 100;
+    config.scan_time.active.max = 300;
+    const esp_err_t err = esp_wifi_scan_start(&config, false);
+    // Usually a scan of the Wi-Fi component's own is running; its results
+    // come here too.
+    if (err != ESP_OK)
+      ESP_LOGD(TAG, "Scan not started (%s); waiting for the running one", esp_err_to_name(err));
+#endif
+    this->scanning_ = true;
+    // The component tells no listener about a scan that found nothing.
+    this->set_timeout("scan", 10000, [this]() {
+      {
+        std::lock_guard<std::mutex> lock(this->mutex_);
+        this->scanned_.clear();
+        this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
+      }
+      this->scanning_ = false;
+    });
+  });
+}
+
+void SavedNetworks::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+  std::vector<std::string> names;
+  for (const auto &r : results) {
+    if (r.get_is_hidden() || r.get_ssid().empty() || names.size() >= 32)
+      continue;
+    std::string name = r.get_ssid().str();
+    if (std::find(names.begin(), names.end(), name) == names.end())
+      names.push_back(std::move(name));
+  }
+  {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    this->scanned_.swap(names);
+    this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
+  }
+  if (this->scanning_) {
+    this->scanning_ = false;
+    this->cancel_timeout("scan");
+  }
+}
+
+bool SavedNetworks::switch_to(const std::string &ssid) {
+  auto *w = wifi::global_wifi_component;
+  if (w == nullptr || !w->is_connected() || this->in_setup_ || this->switching_ ||
+      ssid == this->connected_ssid_().data() ||
+      app_provisioning())
+    return false;
+  wifi_list::Network target{};
+  {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    const int at = wifi_list::find(this->list_, ssid.c_str());
+    if (at < 0)
+      return false;
+    target = this->list_.nets[at];
+    this->switch_to_ = target;
+    this->switch_failed_ = {};
+  }
+  this->switch_failed_ms_ = 0;
+  this->switch_grace_ = false;
+  this->switching_ = true;
+  // A moment first, so the answer to the request that asked for this is out
+  // before the panel leaves the network it came in on.
+  this->set_timeout("switch-start", 500, [this, target]() {
+    if (!this->switching_)
+      return;
+    ESP_LOGI(TAG, "Switching to %s; back to the saved networks if it has not connected in %u s", target.ssid,
+             (unsigned) (SWITCH_MS / 1000));
+    wifi::WiFiAP ap{};
+    ap.set_ssid(target.ssid);
+    ap.set_password(target.password);
+    // The live list narrows to this network, as a setup from the app does,
+    // so ESPHome tries nothing else meanwhile. Then leave the network the
+    // panel is on, and ESPHome's own reconnect joins this one. Not
+    // start_connecting() while still connected: it leaves the old network
+    // itself, and that disconnect arrives after it has cleared its error
+    // flag, so ESPHome takes the new attempt for a failed one and tears it
+    // down (seen on the bench: on the new network with an address, never
+    // counted as connected).
+    wifi::global_wifi_component->set_sta(ap);
+#ifdef USE_ESP32
+    esp_wifi_disconnect();
+#endif
+    this->set_timeout("switch", SWITCH_MS, [this]() { this->switch_timeout_(); });
+  });
+  return true;
+}
+
+// The network switch_to() was given has not connected: back to the whole
+// list, starting with the network the panel was on, still at the front.
+// Left the same way switch_to() leaves: hand ESPHome the list and drop the
+// link, and its reconnect picks the front network. Not start_connecting():
+// a join that finished at the deadline is a live link, and that call while
+// one is up reset DHCP on it and left the panel associated but unreachable,
+// with ESPHome never noticing the drop (bench, 2026-11-15).
+void SavedNetworks::switch_timeout_() {
+  if (!this->switching_)
+    return;
+  wifi_list::Network target{};
+  {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    target = this->switch_to_;
+  }
+#ifdef USE_ESP32
+  // Already associated with it, still getting an address: once, a little
+  // longer, rather than pulling it off a network that is working.
+  wifi_ap_record_t ap{};
+  if (!this->switch_grace_ && esp_wifi_sta_get_ap_info(&ap) == ESP_OK &&
+      strncmp(reinterpret_cast<const char *>(ap.ssid), target.ssid, wifi_list::SSID_SIZE) == 0) {
+    this->switch_grace_ = true;
+    ESP_LOGI(TAG, "On %s but not connected yet; %u s more", target.ssid, (unsigned) (SWITCH_GRACE_MS / 1000));
+    this->set_timeout("switch", SWITCH_GRACE_MS, [this]() { this->switch_timeout_(); });
+    return;
+  }
+#endif
+  {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    this->switch_failed_ = target;
+    this->switch_to_ = {};
+  }
+  this->switch_failed_ms_ = std::max<uint32_t>(millis(), 1);
+  this->switching_ = false;
+  ESP_LOGW(TAG, "%s did not connect; back to the saved networks", target.ssid);
+  this->apply_();
+#ifdef USE_ESP32
+  esp_wifi_disconnect();
+#endif
+}
+
+std::string SavedNetworks::switching_ssid() {
+  std::lock_guard<std::mutex> lock(this->mutex_);
+  return this->switching_ ? std::string(this->switch_to_.ssid) : std::string();
+}
+
+std::string SavedNetworks::switch_failed() {
+  const uint32_t at = this->switch_failed_ms_;
+  if (at == 0 || millis() - at >= FAILED_MS)
+    return {};
+  std::lock_guard<std::mutex> lock(this->mutex_);
+  return this->switch_failed_.ssid;
+}
+
+Forgot SavedNetworks::forget(const std::string &ssid) {
+  const auto now = this->connected_ssid_();
   bool removed;
   bool rewrite_slot;
+  bool leaves;
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
     rewrite_slot = wifi_list::forget(this->list_, ssid.c_str(), &removed) != nullptr;
+    leaves = removed && wifi_list::leaves_now(this->list_, ssid.c_str(), now.data());
   }
   if (!removed)
-    return false;
-  ESP_LOGI(TAG, "Forgot %s", ssid.c_str());
-  this->defer([this, rewrite_slot, ssid]() {
+    return Forgot::NOT_SAVED;
+  ESP_LOGI(TAG, "Forgot %s%s", ssid.c_str(), leaves ? "; leaving it for the next saved network" : "");
+  this->defer([this, rewrite_slot, leaves, ssid]() {
     if (ssid == this->pending_.ssid)
       this->pending_ = {};
     if (rewrite_slot) {
@@ -245,14 +476,43 @@ bool SavedNetworks::forget(const std::string &ssid) {
         // Hand the rest back, or keep setup mode's blank network.
         w->save_wifi_sta(front.ssid, front.password);
         if (this->in_setup_)
-          w->set_sta(wifi::WiFiAP{});
+          w->set_sta(setup_network());
         else
           this->apply_();
       }
     }
     this->save_();
+    // A second for the HTTP reply to reach the page or the app first.
+    if (leaves)
+      this->set_timeout("leave", 1000, [this, ssid]() { this->leave_(ssid); });
   });
-  return true;
+  return leaves ? Forgot::LEAVES : Forgot::STAYS;
+}
+
+// The live list no longer has the forgotten network, so once the panel is
+// off it ESPHome's reconnect scans and joins one that is left: the front
+// one if it can see it (priority 1 in apply_()), else the strongest. Checked
+// again here: the panel may have moved on its own in the second since.
+void SavedNetworks::leave_(const std::string &ssid) {
+  if (wifi::global_wifi_component == nullptr || this->in_setup_ || this->count() == 0)
+    return;
+  const auto now = this->connected_ssid_();
+  if (ssid != now.data())
+    return;
+  ESP_LOGI(TAG, "Leaving %s for the next saved network", ssid.c_str());
+#ifdef USE_ESP32
+  esp_wifi_disconnect();
+#endif
+}
+
+std::array<char, wifi::SSID_BUFFER_SIZE> SavedNetworks::connected_ssid_() const {
+  std::array<char, wifi::SSID_BUFFER_SIZE> now{};
+  auto *w = wifi::global_wifi_component;
+  // Read from the driver, not from get_sta(): that one is blank while
+  // ESPHome rescans, and this runs on the HTTP task too.
+  if (w != nullptr && w->is_connected())
+    w->wifi_ssid_to(now);
+  return now;
 }
 
 void SavedNetworks::start_setup() {
@@ -263,18 +523,16 @@ void SavedNetworks::start_setup() {
 }
 
 std::vector<Entry> SavedNetworks::list() {
-  std::array<char, wifi::SSID_BUFFER_SIZE> now{};
-  auto *w = wifi::global_wifi_component;
-  // Read from the driver, not from get_sta(): that one is blank while
-  // ESPHome rescans, and this runs on the HTTP task.
-  if (w != nullptr && w->is_connected())
-    w->wifi_ssid_to(now);
+  const auto now = this->connected_ssid_();
   std::vector<Entry> out;
   std::lock_guard<std::mutex> lock(this->mutex_);
+  const bool fresh = this->scanned_ms_ != 0 && millis() - this->scanned_ms_ < SEEN_MS;
   out.reserve(this->list_.count);
   for (size_t i = 0; i < this->list_.count; i++) {
     const char *ssid = this->list_.nets[i].ssid;
-    out.push_back(Entry{ssid, now[0] != '\0' && strncmp(ssid, now.data(), now.size()) == 0});
+    const bool seen =
+        fresh && std::find(this->scanned_.begin(), this->scanned_.end(), ssid) != this->scanned_.end();
+    out.push_back(Entry{ssid, now[0] != '\0' && strncmp(ssid, now.data(), now.size()) == 0, seen});
   }
   return out;
 }

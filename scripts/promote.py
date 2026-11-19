@@ -88,6 +88,20 @@ def problems_on(changelog, note_hits):
     return problems
 
 
+def past_untagged(version, changelog):
+    """The version to release when dev already has a `## v<version>` heading.
+
+    The newest tag plus one names a version an earlier promotion already took to beta
+    when that beta never reached main (v2026.11.4: on beta 11/15, never tagged). With
+    new bullets under Unreleased since, those go out as the next patch, not under the
+    old heading."""
+    body = changelog_check.sections(changelog).get("Unreleased", "")
+    if f"## v{version}" in changelog.splitlines() and any(l.startswith("- ") for l in body.splitlines()):
+        y, m, p = (int(x) for x in version.split("."))
+        return past_untagged(f"{y}.{m}.{p + 1}", changelog)
+    return version
+
+
 def section_text(changelog, heading):
     return changelog_check.sections(changelog).get(heading, "").strip()
 
@@ -171,6 +185,10 @@ def selftest():
     assert any("nothing" in p for p in problems_on("# Changelog\n\n## Unreleased\n\n## v1.0.0\n", []))
     assert any(NOTE in p for p in problems_on(cl, ["docs/x.md:3"]))
     assert section_text(out, "v2026.11.2").startswith("S.")
+    # v2026.11.2 on beta and untagged, more under Unreleased since: the next is .3.
+    assert past_untagged("2026.11.2", cl.replace("## v2026.11.1", "## v2026.11.2")) == "2026.11.3"
+    assert past_untagged("2026.11.2", cl) == "2026.11.2"
+    assert past_untagged("2026.11.2", "# Changelog\n\n## Unreleased\n\n## v2026.11.2\n\nS.\n") == "2026.11.2"
     print("selftest ok")
 
 
@@ -193,7 +211,7 @@ def main():
     yaml_v = yaml_version(show(DEV, YAML))
     tags = beta_version.remote_tags()
     now = datetime.datetime.now(zoneinfo.ZoneInfo("America/Chicago"))
-    version = "%d.%d.%d" % beta_version.next_version(tags, yaml_v, now.year, now.month)
+    version = past_untagged("%d.%d.%d" % beta_version.next_version(tags, yaml_v, now.year, now.month), changelog)
 
     prep_number = None
     if f"## v{version}" in changelog.splitlines() and yaml_v == version:

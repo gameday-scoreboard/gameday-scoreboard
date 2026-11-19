@@ -1,0 +1,339 @@
+# The Smart board: up to four rows of text the owner sends, usually Home
+# Assistant templates that show any entity's state or attribute, as the
+# fourth page under "Showing" (Scoreboard, Clock, Effects, Smart board) and a
+# choice under After the game (components/gameday/wake.h, After::SMART).
+#
+# The rows are four text entities, "Smart board row 1" to "row 4". A row's
+# color tags ([red], [#FF6400], one later in the row for the words after it)
+# are read by components/gameday/smart_board.h. The filled rows share the
+# panel's height, so fewer rows get bigger text; a row too wide for the panel
+# takes the size under it, then scrolls.
+#
+# Picked under Showing, the Smart board stays up through restarts and power
+# cuts (gd_sb_pinned) until somebody picks something else there: the device
+# page, the app or Home Assistant. Picked under After the game, it goes up
+# between games while Showing is on Scoreboard, and the scoreboard comes back
+# when the next game is near. Either way the screens that tell the owner
+# something (Wi-Fi, no internet, heat or power, a banner, an install, the
+# night schedule) are on LVGL's top layer and show over it.
+#
+# The rows come from outside, so they can go stale: once Home Assistant has
+# been connected and then gone for two minutes, the rows turn gray and a dot
+# lights in the top right corner, until it is back. A panel that has never
+# talked to Home Assistant since it started (rows sent from the device page
+# or curl) never goes gray.
+
+text:
+  - platform: template
+    name: "Smart board row 1"
+    id: gd_sb_row1
+    icon: "mdi:numeric-1-box-outline"
+    mode: text
+    max_length: 255
+    optimistic: true
+    on_value:
+      - script.execute: gd_sb_draw
+  - platform: template
+    name: "Smart board row 2"
+    id: gd_sb_row2
+    icon: "mdi:numeric-2-box-outline"
+    mode: text
+    max_length: 255
+    optimistic: true
+    on_value:
+      - script.execute: gd_sb_draw
+  - platform: template
+    name: "Smart board row 3"
+    id: gd_sb_row3
+    icon: "mdi:numeric-3-box-outline"
+    mode: text
+    max_length: 255
+    optimistic: true
+    on_value:
+      - script.execute: gd_sb_draw
+  - platform: template
+    name: "Smart board row 4"
+    id: gd_sb_row4
+    icon: "mdi:numeric-4-box-outline"
+    mode: text
+    max_length: 255
+    optimistic: true
+    on_value:
+      - script.execute: gd_sb_draw
+
+globals:
+  # Showing is on Smart board because somebody picked it there, so it comes
+  # back after a restart
+  - id: gd_sb_pinned
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+esphome:
+  on_boot:
+    # After the page manager has published its default page (Scoreboard)
+    - priority: -200.0
+      then:
+        - lambda: |-
+            id(page_manager).add_on_state_callback([](size_t index) {
+              const bool sb = strcmp(id(page_manager).option_at(index), "Smart board") == 0;
+              if (::espn::sb_flags().own_change) {
+                ::espn::sb_flags().own_change = false;
+                return;
+              }
+              if (sb != id(gd_sb_pinned)) {
+                id(gd_sb_pinned) = sb;
+                id(gd_sb_pin_sync).execute();
+                ESP_LOGI("smart_board", sb ? "Showing the Smart board until somebody picks something else"
+                                           : "Smart board no longer picked under Showing");
+              }
+            });
+            if (id(gd_sb_pinned)) {
+              ESP_LOGI("smart_board", "Back on the Smart board, as Showing was before the restart");
+              ::espn::sb_flags().own_change = true;
+              id(page_manager).show_page("gd_sb_page");
+            }
+
+script:
+  # Into flash at once, like every other setting. The global saves itself on
+  # a 1 s poll and ESPHome writes flash only every 60 s, so a power cut in that
+  # minute brought the panel back on the Scoreboard. Wait out the poll first.
+  - id: gd_sb_pin_sync
+    mode: restart
+    then:
+      - delay: 1100ms
+      - lambda: 'id(gameday_ctl).sync_soon();'
+  - id: gd_sb_draw
+    mode: queued
+    max_runs: 2
+    then:
+      - lambda: |-
+          lv_obj_t *lbl[::espn::kSbRows] = {id(gd_sb_l1), id(gd_sb_l2), id(gd_sb_l3), id(gd_sb_l4)};
+          const std::string raw[::espn::kSbRows] = {id(gd_sb_row1).state, id(gd_sb_row2).state,
+                                                     id(gd_sb_row3).state, id(gd_sb_row4).state};
+          // Biggest first; spleen_8 only as the last resort for a row too short for 12
+          const lv_font_t *fonts[4] = {id(spleen_32)->get_lv_font(), id(spleen_16)->get_lv_font(),
+                                       id(spleen_12)->get_lv_font(), id(spleen_8)->get_lv_font()};
+          int32_t heights[4];
+          for (int f = 0; f < 4; f++)
+            heights[f] = lv_font_get_line_height(fonts[f]);
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          const int32_t H = lv_display_get_vertical_resolution(lv_display_get_default());
+          const bool stale = ::espn::sb_flags().stale;
+
+          ::espn::SbRow rows[::espn::kSbRows];
+          bool filled[::espn::kSbRows];
+          for (size_t i = 0; i < ::espn::kSbRows; i++) {
+            rows[i] = ::espn::sb_parse(raw[i]);
+            filled[i] = !rows[i].empty();
+          }
+          int32_t y[::espn::kSbRows], h[::espn::kSbRows];
+          const int n = ::espn::sb_layout(filled, H, y, h);
+
+          // What each label shows now, as a hash of its text and place.
+          // Home Assistant often sends the same row again (every minute,
+          // say); a row that would come out the same is left alone, so a
+          // scrolling row keeps its place. A hash, not a copy of the text:
+          // internal RAM is tight.
+          static uint32_t drawn[::espn::kSbRows];
+          static uint32_t drawn_layout = 0;
+          const uint32_t layout = (uint32_t) W * 2 + (stale ? 1 : 0) + 1;
+          const bool layout_changed = layout != drawn_layout;
+          drawn_layout = layout;
+          auto key = [](const std::string &s, int32_t y, int32_t h) {
+            uint32_t k = 2166136261u;  // FNV-1a
+            for (unsigned char c : s)
+              k = (k ^ c) * 16777619u;
+            k = (k ^ (uint32_t) y) * 16777619u;
+            return ((k ^ (uint32_t) h) * 16777619u) | 1u;  // never 0, the empty mark
+          };
+
+          for (size_t i = 0; i < ::espn::kSbRows; i++) {
+            lv_obj_t *l = lbl[i];
+            if (!filled[i]) {
+              lv_obj_add_flag(l, LV_OBJ_FLAG_HIDDEN);
+              drawn[i] = 0;
+              continue;
+            }
+            const ::espn::SbRow &r = rows[i];
+            const uint32_t k = key(raw[i], y[i], h[i]);
+            if (!layout_changed && drawn[i] == k && !lv_obj_has_flag(l, LV_OBJ_FLAG_HIDDEN))
+              continue;
+            drawn[i] = k;
+            int32_t widths[4];
+            for (int f = 0; f < 4; f++) {
+              lv_point_t sz;
+              lv_text_get_size(&sz, r.plain.c_str(), fonts[f], 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              widths[f] = sz.x;
+            }
+            const size_t f = ::espn::sb_font(h[i], W, heights, widths, 4, 12);
+            const bool roll = widths[f] > W;
+            // Clip first so a change of text or mode restarts the scroll
+            lv_label_set_long_mode(l, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_font(l, fonts[f], 0);
+            lv_obj_set_style_text_align(l, roll ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_style_text_color(l, lv_color_hex(stale ? ::espn::kSbStaleRgb : r.rgb), 0);
+            lv_label_set_recolor(l, r.recolor && !stale);
+            lv_label_set_text(l, (r.recolor && !stale ? r.text : r.plain).c_str());
+            lv_obj_set_size(l, W, heights[f]);
+            lv_obj_set_pos(l, 0, y[i] + (h[i] - heights[f]) / 2);
+            if (roll)
+              lv_label_set_long_mode(l, LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_clear_flag(l, LV_OBJ_FLAG_HIDDEN);
+          }
+
+          // Nothing sent yet: say what the page is for, not a black panel
+          if (n == 0) {
+            lv_obj_set_width(id(gd_sb_hint_title), W);
+            lv_obj_set_width(id(gd_sb_hint_sub), W);
+            lv_obj_set_style_text_font(id(gd_sb_hint_title), W >= 128 ? fonts[1] : fonts[2], 0);
+            lv_obj_set_pos(id(gd_sb_hint_title), 0, W >= 128 ? 14 : 10);
+            lv_obj_set_pos(id(gd_sb_hint_sub), 0, W >= 128 ? 36 : 30);
+            lv_label_set_text(id(gd_sb_hint_sub),
+                              W >= 128 ? "Send rows from\nHome Assistant" : "Send rows\nfrom Home\nAssistant");
+            lv_obj_clear_flag(id(gd_sb_hint_title), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(gd_sb_hint_sub), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(id(gd_sb_hint_title), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(gd_sb_hint_sub), LV_OBJ_FLAG_HIDDEN);
+          }
+
+          lv_obj_set_pos(id(gd_sb_mark), W - 3, 0);
+          if (stale && n > 0)
+            lv_obj_clear_flag(id(gd_sb_mark), LV_OBJ_FLAG_HIDDEN);
+          else
+            lv_obj_add_flag(id(gd_sb_mark), LV_OBJ_FLAG_HIDDEN);
+
+interval:
+  # Whether Home Assistant is still there, for the stale look
+  - interval: 5s
+    then:
+      - lambda: |-
+          // Whether Home Assistant was ever connected, and millis() when it
+          // last was (plain statics: a global costs more internal RAM)
+          static bool ha_seen = false;
+          static uint32_t ha_ms = 0;
+          const uint32_t now = millis();
+          const bool up = api::global_api_server != nullptr && api::global_api_server->is_connected();
+          if (up) {
+            ha_seen = true;
+            ha_ms = now;
+          }
+          const bool stale = !up && ha_seen && now - ha_ms >= ::espn::kSbStaleMs;
+          if (stale != ::espn::sb_flags().stale) {
+            ::espn::sb_flags().stale = stale;
+            ESP_LOGI("smart_board", stale ? "Home Assistant gone for 2 minutes: the rows are gray until it is back"
+                                          : "Home Assistant is back: the rows are in color again");
+            id(gd_sb_draw).execute();
+          }
+
+lvgl:
+  pages:
+    - id: gd_sb_page
+      bg_color: 0x000000
+      scrollbar_mode: "OFF"
+      on_load:
+        then:
+          - script.execute: gd_sb_draw
+      widgets:
+        - label:
+            id: gd_sb_l1
+            x: 0
+            y: 0
+            width: 64
+            long_mode: CLIP
+            hidden: true
+            text: ""
+            text_color: 0xFFFFFF
+        - label:
+            id: gd_sb_l2
+            x: 0
+            y: 16
+            width: 64
+            long_mode: CLIP
+            hidden: true
+            text: ""
+            text_color: 0xFFFFFF
+        - label:
+            id: gd_sb_l3
+            x: 0
+            y: 32
+            width: 64
+            long_mode: CLIP
+            hidden: true
+            text: ""
+            text_color: 0xFFFFFF
+        - label:
+            id: gd_sb_l4
+            x: 0
+            y: 48
+            width: 64
+            long_mode: CLIP
+            hidden: true
+            text: ""
+            text_color: 0xFFFFFF
+        - label:
+            id: gd_sb_hint_title
+            x: 0
+            y: 10
+            width: 64
+            text_align: CENTER
+            long_mode: CLIP
+            text: "Smart board"
+            text_color: 0xFFFFFF
+            text_font: spleen_12
+        - label:
+            id: gd_sb_hint_sub
+            x: 0
+            y: 30
+            width: 64
+            text_align: CENTER
+            long_mode: WRAP
+            text: "Send rows from Home Assistant"
+            text_color: 0x808080
+            text_font: spleen_8
+        # The stale dot
+        - obj:
+            id: gd_sb_mark
+            x: 61
+            y: 0
+            width: 3
+            height: 3
+            radius: 0
+            border_width: 0
+            pad_all: 0
+            bg_color: 0xFF8000
+            bg_opa: COVER
+            scrollbar_mode: "OFF"
+            hidden: true
+
+lvgl_page_manager:
+  pages:
+    - page: gd_sb_page
+      friendly_name: "Smart board"
+      order: 20
+
+gameday:
+  on_action:
+    # After the game is Smart board: up between games, but only over the
+    # scoreboard (an owner who picked the clock or an effect keeps it), and
+    # down when the next game is near unless somebody picked it under Showing
+    - if:
+        condition:
+          lambda: 'return x == "smartboard";'
+        then:
+          - lambda: |-
+              // current_option() is empty, with a null c_str(), before the first page
+              const auto cur = id(page_manager).current_option();
+              const char *page = cur.empty() ? "" : cur.c_str();
+              const bool on_sb = strcmp(page, "Smart board") == 0;
+              const bool on_board = strcmp(page, "Scoreboard") == 0;
+              if (id(gameday_ctl).smart_between()) {
+                if (on_board) {
+                  ::espn::sb_flags().own_change = true;
+                  id(page_manager).show_page("gd_sb_page");
+                }
+              } else if (on_sb && !id(gd_sb_pinned)) {
+                ::espn::sb_flags().own_change = true;
+                id(page_manager).show_page("gameday_live");
+              }

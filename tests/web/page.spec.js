@@ -38,8 +38,9 @@ const playlistsPost = (p) => {
   // A playlist's options come back as its @ tokens, in the firmware's order.
   const opts = (l) => (l.days ? ",@d:" + l.days + (l.start !== undefined ? ",@t:" + l.start + "-" + l.end : "") : "")
     + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
-    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
-  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",") + opts(l)).join(";") };
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "")
+    + (l.lg || []).map((lg) => ",@lg:" + lg).join("");
+  const q = { lists: d.lists.map((l) => l.n + "=" + l.t.join(",") + opts(l) + (l.lg === undefined ? ",@lg" : "")).join(";") };
   if (d.list !== undefined) q.list = String(d.list);
   return q;
 };
@@ -637,7 +638,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   // Showing and the effect controls are on the Home tab, under the panel's power and brightness.
   const showing = page.getByRole("combobox", { name: "Showing" });
   await expect(showing).toHaveValue("Scoreboard");
-  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects"]);
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board"]);
   await expect(page.locator("#fxCtls")).toBeHidden();
   // The Panel card's own controls are untouched by the hidden effect rows.
   await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
@@ -654,7 +655,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   const speed = page.getByRole("slider", { name: "Speed", exact: true });
   const intensity = page.getByRole("slider", { name: "Intensity", exact: true });
   await expect(effect).toHaveValue("Matrix");
-  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall"]);
+  await expect(effect.locator("option")).toHaveText(["Matrix", "Metaballs", "DNA", "Fireworks", "Snow Fall", "Distortion Waves", "Drift", "Plasma Ball"]);
   await expect(palette).toHaveValue("Default");
   await expect(speed).toHaveValue("128");
   await expect(speed).toHaveAttribute("max", "255");
@@ -676,6 +677,127 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   await showing.selectOption("Scoreboard");
   await expect(page.locator("#fxCtls")).toBeHidden();
   await expect(page.locator("#showCtls .ctl")).toHaveCount(1);
+});
+
+// Effect playlists post to the settings import as {"schema": 1, "fxlists": [...]}.
+const fxPosts = async (request) =>
+  (await (await request.get("/_log")).json())
+    .filter((p) => p.path === "/gameday/settings")
+    .map((p) => { try { return JSON.parse(p.body); } catch (_) { return null; } })
+    .filter((d) => d && Array.isArray(d.fxlists))
+    .map((d) => d.fxlists);
+const lastFx = async (request) => (await fxPosts(request)).pop();
+
+test("effect playlists: made, edited, played, stopped by a hand pick, deleted", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "customize");
+  const card = page.locator("#fxCard");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("heading")).toHaveText("Effect playlists");
+  await expect(card).toContainText("No effect playlists yet.");
+  // The Home tab's picker waits for a playlist.
+  await expect(page.locator("#fxPickRow")).toBeHidden();
+
+  await card.getByRole("button", { name: "New effect playlist" }).click();
+  await expect.poll(() => lastFx(request)).toEqual([{ n: "Effects 1", shuffle: false, fx: [] }]);
+  await expect(card.getByRole("textbox", { name: "Effect playlist name" })).toHaveValue("Effects 1");
+  await expect(card.getByRole("button", { name: "Play Effects 1" })).toBeDisabled();
+
+  // Renamed; a new effect starts as what the panel shows now, for 15 seconds.
+  await card.getByRole("textbox", { name: "Effect playlist name" }).fill("Party");
+  await card.getByRole("textbox", { name: "Effect playlist name" }).press("Enter");
+  await expect.poll(() => lastFx(request)).toEqual([{ n: "Party", shuffle: false, fx: [] }]);
+  await card.getByRole("button", { name: "Add an effect to Party" }).click();
+  await expect.poll(() => lastFx(request)).toEqual([{ n: "Party", shuffle: false, fx: [{ e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }]);
+  await card.getByRole("button", { name: "Add an effect to Party" }).click();
+  await expect(card.getByRole("combobox", { name: "Effect 2 in Party" })).toBeVisible();
+
+  // The second effect: another effect and palette, a speed, a minute, then Shuffle.
+  await card.getByRole("combobox", { name: "Effect 2 in Party" }).selectOption("Drift");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].e).toBe("Drift");
+  await card.getByRole("combobox", { name: "Palette 2 in Party" }).selectOption("Sunset");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].p).toBe("Sunset");
+  const speed = card.getByRole("spinbutton", { name: "Speed 2 in Party" });
+  await speed.fill("200");
+  await speed.press("Enter");
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].s).toBe(200);
+  const time = card.getByRole("combobox", { name: "Time 2 in Party" });
+  await expect(time.locator("option")).toHaveCount(16);
+  await expect(time.locator("option").first()).toHaveText("1 s");
+  await expect(time.locator("option").last()).toHaveText("1 hour");
+  await time.selectOption({ label: "1 min" });
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].w).toBe(60);
+  await card.getByRole("switch", { name: "Shuffle Party" }).click();
+  await expect.poll(async () => (await lastFx(request))[0].shuffle).toBe(true);
+  // Moved up: Drift first.
+  await card.getByRole("button", { name: "Move up effect 2 in Party" }).click();
+  await expect.poll(async () => (await lastFx(request))[0].fx.map((e) => e.e)).toEqual(["Drift", "Matrix"]);
+  const st = await deviceState(request);
+  expect(st.fxlists).toEqual([{ n: "Party", shuffle: true, fx: [
+    { e: "Drift", p: "Sunset", s: 200, i: 128, w: 60 }, { e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }]);
+
+  // Play: the panel goes to Effects, and the page says which one plays.
+  await card.getByRole("button", { name: "Play Party" }).click();
+  await expectSet(request, { fxlist: "1" });
+  await expect(card.getByRole("button", { name: "Stop Party" })).toBeVisible();
+  await expect(card).toContainText("Playing now");
+  await tab(page, "board");
+  await expect(page.getByRole("combobox", { name: "Showing" })).toHaveValue("Effects");
+  const pick = page.getByRole("combobox", { name: "Effect playlist" });
+  await expect(pick).toHaveValue("1");
+  await expect(pick.locator("option")).toHaveText(["None", "Party"]);
+  await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("Drift");
+
+  // A hand pick of the effect stops the playlist and keeps the pick.
+  await page.getByRole("combobox", { name: "Effect", exact: true }).selectOption("DNA");
+  await expect.poll(async () => (await deviceState(request)).fxlist).toBe(0);
+  await expect(pick).toHaveValue("0");
+  await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("DNA");
+
+  // The picker starts it again, and None stops it.
+  await pick.selectOption("1");
+  await expectSet(request, { fxlist: "1" });
+  await expect.poll(async () => (await deviceState(request)).fxlist).toBe(1);
+  await pick.selectOption("0");
+  await expectSet(request, { fxlist: "0" });
+  await expect.poll(async () => (await deviceState(request)).fxlist).toBe(0);
+
+  // Deleted, after a yes.
+  await tab(page, "customize");
+  page.once("dialog", (d) => d.accept());
+  await card.getByRole("button", { name: "Delete Party" }).click();
+  await expect.poll(() => lastFx(request)).toEqual([]);
+  await expect(card).toContainText("No effect playlists yet.");
+});
+
+test("effect playlists: four at most, eight effects each, and none on older firmware", async ({ page, request }) => {
+  const fx = (e) => ({ e, p: "Default", s: 128, i: 128, w: 15 });
+  const eight = Array.from({ length: 8 }, () => fx("Matrix"));
+  await reset(request, { fxlists: ["A", "B", "C", "D"].map((n) => ({ n, shuffle: false, fx: n === "A" ? eight : [fx("DNA")] })) });
+  await page.goto("/#customize");
+  const card = page.locator("#fxCard");
+  await expect(card.getByRole("textbox", { name: "Effect playlist name" })).toHaveCount(4);
+  await expect(card.getByRole("button", { name: "New effect playlist" })).toBeHidden();
+  await expect(card.getByRole("button", { name: "Add an effect to A" })).toBeHidden();
+  await expect(card.getByRole("button", { name: "Add an effect to B" })).toBeVisible();
+  // A name another one has is refused here.
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).fill("A");
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).press("Enter");
+  await expect(page.locator("#toast")).toContainText("Another effect playlist has that name");
+  expect(await fxPosts(request)).toEqual([]);
+  // So is "None", Home Assistant's choice to stop a playlist.
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).fill("None");
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).press("Enter");
+  await expect(page.locator("#toast")).toContainText("That name is taken");
+  await expect(card.getByRole("textbox", { name: "Effect playlist name" }).nth(1)).toHaveValue("B");
+  expect(await fxPosts(request)).toEqual([]);
+
+  // Firmware without effect playlists: no card, no picker.
+  await reset(request, { fxlists: null, fxlist: null, fxlistmax: null, fxmax: null, fxwaits: null });
+  await page.reload();
+  await expect(page.locator("#fxCard")).toBeHidden();
+  await expect(page.locator("#fxPickRow")).toBeHidden();
 });
 
 test("a screen reader gets each control's name, role and state", async ({ page, request }) => {
@@ -853,7 +975,7 @@ test("a playlist's options post as tokens: days, hours, only this list, only tod
   await expect(box.locator(".phours")).toHaveCount(0);
   // The state reads back what the mock kept.
   const st = await deviceState(request);
-  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true, color: "", icon: "" });
+  expect(st.lists[0]).toEqual({ n: "Sundays", f: [0], days: "", start: "00:00", end: "00:00", only: true, color: "", icon: "", lg: [] });
 });
 
 test("a playlist's color and icon post as tokens and show beside its name and in Playing", async ({ page, request }) => {
@@ -878,7 +1000,7 @@ test("a playlist's color and icon post as tokens and show beside its name and in
   await expect(box.locator(".ctl > .pmark svg path")).toHaveAttribute("fill", "#3070ff");
   // The state reads back what the mock kept, in the firmware's key order.
   const st = await deviceState(request);
-  expect(JSON.stringify(st.lists[0])).toBe(JSON.stringify({ n: "Sundays", f: [0], days: "0", start: "00:00", end: "00:00", only: false, color: "blue", icon: "star" }));
+  expect(JSON.stringify(st.lists[0])).toBe(JSON.stringify({ n: "Sundays", f: [0], days: "0", start: "00:00", end: "00:00", only: false, color: "blue", icon: "star", lg: [] }));
   // A rename and a move keep them.
   await box.getByRole("button", { name: "Move down Sundays" }).click();
   await expectSet(request, { lists: "Hoops=nfl:34;Sundays=nfl:6,@d:0,@c:blue,@i:star" });
@@ -919,7 +1041,7 @@ test("a playlist's options survive a rename and a reorder, and the bar says when
   await expectSet(request, { lists: "Sunday ball=nfl:34,@d:0,@t:11:00-23:00,@only,@today:0;A=nfl:6", list: "1" });
 });
 
-test("the Remote card sets each button: a favorite, a sport, a playlist, all or nothing, and marks the favorite it lands on", async ({ page, request }) => {
+test("the Remote card sets each button: a favorite, a sport, a playlist, all, Live games or nothing, and marks the favorite it lands on", async ({ page, request }) => {
   const t = (l, id, abbr, name) => ({ l, id, abbr, name });
   await reset(request, {
     favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("nba", 6, "DAL", "Dallas Mavericks"), t("ncaa", 251, "TEX", "Texas Longhorns"), {}],
@@ -931,7 +1053,21 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  await expect(b1.locator("option")).toHaveText(["Its own favorite", "Dallas Cowboys", "Dallas Mavericks", "Texas Longhorns", "All football", "All basketball", "Sundays", "All favorites", "Nothing"]);
+  // Grouped by sport, all nine leagues: each league's live games, the sport
+  // row with two favorites in it, the favorites, then another team of each
+  // league; the pages under Showing last.
+  await expect(b1.locator("optgroup")).toHaveCount(7);
+  expect(await b1.locator("optgroup").evaluateAll((gs) => gs.map((g) => g.label))).toEqual(
+    ["Your playlists", "Football", "Baseball", "Basketball", "Hockey", "Soccer", "Showing"]);
+  await expect(b1.locator("optgroup[label=Football] option")).toHaveText(["All NFL live games", "All college football live games",
+    "My football teams", "Dallas Cowboys", "Texas Longhorns", "Another NFL team...", "Another college football team..."]);
+  // One basketball favorite: no row of its own.
+  await expect(b1.locator("optgroup[label=Basketball] option")).toHaveText(["All NBA live games", "All WNBA live games",
+    "All men's college basketball live games", "Dallas Mavericks", "Another NBA team...", "Another WNBA team...",
+    "Another men's college basketball team..."]);
+  await expect(b1.locator("optgroup[label=Hockey] option")).toHaveText(["All NHL live games", "Another NHL team..."]);
+  await expect(b1.locator("optgroup[label=Showing] option")).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects"]);
+  await expect(b1.locator(":scope > option")).toHaveText(["Its own favorite", "All favorites", "Live games", "Nothing"]);
   await expect(b1).toHaveValue("fav");
   await expect(btns.nth(0).locator("label small")).toHaveText("Favorite 1: Dallas Cowboys.");
   await expect(btns.nth(3).locator("label small")).toHaveText("Favorite 4 (empty).");
@@ -943,11 +1079,13 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
   await expect(rows.nth(2).locator("small")).toHaveText("College football · remote button 1, 3");
   await expect(rows.nth(0).locator("small")).toHaveText("NFL");
   await expect(btns.nth(0).locator("label small")).toHaveCount(0);
-  await btns.nth(1).locator("select").selectOption("sport:basketball");
-  await expectSet(request, { remote2: "sport:basketball" });
+  await btns.nth(1).locator("select").selectOption("sport:football");
+  await expectSet(request, { remote2: "sport:football" });
   await btns.nth(2).locator("select").selectOption("list:Sundays");
   await expectSet(request, { remote3: "list:Sundays" });
   await expect(page.locator("#listCtls .plist").nth(0).locator(".pbtn")).toHaveText("Button 3");
+  await btns.nth(3).locator("select").selectOption("live");
+  await expectSet(request, { remote4: "live" });
   await btns.nth(3).locator("select").selectOption("none");
   await expectSet(request, { remote4: "none" });
   // Making another playlist leaves the buttons as they are.
@@ -955,7 +1093,142 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all or 
   await page.locator("#listAdd").click();
   await expectSet(request, { lists: "Sundays=nfl:6;Playlist 2=" });
   const st = await deviceState(request);
-  expect(st.remote.map((r) => r.v)).toEqual(["team:ncaa:251", "sport:basketball", "list:Sundays", "none"]);
+  expect(st.remote.map((r) => r.v)).toEqual(["team:ncaa:251", "sport:football", "list:Sundays", "none"]);
+});
+
+test("a remote button plays one league's live games, leaving the owner's own leagues alone", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, { favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), {}, {}, {}] });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  await btns.nth(1).locator("select").selectOption("league:nhl");
+  await expectSet(request, { remote2: "league:nhl" });
+  await expect(btns.nth(1).locator("label small")).toHaveText("Leaves your own Live games leagues as they are.");
+  const st = await deviceState(request);
+  expect(st.favs.filter((f) => f.id).length).toBe(1);
+  expect(st.remote[1]).toEqual({ v: "league:nhl", gone: false });
+});
+
+test("a team that isn't a favorite goes on a button only: marked, counted, out of playlists, and kept as a favorite with a tap", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), t("ncaa", 251, "TEX", "Texas Longhorns"), {}, {}],
+    lists: [{ n: "Sundays", f: [0] }],
+  });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  const b1 = btns.nth(0).locator("select").first();
+  // Another NFL team opens the NFL's list; nothing is posted until a team is picked.
+  await b1.selectOption("pick:nfl");
+  const team = btns.nth(0).locator("select.rteam");
+  await expect(team).toBeVisible();
+  await expect(team.locator("option").first()).toHaveText("Pick a team");
+  await expect(team.locator("option", { hasText: "Philadelphia Eagles" })).toHaveCount(1);
+  await team.selectOption("nfl:21");
+  await expectSet(request, { remote1: "team:nfl:21" });
+  let st = await deviceState(request);
+  expect(st.favs[2]).toMatchObject({ l: "nfl", id: 21, btn: true });
+  // The button shows it as Another NFL team, the Eagles picked.
+  await expect(b1).toHaveValue("pick:nfl");
+  await expect(btns.nth(0).locator("select.rteam")).toHaveValue("nfl:21");
+  await expect(btns.nth(0).locator("label small")).toHaveText("Button only: not in All favorites, playlists or take over.");
+  // Button 3's own favorite is that place: it counts as empty.
+  await expect(btns.nth(2).locator("label small")).toHaveText("Favorite 3 (empty).");
+  // The Favorites card marks it; playlists don't offer it; no Eagles in the football sport row's picks.
+  await tab(page, "teams");
+  const rows = page.locator("#favCtls .ctl.fav");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(2)).toHaveClass(/btnonly/);
+  await expect(rows.nth(2).locator("small")).toHaveText("NFL · Button only (button 1)");
+  await expect(page.locator("#listCtls .plist").nth(0).locator(".pteams .chip")).toHaveCount(2);
+  // A tap on it in the team picker keeps it as a favorite.
+  await page.locator("#favAdd").click();
+  await page.locator("#q").fill("eagles");
+  const tile = page.locator("#tiles [data-key='nfl:21']");
+  await expect(tile).toHaveAttribute("aria-pressed", "false");
+  await tile.click();
+  await expectSet(request, { keepfav: "nfl:21" });
+  st = await deviceState(request);
+  expect(st.favs[2].btn).toBeUndefined();
+  await expect(tile).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a button-only team leaves the favorites when no button is set to it, and a full list adds none", async ({ page, request }) => {
+  const t = (l, id, abbr, name) => ({ l, id, abbr, name });
+  await reset(request, {
+    favs: [t("nfl", 6, "DAL", "Dallas Cowboys"), {}, {}, {}],
+    remote: [{ v: "team:nfl:21" }, { v: "fav" }, { v: "fav" }, { v: "fav" }],
+  });
+  await request.post("/gameday/set", { form: { remote1: "team:nfl:21" } });
+  let st = await deviceState(request);
+  expect(st.favs[1]).toMatchObject({ id: 21, btn: true });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  await btns.nth(0).locator("select").first().selectOption("live");
+  await expectSet(request, { remote1: "live" });
+  st = await deviceState(request);
+  expect(st.favs.filter((f) => f.id).map((f) => f.id)).toEqual([6]);
+  // Sixteen favorites: the picker says so and posts nothing.
+  const nfl = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((id) => t("nfl", id, "T" + id, "Team " + id));
+  await reset(request, { favs: nfl });
+  await page.reload();
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  await btns.nth(0).locator("select").first().selectOption("pick:nfl");
+  await btns.nth(0).locator("select.rteam").selectOption("nfl:21");
+  await expect(page.locator("#toast")).toContainText("Your favorites are full (16)");
+  st = await deviceState(request);
+  expect(st.remote[0].v).toBe("fav");
+});
+
+test("a remote button picks a page under Showing; an Effects button saves the effect playing now, and Change edits its own without touching the panel", async ({ page, request }) => {
+  await reset(request, {});
+  // What Effects is set to on the panel now, before the page reads it
+  await request.post("/select/Effect/set?option=DNA");
+  await request.post("/select/Effect%20Palette/set?option=Ocean");
+  await request.post("/number/Effect%20Speed/set?value=40");
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  await expect(btns).toHaveCount(4);
+  await btns.nth(0).locator("select").selectOption("clock");
+  await expectSet(request, { remote1: "clock" });
+  await btns.nth(1).locator("select").selectOption("smartboard");
+  await expectSet(request, { remote2: "smartboard" });
+  await btns.nth(2).locator("select").selectOption("scoreboard");
+  await expectSet(request, { remote3: "scoreboard" });
+  await btns.nth(3).locator("select").selectOption("fx");
+  await expectSet(request, { remote4: "fx:DNA,Ocean,40,128" });
+  const b4 = btns.nth(3).locator("select");
+  await expect(b4).toHaveValue("fx:DNA,Ocean,40,128");
+  await expect(b4.locator("option:checked")).toHaveText("Effects: DNA, Ocean");
+  // Change opens the button's own controls; editing them changes the button only.
+  const before = (await entityPosts(request)).length;
+  const change = page.locator("#remoteBtns .rfx .linkbtn");
+  await expect(change).toHaveText("Change");
+  await expect(page.locator("#remoteBtns .rfxedit")).toHaveCount(0);
+  await change.click();
+  const edit = page.locator("#remoteBtns .rfxedit");
+  await expect(edit).toBeVisible();
+  await edit.locator("select").nth(0).selectOption("Snow Fall");
+  await expectSet(request, { remote4: "fx:Snow Fall,Ocean,40,128" });
+  await edit.locator("select").nth(1).selectOption("Red & Blue");
+  await expectSet(request, { remote4: "fx:Snow Fall,Red & Blue,40,128" });
+  await edit.locator("input[type=range]").nth(1).fill("200");
+  await expectSet(request, { remote4: "fx:Snow Fall,Red & Blue,40,200" });
+  expect((await entityPosts(request)).length).toBe(before);
+  const st = await deviceState(request);
+  expect(st.remote.map((r) => r.v)).toEqual(["clock", "smartboard", "scoreboard", "fx:Snow Fall,Red & Blue,40,200"]);
+  await expect(b4.locator("option:checked")).toHaveText("Effects: Snow Fall, Red & Blue");
+  await page.locator("#remoteBtns .rfx .linkbtn").click();
+  await expect(page.locator("#remoteBtns .rfxedit")).toHaveCount(0);
 });
 
 test("a remote button whose target is gone falls back to its own favorite and the page says so", async ({ page, request }) => {
@@ -982,6 +1255,60 @@ test("a remote button whose target is gone falls back to its own favorite and th
   await btns.nth(0).locator("select").selectOption("team:nfl:34");
   await expectSet(request, { remote1: "team:nfl:34" });
   await expect(rows.nth(1).locator("small")).toHaveText("NFL · remote button 1, 2");
+});
+
+test("a remote button picks an effect playlist; an emptied or deleted one says so", async ({ page, request }) => {
+  const fx = (e) => ({ e, p: "Default", s: 128, i: 128, w: 15 });
+  await reset(request, {
+    favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, {}, {}, {}],
+    lists: [{ n: "Party", f: [] }],
+    fxlists: [{ n: "Party", shuffle: false, fx: [fx("Matrix"), fx("DNA")] }, { n: "Calm", shuffle: true, fx: [fx("Drift")] },
+      { n: "Empty", shuffle: false, fx: [] }],
+  });
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  const btns = page.locator("#remoteBtns .rbtn");
+  const b1 = btns.nth(0).locator("select");
+  // Under Showing, in full, beside the team playlist of the same name; one with no effects isn't offered.
+  const showing = b1.locator('optgroup[label="Showing"] option');
+  await expect(showing).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects", "Effect playlist: Party", "Effect playlist: Calm"]);
+  await expect(b1.locator('optgroup[label="Your playlists"] option')).toHaveText(["Party"]);
+  await b1.selectOption("fxlist:Party");
+  await expectSet(request, { remote1: "fxlist:Party" });
+  await btns.nth(1).locator("select").selectOption("fxlist:Calm");
+  await expectSet(request, { remote2: "fxlist:Calm" });
+  await expect.poll(async () => (await deviceState(request)).remote.slice(0, 2)).toEqual(
+    [{ v: "fxlist:Party", gone: false }, { v: "fxlist:Calm", gone: false }]);
+  await expect(b1).toHaveValue("fxlist:Party");
+  await expect(b1.locator("option:checked")).toHaveText("Effect playlist: Party");
+  // The effect playlist's row says which button plays it.
+  await tab(page, "customize");
+  await expect(page.locator("#fxListCtls .fxlist").nth(0).locator(".pbtn")).toHaveText("Button 1");
+  await expect(page.locator("#fxListCtls .fxlist").nth(1).locator(".pbtn")).toHaveText("Button 2");
+  // Calm emptied and Party deleted: both buttons fall back to their own favorites, and say so.
+  await request.post("/gameday/set", { form: { fxlists: "Calm=;Empty=" } });
+  await tab(page, "device");
+  await expect(btns.nth(0).locator("label small")).toHaveText("That effect playlist is gone or has no effects, so it is favorite 1: dallas cowboys for now.");
+  await expect(btns.nth(1).locator("label small")).toHaveText("That effect playlist is gone or has no effects, so it is favorite 2 (empty) for now.");
+  await expect(b1).toHaveValue("fxlist:Party");
+  await expect(b1.locator("option:checked")).toHaveText("Effect playlist: Party (gone)");
+});
+
+test("a remote button set to an effect playlist follows it through a rename", async ({ page, request }) => {
+  await reset(request, {
+    fxlists: [{ n: "Party", shuffle: false, fx: [{ e: "Matrix", p: "Default", s: 128, i: 128, w: 15 }] }],
+    remote: [{ v: "fav" }, { v: "fav" }, { v: "fxlist:Party" }, { v: "fav" }],
+  });
+  await page.goto("/");
+  await tab(page, "customize");
+  const name = page.locator("#fxListCtls .fxlist").nth(0).locator(".pname");
+  await name.fill("Disco");
+  await name.press("Enter");
+  await expect.poll(async () => (await deviceState(request)).remote[2]).toEqual({ v: "fxlist:Disco", gone: false });
+  await tab(page, "device");
+  await unfold(page, "#remoteCard");
+  await expect(page.locator("#remoteBtns .rbtn").nth(2).locator("select")).toHaveValue("fxlist:Disco");
 });
 
 test("a remote button set to a playlist follows it through a rename", async ({ page, request }) => {
@@ -1039,12 +1366,68 @@ test("all 16 playlists with every favorite save", async ({ page, request }) => {
   await expect(page.locator("#toast")).not.toContainText("did not respond");
 });
 
-test("playlists wait for favorites", async ({ page, request }) => {
+test("a playlist needs no favorites: sports alone", async ({ page, request }) => {
   await reset(request, { favs: [{}, {}, {}, {}] });
   await page.goto("/");
   await tab(page, "teams");
-  await expect(page.locator("#listCtls")).toHaveText("Add favorites first, then group them here.");
-  await expect(page.locator("#listActions")).toBeHidden();
+  await expect(page.locator("#listCtls")).toHaveText("No playlists yet.");
+  await page.locator("#listAdd").click();
+  await expectSet(request, { lists: "Playlist 1=" });
+  const box = page.locator("#listCtls .plist").nth(0);
+  await expect(box.locator(".pteams .chip")).toHaveCount(0);
+  await box.getByRole("group", { name: "Sports in Playlist 1" }).getByRole("button", { name: "NHL" }).click();
+  await expectSet(request, { lists: "Playlist 1=,@lg:nhl" });
+  await expect(box.locator(".psports small")).toHaveText("Plays live NHL games. Add teams to have them take over while they play.");
+});
+
+test("a playlist's sports post as @lg tokens beside its teams, and the bar says it plays their live games", async ({ page, request }) => {
+  await reset(request, {
+    mode: 4,
+    favs: [
+      { l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" },
+      { l: "nba", id: 6, abbr: "DAL", name: "Dallas Mavericks" },
+      {},
+      {},
+    ],
+    lists: [{ n: "Sunday", f: [0, 1] }],
+    list: 1,
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  const box = page.locator("#listCtls .plist").nth(0);
+  const sports = box.getByRole("group", { name: "Sports in Sunday" }).getByRole("button");
+  // Every league the panel knows, in kLeagues order.
+  await expect(sports).toHaveText(["NFL", "College football", "MLB", "MLS", "Premier League", "NBA", "WNBA",
+    "Men's college basketball", "NHL"]);
+  await expect(box.locator(".psports small")).toHaveCount(0);
+  await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
+  await box.getByRole("button", { name: "NFL", exact: true }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@lg:nfl" });
+  await expect(box.getByRole("button", { name: "NFL", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(box.locator(".psports small")).toHaveText("Plays live NFL games. Its teams take over while their game is on.");
+  // Favorite teams' own rules don't apply to live games.
+  await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toHaveCount(0);
+  await expect(box.getByLabel("Only today's games Sunday")).toHaveCount(0);
+  // A second sport goes in kLeagues order, after the options and look.
+  await box.getByRole("button", { name: "Blue" }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue,@lg:nfl" });
+  await box.getByRole("button", { name: "NHL" }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue,@lg:nfl,@lg:nhl" });
+  const st = await deviceState(request);
+  expect(st.lists[0].lg).toEqual(["nfl", "nhl"]);
+  // An app that doesn't know sports yet sends none: the playlist keeps its own.
+  await request.post("/gameday/settings", { data: { schema: 1, lists: [{ n: "Sunday", t: ["nfl:6"] }] } });
+  expect((await deviceState(request)).lists[0].lg).toEqual(["nfl", "nhl"]);
+  await request.post("/gameday/settings", { data: { schema: 1, lists: [{ n: "Sunday", t: ["nfl:6", "nba:6"], color: "blue", lg: ["nfl", "nhl"] }] } });
+  await tab(page, "board");
+  await expect(page.locator("#favName")).toHaveText("Playing your Sunday playlist: live NFL and NHL games, and its teams while they play");
+  // Taking the sports back out makes it a playlist of teams again.
+  await tab(page, "teams");
+  await box.getByRole("button", { name: "NFL", exact: true }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue,@lg:nhl" });
+  await box.getByRole("button", { name: "NHL" }).click();
+  await expectSet(request, { lists: "Sunday=nfl:6,nba:6,@c:blue" });
+  await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
 });
 
 test("Favorite teams plays a playlist: the picker posts it, the bar names it, the others dim", async ({ page, request }) => {
@@ -2321,11 +2704,54 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   await expect(rows).toHaveCount(1);
   await expect(rows.nth(0).locator("label")).toContainText("Home");
 
-  // Forgetting the last one leaves the empty line.
-  page.once("dialog", (d) => d.accept());
+  // Forgetting the last one, which it's on, says it stays on it, and leaves the empty line.
+  let asked = "";
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
   await rows.nth(0).locator("button").click();
   await expect(rows).toHaveCount(0);
+  expect(asked).toContain("only saved network, so the panel stays on it");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. It's the only saved network");
   await expect(page.locator("#netsEmpty")).toBeVisible();
+
+  // Forgetting the one it's on with others left names the next one and moves there.
+  await reset(request, {}, [], [
+    { ssid: "Home", connected: true },
+    { ssid: "iPhone", connected: false },
+  ]);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(2);
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
+  await rows.nth(0).locator("button").click();
+  await expect.poll(() => asked).toBe("Forget Home? The panel moves to iPhone now.");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. Moving to iPhone now");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+
+  // With more than one left, the next one is named and the rest are a fallback.
+  await reset(request, {}, [], [
+    { ssid: "Home", connected: true },
+    { ssid: "iPhone", connected: false },
+    { ssid: "Friend", connected: false },
+  ]);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(3);
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.accept();
+  });
+  await rows.nth(0).locator("button").click();
+  await expect.poll(() => asked).toBe("Forget Home? The panel moves to iPhone now, or another saved network if it can't see iPhone.");
+  await expect(page.locator("#toast")).toContainText("Forgot Home. Moving to the next saved network now");
 
   // Firmware without the list: the section stays hidden.
   await reset(request, {}, [], null);
@@ -2333,6 +2759,80 @@ test("saved Wi-Fi networks are listed in order and one can be forgotten", async 
   await tab(page, "device");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#netsCard")).toBeHidden();
+});
+
+test("a network is added by name, and the page offers to switch when the panel sees it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  const rows = page.locator("#nets .ctl");
+  const msg = page.locator("#netMsg");
+  await expect(rows).toHaveCount(2);
+  const posts = async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi");
+  const add = async (name, pass) => {
+    if (await page.locator("#netAdd").isVisible()) await page.locator("#netAdd").click();
+    await page.locator("#netName").fill(name);
+    await page.locator("#netPass").fill(pass);
+    await page.locator("#netSave").click();
+  };
+
+  // Checked on the page first: nothing is posted.
+  await add("Lake", "short");
+  await expect(msg).toHaveText("A Wi-Fi password is 8 to 63 characters.");
+  await add("Home", "password1");
+  await expect(msg).toHaveText("The panel is on Home now, so its password already works.");
+  expect(await posts()).toEqual([]);
+
+  // Out of range: saved second, behind the network it is on, no offer. The
+  // password goes in the body, not the address.
+  page.on("dialog", (d) => d.accept());
+  await add("Lake", "lakepass1");
+  await expect(msg).toHaveText("Saved Lake. The panel joins it wherever it can't find a network it already knows.");
+  expect(await posts()).toEqual([{ path: "/gameday/wifi", q: {}, form: { ssid: "Lake", password: "lakepass1" } }]);
+  await expect(page.locator("#netForm")).toBeHidden();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(1).locator("label")).toContainText("Lake");
+
+  // In range, but the switch fails: the panel is back on Home.
+  await add("Attic", "atticpass");
+  await expect(msg).toHaveText("The panel couldn't join Attic, so it went back to Home. Check the name and password, then add it again.",
+    { timeout: 15000 });
+  expect((await posts()).map((p) => p.q).filter((q) => q.switch)).toEqual([{ switch: "Attic" }]);
+
+  // In range and it joins.
+  const offers = [];
+  page.removeAllListeners("dialog");
+  page.on("dialog", (d) => { offers.push(d.message()); d.accept(); });
+  await add("Cabin", "cabinpass");
+  await expect(msg).toHaveText("The panel is on Cabin now.", { timeout: 15000 });
+  expect(offers.length).toBe(1);
+  expect(offers[0]).toContain("The panel can see Cabin. Switch to it now?");
+  expect(offers[0]).toContain("it goes back to Home within a minute");
+  await expect(rows.nth(0).locator("label small")).toHaveText("Connected");
+  await expect(rows.nth(0).locator("label")).toContainText("Cabin");
+
+  // Declining the offer leaves it saved; a saved name asks before its password changes.
+  page.removeAllListeners("dialog");
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); asked.length === 1 ? d.accept() : d.dismiss(); });
+  await add("Attic", "atticpass2");
+  await expect(msg).toHaveText("Saved Attic. The panel joins it wherever it can't find a network it already knows.");
+  expect(asked[0]).toBe("Attic is already saved. Replace its password?");
+  expect(asked[1]).toContain("The panel can see Attic.");
+
+  // Full: the page says which one drops.
+  page.removeAllListeners("dialog");
+  await reset(request, {}, [], [1, 2, 3, 4, 5].map((i) => ({ ssid: "n" + i, connected: i === 1 })));
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await expect(rows).toHaveCount(5);
+  page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await add("Lake", "lakepass1");
+  await expect.poll(() => asked[asked.length - 1]).toBe("The list is full, so adding Lake drops n5. Add it?");
+  expect(await posts()).toEqual([]);
 });
 
 test("the stale tag follows the device's consecutive misses", async ({ page, request }) => {
@@ -2536,7 +3036,7 @@ test("the Device tab's rarely used cards are folded shut, each with a line on wh
   await page.goto("/");
   await tab(page, "device");
   const folds = page.locator("#pane-device details.card");
-  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Diagnostics", "Remote", "Matrix", "FCC information"]);
+  await expect(folds.locator("summary h2")).toHaveText(["Setup", "Game events", "Wi-Fi networks", "Remote", "Matrix", "Diagnostics", "FCC information"]);
   for (const d of await folds.all()) expect(await d.evaluate((n) => n.open)).toBe(false);
   await expect(page.locator("#setupCard .fsum")).toHaveText("Time zone, startup, backup");
   await expect(page.locator("#netsSum")).toHaveText("2 saved");
@@ -2590,7 +3090,7 @@ test("the Look switch picks Phone, Light or Dark, and this browser keeps it", as
   await expect(look.getByRole("radio", { checked: true })).toHaveText("Light");
 });
 
-test("the board's round power button switches Power, and its strip shows brightness as a percent", async ({ page, request }) => {
+test("the board's round power button turns the panel's light on and off, and its strip shows brightness as a percent", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   const power = page.locator("#quickCtls .sw.round");
@@ -2600,12 +3100,82 @@ test("the board's round power button switches Power, and its strip shows brightn
   const paths = async () => (await entityPosts(request)).map((p) => p.path);
   await power.click();
   await expect(power).toHaveAttribute("aria-checked", "false");
-  await expect.poll(paths).toContain("/switch/Power/turn_off");
+  await expect.poll(paths).toContain("/light/Game%20Day%20Scoreboard%202f6a70/turn_off");
   await power.click();
   await expect(power).toHaveAttribute("aria-checked", "true");
-  await expect.poll(paths).toContain("/switch/Power/turn_on");
+  await expect.poll(paths).toContain("/light/Game%20Day%20Scoreboard%202f6a70/turn_on");
   await page.getByRole("button", { name: "Refresh scores" }).click();
   await expect.poll(paths).toContain("/button/Refresh%20Now/press");
+});
+
+test("the Brightness slider sets the panel's light's brightness, 1 to 255", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "Brightness" });
+  await expect(slider).toHaveValue("128");
+  await slider.fill("200");
+  await slider.dispatchEvent("change");
+  await expect.poll(async () => (await entityPosts(request)).some((p) => p.path === "/light/Game%20Day%20Scoreboard%202f6a70/turn_on" && JSON.stringify(p.q).includes("200"))).toBe(true);
+  await expect(page.locator(".boardctl .val")).toHaveText("78%");
+});
+
+test("the board shows the Smart board's rows, in their colors, while the panel shows it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const post = (path) => request.post(path);
+  await post("/text/Smart%20board%20row%201/set?value=" + encodeURIComponent("[red] Front Door [#00FF64]Locked"));
+  await post("/text/Smart%20board%20row%203/set?value=" + encodeURIComponent("CO2 547ppm [blink]"));
+  await post("/select/Select%20Page/set?option=Smart%20board");
+  const rows = page.locator("#sbView .sbrow");
+  await expect(page.locator("#sbView")).toBeVisible();
+  await expect(page.locator("#tA")).toBeHidden();
+  await expect(rows.nth(0)).toHaveText("Front Door Locked");
+  await expect(rows.nth(0).locator("span").first()).toHaveCSS("color", "rgb(255, 32, 32)");
+  await expect(rows.nth(0).locator("span").nth(1)).toHaveCSS("color", "rgb(0, 255, 100)");
+  await expect(rows.nth(1)).toBeHidden();
+  // A bracket that isn't a color stays text
+  await expect(rows.nth(2)).toHaveText("CO2 547ppm [blink]");
+  await expect(page.locator("#sbView .sbhint")).toBeHidden();
+  await post("/select/Select%20Page/set?option=Scoreboard");
+  await expect(page.locator("#sbView")).toBeHidden();
+  await expect(page.locator("#tA")).toBeVisible();
+});
+
+test("Smart board rows show in their colors and edit with words and a color, no tags", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await request.post("/text/Smart%20board%20row%201/set?value=" + encodeURIComponent("[red]Front Door"));
+  await request.post("/select/Select%20Page/set?option=Smart%20board");
+  const lines = page.locator("#sbRows .sbline");
+  await expect(lines.nth(0)).toHaveText("Front Door");
+  await expect(lines.nth(0).locator("span")).toHaveCSS("color", "rgb(255, 32, 32)");
+  await expect(lines.nth(1)).toHaveText("Empty");
+  await expect(page.getByRole("button", { name: "Add row 2" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit row 1" }).click();
+  const text = page.getByRole("textbox", { name: "Row 1 text" });
+  await expect(text).toHaveValue("Front Door");
+  await expect(page.getByRole("radio", { name: "red" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: "blue" }).click();
+  await text.fill("Back Door");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/text/Smart%20board%20row%201/set", q: { value: "[#3070FF]Back Door" } });
+  await expect(lines.nth(0)).toHaveText("Back Door");
+  await expect(lines.nth(0).locator("span")).toHaveCSS("color", "rgb(48, 112, 255)");
+
+  // Clear row empties it on the panel
+  await page.getByRole("button", { name: "Edit row 1" }).click();
+  await page.getByRole("button", { name: "Clear row" }).click();
+  await expect.poll(() => entityPosts(request)).toContainEqual({ path: "/text/Smart%20board%20row%201/set", q: { value: "" } });
+  await expect(lines.nth(0)).toHaveText("Empty");
+});
+
+test("an empty Smart board says where its rows come from", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await request.post("/select/Select%20Page/set?option=Smart%20board");
+  await expect(page.locator("#sbView .sbhint")).toHaveText("Send rows from Home Assistant");
+  await expect(page.locator("#sbView .sbrow").first()).toBeHidden();
 });
 
 test("the header is the panel's name, and a slim bar keeps it once it scrolls away", async ({ page, request }) => {
@@ -3030,12 +3600,12 @@ test("Live pictures and update switches hold their tap through a slow read", asy
     expect(await beta.getAttribute("aria-checked")).toBe("true");
 });
 
-test("a Power tap the panel never gets goes back", async ({ page, request }) => {
+test("a Panel on tap the panel never gets goes back", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");
   const power = page.locator("#quickCtls .sw");
   await expect(power).toHaveAttribute("aria-checked", "true");
-  await page.route("**/switch/**", (route) => route.abort());
+  await page.route("**/light/**", (route) => route.abort());
   await power.click();
   await expect(page.locator("#toast")).toContainText("Device did not respond");
   await expect(power).toHaveAttribute("aria-checked", "true");

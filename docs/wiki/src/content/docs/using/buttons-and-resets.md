@@ -32,7 +32,7 @@ Holding the button on a panel that is off turns it on, so you can see the countd
 
 Reset Wi-Fi is for a new router, a new Wi-Fi password, or moving the panel to another network. Start it by holding the button past 10 seconds and letting go before 20, or with **Reset Wi-Fi** at the bottom of the device page's Device tab.
 
-The panel restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Give it the new network from the app or the hotspot; see [Set up your panel](/get-started/setup/).
+The panel restarts into setup, showing **SETUP** and the QR code for the Game Day app, and starting its own hotspot. Give it the new network from the app or the hotspot; see [Set up your panel](/get-started/setup/). In setup the panel joins no Wi-Fi by itself, not even an open network nearby like a neighbor's guest Wi-Fi, so the app can always find it.
 
 Your team, favorites and every other setting stay as they were.
 

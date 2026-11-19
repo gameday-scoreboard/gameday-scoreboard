@@ -302,11 +302,14 @@ script:
           if (w == nullptr) return;
           // The boot button's countdown has the screen (boot_hold_tick).
           if (id(boot_hold_stage) >= 2) return;
-          // The app is mid-handover: no QR and no turns, just JOINING.
+          // The app is mid-handover, or the panel is switching to a network
+          // picked on the device page or in the app: no QR and no turns,
+          // just JOINING.
           const bool provisioning =
-              improv_ble::global_improv_component != nullptr &&
-              improv_ble::global_improv_component->get_improv_state() ==
-                  improv::STATE_PROVISIONING;
+              id(gd_networks).switching() ||
+              (improv_ble::global_improv_component != nullptr &&
+               improv_ble::global_improv_component->get_improv_state() ==
+                   improv::STATE_PROVISIONING);
           // Lost means: there is a real saved network and the panel is not on
           // it. Derived from the live Wi-Fi state every time rather than
           // latched, so it is still right after the offline restart
@@ -455,16 +458,23 @@ script:
             if (id(boot_hold_since_ms) != 0 && !via_button && !id(boot_show_address).is_running() &&
                 !id(gameday_ctl).boot_hold(id(boot_hold_since_ms)))
               id(boot_hide).execute();
-          } else if (!provisioning && improv_ble::global_improv_component != nullptr &&
-                     improv_ble::global_improv_component->failed_ms() != 0 &&
-                     millis() - improv_ble::global_improv_component->failed_ms() < 30000) {
-            // The network the app just handed over didn't work. Say so for
-            // 30 s, ahead of setup and Wi-Fi lost, so someone watching the
-            // panel rather than the phone knows why it is back where it was.
-            // The app asks for the name and password again.
+          } else if (!provisioning &&
+                     ((improv_ble::global_improv_component != nullptr &&
+                       improv_ble::global_improv_component->failed_ms() != 0 &&
+                       millis() - improv_ble::global_improv_component->failed_ms() < 30000) ||
+                      (id(gd_networks).switch_failed_ms() != 0 &&
+                       millis() - id(gd_networks).switch_failed_ms() < 30000))) {
+            // The network the app just handed over, or the one a switch
+            // went to, didn't work. Say so for 30 s, ahead of setup and
+            // Wi-Fi lost, so someone watching the panel rather than the
+            // phone knows why it is back where it was. The app asks for the
+            // name and password again; a switch rejoins the old network.
             id(boot_qr_cycle).execute(0, false);
             id(boot_view).execute(false, false);
-            const std::string &tried = improv_ble::global_improv_component->failed_ssid();
+            const bool by_switch = id(gd_networks).switch_failed_ms() != 0 &&
+                                   millis() - id(gd_networks).switch_failed_ms() < 30000;
+            const std::string tried = by_switch ? id(gd_networks).switch_failed()
+                                                : improv_ble::global_improv_component->failed_ssid();
             id(boot_set_lines).execute("Can't join", tried.empty() ? std::string("Wi-Fi") : tried, "Check name",
                                        "and password", false);
           } else if (waiting) {
@@ -677,7 +687,7 @@ script:
             if (held >= 1500 && id(boot_hold_stage) < 1) {
               id(boot_hold_stage) = 1;
               // A panel switched off with a click would show none of this.
-              if (!id(power).state) id(power).turn_on();
+              if (!id(gameday_ctl).display_on()) id(gd_display).turn_on().perform();
               // In front of whatever else is up (a banner, the heat mark), or
               // the countdown would run where nobody can read it.
               lv_obj_move_foreground(id(boot_overlay));
@@ -779,6 +789,13 @@ script:
                 // its first frame: text on 64, QR beside the text on 128.
                 const bool wide = lv_disp_get_hor_res(lv_disp_get_default()) >= 128;
                 id(boot_qr_cycle).execute(0, false);
+                if (id(gd_networks).switching()) {
+                  // Left on purpose for another network (wifi: on_disconnect).
+                  const std::string joining = id(gd_networks).switching_ssid();
+                  id(boot_view).execute(false, false);
+                  id(boot_set_lines).execute("JOINING", joining.empty() ? std::string("Wi-Fi") : joining, "", "", true);
+                  return;
+                }
                 id(boot_view).execute(wide, wide);
                 id(boot_set_lines).execute("Wi-Fi", "lost", "open app", "", true);
 

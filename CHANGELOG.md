@@ -35,6 +35,35 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## v2026.11.5
+
+The new Smart board shows your own text from Home Assistant, effect playlists step through your effects, and remote buttons can pick live games, any team, a page or a playlist.
+
+### ⚠️ Heads up
+
+- 💡 In Home Assistant, **Power** and **Brightness** are now one light with the panel's name that can join a light group or an area and fade; an automation or dashboard that used either needs the light instead
+
+### ✨ New
+
+- 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**
+- 📶 **Add network** under **Wi-Fi networks** on the device page saves a network by name and password while the panel stays on its Wi-Fi, and offers to switch to it now when it's in range
+- 📉 The panel downloads a fifth of the data from ESPN or less: it asks for the scores compressed, so **ESPN data** on the device page climbs much slower
+- 🎆 **Effect playlists**: up to 4 named lists of effects (any name but **None**, the choice that stops one), each one up for 1 second to an hour, in order or shuffled, made on the Customize tab and played from there, the Home tab, a **Remote** button or Home Assistant
+- 🎮 **Live games**, **Scoreboard**, **Clock**, **Smart board** and **Effects** in the **Remote** button pickers: Live games switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip; a page choice puts that page up, and an Effects button keeps its own effect, palette, speed and intensity, set with **Change** under it
+- 🏈 The **Remote** button pickers are grouped by sport, with every league: **All NFL live games** follows that league only, leaving your own Live games leagues as they are, and **Another NFL team...** puts any team on a button, marked **Button only** under **Favorites**
+- 🏟️ **Sports in playlists**: a playlist can hold whole leagues beside its teams, like NFL plus the Mavericks; it shows those leagues' live games, and its own teams take over while they play
+- 🔁 A remote button set to a team, playlist, sport or Live games now brings the panel back to the scoreboard when the Clock, Smart board or an effect is up, and ends **After the game**'s clock or Smart board until the next game's final
+
+### 🐛 Fixes
+
+- ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league
+- 📶 **Forget** on the Wi-Fi network the panel is on moves it to your next saved network right away, instead of staying on the forgotten one until the next restart
+- 🎮 A WizMote paired or unpaired just before a power cut stays that way, instead of the old pairing coming back
+- 🪝 A webhook address no longer takes a little of the panel's memory with every event it posts, which over a week of game days without a restart could run the panel low
+- 📶 The round arrow above the app's Wi-Fi list now has the panel look for networks again, so a phone hotspot turned on after the panel started shows up
+- 🔓 After **Reset Wi-Fi** the panel stays in setup for the app instead of joining an open Wi-Fi network nearby that it never saved
+- 🌅 A panel turned back on now shows what's current: a Smart board row no longer stays frozen mid-scroll on the text it had when it went dark
+
 ## v2026.11.3
 
 Pick the best game now starts off, so Live games shows a random game until you turn it on. Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.

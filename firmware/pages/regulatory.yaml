@@ -14,7 +14,7 @@
 # 128 px, with the page number in the bottom right corner. A panel switched
 # off is switched on, and one dimmed or dark for the night lights at its
 # Brightness setting while the screen is up (pages/guard.yaml). Asking again
-# starts over at page 1; the Power switch turned off takes it down. It never
+# starts over at page 1; the Display light turned off takes it down. It never
 # covers the QC screen.
 
 globals:
@@ -38,10 +38,10 @@ script:
                 ESP_LOGI("regulatory", "FCC information on screen");
                 id(reg_active) = true;
                 id(reg_step) = 0;
-                if (!id(power).state) id(power).turn_on();
+                if (!id(gameday_ctl).display_on()) id(gd_display).turn_on().perform();
             - hub75.set_brightness:
                 id: matrix
-                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, false);'
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level(), false);'
             - while:
                 condition:
                   lambda: |-
@@ -89,8 +89,8 @@ script:
           lv_obj_move_foreground(id(reg_layer));
           lv_obj_clear_flag(id(reg_layer), LV_OBJ_FLAG_HIDDEN);
 
-switch:
-  - id: !extend power
+light:
+  - id: !extend gd_display
     on_turn_off:
       - script.execute: reg_stop
 

@@ -23,6 +23,16 @@ Open the [Game Day app](/get-started/the-app/). It finds the new panel over Blue
 2. Pick your Wi-Fi network from the list. The list comes from the panel itself, strongest network first, so it shows what the panel can actually reach.
 3. Enter the password.
 
+Setting it up on your phone's hotspot? An iPhone's Personal Hotspot only shows up while its settings screen is open, so open **Settings > Personal Hotspot** on that iPhone and leave it open while you pick from the list. If it's still missing, tap the round arrow above the list. The panel looks again, which takes about 10 seconds. A hotspot you just turned on can take a minute to show, so tap it again if you need to.
+
+:::note[Coming in the next app and panel updates]
+In the iPhone and Android apps the list refreshes by itself. While it's on screen the app asks the panel to look again every 30 seconds, so a hotspot you just turned on shows up within about a minute with no tap. Networks already on the list keep their place, new ones are added under them, and the network you picked stays picked. The round arrow still looks again right away.
+:::
+
+:::note[Coming in the next app update]
+Right after **Reset Wi-Fi** the panel can take a few seconds to see any networks. The iPhone and Android apps keep asking until the list comes in, which takes up to about 20 seconds. If the panel still sees none, the app says so: tap the round arrow to look again, or type your network's name.
+:::
+
 While the panel joins, it shows **JOINING** and the name of the network the app sent it. If that's the wrong network, you can see it right there. Once the panel is on your Wi-Fi, the app opens it so you can add your teams. On iPhone a short walkthrough takes you through your teams, what the panel shows, the ticker and the timezone.
 
 :::note[Coming in the next app update]
@@ -86,8 +96,6 @@ A panel that can't get back on its Wi-Fi restarts itself once, a minute into the
 
 Every network you set up is added to a list of up to five. Set the panel up on a phone hotspot for a tailgate, and it still knows your home network when it gets back. When it starts, it joins whichever saved network it can see, trying the last one that worked first.
 
-**Wi-Fi networks** on the device page's Device tab lists the saved networks. **Connected** marks the one in use, and **Tried first** marks the one it tries first. **Forget** takes a network off the list.
-
-**Reset Wi-Fi** and **Factory reset** on the device page clear the whole list. See [Wi-Fi](/using/wifi/) for more.
+**Wi-Fi networks** on the device page's Device tab lists the saved networks. **Connected** marks the one in use, and **Tried first** marks the one it tries first. **Forget** takes a network off the list, and **Add network** saves another one without setting the panel up again. See [Wi-Fi](/using/wifi/) for more.
 
 **Reset Wi-Fi** keeps the saved networks. The panel restarts into setup for 15 minutes so you can give it a new network. If you unplug it and plug it back in, or the 15 minutes run out, it goes back to the networks it already knows. While it's in setup, the panel takes a turn saying **Unplug it to rejoin saved Wi-Fi**. **Factory reset** still erases everything.
