@@ -65,12 +65,14 @@ struct Settings {
   uint32_t cdymd{0};
   TeamRef favs[16];
   // Playlists as the firmware keeps them: a name, a mask over favs and the
-  // options (Prefs9 and Prefs10), and its color and icon (Prefs12).
+  // options (Prefs9 and Prefs10), its color and icon (Prefs12) and its
+  // sports (Prefs13).
   struct List {
     std::string first;
     uint16_t second;
     ListOpt opt;
     uint8_t mark{0};
+    uint16_t leagues{0};
   };
   std::vector<List> lists;
   int list{0};
@@ -157,7 +159,10 @@ void load(Settings &s, JsonObjectConst o) {
       uint8_t mark = 0;
       list_mark_token("@c:" + std::string(l["color"] | ""), mark);
       list_mark_token("@i:" + std::string(l["icon"] | ""), mark);
-      s.lists.push_back({l["n"].as<const char *>(), mask, opt, mark});
+      uint16_t leagues = 0;
+      for (JsonVariantConst k : l["lg"].as<JsonArrayConst>())
+        list_league_token("@lg:" + std::string(k | ""), leagues);
+      s.lists.push_back({l["n"].as<const char *>(), mask, opt, mark, leagues});
     }
   }
   if (o["list"].is<int>())
@@ -338,10 +343,15 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
         memset(b.name, 0, sizeof(b.name));
         memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
       }
+      uint16_t old_leagues[kListMax] = {};
+      for (size_t n = 0; n < s.lists.size() && n < (size_t) kListMax; n++)
+        old_leagues[n] = s.lists[n].leagues;
       s.lists.clear();
       s.list = 0;
-      for (const auto &d : defs) {
-        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark});
+      for (size_t n = 0; n < defs.size(); n++) {
+        const ListDef &d = defs[n];
+        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark,
+                           list_leagues_after(defs, n, old_names, old_leagues)});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
@@ -512,6 +522,10 @@ void state_doc(const Settings &s, JsonDocument &doc) {
       o["today"] = (l.opt.flags & LISTOPT_TODAY) != 0;
     o["color"] = list_color_key(l.mark);
     o["icon"] = list_icon_key(l.mark);
+    JsonArray lg = o["lg"].to<JsonArray>();
+    for (const auto &info : kLeagues)
+      if ((l.leagues >> (uint8_t) info.league) & 1u)
+        lg.add(info.key);
   }
   doc["list"] = s.list;
   // rebuild_state_'s effect playlists.
