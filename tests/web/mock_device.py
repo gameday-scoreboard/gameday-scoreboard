@@ -644,6 +644,8 @@ def norm_list(pl):
         out["today"] = pl["today"]
     out["color"] = pl.get("color", "")
     out["icon"] = pl.get("icon", "")
+    # Its sports by league key, in kLeagues order (list_league_token).
+    out["lg"] = [lg for lg in LEAGUES if lg in pl.get("lg", [])]
     return out
 
 
@@ -664,6 +666,13 @@ def list_opt_token(tok, opt):
         opt["color"] = tok[3:] if tok[3:] in LIST_COLORS else ""
     elif tok.startswith("@i:"):
         opt["icon"] = tok[3:] if tok[3:] in LIST_ICONS else ""
+    elif tok == "@lg":
+        # list_league_token(): keep the sports the playlist of this name has.
+        opt["keep_lg"] = True
+    elif tok.startswith("@lg:"):
+        # list_league_token(): a league it doesn't know drops.
+        if tok[4:] in LEAGUES and tok[4:] not in opt.setdefault("lg", []):
+            opt["lg"].append(tok[4:])
 
 
 def list_opt_text(pl):
@@ -683,6 +692,9 @@ def list_opt_text(pl):
         out += ",@c:" + pl["color"]
     if pl["icon"]:
         out += ",@i:" + pl["icon"]
+    # list_leagues_text(): its sports, in kLeagues order.
+    for lg in pl["lg"]:
+        out += ",@lg:" + lg
     return out
 
 
@@ -712,6 +724,10 @@ def parse_lists(v):
             ref = parse_team_ref(r)
             if ref and ref not in teams and len(teams) < FAV_MAX:
                 teams.append(ref)
+        if opt.pop("keep_lg", False):
+            # list_leagues_after(): the sports of the playlist of that name now.
+            had = next((pl.get("lg", []) for pl in STATE["lists"] if pl["n"] == name), [])
+            opt["lg"] = list(dict.fromkeys(opt.get("lg", []) + had))
         out.append(norm_list({"n": name, "f": [i for i, r in enumerate(fav_refs()) if r and r in teams], **opt}))
     return out
 
@@ -1088,6 +1104,9 @@ def settings_doc():
                 for key in ("color", "icon"):
                     if pl.get(key):
                         e[key] = pl[key]
+                # Its sports, [] for none, so a restore sets them.
+                if isinstance(pl.get("lg"), list):
+                    e["lg"] = list(pl["lg"])
                 out["lists"].append(e)
         elif k == "live":
             # Live games' own list, not the state's (every league with no favorite picked).
@@ -1232,10 +1251,21 @@ def import_settings(doc):
                         skipped.append(f"lists={name}:{key}={e[key]}")
                     elif e[key]:
                         opt[key] = e[key]
+                # Its sports; a league this firmware doesn't have is left out and listed.
+                # No lg at all keeps the playlist's sports ('@lg').
+                keep = ",@lg" if e.get("lg") is None else ""
+                if e.get("lg") is not None:
+                    if not isinstance(e["lg"], list) or not all(isinstance(k, str) for k in e["lg"]):
+                        return fail('lists lg should be leagues like ["nfl"].')
+                    for k in e["lg"]:
+                        if k in LEAGUES:
+                            list_opt_token("@lg:" + k, opt)
+                        else:
+                            skipped.append(f"lists={name}:lg={k}")
                 if not name or len(parts) == LIMITS["kListMax"]:
                     skipped.append("lists=" + name)
                     continue
-                parts.append(name + "=" + ",".join(refs) + list_opt_text({"n": name, "f": [], **opt}))
+                parts.append(name + "=" + ",".join(refs) + list_opt_text({"n": name, "f": [], **opt}) + keep)
             kv.append(("lists", ";".join(parts)))
             continue
         if k == "fxlists":

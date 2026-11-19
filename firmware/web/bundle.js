@@ -56,6 +56,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
   const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
+  // "NFL", "NFL and NHL", "NFL, NBA and NHL".
+  const andJoin = (a) => (a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0] || "");
   const logoUrl = (league, id, abbr) => {
     const l = lgInfo(league);
     return `https://a.espncdn.com/i/teamlogos/${l.logo}/500-dark/${l.byId ? id : String(abbr).toLowerCase()}.png`;
@@ -177,7 +179,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       <div class="card">
         <h2>Playlists</h2>
         <div class="cbody">
-          <p class="hint">Groups of favorites you can switch between.</p>
+          <p class="hint">Groups of favorites and sports you can switch between.</p>
           <div id="listCtls"></div>
           <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
         </div>
@@ -769,6 +771,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         if ("today" in o) e.today = o.today;
         if (o.color) e.color = o.color;
         if (o.icon) e.icon = o.icon;
+        // Always, [] for none: a playlist sent without lg keeps the sports it had.
+        e.lg = o.lg;
         return e;
       }),
     };
@@ -1147,8 +1151,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       // A button-only team on its own while its button is in use.
       const heldV = S.held && !S.live_only && S.remote && S.remote[S.held - 1] ? S.remote[S.held - 1].v : "";
       const held = heldV.startsWith("team:") ? teamByKey(heldV.slice(5)) : null;
+      const sportList = !held && playing && (playing.lg || []).length ? playing : null;
       $("#favName").textContent = held && !S.locked
         ? "Showing the " + held[3] + " from remote button " + S.held + ", until you pick a mode, a playlist or another button"
+        : sportList
+        ? "Playing your " + sportList.n + " playlist: live " + andJoin(sportList.lg.map(liveName)) + " games" +
+          (sportList.f.length ? ", and its teams while they play" : "") + (S.sched && S.sched === S.list ? ", on its schedule" : "")
         : !set
         ? "Add a team to get started"
         : S.locked && shown
@@ -1526,8 +1534,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
   // A playlist's options (playlists.h ListOpt) ride in its lists= text as @
   // tokens among its teams: @d:06 the schedule's days (0 Sunday), @t:11:00-23:00
-  // its hours, @only, @today:1 or @today:0, and its look, @c:blue and @i:star.
-  // The state carries them as fields.
+  // its hours, @only, @today:1 or @today:0, its look, @c:blue and @i:star, and
+  // its sports, @lg:nfl. The state carries them as fields.
   const listOpts = (toks) => {
     const o = { days: "", start: "00:00", end: "00:00", only: false };
     let color = "", icon = "";
@@ -1542,11 +1550,13 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     if (!o.days) { o.start = "00:00"; o.end = "00:00"; }
     o.color = color;
     o.icon = icon;
+    o.lg = Object.keys(LEAGUES).filter((lg) => toks.includes("@lg:" + lg));
     return o;
   };
   const optTokens = (l) => (l.days ? ",@d:" + l.days + (l.start !== l.end ? ",@t:" + l.start + "-" + l.end : "") : "")
     + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
-    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "")
+    + (l.lg || []).map((lg) => ",@lg:" + lg).join("");
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favSlots[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
@@ -1621,6 +1631,31 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         chips.appendChild(c);
       });
       box.appendChild(chips);
+      // Its sports (playlists.h list_league_token): with one, the playlist
+      // plays as Live games over its sports and its teams take over.
+      const lgs = l.lg || [];
+      const sports = el("div", "psports");
+      sports.appendChild(el("span", "plabel", "Sports"));
+      const sc = el("span", "chips");
+      sc.setAttribute("role", "group");
+      sc.setAttribute("aria-label", "Sports in " + l.n);
+      Object.keys(LEAGUES).filter((lg) => TEAMS.some((t) => t[0] === lg)).forEach((lg) => {
+        const c = el("button", "chip", lgInfo(lg).name);
+        c.title = "All " + liveName(lg) + " live games";
+        const on = lgs.includes(lg);
+        setOn(c, on, "aria-pressed");
+        c.onclick = () => {
+          const was = cur().lg || [];
+          put({ lg: Object.keys(LEAGUES).filter((k) => (k === lg ? !was.includes(k) : was.includes(k))) });
+        };
+        sc.appendChild(c);
+      });
+      sports.appendChild(sc);
+      if (lgs.length) {
+        sports.appendChild(el("small", "phint", "Plays live " + andJoin(lgs.map(liveName)) + " games. " +
+          (l.f.length ? "Its teams take over while their game is on." : "Add teams to have them take over while they play.")));
+      }
+      box.appendChild(sports);
       // Its options: the schedule's days and hours, Only this list's games,
       // its own Only today's games. Every change posts the playlists whole,
       // from the playlists as they are now: the card isn't redrawn while a
@@ -1679,7 +1714,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       setOn(sw, !!l.only, "aria-checked");
       sw.onclick = () => put({ only: !cur().only });
       only.appendChild(sw);
-      opts.appendChild(only);
+      // A sport playlist plays live games: Favorite teams' own rules don't apply.
+      if (!lgs.length) opts.appendChild(only);
       const today = el("div", "ctl");
       const tl = el("label", null, "Only today's games");
       const ts = el("select");
@@ -1693,7 +1729,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       };
       today.appendChild(tl);
       today.appendChild(ts);
-      opts.appendChild(today);
+      if (!lgs.length) opts.appendChild(today);
       // Its look: a color and an icon, each with None, for its name on the
       // panel and in Playing.
       const look = (label, key, items, draw) => {
@@ -1719,10 +1755,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       box.appendChild(opts);
       host.appendChild(box);
     });
-    const none = !favKeys.length;
-    if (none) host.appendChild(el("p", "hint", "Add favorites first, then group them here."));
-    else if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
-    $("#listActions").hidden = none;
+    if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
+    $("#listActions").hidden = false;
     $("#listAdd").hidden = ls.length >= listMax();
   };
   $("#listAdd").onclick = () => {

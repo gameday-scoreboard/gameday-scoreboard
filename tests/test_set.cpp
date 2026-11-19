@@ -65,12 +65,14 @@ struct Settings {
   uint32_t cdymd{0};
   TeamRef favs[16];
   // Playlists as the firmware keeps them: a name, a mask over favs and the
-  // options (Prefs9 and Prefs10), and its color and icon (Prefs12).
+  // options (Prefs9 and Prefs10), its color and icon (Prefs12) and its
+  // sports (Prefs13).
   struct List {
     std::string first;
     uint16_t second;
     ListOpt opt;
     uint8_t mark{0};
+    uint16_t leagues{0};
   };
   std::vector<List> lists;
   int list{0};
@@ -157,7 +159,10 @@ void load(Settings &s, JsonObjectConst o) {
       uint8_t mark = 0;
       list_mark_token("@c:" + std::string(l["color"] | ""), mark);
       list_mark_token("@i:" + std::string(l["icon"] | ""), mark);
-      s.lists.push_back({l["n"].as<const char *>(), mask, opt, mark});
+      uint16_t leagues = 0;
+      for (JsonVariantConst k : l["lg"].as<JsonArrayConst>())
+        list_league_token("@lg:" + std::string(k | ""), leagues);
+      s.lists.push_back({l["n"].as<const char *>(), mask, opt, mark, leagues});
     }
   }
   if (o["list"].is<int>())
@@ -338,10 +343,15 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
         memset(b.name, 0, sizeof(b.name));
         memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
       }
+      uint16_t old_leagues[kListMax] = {};
+      for (size_t n = 0; n < s.lists.size() && n < (size_t) kListMax; n++)
+        old_leagues[n] = s.lists[n].leagues;
       s.lists.clear();
       s.list = 0;
-      for (const auto &d : defs) {
-        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark});
+      for (size_t n = 0; n < defs.size(); n++) {
+        const ListDef &d = defs[n];
+        s.lists.push_back({d.name, list_mask(d.teams, before), d.opt, d.mark,
+                           list_leagues_after(defs, n, old_names, old_leagues)});
         if (!active.empty() && d.name == active)
           s.list = (int) s.lists.size();
       }
@@ -512,6 +522,10 @@ void state_doc(const Settings &s, JsonDocument &doc) {
       o["today"] = (l.opt.flags & LISTOPT_TODAY) != 0;
     o["color"] = list_color_key(l.mark);
     o["icon"] = list_icon_key(l.mark);
+    JsonArray lg = o["lg"].to<JsonArray>();
+    for (const auto &info : kLeagues)
+      if ((l.leagues >> (uint8_t) info.league) & 1u)
+        lg.add(info.key);
   }
   doc["list"] = s.list;
   // rebuild_state_'s effect playlists.
@@ -964,6 +978,94 @@ void test_list_marks() {
          "tokens after a full list: %zu teams, %s", l[0].teams.size(), list_mark_text(l[0].mark).c_str());
 }
 
+// A playlist's sports (playlists.h): @lg tokens both ways, which playlist
+// plays as Live games, what its scan reads and keeps, and whose games take
+// the panel.
+void test_list_sports() {
+  const uint16_t NFL = 1u << (uint8_t) League::NFL, NBA = 1u << (uint8_t) League::NBA,
+                 NHL = 1u << (uint8_t) League::NHL;
+  std::vector<ListDef> l = parse_lists("Sunday=nfl:6,nba:6,@lg:nfl,@c:blue,@d:0;Teams=nfl:6;Hockey=@lg:nhl", kFavMax);
+  SCHECK(l.size() == 3 && l[0].teams.size() == 2 && l[0].leagues == NFL, "a sport beside teams: %04x", l[0].leagues);
+  SCHECK(l[0].opt.days == 1 && list_color(l[0].mark) == 6, "options and look still read beside it");
+  SCHECK(l[1].leagues == 0 && list_leagues_text(0).empty(), "a playlist of teams has no sports, no tokens");
+  SCHECK(l[2].teams.empty() && l[2].leagues == NHL, "sports alone");
+  SCHECK(list_leagues_text(NBA | NFL) == ",@lg:nfl,@lg:nba", "tokens back in kLeagues order: %s",
+         list_leagues_text(NBA | NFL).c_str());
+  l = parse_lists("A=@lg:curling,@lg:,@lg:nfl,@lg:nfl;B=@lgx", kFavMax);
+  SCHECK(l[0].leagues == NFL && l[0].opt == ListOpt{} && l[0].mark == 0,
+         "a league it doesn't know drops, and isn't an option; a repeat is one");
+  SCHECK(l[1].leagues == 0, "@lgx isn't a sport");
+  for (const auto &lg : kLeagues) {
+    uint16_t m = 0;
+    SCHECK(list_league_token(std::string("@lg:") + lg.key, m) && m == (1u << (uint8_t) lg.league), "%s reads", lg.key);
+    SCHECK(list_leagues_text(m) == std::string(",@lg:") + lg.key, "%s back", lg.key);
+  }
+  SCHECK(list_leagues_known(0x8000 | NFL) == NFL, "a league bit this firmware lacks is dropped");
+  // A full list of teams keeps the sport after it.
+  std::string full = "Full=";
+  for (int i = 1; i <= (int) kFavMax + 2; i++)
+    full += "nfl:" + std::to_string(i) + ",";
+  SCHECK(parse_lists(full + "@lg:nba", kFavMax)[0].leagues == NBA, "a sport after a full list of teams");
+
+  // Which playlist plays as Live games.
+  uint16_t lg[kListMax] = {NFL, 0, (uint16_t) (NHL | 0x8000)};
+  SCHECK(sport_list_playing(true, false, 1, 3, lg) == NFL, "playlist 1 has a sport");
+  SCHECK(sport_list_playing(true, false, 2, 3, lg) == 0, "playlist 2 is teams only: Favorite teams as ever");
+  SCHECK(sport_list_playing(true, false, 3, 3, lg) == NHL, "only leagues this firmware has");
+  SCHECK(sport_list_playing(true, false, 0, 3, lg) == 0, "every favorite");
+  SCHECK(sport_list_playing(false, false, 1, 3, lg) == 0, "Live games picked: the playlist isn't playing");
+  SCHECK(sport_list_playing(true, true, 1, 3, lg) == 0, "a button-only team holds the panel");
+  SCHECK(sport_list_playing(true, false, 4, 3, lg) == 0, "past the playlists");
+
+  // NFL + Cowboys + Mavericks: the scan reads NFL and the NBA for the Mavericks alone.
+  std::vector<TeamRef> favs = {{(uint8_t) League::NFL, 6}, {(uint8_t) League::NBA, 6}, {(uint8_t) League::NHL, 25}};
+  std::vector<TeamRef> teams = sport_list_teams(0b011, favs, 0);
+  SCHECK(teams.size() == 2 && teams[0] == favs[0] && teams[1] == favs[1], "the playlist's own teams");
+  SCHECK(sport_list_teams(0, favs, 0).empty(), "sports alone: no team takes the panel, not every favorite");
+  SCHECK(sport_list_teams(0b011, favs, 0b010).size() == 1, "a button-only team never takes it");
+  std::vector<League> scan = sport_list_scan(NFL, teams);
+  SCHECK(scan.size() == 2 && scan[0] == League::NFL && scan[1] == League::NBA, "NFL, then the NBA: %zu",
+         scan.size());
+  SCHECK(sport_list_scan(NFL | NBA, teams).size() == 2, "a team's league that is a sport already: read once");
+  SCHECK(sport_list_scan(NHL, {}).size() == 1, "sports alone");
+  const uint8_t nfl = (uint8_t) League::NFL, nba = (uint8_t) League::NBA;
+  SCHECK(sport_list_keeps(NFL, teams, nfl, 21, 22), "any NFL game");
+  SCHECK(sport_list_keeps(NFL, teams, nba, 6, 13) && sport_list_keeps(NFL, teams, nba, 13, 6),
+         "the Mavericks game, home or away");
+  SCHECK(!sport_list_keeps(NFL, teams, nba, 13, 2), "another NBA game isn't in the rotation");
+  SCHECK(!sport_list_keeps(NFL, teams, (uint8_t) League::WNBA, 6, 2), "the same id in another league isn't the team");
+  SCHECK(sport_list_keeps(0, teams, nba, 13, 2), "no sport playlist: every game");
+
+  // '@lg' alone (the settings import, for a playlist sent without sports)
+  // keeps the sports the playlist of that name has.
+  const std::vector<std::string> old_names = {"Sunday", "Hockey", "Teams"};
+  const uint16_t old_lg[] = {NFL, NHL, 0};
+  l = parse_lists("Teams=nfl:6,@lg;Sunday=nfl:6,@lg;New=@lg;Hockey=@lg:nba", kFavMax);
+  SCHECK(l[1].keep_leagues && l[1].leagues == 0 && !l[3].keep_leagues, "@lg reads as keep");
+  SCHECK(list_leagues_after(l, 1, old_names, old_lg) == NFL, "Sunday keeps NFL through a move");
+  SCHECK(list_leagues_after(l, 0, old_names, old_lg) == 0, "Teams keeps having none");
+  SCHECK(list_leagues_after(l, 2, old_names, old_lg) == 0, "a new name has none to keep");
+  SCHECK(list_leagues_after(l, 3, old_names, old_lg) == NBA, "sports sent are the sports");
+  l = parse_lists("Sundays=@lg;Hockey=@lg;Teams=", kFavMax);
+  SCHECK(list_leagues_after(l, 0, old_names, old_lg) == NFL, "a rename keeps them: Sunday is Sundays now");
+  SCHECK(list_leagues_text(l[0].leagues).empty(), "keep writes no token back of its own");
+
+  // The names' sum: the same playlists give the same number, a rename, a
+  // move, one more or one less a different one.
+  char names[kListMax][kListNameMax] = {};
+  strncpy(names[0], "Sunday", kListNameMax);
+  strncpy(names[1], "Hockey", kListNameMax);
+  const uint32_t two = list_names_sum(names, 2);
+  SCHECK(two == list_names_sum(names, 2), "the same playlists, the same sum");
+  SCHECK(two != list_names_sum(names, 1) && two != list_names_sum(names, 3), "a playlist more or less");
+  strncpy(names[1], "Sunday", kListNameMax);
+  strncpy(names[0], "Hockey", kListNameMax);
+  SCHECK(two != list_names_sum(names, 2), "a move");
+  strncpy(names[0], "Hockeys", kListNameMax);
+  SCHECK(two != list_names_sum(names, 2), "a rename");
+  SCHECK(list_names_sum(names, 0) != two, "no playlists");
+}
+
 // Local day of the week (0 Sunday) and minute after midnight of an epoch in
 // a POSIX timezone, as the panel's clock gives them.
 std::pair<int, int> local_dm(int64_t epoch, const char *tz) {
@@ -1309,6 +1411,7 @@ int run_set_tests(int &total_checks) {
   test_remote();
   test_list_options();
   test_list_marks();
+  test_list_sports();
   test_playlists();
   test_parse_set();
   test_cards();

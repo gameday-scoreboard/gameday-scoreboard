@@ -6,7 +6,8 @@
 // list, so it costs no team storage of its own and only the favorites are
 // ever read from ESPN. Beside them, a sport row per sport in the favorites
 // plays that sport's favorites; it is worked out from the favorites each
-// time, so nothing about it is saved but which one plays.
+// time, so nothing about it is saved but which one plays. A playlist can
+// also hold whole sports (list_league_token), and then plays their live games.
 // Pure, no ESPHome includes, so the host tests cover it.
 #pragma once
 
@@ -155,11 +156,89 @@ inline std::string list_mark_text(uint8_t mark) {
   return out;
 }
 
+// A playlist's sports: whole leagues beside its teams, '@lg:<key>' tokens
+// like the options ("Sunday=nfl:6,nba:6,@lg:nfl"), a bit per League. A
+// playlist with one plays as Live games over those leagues, and its own
+// teams take the panel while their game is on, whatever their league
+// (sport_list_scan, sport_list_keeps). '@lg' alone keeps the sports the
+// playlist of that name has now: the settings import writes it for a
+// playlist sent with no sports field, from an app that doesn't know them yet.
+inline bool list_league_token(const std::string &tok, uint16_t &leagues, bool *keep = nullptr) {
+  if (tok == "@lg") {
+    if (keep != nullptr)
+      *keep = true;
+    return true;
+  }
+  if (tok.compare(0, 4, "@lg:") != 0)
+    return false;
+  const LeagueInfo *l = league_by_key(tok.c_str() + 4);
+  if (l != nullptr)
+    leagues |= (uint16_t) (1u << (uint8_t) l->league);
+  return true;
+}
+
+// Only the leagues this firmware has.
+inline uint16_t list_leagues_known(uint16_t leagues) {
+  uint16_t known = 0;
+  for (const auto &l : kLeagues)
+    known |= (uint16_t) (1u << (uint8_t) l.league);
+  return leagues & known;
+}
+
+// The sports back as their tokens, in kLeagues order: ",@lg:nfl,@lg:nba" ("" for none).
+inline std::string list_leagues_text(uint16_t leagues) {
+  std::string out;
+  for (const auto &l : kLeagues)
+    if ((leagues >> (uint8_t) l.league) & 1u)
+      out += std::string(",@lg:") + l.key;
+  return out;
+}
+
+// The leagues a sport playlist's scan reads, in kLeagues order: its own,
+// and the league of each of its teams, read for that team's game alone.
+inline std::vector<League> sport_list_scan(uint16_t leagues, const std::vector<TeamRef> &teams) {
+  uint16_t mask = list_leagues_known(leagues);
+  for (const auto &t : teams)
+    if (t.id != 0 && t.league < 16)
+      mask |= (uint16_t) (1u << t.league);
+  mask = list_leagues_known(mask);
+  std::vector<League> out;
+  for (const auto &l : kLeagues)
+    if ((mask >> (uint8_t) l.league) & 1u)
+      out.push_back(l.league);
+  return out;
+}
+
+// Does a live game a sport playlist's scan found stay in it? Every game in
+// its leagues does; from a league it reads only for its teams, only their
+// games. leagues 0 (no sport playlist playing): every game.
+inline bool sport_list_keeps(uint16_t leagues, const std::vector<TeamRef> &teams, uint8_t league, uint32_t away,
+                             uint32_t home) {
+  if (leagues == 0 || (league < 16 && ((leagues >> league) & 1u)))
+    return true;
+  for (const auto &t : teams)
+    if (t.id != 0 && t.league == league && (t.id == away || t.id == home))
+      return true;
+  return false;
+}
+
+// The sports the playing playlist holds, a bit per League, 0 when Favorite
+// teams plays as ever: not in Favorite teams, a button-only team holding
+// the panel, every favorite or a sport row playing, or a playlist of teams
+// alone. leagues[n] belongs to playlist n + 1.
+inline uint16_t sport_list_playing(bool fav_mode, bool held, uint8_t active, uint8_t count, const uint16_t *leagues) {
+  if (!fav_mode || held || active == 0 || active > count || active > kListMax)
+    return 0;
+  return list_leagues_known(leagues[active - 1]);
+}
+
 struct ListDef {
   std::string name;
   std::vector<TeamRef> teams;
   ListOpt opt;
-  uint8_t mark{0};  // its color and icon (list_color, list_icon)
+  uint8_t mark{0};       // its color and icon (list_color, list_icon)
+  uint16_t leagues{0};   // its sports, a bit per League (list_league_token)
+  bool keep_leagues{false};  // '@lg': the sports the playlist of this name has now
 };
 
 // "11:00" -> minutes after midnight, -1 for anything else (0:00 to 23:59).
@@ -338,7 +417,7 @@ inline std::vector<ListDef> parse_lists(const std::string &v, size_t fav_max) {
       std::string ref = refs.substr(p, comma == std::string::npos ? std::string::npos : comma - p);
       p = comma == std::string::npos ? refs.size() : comma + 1;
       if (!ref.empty() && ref[0] == '@') {
-        if (!list_mark_token(ref, d.mark))
+        if (!list_mark_token(ref, d.mark) && !list_league_token(ref, d.leagues, &d.keep_leagues))
           list_opt_token(ref, d.opt);
         continue;
       }
@@ -354,6 +433,37 @@ inline std::vector<ListDef> parse_lists(const std::string &v, size_t fav_max) {
     out.push_back(d);
   }
   return out;
+}
+
+// The sports playlist n (0-based) of the new playlists gets: its own, or with
+// keep_leagues the ones the playlist of its name had (after a rename, the
+// one it was renamed from), none for a new name.
+inline uint16_t list_leagues_after(const std::vector<ListDef> &lists, size_t n, const std::vector<std::string> &old_names,
+                                   const uint16_t *old_leagues) {
+  const ListDef &d = lists[n];
+  if (!d.keep_leagues)
+    return list_leagues_known(d.leagues);
+  std::vector<std::string> new_names;
+  for (const auto &l : lists)
+    new_names.push_back(l.name);
+  for (size_t k = 0; k < old_names.size(); k++)
+    if (old_names[k] == d.name || list_renamed(old_names, new_names, old_names[k]) == d.name)
+      return list_leagues_known(old_leagues[k] | d.leagues);
+  return list_leagues_known(d.leagues);
+}
+
+// The playlists' names and count in one number (FNV-1a), saved beside
+// their sports: firmware without sports edits the playlists and leaves the
+// sports as they were, so a mismatch on load means they belong to other
+// playlists now, and they go.
+inline uint32_t list_names_sum(const char (*names)[kListNameMax], uint8_t count) {
+  uint32_t h = 2166136261u;
+  auto add = [&h](uint8_t b) { h = (h ^ b) * 16777619u; };
+  add(count);
+  for (uint8_t n = 0; n < count && n < kListMax; n++)
+    for (size_t i = 0; i < kListNameMax; i++)
+      add((uint8_t) names[n][i]);
+  return h;
 }
 
 // A bit per favorite (bit i = favs[i]) for the teams of a playlist that are
@@ -424,6 +534,17 @@ inline bool sport_row_has(uint8_t rows, uint8_t row) {
 // Is favorite i a team that counts as a favorite: there, and not button-only?
 inline bool fav_counts(const std::vector<TeamRef> &favs, uint16_t solo, size_t i) {
   return i < favs.size() && favs[i].id != 0 && !(i < 16 && ((solo >> i) & 1u));
+}
+
+// A sport playlist's teams, the ones that take the panel while their game is
+// on: its own teams only (bit i = favs[i]), never every favorite as a
+// playlist with no teams plays in Favorite teams, and no button-only team.
+inline std::vector<TeamRef> sport_list_teams(uint16_t mask, const std::vector<TeamRef> &favs, uint16_t solo) {
+  std::vector<TeamRef> out;
+  for (size_t i = 0; i < favs.size() && i < 16; i++)
+    if (((mask >> i) & 1u) && fav_counts(favs, solo, i))
+      out.push_back(favs[i]);
+  return out;
 }
 
 // Where a button-only team goes: the first empty place after the last team,

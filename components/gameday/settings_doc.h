@@ -181,6 +181,15 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
           if (*v != '\0')
             o[key] = v;
         }
+        // Its sports by league key, [] for none, so a restore sets them
+        // rather than keeping what the panel has (state from firmware
+        // before sports has none to write).
+        if (l["lg"].is<JsonArrayConst>()) {
+          JsonArray lg = o["lg"].to<JsonArray>();
+          for (JsonVariantConst k : l["lg"].as<JsonArrayConst>())
+            if (k.is<const char *>())
+              lg.add(k.as<const char *>());
+        }
       }
     } else if (strcmp(k, "fxlists") == 0) {
       // Effect playlists as the state has them (fx_playlists.h), Shuffle
@@ -541,12 +550,33 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             if ((key[0] == 'c' ? list_color(mark) : list_icon(mark)) == 0)
               out.skipped.push_back("lists=" + name + ":" + key + "=" + v);
           }
+          // Its sports as their tokens. A league this firmware doesn't have
+          // (from newer firmware) is left out and listed. No lg at all (an
+          // app or a backup from before sports): the playlist keeps the
+          // sports it has now ('@lg').
+          uint16_t leagues = 0;
+          std::string keep = e["lg"].isNull() ? ",@lg" : "";
+          if (!e["lg"].isNull()) {
+            if (!e["lg"].is<JsonArrayConst>())
+              return detail::settings_fail(out, "lists lg should be leagues like [\"nfl\"].");
+            for (JsonVariantConst k : e["lg"].as<JsonArrayConst>()) {
+              if (!k.is<const char *>())
+                return detail::settings_fail(out, "lists lg should be leagues like [\"nfl\"].");
+              std::string key = k.as<const char *>();
+              if (league_by_key(key.c_str()) == nullptr) {
+                out.skipped.push_back("lists=" + name + ":lg=" + key);
+                continue;
+              }
+              list_league_token("@lg:" + key, leagues);
+            }
+          }
           if (name.empty() || kept == (size_t) kListMax) {
             out.skipped.push_back("lists=" + name);
             continue;
           }
           kept++;
-          text += (text.empty() ? "" : ";") + name + "=" + refs + list_opt_text(opt) + list_mark_text(mark);
+          text += (text.empty() ? "" : ";") + name + "=" + refs + list_opt_text(opt) + list_mark_text(mark) +
+                  list_leagues_text(leagues) + keep;
         }
         parse_set(k, text, op, target.fav_max);
         break;

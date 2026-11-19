@@ -195,7 +195,7 @@ void test_round_trip() {
         break;
       }
       case SettingType::PLAYLISTS:
-        text = "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@c:blue,@i:star;College=ncaa:251,ncaa:2294";
+        text = "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@c:blue,@i:star,@lg:nfl;College=ncaa:251,ncaa:2294";
         break;
       case SettingType::CARDS:
         text = "next:1,clock:0,countdown:1,custom:1,message:1,picture:1,gameleaders:1,top25:1,schedule:1,"
@@ -501,7 +501,7 @@ void test_playlists() {
     {"n":"Sun=day;s","t":[]}],"list":2})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   const SetOp *lists = find(in, SetKind::LISTS);
-  SCHECK(lists != nullptr && lists->text == "Pros=nfl:6;Sundays=", "lists came back as %s",
+  SCHECK(lists != nullptr && lists->text == "Pros=nfl:6,@lg;Sundays=,@lg", "lists came back as %s",
          lists != nullptr ? lists->text.c_str() : "nothing");
   SCHECK(skipped(in, "lists=Pros:mlb:999999") && skipped(in, "lists="), "an unknown team or a nameless playlist isn't listed");
   SCHECK(find(in, SetKind::LIST) != nullptr && find(in, SetKind::LIST)->value == 2, "list wasn't applied");
@@ -547,10 +547,10 @@ void test_playlists() {
     {"n":"Late","t":[],"days":"60","only":false},{"n":"Plain","t":["nfl:6"]}]})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   lists = find(in, SetKind::LISTS);
-  SCHECK(lists != nullptr && lists->text == "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0;Late=,@d:06;Plain=nfl:6",
+  SCHECK(lists != nullptr && lists->text == "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@lg;Late=,@d:06,@lg;Plain=nfl:6,@lg",
          "options came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
   in = import(R"({"schema":1,"lists":[{"n":"A","t":[],"days":"1","start":"25:00","end":"23:00"}]})");
-  SCHECK(in.error.empty() && skipped(in, "lists=A:25:00-23:00") && find(in, SetKind::LISTS)->text == "A=,@d:1",
+  SCHECK(in.error.empty() && skipped(in, "lists=A:25:00-23:00") && find(in, SetKind::LISTS)->text == "A=,@d:1,@lg",
          "hours the panel can't read are left out and listed");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"days":1}]})", "days as a number");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"start":"11:00"}]})", "a start with no end");
@@ -561,20 +561,34 @@ void test_playlists() {
     {"n":"B","t":[],"color":"plaid","icon":"heart"},{"n":"C","t":[],"color":"","icon":""}]})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   lists = find(in, SetKind::LISTS);
-  SCHECK(lists != nullptr && lists->text == "A=nfl:6,@d:0,@c:blue,@i:star;B=,@i:heart;C=",
+  SCHECK(lists != nullptr && lists->text == "A=nfl:6,@d:0,@c:blue,@i:star,@lg;B=,@i:heart,@lg;C=,@lg",
          "color and icon came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
   SCHECK(skipped(in, "lists=B:color=plaid"), "a color this firmware doesn't have isn't left out and listed");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"color":3}]})", "color as a number");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"icon":true}]})", "icon as true");
+  // Its sports (playlists.h list_league_token) as their tokens, in kLeagues order.
+  in = import(R"({"schema":1,"lists":[{"n":"Sunday","t":["nfl:6","nba:6"],"lg":["nba","nfl","xfl"],"color":"blue"},
+    {"n":"Teams","t":["nfl:6"],"lg":[]}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "Sunday=nfl:6,nba:6,@c:blue,@lg:nfl,@lg:nba;Teams=nfl:6",
+         "sports came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  SCHECK(skipped(in, "lists=Sunday:lg=xfl"), "a league this firmware doesn't have isn't left out and listed");
+  in = import(R"({"schema":1,"lists":[{"n":"Sunday","t":["nfl:6"]}]})");
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "Sunday=nfl:6,@lg",
+         "no lg keeps the playlist's sports: %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"lg":"nfl"}]})", "lg as text");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"lg":[2]}]})", "a league as a number");
   // The export writes only what is set, so a backup from firmware without
   // the options reads the same (settings_from_state).
   JsonDocument state, exported;
   deserializeJson(state, R"({"favs":[{"l":"nfl","id":6}],"lists":[{"n":"A","f":[0],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},
-    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false,"color":"","icon":""},{"n":"C","f":[],"days":"5","color":"pink","icon":"crown"}]})");
+    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false,"color":"","icon":"","lg":[]},{"n":"C","f":[],"days":"5","color":"pink","icon":"crown","lg":["nfl","nba"]}]})");
   settings_from_state(state.as<JsonObjectConst>(), 0, -1, -1, exported);
   std::string text;
   serializeJson(exported["lists"], text);
-  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"]},{"n":"C","t":[],"days":"5","color":"pink","icon":"crown"}])",
+  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"],"lg":[]},{"n":"C","t":[],"days":"5","color":"pink","icon":"crown","lg":["nfl","nba"]}])",
          "the export's options: %s", text.c_str());
 }
 
@@ -640,6 +654,9 @@ void test_fullest_fits() {
     l["today"] = true;
     l["color"] = "orange";  // the longest keys
     l["icon"] = "trophy";
+    JsonArray lg = l["lg"].to<JsonArray>();  // every sport
+    for (const auto &info : kLeagues)
+      lg.add(info.key);
   }
   state["list"] = kListMax;
   // Four effect playlists of eight effects, every name at its cap.

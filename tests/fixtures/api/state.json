@@ -49,7 +49,10 @@
       "only": true,
       "today": false,
       "color": "blue",
-      "icon": "star"
+      "icon": "star",
+      "lg": [
+        "nfl"
+      ]
     },
     {
       "n": "College",
@@ -62,7 +65,8 @@
       "end": "00:00",
       "only": false,
       "color": "",
-      "icon": ""
+      "icon": "",
+      "lg": []
     }
   ],
   "list": 2,

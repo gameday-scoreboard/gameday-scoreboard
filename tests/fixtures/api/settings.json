@@ -82,14 +82,18 @@
       "only": true,
       "today": false,
       "color": "blue",
-      "icon": "star"
+      "icon": "star",
+      "lg": [
+        "nfl"
+      ]
     },
     {
       "n": "College",
       "t": [
         "ncaa:251",
         "ncaa:2294"
-      ]
+      ],
+      "lg": []
     }
   ],
   "list": 2,
