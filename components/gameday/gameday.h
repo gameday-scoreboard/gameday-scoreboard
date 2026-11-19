@@ -1079,7 +1079,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // the playlist's teams alone.
   struct Prefs13 {
     uint16_t leagues[::espn::kListMax];
-  } __attribute__((packed));
+  };  // 16-bit fields alone: no padding to pack, and a pointer to them stays aligned
   static_assert(sizeof(Prefs13) == 32, "Prefs13 is a fixed-size blob");
   ESPPreferenceObject pref13_;
   Prefs13 prefs13_{};
