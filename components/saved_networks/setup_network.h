@@ -11,9 +11,9 @@
 // skips the name check for a network with no name, and with no password it
 // matches every open network in range, so the panel joined a neighbor's
 // guest Wi-Fi a few seconds into setup. The broadcast address as the BSSID
-// matches no scan result, since no access point sends from it. A connect
-// attempt without a scan (ESPHome's hidden-network retry) clears the BSSID
-// and asks ESP-IDF for a network with no name, which it doesn't join.
+// matches no scan result, since no access point sends from it. ESPHome's
+// hidden-network retry still tries it without the BSSID, and ESP-IDF refuses
+// a connect with no name (esp_wifi_connect returns ESP_ERR_WIFI_SSID).
 
 #include "esphome/components/wifi/wifi_component.h"
 
