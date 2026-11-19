@@ -37,6 +37,10 @@ constexpr int kFxWaitCount = 16;
 constexpr uint16_t kFxWaitSeconds[kFxWaitCount] = {1,   2,   3,   5,   10,  15,   20,   30,
                                                    45,  60,  120, 300, 600, 900,  1800, 3600};
 static_assert(kFxListMax == 4, "set_request.h takes fxlist=0 to 4");
+
+// Home Assistant's "Effect playlist" select lists this first, to stop, so no
+// playlist may take it as a name.
+constexpr const char *kFxListStop = "None";
 constexpr uint8_t kFxWaitDefault = 5;  // 15 seconds for a new effect
 constexpr uint8_t kFxSpeedDefault = 128;
 constexpr uint8_t kFxIntensityDefault = 128;
@@ -142,9 +146,9 @@ inline bool parse_fx_entry(const std::string &text, const FxNames &names, FxEntr
 }
 
 // The set text into a store. At most kFxListMax playlists of kFxEntryMax
-// effects; a name left empty by list_name_clean, or one a playlist before it
-// already has, drops that playlist, so Home Assistant never lists two the
-// same. "" clears them all. A playlist with no effects is kept, so one can be
+// effects; a name left empty by list_name_clean, one a playlist before it
+// already has, or kFxListStop drops that playlist, so Home Assistant never
+// lists two the same. "" clears them all. A playlist with no effects is kept, so one can be
 // made and then filled. Written straight into st, so the panel parses into
 // its PSRAM copy without a second one on the loop task's stack.
 inline void parse_fx_lists(const std::string &v, const FxNames &names, FxStore &st) {
@@ -155,7 +159,7 @@ inline void parse_fx_lists(const std::string &v, const FxNames &names, FxStore &
     std::string part = detail::fx_field(v, start, ';');
     size_t eq = part.find('=');
     std::string name = list_name_clean(part.substr(0, eq));
-    if (name.empty())
+    if (name.empty() || name == kFxListStop)
       continue;
     bool dup = false;
     for (uint8_t n = 0; n < st.count; n++)

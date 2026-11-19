@@ -785,6 +785,12 @@ test("effect playlists: four at most, eight effects each, and none on older firm
   await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).press("Enter");
   await expect(page.locator("#toast")).toContainText("Another effect playlist has that name");
   expect(await fxPosts(request)).toEqual([]);
+  // So is "None", Home Assistant's choice to stop a playlist.
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).fill("None");
+  await card.getByRole("textbox", { name: "Effect playlist name" }).nth(1).press("Enter");
+  await expect(page.locator("#toast")).toContainText("That name is taken");
+  await expect(card.getByRole("textbox", { name: "Effect playlist name" }).nth(1)).toHaveValue("B");
+  expect(await fxPosts(request)).toEqual([]);
 
   // Firmware without effect playlists: no card, no picker.
   await reset(request, { fxlists: null, fxlist: null, fxlistmax: null, fxmax: null, fxwaits: null });

@@ -1189,7 +1189,7 @@ void GamedayComponent::select_fx_playlist(const std::string &option) {
       this->play_fx_list_(n);
       return;
     }
-  if (option == "None")
+  if (option == ::espn::kFxListStop)
     this->stop_fx_list_("None picked");
   else
     ESP_LOGW(TAG, "Unknown effect playlist '%s'", option.c_str());
@@ -1204,12 +1204,12 @@ void GamedayComponent::fx_changed_() {
   if (f.select != nullptr) {
     FixedVector<const char *> options;
     options.init(f.store.count + 1);
-    options.push_back("None");
+    options.push_back(::espn::kFxListStop);
     for (uint8_t n = 0; n < f.store.count; n++)
       options.push_back(f.store.list[n].name);
     f.select->traits.set_options(options);
     uint8_t p = this->fx_player_.list;
-    f.select->publish_state(p >= 1 && p <= f.store.count ? f.store.list[p - 1].name : "None");
+    f.select->publish_state(p >= 1 && p <= f.store.count ? f.store.list[p - 1].name : ::espn::kFxListStop);
   }
   this->rebuild_state_(&this->last_fields_);
 }
