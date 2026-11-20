@@ -6886,13 +6886,17 @@ void GamedayComponent::send_game_event_(const ::espn::HaEvent &e) {
     fields.emplace_back("panel", panel);
     const std::string name = std::string("esphome.gameday_") + kind;
     api::HomeassistantActionRequest req;
-    req.service = StringRef(name);
+    // ESPHome 2026.11 turned these fields into ProgmemStringRef, which takes a
+    // StringRef only explicitly. Naming each field's own type builds on both.
+    using Service = decltype(req.service);
+    using Field = decltype(api::HomeassistantServiceMap::key);
+    req.service = Service(StringRef(name));
     req.is_event = true;
     req.data.init(fields.size());
     for (const auto &kv : fields) {
       auto &m = req.data.emplace_back();
-      m.key = StringRef(kv.first);
-      m.value = StringRef(kv.second);
+      m.key = Field(StringRef(kv.first));
+      m.value = Field(StringRef(kv.second));
     }
     api->send_homeassistant_action(req);
   }
