@@ -35,6 +35,16 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+Effect playlists keep playing from where they are while you edit them, and a remote button set to live games says what it picked.
+
+### 🐛 Fixes
+
+- 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
+- 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
+- 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
+
 ## v2026.11.5
 
 The new Smart board shows your own text from Home Assistant, effect playlists step through your effects, and remote buttons can pick live games, any team, a page or a playlist.

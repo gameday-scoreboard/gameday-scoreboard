@@ -58,7 +58,7 @@ The rest of the choices:
 - **Its own favorite**: favorite 1 to 4, whichever team is in that slot. The default.
 - A **playlist**, or **My football teams** and the other sport rows: the panel switches to Favorite teams, plays it and shows its name on the board for a moment, in the playlist's [color and icon](/using/favorites/#playlists) if you gave it one.
 - **All favorites**: back to every favorite.
-- **Live games**: back to Live games, with your own leagues. In Live games it leaves the panel as it is. With one button on Live games, a favorite's button pressed during Live games is no longer a one-way trip into Favorite teams.
+- **Live games**: back to Live games, with your own leagues, and **Live games** shows on the board for a moment. In Live games it leaves the panel as it is. With one button on Live games, a favorite's button pressed during Live games is no longer a one-way trip into Favorite teams.
 - **Nothing**.
 - A page under **Showing**: **Scoreboard**, **Clock**, **Smart board** or **Effects**. The button puts the panel on that page, the same as picking it under **Showing** on the device page. Pressing it while that page is already up leaves it there.
 - One of your [effect playlists](/using/effects/#effect-playlists), listed under **Showing** by name, like **Effect playlist: Party**. See [A button that plays an effect playlist](#a-button-that-plays-an-effect-playlist).
@@ -71,7 +71,7 @@ A button set to a team, a playlist, a sport, a league, **All favorites** or **Li
 
 ### One league's live games
 
-A button set to **All NFL live games** switches the panel to Live games and follows only NFL games, the same way Live games follows any league. With no NFL game on, it shows what Live games shows between games: your first favorite's card, or recent NFL finals if you have no favorites. The leagues you picked for Live games stay as they are. The device page's Live games bar says **Remote button 2: NFL games only** while it's on.
+A button set to **All NFL live games** switches the panel to Live games and follows only NFL games, the same way Live games follows any league. **All NFL live games** shows on the board for a moment, so the press says what it picked. With no NFL game on, it shows what Live games shows between games: your first favorite's card, or recent NFL finals if you have no favorites. The leagues you picked for Live games stay as they are. The device page's Live games bar says **Remote button 2: NFL games only** while it's on.
 
 It stays on through a restart, and ends when you pick a mode, a playlist or another button that picks what the panel follows. A page button (Scoreboard, Clock, Smart board, Effects, an effect playlist) leaves it on. A button set to **Live games** goes back to your own leagues.
 

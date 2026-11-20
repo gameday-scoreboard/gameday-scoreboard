@@ -214,10 +214,32 @@ void test_edit() {
   // B moves first, unchanged: it keeps playing at its new place.
   FxStore moved = parse_fx_lists("B=Drift,DNA;A=Matrix", n);
   FCHECK(fx_after_edit(moved, p, before) == FxEdit::KEEP && p.list == 1, "moved, kept");
-  // B changed: it starts over.
+  // B's second effect up now; its first one changed: DNA stays up.
+  fx_advance(moved, p, 0);
   before = moved.list[0];
   FxStore changed = parse_fx_lists("B=Drift|Lava,DNA;A=Matrix", n);
-  FCHECK(fx_after_edit(changed, p, before) == FxEdit::RESTART && p.list == 1, "changed, restarts");
+  FCHECK(fx_after_edit(changed, p, before) == FxEdit::KEEP && p.list == 1 && p.pos == 1, "another changed, kept");
+  // DNA moved first: it stays up at its new place.
+  before = changed.list[0];
+  FxStore up = parse_fx_lists("B=DNA,Drift|Lava;A=Matrix", n);
+  FCHECK(fx_after_edit(up, p, before) == FxEdit::KEEP && p.pos == 0, "moved within, kept");
+  // DNA itself changed: the changed one goes up in its place.
+  before = up.list[0];
+  FxStore tuned = parse_fx_lists("B=DNA|Lava|200,Drift|Lava;A=Matrix", n);
+  FCHECK(fx_after_edit(tuned, p, before) == FxEdit::SHOW && p.pos == 0, "the one up changed, shown");
+  // An effect added: the one up stays.
+  before = tuned.list[0];
+  FxStore added = parse_fx_lists("B=Matrix,DNA|Lava|200,Drift|Lava;A=Matrix", n);
+  FCHECK(fx_after_edit(added, p, before) == FxEdit::KEEP && p.pos == 1, "added, kept");
+  // The one up taken out: the next one goes up in its place; the last one
+  // taken out goes round to the first.
+  before = added.list[0];
+  FxStore cut = parse_fx_lists("B=Matrix,Drift|Lava;A=Matrix", n);
+  FCHECK(fx_after_edit(cut, p, before) == FxEdit::SHOW && p.pos == 1, "taken out, next shown");
+  before = cut.list[0];
+  FCHECK(fx_after_edit(parse_fx_lists("B=Matrix;A=Matrix", n), p, before) == FxEdit::SHOW && p.pos == 0,
+         "last taken out, first shown");
+  fx_start(changed, p, 1, 0);
   // B renamed in its place, effects the same: it keeps playing.
   before = changed.list[0];
   FCHECK(fx_after_edit(parse_fx_lists("Bee=Drift|Lava,DNA;A=Matrix", n), p, before) == FxEdit::KEEP && p.list == 1,
