@@ -49,7 +49,9 @@
 // next time the panel looks for a network. When a scan shows it in range,
 // switch_to() joins it now: the live list narrows to it the way a setup from
 // the app does, and if it has not connected after SWITCH_MS the whole list
-// goes back and the panel rejoins the network it was on.
+// goes back and the panel rejoins the network it was on. The page asks for a
+// scan when its Add network form opens and lists what it finds (nearby()),
+// so a name can be picked rather than typed.
 
 #include <array>
 #include <atomic>
@@ -78,6 +80,13 @@ struct Entry {
   std::string ssid;
   bool connected;  // the network the panel is on right now
   bool seen;       // in a scan from the last SEEN_MS
+};
+
+// One network the last scan found, for the device page's list to pick from.
+struct Nearby {
+  std::string ssid;
+  int8_t rssi;  // the strongest access point with that name
+  bool open;    // no password
 };
 
 // What forget() did.
@@ -142,6 +151,9 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   bool in_setup() const { return this->in_setup_; }
   // The saved networks in the order they are tried. Safe from the HTTP task.
   std::vector<Entry> list();
+  // The networks a scan from the last SEEN_MS found, strongest first; empty
+  // when there is none that recent. Safe from the HTTP task.
+  std::vector<Nearby> nearby();
   size_t count();
   static constexpr size_t max() { return MAX_NETWORKS; }
   // Hands the whole saved list to the Wi-Fi component again, after something
@@ -158,6 +170,9 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   static constexpr uint32_t SWITCH_GRACE_MS = 15000;
   // How long a scan counts as showing what is in range now.
   static constexpr uint32_t SEEN_MS = 120000;
+  // How many names a scan keeps, the strongest when there are more. An
+  // apartment building can show dozens.
+  static constexpr size_t MAX_SCANNED = 24;
   // How long switch_failed() names a network that would not join.
   static constexpr uint32_t FAILED_MS = 120000;
 
@@ -179,8 +194,9 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   ESPPreferenceObject pref_;
   ESPPreferenceObject setup_pref_;
   bool in_setup_{false};
-  // The names in the last scan, under mutex_, and millis() when it finished.
-  std::vector<std::string> scanned_;
+  // What the last scan found, one entry per name, strongest first, under
+  // mutex_, and millis() when it finished.
+  std::vector<Nearby> scanned_;
   uint32_t scanned_ms_{0};
   std::atomic<bool> scanning_{false};
   std::atomic<bool> switching_{false};

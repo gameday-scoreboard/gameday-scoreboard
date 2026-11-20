@@ -35,6 +35,14 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+Add network on the device page now lists the Wi-Fi networks the panel can see, so you can tap one instead of typing its name.
+
+### ✨ New
+
+- 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+
 ## v2026.11.5
 
 The new Smart board shows your own text from Home Assistant, effect playlists step through your effects, and remote buttons can pick live games, any team, a page or a playlist.

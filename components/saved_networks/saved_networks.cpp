@@ -323,14 +323,23 @@ void SavedNetworks::scan() {
 }
 
 void SavedNetworks::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
-  std::vector<std::string> names;
+  // One entry per name: a mesh or a building with several access points
+  // lists the same network once per access point.
+  std::vector<Nearby> names;
   for (const auto &r : results) {
-    if (r.get_is_hidden() || r.get_ssid().empty() || names.size() >= 32)
+    if (r.get_is_hidden() || r.get_ssid().empty())
       continue;
     std::string name = r.get_ssid().str();
-    if (std::find(names.begin(), names.end(), name) == names.end())
-      names.push_back(std::move(name));
+    auto it = std::find_if(names.begin(), names.end(), [&](const Nearby &n) { return n.ssid == name; });
+    if (it != names.end()) {
+      it->rssi = std::max(it->rssi, r.get_rssi());
+      continue;
+    }
+    names.push_back(Nearby{std::move(name), r.get_rssi(), !r.get_with_auth()});
   }
+  std::stable_sort(names.begin(), names.end(), [](const Nearby &a, const Nearby &b) { return a.rssi > b.rssi; });
+  if (names.size() > MAX_SCANNED)
+    names.resize(MAX_SCANNED);
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
     this->scanned_.swap(names);
@@ -530,11 +539,18 @@ std::vector<Entry> SavedNetworks::list() {
   out.reserve(this->list_.count);
   for (size_t i = 0; i < this->list_.count; i++) {
     const char *ssid = this->list_.nets[i].ssid;
-    const bool seen =
-        fresh && std::find(this->scanned_.begin(), this->scanned_.end(), ssid) != this->scanned_.end();
+    const bool seen = fresh && std::any_of(this->scanned_.begin(), this->scanned_.end(),
+                                           [&](const Nearby &n) { return n.ssid == ssid; });
     out.push_back(Entry{ssid, now[0] != '\0' && strncmp(ssid, now.data(), now.size()) == 0, seen});
   }
   return out;
+}
+
+std::vector<Nearby> SavedNetworks::nearby() {
+  std::lock_guard<std::mutex> lock(this->mutex_);
+  if (this->scanned_ms_ == 0 || millis() - this->scanned_ms_ >= SEEN_MS)
+    return {};
+  return this->scanned_;
 }
 
 size_t SavedNetworks::count() {
