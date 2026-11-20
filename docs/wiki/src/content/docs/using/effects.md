@@ -28,7 +28,7 @@ An effect playlist is a list of effects the panel steps through on its own, each
 To make one, open the device page's **Customize** tab and find **Effect playlists**:
 
 1. Tap **New effect playlist** and give it a name of up to 16 characters. Any name works except one another effect playlist has and **None**, which is the choice that stops a playlist.
-2. Tap **Add an effect**. The new effect starts as whatever the panel is showing now, so you can try an effect, palette, speed and intensity on the Home tab first and then add it. Change any of them in the row after.
+2. Tap **Add an effect**. The new effect starts as whatever the panel is showing now, so you can try an effect, palette, speed and intensity on the Home tab first and then add it. Change any of them in the row after: the effect and palette from their lists, the speed and intensity with their sliders.
 3. Pick how long it stays up from **For**, from 1 second to 1 hour. A new effect stays up for 15 seconds.
 4. Use the arrows to put the effects in order, and the **✕** to take one out.
 5. Turn on **Shuffle** to play them in a random order instead. Shuffle shows every effect once before any of them comes round again, and never the same one twice in a row.
@@ -39,7 +39,9 @@ The playlist stops, and the panel stays on the effect it was showing, when:
 
 - you pick an effect, palette, speed or intensity yourself, on the device page, in the app or in Home Assistant. The panel keeps what you picked. Pick the playlist again to start it over.
 - **Showing** leaves **Effects**, whether you pick another page or the panel takes the screen back for one of the reasons below.
-- you delete the playlist or take out all its effects. Editing the one that's playing starts it over with your change; renaming it or moving it in the list doesn't interrupt it.
+- you delete the playlist or take out all its effects.
+
+Editing the one that's playing doesn't start it over. It carries on from the effect that's up: change that effect and the change shows at once, take it out and the next one comes up, and changing, adding or moving the others leaves it playing. Renaming the playlist or moving it in the list doesn't interrupt it either.
 
 Every time the panel starts it shows the Scoreboard, so a playlist never comes back on its own after a restart. The effect playlists themselves are kept, and a [settings backup](/using/backup/) saves them.
 

@@ -501,12 +501,15 @@ button { font: inherit; color: inherit; }
 .fxrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .fxrow + .fxrow { margin-top: 6px; }
 .fxrow .fxnum { color: var(--muted); font-size: 12px; min-width: 14px; }
-.fxrow select, .fxrow input.num {
+.fxrow select {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
   font: inherit; font-size: 14px; min-width: 0;
 }
 .fxrow > select { flex: 1 1 120px; max-width: 100%; }
-.fxrow input.num { width: 64px; text-align: center; }
+.fxslide { flex-wrap: nowrap; font-size: 12px; color: var(--muted); }
+.fxslide > span:first-child { min-width: 58px; }
+.fxslide input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.fxslide .val { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
 .fxrow .fxval { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
 .fxrow .favmove { margin-left: auto; }
 .fxacts { padding: 4px 0; }
