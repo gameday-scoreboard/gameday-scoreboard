@@ -50,11 +50,11 @@ script:
       - lambda: |-
           const uint8_t mark = id(gameday_ctl).guard_mark();
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_guard_line), true);
           auto pulse = [](void *icon, int32_t v) { lv_obj_set_style_opa((lv_obj_t *) icon, (lv_opa_t) v, 0); };
           lv_anim_delete(id(gd_guard_icon), pulse);
           if (mark == 0) {
-            lv_obj_add_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_guard_icon), true);
             return;
           }
           image::Image *icon = mark == 2 ? id(gd_guard_power_img) : id(gd_guard_heat_img);
@@ -73,7 +73,7 @@ script:
           lv_anim_start(&a);
           if (!id(qc_active))
             lv_obj_move_foreground(id(gd_guard_icon));
-          lv_obj_clear_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_guard_icon), false);
           const lv_color_t color = lv_color_hex(mark == 2 ? 0xFF2020 : 0xFF8000);
           lv_obj_set_width(id(gd_guard_line), W);
           lv_obj_set_width(id(gd_guard_lbl), W);
@@ -89,9 +89,9 @@ script:
                   return;
                 lv_obj_move_foreground(id(gd_guard_icon));
                 lv_obj_move_foreground(id(gd_guard_line));
-                lv_obj_clear_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(id(gd_guard_line), false);
             - delay: 15s
-            - lambda: 'lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);'
+            - lambda: 'lv_obj_set_hidden(id(gd_guard_line), true);'
             - delay: 105s
 
 image:
