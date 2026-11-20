@@ -2237,6 +2237,7 @@ void GamedayComponent::loop() {
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the cards down.
   this->msg_tick_();
+  this->gdcard_tick_();
   this->top25_tick_();
   this->news_tick_();
   this->season_tick_();
@@ -2619,7 +2620,7 @@ bool GamedayComponent::card_on(::espn::Card c) const {
     case ::espn::Card::WEATHER:
       return this->weather_on();
     default:
-      return (this->countdown_.cards_off & ::espn::card_bit(c)) == 0;
+      return ::espn::card_saved_on(c, this->countdown_.cards_off);
   }
 }
 
@@ -2632,10 +2633,7 @@ void GamedayComponent::set_card(::espn::Card c, bool on) {
     return this->set_weather(on);
   if (on == this->card_on(c))
     return;
-  if (on)
-    this->countdown_.cards_off &= (uint16_t) ~::espn::card_bit(c);
-  else
-    this->countdown_.cards_off |= ::espn::card_bit(c);
+  this->countdown_.cards_off = ::espn::card_saved(c, this->countdown_.cards_off, on);
   this->save_countdown_();
   for (const auto &r : ::espn::kCards)
     if (r.card == c)
@@ -7136,8 +7134,13 @@ void GamedayComponent::msg_show_(const std::string &page) {
   this->fire_action_("msg");  // gd_msg_card in firmware/pages/gameday-live.yaml
 }
 
-// Not over a live game, the demo, a splash or the panel's trouble line.
+// Not over a live game, the demo, a splash, the panel's trouble line or the
+// Game Day card.
 bool GamedayComponent::card_between_(uint32_t now) const {
+  return !this->gdcard_shown_ && this->board_between_(now);
+}
+
+bool GamedayComponent::board_between_(uint32_t now) const {
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   return !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
@@ -7187,6 +7190,39 @@ void GamedayComponent::msg_tick_() {
   this->msg_pos_ = page.next;
   const std::string entries = ::espn::msg_entries(this->msg_list_, page.first - this->msg_from_, page.count);
   this->msg_show_(board_lines(entries));
+}
+
+// ---- the Game Day card (gameday_card.h) -----------------------------------------
+
+// Its turn every kGamedayCardEveryMin, between games with no other card up
+// (nor 10 s after the message, news or picture card), for one page.
+void GamedayComponent::gdcard_tick_() {
+  const uint32_t now = millis();
+  if (now - this->gdcard_tick_ms_ < 250)
+    return;
+  this->gdcard_tick_ms_ = now;
+  const bool between = this->board_between_(now) && !this->msg_shown_ &&
+                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
+  ::espn::MsgTurn turn = ::espn::msg_turn(this->card_on(::espn::Card::GAMEDAY), between, this->gdcard_shown_,
+                                          now - this->gdcard_since_ms_, ::espn::kGamedayCardEveryMin,
+                                          ::espn::kMsgPageMs);
+  if (turn == ::espn::MsgTurn::NONE)
+    return;
+  this->gdcard_show_(turn == ::espn::MsgTurn::SHOW);
+}
+
+void GamedayComponent::gdcard_show_(bool up) {
+  if (up == this->gdcard_shown_)
+    return;
+  if (!up)
+    this->gdcard_wording_ = (this->gdcard_wording_ + 1) % ::espn::kGamedayCardWordings;
+  this->gdcard_shown_ = up;
+  this->gdcard_since_ms_ = millis();
+  if (up)
+    ESP_LOGI(TAG, "Game Day card: wording %d", this->gdcard_wording_ + 1);
+  this->fire_action_("gameday_card");  // gd_gameday_card in firmware/pages/gameday-live.yaml
 }
 
 void GamedayComponent::start_msg_job_() {

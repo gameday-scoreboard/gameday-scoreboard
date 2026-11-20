@@ -1189,6 +1189,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     top25: "The AP poll, a page at a time, every 10 minutes.",
     news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
     weather: "Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days.",
+    gamedaycard: "A QR code for gameday-scoreboard.com with a few words on getting a scoreboard, for 10 seconds every 20 minutes. For a panel that other people see, like one in a shop or an office.",
   };
   const OWN_CARDS = { custom: "the date countdown", message: "the message card", picture: "your pictures" };
   const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news"]]];
@@ -1199,6 +1200,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     gameleaders: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',
     top25: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
     news: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10M7 12.5h10M7 16h6"/>',
+    gamedaycard: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>',
     weather: '<circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 20z"/>',
   };
   const cardIcon = (id) => '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (CARD_ICONS[id] || '<circle cx="12" cy="12" r="8"/>') + "</svg>";

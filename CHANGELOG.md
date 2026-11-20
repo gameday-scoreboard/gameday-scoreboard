@@ -35,6 +35,14 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+A new Game Day card puts a QR code for gameday-scoreboard.com between games, for a scoreboard other people see.
+
+### ✨ New
+
+- 🔳 Game Day card: a QR code for gameday-scoreboard.com every 20 minutes between games, off until you turn it on under Between games.
+
 ## v2026.11.5
 
 The new Smart board shows your own text from Home Assistant, effect playlists step through your effects, and remote buttons can pick live games, any team, a page or a playlist.
