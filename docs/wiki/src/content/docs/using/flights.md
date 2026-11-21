@@ -16,7 +16,7 @@ sidebar:
 
 Flights uses the town you set for [Weather](/using/weather/) as home. If no town is set, the panel says **Set your town on the device page**.
 
-The **Flights** card on the device page has three settings:
+The **Flights** card on the device page's Customize tab has these settings:
 
 - **Within**: how far from home a plane can be: 5, 10, 15, 25 or 50 miles, or 10, 15, 25, 40 or 80 km when Weather uses Celsius. A new panel starts at 10 miles (15 km).
 - **Facing**: the way your window faces. The card then shows the nearest plane in that direction, the one you can see, and falls back to the nearest plane anywhere when nothing is that way. **Any direction** shows the nearest plane.
