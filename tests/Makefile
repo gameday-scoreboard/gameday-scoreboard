@@ -11,7 +11,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board build/test_flights
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -25,6 +25,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_celeb_baseball
 	./build/test_celeb_soccer
 	./build/test_smart_board
+	./build/test_flights
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -80,6 +81,12 @@ celebrate-gifs: build/render_celebrations
 build/test_smart_board: test_smart_board.cpp ../components/gameday/smart_board.h ../components/gameday/panel_text.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_smart_board.cpp -o $@ $(LDFLAGS)
+
+# The Flights page's parsers, geometry, card pick and text (flights.h),
+# over recorded adsb.lol and adsbdb replies.
+build/test_flights: test_flights.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_flights.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 build/test_networks: test_networks.cpp $(wildcard ../components/saved_networks/*.h)
 	@mkdir -p build
