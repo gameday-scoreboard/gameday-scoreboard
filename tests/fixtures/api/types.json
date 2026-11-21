@@ -290,6 +290,11 @@
   "wifi": {
     "failed": "string",
     "max": "int",
+    "nearby": "array",
+    "nearby[]": "object",
+    "nearby[].open": "bool",
+    "nearby[].rssi": "int",
+    "nearby[].ssid": "string",
     "networks": "array",
     "networks[]": "object",
     "networks[].connected": "bool",

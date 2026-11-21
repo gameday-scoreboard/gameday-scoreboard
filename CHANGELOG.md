@@ -37,10 +37,15 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Game Day card can put a QR code for gameday-scoreboard.com between games, and effect playlists keep playing from where they are while you edit them.
+Add network lists nearby Wi-Fi, a Game Day card shows a QR code between games, playlists keep playing while edited, Rain's speed works, a live games remote button says its pick, and Home Assistant calls the panel Scoreboard by Game Day.
+
+### ⚠️ Heads up
+
+- 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
 
 ### ✨ New
 
+- 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 - 🔳 Game Day card: a QR code for gameday-scoreboard.com every 20 minutes between games, off until you turn it on under Between games.
 
 ### 🐛 Fixes
@@ -49,6 +54,7 @@ A new Game Day card can put a QR code for gameday-scoreboard.com between games, 
 - 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
 - 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
+- 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
 
 ## v2026.11.5
 

@@ -21,7 +21,8 @@ routes with the response shapes from components/gameday/gameday.cpp:
                          ssid= and password= as a form body saves one second in the
                          list (400 for the one it is on); switch=<ssid> joins one at
                          once, or fails for a name in WIFI_BAD; scan=1. GET marks the
-                         names in WIFI_NEARBY seen
+                         names in WIFI_NEARBY seen, and after a scan lists WIFI_SCAN
+                         under "nearby"
   GET  /gameday/settings the settings backup (components/gameday/settings_doc.h)
   POST /gameday/settings a backup as a JSON body: checked whole, then applied through
                          apply_set; 400 with "error" when refused
@@ -340,9 +341,13 @@ LOG = []
 # The saved Wi-Fi networks as GET /gameday/wifi lists them, the one tried first
 # first. None: firmware without the list.
 WIFI_INITIAL = [{"ssid": "Home", "connected": True}, {"ssid": "iPhone", "connected": False}]
-WIFI = {"list": copy.deepcopy(WIFI_INITIAL), "failed": None}
+WIFI = {"list": copy.deepcopy(WIFI_INITIAL), "failed": None, "scanned": False}
 # The networks the mock panel's scans see, and the ones a switch can't join.
 WIFI_NEARBY = {"Home", "iPhone", "Cabin", "Attic"}
+# What a scan finds, as GET /gameday/wifi lists it under "nearby" (strongest
+# first) once a POST scan=1 has run.
+WIFI_SCAN = [{"ssid": "Home", "rssi": -48}, {"ssid": "Cabin", "rssi": -58}, {"ssid": "Attic", "rssi": -71},
+             {"ssid": "Coffee Shop", "rssi": -80, "open": True}, {"ssid": "iPhone", "rssi": -83}]
 WIFI_BAD = {"Attic"}
 # Live games' own list (the live mask), kept apart from the state's live list,
 # which shows every league instead while no favorite is picked.
@@ -1678,7 +1683,7 @@ class Handler(BaseHTTPRequestHandler):
             if WIFI["list"] is None:
                 return self._json(404, {"error": "unknown route"})
             doc = {"networks": [dict(n, seen=n["ssid"] in WIFI_NEARBY) for n in WIFI["list"]], "max": 5,
-                   "scanning": False}
+                   "scanning": False, "nearby": copy.deepcopy(WIFI_SCAN) if WIFI["scanned"] else []}
             if WIFI["failed"]:
                 doc["failed"] = WIFI["failed"]
             return self._json(200, doc)
@@ -1742,6 +1747,7 @@ class Handler(BaseHTTPRequestHandler):
             DEMO.update(copy.deepcopy(DEMO_INITIAL))
             WIFI["list"] = body["wifi"] if "wifi" in body else copy.deepcopy(WIFI_INITIAL)
             WIFI["failed"] = None
+            WIFI["scanned"] = False
             for e in ENTITIES:
                 e.update(copy.deepcopy(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"])))
             if "wizmote" in body:
@@ -1778,6 +1784,7 @@ class Handler(BaseHTTPRequestHandler):
                 del nets[5:]
                 return self._json(200, {"ok": True, "added": True})
             if "scan" in q:
+                WIFI["scanned"] = True
                 return self._json(200, {"ok": True})
             if "switch" in q:
                 to = q["switch"]

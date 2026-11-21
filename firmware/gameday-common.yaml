@@ -99,7 +99,7 @@ esphome:
   comment: "v${version}"
   build_path: build/gameday-${variant}
   project:
-    name: bharvey88.gameday-scoreboard
+    name: Game Day.Scoreboard
     version: "${version}"
   on_boot:
     # The Display light can restore its saved brightness before the HUB75
