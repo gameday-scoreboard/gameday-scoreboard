@@ -1169,7 +1169,7 @@ void GamedayComponent::fx_between_tick_() {
   in.trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                    ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   in.mark = this->guard_mark() != 0;
-  in.banner = !this->say_text_.empty();
+  in.banner = this->say_up_(now);
   in.card_turn = this->msg_shown_ ||
                  this->countdown_card_((int64_t) this->time_->timestamp_now()) != ::espn::CountdownCard::NONE;
   const bool want = ::espn::fx_between_want(in);
@@ -6858,6 +6858,7 @@ void GamedayComponent::say(const std::string &text, int secs, uint8_t mark) {
   this->say_text_ = board_lines(::espn::message_clean(text, ::espn::kMsgTextMax, true));
   this->say_secs_ = ::espn::clamp_say_secs(secs);
   this->say_mark_ = mark;
+  this->say_ms_ = millis();
   if (this->say_text_.empty())
     ESP_LOGI(TAG, "Banner down");
   else

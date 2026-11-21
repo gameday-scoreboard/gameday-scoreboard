@@ -691,6 +691,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void msg_show_(const std::string &page);
   std::string say_text_;
   int say_secs_{::espn::kSayDefaultSecs};
+  // When the banner went up. say_text_ keeps its words after
+  // firmware/pages/message.yaml takes it down, so this says whether it is
+  // still up (say_up_).
+  uint32_t say_ms_{0};
+  bool say_up_(uint32_t now) const {
+    return !this->say_text_.empty() && now - this->say_ms_ < (uint32_t) this->say_secs_ * 1000u;
+  }
   uint8_t say_mark_{0};
   // The entries on hand, [msg_from_, msg_from_ + msg_n_), one per line:
   // the saved text, or one read's window of the list (PSRAM).
