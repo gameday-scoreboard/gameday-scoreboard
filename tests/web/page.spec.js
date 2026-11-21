@@ -718,9 +718,14 @@ test("effect playlists: made, edited, played, stopped by a hand pick, deleted", 
   await expect.poll(async () => (await lastFx(request))[0].fx[1].e).toBe("Drift");
   await card.getByRole("combobox", { name: "Palette 2 in Party" }).selectOption("Sunset");
   await expect.poll(async () => (await lastFx(request))[0].fx[1].p).toBe("Sunset");
-  const speed = card.getByRole("spinbutton", { name: "Speed 2 in Party" });
-  await speed.fill("200");
-  await speed.press("Enter");
+  // Speed and intensity are sliders that save when let go.
+  const slideTo = async (name, v) => {
+    const r = card.getByRole("slider", { name });
+    await r.fill(String(v));
+    await r.dispatchEvent("change");
+  };
+  await expect(card.getByRole("spinbutton")).toHaveCount(0);
+  await slideTo("Speed 2 in Party", 200);
   await expect.poll(async () => (await lastFx(request))[0].fx[1].s).toBe(200);
   const time = card.getByRole("combobox", { name: "Time 2 in Party" });
   await expect(time.locator("option")).toHaveCount(16);
@@ -748,6 +753,19 @@ test("effect playlists: made, edited, played, stopped by a hand pick, deleted", 
   await expect(pick).toHaveValue("1");
   await expect(pick.locator("option")).toHaveText(["None", "Party"]);
   await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("Drift");
+
+  // Editing it while it plays keeps its place: another effect's change leaves
+  // Drift up, and a change to Drift itself goes up at once.
+  await tab(page, "customize");
+  await slideTo("Intensity 2 in Party", 40);
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].i).toBe(40);
+  await slideTo("Speed 1 in Party", 90);
+  await expect.poll(async () => (await lastFx(request))[0].fx[0].s).toBe(90);
+  expect((await deviceState(request)).fxlist).toBe(1);
+  await expect(card).toContainText("Playing now");
+  await tab(page, "board");
+  await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("Drift");
+  await expect(page.locator("#fxCtls .val").first()).toHaveText("90");
 
   // A hand pick of the effect stops the playlist and keeps the pick.
   await page.getByRole("combobox", { name: "Effect", exact: true }).selectOption("DNA");

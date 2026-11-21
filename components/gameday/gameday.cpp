@@ -1147,10 +1147,11 @@ void GamedayComponent::set_fx_lists_(const std::string &text) {
   this->sync_prefs_();
   ESP_LOGI(TAG, "Effect playlists: %u", (unsigned) f.store.count);
   switch (::espn::fx_after_edit(f.store, this->fx_player_, before)) {
-    case ::espn::FxEdit::RESTART:
-      // The one playing was changed: it starts over with the change.
-      this->play_fx_list_(this->fx_player_.list);
-      return;
+    case ::espn::FxEdit::SHOW:
+      // The effect up now was changed or taken out: the one at its place
+      // goes up, and the playlist carries on from there.
+      this->fx_show_();
+      break;
     case ::espn::FxEdit::STOP:
       ESP_LOGI(TAG, "Effect playlist off: it was deleted, renamed or emptied");
       break;
@@ -1451,6 +1452,7 @@ void GamedayComponent::remote_number(uint8_t n) {
       this->clear_held_(true);
       if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES)
         this->set_mode_((uint8_t) Mode::LIVE);
+      this->say("Live games", 3);  // a press in the dark says what it picked, as a playlist's does
       break;
     case ::espn::RemoteKind::LEAGUE: {
       // Live games in that league only, until something else is picked. The
@@ -1465,6 +1467,7 @@ void GamedayComponent::remote_number(uint8_t n) {
         this->set_mode_((uint8_t) Mode::LIVE);
       else if (!this->live_leagues_changed_(before))
         this->rebuild_state_(&this->last_fields_);
+      this->say("All " + ::espn::league_live_name((League) a.league) + " live games", 3);
       break;
     }
     case ::espn::RemoteKind::TEAM:
