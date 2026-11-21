@@ -1071,7 +1071,7 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  // Grouped by sport, all nine leagues: each league's live games, the sport
+  // Grouped by sport, all ten leagues: each league's live games, the sport
   // row with two favorites in it, the favorites, then another team of each
   // league; the pages under Showing last.
   await expect(b1.locator("optgroup")).toHaveCount(7);
@@ -1081,8 +1081,9 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
     "My football teams", "Dallas Cowboys", "Texas Longhorns", "Another NFL team...", "Another college football team..."]);
   // One basketball favorite: no row of its own.
   await expect(b1.locator("optgroup[label=Basketball] option")).toHaveText(["All NBA live games", "All WNBA live games",
-    "All men's college basketball live games", "Dallas Mavericks", "Another NBA team...", "Another WNBA team...",
-    "Another men's college basketball team..."]);
+    "All men's college basketball live games", "All women's college basketball live games", "Dallas Mavericks",
+    "Another NBA team...", "Another WNBA team...", "Another men's college basketball team...",
+    "Another women's college basketball team..."]);
   await expect(b1.locator("optgroup[label=Hockey] option")).toHaveText(["All NHL live games", "Another NHL team..."]);
   await expect(b1.locator("optgroup[label=Showing] option")).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects"]);
   await expect(b1.locator(":scope > option")).toHaveText(["Its own favorite", "All favorites", "Live games", "Nothing"]);

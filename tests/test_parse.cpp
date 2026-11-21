@@ -3265,6 +3265,8 @@ static void test_wcbb_urls() {
   const LeagueInfo *l = league_by_key("wcbb");
   CHECK(l != nullptr && !l->season_list && l->logo_by_id && l->sport == Sport::BASKETBALL);
   CHECK_EQ(std::string(league_path(League::WCBB)), std::string("womens-college-basketball"));
+  // "All women's college basketball live games", as the device page says it.
+  CHECK_EQ(league_live_name(League::WCBB), std::string("women's college basketball"));
   int n = 0;
   for (size_t i = 0; i < kTeamCount; i++) {
     const Team &t = kTeams[i];

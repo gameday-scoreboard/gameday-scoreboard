@@ -98,6 +98,8 @@ inline std::string league_live_name(League league) {
     return "college football";
   if (league == League::MCBB)
     return "men's college basketball";
+  if (league == League::WCBB)
+    return "women's college basketball";
   if (league == League::EPL)
     return "Premier League";
   const LeagueInfo *l = league_info(league);
