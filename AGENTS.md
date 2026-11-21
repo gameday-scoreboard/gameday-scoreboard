@@ -179,7 +179,8 @@ over is its own PR, never a side effect of another change.
 - Name the branch after the change (`espn-gzip`, `power-cut-boot`). The
   name stays in the merge commit, so CI's Branch rules job refuses a head
   branch with a tracker's ticket in it, like `card-123-...`.
-- A PR description says what changed and how it was tested. No links to
+- A PR description says what changed, how it was tested, and who the change
+  builds on: credit the data sources and projects it uses, with links. No links to
   private repos or trackers, no ticket numbers from them, and no AI
   attribution in PR text or comments. Maintainers keep reviews and
   progress notes privately.

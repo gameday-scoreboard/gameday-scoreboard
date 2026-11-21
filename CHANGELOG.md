@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-The panel can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, Rain's speed works, and Home Assistant names the panel Scoreboard by Game Day.
+A new Flights page shows the planes flying over your home, the panel can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, and Home Assistant names the panel Scoreboard by Game Day.
 
 ### ⚠️ Heads up
 
@@ -48,6 +48,7 @@ The panel can play an effect whenever no game of yours is on, Add network lists 
 ### ✨ New
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+- ✈️ **Flights** under **Showing** and **After the game**: the planes near your home with their airline, route, type, altitude and distance, from adsb.lol's free community data or your own ADS-B receiver
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 
 ### 🐛 Fixes
