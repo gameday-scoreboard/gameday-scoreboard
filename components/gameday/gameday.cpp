@@ -2304,6 +2304,7 @@ void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
   this->fx_tick_();  // the effect playlist's next effect, when one is due
+  this->showing_tick_();  // a picked page stops the reads below (showing.h)
   if (this->logo_held_ && this->logo_hold_done_())
     this->draw_(this->last_fields_);
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
@@ -2435,29 +2436,33 @@ void GamedayComponent::loop() {
   // the rest, and the new pick waited behind it.
   const bool board_due = (int32_t) (millis() - this->next_fetch_ms_) >= 0;
   const bool side_wait = ::espn::board_first(millis(), this->board_first_ms_, board_due);
+  // A page somebody picked under Showing has nothing from ESPN on it: no
+  // reads at all until the Scoreboard is back (showing.h), but the clock
+  // the Clock page needs still comes from ESPN when the time servers fail.
+  const bool paused = this->showing_ == ::espn::Showing::PICKED;
   if (this->board_first_ms_ != 0 && millis() - this->board_first_ms_ >= ::espn::kBoardFirstMs)
     this->board_first_ms_ = 0;
   // The message card's list, between ESPN reads and outside their timing,
   // but never sooner after a written-off worker than the next ESPN read is.
-  if (this->msg_read_due_ && !side_wait && network::is_connected() &&
+  if (this->msg_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_msg_job_();
     return;
   }
   // The Top 25 card's poll, the same way.
-  if (this->top25_read_due_ && !side_wait && network::is_connected() && this->clock_set_() &&
+  if (this->top25_read_due_ && !paused && !side_wait && network::is_connected() && this->clock_set_() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_top25_job_();
     return;
   }
   // The news card's headlines, the same way.
-  if (this->news_read_due_ && !side_wait && network::is_connected() &&
+  if (this->news_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_news_job_();
     return;
   }
   // A team's season schedule for the schedule and recap cards, the same way.
-  if (this->season_read_due_ && !side_wait && network::is_connected() &&
+  if (this->season_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_season_job_();
     return;
@@ -2466,14 +2471,16 @@ void GamedayComponent::loop() {
   // reads, never alongside one, and not while a game the panel follows is
   // live. They also wait while the next ESPN read is near, so even a read
   // that runs to its timeout is done before ESPN's turn (wx_gap_).
-  if (!side_wait && network::is_connected() && ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
+  // A town typed on the device page is looked up on a picked page too.
+  if ((!paused || this->wx_lookup_due_) && !side_wait && network::is_connected() &&
+      ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     if (this->wx_due_()) {
       this->start_wx_job_();
       return;
     }
     // The next game's kickoff forecast, when ESPN's event has none.
-    uint8_t kick = this->kick_due_();
+    uint8_t kick = paused ? 0 : this->kick_due_();
     if (kick != 0) {
       this->start_kick_job_(kick);
       return;
@@ -2500,6 +2507,8 @@ void GamedayComponent::loop() {
              this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
+  if (paused)
+    return;
   this->start_job_();
 }
 
@@ -3420,6 +3429,11 @@ void GamedayComponent::update_state_changed_() {
 // covers the live modes and their fallback, or any favorite's in Favorite
 // teams.
 bool GamedayComponent::followed_game_live_() const {
+  // A picked page reads nothing (showing.h), so a game it left live would
+  // stay live forever: night mode lighting the panel all night for it, and
+  // the automatic update waiting for its end.
+  if (this->showing_ == ::espn::Showing::PICKED)
+    return false;
   if (this->game_.valid && this->game_.state == GameState::IN)
     return true;
   if (this->favorites_mode_())
@@ -3593,8 +3607,10 @@ void GamedayComponent::reset_game_() {
   this->no_game_confirmed_ = false;
 }
 
-void GamedayComponent::restart_board_() {
+void GamedayComponent::restart_board_(bool keep_cards, bool owner_pick) {
   this->reset_game_();
+  if (!keep_cards)
+    this->rebuild_favorites_(false);
   this->scan_live_sides_.clear();  // until the next scan
   this->generation_++;  // a scan in flight read what the board followed before
   this->board_changed_(true);
@@ -3602,9 +3618,77 @@ void GamedayComponent::restart_board_() {
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
   this->end_backoff_wait_();
   this->schedule_next_(0);
+  if (!owner_pick)
+    return;
   // Somebody changed what the panel follows, so they are looking at it.
   this->fire_action_("user_pick");
   this->fx_between_end_("a new pick");
+}
+
+// ---- Showing (showing.h) --------------------------------------------------------
+
+::espn::Showing GamedayComponent::showing_now_() const {
+  const FxState *f = this->fx_state_;
+  const char *page = nullptr;
+  if (f != nullptr && f->page != nullptr) {
+    auto at = f->page->active_index();
+    if (at.has_value())
+      page = f->page->option_at(*at);
+  }
+  return ::espn::showing_now(page, this->fx_ours_, this->sb_pinned_ != nullptr && *this->sb_pinned_);
+}
+
+void GamedayComponent::showing_tick_() {
+  const ::espn::Showing now = this->showing_now_();
+  if (now == this->showing_)
+    return;
+  // Power off and the night's screen-off put the Scoreboard page up from a
+  // picked Effects page (pages/effects.yaml, gd_fx_yield). Nobody sees it
+  // while the screen is dark, so the page stays picked until it lights.
+  const bool lit = this->power_on_ && this->display_on() && this->guard_brightness(255) != 0;
+  if (this->showing_ == ::espn::Showing::PICKED && now == ::espn::Showing::BOARD && !lit)
+    return;
+  const ::espn::Showing was = this->showing_;
+  this->showing_ = now;
+  if (now == ::espn::Showing::PICKED) {
+    ESP_LOGI(TAG, "Showing %s: no ESPN reads and no game states to Home Assistant until the Scoreboard is back",
+             ::espn::showing_word(now));
+    return;
+  }
+  if (now == ::espn::Showing::AUTO) {
+    ESP_LOGI(TAG, "Showing %s: no game states to Home Assistant until the Scoreboard is back",
+             ::espn::showing_word(now));
+    return;
+  }
+  if (was != ::espn::Showing::PICKED) {
+    ESP_LOGI(TAG, "Back on the Scoreboard from %s", ::espn::showing_word(was));
+    return;
+  }
+  // Nothing was read while the picked page was up, so every card is as old as
+  // the page: start over as a team change does, the boot screen's "Looking
+  // for" up until the first fresh read, and no old score on the board.
+  ESP_LOGI(TAG, "Back on the Scoreboard from a picked page: reading everything again");
+  this->ha_tracker_.clear();
+  this->board_ready_ = false;
+  this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+  this->restart_board_(false, false);
+}
+
+std::string GamedayComponent::looking_for() const {
+  const char *team = nullptr;
+  if (!this->live_mode_()) {
+    const int held = this->held_fav_();
+    int listed = 0;
+    for (const auto &e : this->fav_) {
+      if (held >= 0 ? (int) e.slot - 1 == held : !this->fav_off_(e)) {
+        team = e.team->name;
+        listed++;
+      }
+    }
+    if (listed != 1)
+      team = nullptr;
+  }
+  return ::espn::looking_for(this->live_mode_(), this->live_word_(), team);
 }
 
 void GamedayComponent::board_changed_(bool board_cleared) {
@@ -5166,6 +5250,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
                                            this->score_log_.lines(g.event_id));
   const GameSnapshot &ha = this->ha_game_();
+  f.ha_quiet = this->showing_ != ::espn::Showing::BOARD;
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;
   if (ha.valid && ha.state != GameState::NOT_FOUND) {
@@ -6958,6 +7043,11 @@ std::string GamedayComponent::ha_league_() const {
 // From every board update and every so often from loop(): the reminder
 // before the start goes by the clock, not by a read.
 void GamedayComponent::ha_track_() {
+  // Off the Scoreboard nothing goes to Home Assistant (showing.h). Back on
+  // it from a picked page, the tracker starts fresh (showing_tick_), so a
+  // score from while it was away never fires.
+  if (this->showing_ != ::espn::Showing::BOARD)
+    return;
   // The finals rotation turns through other games' cards, none of them followed.
   if (this->recap_on_ && !this->demo_playing_())
     return;

@@ -42,6 +42,8 @@ The panel can play an effect whenever no game of yours is on, Add network lists 
 ### ⚠️ Heads up
 
 - 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
+- 🏠 On the Clock, Effects or the Smart board the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
+- 🌡️ **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** leave Home Assistant, where they wrote a row every 10 to 30 seconds; delete the old entities (the chip temperature is on the device page under Diagnostics)
 
 ### ✨ New
 
@@ -55,6 +57,7 @@ The panel can play an effect whenever no game of yours is on, Add network lists 
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
 - 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
 - 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
+- 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
 
 ## v2026.11.5
 

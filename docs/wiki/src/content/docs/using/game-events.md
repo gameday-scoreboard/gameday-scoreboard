@@ -134,6 +134,7 @@ data:
 
 - The events of one moment come together and in order: a touchdown that takes the lead is a `score`, then a `lead_change`. A score on the last play arrives with the final.
 - Each one comes once. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
+- Events come only while **Showing** is on the Scoreboard. On the Clock, Effects or the Smart board the panel sends none, and back on the Scoreboard the first event is the next thing that happens: a score from while it was away never fires.
 - After the panel restarts, or starts following a game already under way, the first event is the next thing that happens, not the ones before it. A panel turned on inside the heads-up window sends no heads-up for that game.
 - ESPN sometimes serves an older copy of a game for a moment. The panel ignores a score that goes down and comes back, so nothing repeats. A score ESPN takes back for good, like a touchdown overturned on review, counts after a minute and a half, without an event.
 - A period ends at the break after it, or when the next one is under way if the panel missed the break. The final ends the last period itself.
@@ -174,7 +175,7 @@ Each event is a `POST` with a small JSON body, the same fields as above with `ev
 
 ## Entities for the game
 
-These follow the same game, and change only when what they show does:
+These follow the same game, and change only when what they show does. Off the Scoreboard they keep their last state:
 
 | Entity | What it is |
 | --- | --- |

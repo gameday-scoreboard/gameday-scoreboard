@@ -82,7 +82,7 @@ The app and the settings backup have the same settings.
 
 ## Showing: the scoreboard or the clock
 
-**Showing** picks the page the panel shows: the **Scoreboard**, a **Clock** page, [Effects](/using/effects/) or the [Smart board](/using/smart-board/). The scoreboard is the page that follows your games; the clock page is a plain clock for when you want one. Home Assistant has the same choice as **Select Page**.
+**Showing** picks the page the panel shows: the **Scoreboard**, a **Clock** page, [Effects](/using/effects/) or the [Smart board](/using/smart-board/). The scoreboard is the page that follows your games; the clock page is a plain clock for when you want one. Home Assistant has the same choice as **Select Page**. On any page but the Scoreboard, the panel stops reading scores from ESPN and sends Home Assistant nothing about games, since nothing on the screen needs them. Back on the Scoreboard it says **Looking for** your team, or the live games it follows, until the scores are in, usually a second or two. Turning the panel off or night mode keeps the Scoreboard page, so it keeps following your games then.
 
 ### The off-season clock
 

@@ -5,7 +5,7 @@ sidebar:
   order: 13
 ---
 
-**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. The panel keeps following your games underneath, so the moment you go back to the Scoreboard the board is up to date, and the device page, the app, Home Assistant and the remote all keep working while a pattern runs.
+**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. While a pattern you picked runs, the panel stops reading scores: it shows nothing from ESPN, so it reads nothing and sends Home Assistant nothing about games. Go back to the Scoreboard and it says **Looking for** your team, or the live games it follows, for the second or two it takes to catch up. The device page, the app, Home Assistant and the remote all keep working while a pattern runs. Effects that **After the game** puts up between games keep watching for your next game, so the scoreboard comes back in time.
 
 Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own unless you set **After the game** to **Show effects** (see [Between games](#between-games)).
 

@@ -749,6 +749,19 @@ static std::vector<HaEvent> sf(std::vector<HaEvent> v) {
   return out;
 }
 
+// Back on the Scoreboard after a page with no game on it (showing.h): the
+// scores from while it was away never fire, the next ones do.
+static void test_ha_events_after_away() {
+  HaTracker t;
+  sf(t.update(live(7, 0), false));
+  t.clear();  // the panel left the Scoreboard
+  CHECK(sf(t.update(live(21, 3), false)).empty());  // two touchdowns and a field goal while away
+  auto e = sf(t.update(live(28, 3), false));
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].play, std::string("touchdown"));
+  CHECK_EQ(e[0].team_score, 28);
+}
+
 static void test_ha_events() {
   HaTracker t;
   // The first read of a game fires nothing, a repeat of it nothing either.
@@ -9635,6 +9648,7 @@ int main() {
   test_regulatory();
   test_wifi_history();
   test_ha_events();
+  test_ha_events_after_away();
   test_ha_game_events();
   test_ha_pregame();
   test_ha_events_stale();

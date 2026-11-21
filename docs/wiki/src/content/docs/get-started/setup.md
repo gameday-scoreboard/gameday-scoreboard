@@ -71,7 +71,7 @@ Right after it joins your Wi-Fi, the panel shows the QR code for the Game Day ap
 
 That address is the panel's device page. The six characters are the same ones in the hotspot's name. Open the address in a browser on any phone or computer on the same Wi-Fi to pick your team and change settings. See [The device page](/using/device-page/).
 
-A new panel keeps the QR code and the address up for 45 seconds, or until you pick a team. A panel that already has a team shows them once, for about 18 seconds, every time it starts. Then it says **Looking up scores** while the first scoreboard loads, for up to 10 seconds.
+A new panel keeps the QR code and the address up for 45 seconds, or until you pick a team. A panel that already has a team shows them once, for about 18 seconds, every time it starts. Then it says **Looking for** and your team, or the live games it follows, while the first scoreboard loads, for up to 10 seconds.
 
 Until you pick a team or a mode, the ticker along the bottom says **Pick a team in the Game Day app or at** followed by the panel's IP address, like `192.168.1.50`. Use the IP address if your phone won't open a `.local` address.
 
