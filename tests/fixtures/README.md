@@ -89,15 +89,15 @@ MLB, recorded 2026-10-07 (postseason) from the single-event endpoint
 | `event_mlb_pre.json` | 401908005 MIL @ SD, pre-game with probable pitchers and odds |
 | `event_mlb_final_12.json` | 401908045 MIL @ TB, Final/12 (recorded 2026-11-06) |
 | `event_mlb_suspended_final.json` | 401696561 ATL @ CIN, the 2025 Speedway Classic: suspended by rain in the 1st inning and finished the next day, so the document reads Final with `wasSuspended` on the competition (recorded 2026-11-06) |
+| `event_mlb_hr_before.json`, `event_mlb_hr.json` | 401907987 TB @ NYY, the polls either side of a two-run home run (Top 6th) |
+| `team_mlb_atl.json` | `.../baseball/mlb/teams/15` (next event is the game in progress) |
 
 A document carrying a live rain-delay or suspended status cannot be
 recorded after the fact: ESPN re-serves a finished game as Final (the
-Speedway Classic above is the proof), and a scan of every 2026 day
+Speedway Classic in the table above is the proof), and a scan of every 2026 day
 scoreboard on 2026-11-06 found no event still carrying a delayed or
 suspended status. Capturing one still needs a `curl` while a game is
 sitting in the delay.
-| `event_mlb_hr_before.json`, `event_mlb_hr.json` | 401907987 TB @ NYY, the polls either side of a two-run home run (Top 6th) |
-| `team_mlb_atl.json` | `.../baseball/mlb/teams/15` (next event is the game in progress) |
 
 Soccer, from the single-event endpoint `.../soccer/<league>/scoreboard/<event id>`.
 Brazilian Serie A (`bra.1`, the same document shape as MLS and the Premier

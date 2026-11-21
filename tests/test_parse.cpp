@@ -2463,8 +2463,10 @@ static void test_mlb_pre_post() {
 
   // The 2025 Speedway Classic (ATL @ CIN) was suspended by rain in the
   // first inning and finished the next day. ESPN's document for it now
-  // reads Final with wasSuspended set on the competition, so the panel
-  // shows a normal final instead of sitting on "Suspended" for good.
+  // reads Final, with wasSuspended set on the competition. The parser
+  // doesn't read that flag, so this pins only that a suspended game ESPN
+  // has since finished parses as an ordinary final; it can't test a game
+  // while it sits suspended (see fixtures/README.md).
   GameSnapshot sus = mlb_event("fixtures/event_mlb_suspended_final.json", kBraves);
   CHECK(sus.state == GameState::POST);
   CHECK(sus.completed);
