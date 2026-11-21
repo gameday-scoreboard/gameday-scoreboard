@@ -339,7 +339,7 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
-      # The installer would say "Installing bharvey88.gameday-scoreboard".
+      # The installer would say "Installing Game Day.Scoreboard".
       - name: Product name in the manifest
         if: needs.changes.outputs.firmware == 'true'
         run: ./scripts/set_manifest_name.sh out
