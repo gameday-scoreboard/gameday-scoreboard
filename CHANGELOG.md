@@ -39,6 +39,10 @@ through `update_important` in the panel's state.
 
 Effect playlists keep playing from where they are while you edit them, Rain's speed works, a remote button set to live games says what it picked, and Home Assistant lists the panel as Scoreboard by Game Day.
 
+### ⚠️ Heads up
+
+- 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
+
 ### 🐛 Fixes
 
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
