@@ -555,13 +555,11 @@ script:
   - id: boot_hold_view
     then:
       - lambda: |-
-          const bool wide = lv_disp_get_hor_res(lv_disp_get_default()) >= 128;
           id(boot_qr_cycle).execute(0, false);
           id(boot_view).execute(false, false);
-          if (wide)
-            id(boot_set_lines).execute("", "Looking up scores", "", "", true);
-          else
-            id(boot_set_lines).execute("", "Looking up", "scores", "", true);
+          // "Looking for" and what: the team, "live NFL games", "your teams"
+          // (components/gameday/showing.h). A long name scrolls.
+          id(boot_set_lines).execute("", "Looking for", id(gameday_ctl).looking_for(), "", true);
 
   - id: boot_hide
     then:

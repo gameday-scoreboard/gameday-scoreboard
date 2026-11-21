@@ -75,6 +75,8 @@ esphome:
     - priority: -200.0
       then:
         - lambda: |-
+            // What Showing has up decides what the panel reads (showing.h)
+            id(gameday_ctl).set_sb_pinned_ref(&id(gd_sb_pinned));
             id(page_manager).add_on_state_callback([](size_t index) {
               const bool sb = strcmp(id(page_manager).option_at(index), "Smart board") == 0;
               if (::espn::sb_flags().own_change) {

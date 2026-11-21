@@ -68,6 +68,7 @@
 #include "startup.h"
 #include "wake.h"
 #include "smart_board.h"
+#include "showing.h"
 #include "update_nudge.h"
 #include "weather.h"
 #include "wifi_history.h"
@@ -159,6 +160,9 @@ struct UpdateFields {
   std::string ha_team, ha_opponent;
   std::string ha_team_rgb, ha_opp_rgb;
   std::string ha_period, ha_clock;
+  // Showing isn't on the Scoreboard (showing.h): none of the above goes to
+  // Home Assistant, which keeps what it had.
+  bool ha_quiet{false};
   // The off-season clock (offseason.h) on the no-game screen, in team_color.
   // next_line is the next game for a wide board, its kickoff on a second
   // line; empty when none is known, and the page shows the date instead.
@@ -431,7 +435,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t espn_requests() const { return this->espn_requests_.load(); }
   // True while a boot screen hold that started at since_ms should go on
   // (startup.h). 0 means no hold is running.
-  bool boot_hold(uint32_t since_ms) const { return ::espn::boot_hold(this->board_ready_, since_ms, millis()); }
+  // A picked page (showing.h) has no scoreboard to wait for.
+  bool boot_hold(uint32_t since_ms) const {
+    const bool picked = this->showing_ == ::espn::Showing::PICKED || this->showing_now_() == ::espn::Showing::PICKED;
+    return !picked && ::espn::boot_hold(this->board_ready_, since_ms, millis());
+  }
+  // What the boot screen's hold says it is looking for (showing.h).
+  std::string looking_for() const;
+  // pages/smart_board.yaml's gd_sb_pinned, read for showing_now_().
+  void set_sb_pinned_ref(const bool *pinned) { this->sb_pinned_ = pinned; }
   // Stored inverted so panels from before this setting keep showing it.
   bool show_boot_address() const { return !this->flag_(FLAG_NOBOOTADDR); }
   void set_show_boot_address(bool on) { this->set_flag_(FLAG_NOBOOTADDR, !on); }
@@ -1163,6 +1175,12 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void fx_between_tick_();  // from loop(), four times a second
   bool fx_page_is_(const char *name) const;
   void fx_set_page_(const char *name);
+  // What Showing has up (showing.h). showing_ is what loop() last acted on;
+  // showing_now_() reads the page select itself.
+  const bool *sb_pinned_{nullptr};
+  ::espn::Showing showing_{::espn::Showing::BOARD};
+  ::espn::Showing showing_now_() const;
+  void showing_tick_();  // from loop(): a picked page stops the reads, the Scoreboard brings them back
   // Somebody picked a team, a mode or the favorites: the effect between
   // games ends until after the next game's final, as a remote press does.
   void fx_between_end_(const char *why);
@@ -1484,8 +1502,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   int64_t drawn_day_{0};
   void reset_game_();
   // Clears the board and scans again now, for a change in what the mode
-  // follows. The caller starts the boot screen hold first.
-  void restart_board_();
+  // follows. The caller starts the boot screen hold first. keep_cards false
+  // drops the favorites' cards too, so nothing old shows. owner_pick false
+  // is the panel's own restart: no lighting a dark panel, no ending effects
+  // between games.
+  void restart_board_(bool keep_cards = true, bool owner_pick = true);
   // A settings change: the board's reads go first, and the job in flight
   // stops if the change makes it useless (settings_change.h).
   void board_changed_(bool board_cleared);

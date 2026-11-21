@@ -11,7 +11,7 @@ The **Smart board** puts up to four rows of your own text on the panel in place 
 
 There are two ways, depending on whether you want it all the time or between games.
 
-- **All the time:** set **Showing** to **Smart board** on the [device page](/using/device-page/)'s Home tab, or **Select Page** in Home Assistant. It stays up, through restarts and power cuts too, until somebody picks another page there. Your games don't take it over.
+- **All the time:** set **Showing** to **Smart board** on the [device page](/using/device-page/)'s Home tab, or **Select Page** in Home Assistant. It stays up, through restarts and power cuts too, until somebody picks another page there. Your games don't take it over, and while it's up the panel stops reading scores and sends Home Assistant nothing about games. Pick the Scoreboard again and it catches up in a second or two.
 - **Between games:** set **After the game** to **Show the Smart board** (under **Screen** on the Display tab). Once your game's final has been up a while, the Smart board goes up, and the scoreboard comes back at the **Turns on** time before your next game. See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). This only takes over from the Scoreboard: if **Showing** is on the Clock or Effects, that stays.
 
 Until any row has text, the page says **Smart board** and how to fill it, so the panel never sits black.

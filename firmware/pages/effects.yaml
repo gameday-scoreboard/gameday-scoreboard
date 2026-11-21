@@ -391,40 +391,42 @@ number:
 
 # Diagnostic sensors gated on the effect, so all three read NA while none
 # runs, and during wled_fx's one second warm-up after an effect change,
-# when its averages are still zero.
+# when its averages are still zero. Internal: every 10 s in Home Assistant
+# was up to 1,080 recorder rows an hour while an effect ran, for numbers
+# only a bench reads, from the DEBUG log's "Sending state" lines.
 sensor:
   - platform: template
     name: "Effect FPS"
+    internal: true
     id: gd_fx_fps
     icon: "mdi:film"
     unit_of_measurement: "fps"
     accuracy_decimals: 1
     state_class: measurement
-    entity_category: diagnostic
     update_interval: 10s
     lambda: |-
       if (!id(gd_fx_on) || id(gd_fx).profile().frames == 0) return NAN;
       return id(gd_fx).profile().fps_x10() / 10.0f;
   - platform: template
     name: "Effect Render Time"
+    internal: true
     id: gd_fx_render_time
     icon: "mdi:timer-outline"
     unit_of_measurement: "µs"
     accuracy_decimals: 0
     state_class: measurement
-    entity_category: diagnostic
     update_interval: 10s
     lambda: |-
       if (!id(gd_fx_on) || id(gd_fx).profile().frames == 0) return NAN;
       return id(gd_fx).profile().render_avg_us();
   - platform: template
     name: "Effect Output Time"
+    internal: true
     id: gd_fx_output_time
     icon: "mdi:timer-outline"
     unit_of_measurement: "µs"
     accuracy_decimals: 0
     state_class: measurement
-    entity_category: diagnostic
     update_interval: 10s
     lambda: |-
       if (!id(gd_fx_on) || id(gd_fx).profile().frames == 0) return NAN;

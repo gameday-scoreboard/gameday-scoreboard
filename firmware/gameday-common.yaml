@@ -860,48 +860,54 @@ gameday:
         then:
           - light.turn_on: gd_display
   on_update:
-    # Published on every update, though the value often repeats: Home
-    # Assistant only logs a change, and the device page takes each Game
-    # Status event as its cue to re-read /gameday/state.
-    - text_sensor.template.publish:
-        id: gd_status_sensor
-        state: !lambda 'return x.ha_status_text;'
-    # Home Assistant shows a state over 255 characters as unknown, so a long
-    # play is cut to 255 bytes, never inside a character.
-    - text_sensor.template.publish:
-        id: gd_last_play_sensor
-        state: !lambda |-
-          std::string s = x.ha_last_play;
-          if (s.size() > 255) {
-            size_t cut = 255;
-            while (cut > 0 && ((uint8_t) s[cut] & 0xC0) == 0x80)
-              cut--;
-            s.resize(cut);
-          }
-          return s;
-    # Only on a change, so the score sensors don't send the same number on
-    # every redraw. Unknown with no game and before kickoff.
-    - lambda: |-
-        id(gd_game_live).publish_state(x.ha_live);  // a binary sensor sends changes only
-        auto put = [](sensor::Sensor *s, int score) {
-          float v = score < 0 ? NAN : (float) score;
-          if (s->has_state() && (s->state == v || (std::isnan(v) && std::isnan(s->state))))
-            return;
-          s->publish_state(v);
-        };
-        put(id(gd_team_score), x.ha_team_score);
-        put(id(gd_opp_score), x.ha_opp_score);
-        // The sides, colors, period and clock, also only on a change.
-        auto say = [](text_sensor::TextSensor *t, const std::string &v) {
-          if (!t->has_state() || t->state != v)
-            t->publish_state(v);
-        };
-        say(id(gd_ha_team), x.ha_team);
-        say(id(gd_ha_opponent), x.ha_opponent);
-        say(id(gd_ha_team_rgb), x.ha_team_rgb);
-        say(id(gd_ha_opp_rgb), x.ha_opp_rgb);
-        say(id(gd_ha_period), x.ha_period);
-        say(id(gd_ha_clock), x.ha_clock);
+    # Off the Scoreboard (components/gameday/showing.h) Home Assistant hears
+    # nothing about games and keeps what it had.
+    - if:
+        condition:
+          lambda: 'return !x.ha_quiet;'
+        then:
+          # Published on every update, though the value often repeats: Home
+          # Assistant only logs a change, and the device page takes each Game
+          # Status event as its cue to re-read /gameday/state.
+          - text_sensor.template.publish:
+              id: gd_status_sensor
+              state: !lambda 'return x.ha_status_text;'
+          # Home Assistant shows a state over 255 characters as unknown, so a long
+          # play is cut to 255 bytes, never inside a character.
+          - text_sensor.template.publish:
+              id: gd_last_play_sensor
+              state: !lambda |-
+                std::string s = x.ha_last_play;
+                if (s.size() > 255) {
+                  size_t cut = 255;
+                  while (cut > 0 && ((uint8_t) s[cut] & 0xC0) == 0x80)
+                    cut--;
+                  s.resize(cut);
+                }
+                return s;
+          # Only on a change, so the score sensors don't send the same number on
+          # every redraw. Unknown with no game and before kickoff.
+          - lambda: |-
+              id(gd_game_live).publish_state(x.ha_live);  // a binary sensor sends changes only
+              auto put = [](sensor::Sensor *s, int score) {
+                float v = score < 0 ? NAN : (float) score;
+                if (s->has_state() && (s->state == v || (std::isnan(v) && std::isnan(s->state))))
+                  return;
+                s->publish_state(v);
+              };
+              put(id(gd_team_score), x.ha_team_score);
+              put(id(gd_opp_score), x.ha_opp_score);
+              // The sides, colors, period and clock, also only on a change.
+              auto say = [](text_sensor::TextSensor *t, const std::string &v) {
+                if (!t->has_state() || t->state != v)
+                  t->publish_state(v);
+              };
+              say(id(gd_ha_team), x.ha_team);
+              say(id(gd_ha_opponent), x.ha_opponent);
+              say(id(gd_ha_team_rgb), x.ha_team_rgb);
+              say(id(gd_ha_opp_rgb), x.ha_opp_rgb);
+              say(id(gd_ha_period), x.ha_period);
+              say(id(gd_ha_clock), x.ha_clock);
     - lambda: |-
         id(gd_countdown_at) = x.countdown_at;
         id(gd_countdown_end) = x.countdown_end;

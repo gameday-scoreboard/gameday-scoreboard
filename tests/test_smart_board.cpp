@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <string>
 
+#include "showing.h"
 #include "smart_board.h"
 
 using namespace espn;
@@ -140,6 +141,26 @@ static void test_font() {
   CHECK(sb_font(10, 128, heights, short_, 4, 12) == 3);
 }
 
+// What Showing has up (showing.h): the Scoreboard follows games, a page
+// somebody picked reads nothing, a page After the game put up keeps its reads.
+static void test_showing() {
+  CHECK(showing_now("Scoreboard", false, false) == Showing::BOARD);
+  CHECK(showing_now(nullptr, false, false) == Showing::BOARD);  // before the first page
+  CHECK(showing_now("", true, true) == Showing::BOARD);
+  CHECK(showing_now("Clock", false, false) == Showing::PICKED);
+  CHECK(showing_now("Clock", true, true) == Showing::PICKED);
+  CHECK(showing_now("Effects", false, false) == Showing::PICKED);
+  CHECK(showing_now("Effects", true, false) == Showing::AUTO);
+  CHECK(showing_now("Smart board", false, true) == Showing::PICKED);
+  CHECK(showing_now("Smart board", false, false) == Showing::AUTO);
+  CHECK(showing_now("Smart board", true, true) == Showing::PICKED);
+  CHECK(looking_for(true, "NFL ", "Dallas Cowboys") == "live NFL games");
+  CHECK(looking_for(true, "", nullptr) == "live games");
+  CHECK(looking_for(false, "", "Dallas Cowboys") == "Dallas Cowboys");
+  CHECK(looking_for(false, "", nullptr) == "your teams");
+  CHECK(looking_for(false, "", "") == "your teams");
+}
+
 int main() {
   test_plain_rows();
   test_leading_tag();
@@ -148,6 +169,7 @@ int main() {
   test_cleaning();
   test_layout();
   test_font();
+  test_showing();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

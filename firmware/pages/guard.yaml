@@ -14,7 +14,10 @@ sensor:
   - platform: internal_temperature
     name: "Chip Temperature"
     id: gd_chip_temp
-    entity_category: diagnostic
+    # The heat guard's own reading, not Home Assistant's: every 30 s all
+    # day was a recorder row each time. The device page shows it under
+    # Diagnostics (GET /gameday/health).
+    internal: true
     update_interval: 15s
     # The last minute's average, every 30 s, so one odd reading can't put
     # the thermometer up.
