@@ -235,7 +235,7 @@ ENTITIES = [
     {"id": "number/Scroll Speed", "domain": "number", "name": "Scroll Speed", "state": "5", "value": "5",
      "min_value": "1", "max_value": "10", "step": "1"},
     {"id": "select/Select Page", "domain": "select", "name": "Select Page", "state": "Scoreboard",
-     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board"]},
+     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board", "Flights"]},
     # The Smart board's rows (firmware/pages/smart_board.yaml), which Home Assistant fills
     *({"id": f"text/Smart board row {n}", "domain": "text", "name": f"Smart board row {n}", "state": "",
        "value": "", "max_length": 255} for n in range(1, 5)),
@@ -535,11 +535,22 @@ def state_doc():
                        for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
     if "fl" in STATE:
         # The weather town is home; the distance in the weather's units (auto is miles for these Texas towns).
+        fl = STATE["fl"]
         step = STATE.get("flrad", FL_RADIUS_DEFAULT)
         km = STATE.get("wxunit") == 2
-        STATE["fl"]["radius"] = f"{FL_RADIUS_KM[step]} km" if km else f"{FL_RADIUS_MI[step]} mi"
-        STATE["fl"]["place"] = (STATE.get("wx") or {}).get("place", "")
-        STATE["fl"]["src"] = "receiver" if STATE.get("flrx") else "adsblol"
+        fl["radius"] = f"{FL_RADIUS_KM[step]} km" if km else f"{FL_RADIUS_MI[step]} mi"
+        fl["place"] = (STATE.get("wx") or {}).get("place", "")
+        fl["src"] = "receiver" if STATE.get("flrx") else "adsblol"
+        # It reads only while Flights is up on a lit screen. The first read
+        # finds the planes near the Coppell fixture (flights_adsblol_point_dfw25.json):
+        # 11 within the distance, 8 of them on the card's list. A test that
+        # sets read_s or err keeps them.
+        light = next(e for e in ENTITIES if e["domain"] == "light")
+        fl["on"] = entity("Select Page")["value"] == "Flights" and light["state"] == "ON"
+        if fl["on"] and fl["place"] and fl["read_s"] < 0 and fl["err"] == "none":
+            fl.update(n=8, heard=11, read_s=20)
+        elif not fl["on"] and fl["read_s"] < 0:
+            fl.update(n=0, heard=0)
     return STATE
 
 
@@ -1601,6 +1612,23 @@ def selftest():
     for e in ENTITIES:
         e.update(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"]))
     print(f"settings backup: {bad} failures in all")
+
+    # The adsb.lol key goes in and never comes back out, in the state or a backup.
+    reset_state({})
+    apply_set([("flkey", "sekrit-key-123")])
+    if not state_doc()["flkey_set"] or "sekrit" in json.dumps(state_doc()) or "sekrit" in json.dumps(settings_doc()):
+        bad += 1
+        print("FAIL the adsb.lol key wasn't kept, or came back in the state or the backup")
+    apply_set([("flkey", "two words")])
+    apply_set([("flrx", "a b")])
+    if FL_KEY[0] != "sekrit-key-123" or STATE["flrx"] != "":
+        bad += 1
+        print("FAIL a key or receiver address with a space was taken")
+    apply_set([("flkey", "")])
+    if state_doc()["flkey_set"]:
+        bad += 1
+        print("FAIL an empty key didn't clear it")
+    reset_state({})
 
     for path, want in (("/button/Reset%20Wi-Fi/press", True), ("/light/Game%20Day%20Scoreboard%202f6a70/turn_off", True),
                        ("/number/Scroll%20Speed/set", True), ("/update/Firmware/install", True),
