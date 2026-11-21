@@ -796,7 +796,8 @@ void test_parse_set() {
          "after clock");
   SCHECK(parse_set("after", "off", op, kFavMax) && op.value == (int) After::OFF, "after off");
   SCHECK(parse_set("after", "scoreboard", op, kFavMax) && op.value == (int) After::SCOREBOARD, "after scoreboard");
-  SCHECK(!parse_set("after", "effects", op, kFavMax), "after effects isn't in this firmware");
+  SCHECK(parse_set("after", "effects", op, kFavMax) && op.value == (int) After::EFFECTS, "after effects");
+  SCHECK(!parse_set("after", "fx", op, kFavMax), "after takes the word effects, not fx");
 
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {

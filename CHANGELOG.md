@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Add network lists the Wi-Fi networks the panel can see, effect playlists keep playing as you edit them, Rain's speed works, a remote button set to live games says what it picked, and Home Assistant names the panel Scoreboard by Game Day.
+The panel can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, Rain's speed works, and Home Assistant names the panel Scoreboard by Game Day.
 
 ### ⚠️ Heads up
 
@@ -46,6 +46,7 @@ Add network lists the Wi-Fi networks the panel can see, effect playlists keep pl
 ### ✨ New
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+- ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 
 ### 🐛 Fixes
 

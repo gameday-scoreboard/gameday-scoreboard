@@ -323,10 +323,13 @@ void test_refused() {
   {
     // An After the game choice from newer firmware is left out, not a refusal;
     // a lead out of range is left out rather than clamped.
-    SettingsImport in = import(R"({"schema":1,"after":"effects","wake":true,"wakelead":300})");
-    SCHECK(in.error.empty() && skipped(in, "after=effects") && skipped(in, "wakelead=300") && in.ops.size() == 1 &&
+    SettingsImport in = import(R"({"schema":1,"after":"fireworks","wake":true,"wakelead":300})");
+    SCHECK(in.error.empty() && skipped(in, "after=fireworks") && skipped(in, "wakelead=300") && in.ops.size() == 1 &&
                in.ops[0].kind == SetKind::WAKE && in.ops[0].on,
-           "after=effects: error '%s', %zu ops", in.error.c_str(), in.ops.size());
+           "after=fireworks: error '%s', %zu ops", in.error.c_str(), in.ops.size());
+    SettingsImport fx = import(R"({"schema":1,"after":"effects"})");
+    const SetOp *fx_after = find(fx, SetKind::AFTER);
+    SCHECK(fx_after != nullptr && fx_after->value == (int) After::EFFECTS, "after=effects restores");
     SettingsImport ok = import(R"({"schema":1,"after":"clock","wakelead":45})");
     const SetOp *after = find(ok, SetKind::AFTER);
     const SetOp *lead = find(ok, SetKind::WAKE_LEAD);
