@@ -642,7 +642,7 @@ template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
 // field, its state and round, and the leaderboard rows the panel keeps —
 // the top kGolfTopRows, plus the followed golfers (fav_ids, this tour's
 // athlete ids) wherever they stand, up to kGolfFavRows more. The document
-// is 90-350 KB, most of it statistics and hole-by-hole linescores for the
+// is 90-600 KB, most of it statistics and hole-by-hole linescores for the
 // whole field; the filter keeps only what a row needs, and a golfer's thru
 // is the count of hole linescores the filter lets through for the current
 // round (the PGA Tour document carries them, the LPGA and DP World Tour
@@ -667,6 +667,9 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
   c["score"] = true;
   c["athlete"]["shortName"] = true;
   c["athlete"]["displayName"] = true;
+  // A team event (the Zurich Classic's pairs) lists teams, not golfers:
+  // "Smalley/Springer", with the pair's score.
+  c["team"]["displayName"] = true;
   JsonObject ls = c["linescores"].add<JsonObject>();
   ls["period"] = true;
   ls["displayValue"] = true;
@@ -696,6 +699,10 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
   b.league = league;
   const std::string estate = detail::str_or_empty(pick["status"]["type"]["state"]);
   b.state = estate == "in" ? GolfState::IN : estate == "post" ? GolfState::POST : GolfState::PRE;
+  // The event stays "in" from the first tee time to the last putt; the
+  // competition's own state says whether a round is being played right now
+  // ("post" overnight and while play is stopped: "Round 3 - Suspended").
+  b.round_live = b.state == GolfState::IN && detail::str_or_empty(comp0["status"]["type"]["state"]) == "in";
   snprintf(b.event, sizeof(b.event), "%s", detail::str_or_empty(pick["name"]).c_str());
   std::string detail = detail::str_or_empty(comp0["status"]["type"]["shortDetail"]);
   if (detail.empty())
@@ -729,8 +736,18 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
     std::string full = ascii_fold(detail::str_or_empty(gc["athlete"]["displayName"]));
     size_t sp = full.rfind(' ');
     snprintf(r.last, sizeof(r.last), "%s", (sp == std::string::npos ? full : full.substr(sp + 1)).c_str());
-    // A competitor with no athlete is not a golfer (a team game's document
-    // read by mistake): it counts in the field but is never a row.
+    // A pair in a team event goes by the pair's name, "Smalley/Springer",
+    // and on a single panel by the first name and the second's initial,
+    // "Smalley/S", which fits the row.
+    if (r.name[0] == '\0' && r.last[0] == '\0') {
+      const std::string pair = ascii_fold(detail::str_or_empty(gc["team"]["displayName"]));
+      snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
+      const size_t slash = pair.find('/');
+      const std::string narrow = slash != std::string::npos && slash + 1 < pair.size() ? pair.substr(0, slash + 2) : pair;
+      snprintf(r.last, sizeof(r.last), "%s", narrow.c_str());
+    }
+    // Neither a golfer nor a pair (a team game's document read by mistake):
+    // it counts in the field but is never a row.
     if (r.name[0] == '\0' && r.last[0] == '\0')
       continue;
     int total = 0;

@@ -38,7 +38,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
+                                    "news",   "town",     "wxon",     "wxunit",   "cards",   "golftours",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
                                     "field",   "winbar",  "spark",   "bigplays", "keepfav", "fxlists", "fxlist"};
 
@@ -499,6 +499,7 @@ enum class SetKind : uint8_t {
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
+  GOLF_TOURS,   // value, the Golf leaderboard card's tours, a bit per golf slot (golf.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
   FIELD,        // on, football's field strip on the board (game_viz.h)
   WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
@@ -756,6 +757,13 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "wxon")
     return on(SetKind::WXON);
+  if (k == "golftours") {
+    // "pga,lpga": the tours the Golf leaderboard card shows; "" none. Other
+    // keys are skipped, as Live games' list skips them.
+    op.kind = SetKind::GOLF_TOURS;
+    op.value = golf_tours_from_keys(v);
+    return true;
+  }
   if (k == "wxunit") {
     // 0 auto (the town's country, else the time zone), 1 F, 2 C
     op.kind = SetKind::WXUNIT;

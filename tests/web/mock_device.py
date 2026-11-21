@@ -183,6 +183,8 @@ INITIAL = {
     # The weather card (weather.h): the town, the switch and the degrees (0
     # auto, 1 F, 2 C); wx once a town is set.
     "town": "", "wxon": False, "wxunit": 0,
+    # The Golf leaderboard card's tours (golf.h golf_tours_keys), slot order.
+    "golftours": "",
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
@@ -518,6 +520,10 @@ def state_doc():
     return STATE
 
 
+# The golf tours in slot order (golf.h golf_slot): PGA, LPGA, DP World Tour.
+GOLF_TOURS = ("pga", "lpga", "eur")
+
+
 def cards_on():
     """card_on() for each card: its own key for the cards that kept one, else the list."""
     listed = {c["id"]: c["on"] for c in STATE.get("cards", []) if "id" in c}
@@ -540,6 +546,9 @@ def card_ok(cid):
     if cid == "top25":
         leagues = {t["l"] for t in STATE["favs"] if counts(t)} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
         return not no_team_default() and bool(leagues & {"ncaa", "mcbb"})
+    if cid == "golf":
+        # golf_slots_(): a tour picked on the card, or a followed golfer's tour.
+        return bool(STATE.get("golftours")) or any(t.get("l") in GOLF_TOURS for t in STATE["favs"] if t)
     return True
 
 
@@ -1011,6 +1020,10 @@ def apply_set(kv):
                 wx_lookup(town)
         elif k == "wxon":
             STATE["wxon"] = v == "1"
+        elif k == "golftours":
+            # golf_tours_from_keys(): golf keys only, back in slot order.
+            picked = set(v.split(","))
+            STATE["golftours"] = ",".join(t for t in GOLF_TOURS if t in picked)
         elif k == "wxunit":
             if v in ("0", "1", "2"):
                 STATE["wxunit"] = int(v)

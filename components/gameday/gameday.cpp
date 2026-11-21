@@ -6689,6 +6689,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["town"] = (const char *) this->wx_.town;
   doc["wxon"] = this->weather_on();
   doc["wxunit"] = this->wx_.unit;
+  doc["golftours"] = ::espn::golf_tours_keys(this->prefs10_.golf_tours);
   const bool wx_f = this->wx_fahrenheit_();
   if (this->wx_.town[0] != '\0') {
     JsonObject wx = doc["wx"].to<JsonObject>();
@@ -7718,10 +7719,11 @@ void GamedayComponent::apply_top25_job_() {
 
 // ---- The golf card (golf.h) --------------------------------------------------
 
-// A followed golfer in each tour, from the favorites list itself: a golfer
-// has no team entry, so the favorites entries never carry one.
+// The tours the card shows: the ones picked on the card, and each tour a
+// followed golfer plays on (a golfer has no team entry, so the favorites
+// entries never carry one).
 uint8_t GamedayComponent::golf_slots_() const {
-  uint8_t slots = 0;
+  uint8_t slots = this->prefs10_.golf_tours & (uint8_t) ((1u << ::espn::kGolfSlots) - 1);
   for (uint8_t i = 0; i < FAV_MAX; i++) {
     if (this->fav_id_(i) == 0)
       continue;
@@ -7774,19 +7776,19 @@ void GamedayComponent::golf_tick_() {
   }
   // A tour the panel follows whose board is due: never read, read long
   // enough ago for where its event stands, or a failed read's retry.
+  const int64_t epoch = (int64_t) this->time_->now().timestamp;
   if (!this->golf_read_due_ && !(this->busy_ && this->job_.need_golf)) {
     for (uint8_t s = 0; s < ::espn::kGolfSlots; s++) {
       if (!(slots & (1u << s)))
         continue;
       const bool may_read = this->golf_fail_ms_[s] == 0 || now - this->golf_fail_ms_[s] >= ::espn::kGolfRetryMs;
-      if (may_read && (this->golf_read_ms_[s] == 0 || now - this->golf_read_ms_[s] >= ::espn::golf_read_ms(this->golf_[s]))) {
+      if (may_read && (this->golf_read_ms_[s] == 0 || now - this->golf_read_ms_[s] >= ::espn::golf_read_ms(this->golf_[s], this->golf_read_epoch_[s]))) {
         this->golf_read_due_ = true;
         this->golf_read_slot_ = s;
         break;
       }
     }
   }
-  const int64_t epoch = (int64_t) this->time_->now().timestamp;
   if (this->golf_shown_) {
     if (now - this->golf_since_ms_ < ::espn::kGolfPageMs)
       return;
@@ -7834,10 +7836,13 @@ void GamedayComponent::start_golf_job_() {
 
 void GamedayComponent::run_golf_job_() {
   Job &j = this->job_;
-  auto container = this->open_(::espn::golf_url(::espn::golf_slot_league(j.golf_slot)));
+  // Asked for gzip like every other ESPN read: the PGA Tour's document is
+  // about 600 KB as text and a tenth of that compressed.
+  EspnFetch fetch;
+  auto container = this->open_(::espn::golf_url(::espn::golf_slot_league(j.golf_slot)), &fetch);
   if (container == nullptr)
     return;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, nullptr, &fetch);
   j.golf_ok = ::espn::parse_golf(reader, ::espn::golf_slot_league(j.golf_slot), j.golf_favs.data(), j.golf_favs.size(),
                                  j.golf_board);
   container->end();
@@ -7856,6 +7861,7 @@ void GamedayComponent::apply_golf_job_() {
   }
   this->golf_fail_ms_[s] = 0;
   this->golf_read_ms_[s] = now;
+  this->golf_read_epoch_[s] = this->time_ != nullptr ? (int64_t) this->time_->now().timestamp : 0;
   // A turn on the old board ends here; the next turn shows the new one.
   if (this->golf_shown_ && this->golf_slot_ == (int) s)
     this->golf_hide_();
@@ -8831,6 +8837,13 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         break;
       case ::espn::SetKind::WXUNIT:
         this->set_wx_unit((uint8_t) op.value);
+        break;
+      case ::espn::SetKind::GOLF_TOURS:
+        if (this->prefs10_.golf_tours != (uint8_t) op.value) {
+          this->prefs10_.golf_tours = (uint8_t) op.value;
+          this->pref10_.save(&this->prefs10_);
+          this->golf_since_ms_ = 0;  // a new tour's first turn comes a minute from now
+        }
         break;
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;

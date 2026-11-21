@@ -1,6 +1,6 @@
 // Golf: the PGA Tour, the LPGA and the DP World Tour (ESPN's golf/eur) as
 // leaderboard boards, read from the tour's scoreboard document (about
-// 90-350 KB) and shown between games, a page of rows at a time, like the
+// 90-600 KB, a tenth of that gzipped) and shown between games, a page of rows at a time, like the
 // Top 25 card. A tournament is not a game between two teams: the board is
 // the top of the leaderboard, with the golfers the owner follows pinned
 // into it wherever they stand. A favorite in a golf league is a golfer,
@@ -30,10 +30,14 @@ constexpr uint32_t kGolfPageMs = 5u * 1000;
 constexpr uint32_t kGolfEveryMs = 10u * 60 * 1000;  // from the end of one turn to the next
 // While a round is being played the board is read again this often; a
 // scoreboard read is the tour's whole document, so golf never polls at the
-// ten-second pace of a game. Between tournaments the next read is a day
-// away: the scoreboard names the next event as soon as ESPN posts it.
+// ten-second pace of a game. ESPN calls the event in progress from the first
+// tee time to the last putt, overnight and through a weather stop too, so
+// between rounds the board is read every half hour. Between tournaments it
+// is read every few hours, and at the next event's first tee time once ESPN
+// has posted it, so a Thursday start is never missed by long.
 constexpr uint32_t kGolfLiveReadMs = 5u * 60 * 1000;
-constexpr uint32_t kGolfIdleReadMs = 24u * 60 * 60 * 1000;
+constexpr uint32_t kGolfBreakReadMs = 30u * 60 * 1000;
+constexpr uint32_t kGolfIdleReadMs = 6u * 60 * 60 * 1000;
 constexpr uint32_t kGolfRetryMs = 5u * 60 * 1000;  // after a failed read
 // A board is left off once its event ended more than this long ago: the
 // last round of one week to the first of the next is four days.
@@ -60,7 +64,8 @@ struct GolfRow {
 struct GolfBoard {
   bool valid{false};
   League league{League::PGA};
-  GolfState state{GolfState::PRE};
+  GolfState state{GolfState::PRE};  // the tournament's: IN from the first round's start to the final
+  bool round_live{false};           // a round is being played now (not overnight, not stopped for weather)
   char event[48]{};    // "World Wide Technology Championship"
   char detail[32]{};   // ESPN's word for where the event is: "Round 2 - In Progress", "Final"
   uint8_t round{0};    // the round in progress or last played, 0 when ESPN gives none
@@ -91,9 +96,49 @@ inline bool golf_fresh(const GolfBoard &b, int64_t now) {
   return b.valid && !b.rows.empty() && now > 0 && (b.end_epoch == 0 || now - b.end_epoch <= kGolfStaleSecs);
 }
 
-// When a tour's board is read again: soon while its event is being played,
-// a day away when it is over or still to come.
-inline uint32_t golf_read_ms(const GolfBoard &b) { return b.valid && b.state == GolfState::IN ? kGolfLiveReadMs : kGolfIdleReadMs; }
+// When a tour's board is read again, from the last read at now_epoch: soon
+// while a round is being played, every half hour between the rounds of an
+// event in progress, and otherwise every few hours or at the next event's
+// start, whichever comes first.
+inline uint32_t golf_read_ms(const GolfBoard &b, int64_t now_epoch) {
+  if (!b.valid)
+    return kGolfIdleReadMs;
+  if (b.state == GolfState::IN)
+    return b.round_live ? kGolfLiveReadMs : kGolfBreakReadMs;
+  if (b.state == GolfState::PRE && b.start_epoch > now_epoch && now_epoch > 0) {
+    const int64_t until = b.start_epoch - now_epoch;
+    if (until < (int64_t) (kGolfIdleReadMs / 1000))
+      return until * 1000 < (int64_t) kGolfLiveReadMs ? kGolfLiveReadMs : (uint32_t) (until * 1000);
+  }
+  return kGolfIdleReadMs;
+}
+
+// The tours the owner picked on the Golf leaderboard card, a bit per slot,
+// from "pga,lpga" (golf league keys; others are skipped) and back, in slot
+// order.
+inline uint8_t golf_tours_from_keys(const std::string &keys) {
+  uint8_t mask = 0;
+  size_t start = 0;
+  while (start < keys.size()) {
+    size_t comma = keys.find(',', start);
+    std::string key = keys.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    start = comma == std::string::npos ? keys.size() : comma + 1;
+    const LeagueInfo *info = league_by_key(key.c_str());
+    if (info != nullptr && golf_slot(info->league) >= 0)
+      mask |= (uint8_t) (1u << golf_slot(info->league));
+  }
+  return mask;
+}
+inline std::string golf_tours_keys(uint8_t mask) {
+  std::string out;
+  for (int s = 0; s < kGolfSlots; s++)
+    if (mask & (1u << s)) {
+      if (!out.empty())
+        out += ',';
+      out += league_key(golf_slot_league(s));
+    }
+  return out;
+}
 
 // "PGA R2", over the rows; a final reads "PGA FINAL", and before the first
 // round just the tour.

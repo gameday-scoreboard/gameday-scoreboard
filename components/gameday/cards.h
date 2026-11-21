@@ -68,7 +68,7 @@ constexpr CardRow kCards[] = {
     {Card::RECAP,     "seasonrecap", "Season recap",               true,  "Only for teams in Favorite teams, not baseball"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},
     {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
-    {Card::GOLF,      "golf",        "Golf leaderboard",           true,  "Follow a golfer in Favorite teams first"},
+    {Card::GOLF,      "golf",        "Golf leaderboard",           true,  "Pick a tour below, or follow a golfer"},
 };
 // clang-format on
 constexpr size_t kCardCount = sizeof(kCards) / sizeof(kCards[0]);

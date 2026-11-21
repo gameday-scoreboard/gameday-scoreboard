@@ -776,6 +776,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::GolfBoard golf_[::espn::kGolfSlots];
   uint32_t golf_read_ms_[::espn::kGolfSlots]{};  // millis() of the last good read, 0 = none
   uint32_t golf_fail_ms_[::espn::kGolfSlots]{};  // millis() of the last failed read, 0 = none since
+  int64_t golf_read_epoch_[::espn::kGolfSlots]{};  // the clock at the last good read, for golf_read_ms
   bool golf_read_due_{false};
   uint8_t golf_read_slot_{0};
   int golf_slot_{-1};  // the tour up now, or the last one shown
@@ -1094,7 +1095,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int8_t sched_before;
     uint8_t sched_mode;
     uint8_t sched_sport;  // the sport row playing before, 1 + Sport; 0 = none
-    uint8_t spare[4];
+    // The tours the Golf leaderboard card shows without a followed golfer,
+    // a bit per golf slot (golf.h). Was spare, so older firmware picks none.
+    uint8_t golf_tours;
+    uint8_t spare[3];
   } __attribute__((packed));
   static_assert(sizeof(Prefs10) == 104, "Prefs10 is a fixed-size blob");
   ESPPreferenceObject pref10_;

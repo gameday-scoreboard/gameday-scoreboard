@@ -49,8 +49,8 @@
       "heap": 1850
     },
     "poll_golf": {
-      "heap": 1103,
-      "json": 224142
+      "heap": 1101,
+      "json": 376018
     },
     "rankings_ncaa": {
       "heap": 1042

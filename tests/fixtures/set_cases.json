@@ -11,7 +11,7 @@
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "sport": "", "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "field": true, "winbar": true, "spark": true, "opp": true, "celebrate": 2, "bigplays": true, "best": false, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0,
+    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0, "golftours": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
     "wake": false, "wakelead": 15, "after": "scoreboard"
   },
@@ -159,6 +159,8 @@
     {"name": "weather card on with no town", "set": [["wxon", "1"]], "expect": {"town": "", "wxon": true}},
     {"name": "weather in Celsius", "set": [["wxunit", "2"]], "expect": {"wxunit": 2}},
     {"name": "weather in Fahrenheit", "start": {"wxunit": 2}, "set": [["wxunit", "1"]], "expect": {"wxunit": 1}},
+    {"name": "golf tours come back in slot order, other keys skipped", "set": [["golftours", "eur,nfl,pga"]], "expect": {"golftours": "pga,eur"}},
+    {"name": "no golf tours", "start": {"golftours": "pga,lpga"}, "set": [["golftours", ""]], "expect": {"golftours": ""}},
     {"name": "weather unit back to auto", "start": {"wxunit": 1}, "set": [["wxunit", "0"]], "expect": {"wxunit": 0}},
     {"name": "weather unit past C is refused", "set": [["wxunit", "3"]], "expect": {"wxunit": 0}},
     {"name": "weather unit takes no letters", "set": [["wxunit", "C"]], "expect": {"wxunit": 0}},

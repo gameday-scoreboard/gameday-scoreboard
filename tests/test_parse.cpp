@@ -6446,9 +6446,58 @@ static void test_golf() {
   CHECK(golf_fresh(gb, gb.end_epoch + kGolfStaleSecs));
   CHECK(!golf_fresh(gb, gb.end_epoch + kGolfStaleSecs + 1));
   CHECK(!golf_fresh(gb, 0));
-  // A live board is read again in minutes, a finished one in a day.
-  CHECK_EQ(golf_read_ms(b), kGolfLiveReadMs);
-  CHECK_EQ(golf_read_ms(gb), kGolfIdleReadMs);
+  // A round being played is read again in minutes, a finished event every
+  // few hours.
+  CHECK(b.round_live);
+  CHECK_EQ(golf_read_ms(b, b.start_epoch + 86400), kGolfLiveReadMs);
+  CHECK(!gb.round_live);
+  CHECK_EQ(golf_read_ms(gb, gb.end_epoch + 3600), kGolfIdleReadMs);
+
+  // Weather stopped round 3 of The RSM Classic: ESPN keeps the event "in"
+  // but the round's own state is "post". The board still reads R3, not a
+  // final, and is read every half hour until play starts again. The whole
+  // 592 KB document parses through the filter.
+  std::string sus = slurp("fixtures/scoreboard_pga_20261121_suspended.json");
+  GolfBoard sb;
+  CHECK(parse_golf(sus, League::PGA, nullptr, 0, sb));
+  CHECK(sb.state == GolfState::IN);
+  CHECK(!sb.round_live);
+  CHECK_EQ(std::string(sb.detail), std::string("Round 3 - Suspended"));
+  CHECK_EQ(golf_header(sb), std::string("PGA R3"));
+  CHECK_EQ((int) sb.field, 147);
+  CHECK_EQ(std::string(sb.rows[0].name), std::string("M. Penge"));
+  CHECK_EQ(std::string(sb.rows[0].score), std::string("-9"));
+  CHECK_EQ(golf_read_ms(sb, sb.start_epoch + 2 * 86400), kGolfBreakReadMs);
+
+  // Before an event: every few hours, then at the first tee time once it is
+  // closer than that, and never sooner than a live read.
+  GolfBoard pre;
+  pre.valid = true;
+  pre.state = GolfState::PRE;
+  pre.start_epoch = 1800000000;
+  CHECK_EQ(golf_read_ms(pre, pre.start_epoch - 2 * 86400), kGolfIdleReadMs);
+  CHECK_EQ(golf_read_ms(pre, pre.start_epoch - 3600), 3600u * 1000u);
+  CHECK_EQ(golf_read_ms(pre, pre.start_epoch - 60), kGolfLiveReadMs);
+  CHECK_EQ(golf_read_ms(pre, pre.start_epoch + 60), kGolfIdleReadMs);
+  CHECK_EQ(golf_read_ms(pre, 0), kGolfIdleReadMs);
+
+  // A team event lists pairs, not golfers: the board shows them by the
+  // pair's name on both panels.
+  std::string team = slurp("fixtures/scoreboard_pga_team_20260426.json");
+  GolfBoard tb;
+  CHECK(parse_golf(team, League::PGA, nullptr, 0, tb));
+  CHECK(tb.state == GolfState::POST);
+  CHECK_EQ(std::string(tb.event), std::string("Zurich Classic of New Orleans"));
+  CHECK_EQ(std::string(tb.rows[0].name), std::string("Smalley/Springer"));
+  CHECK_EQ(std::string(tb.rows[0].score), std::string("-30"));
+  CHECK_EQ(golf_row(tb.rows[0]), std::string(" 1 Smalley/S  -30"));
+
+  // The tours picked on the card: golf keys only, back in slot order.
+  CHECK_EQ((int) golf_tours_from_keys("eur,nfl,pga"), 5);
+  CHECK_EQ(golf_tours_keys(golf_tours_from_keys("eur,nfl,pga")), std::string("pga,eur"));
+  CHECK_EQ((int) golf_tours_from_keys(""), 0);
+  CHECK_EQ(golf_tours_keys(0), std::string(""));
+  CHECK_EQ(golf_tours_keys(7), std::string("pga,lpga,eur"));
 
   // Not golf: a team game's document and an empty one both refuse.
   GolfBoard no;

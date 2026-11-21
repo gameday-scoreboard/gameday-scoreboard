@@ -83,6 +83,7 @@ struct Settings {
   std::string town;
   bool wxon{false};
   int wxunit{0};
+  uint8_t golftours{0};  // Prefs10::golf_tours
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -236,6 +237,8 @@ void load(Settings &s, JsonObjectConst o) {
   flag("wxon", s.wxon);
   if (o["town"].is<const char *>())
     s.town = o["town"].as<const char *>();
+  if (o["golftours"].is<const char *>())
+    s.golftours = golf_tours_from_keys(o["golftours"].as<const char *>());
   // As the backup lists them: {"next": true, ...}.
   for (JsonPairConst p : o["cards"].as<JsonObjectConst>())
     if (const CardRow *r = card_row(p.key().c_str()))
@@ -471,6 +474,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       break;
     case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::WXUNIT: s.wxunit = op.value; break;
+    case SetKind::GOLF_TOURS: s.golftours = (uint8_t) op.value; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -612,6 +616,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
+  doc["golftours"] = golf_tours_keys(s.golftours);
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -844,7 +849,7 @@ void test_scan_leagues() {
 void test_no_team() {
   SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl,pga,lpga,eur", "every league, kLeagues order");
   SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl",
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl",
          "the no-team default's scan reads every league with games, golf left out");
   const uint8_t favs = (uint8_t) Mode::FAVORITES;
   SCHECK(no_team_default(favs, false), "Favorites with none set");
