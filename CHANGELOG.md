@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-The panel can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, Rain's speed works, and Home Assistant names the panel Scoreboard by Game Day.
+Women's college basketball joins the panel, it can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, and Rain's speed works.
 
 ### ⚠️ Heads up
 
@@ -50,6 +50,7 @@ The panel can play an effect whenever no game of yours is on, Add network lists 
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
+- 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
 
 ### 🐛 Fixes
 

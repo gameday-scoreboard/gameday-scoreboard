@@ -46,12 +46,13 @@
     nba: { prefix: "NBA", tab: "NBA", name: "NBA", path: "basketball/nba", logo: "nba", byId: false, scan: "" },
     wnba: { prefix: "WNBA", tab: "WNBA", name: "WNBA", path: "basketball/wnba", logo: "wnba", byId: false, scan: "" },
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
+    wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
-  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
   // "NFL", "NFL and NHL", "NFL, NBA and NHL".
   const andJoin = (a) => (a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0] || "");
   const logoUrl = (league, id, abbr) => {
@@ -2045,7 +2046,7 @@
       const mine = real.filter((k) => lgs.includes(keyLeague(k)));
       if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
       for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
-      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
       groups.push([title, opts]);
     }
     groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
