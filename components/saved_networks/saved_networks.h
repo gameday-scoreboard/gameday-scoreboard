@@ -62,6 +62,7 @@
 
 #include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/component.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/preferences.h"
 
 #include "network_list.h"
@@ -84,7 +85,7 @@ struct Entry {
 
 // One network the last scan found, for the device page's list to pick from.
 struct Nearby {
-  std::string ssid;
+  char ssid[wifi_list::SSID_SIZE];
   int8_t rssi;  // the strongest access point with that name
   bool open;    // no password
 };
@@ -151,9 +152,20 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   bool in_setup() const { return this->in_setup_; }
   // The saved networks in the order they are tried. Safe from the HTTP task.
   std::vector<Entry> list();
-  // The networks a scan from the last SEEN_MS found, strongest first; empty
-  // when there is none that recent. Safe from the HTTP task.
-  std::vector<Nearby> nearby();
+  // Calls f(Nearby &) for each network a scan from the last SEEN_MS found,
+  // strongest first; none when there is no scan that recent. f gets a copy,
+  // so it may keep pointers into it only for as long as it runs. Holds the
+  // lock while it runs, so f must not call back in here. Safe from the HTTP
+  // task.
+  template<typename F> void each_nearby(F f) {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    if (this->scanned_ms_ == 0 || esphome::millis() - this->scanned_ms_ >= SEEN_MS)
+      return;
+    for (size_t i = 0; i < this->scanned_n_; i++) {
+      Nearby n = this->scanned_[i];
+      f(n);
+    }
+  }
   size_t count();
   static constexpr size_t max() { return MAX_NETWORKS; }
   // Hands the whole saved list to the Wi-Fi component again, after something
@@ -182,6 +194,8 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   void pending_timeout_();
   void leave_(const std::string &ssid);  // main loop only
   void end_scan_();  // a scan of scan()'s is over; main loop only
+  // Puts a scan's networks in scanned_; under mutex_.
+  void fill_scanned_(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results);
   // The network the panel is on, read from the driver; blank when on none.
   // Safe from the HTTP task.
   std::array<char, wifi::SSID_BUFFER_SIZE> connected_ssid_() const;
@@ -196,8 +210,9 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   ESPPreferenceObject setup_pref_;
   bool in_setup_{false};
   // What the last scan found, one entry per name, strongest first, under
-  // mutex_, and millis() when it finished.
-  std::vector<Nearby> scanned_;
+  // mutex_, and millis() when it finished. Fixed, so a scan never allocates.
+  std::array<Nearby, MAX_SCANNED> scanned_{};
+  size_t scanned_n_{0};
   uint32_t scanned_ms_{0};
   std::atomic<bool> scanning_{false};
   std::atomic<bool> switching_{false};

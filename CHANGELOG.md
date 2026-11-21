@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Add network on the device page lists the Wi-Fi networks the panel can see, and effect playlists keep playing from where they are while you edit them.
+Add network on the device page lists the Wi-Fi networks the panel can see, effect playlists keep playing while you edit them, Rain's speed works, and a remote button set to live games says what it picked.
 
 ### ✨ New
 
