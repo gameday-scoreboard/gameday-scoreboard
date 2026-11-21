@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Text the panel can draw. The Spleen fonts carry printable ASCII and Latin-1
 // (gameday-common.yaml lists both for each size), and a label draws an empty
 // box for any other character. Text from outside the panel (a network name,

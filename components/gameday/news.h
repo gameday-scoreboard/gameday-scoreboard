@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The news card: ESPN headlines between games, one a turn, over the board
 // like the message card (message.h) and on the same kind of clock. The
 // owner turns it on; its source follows the panel. Favorite teams reads its

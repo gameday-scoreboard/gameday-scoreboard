@@ -2,12 +2,28 @@
   "networks": [
     {
       "ssid": "Home Wi-Fi",
-      "connected": true
+      "connected": true,
+      "seen": true
     },
     {
       "ssid": "Garage",
-      "connected": false
+      "connected": false,
+      "seen": false
     }
   ],
-  "max": 5
+  "nearby": [
+    {
+      "ssid": "Home Wi-Fi",
+      "rssi": -52
+    },
+    {
+      "ssid": "Coffee Shop",
+      "rssi": -78,
+      "open": true
+    }
+  ],
+  "max": 5,
+  "scanning": false,
+  "switching": "Garage",
+  "failed": "Cabin"
 }

@@ -134,6 +134,7 @@ data:
 
 - The events of one moment come together and in order: a touchdown that takes the lead is a `score`, then a `lead_change`. A score on the last play arrives with the final.
 - Each one comes once. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
+- Events come only while **Showing** is on the Scoreboard. On the Clock, Effects or the Smart board the panel sends none, and back on the Scoreboard the first event is the next thing that happens: a score from while it was away never fires.
 - After the panel restarts, or starts following a game already under way, the first event is the next thing that happens, not the ones before it. A panel turned on inside the heads-up window sends no heads-up for that game.
 - ESPN sometimes serves an older copy of a game for a moment. The panel ignores a score that goes down and comes back, so nothing repeats. A score ESPN takes back for good, like a touchdown overturned on review, counts after a minute and a half, without an event.
 - A period ends at the break after it, or when the next one is under way if the panel missed the break. The final ends the last period itself.
@@ -168,13 +169,13 @@ Each event is a `POST` with a small JSON body, the same fields as above with `ev
 
 - The address starts with `http://`. The panel doesn't post over `https://`: it is meant for something on your home network, and a second secure connection beside ESPN's would cost the panel memory it needs for the board.
 - The address is plain letters, numbers and symbols, with no spaces. The device page says so when it has an accented letter or a curly quote; copy it from the browser's address bar, which writes those out in a form the panel takes.
-- Each event gets one try, with a few seconds to answer. A listener that is down misses the event; the panel never holds up the board waiting for it, and never retries. Events wait while the panel's Wi-Fi is down, up to the last six.
+- Each event gets one try, with a few seconds to answer. A listener that is down misses the event; the panel never holds up the board waiting for it, and never retries. Events wait while the panel's Wi-Fi is down, up to the last six. Posting leaves no memory behind, so a webhook can stay on through weeks of game days without a restart.
 - The card says how the last post went: delivered, an error code from your listener, or no answer.
 - Home Assistant has webhooks of its own: an automation with a **Webhook** trigger gives you an address like `http://homeassistant.local:8123/api/webhook/<id>` that works here too. A name ending in `.local` is looked up on your network the way your phone does it; if the card says the last post got no answer, use the IP address instead.
 
 ## Entities for the game
 
-These follow the same game, and change only when what they show does:
+These follow the same game, and change only when what they show does. Off the Scoreboard they keep their last state:
 
 | Entity | What it is |
 | --- | --- |

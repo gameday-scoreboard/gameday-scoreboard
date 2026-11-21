@@ -16,7 +16,7 @@
 # "Button OK" in green for 3 s, then QC ends. That press clears the flag.
 # Unplugging first, or the 2 minute timeout, leaves the flag set, so the
 # panel runs QC again on its next boot and can't skip the check unnoticed.
-# Leaving puts the screen and the Power switch back the way they were; it
+# Leaving puts the screen and the Display light back the way they were; it
 # doesn't restart the panel, so a burn-in run doesn't count a restart.
 #
 # The panel stays at its Brightness setting, so full white never draws more
@@ -43,7 +43,7 @@ globals:
   - id: qc_button_ok
     type: bool
     initial_value: 'false'
-  # The Power switch when QC mode started, put back when it ends
+  # The Display light's on/off when QC mode started, put back when it ends
   - id: qc_power_was
     type: bool
     initial_value: 'true'
@@ -59,15 +59,15 @@ script:
           id(qc_active) = true;
           id(qc_since_ms) = millis();
           id(qc_button_ok) = false;
-          id(qc_power_was) = id(power).state;
+          id(qc_power_was) = id(gameday_ctl).display_on();
           lv_obj_move_foreground(id(qc_layer));
-          lv_obj_clear_flag(id(qc_layer), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(qc_layer), false);
           id(qc_show).execute(0);
-      # Lit at the Brightness setting even if Power was off or it is night.
-      # The switch is left alone, so leaving QC knows what to go back to.
+      # Lit at the light's brightness even if it was off or it is night.
+      # The light is left alone, so leaving QC knows what to go back to.
       - hub75.set_brightness:
           id: matrix
-          brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, false);'
+          brightness: !lambda 'return id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level(), false);'
       - script.execute: gd_repaint
 
   - id: qc_stop
@@ -77,14 +77,17 @@ script:
           ESP_LOGI("qc", "QC mode off");
           id(qc_active) = false;
           id(qc_from_flag) = false;
-          lv_obj_add_flag(id(qc_layer), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(qc_layer), true);
       - if:
           condition:
             lambda: 'return !id(qc_power_was);'
           then:
-            - switch.turn_off: power
+            - light.turn_off: gd_display
           else:
-            - switch.turn_on: power
+            - light.turn_on: gd_display
+      # The light already at what QC found sends nothing to the panel, so
+      # put its brightness back from the light, dark if it is off.
+      - script.execute: gd_guard
 
   # The button test passed: "Button OK" stays up for 3 s, then QC ends.
   - id: qc_finish
@@ -105,14 +108,14 @@ script:
           lv_obj_t *lines[6] = {id(qc_l1), id(qc_l2), id(qc_l3), id(qc_l4), id(qc_l5), id(qc_l6)};
           const bool readout = step == 5;
           for (auto *l : lines) {
-            if (readout) lv_obj_clear_flag(l, LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_add_flag(l, LV_OBJ_FLAG_HIDDEN);
+            if (readout) lv_obj_set_hidden(l, false);
+            else lv_obj_set_hidden(l, true);
           }
           if (step == 4) {
             lv_obj_set_y(id(qc_row), 0);
-            lv_obj_clear_flag(id(qc_row), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(qc_row), false);
           } else {
-            lv_obj_add_flag(id(qc_row), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(qc_row), true);
           }
           const uint32_t bg = step < 4 ? FILLS[step] : 0x000000;
           lv_obj_set_style_bg_color(id(qc_layer), lv_color_hex(bg), LV_PART_MAIN);

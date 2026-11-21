@@ -33,11 +33,23 @@ int main(int argc, char **argv) {
       {"field-goal", CelebKind::WAVE, "FIELD GOAL!", "", 0x002244},
       {"home-run", CelebKind::HOME_RUN, "HOME RUN!", "", 0x0C2340},
       {"goal-soccer", CelebKind::GOAL_NET, "GOAL!", "", 0xEF0107},
+      {"brace", CelebKind::BRACE, "BRACE!", "SAKA", 0xEF0107},
+      {"hat-trick", CelebKind::SOCCER_HAT_TRICK, "HAT TRICK!", "ALAN PATRICK", 0xEF0107},
+      {"penalty", CelebKind::PENALTY, "PENALTY!", "", 0xEF0107},
+      {"late-goal", CelebKind::LATE_GOAL, "LATE GOAL!", "89'", 0xEF0107},
       {"goal-hockey", CelebKind::GOAL_LAMP, "GOAL!", "", 0xFCB514},
       {"three", CelebKind::THREE, "THREE!", "", 0x1D428A},
       {"win", CelebKind::WIN, "KC WINS!", "24-17", 0xE31837},
       {"flash", CelebKind::FLASH, "EXTRA POINT!", "", 0xE31837},
       {"muted", CelebKind::MUTED, "BUF TOUCHDOWN", "", 0x00338D},
+      {"dunk", CelebKind::DUNK, "DUNK!", "", 0xC4CED4},
+      {"alley-oop", CelebKind::ALLEY_OOP, "ALLEY-OOP!", "", 0xE03A3E},
+      {"interception", CelebKind::INTERCEPTION, "INTERCEPTION!", "", 0x00338D},
+      {"pick-six", CelebKind::PICK_SIX, "PICK SIX!", "", 0x00338D},
+      {"fumble", CelebKind::FUMBLE, "FUMBLE!", "", 0xE31837},
+      {"sack", CelebKind::SACK, "SACK!", "", 0xE31837},
+      {"grand-slam", CelebKind::GRAND_SLAM, "GRAND SLAM!", "", 0x002D72},
+      {"walk-off", CelebKind::WALK_OFF, "WALK-OFF!", "", 0x005A9C},
   };
   std::vector<uint16_t> buf((size_t) w * h);
   for (const Show &s : shows) {
@@ -56,6 +68,18 @@ int main(int argc, char **argv) {
       case CelebKind::THREE: p.duration_ms = kCelebThreeMs; break;
       case CelebKind::WIN: p.duration_ms = kCelebWinMs; break;
       case CelebKind::MUTED: p.duration_ms = kCelebMutedMs; break;
+      case CelebKind::BRACE:
+      case CelebKind::SOCCER_HAT_TRICK: p.duration_ms = kCelebBraceMs; break;
+      case CelebKind::PENALTY: p.duration_ms = kCelebPenaltyMs; break;
+      case CelebKind::LATE_GOAL: p.duration_ms = kCelebLateGoalMs; break;
+      case CelebKind::DUNK: p.duration_ms = kCelebDunkMs; break;
+      case CelebKind::ALLEY_OOP: p.duration_ms = kCelebAlleyOopMs; break;
+      case CelebKind::INTERCEPTION: p.duration_ms = kCelebInterceptionMs; break;
+      case CelebKind::PICK_SIX: p.duration_ms = kCelebPickSixMs; break;
+      case CelebKind::FUMBLE: p.duration_ms = kCelebFumbleMs; break;
+      case CelebKind::SACK: p.duration_ms = kCelebSackMs; break;
+      case CelebKind::GRAND_SLAM: p.duration_ms = kCelebGrandSlamMs; break;
+      case CelebKind::WALK_OFF: p.duration_ms = kCelebWalkOffMs; break;
       default: p.duration_ms = kCelebFlashMs; break;
     }
     Celebration c;

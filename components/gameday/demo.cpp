@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The demo build's scripted game (firmware/gameday-demo.yaml). Release
 // firmware compiles none of this: GAMEDAY_DEMO is only defined when the
 // gameday block in YAML says demo: true.
@@ -220,15 +222,17 @@ void GamedayComponent::demo_show_step_(bool splash) {
 }
 
 // With made-up teams there is no logo to fetch, so each logo slot shows the
-// side's abbreviation on its colors instead, the way the app shows every team.
+// side's abbreviation in its color instead.
 void GamedayComponent::demo_badges_(UpdateFields &f) const {
   if (!this->demo_playing_() || !this->demo_prefs_.madeup)
     return;
   DemoKind kind = (DemoKind) this->demo_kind_;
+  const auto &home = ::espn::demo_made_up(kind, true);
+  const auto &away = ::espn::demo_made_up(kind, false);
   f.team_badge = true;
   f.opponent_badge = true;
-  f.team_ring = ::espn::demo_made_up(kind, true).alt;
-  f.opponent_ring = ::espn::demo_made_up(kind, false).alt;
+  f.team_badge_rgb = ::espn::badge_text(home.rgb, home.alt);
+  f.opponent_badge_rgb = ::espn::badge_text(away.rgb, away.alt);
 }
 
 ::espn::DemoMatchup GamedayComponent::demo_matchup_(uint8_t kind) const {

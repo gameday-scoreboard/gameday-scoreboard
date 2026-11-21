@@ -4,7 +4,7 @@
 # the app, or Home Assistant through the Message text entity below or the
 # show_message action (gameday-common.yaml). The gameday component sends
 # "say" (gameday-common.yaml on_action) with the text in say_text(). It is on
-# the top layer, so the panel's Power switch still decides whether anything
+# the top layer, so the panel's Display light still decides whether anything
 # lights up.
 #
 # The message card, which takes turns with the board between games, is on
@@ -15,7 +15,7 @@ script:
     mode: restart
     then:
       - lambda: |-
-          lv_obj_add_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_say_box), true);
           const std::string &text = id(gameday_ctl).say_text();
           // Not over the QC screen, which a technician is reading.
           if (text.empty() || id(qc_active))
@@ -27,7 +27,7 @@ script:
           const lv_color_t color = lv_color_hex(id(gameday_ctl).say_rgb());
           lv_obj_set_style_text_color(id(gd_say_lbl), color, 0);
           lv_obj_t *cv = id(gd_say_icon);
-          lv_obj_add_flag(cv, LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(cv, true);
           const int icon = id(gameday_ctl).say_icon();
           const int32_t S = ::espn::kListIconSize, gap = S + 2;
           // The text a line shorter, the icon over it and the two centered
@@ -48,16 +48,16 @@ script:
                   lv_canvas_set_px(cv, x, y, color, LV_OPA_COVER);
             lv_obj_set_pos(cv, (W - S) / 2, top);
             lv_obj_set_y(id(gd_say_lbl), top + gap);
-            lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(cv, false);
           }
           lv_obj_move_foreground(id(gd_say_box));
-          lv_obj_clear_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_say_box), false);
       - if:
           condition:
-            lambda: 'return !lv_obj_has_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);'
+            lambda: 'return !lv_obj_is_hidden(id(gd_say_box));'
           then:
             - delay: !lambda 'return (uint32_t) id(gameday_ctl).say_secs() * 1000;'
-            - lambda: 'lv_obj_add_flag(id(gd_say_box), LV_OBJ_FLAG_HIDDEN);'
+            - lambda: 'lv_obj_set_hidden(id(gd_say_box), true);'
 
 # For Home Assistant dashboards and automations: setting it shows the banner
 # for 10 seconds. The show_message action (gameday-common.yaml) also takes

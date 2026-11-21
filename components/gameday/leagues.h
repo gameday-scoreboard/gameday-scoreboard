@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Every league the panel can follow and what differs between them. Pure, no
 // ESPHome includes, so the host tests use it too. scripts/build_teams.py,
 // scripts/build_web.py, __init__.py and tests/web/mock_device.py read kLeagues
@@ -7,6 +9,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 namespace espn {
 
@@ -85,6 +88,20 @@ inline const LeagueInfo *league_info(League league) {
     if (l.league == league)
       return &l;
   return nullptr;
+}
+
+// The league's name in "All NFL live games", as the device page says it: its
+// short name, or the long one where the short one is an abbreviation owners
+// don't use (app.js liveName).
+inline std::string league_live_name(League league) {
+  if (league == League::NCAA)
+    return "college football";
+  if (league == League::MCBB)
+    return "men's college basketball";
+  if (league == League::EPL)
+    return "Premier League";
+  const LeagueInfo *l = league_info(league);
+  return l != nullptr ? l->prefix : "";
 }
 
 inline const LeagueInfo *league_by_key(const char *key) {

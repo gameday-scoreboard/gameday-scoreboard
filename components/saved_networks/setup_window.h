@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #pragma once
 
 // When the boot after "Reset Wi-Fi" gives up on setup and restarts onto the

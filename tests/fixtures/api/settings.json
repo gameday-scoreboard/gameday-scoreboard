@@ -31,7 +31,8 @@
   "spark": true,
   "opp": true,
   "celebrate": 2,
-  "best": true,
+  "bigplays": true,
+  "best": false,
   "bootaddr": true,
   "night": true,
   "nightstart": "23:00",
@@ -67,7 +68,6 @@
   "msg": "",
   "msgurl": "http://homeassistant.local:8123/local/gameday.txt",
   "msgevery": 2,
-  "brand": "http://192.168.1.20/brand/taproom.json",
   "autoupd": false,
   "beta": false,
   "lists": [
@@ -82,14 +82,18 @@
       "only": true,
       "today": false,
       "color": "blue",
-      "icon": "star"
+      "icon": "star",
+      "lg": [
+        "nfl"
+      ]
     },
     {
       "n": "College",
       "t": [
         "ncaa:251",
         "ncaa:2294"
-      ]
+      ],
+      "lg": []
     }
   ],
   "list": 2,
@@ -100,6 +104,40 @@
   "remote2": "team:ncaa:2294",
   "remote3": "list:College",
   "remote4": "sport:basketball",
+  "fxlists": [
+    {
+      "n": "Party",
+      "shuffle": true,
+      "fx": [
+        {
+          "e": "Matrix",
+          "p": "Party",
+          "s": 200,
+          "i": 100,
+          "w": 30
+        },
+        {
+          "e": "Plasma Ball",
+          "p": "Sunset",
+          "s": 128,
+          "i": 128,
+          "w": 15
+        }
+      ]
+    },
+    {
+      "n": "Calm",
+      "fx": [
+        {
+          "e": "Drift",
+          "p": "Ocean",
+          "s": 64,
+          "i": 128,
+          "w": 300
+        }
+      ]
+    }
+  ],
   "panels": 2,
   "brightness": 128,
   "scroll": 5

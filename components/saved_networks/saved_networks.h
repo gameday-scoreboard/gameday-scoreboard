@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #pragma once
 
 // Keeps more than one Wi-Fi network for the panel. ESPHome itself remembers
@@ -36,17 +38,35 @@
 // A setup from the app narrows the live list to the new network the way
 // ESPHome always did; a failed one hands the whole list back (reapply(),
 // from improv_ble). Forgetting a network takes it out of flash and out of
-// the live list at once.
+// the live list at once. Forgetting the one the panel is on, with another
+// saved network left, also takes it off that one a second later (time for
+// the HTTP reply to go out), and ESPHome scans and joins the rest the way it
+// does after any drop. ESP-IDF reports that as ASSOC_LEAVE, which the Wi-Fi
+// health doesn't count as a drop (wifi_history.h).
+//
+// The device page and the app can also add a network by name and password
+// without joining it (add()). It goes second in the list and is tried the
+// next time the panel looks for a network. When a scan shows it in range,
+// switch_to() joins it now: the live list narrows to it the way a setup from
+// the app does, and if it has not connected after SWITCH_MS the whole list
+// goes back and the panel rejoins the network it was on. The page asks for a
+// scan when its Add network form opens and lists what it finds (nearby()),
+// so a name can be picked rather than typed.
 
+#include <array>
+#include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/component.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/preferences.h"
 
 #include "network_list.h"
+#include "setup_network.h"
 #include "setup_window.h"
 
 namespace esphome {
@@ -60,9 +80,32 @@ using wifi_list::SetupWindow;
 struct Entry {
   std::string ssid;
   bool connected;  // the network the panel is on right now
+  bool seen;       // in a scan from the last SEEN_MS
 };
 
-class SavedNetworks : public Component {
+// One network the last scan found, for the device page's list to pick from.
+struct Nearby {
+  char ssid[wifi_list::SSID_SIZE];
+  int8_t rssi;  // the strongest access point with that name
+  bool open;    // no password
+};
+
+// What forget() did.
+enum class Forgot : uint8_t {
+  NOT_SAVED,  // the network was not in the list; nothing changed
+  STAYS,      // taken off the list; the panel stays where it is
+  LEAVES,     // taken off the list, and the panel leaves it for the rest
+};
+
+// What add() did.
+enum class AddResult {
+  ADDED,    // a new network, second in the list
+  UPDATED,  // a saved network, with the password given
+  ON_IT,    // the panel is on that network now; nothing changed
+  BAD,      // blank or too long
+};
+
+class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
  public:
   void setup() override;
   void dump_config() override;
@@ -75,9 +118,32 @@ class SavedNetworks : public Component {
   // Called from wifi: on_connect with the network the panel just joined. It
   // moves to the front and the list is saved when anything changed.
   void note_connected(const wifi::WiFiAP &ap);
-  // Takes one network out of the saved list. Returns false when it was not
-  // there. Safe from the HTTP task; the flash write runs on the main loop.
-  bool forget(const std::string &ssid);
+  // Takes one network out of the saved list, and the panel off it when it
+  // is on it and another is left (wifi_list::leaves_now()). Safe from the
+  // HTTP task; the flash write and the leaving run on the main loop.
+  Forgot forget(const std::string &ssid);
+  // Saves a network without joining it, and scans for it so the page can
+  // offer to switch. Safe from the HTTP task.
+  AddResult add(const std::string &ssid, const std::string &password);
+  // Starts a scan for the networks in range, unless one is running or the
+  // panel is not on Wi-Fi. Safe from the HTTP task.
+  void scan();
+  bool scanning() const { return this->scanning_; }
+  // Joins a saved network now, going back to the others if it does not
+  // connect within SWITCH_MS. False when it is not saved, the panel is not on
+  // Wi-Fi, already on it, mid-switch or in a setup from the app. Safe from
+  // the HTTP task.
+  bool switch_to(const std::string &ssid);
+  // Mid-switch: the panel has left its network for the one switch_to() was
+  // given, named by switching_ssid() (blank when not switching).
+  bool switching() const { return this->switching_; }
+  std::string switching_ssid();
+  // The network the last switch_to() could not join, blank once FAILED_MS
+  // have passed or after another switch, and millis() when it gave up (0 for
+  // none). Safe from the HTTP task.
+  std::string switch_failed();
+  uint32_t switch_failed_ms() const { return this->switch_failed_ms_; }
+  void on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) override;
   // "Reset Wi-Fi": the next boot starts in setup mode. Call it right before
   // restarting; the flag is in flash when this returns.
   void start_setup();
@@ -86,6 +152,20 @@ class SavedNetworks : public Component {
   bool in_setup() const { return this->in_setup_; }
   // The saved networks in the order they are tried. Safe from the HTTP task.
   std::vector<Entry> list();
+  // Calls f(Nearby &) for each network a scan from the last SEEN_MS found,
+  // strongest first; none when there is no scan that recent. f gets a copy,
+  // so it may keep pointers into it only for as long as it runs. Holds the
+  // lock while it runs, so f must not call back in here. Safe from the HTTP
+  // task.
+  template<typename F> void each_nearby(F f) {
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    if (this->scanned_ms_ == 0 || esphome::millis() - this->scanned_ms_ >= SEEN_MS)
+      return;
+    for (size_t i = 0; i < this->scanned_n_; i++) {
+      Nearby n = this->scanned_[i];
+      f(n);
+    }
+  }
   size_t count();
   static constexpr size_t max() { return MAX_NETWORKS; }
   // Hands the whole saved list to the Wi-Fi component again, after something
@@ -95,11 +175,31 @@ class SavedNetworks : public Component {
   // How long a new password for a saved network gets before the panel goes
   // back to the one that worked.
   static constexpr uint32_t PENDING_MS = 60000;
+  // How long switch_to() gives the new network, as long as the app gets.
+  static constexpr uint32_t SWITCH_MS = 30000;
+  // Once more, when the panel is on the new network but has no address yet
+  // at SWITCH_MS.
+  static constexpr uint32_t SWITCH_GRACE_MS = 15000;
+  // How long a scan counts as showing what is in range now.
+  static constexpr uint32_t SEEN_MS = 120000;
+  // How many names a scan keeps, the strongest when there are more. An
+  // apartment building can show dozens.
+  static constexpr size_t MAX_SCANNED = 24;
+  // How long switch_failed() names a network that would not join.
+  static constexpr uint32_t FAILED_MS = 120000;
 
  protected:
   void apply_();  // hands the list to the Wi-Fi component; main loop only
   void save_();   // main loop only
   void pending_timeout_();
+  void leave_(const std::string &ssid);  // main loop only
+  void end_scan_();  // a scan of scan()'s is over; main loop only
+  // Puts a scan's networks in scanned_; under mutex_.
+  void fill_scanned_(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results);
+  // The network the panel is on, read from the driver; blank when on none.
+  // Safe from the HTTP task.
+  std::array<char, wifi::SSID_BUFFER_SIZE> connected_ssid_() const;
+  void switch_timeout_();
 
   NetworkList list_{};
   // A new password for a saved network, tried first this boot and stored
@@ -109,6 +209,19 @@ class SavedNetworks : public Component {
   ESPPreferenceObject pref_;
   ESPPreferenceObject setup_pref_;
   bool in_setup_{false};
+  // What the last scan found, one entry per name, strongest first, under
+  // mutex_, and millis() when it finished. Fixed, so a scan never allocates.
+  std::array<Nearby, MAX_SCANNED> scanned_{};
+  size_t scanned_n_{0};
+  uint32_t scanned_ms_{0};
+  std::atomic<bool> scanning_{false};
+  std::atomic<bool> switching_{false};
+  std::atomic<bool> switch_grace_{false};  // switch_timeout_() gave the extra time
+  // The network being switched to, and the one that would not join; both
+  // under mutex_.
+  wifi_list::Network switch_to_{};
+  wifi_list::Network switch_failed_{};
+  std::atomic<uint32_t> switch_failed_ms_{0};
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)

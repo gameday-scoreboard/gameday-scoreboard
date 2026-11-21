@@ -14,7 +14,10 @@ sensor:
   - platform: internal_temperature
     name: "Chip Temperature"
     id: gd_chip_temp
-    entity_category: diagnostic
+    # The heat guard's own reading, not Home Assistant's: every 30 s all
+    # day was a recorder row each time. The device page shows it under
+    # Diagnostics (GET /gameday/health).
+    internal: true
     update_interval: 15s
     # The last minute's average, every 30 s, so one odd reading can't put
     # the thermometer up.
@@ -30,26 +33,31 @@ script:
   - id: gd_guard
     mode: restart
     then:
-      # QC lights the panel with Power off and at night too (pages/qc.yaml),
-      # and the FCC screen at night (pages/regulatory.yaml).
+      # QC lights the panel with the Display light off and at night too
+      # (pages/qc.yaml), and the FCC screen at night (pages/regulatory.yaml).
       # The repaint is for the end of a screen-off night: the driver dropped
-      # every frame while it was at 0 (gd_repaint).
+      # every frame while it was at 0 (gd_repaint). Off, it goes dark here too,
+      # for QC handing a switched-off panel back (qc_stop).
       - if:
           condition:
-            lambda: 'return id(power).state || id(qc_active);'
+            lambda: 'return id(gameday_ctl).display_on() || id(qc_active);'
           then:
             - hub75.set_brightness:
                 id: matrix
-                brightness: !lambda 'return id(gameday_ctl).guard_brightness((uint8_t) id(brightness).state, !id(qc_active) && !id(reg_active));'
+                brightness: !lambda 'return id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level(), !id(qc_active) && !id(reg_active));'
             - script.execute: gd_repaint
+          else:
+            - hub75.set_brightness:
+                id: matrix
+                brightness: 0
       - lambda: |-
           const uint8_t mark = id(gameday_ctl).guard_mark();
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_guard_line), true);
           auto pulse = [](void *icon, int32_t v) { lv_obj_set_style_opa((lv_obj_t *) icon, (lv_opa_t) v, 0); };
           lv_anim_delete(id(gd_guard_icon), pulse);
           if (mark == 0) {
-            lv_obj_add_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_guard_icon), true);
             return;
           }
           image::Image *icon = mark == 2 ? id(gd_guard_power_img) : id(gd_guard_heat_img);
@@ -68,7 +76,7 @@ script:
           lv_anim_start(&a);
           if (!id(qc_active))
             lv_obj_move_foreground(id(gd_guard_icon));
-          lv_obj_clear_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_guard_icon), false);
           const lv_color_t color = lv_color_hex(mark == 2 ? 0xFF2020 : 0xFF8000);
           lv_obj_set_width(id(gd_guard_line), W);
           lv_obj_set_width(id(gd_guard_lbl), W);
@@ -84,9 +92,9 @@ script:
                   return;
                 lv_obj_move_foreground(id(gd_guard_icon));
                 lv_obj_move_foreground(id(gd_guard_line));
-                lv_obj_clear_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(id(gd_guard_line), false);
             - delay: 15s
-            - lambda: 'lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);'
+            - lambda: 'lv_obj_set_hidden(id(gd_guard_line), true);'
             - delay: 105s
 
 image:

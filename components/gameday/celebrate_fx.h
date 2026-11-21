@@ -1,15 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The celebration animations: fireworks, confetti, a light wave, a ball out
 // of the park, a rippling net, a spinning goal lamp, a three through the
 // hoop, drawn into an RGB565 frame. Pure, no ESPHome or LVGL includes: the
 // panel hands it the LVGL canvas buffer (celebrate_lvgl.h), the host tests
 // and tests/render_celebrations.cpp hand it a plain array, so the GIFs in a
 // review are the firmware's own frames. Fixed-size, no allocation after
-// start(): a particle pool of kCelebParticles and nothing else.
+// start(): a particle pool of kCelebParticles and the big plays' 8 KB
+// frame index (celeb_art.h), nothing else.
 #pragma once
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 
+#include "celeb_art_index.h"
 #include "celebrate.h"
 
 namespace espn {
@@ -156,6 +160,7 @@ class Celebration {
     rng_.s = seed ? seed : 1;
     next_rocket_ = 0;
     ball_done_ = false;
+    art_.reset();
     switch (plan.kind) {
       case CelebKind::TOUCHDOWN:
         // Three bursts at once for the punch, rockets after.
@@ -212,6 +217,18 @@ class Celebration {
   }
 
   void render(CelebFrame &f) const {
+    if (celeb_is_art(plan_.kind)) {
+      // The big plays: their frames for this width, recolored to the team.
+      if (const CelebArt *art = celeb_art_for(plan_.kind, f.w)) {
+        art_.render(f.px, f.w, f.h, f.stride, *art, t_, plan_.color, plan_.alt, fade_());
+        // The words that change from game to game, over the frames.
+        if (const CelebCaption *c = celeb_caption_for(plan_.kind, f.w))
+          celeb_caption_draw(f.px, f.w, f.h, f.stride, *c, plan_.line2, art_.frame(), t_, plan_.color, plan_.alt,
+                             fade_());
+      } else
+        f.clear();
+      return;
+    }
     switch (plan_.kind) {
       case CelebKind::NONE:
         f.clear();
@@ -243,6 +260,7 @@ class Celebration {
         render_hoop_(f);
         break;
       case CelebKind::WIN:
+      default:
         f.clear();
         break;
     }
@@ -258,6 +276,7 @@ class Celebration {
   CelebRng rng_;
   CelebParticle p_[kCelebParticles];
   int count_{0};
+  mutable CelebArtPlayer art_;  // decodes forward from the last frame it drew
 
   float fade_() const {
     // The last 0.6 s dims everything out so the board comes back softly.

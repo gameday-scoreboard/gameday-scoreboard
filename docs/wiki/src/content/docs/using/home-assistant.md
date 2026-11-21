@@ -11,6 +11,10 @@ Nothing about the panel needs Home Assistant. It reads ESPN, runs its own device
 
 With Home Assistant on the same network, it discovers the panel as a new ESPHome device and offers to add it. The prebuilt firmware has no API encryption key, so there is no key to enter.
 
+On its device page, Home Assistant lists the panel under its own name, like **Game Day Scoreboard 2f6a70**, as **Scoreboard by Game Day**.
+
+With the panel on an IoT network or IoT VLAN and Home Assistant on your main network, Home Assistant needs TCP port 6053 to the panel. With mDNS on between the networks it discovers the panel the same way and follows it to a new IP address by itself. Without mDNS, add it by IP address under **Settings > Devices & services > Add integration > ESPHome**, and give the panel a fixed IP address in your router. See [IoT network, IoT VLAN or IoT subnet](/using/wifi/#iot-network-iot-vlan-or-iot-subnet).
+
 Picking a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
 
 ## What appears
@@ -18,8 +22,7 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | Entity | What it is |
 | --- | --- |
 | **Mode** | Favorite teams or Live games. A panel on one of the older football-only live modes shows Live games. |
-| **Power** | The panel's lights on or off. |
-| **Brightness** | 1 to 255. |
+| The panel's light | The panel on or off, and its brightness. It has the panel's own name, like **Game Day Scoreboard 2f6a70**. See [The panel's light](#the-panels-light). |
 | **Scroll Speed** | The ticker speed, 1 to 10. |
 | **Select Page** | The Scoreboard or the Clock page, with **Page Next** and **Page Previous** buttons. |
 | **Game Status** | The game in one line: the matchup, whether it's upcoming, live or final, and the score. |
@@ -41,9 +44,15 @@ A **Playlist** select picks the playlist Favorite teams plays: **All favorites**
 
 With favorites in more than one sport, the select also lists **All football**, **All basketball** and so on, one for each sport, after **All favorites**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
 
-A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
+The controller's chip temperature, the reading the panel uses to dim itself when it runs hot, is on the device page under Diagnostics rather than in Home Assistant, where it wrote a row to the database every 30 seconds. **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** entities left over from an older firmware show as unavailable; delete them in Home Assistant.
 
-**Select Page** gets a third option, **Effects**, which fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255) to set it. The panel starts on the Scoreboard after every restart and puts the Scoreboard back itself when it has something to show you, so an automation that wants the pattern back after that selects Effects again. Three diagnostic sensors, **Effect FPS**, **Effect Render Time** and **Effect Output Time**, read the pattern's frame rate while one runs and are unknown otherwise. See [Effects](/using/effects/).
+**Select Page** gets a third option, **Effects**, which fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255) to set it. The panel starts on the Scoreboard after every restart and puts the Scoreboard back itself when it has something to show you, so an automation that wants the pattern back after that selects Effects again. See [Effects](/using/effects/).
+
+An **Effect playlist** select plays one of your [effect playlists](/using/effects/#effect-playlists) by name, putting the panel on Effects, and **None** stops the one playing. It shows **None** again when the playlist stops because an effect setting was changed by hand or the panel left Effects. It is separate from the **Playlist** select, which picks a playlist of teams.
+
+**Select Page** also has **Smart board**, and four text entities, **Smart board row 1** to **Smart board row 4**, fill it: set one with **Text: Set value**, from a template that reads any entity's state or attribute, with color tags like `[red]`. Picked under **Select Page**, the Smart board stays up through restarts until something picks another page. See [Smart board](/using/smart-board/).
+
+The game entities below, Game Status and Last Play come from the Scoreboard. While **Select Page** is on the Clock, Effects or the Smart board, the panel sends them nothing, and each keeps its last state until the Scoreboard is back.
 
 **Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
@@ -110,12 +119,22 @@ The **Message** text entity puts a banner on the panel: set it, from a dashboard
 
 Use your panel's own name in the action. Like the other device actions, it needs no "Allow the device to perform Home Assistant actions" option. The message card that takes turns between games is set on the device page. See [Your own messages](/using/messages/).
 
+## The panel's light
+
+The panel shows up in Home Assistant as a light with the panel's own name, like **Game Day Scoreboard 2f6a70**. It's **Panel on** and **Brightness** in one light, so it works like the other lights in your home:
+
+- Turn it on or off, or set its brightness, from a light card, a scene, a voice assistant or an automation. Its brightness is the same setting as **Brightness** on the device page, shown in Home Assistant as a percent.
+- Put it in a light group, or give it an area, and it turns on and off with that room's lights. A dimmer remote on the group dims it too.
+- Ask for a fade (a transition) and it fades in or out over that time. Without one it turns on and off at once.
+
+Because it's a light, anything that turns off every light, or every light in its area, turns the panel off too. If you don't want that, leave it out of those automations, or give it no area.
+
 ## What you can automate
 
 Game Status changes when a game starts, when someone scores and when it ends, not on every play, so it makes a good trigger and keeps your history small. Some ideas:
 
 - Flash the room lights or play a sound when Game Status changes during your team's game.
-- Turn the panel on before kickoff and off at bedtime with **Power**, or turn **Brightness** down at night.
+- Turn the panel on before kickoff and off at bedtime with the panel's light, or turn its brightness down at night.
 - Switch **Team** or **Mode** for the evening's game.
 - Install updates on your own schedule with the **Firmware** entity.
 
