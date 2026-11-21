@@ -1417,7 +1417,7 @@ test("a playlist's sports post as @lg tokens beside its teams, and the bar says 
   const sports = box.getByRole("group", { name: "Sports in Sunday" }).getByRole("button");
   // Every league the panel knows, in kLeagues order.
   await expect(sports).toHaveText(["NFL", "College football", "MLB", "MLS", "Premier League", "NBA", "WNBA",
-    "Men's college basketball", "NHL"]);
+    "Men's college basketball", "Women's college basketball", "NHL"]);
   await expect(box.locator(".psports small")).toHaveCount(0);
   await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
   await box.getByRole("button", { name: "NFL", exact: true }).click();
