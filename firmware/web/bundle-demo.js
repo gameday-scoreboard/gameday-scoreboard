@@ -52,9 +52,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
-    // Golf has no teams: a favorite is a golfer, by ESPN athlete id (golf:
-    // the picker asks for the id instead of showing team tiles, and the
-    // On now list skips these leagues — a tournament is not a game).
+    // Golf has no teams: a favorite is a golfer, by ESPN athlete id. The
+    // picker searches golfers by name instead of showing team tiles, and the
+    // On now list skips these leagues: a tournament is not a game.
     pga: { prefix: "PGA", tab: "PGA", name: "PGA Tour", path: "golf/pga", logo: "golf", byId: true, scan: "", golf: true },
     lpga: { prefix: "LPGA", tab: "LPGA", name: "LPGA", path: "golf/lpga", logo: "golf", byId: true, scan: "", golf: true },
     eur: { prefix: "DPWT", tab: "DPWT", name: "DP World Tour", path: "golf/eur", logo: "golf", byId: true, scan: "", golf: true },
@@ -298,6 +298,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
             <div class="ctl" id="newsRow"><label>News headlines<small>Shows ESPN headlines about your teams.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
           </div>
           <div id="cardPark" hidden></div>
+          <div id="golfBox" hidden>
+            <div class="chips" id="golfChips" role="group" aria-label="Tours"></div>
+          </div>
           <div id="wxBox" hidden>
             <div class="sub">Weather</div>
             <p class="hint">The forecast for your town.</p>
@@ -682,7 +685,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    town: String, wxon: (v) => v === "1", wxunit: Number,
+    town: String, wxon: (v) => v === "1", wxunit: Number, golftours: String,
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -1201,9 +1204,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     top25: "The AP poll, a page at a time, every 10 minutes.",
     news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
     weather: "Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days.",
+    golf: "The tournament leaderboard between games: the top ten and the golfers you follow, a page every 5 seconds, every 10 minutes. Pick the tours here; following a golfer adds their tour too.",
   };
   const OWN_CARDS = { custom: "the date countdown", message: "the message card", picture: "your pictures" };
-  const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news"]]];
+  const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news", "golf"]]];
   const CARD_ICONS = {
     next: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     countdown: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
@@ -1211,6 +1215,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     gameleaders: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',
     top25: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
     news: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10M7 12.5h10M7 16h6"/>',
+    golf: '<path d="M8 21V3l9 4-9 4M4 21h8"/>',
     weather: '<circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 20z"/>',
   };
   const cardIcon = (id) => '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (CARD_ICONS[id] || '<circle cx="12" cy="12" r="8"/>') + "</svg>";
@@ -1228,7 +1233,31 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   };
   // A card's own settings go inside its row; while it is off they wait here,
   // still in the page, since the renders look their fields up by id.
-  const cardExtras = () => ({ weather: $("#wxBox") });
+  const cardExtras = () => ({ weather: $("#wxBox"), golf: $("#golfBox") });
+  // The Golf leaderboard card's tours (golftours, golf.h slot order). Built
+  // once and updated in place, as the Live games chips are.
+  const GOLF_TOURS = Object.keys(LEAGUES).filter((lg) => LEAGUES[lg].golf);
+  const golfTours = () => String(S.golftours || "").split(",").filter((k) => GOLF_TOURS.includes(k));
+  const renderGolfChips = () => {
+    $("#golfBox").hidden = S.golftours === undefined;  // firmware from before the tours
+    const host = $("#golfChips");
+    const on = golfTours();
+    if (host.children.length) {
+      for (const b of host.children) setOn(b, on.includes(b.dataset.lg), "aria-pressed");
+      return;
+    }
+    for (const lg of GOLF_TOURS) {
+      const b = el("button", "chip", LEAGUES[lg].name);
+      b.dataset.lg = lg;
+      setOn(b, on.includes(lg), "aria-pressed");
+      b.onclick = () => {
+        const cur = golfTours();
+        const next = cur.includes(lg) ? cur.filter((k) => k !== lg) : cur.concat([lg]);
+        setGD({ golftours: GOLF_TOURS.filter((k) => next.includes(k)).join(",") });
+      };
+      host.appendChild(b);
+    }
+  };
   const cardsOpen = new Set();
   let cardsKey = "";
   let addSheet = null;
@@ -1275,6 +1304,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     }
     const cards = S.cards;
     renderOwnCards(cards);
+    renderGolfChips();
     const key = cards.map((c) => [c.id, c.on, c.ok, c.hint].join(":")).join();
     if (key === cardsKey) return renderAddSheet();
     cardsKey = key;
@@ -1413,6 +1443,38 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
+  // A golfer has no team table: the name comes from ESPN's athlete lookup,
+  // which answers any page, and is kept in this browser. Until it answers,
+  // the ESPN id stands in.
+  const ESPN_COMMON = "https://site.web.api.espn.com/apis/common/v3/";
+  const GOLFER_STORE = "gdGolfers";
+  const golferNames = (() => {
+    try { return JSON.parse(localStorage.getItem(GOLFER_STORE) || "{}") || {}; } catch (e) { return {}; }
+  })();
+  const golferAsked = new Set();
+  const saveGolfer = (key, name) => {
+    if (!name || golferNames[key] === name) return;
+    golferNames[key] = name;
+    try { localStorage.setItem(GOLFER_STORE, JSON.stringify(golferNames)); } catch (e) { /* kept for this visit only */ }
+  };
+  const golferName = (key) => {
+    if (golferNames[key]) return golferNames[key];
+    const [lg, id] = key.split(":");
+    if (!golferAsked.has(key) && LEAGUES[lg]) {
+      golferAsked.add(key);
+      fetch(ESPN_COMMON + "sports/" + LEAGUES[lg].path + "/athletes/" + id)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const n = j && j.athlete && j.athlete.displayName;
+          if (!n) return;
+          saveGolfer(key, n);
+          renderFavs();
+          if ($("#modal").classList.contains("open")) renderTiles();
+        })
+        .catch(() => {});
+    }
+    return "Golfer " + id;
+  };
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
   let favSlots = [];
@@ -1455,7 +1517,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       if (t) img.src = logoUrl(t[0], t[1], t[2]);
       row.appendChild(img);
       const golf = !t && LEAGUES[key.split(":")[0]] && LEAGUES[key.split(":")[0]].golf;
-      const name = el("label", null, (i + 1) + ". " + (t ? t[3] : golf ? "Golfer " + key.split(":")[1] : key));
+      const name = el("label", null, (i + 1) + ". " + (t ? t[3] : golf ? golferName(key) : key));
       const btn = remoteButtonFor(key, favSlots.indexOf(key));
       if (btnKeys.includes(key)) {
         // Added by a remote button: shown, marked, and no favorite anywhere else.
@@ -3297,42 +3359,62 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     tile.onclick = () => toggleFav(t);
     return tile;
   };
-  // A golf tour's picker: no team tiles — a box for the golfer's ESPN
-  // athlete id (the number in his leaderboard or profile link), and the
-  // golfers already followed in this tour, each removable.
-  const renderGolfTiles = () => {
-    $("#tiles").className = "tiles";
-    const tiles = $("#tiles");
-    tiles.innerHTML = "";
-    tiles.appendChild(el("p", "hint", "Follow a golfer by his ESPN athlete id — the number at the end of his page on espn.com/golf/player. He is pinned on the panel's leaderboard wherever he stands."));
-    const form = el("div", "golfadd");
-    const input = el("input");
-    input.type = "text";
-    input.inputMode = "numeric";
-    input.placeholder = "Athlete id";
-    input.setAttribute("aria-label", "ESPN athlete id");
-    const add = el("button", null, "Add golfer");
-    const go = () => {
-      const id = input.value.trim();
-      if (!/^\d+$/.test(id) || Number(id) === 0) return toast("That doesn't look like an athlete id");
-      const key = league + ":" + Number(id);
-      if (favKeys.includes(key)) return toast("Already following that golfer");
+  // A golf tour's picker: no team tiles. The search box looks golfers up by
+  // name with ESPN's own search, any tour, and empty it lists the golfers
+  // already followed on this tour. A tap follows a golfer or stops.
+  let golfSearchSeq = 0;
+  let golfSearchTimer = 0;
+  const golferTile = (key, name, tour) => {
+    const on = favKeys.includes(key);
+    const tile = el("button", "tile" + (on ? " on" : ""));
+    tile.dataset.key = key;
+    tile.setAttribute("aria-pressed", String(on));
+    tile.appendChild(el("div", "n", name));
+    tile.appendChild(el("div", "a", LEAGUES[tour].name));
+    tile.onclick = () => {
+      if (favKeys.includes(key)) {
+        postFavs(favKeys.filter((k) => k !== key));
+        return toast("Stopped following " + name);
+      }
       if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
+      saveGolfer(key, name);
       postFavs(favKeys.concat([key]));
-      toast("Added the golfer");
+      toast("Following " + name);
     };
-    add.onclick = go;
-    input.onkeydown = (ev) => { if (ev.key === "Enter") go(); };
-    form.appendChild(input);
-    form.appendChild(add);
-    tiles.appendChild(form);
-    for (const key of favKeys.filter((k) => k.split(":")[0] === league)) {
-      const chip = el("button", "tile on", "Golfer " + key.split(":")[1]);
-      chip.dataset.key = key;
-      chip.setAttribute("aria-pressed", "true");
-      chip.onclick = () => { postFavs(favKeys.filter((k) => k !== key)); toast("Removed the golfer"); };
-      tiles.appendChild(chip);
+    return tile;
+  };
+  const renderGolfTiles = () => {
+    const tiles = $("#tiles");
+    tiles.className = "tiles";
+    tiles.innerHTML = "";
+    const q = $("#q").value.trim();
+    clearTimeout(golfSearchTimer);
+    const seq = ++golfSearchSeq;
+    if (q.length < 3) {
+      const mine = favKeys.filter((k) => k.split(":")[0] === league);
+      tiles.appendChild(el("p", "hint", mine.length
+        ? "The golfers you follow on the " + LEAGUES[league].name + ". Search above to add more; each is pinned on their tour's leaderboard wherever they stand."
+        : "Search above for a golfer by name. A golfer you follow is pinned on their tour's leaderboard wherever they stand."));
+      for (const key of mine) tiles.appendChild(golferTile(key, golferName(key), league));
+      return;
     }
+    tiles.appendChild(el("p", "hint", "Searching ESPN..."));
+    golfSearchTimer = setTimeout(() => {
+      fetch(ESPN_COMMON + "search?type=player&limit=25&query=" + encodeURIComponent(q))
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .then((j) => {
+          if (seq !== golfSearchSeq) return;
+          const found = (j.items || []).filter((it) => it.sport === "golf" && LEAGUES[it.league] && LEAGUES[it.league].golf && it.id && it.displayName);
+          tiles.innerHTML = "";
+          if (!found.length) return tiles.appendChild(el("div", "none", "No golfer on the PGA Tour, LPGA or DP World Tour matches"));
+          for (const it of found) tiles.appendChild(golferTile(it.league + ":" + Number(it.id), it.displayName, it.league));
+        })
+        .catch(() => {
+          if (seq !== golfSearchSeq) return;
+          tiles.innerHTML = "";
+          tiles.appendChild(el("div", "none", "Couldn't reach ESPN's search. Try again in a moment."));
+        });
+    }, 300);
   };
   const renderTiles = () => {
     if (league === "now") return renderGames();
@@ -3397,7 +3479,15 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     setOn(b, b.dataset.lg === lg, "aria-selected");
     b.tabIndex = b.dataset.lg === lg ? 0 : -1;
   });
-  const showTab = (b) => { league = b.dataset.lg; $$tabs(league); $("#q").value = ""; renderTiles(); };
+  const showTab = (b) => {
+    league = b.dataset.lg;
+    $$tabs(league);
+    $("#q").value = "";
+    const golf = LEAGUES[league] && LEAGUES[league].golf;
+    $("#q").placeholder = golf ? "Search golfers" : "Search teams";
+    $("#q").setAttribute("aria-label", golf ? "Search golfers" : "Search teams");
+    renderTiles();
+  };
   tabButtons.forEach((b, i) => {
     b.onclick = () => showTab(b);
     b.onkeydown = (ev) => {

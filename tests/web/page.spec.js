@@ -2520,6 +2520,71 @@ test("the picker has a tab per league and adds a team from another sport", async
   await expect(page.locator("#tiles .tile", { hasText: "Anaheim Ducks" })).toHaveAttribute("aria-pressed", "true");
 });
 
+test("a golf tab finds golfers by name with ESPN's search and follows one", async ({ page, request }) => {
+  await reset(request);
+  const asked = [];
+  await page.route("https://site.web.api.espn.com/apis/common/v3/search*", (route) => {
+    asked.push(new URL(route.request().url()).searchParams.get("query"));
+    return route.fulfill({ json: { items: [
+      { id: "9478", displayName: "Scottie Scheffler", sport: "golf", league: "pga" },
+      { id: "3116147", displayName: "Ian Werner Scheffler", sport: "soccer", league: "club.friendly" },
+    ] } });
+  });
+  await page.route("https://site.web.api.espn.com/apis/common/v3/sports/golf/pga/athletes/9478", (route) =>
+    route.fulfill({ json: { athlete: { displayName: "Scottie Scheffler" } } }));
+  await page.goto("/");
+  await tab(page, "teams");
+  await page.locator("#favAdd").click();
+  await page.locator(".tabs button", { hasText: "PGA" }).first().click();
+  await expect(page.locator("#q")).toHaveAttribute("placeholder", "Search golfers");
+  await expect(page.locator("#tiles .hint")).toContainText("Search above for a golfer by name");
+  await page.locator("#q").fill("schef");
+  // Only golfers, with their tour; the soccer player of the same name is left out.
+  await expect(page.locator("#tiles .tile")).toHaveCount(1);
+  await expect(page.locator("#tiles .tile")).toContainText("Scottie Scheffler");
+  await expect(page.locator("#tiles .tile")).toContainText("PGA Tour");
+  expect(asked).toEqual(["schef"]);
+  await page.locator("#tiles .tile").click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,pga:9478" });
+  await expect(page.locator("#tiles .tile")).toHaveAttribute("aria-pressed", "true");
+  // Back on the Teams tab the golfer is listed by name.
+  await page.locator("#close").click();
+  await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("Scottie Scheffler");
+  await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("PGA Tour golfer");
+  // A team tab's box searches teams again.
+  await page.locator("#favAdd").click();
+  await page.locator(".tabs button", { hasText: "NHL" }).click();
+  await expect(page.locator("#q")).toHaveAttribute("placeholder", "Search teams");
+});
+
+test("the Golf leaderboard card picks its tours with chips", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "display");
+  const row = page.locator('#cardList .xrow[data-card="golf"]');
+  // On, with nothing to show until a tour is picked.
+  await expect(row).toHaveClass(/\bwaiting\b/);
+  await expect(row.locator(".card-hint")).toHaveText("Pick a tour below, or follow a golfer");
+  await row.locator(".xbtn").click();
+  const chips = row.locator("#golfChips .chip");
+  await expect(chips).toHaveText(["PGA Tour", "LPGA", "DP World Tour"]);
+  await chips.nth(2).click();
+  await expectSet(request, { golftours: "eur" });
+  await expect(chips.nth(2)).toHaveAttribute("aria-pressed", "true");
+  await expect(row).not.toHaveClass(/\bwaiting\b/);
+  // A second tour comes back in tour order; a tap takes one off.
+  await chips.nth(0).click();
+  await expectSet(request, { golftours: "pga,eur" });
+  await chips.nth(2).click();
+  await expectSet(request, { golftours: "pga" });
+  // Firmware from before the tours has no chips.
+  await reset(request, { golftours: null });
+  await page.goto("/");
+  await tab(page, "display");
+  await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();
+  await expect(page.locator("#golfBox")).toBeHidden();
+});
+
 test("other sports show their situation line and no timeout pips", async ({ page, request }) => {
   const mlb = {
     s: "IN", l: "mlb", sport: 1, ta: "NYY", ti: 10, ts: 3, oa: "TOR", oi: 14, os: 2, p: 0, tt: 0, ot: 0,

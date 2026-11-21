@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Women's college basketball joins the panel, it can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, and Rain's speed works.
+Women's college basketball and golf leaderboards join the panel, it can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, and effect playlists keep playing as you edit them.
 
 ### ⚠️ Heads up
 
@@ -51,7 +51,7 @@ Women's college basketball joins the panel, it can play an effect whenever no ga
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 - 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
-- ⛳ Golf joins the panel: the PGA Tour, LPGA and DP World Tour leaderboards take a turn between games, with the golfers you follow pinned on
+- ⛳ Golf leaderboards between games: pick the PGA Tour, LPGA or DP World Tour on the **Golf leaderboard** card, or search golfers by name and they're pinned on wherever they stand
 
 ### 🐛 Fixes
 

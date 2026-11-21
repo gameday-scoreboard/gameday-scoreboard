@@ -2463,7 +2463,7 @@ void GamedayComponent::loop() {
     return;
   }
   // The golf card's leaderboard, the same way.
-  if (this->golf_read_due_ && network::is_connected() && this->clock_set_() &&
+  if (this->golf_read_due_ && !paused && !side_wait && network::is_connected() && this->clock_set_() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_golf_job_();
     return;
