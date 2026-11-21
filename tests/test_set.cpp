@@ -14,6 +14,7 @@
 
 #include "fx_names_stub.h"
 #include "fx_playlists.h"
+#include "gameday_card.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -120,16 +121,14 @@ bool *own_switch(Settings &s, Card c) {
 
 bool card_on(const Settings &s, Card c) {
   const bool *own = own_switch(const_cast<Settings &>(s), c);
-  return own != nullptr ? *own : (s.cards_off & card_bit(c)) == 0;
+  return own != nullptr ? *own : card_saved_on(c, s.cards_off);
 }
 
 void set_card(Settings &s, Card c, bool on) {
   if (bool *own = own_switch(s, c))
     *own = on;
-  else if (on)
-    s.cards_off &= (uint16_t) ~card_bit(c);
   else
-    s.cards_off |= card_bit(c);
+    s.cards_off = card_saved(c, s.cards_off, on);
 }
 
 void load(Settings &s, JsonObjectConst o) {
@@ -682,8 +681,31 @@ void test_cards() {
     // news keep their own bytes.
     bool own = r.card == Card::COUNTDOWN || r.card == Card::NEWS || r.card == Card::WEATHER;
     SCHECK(((kCardsOffBits & card_bit(r.card)) != 0) == !own, "card %s: cards_off keeps its bit", r.id);
-    // A saved 0 is the default for a card in cards_off, so every one is on by default.
-    SCHECK(own || r.on, "card %s: on by default", r.id);
+    // A saved 0 is the default for a card in cards_off: on, but the Game Day
+    // card's, which is its build's.
+    if (!own)
+      SCHECK(r.on == card_saved_on(r.card, 0), "card %s: a saved 0 is its default", r.id);
+  }
+  // The Game Day card: off on a home panel, and its bit turns it on.
+  SCHECK(card_row("gamedaycard") != nullptr && !card_row("gamedaycard")->on, "the Game Day card is off by default");
+  SCHECK(!card_saved_on(Card::GAMEDAY, 0) && card_saved_on(Card::GAMEDAY, card_bit(Card::GAMEDAY)),
+         "the Game Day card: its bit means on");
+  SCHECK(card_saved(Card::GAMEDAY, 0, true) == card_bit(Card::GAMEDAY) &&
+             card_saved(Card::GAMEDAY, card_bit(Card::GAMEDAY), false) == 0,
+         "the Game Day card: on sets its bit, off clears it");
+  SCHECK(card_saved(Card::CLOCK, 0, false) == card_bit(Card::CLOCK) && card_saved_on(Card::CLOCK, 0),
+         "the other cards: their bit means off");
+  // Its words: every wording fits the card's lines and its 64 px.
+  for (int w = 0; w < kGamedayCardWordings; w++) {
+    int n = 0;
+    const GamedayCardLine *l = gameday_card_lines(w, n);
+    SCHECK(n > 0 && n <= kGamedayCardLinesMax, "wording %d: %d lines", w, n);
+    for (int i = 0; i < n; i++) {
+      // spleen_8, _12 and _16 are 5, 6 and 8 px a letter.
+      const size_t em = l[i].px >= 16 ? 8 : l[i].px >= 12 ? 6 : 5;
+      SCHECK(strlen(l[i].s) * em <= 64, "wording %d line %d fits 64 px", w, i);
+      SCHECK(l[i].y + l[i].px <= 64, "wording %d line %d fits the panel's height", w, i);
+    }
   }
   // Bits the cards had before the list (game leaders 0, Top 25 5) keep their meaning.
   SCHECK(card_bit(Card::LEADERS) == 1u << 0 && card_bit(Card::TOP25) == 1u << 5, "saved bits kept");

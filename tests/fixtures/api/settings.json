@@ -54,7 +54,8 @@
     "schedule": true,
     "seasonrecap": true,
     "news": false,
-    "weather": true
+    "weather": true,
+    "gamedaycard": false
   },
   "countdown": true,
   "top25": true,

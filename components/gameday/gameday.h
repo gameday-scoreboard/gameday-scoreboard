@@ -35,6 +35,7 @@
 #include "best_game.h"
 #include "captive.h"
 #include "cards.h"
+#include "gameday_card.h"
 #include "celebrate.h"
 #include "celebrate_lvgl.h"
 #include "countdown.h"
@@ -559,6 +560,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // for the panel rolls up; the page says how long one pass takes, and the
   // card stays up at least that long.
   const std::string &msg_card() const { return this->msg_card_; }
+  // The Game Day card (gameday_card.h): its wording while it is up, -1
+  // while it is down (gd_gameday_card in firmware/pages/gameday-live.yaml).
+  int gameday_card() const { return this->gdcard_shown_ ? this->gdcard_wording_ : -1; }
   // The board game's line score at halftime and the final, laid out for a
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
@@ -681,6 +685,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void msg_reset_();    // a new text or address: back to the top, up soon
   void msg_tick_();     // main loop: the card's turns and the reads they need
   bool card_between_(uint32_t now) const;  // the message and news cards may be up
+  bool board_between_(uint32_t now) const;  // card_between_, the Game Day card aside
   void msg_show_(const std::string &page);
   std::string say_text_;
   int say_secs_{::espn::kSayDefaultSecs};
@@ -701,6 +706,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool msg_shown_{false};
   uint32_t msg_since_ms_{0};  // when the card last went up or down
   uint32_t msg_tick_ms_{0};
+  // The Game Day card (gameday_card.h). Its first turn is a full wait after
+  // the start, so a panel that starts doesn't open on it.
+  bool gdcard_shown_{false};
+  int gdcard_wording_{0};       // the wording up, or the next one while down
+  uint32_t gdcard_since_ms_{0};  // when the card last went up or down
+  uint32_t gdcard_tick_ms_{0};
+  void gdcard_tick_();
+  void gdcard_show_(bool up);
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait

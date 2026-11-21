@@ -1056,6 +1056,63 @@ script:
           lv_obj_move_foreground(id(tt_msg));
           lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
 
+  # The Game Day card (components/gameday/gameday_card.h): a wording, or
+  # nothing. The component decides when, between games, and sends
+  # "gameday_card" for each change. On one panel the words go first, then
+  # the code takes over.
+  - id: gd_gameday_card
+    mode: restart
+    then:
+      - lambda: |-
+          const int wording = id(gameday_ctl).gameday_card();
+          if (wording < 0) {
+            lv_obj_add_flag(id(tt_gdcard), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          const bool two = W >= 128;
+          lv_obj_set_size(id(tt_gdcard), W, 64);
+          lv_obj_t *lbl[::espn::kGamedayCardLinesMax] = {id(tt_gdcard_l0), id(tt_gdcard_l1), id(tt_gdcard_l2),
+                                                         id(tt_gdcard_l3), id(tt_gdcard_l4), id(tt_gdcard_l5)};
+          int n = 0;
+          const ::espn::GamedayCardLine *lines = ::espn::gameday_card_lines(wording, n);
+          for (int i = 0; i < ::espn::kGamedayCardLinesMax; i++) {
+            if (i >= n) {
+              lv_obj_add_flag(lbl[i], LV_OBJ_FLAG_HIDDEN);
+              continue;
+            }
+            const lv_font_t *f = lines[i].px >= 16   ? id(spleen_16)->get_lv_font()
+                                 : lines[i].px >= 12 ? id(spleen_12)->get_lv_font()
+                                                     : id(spleen_8)->get_lv_font();
+            lv_obj_set_style_text_font(lbl[i], f, 0);
+            lv_obj_set_style_text_color(
+                lbl[i], lv_color_hex(lines[i].accent ? ::espn::kGamedayCardAccent : 0xFFFFFF), 0);
+            lv_label_set_text(lbl[i], lines[i].s);
+            lv_obj_set_pos(lbl[i], two ? 64 + (W - 128) / 2 : 0, lines[i].y);
+            lv_obj_clear_flag(lbl[i], LV_OBJ_FLAG_HIDDEN);
+          }
+          lv_obj_set_x(id(tt_gdcard_qr), two ? (W - 128) / 2 : 0);
+          if (two)
+            lv_obj_clear_flag(id(tt_gdcard_qr), LV_OBJ_FLAG_HIDDEN);
+          else
+            lv_obj_add_flag(id(tt_gdcard_qr), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_move_foreground(id(tt_gdcard));
+          lv_obj_clear_flag(id(tt_gdcard), LV_OBJ_FLAG_HIDDEN);
+      - if:
+          condition:
+            lambda: |-
+              return id(gameday_ctl).gameday_card() >= 0 &&
+                     lv_display_get_horizontal_resolution(lv_display_get_default()) < 128;
+          then:
+            - delay: !lambda 'return ::espn::kGamedayCardWordsMs;'
+            - lambda: |-
+                if (id(gameday_ctl).gameday_card() < 0)
+                  return;
+                for (lv_obj_t *l : {id(tt_gdcard_l0), id(tt_gdcard_l1), id(tt_gdcard_l2), id(tt_gdcard_l3),
+                                    id(tt_gdcard_l4), id(tt_gdcard_l5)})
+                  lv_obj_add_flag(l, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(id(tt_gdcard_qr), LV_OBJ_FLAG_HIDDEN);
+
   # The Top 25 card (components/gameday/rankings.h): a page of the poll, or
   # nothing. The component turns the pages and sends "top25" for each.
   - id: gd_top25_card
@@ -2130,6 +2187,92 @@ lvgl:
                         text_font: spleen_8
                         text: ""
                         styles: ["tt_st_status_text"]
+
+        # The Game Day card, over the board between games (gd_gameday_card):
+        # the code on the left with the words beside it from 128 px up; on
+        # one panel the words, then the code.
+        - obj:
+            id: tt_gdcard
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - qrcode:
+                  id: tt_gdcard_qr
+                  x: 0
+                  y: 0
+                  size: 64
+                  light_color: 0xA0A0A0
+                  dark_color: 0x000000
+                  text: "https://gameday-scoreboard.com"
+              - label:
+                  id: tt_gdcard_l0
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l1
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l2
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l3
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l4
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l5
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
 
         # The owner's message card, over the board between games (gd_msg_card)
         - obj:

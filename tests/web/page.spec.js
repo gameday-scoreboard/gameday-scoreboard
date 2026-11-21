@@ -1855,8 +1855,8 @@ test("between games: a row per card that is on, in the panel's order, the rest b
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#cardsOld")).toBeHidden();
   const want = (await deviceState(request)).cards;
-  // Every card on to start but news and weather (on once a town is set).
-  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather"]);
+  // Every card on to start but news and weather (on once a town is set) and the Game Day card.
+  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather", "gamedaycard"]);
   // The cards you make are switched on the Customize tab, so the list only names them.
   const own = ["custom", "message", "picture"];
   const shown = want.filter((c) => c.on && !own.includes(c.id));
@@ -1879,14 +1879,14 @@ test("between games: a row per card that is on, in the panel's order, the rest b
 
   // The cards that are off wait in the sheet, a row each with its Add button.
   const sheet = page.locator(".lsheet");
-  await expect(page.locator("#cardAdd")).toHaveText("Add a card (3 more)");
+  await expect(page.locator("#cardAdd")).toHaveText("Add a card (4 more)");
   await page.locator("#cardAdd").click();
   await expect(sheet).toBeVisible();
-  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather"]);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather", "Game Day card"]);
   await sheet.getByRole("button", { name: "Add News headlines" }).click();
   await expectSet(request, { cards: "news:1" });
   await expect.poll(async () => (await deviceState(request)).news).toBe(true);
-  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather"]);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather", "Game Day card"]);
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();
   await expect(row("news")).toHaveCount(1);

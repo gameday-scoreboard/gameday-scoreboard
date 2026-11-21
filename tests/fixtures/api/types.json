@@ -325,6 +325,7 @@
     "cards.schedule": "bool",
     "cards.seasonrecap": "bool",
     "cards.weather": "bool",
+    "cards.gamedaycard": "bool",
     "cddate": "string",
     "celebrate": "int",
     "gameleaders": "bool",

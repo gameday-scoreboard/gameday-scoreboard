@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Add network lists the Wi-Fi networks the panel can see, effect playlists keep playing as you edit them, Rain's speed works, a remote button set to live games says what it picked, and Home Assistant names the panel Scoreboard by Game Day.
+Add network lists nearby Wi-Fi, a Game Day card shows a QR code between games, playlists keep playing while edited, Rain's speed works, a live games remote button says its pick, and Home Assistant calls the panel Scoreboard by Game Day.
 
 ### ⚠️ Heads up
 
@@ -46,6 +46,7 @@ Add network lists the Wi-Fi networks the panel can see, effect playlists keep pl
 ### ✨ New
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+- 🔳 **Game Day card** puts a QR code for gameday-scoreboard.com on the board every 20 minutes between games, off until you turn it on under **Between games**
 
 ### 🐛 Fixes
 
