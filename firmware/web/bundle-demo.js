@@ -239,7 +239,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option>
             </select></div>
           </div>
         </div>
@@ -2483,7 +2483,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
       : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
         : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
-          : "The final, then your next game, as before.";
+          : S.after === "effects" ? "Once the final has been up a while, and whenever no game of yours is on, the panel plays the effect Showing's Effects page is set to, until your next game is close."
+            : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;

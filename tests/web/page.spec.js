@@ -3414,6 +3414,9 @@ test("game-day wake: off by default, its lead and after the game post, hidden on
   await page.locator("#afterGame").selectOption("clock");
   await expectSet(request, { after: "clock" });
   await expect(page.locator("#afterHint")).toContainText("shows the time and your next game");
+  await page.locator("#afterGame").selectOption("effects");
+  await expectSet(request, { after: "effects" });
+  await expect(page.locator("#afterHint")).toContainText("whenever no game of yours is on, the panel plays the effect");
 
   // Off with the wake off says how to bring it back, and asleep says so.
   await reset(request, { after: "off", wake_now: "asleep" });

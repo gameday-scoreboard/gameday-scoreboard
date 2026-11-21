@@ -547,6 +547,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // page goes up until the next game is near (pages/smart_board.yaml, on
   // the "smartboard" action, which fires each time this changes).
   bool smart_between() const { return this->wake_smart_; }
+  // After the game is Effects: the panel put the Effects page up itself,
+  // between games, so the page's start doesn't count as somebody picking
+  // it (no night skip, no lighting a dark panel). pages/effects.yaml.
+  bool fx_between_up() const { return this->fx_ours_; }
+  // pages/effects.yaml's gd_fx_yield and its refusals wrap their page change
+  // in this: the panel taking the screen back is not the owner picking a
+  // page, so the effect between games comes back when the reason ends.
+  void set_fx_yielding(bool on) { this->fx_yielding_ = on; }
   int say_secs() const { return this->say_secs_; }
   // The banner's look: a playlist's color and icon (playlists.h ListColor,
   // ListIcon) while it shows that playlist's name, white and no icon for
@@ -1134,6 +1142,22 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void fx_tick_();
   void fx_show_();
   void fx_changed_();
+  // After the game is Effects (wake.h): the Effects page between games.
+  // fx_want_ is what the last check asked for; fx_ours_ says the page is up
+  // because of it (only an effect the panel put up comes down by itself);
+  // fx_own_change_ marks the panel's own page change, fx_yielding_ a yield,
+  // so the page callback tells both from somebody picking a page.
+  bool fx_want_{false};
+  bool fx_ours_{false};
+  bool fx_own_change_{false};
+  bool fx_yielding_{false};
+  uint32_t fx_between_ms_{0};
+  void fx_between_tick_();  // from loop(), four times a second
+  bool fx_page_is_(const char *name) const;
+  void fx_set_page_(const char *name);
+  // Somebody picked a team, a mode or the favorites: the effect between
+  // games ends until after the next game's final, as a remote press does.
+  void fx_between_end_(const char *why);
   // The color and icon of playlist n (1..count); 0 for anything else.
   uint8_t list_mark_(uint8_t n) const {
     return n >= 1 && n <= this->prefs9_.count ? this->prefs12_.mark[n - 1] : 0;
@@ -1646,13 +1670,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // Game-day wake (wake.h), its own blob, and its state, kept in RTC memory
   // through a restart. wake_clock_ is the clock between games, on the board
   // now (clock_fields_); wake_smart_ the Smart board between games, which
-  // pages/smart_board.yaml puts up on the "smartboard" action.
+  // pages/smart_board.yaml puts up on the "smartboard" action; wake_fx_ an
+  // effect between games, which fx_between_tick_ puts up.
   ESPPreferenceObject wake_pref_;
   ::espn::WakePrefs wake_{};
   ::espn::WakeState wake_state_{};
   bool wake_loaded_{false};
   bool wake_clock_{false};
   bool wake_smart_{false};
+  bool wake_fx_{false};
   bool power_on_{true};
   // Live games with Favorites take over: the next start of a favorite's
   // game from the last scan, 0 for none.

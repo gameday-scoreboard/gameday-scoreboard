@@ -650,6 +650,7 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
 void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<League> &live_before) {
   bool was_fav_mode = this->favorites_mode_();
   const ::espn::Team *fallback_before = this->fallback_team_();
+  this->fx_between_end_("the favorites changed");
   this->rebuild_favorites_(true);
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && (was_fav_mode || this->favorites_mode_())) {
     // The list changed under the mode: drop the board and let the next
@@ -1113,8 +1114,103 @@ void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *p
     const FxState *f = this->fx_state_;
     if (f != nullptr && f->page != nullptr && strcmp(f->page->option_at(i), "Effects") != 0)
       this->stop_fx_list_("Showing left Effects");
+    // Effects between games: the panel's own change, a yield (the effect
+    // comes back when its reason ends), or somebody picking a page, which
+    // ends the effect between games until after the next game's final.
+    if (this->fx_own_change_)
+      return;
+    this->fx_ours_ = false;
+    if (this->fx_yielding_ || !this->wake_fx_ || this->wake_state_.held)
+      return;
+    ESP_LOGI(TAG, "After the game: %s picked under Showing, so no effects until the next game's final",
+             f != nullptr && f->page != nullptr ? f->page->option_at(i) : "a page");
+    this->wake_state_.held = true;
+    this->defer([this]() { this->wake_tick_(); });
   });
   this->fx_changed_();
+}
+
+// ---- Effects between games (wake.h, After::EFFECTS) -----------------------------
+
+bool GamedayComponent::fx_page_is_(const char *name) const {
+  const FxState *f = this->fx_state_;
+  if (f == nullptr || f->page == nullptr)
+    return false;
+  auto at = f->page->active_index();
+  return at.has_value() && strcmp(f->page->option_at(*at), name) == 0;
+}
+
+// The page manager publishes the new page before this returns, so the page
+// callbacks see fx_own_change_.
+void GamedayComponent::fx_set_page_(const char *name) {
+  this->fx_own_change_ = true;
+  this->fx_().page->make_call().set_option(name).perform();
+  this->fx_own_change_ = false;
+}
+
+// Puts the Effects page up over the Scoreboard when an effect should play
+// between games, and takes it down when not. Only over the Scoreboard: a
+// Clock, Smart board or Effects somebody picked under Showing stays. Only
+// the page the panel put up comes down by itself.
+void GamedayComponent::fx_between_tick_() {
+  const uint32_t now = millis();
+  if (now - this->fx_between_ms_ < 250)
+    return;
+  this->fx_between_ms_ = now;
+  const FxState *f = this->fx_state_;
+  if (f == nullptr || f->page == nullptr || !this->clock_set_())
+    return;  // before pages/effects.yaml set up, or no clock to say what is between games
+  ::espn::FxBetween in;
+  in.between = this->wake_fx_;
+  in.board_ready = this->board_ready_;
+  in.power_on = this->power_on_ && this->display_on();
+  in.screen_on = this->guard_brightness(255) != 0;
+  in.wifi = network::is_connected();
+  in.trouble = ::espn::msg_trouble(this->misses_, this->captive_,
+                                   ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
+  in.mark = this->guard_mark() != 0;
+  in.banner = !this->say_text_.empty();
+  in.card_turn = this->msg_shown_ ||
+                 this->countdown_card_((int64_t) this->time_->timestamp_now()) != ::espn::CountdownCard::NONE;
+  const bool want = ::espn::fx_between_want(in);
+  if (want == this->fx_want_)
+    return;
+  this->fx_want_ = want;
+  if (want) {
+    if (!this->fx_page_is_("Scoreboard"))
+      return;
+    ESP_LOGI(TAG, "After the game: an effect between games");
+    this->fx_ours_ = true;
+    this->fx_set_page_("Effects");
+    // The page's own checks (pages/effects.yaml gd_fx_start) can still
+    // send it back, which clears fx_ours_ through the page callback.
+    return;
+  }
+  if (this->fx_ours_ && this->fx_page_is_("Effects")) {
+    const char *why = !in.between       ? "the next game is near or one is live"
+                      : in.card_turn    ? "a card's turn"
+                      : in.banner       ? "a banner"
+                      : !in.screen_on   ? "the night schedule's screen-off"
+                      : !in.power_on    ? "the panel is off"
+                      : in.mark         ? "the heat or power mark"
+                      : !in.wifi        ? "Wi-Fi lost"
+                      : in.trouble      ? "the board's trouble line"
+                                        : "the board isn't ready";
+    ESP_LOGI(TAG, "After the game: effects off for %s", why);
+    this->fx_set_page_("Scoreboard");
+  }
+  this->fx_ours_ = false;
+}
+
+void GamedayComponent::fx_between_end_(const char *why) {
+  if (!this->wake_fx_ || this->wake_state_.held)
+    return;
+  ESP_LOGI(TAG, "After the game: %s, so no effects until the next game's final", why);
+  this->wake_state_.held = true;
+  if (this->fx_ours_ && this->fx_page_is_("Effects"))
+    this->fx_set_page_("Scoreboard");
+  this->fx_ours_ = false;
+  this->wake_tick_();
 }
 
 void GamedayComponent::set_fx_lists_(const std::string &text) {
@@ -1402,9 +1498,10 @@ void GamedayComponent::keep_favorite_(uint8_t league, uint32_t id) {
 }
 
 void GamedayComponent::remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx) {
-  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_) && !this->wake_state_.held) {
+  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_ || this->wake_fx_) &&
+      !this->wake_state_.held) {
     ESP_LOGI(TAG, "After the game: the remote asked for the scoreboard, so no %s until the next game's final",
-             this->wake_clock_ ? "clock" : "Smart board");
+             this->wake_clock_ ? "clock" : this->wake_smart_ ? "Smart board" : "effects");
     this->wake_state_.held = true;
     this->wake_tick_();
   }
@@ -2244,6 +2341,7 @@ void GamedayComponent::loop() {
   this->news_tick_();
   this->season_tick_();
   this->picture_tick_();
+  this->fx_between_tick_();  // after the cards' ticks, so a card's turn takes the screen at once
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
   if (millis() - this->ha_tick_ms_ >= 15000) {
@@ -3137,8 +3235,18 @@ void GamedayComponent::wake_tick_() {
   const bool live_other = this->live_mode_() && !this->live_fallback_;
   const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) && !live_other;
   const bool smart = ::espn::wake_smart(this->wake_, this->wake_state_, in) && !live_other;
-  const bool changed =
-      clock != this->wake_clock_ || smart != this->wake_smart_ || was_asleep != this->wake_state_.asleep;
+  const bool fx = ::espn::wake_effects(this->wake_, this->wake_state_, in) && !live_other;
+  const bool changed = clock != this->wake_clock_ || smart != this->wake_smart_ || fx != this->wake_fx_ ||
+                       was_asleep != this->wake_state_.asleep;
+  if (fx != this->wake_fx_) {
+    // fx_between_tick_ puts the page up or takes it down on its next check.
+    ESP_LOGI(TAG, fx ? "After the game: effects until the next game is near"
+                     : "After the game: back to the scoreboard");
+    this->wake_fx_ = fx;
+    // The next game's countdown waits while the effect has the screen.
+    if (this->board_ready_)
+      this->emit_({});
+  }
   if (smart != this->wake_smart_) {
     ESP_LOGI(TAG, smart ? "After the game: the Smart board until the next game is near"
                         : "After the game: back to the scoreboard");
@@ -3496,6 +3604,7 @@ void GamedayComponent::restart_board_() {
   this->schedule_next_(0);
   // Somebody changed what the panel follows, so they are looking at it.
   this->fire_action_("user_pick");
+  this->fx_between_end_("a new pick");
 }
 
 void GamedayComponent::board_changed_(bool board_cleared) {
@@ -5349,7 +5458,7 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   bool custom = this->card_on(::espn::Card::CUSTOM) && start != 0 && now < start + ::espn::kDayS;
   // After the game's clock keeps the screen between games; the owner's own
   // countdown and the weather still get their turns.
-  bool next = this->countdown_on() && !this->wake_clock_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
+  bool next = this->countdown_on() && !this->wake_clock_ && !this->wake_fx_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
               g.kickoff_epoch > now;
   bool weather = this->wx_card_ready_();
   if (this->live_mode_() && !this->live_fallback_) {
@@ -6360,7 +6469,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["wake"] = this->wake_.on != 0;
   doc["wakelead"] = this->wake_.lead;
   doc["after"] = ::espn::after_word(this->wake_.after);
-  doc["wake_now"] = ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_);
+  doc["wake_now"] =
+      ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_, this->wake_fx_);
 #if defined(USE_UPDATE)
   // Left out where nothing can be installed (the demo build), so the page
   // and the app hide the switch.

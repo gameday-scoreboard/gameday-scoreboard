@@ -37,7 +37,11 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Effect playlists keep playing from where they are while you edit them, Rain's speed works, and a remote button set to live games says what it picked.
+The panel can play an effect whenever no game of yours is on, effect playlists keep playing while you edit them, and Rain's speed works.
+
+### ✨ New
+
+- ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 
 ### 🐛 Fixes
 

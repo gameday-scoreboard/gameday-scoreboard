@@ -6613,7 +6613,10 @@ static void test_wake() {
   CHECK_EQ(after_parse("scoreboard"), 0);
   CHECK_EQ(after_parse("off"), 1);
   CHECK_EQ(after_parse("clock"), 2);
-  CHECK_EQ(after_parse("effects"), -1);  // not in this firmware yet
+  CHECK_EQ(after_parse("smartboard"), 3);
+  CHECK_EQ(after_parse("effects"), 4);
+  CHECK_EQ(std::string(after_word((uint8_t) After::EFFECTS)), std::string("effects"));
+  CHECK_EQ(after_parse("effect"), -1);
   CHECK_EQ(after_parse(""), -1);
   CHECK_EQ(std::string(after_word(9)), std::string("scoreboard"));
   CHECK_EQ(clamp_wake_lead(0), (int) kWakeLeadMin);
@@ -6816,9 +6819,19 @@ static void test_wake() {
   // A remote press that follows a team or asks for the Scoreboard ends the
   // clock or Smart board between games; it comes back only after the next
   // game's final.
-  for (uint8_t after : {(uint8_t) After::CLOCK, (uint8_t) After::SMART}) {
+  for (uint8_t after : {(uint8_t) After::CLOCK, (uint8_t) After::SMART, (uint8_t) After::EFFECTS}) {
     p.after = after;
-    auto page = [&](const WakeState &s) { return after == (uint8_t) After::CLOCK ? wake_clock(p, s, in) : wake_smart(p, s, in); };
+    auto page = [&](const WakeState &s) {
+      return after == (uint8_t) After::CLOCK   ? wake_clock(p, s, in)
+             : after == (uint8_t) After::SMART ? wake_smart(p, s, in)
+                                               : wake_effects(p, s, in);
+    };
+    // Each choice puts up its own page only.
+    at(kick - 3 * 3600);
+    {
+      WakeState s0;
+      CHECK_EQ(wake_clock(p, s0, in) + wake_smart(p, s0, in) + wake_effects(p, s0, in), 1);
+    }
     WakeState s;
     in.kick = kick;
     at(kick - 3 * 3600);
@@ -6845,6 +6858,24 @@ static void test_wake() {
   CHECK_EQ(std::string(wake_word(true, false)), std::string("asleep"));
   CHECK_EQ(std::string(wake_word(false, true)), std::string("clock"));
   CHECK_EQ(std::string(wake_word(false, false)), std::string(""));
+  CHECK_EQ(std::string(wake_word(false, false, false, true)), std::string("effects"));
+
+  // Effects between games: up only while nothing else needs the screen.
+  FxBetween fx;
+  fx.between = fx.board_ready = fx.power_on = fx.screen_on = fx.wifi = true;
+  CHECK(fx_between_want(fx));
+  for (bool FxBetween::*need : {&FxBetween::between, &FxBetween::board_ready, &FxBetween::power_on,
+                                &FxBetween::screen_on, &FxBetween::wifi}) {
+    FxBetween f = fx;
+    f.*need = false;
+    CHECK(!fx_between_want(f));
+  }
+  for (bool FxBetween::*takes : {&FxBetween::trouble, &FxBetween::mark, &FxBetween::banner, &FxBetween::card_turn}) {
+    FxBetween f = fx;
+    f.*takes = true;
+    CHECK(!fx_between_want(f));
+  }
+  CHECK(!fx_between_want(FxBetween{}));  // nothing known yet: no effect
 }
 
 static void test_offseason() {
