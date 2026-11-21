@@ -297,6 +297,10 @@ void SavedNetworks::scan() {
     // component's start_scanning(), which would take the panel off its
     // network. The component stores the results and hands them to
     // on_wifi_scan_results(). Same settings as its own scans.
+    // Once the panel is connected, ESPHome keeps only the saved networks
+    // from a scan unless asked for all of them. Asked for this scan only,
+    // so its own scans go on dropping (and freeing) the rest.
+    w->set_keep_scan_results(true);
 #ifdef USE_ESP32
     wifi_scan_config_t config{};
     config.show_hidden = false;
@@ -314,32 +318,80 @@ void SavedNetworks::scan() {
     this->set_timeout("scan", 10000, [this]() {
       {
         std::lock_guard<std::mutex> lock(this->mutex_);
-        this->scanned_.clear();
+        this->scanned_n_ = 0;
         this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
       }
-      this->scanning_ = false;
+      this->end_scan_();
     });
   });
 }
 
 void SavedNetworks::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
-  std::vector<std::string> names;
-  for (const auto &r : results) {
-    if (r.get_is_hidden() || r.get_ssid().empty() || names.size() >= 32)
-      continue;
-    std::string name = r.get_ssid().str();
-    if (std::find(names.begin(), names.end(), name) == names.end())
-      names.push_back(std::move(name));
-  }
+  // One entry per name: a mesh or a building with several access points
+  // lists the same network once per access point. Filled in place, with no
+  // allocation: this runs on every scan, ESPHome's own included. Once the
+  // list is full a stronger name takes the weakest one's place.
   {
     std::lock_guard<std::mutex> lock(this->mutex_);
-    this->scanned_.swap(names);
-    this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
+    this->fill_scanned_(results);
   }
   if (this->scanning_) {
-    this->scanning_ = false;
     this->cancel_timeout("scan");
+    this->end_scan_();
   }
+}
+
+void SavedNetworks::fill_scanned_(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+  size_t n = 0;
+  for (const auto &r : results) {
+    if (r.get_is_hidden() || r.get_ssid().empty())
+      continue;
+    char name[wifi_list::SSID_SIZE];
+    const auto ssid = r.get_ssid();
+    const size_t len = std::min(ssid.size(), wifi_list::SSID_SIZE - 1);
+    memcpy(name, ssid.c_str(), len);
+    name[len] = '\0';
+    const int8_t rssi = r.get_rssi();
+    Nearby *same = nullptr;
+    for (size_t i = 0; i < n && same == nullptr; i++)
+      if (strncmp(this->scanned_[i].ssid, name, wifi_list::SSID_SIZE) == 0)
+        same = &this->scanned_[i];
+    if (same != nullptr) {
+      same->rssi = std::max(same->rssi, rssi);
+      continue;
+    }
+    Nearby *slot = nullptr;
+    if (n < MAX_SCANNED) {
+      slot = &this->scanned_[n++];
+    } else {
+      Nearby *weakest = &this->scanned_[0];
+      for (size_t i = 1; i < n; i++)
+        if (this->scanned_[i].rssi < weakest->rssi)
+          weakest = &this->scanned_[i];
+      if (rssi <= weakest->rssi)
+        continue;
+      slot = weakest;
+    }
+    memcpy(slot->ssid, name, len + 1);
+    slot->rssi = rssi;
+    slot->open = !r.get_with_auth();
+  }
+  // Strongest first; an insertion sort keeps equal signals in scan order.
+  for (size_t i = 1; i < n; i++) {
+    const Nearby cur = this->scanned_[i];
+    size_t j = i;
+    for (; j > 0 && this->scanned_[j - 1].rssi < cur.rssi; j--)
+      this->scanned_[j] = this->scanned_[j - 1];
+    this->scanned_[j] = cur;
+  }
+  this->scanned_n_ = n;
+  this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
+}
+
+void SavedNetworks::end_scan_() {
+  if (wifi::global_wifi_component != nullptr)
+    wifi::global_wifi_component->set_keep_scan_results(false);
+  this->scanning_ = false;
 }
 
 bool SavedNetworks::switch_to(const std::string &ssid) {
@@ -530,12 +582,15 @@ std::vector<Entry> SavedNetworks::list() {
   out.reserve(this->list_.count);
   for (size_t i = 0; i < this->list_.count; i++) {
     const char *ssid = this->list_.nets[i].ssid;
-    const bool seen =
-        fresh && std::find(this->scanned_.begin(), this->scanned_.end(), ssid) != this->scanned_.end();
+    const bool seen = fresh && std::any_of(this->scanned_.begin(), this->scanned_.begin() + this->scanned_n_,
+                                           [&](const Nearby &n) {
+                                             return strncmp(n.ssid, ssid, wifi_list::SSID_SIZE) == 0;
+                                           });
     out.push_back(Entry{ssid, now[0] != '\0' && strncmp(ssid, now.data(), now.size()) == 0, seen});
   }
   return out;
 }
+
 
 size_t SavedNetworks::count() {
   std::lock_guard<std::mutex> lock(this->mutex_);

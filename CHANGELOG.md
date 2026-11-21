@@ -37,11 +37,15 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Effect playlists keep playing from where they are while you edit them, Rain's speed works, a remote button set to live games says what it picked, and Home Assistant lists the panel as Scoreboard by Game Day.
+Add network lists the Wi-Fi networks the panel can see, effect playlists keep playing as you edit them, Rain's speed works, a remote button set to live games says what it picked, and Home Assistant names the panel Scoreboard by Game Day.
 
 ### ⚠️ Heads up
 
 - 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
+
+### ✨ New
+
+- 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 
 ### 🐛 Fixes
 

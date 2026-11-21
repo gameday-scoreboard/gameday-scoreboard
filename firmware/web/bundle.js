@@ -446,7 +446,12 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <p class="hint" id="netMsg" role="status" hidden></p>
           <div class="actions" id="netAddRow"><button class="btn" id="netAdd">Add network</button></div>
           <div id="netForm" hidden>
-            <label class="fl" for="netName">Network name<small>2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
+            <div id="netScan">
+              <div class="nethead"><span class="fl">Networks nearby<small>The 2.4 GHz networks the panel can see, strongest first. Tap one to use it.</small></span><button class="btn" id="netRescan">Look again</button></div>
+              <p class="hint" id="netScanMsg" role="status" hidden></p>
+              <div id="netNearby"></div>
+            </div>
+            <label class="fl" for="netName">Network name<small>Or type it, for a hidden network. 2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
             <input type="text" id="netName" class="field" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
             <label class="fl" for="netPass">Password<small>Blank for an open network.</small></label>
             <input type="password" id="netPass" class="field" maxlength="64" autocomplete="new-password" enterkeyhint="done">
@@ -3990,19 +3995,92 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   };
   const nap = (ms) => new Promise((r) => setTimeout(r, ms));
   const bytes = (s) => new TextEncoder().encode(s).length;
+  // Networks nearby: opening the form asks the panel to scan (POST scan=1,
+  // about 4 s, the panel stays on its network) and lists what GET then names
+  // under "nearby", strongest first. Tapping one fills in the name. The
+  // network the panel is on is left out: adding it again does nothing.
+  const scanMsg = (t) => {
+    const m = $("#netScanMsg");
+    m.textContent = t || "";
+    m.hidden = !t;
+  };
+  // The same line as the Wi-Fi card's: weak below -75 dBm.
+  const signalWord = (rssi) => (rssi >= -60 ? "Strong" : rssi >= -75 ? "Good" : "Weak");
+  const markNetPick = () => {
+    const name = $("#netName").value.trim();
+    document.querySelectorAll("#netNearby .netpick").forEach((b) => setOn(b, b.dataset.ssid === name, "aria-pressed"));
+  };
+  const renderNearby = (j) => {
+    const box = $("#netNearby");
+    box.innerHTML = "";
+    const on = ((j && j.networks) || []).find((n) => n.connected);
+    const saved = new Set(((j && j.networks) || []).map((n) => n.ssid));
+    const list = ((j && j.nearby) || []).filter((n) => !on || n.ssid !== on.ssid);
+    if (!list.length) return scanMsg("The panel can't see another 2.4 GHz network. Type its name below, or move closer and look again.");
+    scanMsg("");
+    list.forEach((n) => {
+      const b = el("button", "netpick");
+      b.type = "button";
+      b.dataset.ssid = n.ssid;
+      const name = el("span", null, n.ssid);
+      if (saved.has(n.ssid)) name.appendChild(el("small", null, "Saved"));
+      b.appendChild(name);
+      b.appendChild(el("span", "val", n.open ? "Open, " + signalWord(n.rssi).toLowerCase() : signalWord(n.rssi)));
+      b.onclick = () => {
+        $("#netName").value = n.ssid;
+        $("#netPass").value = "";
+        markNetPick();
+        netMsg(n.open ? n.ssid + " is open, so leave the password blank." : "");
+        (n.open ? $("#netSave") : $("#netPass")).focus();
+      };
+      box.appendChild(b);
+    });
+    markNetPick();
+  };
+  let scanRun = 0;  // a newer look, or a closed form, ends the one before
+  const lookNearby = async () => {
+    const run = ++scanRun;
+    const again = $("#netRescan");
+    again.disabled = true;
+    scanMsg("Looking for networks…");
+    try {
+      await fetch("/gameday/wifi?scan=1", { method: "POST" });
+    } catch (_) {}
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      await nap(1500);
+      if (run !== scanRun) return;
+      try {
+        j = await wifiDoc(4000);
+      } catch (_) {
+        j = null;
+        continue;
+      }
+      if (!j.scanning) break;
+    }
+    if (run !== scanRun) return;
+    again.disabled = false;
+    if (!j) return scanMsg("The panel didn't answer. Type the network's name below, or look again.");
+    renderNetworks(j);
+    renderNearby(j);
+  };
   const openNetForm = (open) => {
     $("#netForm").hidden = !open;
     $("#netAddRow").hidden = open;
+    scanRun++;
     if (!open) return;
     $("#netName").value = "";
     $("#netPass").value = "";
-    $("#netName").focus();
+    $("#netNearby").innerHTML = "";
+    lookNearby();
   };
   $("#netAdd").onclick = () => {
     netMsg("");
     openNetForm(true);
   };
   $("#netCancel").onclick = () => openNetForm(false);
+  $("#netRescan").onclick = () => lookNearby();
+  $("#netName").addEventListener("input", markNetPick);
   $("#netName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netPass").focus(); });
   $("#netPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netSave").click(); });
 

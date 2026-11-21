@@ -255,7 +255,8 @@ class GamedaySelect : public select::Select, public Component {
 //   POST /gameday/settings           a backup as a JSON body, checked whole, then applied;
 //                                    400 with "error" when refused or past 4 KB
 //   GET  /gameday/wifi               the saved Wi-Fi networks in the order they are tried,
-//                                    names only (components/saved_networks)
+//                                    names only (components/saved_networks), and "nearby":
+//                                    the networks the last scan (scan=1) found, strongest first
 //   POST /gameday/wifi?forget=<ssid> drops one saved network; 404 when it is not saved.
 //                                    "moving": true when it was the one the panel is on and
 //                                    the panel leaves it now for another saved network

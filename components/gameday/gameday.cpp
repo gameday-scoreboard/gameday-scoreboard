@@ -8099,6 +8099,16 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     o["connected"] = e.connected;
     o["seen"] = e.seen;
   }
+  // What the last scan found, for the Add network form to pick from.
+  JsonArray nearby = doc["nearby"].to<JsonArray>();
+  // n is a copy that ends with the call: as a char * its name is copied in.
+  nets->each_nearby([&nearby](saved_networks::Nearby &n) {
+    JsonObject o = nearby.add<JsonObject>();
+    o["ssid"] = static_cast<char *>(n.ssid);
+    o["rssi"] = n.rssi;
+    if (n.open)
+      o["open"] = true;
+  });
   doc["max"] = (int) saved_networks::SavedNetworks::max();
   doc["scanning"] = nets->scanning();
   const std::string switching = nets->switching_ssid();
