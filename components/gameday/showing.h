@@ -36,6 +36,25 @@ inline const char *showing_word(Showing s) {
   return s == Showing::BOARD ? "the Scoreboard" : s == Showing::AUTO ? "a page After the game put up" : "a picked page";
 }
 
+// A dark screen (Power off, or the night schedule's screen-off) reads only
+// what could light it again: night mode lights it for a live game of the
+// owner's (night_dark: the light is on, the night has the screen off), and
+// Wake, when on, before one. How long between those reads, in ms; 0 for
+// never (turned off by hand with Wake off). kick is the owner's next start
+// (0 when none is known), lead_min the wake lead. Near the start, a minute,
+// so the read that sees the game live lights the screen within one; on a
+// game day an hour, so a moved start is caught; otherwise 6 hours.
+inline uint32_t standby_every_ms(bool night_dark, bool wake_on, int64_t now, int64_t kick, int lead_min) {
+  if (!night_dark && !wake_on)
+    return 0;
+  const int64_t lead_s = ((int64_t) (lead_min > 15 ? lead_min : 15) + 5) * 60;
+  if (kick > 0 && now >= kick - lead_s)
+    return 60u * 1000u;
+  if (kick > 0 && kick - now < 24 * 3600)
+    return 3600u * 1000u;
+  return 6u * 3600u * 1000u;
+}
+
 // The second line under "Looking for" while the first scoreboard loads: at
 // start-up, after a team change, and back on the Scoreboard from a picked
 // page. live_word is the Live games league ("NFL ", "college ", "" for

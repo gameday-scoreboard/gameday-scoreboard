@@ -161,6 +161,22 @@ static void test_showing() {
   CHECK(looking_for(false, "", "") == "your teams");
 }
 
+// How often a dark screen reads (showing.h): never with nothing to light it,
+// a minute near the owner's start, an hour on a game day, else 6 hours.
+static void test_standby_every() {
+  const int64_t now = 1'800'000'000;
+  CHECK(standby_every_ms(false, false, now, now + 600, 15) == 0);  // off by hand, Wake off
+  CHECK(standby_every_ms(true, false, now, 0, 15) == 6u * 3600u * 1000u);  // night, no game known
+  CHECK(standby_every_ms(false, true, now, now + 3 * 86400, 15) == 6u * 3600u * 1000u);
+  CHECK(standby_every_ms(false, true, now, now + 5 * 3600, 15) == 3600u * 1000u);  // game day
+  CHECK(standby_every_ms(false, true, now, now + 21 * 60, 15) == 3600u * 1000u);  // just before the window
+  CHECK(standby_every_ms(false, true, now, now + 20 * 60, 15) == 60u * 1000u);  // lead + 5 min
+  CHECK(standby_every_ms(true, false, now, now - 600, 15) == 60u * 1000u);  // past the start, not live yet
+  CHECK(standby_every_ms(false, true, now, now + 40 * 60, 30) == 3600u * 1000u);
+  CHECK(standby_every_ms(false, true, now, now + 35 * 60, 30) == 60u * 1000u);  // a longer lead
+  CHECK(standby_every_ms(false, true, now, now + 20 * 60, 5) == 60u * 1000u);  // never under 15
+}
+
 int main() {
   test_plain_rows();
   test_leading_tag();
@@ -170,6 +186,7 @@ int main() {
   test_layout();
   test_font();
   test_showing();
+  test_standby_every();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

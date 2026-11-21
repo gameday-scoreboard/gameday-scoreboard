@@ -43,6 +43,7 @@ The panel can play an effect whenever no game of yours is on, Add network lists 
 
 - 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
 - 🏠 On the Clock, Effects or the Smart board the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
+- 🌙 A dark panel, turned off or at night, rests: it draws nothing, turns no cards, reads nothing from ESPN but your next game and sends Home Assistant nothing about games, then catches up in a second or two when it lights
 - 🌡️ **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** leave Home Assistant, where they wrote a row every 10 to 30 seconds; delete the old entities (the chip temperature is on the device page under Diagnostics)
 
 ### ✨ New
