@@ -156,6 +156,10 @@ On iPhone and Android, **Display** has the device page's **Game-day wake** and *
 On iPhone and Android, **After the game** also has **Show the Smart board**: your [Smart board](/using/smart-board/) rows between games, until the **Turns on** time before your next game, then the scoreboard. **Turns on** shows with it too. It shows once the panel runs firmware with the Smart board.
 :::
 
+:::note[Coming in the next app update]
+On iPhone and Android, **After the game** also has **Show effects**: the effect the Effects page is set to, whenever no game of yours is on, until the **Turns on** time before your next game. See [Between games](/using/effects/#between-games).
+:::
+
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
 
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
