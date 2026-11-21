@@ -46,7 +46,7 @@ Add network lists nearby Wi-Fi, a Game Day card shows a QR code between games, p
 ### ✨ New
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
-- 🔳 Game Day card: a QR code for gameday-scoreboard.com every 20 minutes between games, off until you turn it on under Between games.
+- 🔳 **Game Day card** puts a QR code for gameday-scoreboard.com on the board every 20 minutes between games, off until you turn it on under **Between games**
 
 ### 🐛 Fixes
 
