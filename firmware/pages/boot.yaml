@@ -224,8 +224,8 @@ script:
             id(boot_layout_side) = side;
             id(boot_layout).execute(side);
           }
-          if (qr) lv_obj_clear_flag(id(boot_qr_box), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_add_flag(id(boot_qr_box), LV_OBJ_FLAG_HIDDEN);
+          if (qr) lv_obj_set_hidden(id(boot_qr_box), false);
+          else lv_obj_set_hidden(id(boot_qr_box), true);
 
   # Write the four lines. A line wider than its column scrolls at 12 px/s,
   # about two and a half characters a second, not LVGL's 40 px/s default.
@@ -261,8 +261,8 @@ script:
           put(id(boot_lb), lb);
           put(id(boot_lc), lc);
           put(id(boot_ld), ld);
-          if (busy) lv_obj_clear_flag(id(boot_bar), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_add_flag(id(boot_bar), LV_OBJ_FLAG_HIDDEN);
+          if (busy) lv_obj_set_hidden(id(boot_bar), false);
+          else lv_obj_set_hidden(id(boot_bar), true);
 
   # The timing for states that take turns. Sets boot_qr_frame: 0 for the
   # first 5 s, 1 for the next 8 s, then 2 for 5 s when extra is true, and for
@@ -813,7 +813,7 @@ script:
               auto *w = wifi::global_wifi_component;
               return w != nullptr && w->is_connected() && id(gameday_ctl).app_qr_turns() &&
                      id(gameday_ctl).board_ready() && !id(qc_active) &&
-                     lv_obj_has_flag(id(boot_overlay), LV_OBJ_FLAG_HIDDEN) && id(boot_hold_since_ms) == 0 &&
+                     lv_obj_is_hidden(id(boot_overlay)) && id(boot_hold_since_ms) == 0 &&
                      id(boot_button_press_ms) == 0 && !id(boot_show_address).is_running();
           then:
             - lambda: |-
