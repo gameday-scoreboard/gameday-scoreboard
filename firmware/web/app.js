@@ -497,6 +497,7 @@
             <div class="ctl"><label>Firmware</label><span class="val" id="hFw"></span></div>
           </div>
           <div class="ctl"><label>Signal</label><span class="val" id="rssi"></span></div>
+          <div id="diagCtls"></div>
           <div id="wifiDiag" hidden>
             <p class="weak" id="wifiWeak" role="status" hidden>Weak signal. Move the panel closer to the router, or the router closer to the panel.</p>
             <div class="spark" id="wifiSparkBox" hidden>
@@ -2815,6 +2816,8 @@
     { name: "Clear WizMote Pairing", into: "#remoteActions", label: "Unpair remote", danger: true },
     { name: "Refresh Now", into: "#quickActions", label: "Refresh scores", icon: "refresh" },
     { name: "Check for Updates", into: "#actions", label: "Check for updates" },
+    // INFO at every start; DEBUG while troubleshooting (gameday-common.yaml logger)
+    { name: "Log Level", into: "#diagCtls", label: "Log detail" },
     // restart: "" waits for the panel to come back; otherwise the panel
     // restarts into setup and this says why.
     { name: "Reboot", into: "#resetActions", label: "Reboot", danger: true, restart: "" },

@@ -57,6 +57,7 @@ The panel can play an effect whenever no game of yours is on, Add network lists 
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
 - 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
 - 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
+- 🪵 The panel's log stays at INFO, so it shows what matters; **Log detail** under Diagnostics, or **Log Level** in Home Assistant, turns on DEBUG while troubleshooting, until the next restart
 - 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
 
 ## v2026.11.5

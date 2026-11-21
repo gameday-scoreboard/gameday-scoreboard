@@ -228,6 +228,8 @@ The next sections are folded shut, each with a one-line summary. Tap one to open
 
 **Diagnostics** says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal**, the panel's Wi-Fi signal, it draws the last day of signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one. **ESPN data** is how much the panel has downloaded from ESPN since it started, for anyone on a capped internet plan.
 
+**Log detail** sets how much the panel writes to its log: **INFO** normally, which keeps the log to what matters. When you're chasing a problem, or support asks for a log, set it to **DEBUG** for every ESPN read and network step. It goes back to INFO the next time the panel restarts. Home Assistant has the same setting as **Log Level**.
+
 While a new release waits, **Diagnostics** also shows **Update ready on the ticker**: when the ticker last started saying so. See [Update ready on the ticker](/using/updates/#update-ready-on-the-ticker).
 
 ### Reboot and resets

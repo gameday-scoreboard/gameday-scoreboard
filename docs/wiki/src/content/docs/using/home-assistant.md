@@ -33,6 +33,7 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **Reset Wi-Fi**, **Factory Reset** | The resets. See [The boot button and resets](/using/buttons-and-resets/). |
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
+| **Log Level** | How much the panel writes to its log: INFO normally, DEBUG while troubleshooting. Back to INFO at every restart. See [Diagnostics](/using/device-page/#diagnostics). |
 
 The **Team** entity is gone, along with My team.
 
