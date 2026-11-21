@@ -181,6 +181,7 @@ class SavedNetworks : public Component, public wifi::WiFiScanResultsListener {
   void save_();   // main loop only
   void pending_timeout_();
   void leave_(const std::string &ssid);  // main loop only
+  void end_scan_();  // a scan of scan()'s is over; main loop only
   // The network the panel is on, read from the driver; blank when on none.
   // Safe from the HTTP task.
   std::array<char, wifi::SSID_BUFFER_SIZE> connected_ssid_() const;

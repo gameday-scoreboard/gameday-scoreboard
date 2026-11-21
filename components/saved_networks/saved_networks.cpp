@@ -297,6 +297,10 @@ void SavedNetworks::scan() {
     // component's start_scanning(), which would take the panel off its
     // network. The component stores the results and hands them to
     // on_wifi_scan_results(). Same settings as its own scans.
+    // Once the panel is connected, ESPHome keeps only the saved networks
+    // from a scan unless asked for all of them. Asked for this scan only,
+    // so its own scans go on dropping (and freeing) the rest.
+    w->set_keep_scan_results(true);
 #ifdef USE_ESP32
     wifi_scan_config_t config{};
     config.show_hidden = false;
@@ -317,7 +321,7 @@ void SavedNetworks::scan() {
         this->scanned_.clear();
         this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
       }
-      this->scanning_ = false;
+      this->end_scan_();
     });
   });
 }
@@ -346,9 +350,15 @@ void SavedNetworks::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::Wi
     this->scanned_ms_ = std::max<uint32_t>(millis(), 1);
   }
   if (this->scanning_) {
-    this->scanning_ = false;
     this->cancel_timeout("scan");
+    this->end_scan_();
   }
+}
+
+void SavedNetworks::end_scan_() {
+  if (wifi::global_wifi_component != nullptr)
+    wifi::global_wifi_component->set_keep_scan_results(false);
+  this->scanning_ = false;
 }
 
 bool SavedNetworks::switch_to(const std::string &ssid) {
