@@ -31,7 +31,7 @@
 # changes outside its own step (a hand pick) or the page leaves Effects.
 
 external_components:
-  - source: github://bharvey88/esphome-wled-fx@v0.6.1
+  - source: github://bharvey88/esphome-wled-fx@v0.6.2
     components: [wled_fx]
 
 wled_fx:
