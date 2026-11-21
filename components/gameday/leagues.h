@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Every league the panel can follow and what differs between them. Pure, no
 // ESPHome includes, so the host tests use it too. scripts/build_teams.py,
 // scripts/build_web.py, __init__.py and tests/web/mock_device.py read kLeagues
@@ -7,6 +9,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 namespace espn {
 
@@ -21,9 +24,10 @@ enum class League : uint8_t {
   MLS = 6,
   EPL = 7,
   MCBB = 8,
-  PGA = 9,
-  LPGA = 10,
-  EUR = 11
+  WCBB = 9,
+  PGA = 10,
+  LPGA = 11,
+  EUR = 12
 };
 
 enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4, GOLF = 5 };
@@ -70,6 +74,10 @@ constexpr LeagueInfo kLeagues[] = {
     // A college season schedule is ~570 KB. Its teams are left out of Home
     // Assistant's team select (__init__.py).
     {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
+    // Women's college basketball: the same Division I list shape as the
+    // men's (build_teams.py reads it the same way), and a season schedule
+    // runs to a few hundred KB, so no Up next list either.
+    {League::WCBB, "wcbb", "basketball/womens-college-basketball", "NCAAW", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
     {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
     // Golf has no teams: a favorite in one of these leagues is a golfer, by
@@ -100,6 +108,22 @@ inline const LeagueInfo *league_info(League league) {
     if (l.league == league)
       return &l;
   return nullptr;
+}
+
+// The league's name in "All NFL live games", as the device page says it: its
+// short name, or the long one where the short one is an abbreviation owners
+// don't use (app.js liveName).
+inline std::string league_live_name(League league) {
+  if (league == League::NCAA)
+    return "college football";
+  if (league == League::MCBB)
+    return "men's college basketball";
+  if (league == League::WCBB)
+    return "women's college basketball";
+  if (league == League::EPL)
+    return "Premier League";
+  const LeagueInfo *l = league_info(league);
+  return l != nullptr ? l->prefix : "";
 }
 
 inline const LeagueInfo *league_by_key(const char *key) {

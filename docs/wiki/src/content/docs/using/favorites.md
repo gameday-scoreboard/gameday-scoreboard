@@ -17,6 +17,8 @@ The order is the priority. Higher teams win when two games clash (unless you cho
 
 Then tap **Favorite teams** under the board to switch the panel to it. The list is kept when you switch to another mode and back.
 
+A team you add shows on the board within a few seconds, in whatever order you make the changes: add a team and take another out right after, add several in a row, or switch to Favorite teams and then pick the team.
+
 The list also works in Live games. With **Favorites take over** on, Live games shows its usual games until one of your favorites is playing, then stays on that game until it ends. See [Favorites take over](/using/modes/#favorites-take-over).
 
 ## Between games
@@ -54,11 +56,29 @@ The checks behind Jump to the action and Score banner no longer affect the game 
 
 ## Playlists
 
-A playlist is a group of your favorites with a name, like your football teams or your basketball teams. Favorite teams can play one playlist instead of every favorite.
+A playlist is a group of your favorites with a name, like your football teams or your basketball teams. It can hold whole sports too, like all NFL games. Favorite teams can play one playlist instead of every favorite.
 
 - **Playlists** on the device page's Teams tab makes them. **New playlist** adds one; tap the teams to put in it, and type over its name to rename it. A team can be in more than one playlist. Each row moves up or down, or comes out.
 - Up to 16 playlists. A name is up to 16 characters, fewer with accented letters.
 - **Playing**, under the mode cards on the device page's Home tab, picks the playlist. **All favorites** plays every favorite, as before. Picking a playlist switches the panel to Favorite teams.
+
+### Sports in a playlist
+
+Under each playlist's teams, **Sports** lists every league the panel follows: NFL, College football, MLB, MLS, Premier League, NBA, WNBA, Men's college basketball, Women's college basketball and NHL. Tap one to put it in the playlist, and tap it again to take it out. A playlist can hold sports, teams or both, and needs no favorites to hold only sports.
+
+A playlist with a sport in it plays like Live games over its sports:
+
+- The panel shows the live games in those leagues, with your **Live games** settings for switching between them and picking the best game. Your own Live games leagues stay as they are.
+- The playlist's teams take over while their game is on, even a team whose sport isn't in the playlist. A playlist of NFL, the Cowboys and the Mavericks shows NFL games, and the Mavericks game while it's on, but no other NBA game. This works whether **Take over** is on or off, and only the playlist's teams take over.
+- With nothing live, it shows what Live games shows then: the playlist's first team's next game, or recent finals in its sports when it has no teams.
+- **Only this list's games** and **Only today's games** don't apply to live games, so they're hidden for a playlist with a sport in it.
+- The bar on the Home tab says what it plays, like **Playing your Sunday playlist: live NFL games, and its teams while they play**.
+
+Its schedule, color, icon and remote button work as with any playlist, and a settings backup carries its sports. A playlist of teams only plays exactly as before.
+
+:::note[Coming in the next app update]
+The Game Day app, on iPhone and Android, shows a playlist's sports under its teams and lets you change them.
+:::
 
 ### A row for each sport
 
@@ -98,7 +118,11 @@ A favorite you take out of your list leaves every playlist it was in. Adding it 
 
 Buttons 1 to 4 on a paired WizMote jump to your first four favorites. In Favorite teams, the panel shows that favorite's card at once. If its game is locked on, the panel stays on it; otherwise the card stays up for its 10 seconds and the cards carry on from there. A button for an empty slot does nothing. See [WizMote remote](/using/remote/).
 
-Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to a favorite team, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+Buttons 1 to 4 stay on your first four favorites whatever playlists you make, until you set a button yourself under **Remote** on the device page's Device tab: to any team, one league's live games, a playlist, a sport row, all your favorites or nothing. The **Favorites** list on the Teams tab marks the favorite each button lands on, and a playlist shows the buttons set to it. See [The numbered buttons](/using/remote/#the-numbered-buttons).
+
+### Button only
+
+A team you put on a remote button that isn't one of your favorites shows in **Favorites** with **Button only** under its name. It counts toward the 16, so the panel can read its games, but it plays only when you press its button: it isn't in All favorites, your playlists, the sport rows, Favorites take over or Game-day wake. If its place is one of the first four, that button's own favorite counts as empty. Tap the team in the team picker to make it a full favorite. It leaves the list by itself once no button is set to it. See [A team on a button only](/using/remote/#a-team-on-a-button-only).
 
 ## On the device page
 

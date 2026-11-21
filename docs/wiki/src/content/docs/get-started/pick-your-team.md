@@ -34,6 +34,7 @@ Lost the address? Hold the button on the controller for about 1.5 seconds and th
 | NBA | Every team |
 | WNBA | Every team |
 | Men's college basketball (NCAAM) | Every Division I team |
+| Women's college basketball (NCAAW) | Every Division I team |
 | NHL | Every team |
 | MLS | Every team |
 | Premier League (EPL) | Every team |
@@ -49,6 +50,12 @@ The first tab in the team picker, **On now**, lists today's games across the lea
 Your browser reads this list from ESPN, so the tab needs your phone or computer to be online, not only the panel.
 
 Search on **On now** finds a team that isn't playing today. When nothing on today's list matches what you typed, the teams that do match show under a **Teams** heading, with their league, and a tap adds one. Today's games still come first when one matches.
+
+On the device page, each league tab starts with that league's games today, the same way **On now** shows them, with all of its teams under them. **Final** and **Postponed or canceled** start folded; tap the heading to open one. A league with no games today shows just its teams.
+
+:::note[Coming in the next app update]
+The app's league tabs do the same.
+:::
 
 ## Changes take effect right away
 

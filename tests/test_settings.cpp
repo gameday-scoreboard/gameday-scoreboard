@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "fx_names_stub.h"
 #include "settings_doc.h"
 
 using namespace espn;
@@ -104,12 +105,14 @@ void test_export() {
     bool own = k == "schema" || k == "version" || k == "name" || k == "brightness" || k == "scroll";
     SCHECK(own || set_keys.count(k), "the export writes %s, which POST /gameday/set doesn't take", k.c_str());
   }
-  // Every set key but the remote's four slots (favs has them) is exported.
+  // Every set key but the remote's four slots (favs has them) is exported,
+  // and the ones that only do something once (set_key_once), like fxlist.
   for (const char *k : kSetKeys) {
     std::string key = k;
     bool slot = key.size() == 4 && key.compare(0, 3, "fav") == 0;
-    SCHECK(slot || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
+    SCHECK(slot || set_key_once(k) || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
   }
+  SCHECK(out["fxlist"].isNull(), "the export keeps which effect playlist plays");
 
   // An empty slot between two favorites, a live list of its own, and a build
   // without the numbers or a panel layout. With no favorite picked the
@@ -129,7 +132,7 @@ void test_export() {
 
 void test_types() {
   for (const char *k : kSetKeys)
-    SCHECK(setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
+    SCHECK(set_key_once(k) || setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
   SCHECK(setting_type("brightness") == SettingType::NONE, "brightness is not a set key");
 }
 
@@ -140,8 +143,11 @@ void test_round_trip() {
   SCHECK(in.error.empty(), "the settings fixture was refused: %s", in.error.c_str());
   SCHECK(in.skipped.empty(), "the settings fixture left out %zu keys, the first %s", in.skipped.size(),
          in.skipped.empty() ? "" : in.skipped[0].c_str());
-  // Every set key but fav1 to fav4, which favs covers
+  // Every set key but fav1 to fav4, which favs covers, and the ones that
+  // only do something once (set_key_once)
   size_t want = sizeof(kSetKeys) / sizeof(kSetKeys[0]) - 4;
+  for (const char *k : kSetKeys)
+    want -= set_key_once(k) ? 1 : 0;
   SCHECK(in.ops.size() == want, "the fixture gives %zu ops, not %zu", in.ops.size(), want);
   SCHECK(in.brightness == 128 && in.scroll == 5, "brightness %d scroll %d", in.brightness, in.scroll);
   SCHECK(!in.restart, "the same panel count restarts the panel");
@@ -164,7 +170,7 @@ void test_round_trip() {
   size_t j = 0;
   for (const char *key : kSetKeys) {
     std::string k = key;
-    if (k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs")  // fav1 to fav4: favs has them
+    if ((k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs") || set_key_once(key))  // fav1 to fav4: favs has them
       continue;
     JsonVariantConst v = fx[key];
     SCHECK(!v.isNull(), "the fixture has no %s", key);
@@ -189,11 +195,14 @@ void test_round_trip() {
         break;
       }
       case SettingType::PLAYLISTS:
-        text = "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@c:blue,@i:star;College=ncaa:251,ncaa:2294";
+        text = "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@c:blue,@i:star,@lg:nfl;College=ncaa:251,ncaa:2294";
         break;
       case SettingType::CARDS:
         text = "next:1,clock:0,countdown:1,custom:1,message:1,picture:1,gameleaders:1,top25:1,schedule:1,"
                "seasonrecap:1,news:0,weather:1,golf:1";
+        break;
+      case SettingType::FX_PLAYLISTS:
+        text = "Party=Matrix|Party|200|100|30,Plasma Ball|Sunset|128|128|15,@shuffle;Calm=Drift|Ocean|64|128|300";
         break;
       case SettingType::NONE:
         break;
@@ -314,10 +323,13 @@ void test_refused() {
   {
     // An After the game choice from newer firmware is left out, not a refusal;
     // a lead out of range is left out rather than clamped.
-    SettingsImport in = import(R"({"schema":1,"after":"effects","wake":true,"wakelead":300})");
-    SCHECK(in.error.empty() && skipped(in, "after=effects") && skipped(in, "wakelead=300") && in.ops.size() == 1 &&
+    SettingsImport in = import(R"({"schema":1,"after":"fireworks","wake":true,"wakelead":300})");
+    SCHECK(in.error.empty() && skipped(in, "after=fireworks") && skipped(in, "wakelead=300") && in.ops.size() == 1 &&
                in.ops[0].kind == SetKind::WAKE && in.ops[0].on,
-           "after=effects: error '%s', %zu ops", in.error.c_str(), in.ops.size());
+           "after=fireworks: error '%s', %zu ops", in.error.c_str(), in.ops.size());
+    SettingsImport fx = import(R"({"schema":1,"after":"effects"})");
+    const SetOp *fx_after = find(fx, SetKind::AFTER);
+    SCHECK(fx_after != nullptr && fx_after->value == (int) After::EFFECTS, "after=effects restores");
     SettingsImport ok = import(R"({"schema":1,"after":"clock","wakelead":45})");
     const SetOp *after = find(ok, SetKind::AFTER);
     const SetOp *lead = find(ok, SetKind::WAKE_LEAD);
@@ -453,13 +465,46 @@ void test_night_hours() {
          "good hours didn't come back");
 }
 
+// Effect playlists come back as fxlists= text: the defaults filled in, the
+// seconds snapped to a step, the extras, a separator in a name and the name
+// "None" left out and listed, a wrong type refusing the document.
+void test_fx_playlists() {
+  SettingsImport in = import(R"({"schema":1,"fxlists":[
+    {"n":"Party","shuffle":true,"fx":[{"e":"Matrix"},{"e":"Drift","p":"Sunset","s":1,"i":2,"w":50},{"e":"Bad|Name"}]},
+    {"n":" ; "},{"n":"None"},{"n":"B","fx":[]},{"n":"C"},{"n":"D","shuffle":false},{"n":"E"}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  const SetOp *fx = find(in, SetKind::FX_LISTS);
+  SCHECK(fx != nullptr && fx->text == "Party=Matrix||128|128|15,Drift|Sunset|1|2|45,@shuffle;B=;C=;D=",
+         "fxlists came back as %s", fx != nullptr ? fx->text.c_str() : "nothing");
+  std::string skipped;
+  for (const auto &s : in.skipped)
+    skipped += s + " ";
+  SCHECK(skipped == "fxlists=Party:Bad|Name fxlists= fxlists=None fxlists=E ", "skipped: %s", skipped.c_str());
+  std::string nine;
+  for (int i = 0; i < 9; i++)
+    nine += std::string(i ? "," : "") + "{\"e\":\"Matrix\"}";
+  in = import(R"({"schema":1,"fxlists":[{"n":"Nine","fx":[)" + nine + "]}]}");
+  SCHECK(in.skipped.size() == 1 && in.skipped[0] == "fxlists=Nine:Matrix", "the ninth effect isn't left out");
+  refused(R"({"schema":1,"fxlists":{"n":"Party"}})", "effect playlists as an object");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","fx":[{"e":5}]}]})", "an effect as a number");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","fx":[{"e":"Matrix","s":"fast"}]}]})", "speed as text");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","fx":[{"e":"Matrix","i":300}]}]})", "intensity past 255");
+  refused(R"({"schema":1,"fxlists":[{"n":"Party","shuffle":1}]})", "shuffle as a number");
+  // Which one plays isn't a setting (set_key_once): a document naming one
+  // plays nothing and lists it as left out.
+  in = import(R"({"schema":1,"fxlist":2})");
+  SCHECK(in.error.empty() && find(in, SetKind::FX_LIST) == nullptr && in.skipped.size() == 1 &&
+             in.skipped[0] == "fxlist",
+         "fxlist in a backup should be left out");
+}
+
 // Playlists come back by name and team, as lists= text in the order given.
 void test_playlists() {
   SettingsImport in = import(R"({"schema":1,"lists":[{"n":"Pros","t":["nfl:6","mlb:999999"]},{"n":" ; ","t":["nfl:6"]},
     {"n":"Sun=day;s","t":[]}],"list":2})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   const SetOp *lists = find(in, SetKind::LISTS);
-  SCHECK(lists != nullptr && lists->text == "Pros=nfl:6;Sundays=", "lists came back as %s",
+  SCHECK(lists != nullptr && lists->text == "Pros=nfl:6,@lg;Sundays=,@lg", "lists came back as %s",
          lists != nullptr ? lists->text.c_str() : "nothing");
   SCHECK(skipped(in, "lists=Pros:mlb:999999") && skipped(in, "lists="), "an unknown team or a nameless playlist isn't listed");
   SCHECK(find(in, SetKind::LIST) != nullptr && find(in, SetKind::LIST)->value == 2, "list wasn't applied");
@@ -505,10 +550,10 @@ void test_playlists() {
     {"n":"Late","t":[],"days":"60","only":false},{"n":"Plain","t":["nfl:6"]}]})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   lists = find(in, SetKind::LISTS);
-  SCHECK(lists != nullptr && lists->text == "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0;Late=,@d:06;Plain=nfl:6",
+  SCHECK(lists != nullptr && lists->text == "Sundays=nfl:6,@d:0,@t:11:00-23:00,@only,@today:0,@lg;Late=,@d:06,@lg;Plain=nfl:6,@lg",
          "options came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
   in = import(R"({"schema":1,"lists":[{"n":"A","t":[],"days":"1","start":"25:00","end":"23:00"}]})");
-  SCHECK(in.error.empty() && skipped(in, "lists=A:25:00-23:00") && find(in, SetKind::LISTS)->text == "A=,@d:1",
+  SCHECK(in.error.empty() && skipped(in, "lists=A:25:00-23:00") && find(in, SetKind::LISTS)->text == "A=,@d:1,@lg",
          "hours the panel can't read are left out and listed");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"days":1}]})", "days as a number");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"start":"11:00"}]})", "a start with no end");
@@ -519,20 +564,34 @@ void test_playlists() {
     {"n":"B","t":[],"color":"plaid","icon":"heart"},{"n":"C","t":[],"color":"","icon":""}]})");
   SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
   lists = find(in, SetKind::LISTS);
-  SCHECK(lists != nullptr && lists->text == "A=nfl:6,@d:0,@c:blue,@i:star;B=,@i:heart;C=",
+  SCHECK(lists != nullptr && lists->text == "A=nfl:6,@d:0,@c:blue,@i:star,@lg;B=,@i:heart,@lg;C=,@lg",
          "color and icon came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
   SCHECK(skipped(in, "lists=B:color=plaid"), "a color this firmware doesn't have isn't left out and listed");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"color":3}]})", "color as a number");
   refused(R"({"schema":1,"lists":[{"n":"A","t":[],"icon":true}]})", "icon as true");
+  // Its sports (playlists.h list_league_token) as their tokens, in kLeagues order.
+  in = import(R"({"schema":1,"lists":[{"n":"Sunday","t":["nfl:6","nba:6"],"lg":["nba","nfl","xfl"],"color":"blue"},
+    {"n":"Teams","t":["nfl:6"],"lg":[]}]})");
+  SCHECK(in.error.empty(), "refused: %s", in.error.c_str());
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "Sunday=nfl:6,nba:6,@c:blue,@lg:nfl,@lg:nba;Teams=nfl:6",
+         "sports came back as %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  SCHECK(skipped(in, "lists=Sunday:lg=xfl"), "a league this firmware doesn't have isn't left out and listed");
+  in = import(R"({"schema":1,"lists":[{"n":"Sunday","t":["nfl:6"]}]})");
+  lists = find(in, SetKind::LISTS);
+  SCHECK(lists != nullptr && lists->text == "Sunday=nfl:6,@lg",
+         "no lg keeps the playlist's sports: %s", lists != nullptr ? lists->text.c_str() : "nothing");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"lg":"nfl"}]})", "lg as text");
+  refused(R"({"schema":1,"lists":[{"n":"A","t":[],"lg":[2]}]})", "a league as a number");
   // The export writes only what is set, so a backup from firmware without
   // the options reads the same (settings_from_state).
   JsonDocument state, exported;
   deserializeJson(state, R"({"favs":[{"l":"nfl","id":6}],"lists":[{"n":"A","f":[0],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},
-    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false,"color":"","icon":""},{"n":"C","f":[],"days":"5","color":"pink","icon":"crown"}]})");
+    {"n":"B","f":[0],"days":"","start":"00:00","end":"00:00","only":false,"color":"","icon":"","lg":[]},{"n":"C","f":[],"days":"5","color":"pink","icon":"crown","lg":["nfl","nba"]}]})");
   settings_from_state(state.as<JsonObjectConst>(), 0, -1, -1, exported);
   std::string text;
   serializeJson(exported["lists"], text);
-  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"]},{"n":"C","t":[],"days":"5","color":"pink","icon":"crown"}])",
+  SCHECK(text == R"([{"n":"A","t":["nfl:6"],"days":"0","start":"11:00","end":"23:00","only":true,"today":true},{"n":"B","t":["nfl:6"],"lg":[]},{"n":"C","t":[],"days":"5","color":"pink","icon":"crown","lg":["nfl","nba"]}])",
          "the export's options: %s", text.c_str());
 }
 
@@ -547,7 +606,29 @@ void test_remote() {
   SCHECK(in.error.empty() && skipped(in, "remote1=team:xfl:5") && skipped(in, "remote2=sport:curling") &&
              in.ops.size() == 1,
          "an unknown team or sport isn't left out and listed");
+  in = import(R"({"schema":1,"remote1":"clock","remote2":"fx:DNA,Ocean,40,200","remote3":"smartboard","remote4":"fx:Lava Lamp,Fire,1,2"})");
+  SCHECK(in.error.empty() && in.ops.size() == 3 && in.ops[1].text == "fx:DNA,Ocean,40,200" &&
+             skipped(in, "remote4=fx:Lava Lamp,Fire,1,2"),
+         "pages come back, and an effect this panel lacks is left out and listed: %s", in.error.c_str());
+  in = import(R"({"schema":1,"remote1":"fxlist:Party","remote2":"fxlist:"})");
+  SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "fxlist:Party" && skipped(in, "remote2=fxlist:"),
+         "an effect playlist button comes back, one with no name is left out and listed: %s", in.error.c_str());
   refused(R"({"schema":1,"remote1":1})", "a remote button as a number");
+  in = import(R"({"schema":1,"remote1":"league:nhl","keepfav":"nfl:21"})");
+  SCHECK(in.error.empty() && in.ops.size() == 1 && in.ops[0].text == "league:nhl" && skipped(in, "keepfav"),
+         "a league button comes back, and keepfav is no setting to restore");
+
+  // A button-only team (btn) stays out of the backup's favs; its button's
+  // team brings it back as one. The slots around it keep their places.
+  JsonDocument s, out;
+  deserializeJson(s, R"({"favs":[{"l":"nfl","id":6},{"l":"nfl","id":21,"btn":true},{"l":"mlb","id":15},
+    {"l":"nba","id":6,"btn":true}],"remote":[{"v":"team:nfl:21"},{"v":"fav"},{"v":"fav"},{"v":"team:nba:6"}]})");
+  settings_from_state(s.as<JsonObjectConst>(), 0, -1, -1, out);
+  std::string got;
+  serializeJson(out["favs"], got);
+  SCHECK(got == R"(["nfl:6","","mlb:15"])", "button-only teams in the backup's favs: %s", got.c_str());
+  SCHECK(std::string(out["remote1"] | "") == "team:nfl:21" && std::string(out["remote4"] | "") == "team:nba:6",
+         "their buttons stay in the backup");
 }
 
 // The fullest export the panel can write comes back through its own import:
@@ -576,8 +657,27 @@ void test_fullest_fits() {
     l["today"] = true;
     l["color"] = "orange";  // the longest keys
     l["icon"] = "trophy";
+    JsonArray lg = l["lg"].to<JsonArray>();  // every sport
+    for (const auto &info : kLeagues)
+      lg.add(info.key);
   }
   state["list"] = kListMax;
+  // Four effect playlists of eight effects, every name at its cap.
+  JsonArray fxl = state["fxlists"].to<JsonArray>();
+  for (int i = 0; i < kFxListMax; i++) {
+    JsonObject l = fxl.add<JsonObject>();
+    l["n"] = std::string(kListNameMax, '"');
+    l["shuffle"] = true;
+    JsonArray fx = l["fx"].to<JsonArray>();
+    for (int j = 0; j < kFxEntryMax; j++) {
+      JsonObject e = fx.add<JsonObject>();
+      e["e"] = std::string(kFxEffectNameMax, 'W');
+      e["p"] = "* Color Gradient";  // the longest palette name
+      e["s"] = 255;
+      e["i"] = 255;
+      e["w"] = 3600;
+    }
+  }
   state["msg"] = std::string(kMsgTextMax, '"');
   state["msgurl"] = "http://" + std::string(kMsgUrlMax - 7, 'a');
   state["nick"] = std::string(kNickMax, '"');
@@ -630,16 +730,54 @@ void test_reply() {
 
 }  // namespace
 
+// "best": true in a backup from firmware that had Pick the best game on by
+// default is the old default, not a choice, so a restore leaves it out
+// (the panel keeps its own). false, and true from a later version, restore.
+void test_best_default() {
+  auto best = [](const std::string &version_field, bool on) {
+    return import("{\"schema\":1," + version_field + "\"best\":" + (on ? "true" : "false") + "}");
+  };
+  struct Case {
+    const char *version;  // the backup's "version" member, "" for none
+    bool on;
+    int want;  // -1 left out, 0 restored off, 1 restored on
+  } cases[] = {
+      {"\"version\":\"v2026.11.2\",", true, -1},        // the last release with it on
+      {"\"version\":\"v2026.10.1\",", true, -1},        // older
+      {"\"version\":\"v2026.11.2-beta.700\",", true, -1},  // a beta of that release
+      {"", true, -1},                                     // no version
+      {"\"version\":\"dev\",", true, -1},               // unreadable
+      {"\"version\":42,", true, -1},                      // not text
+      {"\"version\":\"v2026.11.2\",", false, 0},        // off restores from any version
+      {"", false, 0},
+      {"\"version\":\"v2026.11.3\",", true, 1},         // the release that starts it off
+      {"\"version\":\"v2026.11.3-beta.900\",", true, 1},  // its beta
+      {"\"version\":\"2026.12.0\",", true, 1},          // later, without the v
+      {"\"version\":\"v2026.11.3\",", false, 0},
+  };
+  for (const auto &c : cases) {
+    SettingsImport in = best(c.version, c.on);
+    SCHECK(in.error.empty(), "best %s %d was refused: %s", c.version, c.on, in.error.c_str());
+    SCHECK(in.skipped.empty(), "best %s %d was listed as left out", c.version, c.on);
+    const SetOp *op = find(in, SetKind::BEST);
+    int got = op == nullptr ? -1 : op->on ? 1 : 0;
+    SCHECK(got == c.want, "best %s %d restored as %d, not %d", c.version, c.on, got, c.want);
+  }
+}
+
 int main() {
+  fx_stub::install();
   test_types();
   test_export();
   test_round_trip();
+  test_best_default();
   test_favs();
   test_refused();
   test_left_out();
   test_other_panel();
   test_night_hours();
   test_playlists();
+  test_fx_playlists();
   test_remote();
   test_fullest_fits();
   test_reply();

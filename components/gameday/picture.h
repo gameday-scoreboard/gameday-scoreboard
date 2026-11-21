@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The picture card: the owner's own PNG or GIF, between games. Up to four
 // pictures are kept in the settings flash; the card shows the next one each
 // turn, a GIF animating. Nothing shows until one is uploaded. The rules,

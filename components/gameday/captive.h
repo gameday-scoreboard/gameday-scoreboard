@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Sign-in (captive portal) Wi-Fi: bar, hotel and dorm networks that let the
 // panel join and then hold everything behind a sign-in page. Every ESPN read
 // is HTTPS, and a portal shows up there only as a failed handshake, the same

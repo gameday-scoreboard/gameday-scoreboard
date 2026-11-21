@@ -50,6 +50,17 @@ When your team wins, a victory splash with fireworks says your abbreviation and 
 
 With **Celebrations** on **Full**, a home run shows the ball arcing up and out over the outfield wall under the stadium lights and bursting in your team's colors as it leaves the park. Other runs sweep a bar of light across the board. The win holds for 10 seconds with the final score under your abbreviation and confetti in your colors. The other side's runs are a dim 2-second flash. **Subtle** keeps every score to the quick flash; **Off** shows no splash at all.
 
+### Big plays
+
+Two plays get their own pixel-art show in your team's colors, drawn for a 128x64 board and for a single 64x64 panel:
+
+- **Grand slam**: a home run with the bases loaded. The batter swings, the ball sails out over the right-center wall, all four runners come around to score while fireworks go off, and "GRAND SLAM!" drops in. 5 seconds, in place of the home run's show.
+- **Walk-off**: your team wins at home on a run in the bottom of the 9th inning or later. The winning run slides home, your team's color floods up from the bottom of the board as the dugout empties onto the field, and "WALK-OFF!" drops in. The victory screen follows. A walk-off grand slam shows the walk-off.
+
+They play only with **Celebrations** on **Full** and **Big plays** on, and only for your team's plays. In the Live games mode the second team's big plays show too when **Opponent scores too** is on. With **Celebrations** on **Subtle** a grand slam still gets the home run's quick flash.
+
+The panel sees a grand slam from ESPN's score for the play or its description; once in a while ESPN's update lands on the next batter instead, and the grand slam shows as four runs. Four runs on a play that isn't a home run, like a bases-loaded triple and an error, get the runs' sweep, not the grand slam.
+
 ## The final
 
 The ticker says "Final", or "Final/10" after extra innings, with each team's hits and errors and the series or the records. In Favorite teams the final stays up for the **After the final** time (see [Favorite teams](/using/favorites/#when-a-game-is-on)). When Live games shows your first favorite with nothing live, the final stays up for ten minutes, shorter than other sports because game two of a doubleheader can start soon after game one. Then the panel looks up the team's next game.

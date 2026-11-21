@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The device page's POST /gameday/set: which keys it takes, what each value
 // means and where it is clamped or refused, and the leagues each live mode
 // scans.
@@ -33,12 +35,17 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "favs",   "today",    "live",   "autoupd", "count",   "match",
                                     "beta",   "countdown", "top25", "cdname", "cddate", "gameleaders", "msg",
                                     "msgurl",
-                                    "msgevery", "brand", "best",   "jump",   "banner",  "leaders", "night",
+                                    "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
-                                    "field",   "winbar",  "spark"};
+                                    "field",   "winbar",  "spark",   "bigplays", "keepfav", "fxlists", "fxlist"};
+
+// Set keys that do something once rather than hold a setting, so the
+// settings backup (settings_doc.h) has nothing of theirs to write or restore:
+// keepfav, and fxlist, which effect playlist plays now (like Showing, not kept).
+inline bool set_key_once(const char *k) { return strcmp(k, "keepfav") == 0 || strcmp(k, "fxlist") == 0; }
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -190,22 +197,82 @@ inline bool live_scan_changed(uint8_t mode, const std::vector<League> &before, c
 // the owner sets it; nothing in the firmware moves it. As text, in set
 // requests, the state document and the settings backup:
 //   fav              the button's own favorite (its default)
-//   team:nfl:6       a favorite team, followed wherever it moves in the list
+//   team:nfl:6       a team, followed wherever it moves in the favorites; one
+//                    that isn't a favorite joins them as a button-only team
 //   list:<name>      one of the owner's playlists, by name
 //   sport:football   a sport row (playlists.h), football to soccer
 //   all              All favorites
+//   live             Live games, with the leagues it has
+//   league:nfl       Live games in that league only, leaving the owner's
+//                    own Live games leagues as they are
 //   none             nothing
-// A button whose team, playlist or sport row is gone does what its default
-// does, and the state says so (playlists.h remote_resolve).
-enum class RemoteKind : uint8_t { FAVORITE = 0, TEAM = 1, LIST = 2, SPORT = 3, ALL = 4, NONE = 5 };
-constexpr size_t kRemoteNameMax = 16;  // a playlist name (playlists.h kListNameMax)
+//   scoreboard       Showing: the Scoreboard
+//   clock            Showing: the Clock
+//   smartboard       Showing: the Smart board
+//   fx:Rain,Party,128,200
+//                    Showing: Effects, with this effect, palette, speed and
+//                    intensity. Only the effect is needed: the palette
+//                    defaults to Default, speed and intensity to 128.
+//   fxlist:<name>    Showing: Effects, playing one of the effect playlists
+//                    (fx_playlists.h) by name from its start
+// The pages (scoreboard to fxlist:) pick what Showing shows; the rest pick
+// what the panel follows. A button whose team, playlist, sport row, effect
+// or effect playlist is gone does what its default does, and the state says
+// so (playlists.h remote_resolve).
+enum class RemoteKind : uint8_t {
+  FAVORITE = 0,
+  TEAM = 1,
+  LIST = 2,
+  SPORT = 3,
+  ALL = 4,
+  NONE = 5,
+  LIVE = 6,
+  SCOREBOARD = 7,
+  CLOCK = 8,
+  SMART = 9,
+  EFFECTS = 10,
+  LEAGUE = 11,
+  FXLIST = 12,
+};
+// The highest kind this firmware knows; a saved button past it (flash from a
+// newer build) goes back to its own favorite at boot.
+constexpr uint8_t kRemoteKindLast = (uint8_t) RemoteKind::FXLIST;
+constexpr size_t kRemoteNameMax = 16;  // a playlist's or effect playlist's name (playlists.h kListNameMax)
+// EFFECTS keeps its setup in the fields the other kinds use, so a saved
+// button stays the same size: name is the effect (the panel's spelling; the
+// longest it offers is 16 letters), league the palette (a WLED palette id),
+// sport the speed and id the intensity.
 struct RemoteTarget {
   uint8_t kind{0};  // RemoteKind
-  uint8_t league{0};
+  uint8_t league{0};             // TEAM, LEAGUE
   uint32_t id{0};                // TEAM
   uint8_t sport{0};              // SPORT, a Sport
-  char name[kRemoteNameMax]{};   // LIST, no terminator when full
+  char name[kRemoteNameMax]{};   // LIST, FXLIST, no terminator when full
 } __attribute__((packed));
+
+constexpr uint8_t kRemoteFxDefault = 128;  // speed and intensity left out of fx:
+
+// A button that changes Showing, rather than what the panel follows.
+inline bool remote_is_page(uint8_t kind) {
+  return (kind >= (uint8_t) RemoteKind::SCOREBOARD && kind <= (uint8_t) RemoteKind::EFFECTS) ||
+         kind == (uint8_t) RemoteKind::FXLIST;
+}
+
+// The effects and palettes this build has, which only the effects package
+// knows (pages/effects.yaml sets these at boot; the host tests set their
+// own). While they are unset an fx: button is refused.
+struct FxNames {
+  // The effect as the panel spells it, "" for one it can't run
+  std::string (*effect)(const std::string &name){nullptr};
+  // A palette's id by name (any case), -1 for none
+  int (*palette_id)(const std::string &name){nullptr};
+  // A palette id's name, "" past the last
+  std::string (*palette_name)(uint8_t id){nullptr};
+};
+inline FxNames &fx_names() {
+  static FxNames n;
+  return n;
+}
 
 inline const char *remote_sport_key(uint8_t sport) {
   return sport < kSportCount ? kSportKeys[sport] : "";
@@ -218,21 +285,80 @@ inline std::string remote_name(const RemoteTarget &t) {
   return std::string(t.name, n);
 }
 
-// The text above into a target; false for anything else. A playlist name
-// is kept as sent, up to kRemoteNameMax bytes; the component cleans it as
-// it cleans a playlist's.
+// "200" into 200; false for anything but 0 to 255 in digits.
+inline bool remote_byte(const std::string &v, uint8_t &out) {
+  if (v.empty() || v.size() > 3)
+    return false;
+  int n = 0;
+  for (char c : v) {
+    if (c < '0' || c > '9')
+      return false;
+    n = n * 10 + (c - '0');
+  }
+  if (n > 255)
+    return false;
+  out = (uint8_t) n;
+  return true;
+}
+
+// "Rain,Party,128,200" (after fx:) into an EFFECTS target. Empty fields
+// take their defaults.
+inline bool remote_fx_parse(const std::string &v, RemoteTarget &t) {
+  const FxNames &fx = fx_names();
+  if (fx.effect == nullptr || fx.palette_id == nullptr)
+    return false;
+  std::vector<std::string> parts;
+  size_t start = 0;
+  while (true) {
+    size_t comma = v.find(',', start);
+    parts.push_back(v.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+    if (comma == std::string::npos)
+      break;
+    start = comma + 1;
+  }
+  if (parts.size() > 4)
+    return false;
+  parts.resize(4);
+  std::string effect = fx.effect(parts[0]);
+  if (effect.empty() || effect.size() > kRemoteNameMax)
+    return false;
+  int palette = parts[1].empty() ? 0 : fx.palette_id(parts[1]);
+  if (palette < 0 || palette > 255)
+    return false;
+  uint8_t speed = kRemoteFxDefault, intensity = kRemoteFxDefault;
+  if (!parts[2].empty() && !remote_byte(parts[2], speed))
+    return false;
+  if (!parts[3].empty() && !remote_byte(parts[3], intensity))
+    return false;
+  t.kind = (uint8_t) RemoteKind::EFFECTS;
+  t.league = (uint8_t) palette;
+  t.sport = speed;
+  t.id = intensity;
+  memcpy(t.name, effect.data(), effect.size());
+  return true;
+}
+
+// The text above into a target; false for anything else. A playlist or
+// effect playlist name is kept as sent, up to kRemoteNameMax bytes; the
+// component cleans it as it cleans a playlist's.
 inline bool remote_parse(const std::string &v, RemoteTarget &t) {
   t = RemoteTarget{};
   if (v == "fav")
     return true;
-  if (v == "all") {
-    t.kind = (uint8_t) RemoteKind::ALL;
-    return true;
-  }
-  if (v == "none") {
-    t.kind = (uint8_t) RemoteKind::NONE;
-    return true;
-  }
+  static const struct {
+    const char *word;
+    RemoteKind kind;
+  } kWords[] = {{"all", RemoteKind::ALL},
+                {"none", RemoteKind::NONE},
+                {"live", RemoteKind::LIVE},
+                {"scoreboard", RemoteKind::SCOREBOARD},
+                {"clock", RemoteKind::CLOCK},
+                {"smartboard", RemoteKind::SMART}};
+  for (const auto &w : kWords)
+    if (v == w.word) {
+      t.kind = (uint8_t) w.kind;
+      return true;
+    }
   if (v.compare(0, 5, "team:") == 0) {
     uint8_t league = 0;
     uint32_t id = 0;  // not t.id itself: a packed field can't be bound by reference
@@ -241,6 +367,14 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     t.kind = (uint8_t) RemoteKind::TEAM;
     t.league = league;
     t.id = id;
+    return true;
+  }
+  if (v.compare(0, 7, "league:") == 0) {
+    const LeagueInfo *l = league_by_key(v.substr(7).c_str());
+    if (l == nullptr)
+      return false;
+    t.kind = (uint8_t) RemoteKind::LEAGUE;
+    t.league = (uint8_t) l->league;
     return true;
   }
   if (v.compare(0, 6, "sport:") == 0) {
@@ -258,7 +392,25 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     memcpy(t.name, name.data(), name.size());
     return true;
   }
+  if (v.compare(0, 7, "fxlist:") == 0 && v.size() > 7) {
+    t.kind = (uint8_t) RemoteKind::FXLIST;
+    std::string name = v.substr(7, kRemoteNameMax);
+    memcpy(t.name, name.data(), name.size());
+    return true;
+  }
+  if (v.compare(0, 3, "fx:") == 0) {
+    if (remote_fx_parse(v.substr(3), t))
+      return true;
+    t = RemoteTarget{};
+  }
   return false;
+}
+
+// An EFFECTS button's palette by name, or by id when this build can't name it.
+inline std::string remote_fx_palette(const RemoteTarget &t) {
+  const FxNames &fx = fx_names();
+  std::string name = fx.palette_name != nullptr ? fx.palette_name(t.league) : std::string();
+  return name.empty() ? std::to_string((unsigned) t.league) : name;
 }
 
 inline std::string remote_text(const RemoteTarget &t) {
@@ -273,6 +425,21 @@ inline std::string remote_text(const RemoteTarget &t) {
       return "all";
     case RemoteKind::NONE:
       return "none";
+    case RemoteKind::LIVE:
+      return "live";
+    case RemoteKind::SCOREBOARD:
+      return "scoreboard";
+    case RemoteKind::CLOCK:
+      return "clock";
+    case RemoteKind::SMART:
+      return "smartboard";
+    case RemoteKind::EFFECTS:
+      return "fx:" + remote_name(t) + "," + remote_fx_palette(t) + "," + std::to_string((unsigned) t.sport) + "," +
+             std::to_string((unsigned) (t.id & 0xFF));
+    case RemoteKind::LEAGUE:
+      return std::string("league:") + league_key((League) t.league);
+    case RemoteKind::FXLIST:
+      return "fxlist:" + remote_name(t);
     default:
       return "fav";
   }
@@ -308,7 +475,6 @@ enum class SetKind : uint8_t {
   MSG,       // text, the message card's own entries (message.h); "" clears it
   MSGURL,    // text, the list's address; "" clears it
   MSGEVERY,  // value, minutes between the card's turns, 0 = holds the board between games
-  BRAND,     // text, the bar build's brand pack address (brand.h); "" clears it
   BEST,      // on, Live games picks the best game (best_game.h)
   JUMP,      // on, Favorites jumps to the action (favorites.h)
   BANNER,    // on, Favorites shows a banner when another favorite scores
@@ -335,9 +501,13 @@ enum class SetKind : uint8_t {
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
   FIELD,        // on, football's field strip on the board (game_viz.h)
-  WINBAR,       // on, the win chance bar on the board
-  SPARK,        // on, the score margin sparkline on the board
+  WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
+  SPARK,        // accepted and ignored: the score margin chart is gone, apps from before still send it
   CELEBRATE,    // value, celebrate.h CelebLevel: 0 off, 1 subtle, 2 full
+  BIGPLAYS,     // on, the big plays' own shows on Full (celeb_<sport>.h)
+  KEEPFAV,      // team: a button-only team (playlists.h) becomes a full favorite
+  FX_LISTS,     // text, every effect playlist (fx_playlists.h parse_fx_lists); "" clears them
+  FX_LIST,      // value, the effect playlist to play from the top, 0 = stop the one playing
 };
 
 struct TeamRef {
@@ -461,6 +631,12 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.team = TeamRef{};
     return v == "none" || v.empty();
   }
+  if (k == "keepfav") {
+    // A team a remote button added (a button-only team), kept as a full
+    // favorite. Any other team does nothing where the favorites are known.
+    op.kind = SetKind::KEEPFAV;
+    return parse_team_ref(v, op.team.league, op.team.id) && known_team(op.team.league, op.team.id);
+  }
   if (k == "msg") {
     op.kind = SetKind::MSG;
     op.text = message_clean(v, kMsgTextMax, true);
@@ -473,12 +649,6 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "msgurl") {
     op.kind = SetKind::MSGURL;
-    op.text = v;
-    return msg_url_ok(v);
-  }
-  if (k == "brand") {
-    // Taken on every build; only the bar build reads the pack.
-    op.kind = SetKind::BRAND;
     op.text = v;
     return msg_url_ok(v);
   }
@@ -523,6 +693,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     long n = strtol(v.c_str(), nullptr, 10);
     op.value = n >= 0 && n <= 16 ? (int) n : -1;
     return !v.empty() && v[0] >= '0' && v[0] <= '9' && op.value >= 0;
+  }
+  if (k == "fxlists") {
+    // Parsed where the panel's effects and palettes are known (fx_playlists.h).
+    op.kind = SetKind::FX_LISTS;
+    op.text = v;
+    return true;
+  }
+  if (k == "fxlist") {
+    // 0 to 4 (fx_playlists.h kFxListMax), a whole number; one past the last
+    // playlist is refused where the playlists are known.
+    op.kind = SetKind::FX_LIST;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 4;
   }
   if (k == "sport") {
     // A sport row (playlists.h) by its kSportKeys word; "none" stops the one
@@ -604,6 +786,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     return on(SetKind::ODDS);
   if (k == "opp")
     return on(SetKind::OPP);
+  if (k == "bigplays")
+    return on(SetKind::BIGPLAYS);
   if (k == "bootaddr")
     return on(SetKind::BOOTADDR);
   if (k == "collide")

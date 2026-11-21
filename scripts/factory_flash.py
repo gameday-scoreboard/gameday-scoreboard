@@ -55,8 +55,8 @@ ESPRESSIF_VID = 0x303A
 LOG_FIELDS = ["time", "name", "mac", "variant", "version", "image", "sha256", "result", "boot_log"]
 LABEL_W_MM = 50
 LABEL_H_MM = 25
-# ESPHome logs this at boot: "Project bharvey88.gameday-scoreboard version 1.5.5"
-BOOT_VERSION_RE = re.compile(r"gameday-scoreboard version (\d+\.\d+\.\d+)")
+# ESPHome logs this at boot: "Project Game Day.Scoreboard version 1.5.5"
+BOOT_VERSION_RE = re.compile(r"Project Game Day\.Scoreboard version (\d+\.\d+\.\d+)")
 # And this as the flag starts QC mode (firmware/pages/qc.yaml)
 BOOT_QC_RE = re.compile(r"QC mode on \(factory flag\)")
 # And this when the QC press clears the flag
@@ -112,10 +112,9 @@ def image_info(data):
     The update manifest URL names the variant, and the boot log line holds the
     project version, both as plain strings in the app.
     """
-    # A bar build's own folder ends in -bar; the Follow beta folders
-    # (<variant>-beta/, beta/<variant>/) never match.
-    variant = re.search(rb"/firmware/([a-z0-9]+(?:-bar)?)/manifest\.json", data)
-    version = re.search(rb"gameday-scoreboard version (\d+\.\d+\.\d+)", data)
+    # The Follow beta folders (<variant>-beta/) never match.
+    variant = re.search(rb"/firmware/([a-z0-9]+)/manifest\.json", data)
+    version = re.search(rb"Project Game Day\.Scoreboard version (\d+\.\d+\.\d+)", data)
     return (variant.group(1).decode() if variant else "", version.group(1).decode() if version else "")
 
 
@@ -466,9 +465,6 @@ def selftest():
     assert factory_from_zip(buf.getvalue(), "moonhub75") == b"image"
     assert version_from("gameday-scoreboard-v1.5.5-scoreboard75.factory.bin") == "1.5.5"
     assert version_from("firmware.factory.bin") == ""
-    bar = b"\0https://install.gameday-scoreboard.com/firmware/beta/moonhub75/manifest.json\0" \
-          b"https://install.gameday-scoreboard.com/firmware/moonhub75-bar/manifest.json\0"
-    assert image_info(bar)[0] == "moonhub75-bar"
     home = b"\0https://install.gameday-scoreboard.com/firmware/waveshare-beta/manifest.json\0" \
            b"https://install.gameday-scoreboard.com/firmware/waveshare/manifest.json\0"
     assert image_info(home)[0] == "waveshare"
@@ -484,7 +480,7 @@ def selftest():
     assert "too small" in check_image(b"\xe9")
 
     built = bytes(good) + (b"https://install.gameday-scoreboard.com/firmware/scoreboard75/manifest.json\x00"
-                           b"Project bharvey88.gameday-scoreboard version 1.5.5\x00")
+                           b"Project Game Day.Scoreboard version 1.5.5\x00")
     assert image_info(built) == ("scoreboard75", "1.5.5")
     assert image_info(bytes(good)) == ("", "")
 
@@ -539,7 +535,7 @@ def selftest():
     fake.SerialException = OSError
     real_serial = sys.modules.get("serial")
     sys.modules["serial"] = fake
-    boot = ["[I][app:100]: Project bharvey88.gameday-scoreboard version 1.5.5\n",
+    boot = ["[I][app:100]: Project Game Day.Scoreboard version 1.5.5\n",
             "[I][qc:066]: QC mode on (factory flag)\n"]
     try:
         FakeSerial.script = boot + ["[I][qc:189]: Button OK\n[I][qc:193]: Factory flag cleared\n"]
@@ -586,7 +582,8 @@ def selftest():
     assert ">gameday-2f6a70<" in svg and "v1.5.5" in svg and 'width="50mm"' in svg
     assert "v" not in label_svg("gameday-2f6a70", "34:85:18:2f:6a:70", "").split("MAC")[1].split("<")[0]
 
-    assert BOOT_VERSION_RE.search("[I][app:100]: Project bharvey88.gameday-scoreboard version 1.5.5").group(1) == "1.5.5"
+    assert BOOT_VERSION_RE.search("[I][app:100]: Project Game Day.Scoreboard version 1.5.5").group(1) == "1.5.5"
+    assert BOOT_VERSION_RE.search("[I][app:100]: Project bharvey88.gameday-scoreboard version 1.5.5") is None
 
     with tempfile.TemporaryDirectory() as d:
         log = Path(d) / "log.csv"
@@ -609,10 +606,9 @@ def main():
     src.add_argument("--release", help="release tag to download the factory image from, e.g. v1.5.5")
     src.add_argument("--image", type=Path, help="local .factory.bin to flash")
     # Ready-made scoreboards ship on the Waveshare ESP32-S3-RGB-Matrix. moonhub75 is the
-    # DIY pinout; scoreboard75 is the early test boards. The -bar ones are the bar
-    # build for panels in bars (firmware-<variant>-bar.zip on the release).
+    # DIY pinout; scoreboard75 is the early test boards.
     ap.add_argument("--variant", default="waveshare",
-                    choices=["waveshare", "moonhub75", "scoreboard75", "moonhub75-bar", "scoreboard75-bar"])
+                    choices=["waveshare", "moonhub75", "scoreboard75"])
     ap.add_argument("--port", help="serial port, for one board only (default: find the Espressif USB device "
                     "for each unit)")
     ap.add_argument("--baud", type=int, default=460800)

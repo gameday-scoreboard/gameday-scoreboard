@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-The Game Day Scoreboard firmware is open source under the MIT license. If you have an ESP32-S3 HUB75 controller and a panel, you can run it for free, with every league and setting a Game Day Scoreboard has.
+The Game Day Scoreboard firmware is open source under GPLv3. If you build on it, keep the author's name on it, mark what you changed and share your source; the [license notice](https://github.com/gameday-scoreboard/gameday-scoreboard/blob/main/NOTICE.md) has the details. If you have an ESP32-S3 HUB75 controller and a panel, you can run it for free, with every league and setting a Game Day Scoreboard has.
 
 These pages are for makers who build their own. If you bought a Game Day Scoreboard, start at [Set up your scoreboard](/get-started/setup/) instead.
 

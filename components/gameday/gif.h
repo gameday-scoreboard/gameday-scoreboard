@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // A GIF player for the picture card (picture.h): draws one frame at a time
 // onto an RGB565 canvas the size of the GIF. Pure, with no ESPHome
 // includes, so the host tests and the fuzzer run it.

@@ -24,6 +24,7 @@
 #include <sstream>
 #include <string>
 
+#include "fx_names_stub.h"
 #include "guard.h"
 #include "health.h"
 #include "set_request.h"
@@ -542,6 +543,7 @@ void test_setters_rebuild_state() {
 }
 
 int main() {
+  fx_stub::install();
   test_state();
   test_setters_rebuild_state();
   test_wifi_route();

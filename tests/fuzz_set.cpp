@@ -8,6 +8,9 @@
 #include <string>
 #include <vector>
 
+#include <cstring>
+
+#include "fx_playlists.h"
 #include "panel_text.h"
 #include "playlists.h"
 #include "set_request.h"
@@ -104,6 +107,31 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       }
       case SetKind::LIST:
         require(op.value >= 0 && op.value <= kListMax, "list is past kListMax", k, v);
+        break;
+      case SetKind::FX_LISTS: {
+        // set_fx_lists_ parses into the fixed-size blob it saves as it is,
+        // and Home Assistant's select points at the terminated names.
+        FxNames names;
+        names.effect = [](const std::string &s) { return s == "Matrix" || s == "Drift" ? s : std::string(); };
+        names.palette_id = [](const std::string &s) { return s == "Party" ? 6 : -1; };
+        names.palette_name = [](uint8_t i) { return std::to_string(i); };
+        FxStore st = parse_fx_lists(op.text, names);
+        require(st.count <= kFxListMax, "more effect playlists than kFxListMax", k, v);
+        for (uint8_t n = 0; n < st.count; n++) {
+          const FxList &l = st.list[n];
+          size_t len = strnlen(l.name, sizeof(l.name));
+          require(len >= 1 && len <= kListNameMax, "an effect playlist name is empty or too long", k, v);
+          require(l.count <= kFxEntryMax, "more effects than kFxEntryMax", k, v);
+          for (uint8_t i = 0; i < l.count; i++)
+            require(l.fx[i].wait < kFxWaitCount && strnlen(l.fx[i].effect, sizeof(l.fx[i].effect)) <= kFxEffectNameMax,
+                    "an effect's wait or name is out of range", k, v);
+          esphome::gameday::panel_text(l.name);
+          fx_lists_text(st, names);
+        }
+        break;
+      }
+      case SetKind::FX_LIST:
+        require(op.value >= 0 && op.value <= kFxListMax, "fxlist is past kFxListMax", k, v);
         break;
       case SetKind::SPORT:
         require(op.value >= 0 && op.value <= kSportCount, "sport is past kSportCount", k, v);

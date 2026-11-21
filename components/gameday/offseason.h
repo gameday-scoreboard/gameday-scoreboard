@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The off-season clock: when the board shows a clock in place of a game, the
 // words under it, and its color. The page draws it on the no-game screen
 // (gameday-live.yaml) and keeps the time itself, once a minute, with no

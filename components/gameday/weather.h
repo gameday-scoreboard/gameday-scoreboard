@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The local weather card: the owner's town, looked up once with Open-Meteo's
 // geocoding API (no key), and its forecast read every half hour from
 // Open-Meteo's forecast API, shown between games as a card of its own: the

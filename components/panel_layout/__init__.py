@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 """panel_layout: picks the HUB75 chain length at boot from a saved preference,
 so one firmware serves a single 64x64 panel and two panels side by side."""
 

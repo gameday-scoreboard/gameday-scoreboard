@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Words from the owner on the panel. Two kinds:
 //   - a banner: POST /gameday/action?do=say&text=...&secs=N, the device page
 //     or Home Assistant puts it over whatever is on screen for N seconds;

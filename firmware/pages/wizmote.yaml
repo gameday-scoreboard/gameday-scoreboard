@@ -3,12 +3,11 @@
 # four numbered buttons pick favorite teams instead of pages.
 #
 # Buttons: ON/OFF = panel power, 1-4 = what the owner set each to (a favorite,
-# a playlist, a sport row, all favorites or nothing; its own favorite until
-# then, set_request.h RemoteTarget), brightness up/down, NIGHT = dim to the
-# night level. In the demo build 1-4 run the demo instead (remote_number in
-# components/gameday/demo.cpp). On the bar build, 4 throws the plate party
-# while the message card shows the brand pack's plate list (remote_number in
-# components/gameday/gameday.cpp).
+# a playlist, a sport row, all favorites, Live games or nothing; or a page
+# under Showing: Scoreboard, Clock, Smart board, or Effects with an effect of
+# its own; its own favorite until then, set_request.h RemoteTarget),
+# brightness up/down, NIGHT = dim to the night level. In the demo build 1-4 run the demo instead (remote_number in
+# components/gameday/demo.cpp).
 #
 # While the night schedule has the panel dim or dark, ON, Brighter, NIGHT and
 # 1-4 turn it off for the rest of the night (night_skip in the gameday
@@ -42,21 +41,21 @@ script:
             - lambda: 'id(gameday_ctl).night_skip("the remote");'
             - if:
                 condition:
-                  switch.is_off: power
+                  lambda: 'return !id(gameday_ctl).display_on();'
                 then:
-                  - switch.turn_on: power
+                  - light.turn_on: gd_display
             - lambda: 'id(gameday_ctl).remote_number(button - 15);'
       - if:
           condition:
             lambda: 'return button == 1;'
           then:
             - lambda: 'id(gameday_ctl).night_skip("the remote");'
-            - switch.turn_on: power
+            - light.turn_on: gd_display
       - if:
           condition:
             lambda: 'return button == 2;'
           then:
-            - switch.turn_off: power
+            - light.turn_off: gd_display
       - if:
           # Brighter on a panel that is off, or dim or dark for the night,
           # means turn it on. The first press brings back the brightness it
@@ -66,16 +65,13 @@ script:
           then:
             - if:
                 condition:
-                  lambda: 'return id(gameday_ctl).night_skip("the remote") || !id(power).state;'
+                  lambda: 'return id(gameday_ctl).night_skip("the remote") || !id(gameday_ctl).display_on();'
                 then:
-                  - switch.turn_on: power
+                  - light.turn_on: gd_display
                 else:
                   - lambda: |-
-                      float current = id(brightness).state;
                       float step = std::max((float) ${WIZMOTE_BRIGHTNESS_MIN_STEP}, 255.0f * ${WIZMOTE_BRIGHTNESS_STEP} / 100.0f);
-                      auto call = id(brightness).make_call();
-                      call.set_value(std::min(255.0f, current + step));
-                      call.perform();
+                      id(gameday_ctl).set_display_level(lroundf(id(gameday_ctl).display_level() + step));
       - if:
           # Dimmer does nothing on a panel that is off, or dim or dark for the
           # night. Otherwise mashing it in the dark walks the saved level down
@@ -85,20 +81,17 @@ script:
           then:
             - if:
                 condition:
-                  lambda: 'return id(power).state && !id(gameday_ctl).night_holding();'
+                  lambda: 'return id(gameday_ctl).display_on() && !id(gameday_ctl).night_holding();'
                 then:
                   - lambda: |-
-                      float current = id(brightness).state;
                       float step = std::max((float) ${WIZMOTE_BRIGHTNESS_MIN_STEP}, 255.0f * ${WIZMOTE_BRIGHTNESS_STEP} / 100.0f);
-                      auto call = id(brightness).make_call();
-                      call.set_value(std::max(1.0f, current - step));
-                      call.perform();
+                      id(gameday_ctl).set_display_level(lroundf(id(gameday_ctl).display_level() - step));
       - if:
           condition:
             lambda: 'return button == 3;'
           then:
-            # NIGHT on a dark panel turns it on at the night level: power
-            # first, then the number, which the switch then lets through. On
+            # NIGHT on a dark panel turns it on at the night level: on
+            # first, then the brightness. On
             # a night the remote or the page skipped, it goes back to the
             # schedule instead; during the schedule's hours it skips the night
             # too, or the night level would never show.
@@ -111,13 +104,55 @@ script:
                   - lambda: 'id(gameday_ctl).night_skip("the remote");'
                   - if:
                       condition:
-                        switch.is_off: power
+                        lambda: 'return !id(gameday_ctl).display_on();'
                       then:
-                        - switch.turn_on: power
-                  - lambda: |-
-                      auto call = id(brightness).make_call();
-                      call.set_value(${WIZMOTE_BRIGHTNESS_NIGHT});
-                      call.perform();
+                        - light.turn_on: gd_display
+                  - lambda: 'id(gameday_ctl).set_display_level(${WIZMOTE_BRIGHTNESS_NIGHT});'
+
+gameday:
+  on_action:
+    # A numbered button asked Showing for a page (remote_number in
+    # components/gameday): its own page button, or the Scoreboard after a
+    # button that follows a team, playlist or Live games. A page already
+    # showing stays; an Effects button puts its effect on first, so the
+    # effect from before never flashes up.
+    - if:
+        condition:
+          lambda: 'return x == "remote_page";'
+        then:
+          - lambda: |-
+              using K = ::espn::RemoteKind;
+              const K want = (K) id(gameday_ctl).remote_page();
+              if (want == K::EFFECTS) {
+                const std::string effect = id(gameday_ctl).remote_fx_effect();
+                if (!id(gd_fx).set_effect_by_name(effect))
+                  ESP_LOGW("wizmote", "Effect %s isn't in this build, so Effects keeps its own", effect.c_str());
+                id(gd_fx).engine().set_palette(id(gameday_ctl).remote_fx_palette());
+                id(gd_fx).engine().set_speed(id(gameday_ctl).remote_fx_speed());
+                id(gd_fx).engine().set_intensity(id(gameday_ctl).remote_fx_intensity());
+                id(gd_fx).notify_state_change();
+              }
+              const char *page = want == K::EFFECTS ? "Effects"
+                                 : want == K::CLOCK ? "Clock"
+                                 : want == K::SMART ? "Smart board"
+                                                    : "Scoreboard";
+              const char *page_id = want == K::EFFECTS ? "gd_fx_page"
+                                    : want == K::CLOCK ? "page_time_date"
+                                    : want == K::SMART ? "gd_sb_page"
+                                                       : "gameday_live";
+              // current_option() is empty, with a null c_str(), before the first page
+              const auto cur = id(page_manager).current_option();
+              if (!cur.empty() && strcmp(cur.c_str(), page) == 0) {
+                // After the game's Smart board is up, and the button picks
+                // it: it stays until somebody picks something else.
+                if (want == K::SMART && !id(gd_sb_pinned)) {
+                  id(gd_sb_pinned) = true;
+                  id(gd_sb_pin_sync).execute();
+                }
+                return;
+              }
+              ESP_LOGI("wizmote", "Showing: %s", page);
+              id(page_manager).show_page(page_id);
 
 espnow:
   id: espnow_component
@@ -200,6 +235,9 @@ text:
           }
           if (!valid)
             ESP_LOGW("wizmote", "Invalid MAC %s (expected aa:bb:cc:dd:ee:ff)", x.c_str());
+          // Into flash at once: a pairing or an unpair followed by a power cut
+          // within ESPHome's 60 s flash timer brought the old remote back.
+          id(gameday_ctl).sync_soon();
       - if:
           condition:
             lambda: 'return id(wizmote_previous_mac) != "" && id(wizmote_previous_mac) != "00:00:00:00:00:00";'

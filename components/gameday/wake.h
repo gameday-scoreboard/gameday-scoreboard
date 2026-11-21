@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Game-day wake and After the game. Wake turns a panel that is off back on a
 // set time before a game of the owner's team or one of their favorites
 // starts. After the game says what the panel does once that game's final has
@@ -21,10 +23,12 @@ constexpr int kWakeLeadMax = 120;
 static const int64_t kWakeLateS = 3 * 3600;
 
 // What the panel does between games. SCOREBOARD is 0 so a saved spare byte
-// keeps today's behavior. Effects joins the list when effects between games
-// ship; the page and the apps list only the ones this firmware has.
-enum class After : uint8_t { SCOREBOARD = 0, OFF = 1, CLOCK = 2 };
-static const uint8_t kAfterCount = 3;
+// keeps today's behavior; the page and the apps list only the ones this
+// firmware has. SMART is the Smart board page (firmware/pages/smart_board.yaml)
+// and EFFECTS the Effects page (firmware/pages/effects.yaml) until the next
+// game is near.
+enum class After : uint8_t { SCOREBOARD = 0, OFF = 1, CLOCK = 2, SMART = 3, EFFECTS = 4 };
+static const uint8_t kAfterCount = 5;
 
 inline const char *after_word(uint8_t a) {
   switch ((After) a) {
@@ -32,6 +36,10 @@ inline const char *after_word(uint8_t a) {
       return "off";
     case After::CLOCK:
       return "clock";
+    case After::SMART:
+      return "smartboard";
+    case After::EFFECTS:
+      return "effects";
     default:
       return "scoreboard";
   }
@@ -88,6 +96,11 @@ struct WakeState {
   uint32_t linger_s{0};  // how long that final stays up
   bool was_live{false};
   bool asleep{false};  // After the game turned the panel off and nothing has turned it on since
+  // A remote button that follows something (a team, a playlist, Live games)
+  // or asks for the Scoreboard ended this stretch between games: the clock
+  // or Smart board stays down until a game of the owner's is live again,
+  // so it comes back after that game's final.
+  bool held{false};
 };
 
 struct WakeInputs {
@@ -112,6 +125,7 @@ inline WakeStep wake_step(const WakePrefs &p, WakeState &s, const WakeInputs &in
   if (in.owner_live) {
     s.was_live = true;
     s.ended_at = 0;
+    s.held = false;
     // A panel After the game put to sleep comes back for a game that went
     // live with no start time to wake for (a TBD start, a restart mid-game).
     if (p.on && s.asleep) {
@@ -142,15 +156,63 @@ inline WakeStep wake_step(const WakePrefs &p, WakeState &s, const WakeInputs &in
   return WakeStep::NONE;
 }
 
-// After the game is Clock and it is between games: no game of the owner's
-// live, no final still up, and the next start not near.
+// Between games: no game of the owner's live, no final still up, and the
+// next start not near.
+inline bool wake_between(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return in.clock_valid && in.has_team && !in.owner_live && !s.was_live && s.ended_at == 0 &&
+         !wake_window(in.kick, in.now, p.lead);
+}
+
+// The clock, Smart board or an effect between games, unless a remote press
+// or a pick ended it.
+inline bool wake_page_between(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return !s.held && wake_between(p, s, in);
+}
+
+// After the game is Clock and it is between games.
 inline bool wake_clock(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
-  return p.after == (uint8_t) After::CLOCK && in.clock_valid && in.has_team && !in.owner_live && !s.was_live &&
-         s.ended_at == 0 && !wake_window(in.kick, in.now, p.lead);
+  return p.after == (uint8_t) After::CLOCK && wake_page_between(p, s, in);
+}
+
+// After the game is Smart board and it is between games.
+inline bool wake_smart(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return p.after == (uint8_t) After::SMART && wake_page_between(p, s, in);
+}
+
+// After the game is Effects and it is between games.
+inline bool wake_effects(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return p.after == (uint8_t) After::EFFECTS && wake_page_between(p, s, in);
 }
 
 // For the state document's wake_now and the log: "asleep" (After the game
-// turned the panel off), "clock" (the clock between games), else "".
-inline const char *wake_word(bool asleep, bool clock) { return asleep ? "asleep" : clock ? "clock" : ""; }
+// turned the panel off), "clock" (the clock between games), "smartboard"
+// (the Smart board between games), "effects" (an effect between games),
+// else "".
+inline const char *wake_word(bool asleep, bool clock, bool smart = false, bool effects = false) {
+  return asleep ? "asleep" : clock ? "clock" : smart ? "smartboard" : effects ? "effects" : "";
+}
+
+// Effects between games: whether the effect should be up now. Each of these
+// takes the screen from it, and the effect comes back when it ends: the
+// panel off, the night schedule's screen-off, Wi-Fi lost or wanting a
+// sign-in, the board's trouble line (no internet, ESPN not answering), the
+// heat or power mark, a banner, and a turn of the message card or of the
+// countdown screen (the owner's own countdown, the weather).
+struct FxBetween {
+  bool between{false};      // wake_effects, and not a Live games board on another game
+  bool board_ready{false};  // the first scoreboard since the start is up
+  bool power_on{false};
+  bool screen_on{false};  // not the night schedule's screen-off
+  bool wifi{false};
+  bool trouble{false};    // a Wi-Fi sign-in, no internet, ESPN misses
+  bool mark{false};       // the heat or power mark
+  bool banner{false};
+  bool card_turn{false};  // the message card or the countdown screen has the board
+};
+
+inline bool fx_between_want(const FxBetween &f) {
+  return f.between && f.board_ready && f.power_on && f.screen_on && f.wifi && !f.trouble && !f.mark && !f.banner &&
+         !f.card_turn;
+}
 
 }  // namespace espn

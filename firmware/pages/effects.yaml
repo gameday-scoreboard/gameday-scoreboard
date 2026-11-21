@@ -10,7 +10,19 @@
 # (gd_fx_start), and the page select's state callback stops it (gd_fx_stop)
 # whenever the selection is anything else, whoever changed it. The page
 # manager has no saved page, so every boot starts on the Scoreboard and an
-# effect never comes back on its own.
+# effect never comes back on its own, except one After the game asks for.
+#
+# After the game set to Effects (components/gameday/wake.h, After::EFFECTS;
+# off out of the box) has the gameday component put this page up over the
+# Scoreboard between games and take it down when the next game is near or
+# one of the owner's goes live (fx_between_tick_). Its effect steps aside for
+# the message card's and the countdown screen's turns and for the yields
+# below; after a turn, a banner, the night's screen-off, Power off, the heat
+# or power mark or a Wi-Fi or internet problem it comes back on its own, and
+# after a one-off (the boot button, an install, QC) at the next card's turn
+# or the next stretch between games. Somebody picking a page under
+# Showing, a team, a mode or the favorites ends it until after the next
+# game's final.
 #
 # What shows while an effect runs: the effect, nothing else. The panel's own
 # pages are LVGL, which is paused, so a score, the countdown, the line score,
@@ -24,9 +36,14 @@
 # (gameday-common.yaml ota), the night schedule's screen-off, and Power off.
 # The brightness, Brightness number and night dimming are the HUB75 driver's,
 # so they apply to an effect too.
+#
+# Effect playlists (components/gameday/fx_playlists.h) step through saved
+# effects on this page: the gameday component writes the four effect
+# controls below for each step, and stops the playlist when one of them
+# changes outside its own step (a hand pick) or the page leaves Effects.
 
 external_components:
-  - source: github://bharvey88/esphome-wled-fx@v0.6.0
+  - source: github://bharvey88/esphome-wled-fx@v0.6.2
     components: [wled_fx]
 
 wled_fx:
@@ -122,6 +139,27 @@ globals:
 
 esphome:
   on_boot:
+    # Before the gameday component sets up: the names of the effects and
+    # palettes this build has, which a remote button set to Effects is saved
+    # and shown by (set_request.h FxNames).
+    - priority: 800.0
+      then:
+        - lambda: |-
+            auto &n = ::espn::fx_names();
+            n.effect = [](const std::string &name) -> std::string {
+              const int i = esphome::wled_fx::EffectRegistry::index_of(name.c_str());
+              if (i < 0 || !id(gd_fx).effect_offered((size_t) i))
+                return "";
+              char buf[64];
+              esphome::wled_fx::effect_name(*esphome::wled_fx::EffectRegistry::at((size_t) i), buf, sizeof(buf));
+              return buf;
+            };
+            n.palette_id = [](const std::string &name) -> int {
+              return esphome::wled_fx::palette_id_by_name(name.c_str());
+            };
+            n.palette_name = [](uint8_t p) -> std::string {
+              return p < esphome::wled_fx::palette_count() ? esphome::wled_fx::PALETTE_NAMES[p] : "";
+            };
     # wled_fx sets up at LATE (-100). Park its loop so an idle panel never
     # renders a frame, then let the page scripts run.
     - priority: -200.0
@@ -137,6 +175,11 @@ esphome:
               if (strcmp(id(page_manager).option_at(index), "Effects") != 0)
                 id(gd_fx_stop).execute();
             });
+            // Effect playlists (components/gameday/fx_playlists.h) step
+            // through these four controls, and stop when one is picked by
+            // hand or Showing leaves Effects.
+            id(gameday_ctl).set_fx_controls(id(gd_fx_effect), id(gd_fx_palette), id(gd_fx_speed),
+                                            id(gd_fx_intensity), id(page_manager));
 
 script:
   # The screen goes back to the scoreboard: something the owner should see,
@@ -152,7 +195,11 @@ script:
           then:
             - lambda: |-
                 ESP_LOGI("effects", "Effects off: %s", reason.c_str());
+                // Not somebody picking a page: an effect After the game put
+                // up comes back once the reason ends (components/gameday).
+                id(gameday_ctl).set_fx_yielding(true);
                 id(page_manager).show_page("gameday_live");
+                id(gameday_ctl).set_fx_yielding(false);
 
   # The Effects page just loaded. A wled_fx that failed setup (no canvas),
   # a heat or power mark, or Wi-Fi that wants a sign-in must not lose the
@@ -178,11 +225,17 @@ script:
             ESP_LOGI("effects", "Effects stays off: %s", refuse);
             // On gameday_ctl, not gd_fx: the scheduler skips a failed
             // component's timers, which left the black page up.
-            App.scheduler.set_timeout(id(gameday_ctl), "gd_fx_back", 0,
-                                      []() { id(page_manager).show_page("gameday_live"); });
+            App.scheduler.set_timeout(id(gameday_ctl), "gd_fx_back", 0, []() {
+              id(gameday_ctl).set_fx_yielding(true);
+              id(page_manager).show_page("gameday_live");
+              id(gameday_ctl).set_fx_yielding(false);
+            });
             return;
           }
-          id(gameday_ctl).night_skip("the Effects page");
+          // After the game put the page up itself, between games: nobody
+          // picked it, so the night schedule carries on.
+          if (!id(gameday_ctl).fx_between_up())
+            id(gameday_ctl).night_skip("the Effects page");
           id(gd_fx_arm) = true;
       - if:
           condition:
@@ -194,8 +247,9 @@ script:
                 id(gd_fx_on) = true;
                 // Whoever asked for an effect wants to see it, as a team pick
                 // lights a dark panel (user_pick in gameday-common.yaml).
-                if (!id(power).state)
-                  id(power).turn_on();
+                // After the game only puts one up on a lit panel.
+                if (!id(gameday_ctl).display_on() && !id(gameday_ctl).fx_between_up())
+                  id(gd_display).turn_on().perform();
                 // ESPHome's 16 ms tick rounds a 23 ms frame up to 32 ms. Ask
                 // for a shorter tick only while an effect runs.
                 id(gd_fx_saved_loop_ms) = App.get_loop_interval();
@@ -223,6 +277,9 @@ script:
             # LVGL marked nothing dirty while paused, so the whole scoreboard
             # must be redrawn over the last effect frame.
             - script.execute: gd_repaint
+            # Stopped by Power off or the night's screen-off: pause again
+            # (pages/guard.yaml)
+            - script.execute: gd_dark_check
 
 # The Effects page: black, nothing on it; wled_fx draws over it.
 lvgl:
@@ -312,6 +369,14 @@ select:
     name: "Effect Palette"
     id: gd_fx_palette
     icon: "mdi:palette"
+  # The owner's effect playlists by name, made on the device page; picking
+  # one plays it on the Effects page, "None" stops it. Beside the team
+  # "Playlist" select, so its name says which kind it is.
+  - platform: gameday
+    gameday_id: gameday_ctl
+    type: fx_playlist
+    name: "Effect playlist"
+    icon: "mdi:playlist-play"
 
 number:
   - platform: wled_fx
@@ -329,40 +394,42 @@ number:
 
 # Diagnostic sensors gated on the effect, so all three read NA while none
 # runs, and during wled_fx's one second warm-up after an effect change,
-# when its averages are still zero.
+# when its averages are still zero. Internal: every 10 s in Home Assistant
+# was up to 1,080 recorder rows an hour while an effect ran, for numbers
+# only a bench reads, from the DEBUG log's "Sending state" lines.
 sensor:
   - platform: template
     name: "Effect FPS"
+    internal: true
     id: gd_fx_fps
     icon: "mdi:film"
     unit_of_measurement: "fps"
     accuracy_decimals: 1
     state_class: measurement
-    entity_category: diagnostic
     update_interval: 10s
     lambda: |-
       if (!id(gd_fx_on) || id(gd_fx).profile().frames == 0) return NAN;
       return id(gd_fx).profile().fps_x10() / 10.0f;
   - platform: template
     name: "Effect Render Time"
+    internal: true
     id: gd_fx_render_time
     icon: "mdi:timer-outline"
     unit_of_measurement: "µs"
     accuracy_decimals: 0
     state_class: measurement
-    entity_category: diagnostic
     update_interval: 10s
     lambda: |-
       if (!id(gd_fx_on) || id(gd_fx).profile().frames == 0) return NAN;
       return id(gd_fx).profile().render_avg_us();
   - platform: template
     name: "Effect Output Time"
+    internal: true
     id: gd_fx_output_time
     icon: "mdi:timer-outline"
     unit_of_measurement: "µs"
     accuracy_decimals: 0
     state_class: measurement
-    entity_category: diagnostic
     update_interval: 10s
     lambda: |-
       if (!id(gd_fx_on) || id(gd_fx).profile().frames == 0) return NAN;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #include "gameday.h"
 
 #include "esphome/components/json/json_util.h"
@@ -11,10 +13,13 @@
 #include "esphome/core/log.h"
 
 #include <cstring>
+#include <new>
+#include <optional>
 #include <type_traits>
 #include <strings.h>
 #include <vector>
 
+#include "gzip_stream.h"
 #include "logo_lru.h"
 #include "panel_text.h"
 #include "timezones.h"
@@ -107,7 +112,11 @@ static_assert(std::is_trivially_copyable<::espn::WakeState>::value, "WakeState i
 // the mark too, or the first boot after it reads the old bytes as the new
 // layout; the size check catches most such changes.
 static_assert(sizeof(::espn::WakeState) == 24, "WakeState changed: change WAKE_MARK and this size");
-static const uint32_t WAKE_MARK = 0x57414B31;
+static const uint32_t WAKE_MARK = 0x57414B32;
+// The layout before WakeState had held, in the same 24 bytes: read as it is,
+// with held off, so the update that adds it keeps a panel After the game
+// turned off still off.
+static const uint32_t WAKE_MARK_V1 = 0x57414B31;
 RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
@@ -185,12 +194,50 @@ static const uint32_t FAV_TICK = 1000;  // playlist / lock decisions re-run this
 // the action and the score banner. One game's read is 8 to 20 KB.
 static const uint32_t FAV_SIDE_INTERVAL = 30 * 1000;
 
+// One ESPN read's gzip state, made before the request goes out. It takes the
+// inflater's 44 KB (gz::Work: a 32 KB window, the decompressor, 1 KB of
+// input) from PSRAM for this read only and frees it when it goes out of
+// scope, so nothing new stays in internal RAM between reads. open_() asks
+// ESPN for gzip only when that allocation worked. A build with
+// GAMEDAY_NO_GZIP defined reads ESPN uncompressed, for bench comparisons.
+class EspnFetch {
+ public:
+  EspnFetch() : start_ms_(millis()) {
+#if defined(USE_PSRAM) && !defined(GAMEDAY_NO_GZIP)
+    this->work_ = static_cast<gz::Work *>(heap_caps_malloc(sizeof(gz::Work), MALLOC_CAP_SPIRAM));
+#endif
+  }
+  ~EspnFetch() { heap_caps_free(this->work_); }
+  EspnFetch(const EspnFetch &) = delete;
+  EspnFetch &operator=(const EspnFetch &) = delete;
+
+  gz::Work *work() const { return this->work_; }
+  uint32_t start_ms() const { return this->start_ms_; }
+
+ private:
+  gz::Work *work_{nullptr};
+  uint32_t start_ms_;
+};
+
 // Feeds ArduinoJson straight from the HTTP socket so a scoreboard document
-// never has to sit in RAM as a whole. Adds what it read to `counter` when done.
+// never has to sit in RAM as a whole, inflating it on the way when the reply
+// is gzip. Adds the bytes it took off the wire to `counter` when done.
 class ContainerReader {
  public:
-  ContainerReader(std::shared_ptr<http_request::HttpContainer> container, std::atomic<uint64_t> &counter)
-      : container_(std::move(container)), counter_(counter) {}
+  // abort: a flag the main loop sets to stop the read (the main loop's
+  // job_moot_), as at the end of the body; nullptr reads to the end.
+  // fetch: the read's EspnFetch, for a gzip reply; nullptr reads the body as
+  // it is.
+  ContainerReader(std::shared_ptr<http_request::HttpContainer> container, std::atomic<uint64_t> &counter,
+                  const std::atomic<bool> *abort = nullptr, const EspnFetch *fetch = nullptr)
+      : container_(std::move(container)),
+        counter_(counter),
+        abort_(abort),
+        start_ms_(fetch != nullptr ? fetch->start_ms() : millis()) {
+    if (fetch != nullptr && fetch->work() != nullptr &&
+        gz::is_gzip_encoding(this->container_->get_response_header("content-encoding").c_str()))
+      this->inflate_.emplace(this->wire_, fetch->work());
+  }
   ~ContainerReader() { this->counter_ += this->total_; }
   ContainerReader(const ContainerReader &) = delete;
   ContainerReader &operator=(const ContainerReader &) = delete;
@@ -214,7 +261,19 @@ class ContainerReader {
     return copied;
   }
 
-  size_t total() const { return this->total_; }
+  size_t total() const { return this->total_; }  // bytes on the wire
+
+  // For the log: bytes on the wire, the JSON bytes when the reply was gzip,
+  // and the time since the request.
+  const char *stats() {
+    unsigned ms = (unsigned) (millis() - this->start_ms_);
+    if (this->inflate_)
+      snprintf(this->stats_, sizeof(this->stats_), "%u bytes gzip, %u JSON, %u ms", (unsigned) this->total_,
+               (unsigned) this->json_total_, ms);
+    else
+      snprintf(this->stats_, sizeof(this->stats_), "%u bytes, %u ms", (unsigned) this->total_, ms);
+    return this->stats_;
+  }
 
   // Stop reading (as at the end of the body) once `ms` have passed since
   // `since`. Each read() is bounded only by the HTTP timeout, so a slow
@@ -224,39 +283,67 @@ class ContainerReader {
     this->limit_ms_ = ms;
   }
   bool timed_out() const { return this->timed_out_; }
+  bool aborted() const { return this->aborted_; }
 
  private:
+  // The socket, for gz::Inflate.
+  struct Wire {
+    ContainerReader *r;
+    int read(uint8_t *buf, size_t max) { return this->r->wire_read_(buf, max); }
+  };
+
+  // Bytes off the socket, stopping at the time limit or the abort flag.
+  int wire_read_(uint8_t *buf, size_t max) {
+    if (this->limit_ms_ != 0 && millis() - this->since_ms_ >= this->limit_ms_) {
+      this->timed_out_ = true;
+      return 0;
+    }
+    if (this->abort_ != nullptr && this->abort_->load()) {
+      this->aborted_ = true;
+      return 0;
+    }
+    int n = this->container_->read(buf, max);
+    if (n > 0)
+      this->total_ += (size_t) n;
+    return n;
+  }
+
+  // A gzip body that is corrupt or cut short reads as ended there, so the
+  // parse fails on it.
   bool fill_() {
     if (this->pos_ < this->len_)
       return true;
     if (this->eof_)
       return false;
-    if (this->limit_ms_ != 0 && millis() - this->since_ms_ >= this->limit_ms_) {
-      this->eof_ = true;
-      this->timed_out_ = true;
-      return false;
-    }
-    int n = this->container_->read(this->buf_, sizeof(this->buf_));
+    int n = this->inflate_ ? this->inflate_->read(this->buf_, sizeof(this->buf_))
+                           : this->wire_read_(this->buf_, sizeof(this->buf_));
     if (n <= 0) {
       this->eof_ = true;
       return false;
     }
     this->pos_ = 0;
     this->len_ = (size_t) n;
-    this->total_ += (size_t) n;
+    this->json_total_ += (size_t) n;
     return true;
   }
 
   std::shared_ptr<http_request::HttpContainer> container_;
   std::atomic<uint64_t> &counter_;
+  const std::atomic<bool> *abort_;
+  Wire wire_{this};
+  std::optional<gz::Inflate<Wire>> inflate_;
   uint8_t buf_[1024];
   size_t pos_{0};
   size_t len_{0};
   size_t total_{0};
+  size_t json_total_{0};
+  uint32_t start_ms_;
+  char stats_[64];
   uint32_t since_ms_{0};
   uint32_t limit_ms_{0};  // 0: no limit
   bool eof_{false};
   bool timed_out_{false};
+  bool aborted_{false};
 };
 
 // ---- GamedaySelect ---------------------------------------------------------
@@ -269,6 +356,8 @@ void GamedaySelect::control(const std::string &value) {
     this->parent_->select_mode(value);
   else if (this->type_ == SelectType::PLAYLIST)
     this->parent_->select_playlist(value);
+  else if (this->type_ == SelectType::FX_PLAYLIST)
+    this->parent_->select_fx_playlist(value);
   else
     this->parent_->select_timezone(value);
 }
@@ -415,9 +504,16 @@ void GamedayComponent::setup() {
   this->pref12_ = global_preferences->make_preference<Prefs12>(fnv1_hash("gameday_prefs12_v1"));
   if (!this->pref12_.load(&this->prefs12_))
     this->prefs12_ = Prefs12{};  // no colors or icons
+  this->pref13_ = global_preferences->make_preference<Prefs13>(fnv1_hash("gameday_prefs13_v1"));
+  if (!this->pref13_.load(&this->prefs13_) ||
+      this->prefs13_.names != ::espn::list_names_sum(this->prefs9_.name, this->prefs9_.count))
+    this->prefs13_ = Prefs13{};  // no sports (or sports of playlists since changed): every playlist plays its teams
+  this->load_fx_();
   for (auto &b : this->prefs11_.btn)
-    if (b.kind > (uint8_t) ::espn::RemoteKind::NONE)
+    if (b.kind > ::espn::kRemoteKindLast)
       b = ::espn::RemoteTarget{};
+  if (this->prefs11_.held > 4)
+    this->prefs11_.held = 0;
   this->load_msg_();
   this->load_nick_();
   this->load_hook_();
@@ -433,12 +529,6 @@ void GamedayComponent::setup() {
   this->apply_channel_();
 #endif
   this->settle_update_mark_();
-#ifdef GAMEDAY_BAR
-  this->bar_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_bar_now_v1"));
-  if (!this->bar_pref_.load(&this->now_tried_))
-    this->now_tried_ = 0;
-  this->load_brand_();
-#endif
   this->team_cache_pref_ =
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
   this->load_wake_();
@@ -469,8 +559,10 @@ void GamedayComponent::setup() {
   if (night_skip_rtc.mark == NIGHT_SKIP_MARK)
     this->night_skip_until_ = night_skip_rtc.until;
   this->defer([this]() { this->night_tick_(); });
-  if (wake_rtc.mark == WAKE_MARK) {
+  if (wake_rtc.mark == WAKE_MARK || wake_rtc.mark == WAKE_MARK_V1) {
     memcpy(&this->wake_state_, wake_rtc.state, sizeof(this->wake_state_));
+    if (wake_rtc.mark == WAKE_MARK_V1)
+      this->wake_state_.held = false;
     if (this->wake_state_.asleep)
       ESP_LOGI(TAG, "Game-day wake: off since the last game, as After the game asks");
   }
@@ -498,7 +590,7 @@ void GamedayComponent::put_fav_(uint8_t i, uint8_t league, uint32_t id) {
 }
 
 bool GamedayComponent::no_team_default() const {
-  return ::espn::no_team_default(this->prefs2_.mode, !this->fav_.empty());
+  return ::espn::no_team_default(this->prefs2_.mode, this->fav_any_());
 }
 
 std::string GamedayComponent::favorite_option_(uint8_t slot) const {
@@ -558,11 +650,13 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
 void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<League> &live_before) {
   bool was_fav_mode = this->favorites_mode_();
   const ::espn::Team *fallback_before = this->fallback_team_();
+  this->fx_between_end_("the favorites changed");
   this->rebuild_favorites_(true);
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && (was_fav_mode || this->favorites_mode_())) {
     // The list changed under the mode: drop the board and let the next
     // cycle refresh what is missing and re-pick.
     this->generation_++;
+    this->board_changed_(true);
     ::espn::reset_in_place(this->game_);
     ::espn::reset_in_place(this->prev_);
     this->no_game_confirmed_ = false;  // ESPN has not answered for the new list
@@ -571,9 +665,11 @@ void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<Lea
     this->schedule_next_(0);
     return;
   }
-  // Favorites take over looks for the new list on the next cycle.
+  // Favorites take over looks for the new list now (below), or after the
+  // job in flight (take_scan_now_after_job).
   this->live_fav_ = -1;
   this->take_scan_at_ = 1;
+  this->take_asks_++;
   // Live games on auto reads the favorites' leagues too.
   if (this->live_leagues_changed_(live_before))
     return;
@@ -583,6 +679,12 @@ void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<Lea
     ESP_LOGI(TAG, "Favorite #1 changed: scanning again");
     this->restart_board_();
     return;
+  }
+  if (this->take_over_()) {
+    // A favorite live now takes the board within seconds, not at the next
+    // scheduled read (minutes away while nothing is live).
+    this->board_changed_(false);
+    this->schedule_next_(0);
   }
   if (first_pick)
     this->emit_({});  // redraw the ticker without the setup prompt
@@ -600,6 +702,14 @@ std::vector<::espn::TeamRef> GamedayComponent::fav_refs_all_() const {
 }
 
 void GamedayComponent::remap_lists_(const std::vector<::espn::TeamRef> &before) {
+  std::vector<::espn::TeamRef> after = this->fav_refs_all_();
+  // The button-only marks move with their teams, and go with them.
+  uint16_t solo = ::espn::remap_mask(this->prefs11_.solo, before, after);
+  if (solo != this->prefs11_.solo) {
+    this->prefs11_.solo = solo;
+    this->pref11_.save(&this->prefs11_);
+    this->sync_prefs_();
+  }
   // A sport row whose sport left the favorites, or the only sport left in
   // them, has no row now: Favorite teams plays every favorite.
   bool sport_gone = this->prefs9_.sport != 0 && this->sport_playing_() == 0;
@@ -611,7 +721,6 @@ void GamedayComponent::remap_lists_(const std::vector<::espn::TeamRef> &before) 
   this->publish_playlist_select_();
   if (this->prefs9_.count == 0 && !sport_gone)
     return;
-  std::vector<::espn::TeamRef> after = this->fav_refs_all_();
   for (uint8_t n = 0; n < this->prefs9_.count; n++)
     this->prefs9_.mask[n] = ::espn::remap_mask(this->prefs9_.mask[n], before, after);
   this->pref9_.save(&this->prefs9_);
@@ -621,7 +730,7 @@ void GamedayComponent::remap_lists_(const std::vector<::espn::TeamRef> &before) 
 uint8_t GamedayComponent::sport_rows_() const {
   uint8_t sports = 0;
   for (uint8_t i = 0; i < FAV_MAX; i++)
-    if (this->fav_id_(i) != 0)
+    if (this->fav_counts_(i))
       sports |= ::espn::sport_bit(this->fav_league_(i));
   return ::espn::sport_rows(sports);
 }
@@ -639,6 +748,12 @@ std::string GamedayComponent::list_name_(uint8_t n) const {
 }
 
 bool GamedayComponent::fav_in_list_(size_t i) const {
+  // A button-only team plays only while its button is in use, and then on its own.
+  int held = this->held_fav_();
+  if (held >= 0)
+    return (int) i == held;
+  if (this->fav_solo_((uint8_t) i))
+    return false;
   uint8_t row = this->sport_playing_();
   if (row != 0)
     return i < FAV_MAX && this->fav_id_(i) != 0 && ::espn::sport_row_has(::espn::sport_bit(this->fav_league_(i)), row);
@@ -697,6 +812,10 @@ void GamedayComponent::schedule_tick_() {
 }
 
 void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int keep) {
+  // A sport playlist playing: its sports and its teams, to see below whether
+  // the board follows something else now.
+  const uint16_t sport_was = this->sport_list_();
+  const std::vector<::espn::TeamRef> sport_teams_was = this->sport_list_teams_();
   std::string active_name = this->list_name_(this->prefs9_.active);
   bool was_active = this->prefs9_.active != 0;
   uint16_t active_mask = was_active ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
@@ -728,9 +847,11 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   p.count = (uint8_t) std::min(lists.size(), (size_t) ::espn::kListMax);
   Prefs10 p10 = this->prefs10_;
   Prefs12 p12{};
+  Prefs13 p13{};
   for (uint8_t n = 0; n < ::espn::kListMax; n++) {
     p10.opt[n] = n < p.count ? lists[n].opt : ::espn::ListOpt{};
     p12.mark[n] = n < p.count ? lists[n].mark : 0;
+    p13.leagues[n] = n < p.count ? ::espn::list_leagues_after(lists, n, old_names, this->prefs13_.leagues) : 0;
   }
   for (uint8_t n = 0; n < p.count; n++) {
     strncpy(p.name[n], lists[n].name.c_str(), ::espn::kListNameMax);
@@ -774,10 +895,21 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
   this->pref10_.save(&this->prefs10_);
   this->prefs12_ = p12;
   this->pref12_.save(&this->prefs12_);
+  p13.names = ::espn::list_names_sum(this->prefs9_.name, this->prefs9_.count);
+  this->prefs13_ = p13;
+  this->pref13_.save(&this->prefs13_);
   this->sync_prefs_();
   ESP_LOGI(TAG, "Playlists: %u", (unsigned) p.count);
   this->publish_playlist_select_();
   uint16_t mask = active != 0 ? this->prefs9_.mask[active - 1] : 0;
+  // A sport playlist playing that gained or lost a sport or a team, or a
+  // playlist that became one or stopped being one: it plays again.
+  const uint16_t sport_now = this->sport_list_();
+  if ((sport_was != 0 || sport_now != 0) &&
+      (sport_was != sport_now || this->sport_list_teams_() != sport_teams_was || (active != 0) != was_active)) {
+    this->set_active_list_(active, false);
+    return;
+  }
   // A rename alone plays the same teams, so the board stays as it is.
   if (this->favorites_mode_() && ((active != 0) != was_active || mask != active_mask || p.sport != sport_before))
     this->set_active_list_(active, false);  // other teams play now: pick again
@@ -789,6 +921,8 @@ void GamedayComponent::set_lists_(const std::vector<::espn::ListDef> &lists, int
 // the board, so a press in the dark says what it picked). Favorite teams
 // starts playing it, from its first card.
 void GamedayComponent::play_list_(uint8_t n, uint8_t row, bool announce) {
+  this->clear_held_(false);  // the pick below plays the list from its first card
+  const uint16_t sport_was = this->sport_list_();
   if (n > this->prefs9_.count)
     n = 0;
   if (n != 0)
@@ -809,15 +943,38 @@ void GamedayComponent::play_list_(uint8_t n, uint8_t row, bool announce) {
     this->set_mode_((uint8_t) Mode::FAVORITES);
     return;
   }
+  if (sport_was != 0 || this->sport_list_() != 0) {
+    // To or from a sport playlist: the board scans its sports, or picks
+    // from the favorites again, from nothing, as a mode change does.
+    if (this->sport_list_() != 0)
+      ESP_LOGI(TAG, "Playlist %s: live games over%s, and its teams take over",
+               this->list_name_(n).c_str(), ::espn::list_leagues_text(this->sport_list_()).c_str());
+    this->board_ready_ = false;
+    this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+    this->restart_board_();
+    return;
+  }
   // As a change to the favorites list: drop the board and pick again from
   // the cards the panel already has.
   this->rebuild_favorites_(true);
   this->generation_++;
+  this->board_changed_(true);
   ::espn::reset_in_place(this->game_);
   ::espn::reset_in_place(this->prev_);
   this->emit_({});
   this->end_backoff_wait_();
   this->schedule_next_(0);
+}
+
+// sport=none in a post that also set a mode other than Favorite teams: the
+// row stops and the post's mode stays (sport_stop_keeps_mode).
+void GamedayComponent::stop_sport_row_() {
+  this->prefs9_.active = 0;
+  this->prefs9_.sport = 0;
+  this->pref9_.save(&this->prefs9_);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Playlist: every favorite");
+  this->publish_playlist_select_();
 }
 
 void GamedayComponent::set_sport_row_(uint8_t row, bool announce) {
@@ -886,75 +1043,583 @@ std::vector<std::string> GamedayComponent::list_names_() const {
   return names;
 }
 
+// The effect playlists' names in order, "" for one with no effects, for a
+// remote button set to one (remote_resolve).
+std::vector<std::string> GamedayComponent::fx_list_names_() const {
+  std::vector<std::string> names;
+  const FxState *f = this->fx_state_;
+  if (f == nullptr)
+    return names;
+  for (uint8_t n = 0; n < f->store.count && n < ::espn::kFxListMax; n++)
+    names.push_back(f->store.list[n].count > 0 ? f->store.list[n].name : "");
+  return names;
+}
+
+// ---- Effect playlists (fx_playlists.h) -----------------------------------------
+
+GamedayComponent::FxState &GamedayComponent::fx_() {
+  if (this->fx_state_ == nullptr) {
+    // PSRAM, zeroed by the value-initialization: no playlists yet.
+    this->fx_state_ = new (::espn::psram_alloc(sizeof(FxState))) FxState();
+    this->fx_state_->store.version = ::espn::kFxStoreVersion;
+  }
+  return *this->fx_state_;
+}
+
+void GamedayComponent::load_fx_() {
+  FxState &f = this->fx_();
+  f.pref = global_preferences->make_preference<::espn::FxStore>(fnv1_hash("gameday_fxlists_v1"));
+  ::espn::FxStore &st = f.store;
+  if (!f.pref.load(&st) || st.version != ::espn::kFxStoreVersion || st.count > ::espn::kFxListMax) {
+    memset(&st, 0, sizeof(st));
+    st.version = ::espn::kFxStoreVersion;
+  }
+  for (auto &l : st.list) {
+    l.name[::espn::kListNameMax] = '\0';
+    if (l.count > ::espn::kFxEntryMax)
+      l.count = ::espn::kFxEntryMax;
+    for (auto &e : l.fx) {
+      e.effect[::espn::kFxEffectNameMax] = '\0';
+      if (e.wait >= ::espn::kFxWaitCount)
+        e.wait = ::espn::kFxWaitDefault;
+    }
+  }
+}
+
+void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *palette, number::Number *speed,
+                                       number::Number *intensity, select::Select *page) {
+  FxState &f = this->fx_();
+  f.effect = effect;
+  f.palette = palette;
+  f.speed = speed;
+  f.intensity = intensity;
+  f.page = page;
+  // Any of the four changing while a playlist plays is somebody picking by
+  // hand (the device page, the app, Home Assistant), unless the player is
+  // writing them itself (the guard flag, fx_playlists.h fx_hand_pick).
+  auto hand = [this]() {
+    if (::espn::fx_hand_pick(this->fx_player_)) {
+      ESP_LOGI(TAG, "Effect playlist off: an effect setting was picked by hand");
+      this->fx_changed_();
+    }
+  };
+  effect->add_on_state_callback([hand](size_t) { hand(); });
+  palette->add_on_state_callback([hand](size_t) { hand(); });
+  speed->add_on_state_callback([hand](float) { hand(); });
+  intensity->add_on_state_callback([hand](float) { hand(); });
+  // Showing left Effects, whoever moved it (a hand pick, or the panel taking
+  // the screen back for a banner, the night or Wi-Fi): the playlist ends
+  // with the effect, which never comes back on its own.
+  page->add_on_state_callback([this](size_t i) {
+    const FxState *f = this->fx_state_;
+    if (f != nullptr && f->page != nullptr && strcmp(f->page->option_at(i), "Effects") != 0)
+      this->stop_fx_list_("Showing left Effects");
+    // Effects between games: the panel's own change, a yield (the effect
+    // comes back when its reason ends), or somebody picking a page, which
+    // ends the effect between games until after the next game's final.
+    if (this->fx_own_change_)
+      return;
+    this->fx_ours_ = false;
+    if (this->fx_yielding_ || !this->wake_fx_ || this->wake_state_.held)
+      return;
+    ESP_LOGI(TAG, "After the game: %s picked under Showing, so no effects until the next game's final",
+             f != nullptr && f->page != nullptr ? f->page->option_at(i) : "a page");
+    this->wake_state_.held = true;
+    this->defer([this]() { this->wake_tick_(); });
+  });
+  this->fx_changed_();
+}
+
+// ---- Effects between games (wake.h, After::EFFECTS) -----------------------------
+
+bool GamedayComponent::fx_page_is_(const char *name) const {
+  const FxState *f = this->fx_state_;
+  if (f == nullptr || f->page == nullptr)
+    return false;
+  auto at = f->page->active_index();
+  return at.has_value() && strcmp(f->page->option_at(*at), name) == 0;
+}
+
+// The page manager publishes the new page before this returns, so the page
+// callbacks see fx_own_change_.
+void GamedayComponent::fx_set_page_(const char *name) {
+  this->fx_own_change_ = true;
+  this->fx_().page->make_call().set_option(name).perform();
+  this->fx_own_change_ = false;
+}
+
+// Puts the Effects page up over the Scoreboard when an effect should play
+// between games, and takes it down when not. Only over the Scoreboard: a
+// Clock, Smart board or Effects somebody picked under Showing stays. Only
+// the page the panel put up comes down by itself.
+void GamedayComponent::fx_between_tick_() {
+  const uint32_t now = millis();
+  if (now - this->fx_between_ms_ < 250)
+    return;
+  this->fx_between_ms_ = now;
+  const FxState *f = this->fx_state_;
+  if (f == nullptr || f->page == nullptr || !this->clock_set_())
+    return;  // before pages/effects.yaml set up, or no clock to say what is between games
+  ::espn::FxBetween in;
+  in.between = this->wake_fx_;
+  in.board_ready = this->board_ready_;
+  in.power_on = this->power_on_ && this->display_on();
+  in.screen_on = this->guard_brightness(255) != 0;
+  in.wifi = network::is_connected();
+  in.trouble = ::espn::msg_trouble(this->misses_, this->captive_,
+                                   ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
+  in.mark = this->guard_mark() != 0;
+  in.banner = this->say_up_(now);
+  in.card_turn = this->msg_shown_ ||
+                 this->countdown_card_((int64_t) this->time_->timestamp_now()) != ::espn::CountdownCard::NONE;
+  const bool want = ::espn::fx_between_want(in);
+  if (want == this->fx_want_)
+    return;
+  this->fx_want_ = want;
+  if (want) {
+    if (!this->fx_page_is_("Scoreboard"))
+      return;
+    ESP_LOGI(TAG, "After the game: an effect between games");
+    this->fx_ours_ = true;
+    this->fx_set_page_("Effects");
+    // The page's own checks (pages/effects.yaml gd_fx_start) can still
+    // send it back, which clears fx_ours_ through the page callback.
+    return;
+  }
+  if (this->fx_ours_ && this->fx_page_is_("Effects")) {
+    const char *why = !in.between       ? "the next game is near or one is live"
+                      : in.card_turn    ? "a card's turn"
+                      : in.banner       ? "a banner"
+                      : !in.screen_on   ? "the night schedule's screen-off"
+                      : !in.power_on    ? "the panel is off"
+                      : in.mark         ? "the heat or power mark"
+                      : !in.wifi        ? "Wi-Fi lost"
+                      : in.trouble      ? "the board's trouble line"
+                                        : "the board isn't ready";
+    ESP_LOGI(TAG, "After the game: effects off for %s", why);
+    this->fx_set_page_("Scoreboard");
+  }
+  this->fx_ours_ = false;
+}
+
+void GamedayComponent::fx_between_end_(const char *why) {
+  if (!this->wake_fx_ || this->wake_state_.held)
+    return;
+  ESP_LOGI(TAG, "After the game: %s, so no effects until the next game's final", why);
+  this->wake_state_.held = true;
+  if (this->fx_ours_ && this->fx_page_is_("Effects"))
+    this->fx_set_page_("Scoreboard");
+  this->fx_ours_ = false;
+  this->wake_tick_();
+}
+
+void GamedayComponent::set_fx_lists_(const std::string &text) {
+  FxState &f = this->fx_();
+  ::espn::FxList before{};
+  if (this->fx_player_.list >= 1 && this->fx_player_.list <= f.store.count)
+    before = f.store.list[this->fx_player_.list - 1];
+  std::vector<std::string> old_names, new_names;
+  for (uint8_t n = 0; n < f.store.count && n < ::espn::kFxListMax; n++)
+    old_names.push_back(f.store.list[n].name);
+  ::espn::parse_fx_lists(text, ::espn::fx_names(), f.store);
+  f.pref.save(&f.store);
+  for (uint8_t n = 0; n < f.store.count && n < ::espn::kFxListMax; n++)
+    new_names.push_back(f.store.list[n].name);
+  // A WizMote button set to a renamed effect playlist follows it, as one
+  // set to a team playlist does (set_lists_).
+  bool btn_moved = false;
+  for (auto &b : this->prefs11_.btn) {
+    if (b.kind != (uint8_t) ::espn::RemoteKind::FXLIST)
+      continue;
+    std::string to = ::espn::list_renamed(old_names, new_names, ::espn::remote_name(b));
+    if (to.empty())
+      continue;
+    memset(b.name, 0, sizeof(b.name));
+    memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
+    btn_moved = true;
+  }
+  if (btn_moved)
+    this->pref11_.save(&this->prefs11_);
+  this->sync_prefs_();
+  ESP_LOGI(TAG, "Effect playlists: %u", (unsigned) f.store.count);
+  switch (::espn::fx_after_edit(f.store, this->fx_player_, before)) {
+    case ::espn::FxEdit::SHOW:
+      // The effect up now was changed or taken out: the one at its place
+      // goes up, and the playlist carries on from there.
+      this->fx_show_();
+      break;
+    case ::espn::FxEdit::STOP:
+      ESP_LOGI(TAG, "Effect playlist off: it was deleted, renamed or emptied");
+      break;
+    default:
+      break;
+  }
+  this->fx_changed_();
+}
+
+void GamedayComponent::play_fx_list_(uint8_t n) {
+  if (n == 0) {
+    this->stop_fx_list_("stopped");
+    return;
+  }
+  FxState &f = this->fx_();
+  if (!::espn::fx_start(f.store, this->fx_player_, n, random_uint32())) {
+    ESP_LOGW(TAG, "Effect playlist %u has no effects", (unsigned) n);
+    this->fx_changed_();
+    return;
+  }
+  ESP_LOGI(TAG, "Effect playlist on: %s", f.store.list[n - 1].name);
+  this->fx_show_();
+  // Showing goes to Effects for it, as picking Effects there does; the
+  // Effects page's own checks (the heat mark, a Wi-Fi sign-in) can still
+  // send it back, which stops the playlist.
+  if (f.page != nullptr) {
+    auto at = f.page->active_index();
+    if (!at.has_value() || strcmp(f.page->option_at(*at), "Effects") != 0)
+      f.page->make_call().set_option("Effects").perform();
+  }
+  this->fx_changed_();
+}
+
+void GamedayComponent::stop_fx_list_(const char *why) {
+  if (this->fx_player_.list == 0)
+    return;
+  ESP_LOGI(TAG, "Effect playlist off: %s", why);
+  this->fx_player_ = ::espn::FxPlayer{};
+  this->fx_changed_();
+}
+
+// Puts the effect up now on the panel through the Effects page's own
+// entities, so Home Assistant and the device page follow it.
+void GamedayComponent::fx_show_() {
+  FxState &f = this->fx_();
+  ::espn::fx_show(f.store, this->fx_player_, millis(), [&f](const ::espn::FxEntry &e) {
+    if (f.effect != nullptr && f.effect->has_option(e.effect))
+      f.effect->make_call().set_option(e.effect).perform();
+    if (f.palette != nullptr && e.palette < f.palette->size())
+      f.palette->make_call().set_index(e.palette).perform();
+    if (f.speed != nullptr)
+      f.speed->make_call().set_value(e.speed).perform();
+    if (f.intensity != nullptr)
+      f.intensity->make_call().set_value(e.intensity).perform();
+  });
+}
+
+void GamedayComponent::fx_tick_() {
+  if (!::espn::fx_due(this->fx_player_, millis()))
+    return;
+  ::espn::fx_advance(this->fx_().store, this->fx_player_, random_uint32());
+  this->fx_show_();
+}
+
+void GamedayComponent::select_fx_playlist(const std::string &option) {
+  const FxState &f = this->fx_();
+  for (uint8_t n = 1; n <= f.store.count; n++)
+    if (option == f.store.list[n - 1].name) {
+      this->play_fx_list_(n);
+      return;
+    }
+  if (option == ::espn::kFxListStop)
+    this->stop_fx_list_("None picked");
+  else
+    ESP_LOGW(TAG, "Unknown effect playlist '%s'", option.c_str());
+  this->fx_changed_();
+}
+
+// Home Assistant's select ("None", then the playlists by name, pointing at
+// their names in PSRAM) and the state document follow a start, a stop or
+// an edit. Home Assistant reads the options when it connects.
+void GamedayComponent::fx_changed_() {
+  const FxState &f = this->fx_();
+  if (f.select != nullptr) {
+    FixedVector<const char *> options;
+    options.init(f.store.count + 1);
+    options.push_back(::espn::kFxListStop);
+    for (uint8_t n = 0; n < f.store.count; n++)
+      options.push_back(f.store.list[n].name);
+    f.select->traits.set_options(options);
+    uint8_t p = this->fx_player_.list;
+    f.select->publish_state(p >= 1 && p <= f.store.count ? f.store.list[p - 1].name : ::espn::kFxListStop);
+  }
+  this->rebuild_state_(&this->last_fields_);
+}
+
 ::espn::RemoteAction GamedayComponent::remote_action_(uint8_t button) const {
   if (button < 1 || button > 4)
     return ::espn::RemoteAction{};
-  return ::espn::remote_resolve(button, this->prefs11_.btn[button - 1], this->fav_refs_all_(), this->list_names_());
+  const ::espn::RemoteTarget &t = this->prefs11_.btn[button - 1];
+  // The effect playlists' names only for a button set to one.
+  return ::espn::remote_resolve(button, t, this->fav_refs_all_(), this->list_names_(), this->prefs11_.solo,
+                                t.kind == (uint8_t) ::espn::RemoteKind::FXLIST ? this->fx_list_names_()
+                                                                                : std::vector<std::string>{});
+}
+
+int GamedayComponent::held_fav_() const {
+  uint8_t b = this->prefs11_.held;
+  if (b < 1 || b > 4 || this->prefs2_.mode != (uint8_t) Mode::FAVORITES)
+    return -1;
+  const ::espn::RemoteTarget &t = this->prefs11_.btn[b - 1];
+  if (t.kind != (uint8_t) ::espn::RemoteKind::TEAM)
+    return -1;
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    if (this->fav_solo_(i) && this->fav_id_(i) == t.id && this->fav_league_(i) == t.league)
+      return i;
+  return -1;
+}
+
+int GamedayComponent::held_league_() const {
+  uint8_t b = this->prefs11_.held;
+  if (b < 1 || b > 4 || this->prefs2_.mode != (uint8_t) Mode::LIVE)
+    return -1;
+  const ::espn::RemoteTarget &t = this->prefs11_.btn[b - 1];
+  if (t.kind != (uint8_t) ::espn::RemoteKind::LEAGUE || ::espn::league_info((League) t.league) == nullptr)
+    return -1;
+  return t.league;
+}
+
+void GamedayComponent::clear_held_(bool refresh) {
+  if (this->prefs11_.held == 0)
+    return;
+  const bool team = this->held_fav_() >= 0, league = this->held_league_() >= 0;
+  std::vector<League> before = this->live_leagues_();
+  ESP_LOGI(TAG, "Remote button %u: no longer in use", (unsigned) this->prefs11_.held);
+  this->prefs11_.held = 0;
+  this->pref11_.save(&this->prefs11_);
+  this->sync_prefs_();
+  if (!refresh)
+    return;
+  if (league)
+    this->live_leagues_changed_(before);
+  else if (team)
+    this->repick_favorites_();
+}
+
+void GamedayComponent::repick_favorites_() {
+  if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES)
+    return;
+  if (!this->favorites_mode_()) {
+    // Nothing left to play: the panel follows live games, as with no favorites.
+    this->restart_board_();
+    return;
+  }
+  this->rebuild_favorites_(true);
+  this->generation_++;
+  this->board_changed_(true);
+  ::espn::reset_in_place(this->game_);
+  ::espn::reset_in_place(this->prev_);
+  this->emit_({});
+  this->end_backoff_wait_();
+  this->schedule_next_(0);
 }
 
 void GamedayComponent::set_remote_(uint8_t button, const ::espn::RemoteTarget &t) {
   if (button < 1 || button > 4)
     return;
   ::espn::RemoteTarget c = t;
-  if (c.kind == (uint8_t) ::espn::RemoteKind::LIST) {
-    // A playlist's name as the playlists keep it.
+  if (c.kind == (uint8_t) ::espn::RemoteKind::LIST || c.kind == (uint8_t) ::espn::RemoteKind::FXLIST) {
+    // A playlist's or effect playlist's name as the playlists keep it.
     std::string name = ::espn::list_name_clean(::espn::remote_name(c));
     memset(c.name, 0, sizeof(c.name));
     memcpy(c.name, name.data(), name.size());
     if (name.empty())
       c = ::espn::RemoteTarget{};
   }
+  std::vector<::espn::TeamRef> before = this->fav_refs_all_();
+  // A team that isn't a favorite joins them as a button-only team, at the
+  // end of the list; with all 16 taken the button stays as it was.
+  int add = -1;
+  if (c.kind == (uint8_t) ::espn::RemoteKind::TEAM) {
+    bool fav = false;
+    for (const auto &f : before)
+      fav = fav || f == ::espn::TeamRef{c.league, c.id};
+    if (!fav) {
+      add = ::espn::solo_slot(before);
+      if (add < 0) {
+        ESP_LOGW(TAG, "Remote button %u: the favorites are full, so %s can't be added", (unsigned) button,
+                 ::espn::remote_text(c).c_str());
+        this->rebuild_state_(&this->last_fields_);
+        return;
+      }
+    }
+  }
+  if (this->prefs11_.held == button && memcmp(&this->prefs11_.btn[button - 1], &c, sizeof(c)) != 0)
+    this->clear_held_(true);
+  std::vector<League> live_before = this->live_leagues_();
   this->prefs11_.btn[button - 1] = c;
-  this->pref11_.save(&this->prefs11_);
-  this->sync_prefs_();
   ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) button, ::espn::remote_text(c).c_str());
+  bool favs_changed = false;
+  if (add >= 0) {
+    this->put_fav_((uint8_t) add, c.league, c.id);
+    this->prefs11_.solo |= (uint16_t) (1u << add);
+    ESP_LOGI(TAG, "Favorite %d: %s, on a button only", add + 1, this->favorite_option_((uint8_t) (add + 1)).c_str());
+    favs_changed = true;
+  }
+  // A button-only team no button is set to any more leaves the favorites.
+  // The list as it is now, the new team in it: the remap below then keeps
+  // its mark, and drops only a team that leaves.
+  std::vector<::espn::TeamRef> now = this->fav_refs_all_();
+  uint16_t unused = ::espn::solo_unused(this->prefs11_.solo, now, this->prefs11_.btn, 4);
+  for (uint8_t i = 0; i < FAV_MAX && unused != 0; i++) {
+    if (!((unused >> i) & 1u))
+      continue;
+    ESP_LOGI(TAG, "Favorite %u: %s leaves, no button is set to it", (unsigned) (i + 1),
+             this->favorite_option_(i + 1).c_str());
+    this->put_fav_(i, 0, 0);
+    this->prefs11_.solo &= (uint16_t) ~(1u << i);
+    favs_changed = true;
+  }
+  this->pref11_.save(&this->prefs11_);
+  if (favs_changed) {
+    this->pref3_.save(&this->prefs3_);
+    this->pref7_.save(&this->prefs7_);
+    this->remap_lists_(now);
+    this->sync_prefs_();
+    this->favorites_changed_(false, live_before);
+    return;
+  }
+  this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::keep_favorite_(uint8_t league, uint32_t id) {
+  for (uint8_t i = 0; i < FAV_MAX; i++) {
+    if (!this->fav_solo_(i) || this->fav_id_(i) != id || this->fav_league_(i) != league)
+      continue;
+    std::vector<League> live_before = this->live_leagues_();
+    this->prefs11_.solo &= (uint16_t) ~(1u << i);
+    this->pref11_.save(&this->prefs11_);
+    this->sync_prefs_();
+    ESP_LOGI(TAG, "Favorite %u: %s, a favorite now", (unsigned) (i + 1), this->favorite_option_(i + 1).c_str());
+    this->publish_playlist_select_();  // a sport row may come with it
+    this->favorites_changed_(false, live_before);
+    return;
+  }
+  ESP_LOGW(TAG, "keepfav: %s:%u isn't on a button only", ::espn::league_key((League) league), (unsigned) id);
+}
+
+void GamedayComponent::remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx) {
+  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_ || this->wake_fx_) &&
+      !this->wake_state_.held) {
+    ESP_LOGI(TAG, "After the game: the remote asked for the scoreboard, so no %s until the next game's final",
+             this->wake_clock_ ? "clock" : this->wake_smart_ ? "Smart board" : "effects");
+    this->wake_state_.held = true;
+    this->wake_tick_();
+  }
+  this->remote_page_ = (uint8_t) page;
+  this->remote_fx_ = fx;
+  this->fire_action_("remote_page");
 }
 
 #ifndef GAMEDAY_DEMO
 // Each button does what the owner set it to; its own favorite until then,
-// and again while what it was set to is gone.
+// and again while what it was set to is gone. One that follows something
+// also brings Showing back to the Scoreboard, so the press shows.
 void GamedayComponent::remote_number(uint8_t n) {
-#ifdef GAMEDAY_BAR
-  if (n == 4 && this->plates_()) {
-    this->plate_party("the remote");
-    return;
-  }
-#endif
   ::espn::RemoteAction a = this->remote_action_(n);
   if (a.gone)
     ESP_LOGI(TAG, "Remote button %u: %s is gone, so favorite %u", (unsigned) n,
              ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str(), (unsigned) n);
+  // A press that picks what the panel follows lets go of a button in use;
+  // Nothing and a page (it only changes what Showing shows) leave it.
+  if (a.kind != ::espn::RemoteKind::NONE && a.kind != ::espn::RemoteKind::LIVE && !::espn::remote_is_page((uint8_t) a.kind) &&
+      !(a.kind == ::espn::RemoteKind::LEAGUE || (a.kind == ::espn::RemoteKind::TEAM && a.solo)))
+    this->clear_held_(false);
   switch (a.kind) {
     case ::espn::RemoteKind::NONE:
       ESP_LOGI(TAG, "Remote button %u: nothing", (unsigned) n);
       return;
+    case ::espn::RemoteKind::SCOREBOARD:
+    case ::espn::RemoteKind::CLOCK:
+    case ::espn::RemoteKind::SMART:
+    case ::espn::RemoteKind::EFFECTS:
+      ESP_LOGI(TAG, "Remote button %u: Showing %s", (unsigned) n,
+               ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str());
+      this->remote_show_(a.kind, this->prefs11_.btn[n - 1]);
+      return;
+    case ::espn::RemoteKind::FXLIST:
+      // Showing goes to Effects and the playlist plays from its start, as
+      // picking it on the device page does; a hand pick stops it as ever.
+      ESP_LOGI(TAG, "Remote button %u: Showing %s", (unsigned) n,
+               ::espn::remote_text(this->prefs11_.btn[n - 1]).c_str());
+      this->play_fx_list_((uint8_t) a.list);
+      return;
+    case ::espn::RemoteKind::LIVE:
+      // Back to Live games with the leagues it had; already there, it stays put.
+      ESP_LOGI(TAG, "Remote button %u: Live games", (unsigned) n);
+      this->clear_held_(true);
+      if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES)
+        this->set_mode_((uint8_t) Mode::LIVE);
+      this->say("Live games", 3);  // a press in the dark says what it picked, as a playlist's does
+      break;
+    case ::espn::RemoteKind::LEAGUE: {
+      // Live games in that league only, until something else is picked. The
+      // owner's own Live games leagues stay as they are.
+      ESP_LOGI(TAG, "Remote button %u: Live games, %s only", (unsigned) n,
+               ::espn::league_info((League) a.league)->prefix);
+      std::vector<League> before = this->live_leagues_();
+      this->prefs11_.held = n;
+      this->pref11_.save(&this->prefs11_);
+      this->sync_prefs_();
+      if (this->prefs2_.mode != (uint8_t) Mode::LIVE)
+        this->set_mode_((uint8_t) Mode::LIVE);
+      else if (!this->live_leagues_changed_(before))
+        this->rebuild_state_(&this->last_fields_);
+      this->say("All " + ::espn::league_live_name((League) a.league) + " live games", 3);
+      break;
+    }
+    case ::espn::RemoteKind::TEAM:
+      if (a.solo) {
+        // A button-only team plays on its own while its button is in use.
+        ESP_LOGI(TAG, "Remote button %u: %s, on its own", (unsigned) n,
+                 this->favorite_option_((uint8_t) a.fav_slot).c_str());
+        const bool sport_was = this->sport_list_() != 0;
+        this->prefs11_.held = n;
+        this->pref11_.save(&this->prefs11_);
+        this->sync_prefs_();
+        if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES)
+          this->set_mode_((uint8_t) Mode::FAVORITES);
+        else if (sport_was)
+          this->restart_board_();  // from a sport playlist's live games
+        else
+          this->repick_favorites_();
+        break;
+      }
+      if (!this->press_favorite((uint8_t) a.fav_slot))
+        return;
+      break;
     case ::espn::RemoteKind::SPORT:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, ::espn::kSportRowNames[a.sport_row - 1]);
       this->set_sport_row_(a.sport_row, true);
-      return;
+      break;
     case ::espn::RemoteKind::LIST:
     case ::espn::RemoteKind::ALL:
       ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) n, a.list == 0 ? "every favorite" : this->list_name_((uint8_t) a.list).c_str());
       this->set_active_list_((uint8_t) a.list, true);
-      return;
+      break;
     default:
-      this->press_favorite((uint8_t) a.fav_slot);
-      return;
+      if (!this->press_favorite((uint8_t) a.fav_slot))
+        return;
+      break;
   }
+  this->remote_show_(::espn::RemoteKind::SCOREBOARD);
 }
 #endif
 
-void GamedayComponent::press_favorite(uint8_t slot) {
+bool GamedayComponent::press_favorite(uint8_t slot) {
   std::string option = this->favorite_option_(slot);
-  if (option == "None") {
+  // A button-only team is no favorite of its own: its place counts as empty.
+  if (option == "None" || this->fav_solo_(slot - 1)) {
     ESP_LOGI(TAG, "Favorite %u is empty", (unsigned) slot);
-    return;
+    return false;
   }
   ESP_LOGI(TAG, "Remote button %u: %s", (unsigned) slot, option.c_str());
+  this->clear_held_(false);
   // In Live games the button switches to Favorites, on that team.
   if (this->prefs2_.mode != (uint8_t) Mode::FAVORITES)
     this->set_mode_((uint8_t) Mode::FAVORITES);
+  // Over a sport playlist, Favorite teams plays every favorite again, from that team.
+  if (this->sport_list_() != 0)
+    this->set_active_list_(0, false);
   if (this->favorites_mode_()) {
     // Jump to that favorite and pin it: a live game holds, a card seeds the playlist.
     for (size_t i = 0; i < this->fav_.size(); i++) {
@@ -972,9 +1637,10 @@ void GamedayComponent::press_favorite(uint8_t slot) {
       this->emit_({});
       this->end_backoff_wait_();
       this->schedule_next_(0);
-      return;
+      return true;
     }
   }
+  return true;
 }
 
 // Push the stored choices into the selects. Runs at setup and once more
@@ -990,6 +1656,8 @@ void GamedayComponent::publish_selects_() {
 }
 
 void GamedayComponent::select_mode(const std::string &option) {
+  if (option == MODE_FAVORITES || option == MODE_LIVE)
+    this->clear_held_(true);  // a mode picked lets go of a button in use
   if (option == MODE_FAVORITES)
     this->set_mode_((uint8_t) Mode::FAVORITES);
   else if (option == MODE_LIVE)
@@ -1057,16 +1725,28 @@ void GamedayComponent::set_favorites_take_over(bool on) {
   // now takes the board. Off, the game on the board stays until the rotation
   // moves on, as any other game would.
   this->take_scan_at_ = 1;
+  this->take_asks_++;
   if (!on)
     this->live_fav_ = -1;
   this->set_fav7_(FAV7_TAKEOVER, on);
+  if (this->take_over_()) {
+    // The scan runs now: the flag alone waited for the next scheduled read,
+    // three hours out in a quiet evening's "no live games" wait.
+    this->board_changed_(false);
+    this->schedule_next_(0);
+  }
 }
 
 // In fav_ order (every entry has a team), so a rank is an index into fav_.
 std::vector<::espn::FavRef> GamedayComponent::fav_refs_() const {
   std::vector<::espn::FavRef> out;
-  for (const auto &e : this->fav_)
-    out.push_back({(uint8_t) e.team->league, e.team->espn_id});
+  // A sport playlist: only its own teams take over.
+  const bool sport = this->sport_list_() != 0;
+  const uint16_t mask = sport ? this->prefs9_.mask[this->prefs9_.active - 1] : 0;
+  for (const auto &e : this->fav_) {  // a button-only team takes nothing over: no id to match
+    bool takes = !e.solo && (!sport || (e.slot >= 1 && e.slot <= 16 && ((mask >> (e.slot - 1)) & 1u)));
+    out.push_back({(uint8_t) e.team->league, takes ? e.team->espn_id : 0u});
+  }
   return out;
 }
 
@@ -1095,11 +1775,40 @@ void GamedayComponent::set_live_mask_(uint16_t mask) {
 }
 
 std::vector<League> GamedayComponent::live_leagues_() const {
+  int held = this->held_league_();
+  if (held >= 0)
+    return {(League) held};
+  // A sport playlist: its sports, and its teams' leagues for their games.
+  uint16_t sport = this->sport_list_();
+  if (sport != 0)
+    return ::espn::sport_list_scan(sport, this->sport_list_teams_());
+  return this->own_live_leagues_();
+}
+
+std::vector<::espn::TeamRef> GamedayComponent::sport_list_teams_() const {
+  if (this->sport_list_() == 0)
+    return {};
+  return ::espn::sport_list_teams(this->prefs9_.mask[this->prefs9_.active - 1], this->fav_refs_all_(),
+                                  this->prefs11_.solo);
+}
+
+const ::espn::Team *GamedayComponent::live_team_() const {
+  if (this->sport_list_() == 0)
+    return this->fallback_team_();
+  std::vector<::espn::TeamRef> teams = this->sport_list_teams_();
+  for (const auto &e : this->fav_)  // in the favorites' order, as favorite #1 is
+    for (const auto &t : teams)
+      if (!e.solo && (uint8_t) e.team->league == t.league && e.team->espn_id == t.id)
+        return e.team;
+  return nullptr;
+}
+
+std::vector<League> GamedayComponent::own_live_leagues_() const {
   if (this->no_team_default())
     return ::espn::no_team_leagues();
   std::vector<uint8_t> fav_leagues;
   for (uint8_t i = 0; i < FAV_MAX; i++)
-    if (this->fav_id_(i) != 0)
+    if (this->fav_counts_(i))
       fav_leagues.push_back(this->fav_league_(i));
   return ::espn::live_leagues(this->prefs7_.live_mask, fav_leagues);
 }
@@ -1145,6 +1854,7 @@ void GamedayComponent::rebuild_favorites_(bool keep_cards) {
         }
       }
     }
+    e.solo = this->fav_solo_(i);
     this->fav_.push_back(e);
   }
   this->fav_shown_ = -1;
@@ -1164,7 +1874,8 @@ void GamedayComponent::rebuild_favorites_(bool keep_cards) {
   r.countdown_s = ::espn::kCountdownTurnS;
   ::espn::ListOpt opt = this->list_opt_(this->prefs9_.active);
   r.today_only = ::espn::list_today(opt, this->today_only());
-  r.only_list = (opt.flags & ::espn::LISTOPT_ONLY) != 0;
+  // A button-only team in use plays on its own, as Only this list's games.
+  r.only_list = (opt.flags & ::espn::LISTOPT_ONLY) != 0 || this->held_fav_() >= 0;
   if (this->time_ != nullptr) {
     ESPTime t = this->time_->now();
     if (t.is_valid()) {
@@ -1180,7 +1891,7 @@ std::vector<::espn::FavGame> GamedayComponent::fav_games_() const {
   int64_t now = (int64_t) this->time_->timestamp_now();
   for (const auto &e : this->fav_) {
     ::espn::FavGame g;
-    g.valid = e.game.valid;
+    g.valid = e.game.valid && !this->fav_off_(e);
     g.state = e.game.state;
     g.kickoff_epoch = e.game.kickoff_epoch;
     g.time_tbd = e.game.time_tbd;
@@ -1269,7 +1980,8 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
   for (int pass = 0; pass < 2 && refresh < 0; pass++) {
     for (size_t i = 0; i < this->fav_.size(); i++) {
       const FavEntry &e = this->fav_[i];
-      if (this->fav_in_list_(e.slot - 1) != (pass == 0))
+      // A button-only team is read only while its button is in use.
+      if (this->fav_off_(e) || this->fav_in_list_(e.slot - 1) != (pass == 0))
         continue;
       // A team read that worked with a game read that failed leaves a
       // schedule but no game for it. Nothing else reads that game again (side
@@ -1278,8 +1990,7 @@ void GamedayComponent::start_fav_job_(uint32_t now) {
       // six-hour refresh.
       bool missing = !e.sched.valid || e.stale ||
                      (!e.sched.event_id.empty() && e.game.event_id != e.sched.event_id);
-      uint32_t age = now - e.fetched_ms;
-      if ((missing && (e.fetched_ms == 0 || age >= RETRY_INTERVAL)) || (!missing && age >= SCHEDULE_INTERVAL)) {
+      if (::espn::fav_read_due(missing, e.fetched_ms, now, RETRY_INTERVAL, SCHEDULE_INTERVAL)) {
         refresh = (int) i;
         break;
       }
@@ -1356,7 +2067,7 @@ int GamedayComponent::fav_side_due_(uint32_t now, int64_t now_epoch) const {
   uint32_t oldest = 0;
   for (size_t i = 0; i < this->fav_.size(); i++) {
     const FavEntry &e = this->fav_[i];
-    if ((int) i == this->fav_shown_ || !e.game.valid || !e.sched.valid || e.stale)
+    if ((int) i == this->fav_shown_ || !e.game.valid || !e.sched.valid || e.stale || this->fav_off_(e))
       continue;
     // Under way, or due to be: ESPN can say PRE a poll or two past kickoff.
     bool live = e.game.state == GameState::IN ||
@@ -1403,8 +2114,16 @@ void GamedayComponent::fav_no_event_(FavEntry &e, bool shown, int64_t now_epoch)
 void GamedayComponent::apply_fav_job_(uint32_t now) {
   Job &j = this->job_;
   if (j.fav_index < 0 || j.fav_index >= (int) this->fav_.size() || this->fav_[j.fav_index].team != j.team) {
-    this->schedule_next_(0);  // the list changed while the worker ran
-    return;
+    // The list changed while the worker ran: the team's place now, if it
+    // is still a favorite.
+    j.fav_index = -1;
+    for (size_t i = 0; i < this->fav_.size(); i++)
+      if (this->fav_[i].team == j.team)
+        j.fav_index = (int) i;
+    if (j.fav_index < 0) {
+      this->schedule_next_(0);
+      return;
+    }
   }
   FavEntry &e = this->fav_[j.fav_index];
   int64_t tnow = (int64_t) this->time_->timestamp_now();
@@ -1475,6 +2194,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   // one for the comparisons below instead of a 1.2 KB copy on the stack.
   std::swap(e.game, j.game);
   const GameSnapshot &old = j.game;
+  this->goal_holds_.update(e.game);
   // A refresh that came back with the same final backs off instead of
   // retrying every minute: six hours when the look-ahead found no game in the
   // coming days, 15 minutes when a read failed or the league does not look
@@ -1543,7 +2263,7 @@ uint32_t GamedayComponent::orient_id_() const {
   uint8_t m = this->job_.mode;
   if (is_live_mode_(m) && !this->live_fallback_)
     return this->live_away_id_;
-  const ::espn::Team *t = this->fallback_team_();
+  const ::espn::Team *t = is_live_mode_(m) ? this->live_team_() : this->fallback_team_();
   return t ? t->espn_id : 0;
 }
 
@@ -1559,9 +2279,6 @@ void GamedayComponent::dump_config() {
                 this->wake_state_.asleep ? " (off since the last game)" : "");
   ESP_LOGCONFIG(TAG, "  Weather: %s, town %s, place %s", this->weather_on() ? "on" : "off",
                 this->wx_.town[0] ? this->wx_.town : "(none)", this->wx_.place[0] ? this->wx_.place : "(none)");
-#ifdef GAMEDAY_BAR
-  ESP_LOGCONFIG(TAG, "  Bar build: installs bar updates on its own at night");
-#endif
 #ifdef GAMEDAY_BETA_CHANNEL
   ESP_LOGCONFIG(TAG, "  Follow beta: %s", this->follow_beta() ? "on" : "off");
 #endif
@@ -1586,6 +2303,9 @@ void GamedayComponent::loop() {
     this->fire_action_("guard");  // the dim start is over: pages/guard.yaml applies the owner's brightness
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
+  this->fx_tick_();  // the effect playlist's next effect, when one is due
+  this->showing_tick_();  // a picked page stops the reads below (showing.h)
+  this->standby_tick_();  // a dark screen stops them too, but for what could light it
   if (this->logo_held_ && this->logo_hold_done_())
     this->draw_(this->last_fields_);
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
@@ -1609,18 +2329,22 @@ void GamedayComponent::loop() {
       ::espn::boot_log_clock(boot_log, (int64_t) this->time_->now().timestamp - esp_timer_get_time() / 1000000);
     }
   }
+  if (this->walk_off_win_ms_ != 0 && (int32_t) (millis() - this->walk_off_win_ms_) >= 0) {
+    this->walk_off_win_ms_ = 0;
+    this->walk_off_release_ = true;
+    this->emit_({});  // the win screen the walk-off held back
+    this->walk_off_release_ = false;  // even when emit_ returned before using it
+  }
   this->captive_tick_();
   this->wifi_tick_();
   // Before the demo's early return, so the scripted game takes the cards down.
   this->msg_tick_();
-#ifdef GAMEDAY_BAR
-  this->brand_tick_();
-#endif
   this->top25_tick_();
   this->golf_tick_();
   this->news_tick_();
   this->season_tick_();
   this->picture_tick_();
+  this->fx_between_tick_();  // after the cards' ticks, so a card's turn takes the screen at once
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
   if (millis() - this->ha_tick_ms_ >= 15000) {
@@ -1635,7 +2359,7 @@ void GamedayComponent::loop() {
     return;
 #endif
   // The finals rotation turns its cards on its own clock, fetch or no fetch.
-  if (this->recap_on_ && !this->demo_playing_())
+  if (this->recap_on_ && !this->demo_playing_() && !this->standby_ && this->showing_ != ::espn::Showing::PICKED)
     this->recap_tick_();
   this->countdown_tick_();
   if (this->busy_) {
@@ -1665,10 +2389,6 @@ void GamedayComponent::loop() {
         this->gave_up_ms_ = millis() == 0 ? 1 : millis();
         if (this->job_.need_msg)
           this->msg_fail_ms_ = this->gave_up_ms_;
-#ifdef GAMEDAY_BAR
-        if (this->job_.need_brand)
-          this->brand_fail_ms_ = this->gave_up_ms_;
-#endif
         if (this->job_.need_top25)
           this->top25_fail_ms_[this->job_.top25_slot] = this->gave_up_ms_;
         if (this->job_.need_golf)
@@ -1704,26 +2424,40 @@ void GamedayComponent::loop() {
     this->busy_ = false;
     this->busy_since_ms_ = 0;
     this->job_done_ = false;
+    const uint32_t asks = this->job_.take_asks;
     this->apply_job_();
+    this->keep_scan_rest_();
+    if (::espn::take_scan_now_after_job(asks, this->take_asks_, this->take_over_())) {
+      // Take-over or the favorites changed while the job ran: the scan they
+      // asked for, now, whatever the job's own answer scheduled.
+      this->take_scan_at_ = 1;
+      this->schedule_next_(0);
+    }
     return;
   }
+  // After a settings change the board's reads go first (board_first): a
+  // 1 MB season read used to start between the first favorite's read and
+  // the rest, and the new pick waited behind it.
+  const bool board_due = (int32_t) (millis() - this->next_fetch_ms_) >= 0;
+  const bool side_wait = ::espn::board_first(millis(), this->board_first_ms_, board_due);
+  // A page somebody picked under Showing has nothing from ESPN on it: no
+  // reads at all until the Scoreboard is back (showing.h), but the clock
+  // the Clock page needs still comes from ESPN when the time servers fail.
+  // A dark screen reads no cards either, and only the game reads that could
+  // light it again (standby_read_due_()).
+  const bool picked = this->showing_ == ::espn::Showing::PICKED;
+  const bool paused = picked || this->standby_;
+  if (this->board_first_ms_ != 0 && millis() - this->board_first_ms_ >= ::espn::kBoardFirstMs)
+    this->board_first_ms_ = 0;
   // The message card's list, between ESPN reads and outside their timing,
   // but never sooner after a written-off worker than the next ESPN read is.
-  if (this->msg_read_due_ && network::is_connected() &&
+  if (this->msg_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_msg_job_();
     return;
   }
-#ifdef GAMEDAY_BAR
-  // The brand pack, the same way, ahead of the message list it may name.
-  if (this->brand_read_due_ && network::is_connected() &&
-      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
-    this->start_brand_job_();
-    return;
-  }
-#endif
   // The Top 25 card's poll, the same way.
-  if (this->top25_read_due_ && network::is_connected() && this->clock_set_() &&
+  if (this->top25_read_due_ && !paused && !side_wait && network::is_connected() && this->clock_set_() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_top25_job_();
     return;
@@ -1735,13 +2469,13 @@ void GamedayComponent::loop() {
     return;
   }
   // The news card's headlines, the same way.
-  if (this->news_read_due_ && network::is_connected() &&
+  if (this->news_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_news_job_();
     return;
   }
   // A team's season schedule for the schedule and recap cards, the same way.
-  if (this->season_read_due_ && network::is_connected() &&
+  if (this->season_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_season_job_();
     return;
@@ -1750,14 +2484,16 @@ void GamedayComponent::loop() {
   // reads, never alongside one, and not while a game the panel follows is
   // live. They also wait while the next ESPN read is near, so even a read
   // that runs to its timeout is done before ESPN's turn (wx_gap_).
-  if (network::is_connected() && ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
+  // A town typed on the device page is looked up on a picked page too.
+  if ((!paused || this->wx_lookup_due_) && !side_wait && network::is_connected() &&
+      ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     if (this->wx_due_()) {
       this->start_wx_job_();
       return;
     }
     // The next game's kickoff forecast, when ESPN's event has none.
-    uint8_t kick = this->kick_due_();
+    uint8_t kick = paused ? 0 : this->kick_due_();
     if (kick != 0) {
       this->start_kick_job_(kick);
       return;
@@ -1784,6 +2520,10 @@ void GamedayComponent::loop() {
              this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
+  if (picked || (this->standby_ && !this->standby_read_due_()))
+    return;
+  if (this->standby_)
+    this->standby_ms_ = millis();
   this->start_job_();
 }
 
@@ -1931,7 +2671,7 @@ void GamedayComponent::set_flag_(uint8_t f, bool on) {
 }
 
 void GamedayComponent::set_best_game(bool on) {
-  uint8_t next = on ? (this->prefs8_.live & ~LIVE8_RANDOM) : (this->prefs8_.live | LIVE8_RANDOM);
+  uint8_t next = ::espn::best_game_set(this->prefs8_.live, on);
   if (next == this->prefs8_.live)
     return;
   this->prefs8_.live = next;
@@ -2040,8 +2780,7 @@ bool GamedayComponent::card_ok_(::espn::Card c) const {
       return !this->clock_set_() || (int64_t) this->time_->timestamp_now() < this->custom_start_() + ::espn::kDayS;
     }
     case ::espn::Card::MESSAGE:
-      // A brand pack alone gives the card its opening card.
-      return !this->msg_src_().empty() || !this->msg_text_.empty() || this->brand_ok_;
+      return !this->msg_src_().empty() || !this->msg_text_.empty();
     case ::espn::Card::TOP25:
       return this->top25_slots_() != 0;
     case ::espn::Card::GOLF:
@@ -2129,19 +2868,19 @@ void GamedayComponent::leaders_turn_taken() {
 bool GamedayComponent::fetch_leaders_(Job &j) {
   std::string url = ::espn::summary_url((League) j.leaders_league, j.leaders_event);
   ESP_LOGD(TAG, "Fetching game leaders: %s", url.c_str());
-  const uint32_t start = millis();
   const unsigned free_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024;
   const unsigned block_before = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024;
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   ::espn::GameLeaders l;
   bool ok = ::espn::parse_summary(reader, j.leaders_sport, j.leaders_our_id, j.leaders_event, j.leaders_stage, l);
   container->end();
-  ESP_LOGI(TAG, "Game leaders at the %s: %s, %u + %u lines (%u bytes, %u ms, internal heap %u/%u KB before, %u/%u after)",
+  ESP_LOGI(TAG, "Game leaders at the %s: %s, %u + %u lines (%s, internal heap %u/%u KB before, %u/%u after)",
            ::espn::leaders_stage_name(j.leaders_stage), ok ? "read" : "not parsed", (unsigned) l.team.count,
-           (unsigned) l.opp.count, (unsigned) reader.total(), (unsigned) (millis() - start), free_before,
+           (unsigned) l.opp.count, reader.stats(), free_before,
            block_before, (unsigned) (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
            (unsigned) (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
   if (!ok)
@@ -2194,9 +2933,6 @@ void GamedayComponent::end_sync_batch_() {
 }
 
 void GamedayComponent::set_auto_update(bool on) {
-#ifdef GAMEDAY_BAR
-  (void) on;  // the bar build always installs; there is no setting
-#else
   if (on == this->auto_update())
     return;
   this->prefs6_.auto_update = on ? 1 : 0;
@@ -2204,7 +2940,6 @@ void GamedayComponent::set_auto_update(bool on) {
   this->sync_prefs_();
   ESP_LOGI(TAG, "Install updates automatically: %s", on ? "on" : "off");
   this->rebuild_state_(&this->last_fields_);
-#endif
 }
 
 void GamedayComponent::load_power_log_() {
@@ -2289,7 +3024,7 @@ bool GamedayComponent::owner_team_(uint8_t league, uint32_t id) const {
   if (id == 0)
     return false;
   for (uint8_t i = 0; i < FAV_MAX; i++)
-    if (this->fav_id_(i) == id && this->fav_league_(i) == league)
+    if (this->fav_counts_(i) && this->fav_id_(i) == id && this->fav_league_(i) == league)
       return true;
   return false;
 }
@@ -2384,7 +3119,7 @@ void GamedayComponent::save_night_skip_() {
 }
 
 bool GamedayComponent::asleep_at_boot() {
-  if (wake_rtc.mark != WAKE_MARK)
+  if (wake_rtc.mark != WAKE_MARK && wake_rtc.mark != WAKE_MARK_V1)
     return false;
   ::espn::WakeState s;
   memcpy(&s, wake_rtc.state, sizeof(s));
@@ -2443,6 +3178,8 @@ int64_t GamedayComponent::owner_next_kick_(int64_t now) const {
     // start; one only on the schedule counts while its start is ahead, since
     // it may be over already.
     for (const auto &e : this->fav_) {
+      if (e.solo)
+        continue;  // a button-only team never wakes the panel
       if (e.game.valid && e.game.event_id == e.sched.event_id) {
         if (e.game.state == GameState::PRE)
           take(e.game.kickoff_epoch, e.game.time_tbd);
@@ -2479,7 +3216,7 @@ int64_t GamedayComponent::owner_next_kick_(int64_t now) const {
     this->wake_league_ = this->live_mode_() && this->schedule_.valid ? (League) this->schedule_.league : t->league;
     if (this->favorites_mode_())
       for (const auto &e : this->fav_)
-        if (e.game.valid && e.game.state == GameState::IN) {
+        if (!this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN) {
           this->wake_league_ = e.team->league;
           break;
         }
@@ -2521,9 +3258,27 @@ void GamedayComponent::wake_tick_() {
   this->save_wake_state_();
   // A Live games board on another game, anyone's, keeps that game: the
   // clock is only for its own team's card.
-  const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) &&
-                     !(this->live_mode_() && !this->live_fallback_);
-  const bool changed = clock != this->wake_clock_ || was_asleep != this->wake_state_.asleep;
+  const bool live_other = this->live_mode_() && !this->live_fallback_;
+  const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) && !live_other;
+  const bool smart = ::espn::wake_smart(this->wake_, this->wake_state_, in) && !live_other;
+  const bool fx = ::espn::wake_effects(this->wake_, this->wake_state_, in) && !live_other;
+  const bool changed = clock != this->wake_clock_ || smart != this->wake_smart_ || fx != this->wake_fx_ ||
+                       was_asleep != this->wake_state_.asleep;
+  if (fx != this->wake_fx_) {
+    // fx_between_tick_ puts the page up or takes it down on its next check.
+    ESP_LOGI(TAG, fx ? "After the game: effects until the next game is near"
+                     : "After the game: back to the scoreboard");
+    this->wake_fx_ = fx;
+    // The next game's countdown waits while the effect has the screen.
+    if (this->board_ready_)
+      this->emit_({});
+  }
+  if (smart != this->wake_smart_) {
+    ESP_LOGI(TAG, smart ? "After the game: the Smart board until the next game is near"
+                        : "After the game: back to the scoreboard");
+    this->wake_smart_ = smart;
+    this->fire_action_("smartboard");
+  }
   if (clock != this->wake_clock_) {
     ESP_LOGI(TAG, clock ? "After the game: the clock until the next game is near"
                         : "After the game: back to the scoreboard");
@@ -2556,8 +3311,7 @@ void GamedayComponent::set_follow_beta(bool on) {
   this->apply_channel_();
   // The updater keeps the last manifest it read when a read fails, so the
   // old channel's release would stay on offer (and install at night) when
-  // the new channel's manifest is missing: a bar panel's stable folder
-  // before the first bar release. Start the new channel from nothing.
+  // the new channel's manifest is missing. Start the new channel from nothing.
   this->forget_update_();
   this->channel_switched_ = true;
   // Read the new manifest now, so the page shows what this channel offers.
@@ -2692,11 +3446,20 @@ void GamedayComponent::update_state_changed_() {
 // covers the live modes and their fallback, or any favorite's in Favorite
 // teams.
 bool GamedayComponent::followed_game_live_() const {
+  // A picked page reads nothing (showing.h), so a game it left live would
+  // stay live forever: night mode lighting the panel all night for it, and
+  // the automatic update waiting for its end.
+  if (this->showing_ == ::espn::Showing::PICKED)
+    return false;
+  // Dark, a game read more than 5 minutes ago is no longer known to be on:
+  // the owner turned the panel off during it, and the standby reads skip it.
+  if (this->standby_ && millis() - this->game_read_ms_ > 5 * 60 * 1000)
+    return false;
   if (this->game_.valid && this->game_.state == GameState::IN)
     return true;
   if (this->favorites_mode_())
     for (const auto &e : this->fav_)
-      if (e.game.valid && e.game.state == GameState::IN)
+      if (!this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN)
         return true;
   return false;
 }
@@ -2723,10 +3486,6 @@ void GamedayComponent::auto_update_tick_() {
   in.newer = ::espn::version_newer(u->update_info.latest_version, u->update_info.current_version);
   in.live = this->followed_game_live_();
   in.failed = ::espn::update_failed_here(this->update_mark_, u->update_info.latest_version);
-#ifdef GAMEDAY_BAR
-  in.now = in.available && ::espn::install_now_listed(u->update_info.summary, this->hostname()) &&
-           fnv1_hash(u->update_info.latest_version) != this->now_tried_;
-#endif
   switch (::espn::auto_update_step(in)) {
     case ::espn::AutoUpdateStep::IDLE:
       // So the next wait for a game is logged too (an install-now one comes
@@ -2763,19 +3522,6 @@ void GamedayComponent::auto_update_tick_() {
       global_preferences->sync();
       u->perform();
       break;
-    case ::espn::AutoUpdateStep::INSTALL_NOW:
-#ifdef GAMEDAY_BAR
-      // Same as above, but the try is for this version, not tonight: a
-      // failed one is left to the nightly rule, which tries once in the
-      // next 3 to 5 AM window (the same night, if it failed inside one).
-      ESP_LOGI(TAG, "Auto update: installing %s now, as the bar beta channel asks (running %s)",
-               u->update_info.latest_version.c_str(), u->update_info.current_version.c_str());
-      this->now_tried_ = fnv1_hash(u->update_info.latest_version);
-      this->bar_pref_.save(&this->now_tried_);
-      global_preferences->sync();
-      u->perform();
-#endif
-      break;
   }
 #endif
 }
@@ -2785,7 +3531,7 @@ void GamedayComponent::auto_update_tick_() {
 // being, since a quiet board can go hours between redraws. Not in the bar
 // build, which always installs on its own.
 void GamedayComponent::update_nudge_tick_() {
-#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+#if defined(USE_UPDATE)
   if (App.get_updates().empty() || this->time_ == nullptr)
     return;
   update::UpdateEntity *u = App.get_updates()[0];
@@ -2882,16 +3628,167 @@ void GamedayComponent::reset_game_() {
   this->no_game_confirmed_ = false;
 }
 
-void GamedayComponent::restart_board_() {
+void GamedayComponent::restart_board_(bool keep_cards, bool owner_pick) {
   this->reset_game_();
+  if (!keep_cards)
+    this->rebuild_favorites_(false);
   this->scan_live_sides_.clear();  // until the next scan
   this->generation_++;  // a scan in flight read what the board followed before
-  this->emit_({});      // clear the board while the next fetch runs
+  this->board_changed_(true);
+  this->emit_({});  // clear the board while the next fetch runs
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
   this->end_backoff_wait_();
   this->schedule_next_(0);
+  if (!owner_pick)
+    return;
   // Somebody changed what the panel follows, so they are looking at it.
   this->fire_action_("user_pick");
+  this->fx_between_end_("a new pick");
+}
+
+// ---- Showing (showing.h) --------------------------------------------------------
+
+::espn::Showing GamedayComponent::showing_now_() const {
+  const FxState *f = this->fx_state_;
+  const char *page = nullptr;
+  if (f != nullptr && f->page != nullptr) {
+    auto at = f->page->active_index();
+    if (at.has_value())
+      page = f->page->option_at(*at);
+  }
+  return ::espn::showing_now(page, this->fx_ours_, this->sb_pinned_ != nullptr && *this->sb_pinned_);
+}
+
+void GamedayComponent::showing_tick_() {
+  const ::espn::Showing now = this->showing_now_();
+  if (now == this->showing_)
+    return;
+  // Power off and the night's screen-off put the Scoreboard page up from a
+  // picked Effects page (pages/effects.yaml, gd_fx_yield). Nobody sees it
+  // while the screen is dark, so the page stays picked until it lights.
+  const bool lit = this->power_on_ && this->display_on() && this->guard_brightness(255) != 0;
+  if (this->showing_ == ::espn::Showing::PICKED && now == ::espn::Showing::BOARD && !lit)
+    return;
+  const ::espn::Showing was = this->showing_;
+  this->showing_ = now;
+  if (now == ::espn::Showing::PICKED) {
+    ESP_LOGI(TAG, "Showing %s: no ESPN reads and no game states to Home Assistant until the Scoreboard is back",
+             ::espn::showing_word(now));
+    return;
+  }
+  if (now == ::espn::Showing::AUTO) {
+    ESP_LOGI(TAG, "Showing %s: no game states to Home Assistant until the Scoreboard is back",
+             ::espn::showing_word(now));
+    return;
+  }
+  if (was != ::espn::Showing::PICKED) {
+    ESP_LOGI(TAG, "Back on the Scoreboard from %s", ::espn::showing_word(was));
+    return;
+  }
+  // Nothing was read while the picked page was up, so every card is as old as
+  // the page: start over as a team change does, the boot screen's "Looking
+  // for" up until the first fresh read, and no old score on the board.
+  ESP_LOGI(TAG, "Back on the Scoreboard from a picked page: reading everything again");
+  this->ha_tracker_.clear();
+  this->board_ready_ = false;
+  this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+  this->restart_board_(false, false);
+}
+
+std::string GamedayComponent::looking_for() const {
+  const char *team = nullptr;
+  if (!this->live_mode_()) {
+    const int held = this->held_fav_();
+    int listed = 0;
+    for (const auto &e : this->fav_) {
+      if (held >= 0 ? (int) e.slot - 1 == held : !this->fav_off_(e)) {
+        team = e.team->name;
+        listed++;
+      }
+    }
+    if (listed != 1)
+      team = nullptr;
+  }
+  return ::espn::looking_for(this->live_mode_(), this->live_word_(), team);
+}
+
+void GamedayComponent::standby_tick_() {
+  const uint32_t now = millis();
+  if (now - this->standby_tick_ms_ < 1000)
+    return;
+  this->standby_tick_ms_ = now;
+  const bool dark = this->screen_dark();
+  if (dark == this->standby_)
+    return;
+  this->standby_ = dark;
+  this->fire_action_("screen");  // pages/guard.yaml pauses or resumes LVGL
+  if (dark) {
+    this->standby_ms_ = now;  // what the panel knew was fresh a moment ago
+    ESP_LOGI(TAG, "Screen dark: no cards, side reads or game states to Home Assistant, and only the reads "
+                  "that could light it again");
+    return;
+  }
+  // The board is as old as the dark: start over as a team change does, with
+  // the boot screen's "Looking for", no old score on the board, and no event
+  // for a score from while it was dark. A return from a picked page this
+  // same loop already did (showing_tick_), and a page After the game put
+  // up has no board to show.
+  if (this->showing_ != ::espn::Showing::BOARD || !this->board_ready_) {
+    ESP_LOGI(TAG, "Screen lit");
+    return;
+  }
+  ESP_LOGI(TAG, "Screen lit: reading everything again");
+  this->ha_tracker_.clear();
+  this->board_ready_ = false;
+  this->board_pending_ms_ = now == 0 ? 1 : now;
+  this->restart_board_(false, false);
+}
+
+// While dark, a read only when it could light the screen again (showing.h,
+// standby_every_ms).
+bool GamedayComponent::standby_read_due_() const {
+  const bool night_dark = this->power_on_ && this->display_on();
+  if (!night_dark && !this->wake_.on)
+    return false;
+  if (!this->clock_set_() || this->time_ == nullptr)
+    return true;
+  const int64_t epoch = (int64_t) this->time_->timestamp_now();
+  const uint32_t every =
+      ::espn::standby_every_ms(night_dark, this->wake_.on, epoch, this->owner_next_kick_(epoch), this->wake_.lead);
+  return every != 0 && millis() - this->standby_ms_ >= every;
+}
+
+void GamedayComponent::board_changed_(bool board_cleared) {
+  this->board_first_ms_ = millis() == 0 ? 1 : millis();
+  if (!this->busy_ || this->job_moot_)
+    return;
+  const ::espn::JobKind kind = this->job_kind_();
+  const bool listed = kind == ::espn::JobKind::FAV_TEAM && this->fav_listed_(this->job_.team);
+  if (!::espn::job_moot_after_change(kind, board_cleared, listed))
+    return;
+  this->job_moot_ = true;
+  if (kind == ::espn::JobKind::SEASON)
+    ESP_LOGI(TAG, "Season: stopping the read in flight, the board's read goes first");
+}
+
+::espn::JobKind GamedayComponent::job_kind_() const {
+  const Job &j = this->job_;
+  if (j.need_msg || j.need_top25 || j.need_news || j.need_wx != 0 || j.need_clock)
+    return ::espn::JobKind::SIDE;
+  if (j.need_season)
+    return ::espn::JobKind::SEASON;
+  if (j.fav_index >= 0 && j.team != nullptr && !j.need_leaders)
+    return ::espn::JobKind::FAV_TEAM;
+  return ::espn::JobKind::BOARD;
+}
+
+bool GamedayComponent::fav_listed_(const ::espn::Team *team) const {
+  if (team == nullptr || !this->favorites_mode_())
+    return false;
+  for (const auto &e : this->fav_)
+    if (e.team == team)
+      return true;
+  return false;
 }
 
 // Without this the finals and the "No live ... games" wait from the old
@@ -2906,13 +3803,15 @@ bool GamedayComponent::live_leagues_changed_(const std::vector<League> &before) 
   return true;
 }
 
-std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::string &url) {
+std::shared_ptr<http_request::HttpContainer> GamedayComponent::open_(const std::string &url, const EspnFetch *fetch) {
   std::vector<http_request::Header> headers = {
       {"User-Agent", USER_AGENT},
       {"Accept", "application/json"},
   };
+  if (fetch != nullptr && fetch->work() != nullptr)
+    headers.push_back({"Accept-Encoding", "gzip"});
   this->espn_requests_++;
-  auto container = this->http_->get(url, headers, {"retry-after"});
+  auto container = this->http_->get(url, headers, {"retry-after", "content-encoding"});
   this->espn_status_ = container == nullptr ? 0 : container->status_code;
   this->espn_answer_ms_ = millis() == 0 ? 1 : millis();
   if (container == nullptr) {
@@ -2955,14 +3854,22 @@ static esp_err_t probe_event(esp_http_client_event_t *evt) {
   return ESP_OK;
 }
 
-// Probe task. Its own esp_http_client rather than http_request, which follows
-// redirects: a portal's redirect is the answer, and following it to an HTTPS
-// sign-in page with its own certificate would only fail.
-void GamedayComponent::probe_task_(void *arg) {
+void GamedayComponent::probe_task_fn_(void *arg) {
   auto *self = static_cast<GamedayComponent *>(arg);
+  while (true) {
+    self->run_probe_();
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  }
+}
+
+// One probe, on the probe task. Its own esp_http_client rather than
+// http_request, which follows redirects: a portal's redirect is the answer,
+// and following it to an HTTPS sign-in page with its own certificate would
+// only fail.
+void GamedayComponent::run_probe_() {
   ProbeHeaders h;
   esp_http_client_config_t cfg = {};
-  cfg.url = self->probe_url_.load();
+  cfg.url = this->probe_url_.load();
   cfg.timeout_ms = 10000;
   cfg.disable_auto_redirect = true;
   cfg.event_handler = &probe_event;
@@ -2987,9 +3894,8 @@ void GamedayComponent::probe_task_(void *arg) {
   const bool redirect = status >= 300 && status < 400 && !h.location.empty();
   ESP_LOGI(TAG, "Wi-Fi check: %s (HTTP %d%s%s)", ::espn::probe_name(r), status, redirect ? ", to " : "",
            redirect ? ::espn::detail::url_host(h.location).c_str() : "");
-  self->probe_result_ = (uint8_t) r;
-  self->probe_done_ = true;
-  vTaskDelete(nullptr);
+  this->probe_result_ = (uint8_t) r;
+  this->probe_done_ = true;
 }
 
 void GamedayComponent::start_probe_() {
@@ -2998,10 +3904,15 @@ void GamedayComponent::start_probe_() {
   this->probe_ok_mark_ = this->espn_ok_reads_.load();
   this->probe_done_ = false;
   this->probe_running_ = true;
-  // Plain HTTP and a 256 byte read, no TLS: a small stack is plenty.
-  if (xTaskCreate(&GamedayComponent::probe_task_, "gameday_probe", 6144, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the Wi-Fi check (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  if (this->probe_task_.is_created()) {
+    xTaskNotifyGive(this->probe_task_.get_handle());
+    return;
+  }
+  // Plain HTTP and a 256 byte read, no TLS: a small stack is plenty. The new
+  // task makes this first probe at once.
+  if (!this->probe_task_.create(&GamedayComponent::probe_task_fn_, "gameday_probe", 6144, this, 1, true)) {
+    ESP_LOGW(TAG, "Could not start the Wi-Fi check (largest free PSRAM block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
     this->probe_running_ = false;
   }
 }
@@ -3091,19 +4002,20 @@ bool GamedayComponent::fetch_schedule_(const ::espn::Team *team, Schedule &out, 
   std::string url = comp_slug != nullptr ? ::espn::team_url(team->league, team->espn_id, comp_slug)
                                          : ::espn::team_url(team->league, team->espn_id);
   ESP_LOGD(TAG, "Fetching schedule: %s", url.c_str());
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   Schedule s;
   bool ok = ::espn::parse_team(reader, s);
   container->end();
   if (!ok) {
-    ESP_LOGW(TAG, "Schedule parse failed after %u bytes", (unsigned) reader.total());
+    ESP_LOGW(TAG, "Schedule parse failed (%s)", reader.stats());
     return false;
   }
-  ESP_LOGI(TAG, "Schedule: event %s kickoff %lld group %u (%u bytes)", s.event_id.c_str(),
-           (long long) s.kickoff_epoch, (unsigned) s.group, (unsigned) reader.total());
+  ESP_LOGI(TAG, "Schedule: event %s kickoff %lld group %u (%s)", s.event_id.c_str(),
+           (long long) s.kickoff_epoch, (unsigned) s.group, reader.stats());
   out = s;
   return true;
 }
@@ -3117,10 +4029,11 @@ int GamedayComponent::fetch_team_day_(const ::espn::Team *team, uint32_t group, 
                                       const std::string &skip_event, Schedule &out, const char *comp_slug) {
   std::string url = ::espn::team_day_url(team->league, group, day_epoch, comp_slug);
   ESP_LOGD(TAG, "Looking ahead: %s", url.c_str());
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr)
     return -1;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   int found = ::espn::parse_team_game(reader, team->espn_id, skip_event, out);
   container->end();
   return found;
@@ -3163,14 +4076,15 @@ bool GamedayComponent::fetch_upcoming_(const ::espn::Team *team, std::vector<::e
   }
   std::string url = ::espn::schedule_url(team->league, team->espn_id);
   ESP_LOGD(TAG, "Fetching upcoming games: %s", url.c_str());
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   // Four: the game on the board plus the three after it.
   bool ok = ::espn::parse_upcoming(reader, team->espn_id, 4, out);
   container->end();
-  ESP_LOGI(TAG, "Upcoming: %u game(s) (%u bytes)", (unsigned) out.size(), (unsigned) reader.total());
+  ESP_LOGI(TAG, "Upcoming: %u game(s) (%s)", (unsigned) out.size(), reader.stats());
   return ok;
 }
 
@@ -3180,10 +4094,11 @@ bool GamedayComponent::fetch_live_games_(League league, ::espn::LiveList &out, i
                                          int64_t *watch_kickoff) {
   std::string url = ::espn::scan_url(league, epoch != 0 ? epoch : (int64_t) this->time_->timestamp_now(), top25);
   ESP_LOGD(TAG, "Scanning for live games: %s", url.c_str());
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr)
     return false;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   size_t before = out.size();
   size_t finals_before = finals != nullptr ? finals->size() : 0;
   size_t pending_before = pending != nullptr ? pending->size() : 0;
@@ -3198,9 +4113,9 @@ bool GamedayComponent::fetch_live_games_(League league, ::espn::LiveList &out, i
     for (size_t i = pending_before; i < pending->size(); i++)
       (*pending)[i].league = (uint8_t) league;
   container->end();
-  ESP_LOGI(TAG, "Scan: %u live game(s), %u final(s), %u to come (%u bytes)", (unsigned) out.size(),
+  ESP_LOGI(TAG, "Scan: %u live game(s), %u final(s), %u to come (%s)", (unsigned) out.size(),
            (unsigned) (finals != nullptr ? finals->size() - finals_before : 0),
-           (unsigned) (pending != nullptr ? pending->size() - pending_before : 0), (unsigned) reader.total());
+           (unsigned) (pending != nullptr ? pending->size() - pending_before : 0), reader.stats());
   if (next != 0 && (next_kickoff == 0 || next < next_kickoff))
     next_kickoff = next;
   if (watch_kickoff != nullptr && watched != 0 && (*watch_kickoff == 0 || watched < *watch_kickoff))
@@ -3218,25 +4133,25 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
     return false;
   std::string url = ::espn::event_url(league, schedule.event_id, schedule.comp_slug);
   ESP_LOGD(TAG, "Fetching game: %s", url.c_str());
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr) {
     // Worker task: the job is this task's until it reports done.
     this->job_.game_gone = this->espn_status_ == 404;
     return false;
   }
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   // parse_event writes out only once the whole document parsed, so no copy of
   // its own is needed here.
   bool ok = ::espn::parse_event(reader, info->sport, this->our_id_(), out, schedule.event_id);
   container->end();
   if (!ok) {
-    ESP_LOGW(TAG, "Game %s not parsed (%u bytes)", schedule.event_id.c_str(),
-             (unsigned) reader.total());
+    ESP_LOGW(TAG, "Game %s not parsed (%s)", schedule.event_id.c_str(), reader.stats());
     this->job_.game_gone = true;
     return false;
   }
-  ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%u bytes)", ::espn::state_name(out.state), out.team_abbr.c_str(),
-           out.team_score, out.opp_abbr.c_str(), out.opp_score, out.short_detail.c_str(), (unsigned) reader.total());
+  ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%s)", ::espn::state_name(out.state), out.team_abbr.c_str(),
+           out.team_score, out.opp_abbr.c_str(), out.opp_score, out.short_detail.c_str(), reader.stats());
   return true;
 }
 
@@ -3296,14 +4211,20 @@ void GamedayComponent::start_job_() {
   Job &j = this->job_;
   ::espn::reset_in_place(j);
   j.generation = this->generation_;
-  j.team = this->fallback_team_();
+  j.team = this->live_mode_() ? this->live_team_() : this->fallback_team_();
   j.mode = this->effective_mode_();
   j.our_id = this->orient_id_();
-  j.scan_leagues = this->scan_leagues_();
+  j.scan_leagues = ::espn::scan_order(this->scan_leagues_(), this->scan_live_leagues_);
   j.top25 = this->no_team_default();
+  if (this->scan_rest_.stage != 0 && (this->scan_rest_.generation != this->generation_ || !this->live_mode_()))
+    ::espn::reset_in_place(this->scan_rest_);  // the board follows something else now
   // This game's leaders at halftime and the final (game_leaders.h): one
-  // summary read for the board's game, ahead of whatever the mode reads next.
-  if (this->leaders_due_()) {
+  // summary read for the board's game, ahead of whatever the mode reads next,
+  // except a favorite just added and not read yet (leaders_wait).
+  bool unread = false;
+  for (const auto &e : this->fav_)
+    unread = unread || (this->favorites_mode_() && e.fetched_ms == 0);
+  if (this->leaders_due_() && !::espn::leaders_wait(now, this->board_first_ms_, unread)) {
     j.need_leaders = true;
     j.leaders_league = (uint8_t) this->board_league_();
     j.leaders_sport = this->game_.sport;
@@ -3330,10 +4251,13 @@ void GamedayComponent::start_job_() {
     j.fav_watch = this->fav_refs_();
     take_due = this->take_scan_at_ != 0 && (int64_t) this->time_->timestamp_now() >= this->take_scan_at_;
   }
+  j.sport_lg = this->sport_list_();
   if (j.team == nullptr && !this->live_mode_()) {
     this->schedule_next_(SCHEDULE_INTERVAL);
     return;
   }
+  if (this->start_scan_rest_(j))
+    return;
   if (this->live_mode_() && this->recap_on_) {
     // The finals rotation is up: read the days it still needs one by one,
     // then rescan for a live game when the wait is over.
@@ -3350,6 +4274,7 @@ void GamedayComponent::start_job_() {
       return;
     }
     j.need_scan = true;
+    j.scan_early = true;  // the finals are up, not a game
     j.want_finals = true;
     this->start_worker_();
     return;
@@ -3386,6 +4311,7 @@ void GamedayComponent::start_job_() {
         j.need_scan = !this->schedule_.valid || rotate || ended || this->live_none_ || take_due;
         j.rotate = rotate;
       }
+      j.scan_early = j.need_scan && ::espn::scan_may_show_early(this->schedule_.valid, this->live_none_);
       // With no team, nothing live means the finals rotation: the scan keeps
       // today's finals for it.
       j.want_finals = j.team == nullptr;
@@ -3484,32 +4410,111 @@ void GamedayComponent::start_job_() {
 }
 
 void GamedayComponent::start_worker_() {
+  this->job_moot_ = false;
+  this->job_.take_asks = this->take_asks_;
   this->job_done_ = false;
   this->busy_ = true;
   this->busy_since_ms_ = millis() == 0 ? 1 : millis();
-  // TLS plus a nested JSON parse needs a roomy stack; 16KB has headroom.
-  if (xTaskCreate(&GamedayComponent::worker_, "gameday_fetch", 16384, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Could not start the fetch task (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  // A fetch task waiting for its next job takes this one (fetch_slots_).
+  for (auto &s : this->fetch_slots_) {
+    if (s.task.is_created() && s.idle.load()) {
+      s.idle = false;
+      xTaskNotifyGive(s.task.get_handle());
+      return;
+    }
+  }
+  // None is free: start one, which runs this job at once. TLS plus a nested
+  // JSON parse needs a roomy stack; 16KB has headroom.
+  for (auto &s : this->fetch_slots_) {
+    if (s.task.is_created())
+      continue;
+    s.owner = this;
+    s.idle = false;
+    if (s.task.create(&GamedayComponent::worker_, "gameday_fetch", 16384, &s, 1, true))
+      return;
+    ESP_LOGW(TAG, "Could not start the fetch task (largest free PSRAM block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
     this->busy_ = false;
     this->schedule_next_(RETRY_INTERVAL);
+    return;
   }
+  ESP_LOGW(TAG, "Could not start a fetch task: the %u jobs given up on are still running", (unsigned) kFetchSlots);
+  this->busy_ = false;
+  this->schedule_next_(RETRY_INTERVAL);
 }
 
 void GamedayComponent::worker_(void *arg) {
-  auto *self = static_cast<GamedayComponent *>(arg);
-  uint32_t mine = self->worker_seq_;
-  self->run_job_();
-  // A worker the loop gave up on must not hand back a result: the Job it
-  // was writing into belongs to a later cycle by now.
-  if (self->worker_seq_ == mine)
-    self->job_done_ = true;
-  // The least stack a fetch task has left untouched, for /gameday/heap.
-  uint32_t left = uxTaskGetStackHighWaterMark(nullptr);
-  uint32_t low = self->fetch_stack_low_.load();
-  while (left < low && !self->fetch_stack_low_.compare_exchange_weak(low, left)) {
+  auto *slot = static_cast<FetchSlot *>(arg);
+  GamedayComponent *self = slot->owner;
+  while (true) {
+    uint32_t mine = self->worker_seq_;
+    self->run_job_();
+    // The least stack a fetch task has left untouched, for /gameday/heap.
+    uint32_t left = uxTaskGetStackHighWaterMark(nullptr);
+    uint32_t low = self->fetch_stack_low_.load();
+    while (left < low && !self->fetch_stack_low_.compare_exchange_weak(low, left)) {
+    }
+    // Free for the next job before the loop hears this one is done, so the
+    // loop never starts a second task for a job this one could take. The
+    // loop only reuses it once job_done_ is set, or once it has given up
+    // on this job, and a notification sent early is kept for the take below.
+    slot->idle = true;
+    // A worker the loop gave up on must not hand back a result: the Job it
+    // was writing into belongs to a later cycle by now.
+    if (self->worker_seq_ == mine)
+      self->job_done_ = true;
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
   }
-  vTaskDelete(nullptr);
+}
+
+// A scan that stopped at its first game (live_scan.h) left the leagues it
+// hasn't read in the job. Keep them and what it read so far: the next job
+// reads the game just picked, so the board has it, and the one after reads
+// the rest. Called after every job, so the rest starts as soon as the
+// game's read is in, not at that game's next poll.
+void GamedayComponent::keep_scan_rest_() {
+  Job &j = this->job_;
+  ScanRest &r = this->scan_rest_;
+  if (j.need_scan && !j.scan_rest.empty() && j.generation == this->generation_ && this->schedule_.valid) {
+    ::espn::reset_in_place(r);
+    r.stage = 1;
+    r.generation = j.generation;
+    r.leagues.swap(j.scan_rest);
+    r.live.swap(j.live);
+    r.finals.swap(j.finals);
+    r.pending.swap(j.pending);
+    r.next_kickoff = j.next_kickoff;
+    r.fav_kickoff = j.fav_kickoff;
+    r.scan_ok = j.scan_ok;
+    r.want_finals = j.want_finals;
+  }
+  if (r.stage != 0)
+    this->schedule_next_(0);
+}
+
+bool GamedayComponent::start_scan_rest_(Job &j) {
+  ScanRest &r = this->scan_rest_;
+  if (r.stage == 0)
+    return false;
+  if (r.stage == 1 && this->schedule_.valid) {
+    r.stage = 2;
+    j.schedule = this->schedule_;  // the game the scan just picked: one read and it is on the board
+    this->start_worker_();
+    return true;
+  }
+  j.need_scan = true;
+  j.scan_cont = true;
+  j.scan_leagues.swap(r.leagues);
+  j.live.swap(r.live);
+  j.finals.swap(r.finals);
+  j.pending.swap(r.pending);
+  j.next_kickoff = r.next_kickoff;
+  j.fav_kickoff = r.fav_kickoff;
+  j.scan_ok = r.scan_ok;
+  j.want_finals = r.want_finals;
+  ::espn::reset_in_place(r);
+  this->start_worker_();
+  return true;
 }
 
 // Worker task: network and parsing only, no display or entity access.
@@ -3519,12 +4524,6 @@ void GamedayComponent::run_job_() {
     this->run_msg_job_();
     return;
   }
-#ifdef GAMEDAY_BAR
-  if (j.need_brand) {
-    this->run_brand_job_();
-    return;
-  }
-#endif
   if (j.need_top25) {
     this->run_top25_job_();
     return;
@@ -3578,16 +4577,48 @@ void GamedayComponent::run_job_() {
   if (j.need_scan) {
     ::espn::FinalList *finals = j.want_finals ? &j.finals : nullptr;
     ::espn::PendingList *pending = j.want_finals ? &j.pending : nullptr;
-    j.scan_ok = true;
-    for (League l : j.scan_leagues) {
+    if (!j.scan_cont)
+      j.scan_ok = true;  // the rest of a scan carries on from what the first part read
+    for (size_t li = 0; li < j.scan_leagues.size(); li++) {
+      League l = j.scan_leagues[li];
+      // The owner changed what the board follows (a mode, a team, the
+      // favorites): the main loop throws this scan away, so stop at the next
+      // league instead of reading the rest first. Nine leagues take about
+      // 9 s, and the new pick used to wait behind every one of them.
+      if (this->job_moot_) {
+        ESP_LOGD(TAG, "Scan stopped at %s: the board follows something else now", ::espn::league_key(l));
+        return;
+      }
       // Favorites take over: this league's favorites, for their next kickoff.
       std::vector<uint32_t> watch;
       for (const auto &f : j.fav_watch)
         if (f.league == (uint8_t) l)
           watch.push_back(f.id);
+      const size_t had = j.live.size();
       j.scan_ok = this->fetch_live_games_(l, j.live, j.next_kickoff, finals, pending, 0, j.top25,
                                           watch.empty() ? nullptr : &watch, &j.fav_kickoff) &&
                   j.scan_ok;
+      if (j.sport_lg != 0 && !((j.sport_lg >> (uint8_t) l) & 1u)) {
+        // A sport playlist reads this league for its own teams' games alone.
+        std::vector<::espn::TeamRef> mine;
+        for (uint32_t id : watch)
+          mine.push_back({(uint8_t) l, id});
+        size_t keep = had;
+        for (size_t g = had; g < j.live.size(); g++)
+          if (::espn::sport_list_keeps(j.sport_lg, mine, j.live[g].league, j.live[g].away_id, j.live[g].home_id)) {
+            if (keep != g)
+              j.live[keep] = std::move(j.live[g]);
+            keep++;
+          }
+        while (j.live.size() > keep)
+          j.live.pop_back();
+      }
+      // The board has no game on it and this league has one: hand it over
+      // now, and read the leagues left in a job of their own.
+      if (::espn::scan_show_now(j.scan_early, j.live.size(), j.scan_leagues.size() - li - 1) && !this->job_moot_) {
+        j.scan_rest.assign(j.scan_leagues.begin() + li + 1, j.scan_leagues.end());
+        break;
+      }
     }
     return;  // the main loop picks a game, then the next cycle polls it
   }
@@ -3617,6 +4648,8 @@ void GamedayComponent::run_job_() {
       int64_t now = (int64_t) this->time_->timestamp_now();
       j.lookahead = 2;
       for (int d = 0; d < LOOKAHEAD_DAYS; d++) {
+        if (this->job_moot_)
+          return;  // thrown away by the main loop, like the scan above
         Schedule next;
         int found = this->fetch_team_day_(j.team, j.schedule.group, now + (int64_t) d * 86400, j.done_event, next);
         if (found < 0) {
@@ -3649,6 +4682,8 @@ void GamedayComponent::run_job_() {
       j.no_event = true;
       return;
     }
+    if (this->job_moot_)
+      return;  // the main loop drops it: skip the game read and the logos
     // Both logos download while the scoreboard read below runs, so the
     // board usually has them the moment it shows.
     League league = j.team->league;
@@ -3662,16 +4697,13 @@ void GamedayComponent::run_job_() {
 // Main loop: fold the worker's result into the component state and render.
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
+  const ::espn::JobKind kind = this->job_kind_();
+  if (kind == ::espn::JobKind::BOARD || kind == ::espn::JobKind::FAV_TEAM)
+    this->game_read_ms_ = millis();
   if (j.need_msg) {
     this->apply_msg_job_();  // whatever the board follows, the card is the same
     return;
   }
-#ifdef GAMEDAY_BAR
-  if (j.need_brand) {
-    this->apply_brand_job_();
-    return;
-  }
-#endif
   if (j.need_top25) {
     this->apply_top25_job_();  // a poll is the same whatever the board follows
     return;
@@ -3696,8 +4728,25 @@ void GamedayComponent::apply_job_() {
     this->apply_clock_job_();  // whatever the board follows now, it needs the clock
     return;
   }
-  if (j.generation != this->generation_) {
+  const bool listed = j.fav_index >= 0 && !j.need_leaders && this->fav_listed_(j.team);
+  if (j.generation != this->generation_ &&
+      ::espn::fav_answer_counts(true, this->job_moot_, this->favorites_mode_(), listed)) {
+    // The favorites or the playlist changed while a favorite's read ran,
+    // and the team is still a favorite: its card stays, so the read counts.
+    ESP_LOGD(TAG, "Keeping %s's read: still a favorite", j.team->abbr);
+  } else if (j.generation != this->generation_) {
     ESP_LOGD(TAG, "Discarding a fetch for the previous team");
+    // A favorite's read took its stamps when it started (start_fav_job_).
+    // The list was rebuilt since and kept the entry, stamps and all, so give
+    // them back: the team is read again now, not after the retry wait.
+    if (j.fav_index >= 0 && j.team != nullptr) {
+      for (auto &e : this->fav_) {
+        if (e.team != j.team)
+          continue;
+        e.fetched_ms = ::espn::fav_stamp_after_drop(e.fetched_ms, j.need_schedule);
+        e.side_ms = ::espn::fav_stamp_after_drop(e.side_ms, j.fav_side);
+      }
+    }
     return;
   }
   uint32_t now = millis();
@@ -3731,12 +4780,19 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(this->back_off_());
       return;
     }
-    if (j.want_finals)
+    // A scan that stopped at its first game: the finals, the next kickoff
+    // and the favorites' kickoffs wait for the leagues still to be read.
+    const bool part = !j.scan_rest.empty();
+    this->scan_live_leagues_ = ::espn::scan_live_after(this->scan_live_leagues_, ::espn::scan_live_leagues(j.live),
+                                                       j.scan_ok && !part);
+    if (j.want_finals && !part)
       this->recap_absorb_(j, (int64_t) this->time_->timestamp_now());
     this->clear_backoff_();
     // Favorites take over: when to scan for the next favorite's kickoff. The
     // pick below says again whether a favorite has the board.
-    if (this->take_over_()) {
+    if (part) {
+      // The rest of this scan is the look take-over asked for.
+    } else if (this->take_over_()) {
       int64_t tnow = (int64_t) this->time_->timestamp_now();
       int64_t at = ::espn::take_over_rescan_at(tnow, j.fav_kickoff);
       this->take_scan_at_ = j.scan_ok ? at : ::espn::take_over_rescan_keep(tnow, at, this->take_scan_at_);
@@ -3768,7 +4824,7 @@ void GamedayComponent::apply_job_() {
                                                         NO_LIVE_RESCAN, NO_GAMES_RESCAN);
       if (this->live_rescan_ms_ > NO_LIVE_RESCAN)
         ESP_LOGI(TAG, "Next scan in %u min", (unsigned) (this->live_rescan_ms_ / MINUTE));
-      const ::espn::Team *saved = this->fallback_team_();
+      const ::espn::Team *saved = this->live_team_();
       if (saved != nullptr) {
         // Nothing live, but the owner has a team: show that team's card and
         // keep scanning. The mode they picked is untouched.
@@ -3840,10 +4896,14 @@ void GamedayComponent::apply_job_() {
     int taken = favs.empty() ? -1
                              : ::espn::take_over_pick(j.live, favs, this->schedule_.event_id, over,
                                                       this->prefs4_.collide == 1, j.rotate);
+    // The rest of a scan that already put a game up: with Pick the best
+    // game off that game stays, where a rescan would move on to another.
+    const int shown = taken >= 0 ? -1 : ::espn::scan_keep_shown(j.live, this->schedule_.event_id, j.scan_cont, best);
     const ::espn::LiveGame &g =
-        j.live[taken >= 0 ? (size_t) taken
-                          : best ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
-                                 : pick[random_uint32() % pick.size()]];
+        j.live[taken >= 0   ? (size_t) taken
+               : shown >= 0 ? (size_t) shown
+               : best       ? ::espn::best_live_game(j.live, this->schedule_.event_id, over)
+                            : pick[random_uint32() % pick.size()]];
     int fav_rank = taken >= 0 ? ::espn::live_fav_rank(g, favs) : -1;
     // The favorite's side is the board's own team, as in Favorite teams mode;
     // any other game reads like a broadcast, away team first.
@@ -3851,16 +4911,21 @@ void GamedayComponent::apply_job_() {
     uint32_t side_id = fav_home ? g.home_id : g.away_id;
     uint8_t side_rank = fav_home ? g.home_rank : g.away_rank;
     uint8_t other_rank = fav_home ? g.away_rank : g.home_rank;
-    if ((best || taken >= 0) && !over && this->game_.valid && g.event_id == this->schedule_.event_id &&
-        side_id == this->live_away_id_ && !this->live_none_ && !this->live_fallback_) {
-      // Still the favorite's game, or the best game on: keep it, and look
-      // again at the next scan.
+    if (::espn::keep_on_rescan(this->game_, this->schedule_.event_id, this->live_away_id_,
+                               !this->live_none_ && !this->live_fallback_, g.event_id, side_id)) {
+      // Still the favorite's game, the best game on, or the only game on:
+      // keep it, its last read included, and look again at the next scan.
       if (taken >= 0)
         ESP_LOGI(TAG, "Favorites take over: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
-      else
+      else if (best)
         ESP_LOGI(TAG, "Still the best game: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+      else if (shown >= 0)
+        ESP_LOGI(TAG, "Scan done, %u live: staying on %s @ %s", (unsigned) j.live.size(), g.away_abbr.c_str(),
+                 g.home_abbr.c_str());
+      else
+        ESP_LOGI(TAG, "Still the only game on: staying on %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
       // This break has had its look; the next one comes when play resumes.
-      if (taken < 0 && ::espn::pick_break(this->game_))
+      if (best && taken < 0 && ::espn::pick_break(this->game_))
         this->break_looked_ = true;
       this->live_fav_ = fav_rank;
       this->live_away_rank_ = side_rank;
@@ -3878,6 +4943,8 @@ void GamedayComponent::apply_job_() {
                (unsigned) j.live.size(), ::espn::live_interest(g));
     else
       ESP_LOGI(TAG, "Following %s @ %s", g.away_abbr.c_str(), g.home_abbr.c_str());
+    if (part)
+      ESP_LOGI(TAG, "Showing it now: %u more league(s) to read", (unsigned) j.scan_rest.size());
     // Both logos download while the game is read, so its board can go up whole.
     this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.away_id, g.away_abbr.c_str()));
     this->logos_.prefetch(::espn::team_logo_url((League) g.league, g.home_id, g.home_abbr.c_str()));
@@ -3976,6 +5043,7 @@ void GamedayComponent::apply_job_() {
   }
   this->cache_unconfirmed_ = false;
   this->gone_event_.clear();
+  this->goal_holds_.update(j.game);
   this->prev_ = this->game_;
   this->game_ = j.game;
   this->mark_good_poll_();
@@ -4130,10 +5198,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.highlight = g.mlb.bases == (::espn::Baseball::FIRST | ::espn::Baseball::SECOND | ::espn::Baseball::THIRD);
   }
   if (g.valid && g.sport == ::espn::Sport::SOCCER) {
-    // The latest goal on the situation row, red cards under the logos, and
-    // records that fit the label under a logo.
-    if (g.state == GameState::IN)
-      f.situation = ::espn::soccer_situation(g);
+    // Red cards under the logos (the latest goal is on the situation row,
+    // below), and records that fit the label under a logo.
     if (g.state != GameState::PRE) {
       f.team_marks = g.soc.team_reds;
       f.opp_marks = g.soc.opp_reds;
@@ -4142,36 +5208,49 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.opponent_record = ::espn::soccer_board_record(g.opp_record);
   }
   if (g.valid && g.sport == ::espn::Sport::HOCKEY) {
+    // Shots on goal and the latest goal on the situation row
+    f.situation = ::espn::hockey_situation(g, this->goal_holds_.find(g.event_id));
     // "30-12-10" is a character too wide for the label under a logo.
     f.team_record = ::espn::hockey_board_record(g.team_record);
     f.opponent_record = ::espn::hockey_board_record(g.opp_record);
   }
-  if (g.valid && g.state == GameState::IN && g.sport == ::espn::Sport::BASKETBALL)
-    f.situation = ::espn::basketball_series(g);
-  // The pictures on a wide board's situation row (game_viz.h). The margin
-  // samples follow the board game read by read while it is on; a redraw of
-  // the same read adds nothing. The bits say what the page draws now.
-  // Nothing at halftime or after the final: the line score and leaders
-  // cards take the row's turns then.
+  // The field strip on a wide board's situation row (game_viz.h), and the
+  // text lines the row takes turns showing (row_text.h). The strip is off at
+  // halftime and after the final: the line score and leaders cards take the
+  // row's turns then. A redraw of the same read holds the same basket.
   const bool playing = g.valid && g.state == GameState::IN && !::espn::at_halftime(g);
-  const bool spark_sport = g.sport == ::espn::Sport::BASKETBALL || g.sport == ::espn::Sport::HOCKEY;
-  const bool odds_sport = g.sport == ::espn::Sport::FOOTBALL || g.sport == ::espn::Sport::BASKETBALL;
-  if (g.valid && g.state == GameState::IN && !g.event_id.empty() && spark_sport)
-    this->margin_tracks_.pick(g.event_id).read(g.event_id, g.team_id, g.team_score - g.opp_score, g.display_clock,
-                                               g.period);
-  if (playing) {
-    f.win_pct = g.team_win_pct;
-    if (this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
-      f.viz |= ::espn::VIZ_FIELD;
-    // ESPN has a number for baseball too, but that row is the diamond's.
-    if (this->win_bar_on() && odds_sport && g.team_win_pct >= 1)
-      f.viz |= ::espn::VIZ_WINBAR;
-    if (this->margin_spark_on() && spark_sport && this->margin_tracks_.current().event_id == g.event_id &&
-        this->margin_tracks_.current().n > 0)
-      f.viz |= ::espn::VIZ_SPARK;
+  if (playing && this->field_strip_on() && g.sport == ::espn::Sport::FOOTBALL && g.yard_line <= 100)
+    f.viz |= ::espn::VIZ_FIELD;
+  // Only while play is on: at halftime the row is the line score, so a
+  // showing then would go unseen.
+  const bool win_due = playing && this->win_swing_.read(g, millis());
+  if (win_due && this->win_swing_.began != nullptr && this->win_chance_on())
+    ESP_LOGI(TAG, "Win chance (%s): %s", this->win_swing_.began, ::espn::win_chance(g).c_str());
+  if (g.valid) {
+    this->row_hold_.read(g);
+    ::espn::RowOptions ro;
+    ro.win_chance = this->win_chance_on() && win_due;
+    ro.last_play = this->ticker_last_play();
+    ::espn::fill_row_lines(f.row, g, this->row_hold_, ro, playing);
+    // Hockey's one line (shots and the last goal, sport_hockey.cpp) on the same row.
+    if (g.sport == ::espn::Sport::HOCKEY && g.state == GameState::IN && f.row.n == 0)
+      f.row.add(f.situation, 0xFFFFFF);
+    std::string news = ::espn::row_news(g, this->row_hold_);
+    if (news != this->row_news_) {
+      this->row_news_ = news;
+      this->row_news_n_++;
+    }
+    f.row.news = this->row_news_n_;
   }
   f.team_color = ::espn::parse_color(g.team_color);
   f.opponent_color = ::espn::parse_color(g.opp_color);
+  // ESPN has no logo for some small schools (a Division III team on a
+  // Division I schedule): that side shows its abbreviation badge, the way
+  // the app does.
+  f.team_badge = f.team_logo.empty() && !f.team_abbr.empty();
+  f.opponent_badge = f.opponent_logo.empty() && !f.opponent_abbr.empty();
+  f.team_badge_rgb = ::espn::badge_text(::espn::badge_rgb(g.team_color), g.team_alt);
+  f.opponent_badge_rgb = ::espn::badge_text(::espn::badge_rgb(g.opp_color), g.opp_alt);
 #ifdef GAMEDAY_DEMO
   this->demo_badges_(f);
 #endif
@@ -4183,10 +5262,27 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     neutral = false;
 #endif
   ::espn::CelebPlan celeb = ::espn::decide_celebration(this->prev_, g, splash, this->celebrations(), neutral,
-                                                       this->opponent_splashes());
-  // Only a fresh read shows a three; this emit_ also runs for redraws.
-  if (celeb.kind == ::espn::CelebKind::THREE && !this->celeb_latch_.take(g))
+                                                       this->opponent_splashes(), this->big_plays());
+  // Only a fresh read shows a three or a big play; this emit_ also runs for redraws.
+  if (::espn::celeb_latched(celeb.kind) && !this->celeb_latch_.take(g, celeb.kind, millis()))
     celeb = ::espn::CelebPlan{};
+  // A walk-off in the same read as the final: the walk-off plays now and the
+  // win screen when it ends (loop() calls back with walk_off_release_ set).
+  if (this->walk_off_release_) {
+    this->walk_off_release_ = false;
+    if (celeb.kind == ::espn::CelebKind::NONE && g.event_id == this->walk_off_event_)
+      celeb = this->walk_off_win_;
+  } else if (celeb.kind == ::espn::CelebKind::WIN && this->celebrations() == ::espn::CelebLevel::FULL &&
+             this->big_plays()) {
+    ::espn::CelebPlan walk = ::espn::walk_off_before_win(this->prev_, g, celeb);
+    if (walk.kind != ::espn::CelebKind::NONE) {
+      this->walk_off_win_ = celeb;
+      this->walk_off_event_ = g.event_id;
+      const uint32_t at = millis() + walk.duration_ms;
+      this->walk_off_win_ms_ = at == 0 ? 1 : at;
+      celeb = walk;
+    }
+  }
   f.splash_text = celeb.kind == ::espn::CelebKind::NONE ? std::string() : celeb.text;
   f.splash_color = celeb.color;
   f.celeb_kind = (uint8_t) celeb.kind;
@@ -4204,6 +5300,14 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.leaders = this->ticker_leaders();
   // Changing the panel count restarts the panel, so this holds until then.
   opts.records = this->panels_ != nullptr && this->panels_->cols() == 1;
+  // A wide board's row under the clock says football's win chance and down
+  // and distance, so the ticker doesn't repeat them; a basketball timeout
+  // is shown nowhere there, since the stopped clock says it.
+  const bool wide = this->panels_ != nullptr && this->panels_->cols() >= 2;
+  opts.row_win = wide && this->win_chance_on();
+  opts.win_due = playing && this->win_swing_.ticker;
+  opts.row_timeout = wide;
+  opts.row_down = wide;
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
     if (!s.valid || s.state != GameState::PRE || s.kickoff_epoch <= 0 || this->time_ == nullptr)
@@ -4224,6 +5328,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
                                            this->score_log_.lines(g.event_id));
   const GameSnapshot &ha = this->ha_game_();
+  f.ha_quiet = this->showing_ != ::espn::Showing::BOARD || this->standby_;
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;
   if (ha.valid && ha.state != GameState::NOT_FOUND) {
@@ -4286,7 +5391,8 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.ha_status_text = showing + why;
     f.message = why;
   }
-  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && !this->demo_playing_()) {
+  if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && this->sport_list_() == 0 &&
+      !this->demo_playing_()) {
     f.status_text = "Favorites: add teams in the app or on the page | " + f.status_text;
     f.ha_status_text = "Favorites: add teams in the app or on the page | " + f.ha_status_text;
   }
@@ -4467,7 +5573,7 @@ void GamedayComponent::wake_clock_fields_(UpdateFields &f) {
   if (this->favorites_mode_()) {
     color = this->fav_[0].sched.team_color;
     for (const auto &e : this->fav_) {
-      if (!e.game.valid || e.game.state != GameState::PRE || e.game.kickoff_epoch <= 0)
+      if (this->fav_off_(e) || !e.game.valid || e.game.state != GameState::PRE || e.game.kickoff_epoch <= 0)
         continue;
       if (next == nullptr || e.game.kickoff_epoch < next->kickoff_epoch) {
         next = &e.game;
@@ -4515,7 +5621,7 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   bool custom = this->card_on(::espn::Card::CUSTOM) && start != 0 && now < start + ::espn::kDayS;
   // After the game's clock keeps the screen between games; the owner's own
   // countdown and the weather still get their turns.
-  bool next = this->countdown_on() && !this->wake_clock_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
+  bool next = this->countdown_on() && !this->wake_clock_ && !this->wake_fx_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
               g.kickoff_epoch > now;
   bool weather = this->wx_card_ready_();
   if (this->live_mode_() && !this->live_fallback_) {
@@ -5361,6 +6467,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     JsonObject o = favs.add<JsonObject>();
     if (this->fav_id_(i) != 0)
       put_team(o, this->fav_league_(i), this->fav_id_(i));
+    if (this->fav_id_(i) != 0 && this->fav_solo_(i))
+      o["btn"] = true;  // a button-only team (playlists.h): on a remote button, no favorite elsewhere
   }
   doc["favmax"] = FAV_MAX;
   // Each playlist's teams as places in favs.
@@ -5389,6 +6497,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     // Its color and icon by key (playlists.h kListColors, kListIcons), "" for none.
     o["color"] = ::espn::list_color_key(this->prefs12_.mark[n - 1]);
     o["icon"] = ::espn::list_icon_key(this->prefs12_.mark[n - 1]);
+    // Its sports by league key, in kLeagues order (playlists.h list_league_token).
+    JsonArray lg = o["lg"].to<JsonArray>();
+    for (const auto &info : ::espn::kLeagues)
+      if ((this->prefs13_.leagues[n - 1] >> (uint8_t) info.league) & 1u)
+        lg.add(info.key);
   }
   doc["list"] = this->prefs9_.active;
   doc["sched"] = this->prefs10_.sched_applied;  // the playlist a schedule put on, 0 = none
@@ -5400,7 +6513,40 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     o["v"] = ::espn::remote_text(this->prefs11_.btn[b - 1]);
     o["gone"] = this->remote_action_(b).gone;
   }
+  // The button in use (its league, or its button-only team on its own), 0 for none.
+  doc["held"] = this->held_league_() >= 0 || this->held_fav_() >= 0 ? this->prefs11_.held : 0;
   doc["listmax"] = ::espn::kListMax;
+  // Effect playlists (fx_playlists.h): each one's name, Shuffle and effects,
+  // an effect as its name, palette name, speed, intensity and seconds up;
+  // fxlist the one playing (0 none), and the limits and wait steps the page
+  // and the apps offer.
+  {
+    const FxState &f = this->fx_();
+    const ::espn::FxNames &names = ::espn::fx_names();
+    JsonArray fxl = doc["fxlists"].to<JsonArray>();
+    for (uint8_t n = 0; n < f.store.count; n++) {
+      const ::espn::FxList &l = f.store.list[n];
+      JsonObject o = fxl.add<JsonObject>();
+      o["n"] = l.name;
+      o["shuffle"] = (l.flags & ::espn::FXLIST_SHUFFLE) != 0;
+      JsonArray fx = o["fx"].to<JsonArray>();
+      for (uint8_t i = 0; i < l.count; i++) {
+        const ::espn::FxEntry &e = l.fx[i];
+        JsonObject x = fx.add<JsonObject>();
+        x["e"] = e.effect;
+        x["p"] = names.palette_name != nullptr ? names.palette_name(e.palette) : std::string();
+        x["s"] = e.speed;
+        x["i"] = e.intensity;
+        x["w"] = ::espn::kFxWaitSeconds[e.wait < ::espn::kFxWaitCount ? e.wait : ::espn::kFxWaitDefault];
+      }
+    }
+    doc["fxlist"] = this->fx_player_.list;
+    doc["fxlistmax"] = ::espn::kFxListMax;
+    doc["fxmax"] = ::espn::kFxEntryMax;
+    JsonArray waits = doc["fxwaits"].to<JsonArray>();
+    for (uint16_t w : ::espn::kFxWaitSeconds)
+      waits.add(w);
+  }
   // The sport rows Playing offers, worked out from the favorites, and the one
   // playing ("" for none; list is then 0).
   JsonArray sports = doc["sports"].to<JsonArray>();
@@ -5414,9 +6560,13 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["jump"] = this->jump_to_action();
   doc["banner"] = this->score_banner();
   doc["favtake"] = this->favorites_take_over();
+  // The owner's own leagues; a league button in use reads its one league
+  // instead (live_only) and leaves these as they are.
   JsonArray live = doc["live"].to<JsonArray>();
-  for (League l : this->live_leagues_())
+  for (League l : this->own_live_leagues_())
     live.add(::espn::league_key(l));
+  int live_only = this->held_league_();
+  doc["live_only"] = live_only >= 0 ? ::espn::league_key((League) live_only) : "";
   doc["live_auto"] = this->prefs7_.live_mask == 0;
   doc["tz"] = this->prefs_.tz_index;
   doc["tz_name"] = ::espn::kTimezones[this->prefs_.tz_index].name;
@@ -5429,10 +6579,12 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["odds"] = this->ticker_odds();
   doc["leaders"] = this->ticker_leaders();
   doc["field"] = this->field_strip_on();
-  doc["winbar"] = this->win_bar_on();
-  doc["spark"] = this->margin_spark_on();
+  doc["winbar"] = this->win_chance_on();
+  // The score margin chart is gone; apps from before still read the key.
+  doc["spark"] = false;
   doc["opp"] = this->opponent_splashes();
   doc["celebrate"] = (int) this->celebrations();
+  doc["bigplays"] = this->big_plays();
   doc["best"] = this->best_game();
   doc["bootaddr"] = this->show_boot_address();
   doc["countdown"] = this->countdown_on();
@@ -5487,10 +6639,11 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["wake"] = this->wake_.on != 0;
   doc["wakelead"] = this->wake_.lead;
   doc["after"] = ::espn::after_word(this->wake_.after);
-  doc["wake_now"] = ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_);
-#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
-  // Left out where nothing can be installed (the demo build) or there is no
-  // choice (the bar build), so the page and the app hide the switch.
+  doc["wake_now"] =
+      ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_, this->wake_fx_);
+#if defined(USE_UPDATE)
+  // Left out where nothing can be installed (the demo build), so the page
+  // and the app hide the switch.
   doc["autoupd"] = this->auto_update();
 #endif
 #ifdef GAMEDAY_BETA_CHANNEL
@@ -5503,7 +6656,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   if (this->update_mark_.failed[0] != '\0')
     doc["update_failed"] = (const char *) this->update_mark_.failed;
 #endif
-#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+#if defined(USE_UPDATE)
   // The release waiting is marked important (update_nudge.h); left out
   // otherwise, and with nothing waiting.
   if (this->update_important_)
@@ -5512,40 +6665,6 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // Diagnostics); left out until it has since this start.
   if (this->nudge_day_.since > 0)
     doc["update_shown"] = this->nudge_day_.since;
-#endif
-#ifdef GAMEDAY_BAR
-  // The device page shows the bar build note and a "Something wrong?" link.
-  doc["bar"]["report"] = this->report_email_;
-  // The brand pack (brand.h): its address, and brandread once a pack is on
-  // hand or a read has answered: the last read's HTTP status (0 for no
-  // answer, -1 none yet), what the pack gave, error when the last file
-  // wasn't used (the pack shown is then the last good one), warning for a
-  // field it couldn't use, logo_error when the logo didn't read; sprite_ok
-  // and sprite_error the same for a pack with a sprite.
-  doc["brand"] = this->brand_url_;
-  if (!this->brand_url_.empty() && (this->brand_ok_ || this->brand_status_ >= 0)) {
-    JsonObject br = doc["brandread"].to<JsonObject>();
-    br["status"] = this->brand_status_;
-    br["ok"] = this->brand_ok_;
-    if (!this->brand_error_.empty())
-      br["error"] = this->brand_error_;
-    if (this->brand_ok_) {
-      br["name"] = this->brand_.name;
-      br["title"] = this->brand_.title;
-      br["wall"] = this->brand_.wall;
-      br["logo"] = this->brand_.logo_color.empty() ? this->brand_.logo : this->brand_.logo_color;
-      br["logo_ok"] = !this->brand_logo_.empty();
-      br["list"] = this->brand_.list;
-      if (!this->brand_.sprite.empty())
-        br["sprite_ok"] = !this->brand_sprite_.empty();
-      if (!this->brand_.warning.empty())
-        br["warning"] = this->brand_.warning;
-    }
-    if (!this->brand_logo_error_.empty())
-      br["logo_error"] = this->brand_logo_error_;
-    if (!this->brand_sprite_error_.empty())
-      br["sprite_error"] = this->brand_sprite_error_;
-  }
 #endif
   // The message card (message.h). msgread is the list's last read, left out
   // with no address or before the first: its HTTP status (0 for no answer)
@@ -5739,6 +6858,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
     doc["shown"] = this->fav_shown_ >= 0 ? (int) this->fav_[this->fav_shown_].slot : 0;
     doc["locked"] = this->fav_locked_;
     for (const auto &e : this->fav_) {
+      if (this->fav_off_(e))
+        continue;  // a button-only team has a row only while its button is in use
       JsonObject o = next.add<JsonObject>();
       o["slot"] = e.slot;
       JsonObject t = o["t"].to<JsonObject>();
@@ -5813,10 +6934,7 @@ std::string GamedayComponent::health_json_() {
   h.version = "";
 #endif
   h.built = (int64_t) App.get_build_time();
-#if defined(GAMEDAY_BAR)
-  // A bar panel with Follow beta on reads the bar betas.
-  h.channel = this->follow_beta() ? "beta" : "bar";
-#elif defined(GAMEDAY_BETA_CHANNEL)
+#if defined(GAMEDAY_BETA_CHANNEL)
   h.channel = this->follow_beta() ? "beta" : "stable";
 #elif defined(USE_UPDATE)
   h.channel = "stable";
@@ -5910,6 +7028,7 @@ void GamedayComponent::say(const std::string &text, int secs, uint8_t mark) {
   this->say_text_ = board_lines(::espn::message_clean(text, ::espn::kMsgTextMax, true));
   this->say_secs_ = ::espn::clamp_say_secs(secs);
   this->say_mark_ = mark;
+  this->say_ms_ = millis();
   if (this->say_text_.empty())
     ESP_LOGI(TAG, "Banner down");
   else
@@ -6009,6 +7128,11 @@ std::string GamedayComponent::ha_league_() const {
 // From every board update and every so often from loop(): the reminder
 // before the start goes by the clock, not by a read.
 void GamedayComponent::ha_track_() {
+  // Off the Scoreboard nothing goes to Home Assistant (showing.h). Back on
+  // it from a picked page, the tracker starts fresh (showing_tick_), so a
+  // score from while it was away never fires.
+  if (this->showing_ != ::espn::Showing::BOARD || this->standby_)
+    return;
   // The finals rotation turns through other games' cards, none of them followed.
   if (this->recap_on_ && !this->demo_playing_())
     return;
@@ -6051,13 +7175,17 @@ void GamedayComponent::send_game_event_(const ::espn::HaEvent &e) {
     fields.emplace_back("panel", panel);
     const std::string name = std::string("esphome.gameday_") + kind;
     api::HomeassistantActionRequest req;
-    req.service = StringRef(name);
+    // ESPHome 2026.11 turned these fields into ProgmemStringRef, which takes a
+    // StringRef only explicitly. Naming each field's own type builds on both.
+    using Service = decltype(req.service);
+    using Field = decltype(api::HomeassistantServiceMap::key);
+    req.service = Service(StringRef(name));
     req.is_event = true;
     req.data.init(fields.size());
     for (const auto &kv : fields) {
       auto &m = req.data.emplace_back();
-      m.key = StringRef(kv.first);
-      m.value = StringRef(kv.second);
+      m.key = Field(StringRef(kv.first));
+      m.value = Field(StringRef(kv.second));
     }
     api->send_homeassistant_action(req);
   }
@@ -6158,21 +7286,33 @@ void GamedayComponent::hook_tick_() {
   this->hook_queue_.erase(this->hook_queue_.begin());
   this->hook_task_done_ = false;
   this->hook_running_ = true;
-  // Plain HTTP and no response body: the Wi-Fi check's stack, freed when
-  // the post is done.
-  if (xTaskCreate(&GamedayComponent::hook_task_, "gameday_hook", 6144, this, 1, nullptr) != pdPASS) {
-    ESP_LOGW(TAG, "Webhook: could not start the post (largest free internal block %u bytes)",
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  if (this->hook_task_.is_created()) {
+    xTaskNotifyGive(this->hook_task_.get_handle());
+    return;
+  }
+  // Plain HTTP and no response body: the Wi-Fi check's stack size, kept in
+  // PSRAM like the logo task's. The new task makes this first post at once.
+  if (!this->hook_task_.create(&GamedayComponent::hook_task_fn_, "gameday_hook", 6144, this, 1, true)) {
+    ESP_LOGW(TAG, "Webhook: could not start the post task (largest free PSRAM block %u bytes)",
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+    std::string().swap(this->hook_task_body_);
     this->hook_running_ = false;
     this->hook_dropped_++;
   }
 }
 
-// The post itself, on its own task: one try, three seconds at most to
-// connect and three for the answer, whose body is never read.
-void GamedayComponent::hook_task_(void *arg) {
+void GamedayComponent::hook_task_fn_(void *arg) {
   auto *self = static_cast<GamedayComponent *>(arg);
-  std::string url = self->hook_task_url_;
+  while (true) {
+    self->hook_post_();
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  }
+}
+
+// The post itself, on the hook task: one try, three seconds at most to
+// connect and three for the answer, whose body is never read.
+void GamedayComponent::hook_post_() {
+  std::string url = this->hook_task_url_;
   std::string host;
 #ifdef USE_MDNS
   // homeassistant.local and the like: lwIP would hand the name to the
@@ -6204,15 +7344,14 @@ void GamedayComponent::hook_task_(void *arg) {
     esp_http_client_set_header(client, "Content-Type", "application/json");
     if (!host.empty())
       esp_http_client_set_header(client, "Host", host.c_str());
-    esp_http_client_set_post_field(client, self->hook_task_body_.data(), (int) self->hook_task_body_.size());
+    esp_http_client_set_post_field(client, this->hook_task_body_.data(), (int) this->hook_task_body_.size());
     if (esp_http_client_perform(client) == ESP_OK)
       status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
   }
-  self->hook_task_status_ = status;
-  self->hook_task_stack_ = (uint32_t) uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
-  self->hook_task_done_ = true;
-  vTaskDelete(nullptr);
+  this->hook_task_status_ = status;
+  this->hook_task_stack_ = (uint32_t) uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
+  this->hook_task_done_ = true;
 }
 
 // Any of the three; a null pointer or a negative every leaves that one as it is.
@@ -6259,7 +7398,6 @@ void GamedayComponent::msg_reset_() {
   this->msg_fail_ms_ = 0;
   this->msg_status_ = -1;
   this->msg_total_ = 0;
-  this->brand_opened_ = false;
   if (this->msg_src_().empty() && !this->msg_text_.empty()) {
     // The saved text is the whole list.
     this->msg_list_.assign(this->msg_text_.data(), this->msg_text_.size());
@@ -6289,6 +7427,9 @@ void GamedayComponent::msg_show_(const std::string &page) {
 
 // Not over a live game, the demo, a splash or the panel's trouble line.
 bool GamedayComponent::card_between_(uint32_t now) const {
+  // Nobody sees a card on a dark screen or under a picked page.
+  if (this->standby_ || this->showing_ == ::espn::Showing::PICKED)
+    return false;
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   return !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
@@ -6306,21 +7447,6 @@ void GamedayComponent::msg_tick_() {
                        now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
                        !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
-#ifdef GAMEDAY_BAR
-  // A plate party someone asked for (plate_party) goes up now, over a game
-  // too, and keeps the board for its time; then the card's own turns again.
-  if (this->party_force_) {
-    if (this->party_due_ && !this->demo_playing_()) {
-      this->party_due_ = false;
-      this->msg_show_(::espn::kPartyPageMark + panel_text(this->party_line_));
-      return;
-    }
-    if (this->msg_shown_ && this->msg_card_[0] == ::espn::kPartyPageMark && now - this->msg_since_ms_ < page_ms)
-      return;
-    this->party_force_ = false;
-    this->party_due_ = false;
-  }
-#endif
   ::espn::MsgTurn turn =
       ::espn::msg_turn(on, between, this->msg_shown_, now - this->msg_since_ms_, this->msg_every_, page_ms);
   if (turn == ::espn::MsgTurn::NONE)
@@ -6329,39 +7455,7 @@ void GamedayComponent::msg_tick_() {
     this->msg_show_("");
     return;
   }
-#ifdef GAMEDAY_BAR
-  // A new plate at the top of the list: its party is the next page.
-  if (this->party_due_ && this->plates_() && !this->party_line_.empty()) {
-    this->party_due_ = false;
-    this->msg_show_(::espn::kPartyPageMark + panel_text(this->party_line_));
-    return;
-  }
-#endif
-  // The bar build's opening card goes up before the list's first page, each
-  // time round, and alone when there is no list.
-  if (this->brand_ok_ && !this->brand_opened_) {
-    this->brand_opened_ = true;
-#ifdef GAMEDAY_BAR
-    this->brand_event_done_ = false;
-#endif
-    this->msg_show_(::espn::kBrandPage);
-    return;
-  }
-#ifdef GAMEDAY_BAR
-  // The pack's event, in the two weeks before it: right after the opening card.
-  if (this->brand_ok_ && !this->brand_event_done_) {
-    this->brand_event_done_ = true;
-    const std::string ev = this->event_page_();
-    if (!ev.empty()) {
-      this->msg_show_(ev);
-      return;
-    }
-  }
-  // The plate wall: one member a page.
-  const uint32_t per = this->plates_() ? 1 : ::espn::kMsgPageLines;
-#else
   const uint32_t per = ::espn::kMsgPageLines;
-#endif
   const bool url = !this->msg_src_().empty();
   const bool may_read = url && (this->msg_fail_ms_ == 0 || now - this->msg_fail_ms_ >= ::espn::kMsgRetryMs);
   const bool stale = may_read && this->msg_list_ms_ != 0 && now - this->msg_list_ms_ >= ::espn::kMsgRefreshMs;
@@ -6378,24 +7472,12 @@ void GamedayComponent::msg_tick_() {
     return;
   }
   if (page.count == 0) {
-    if (this->brand_ok_) {
-      this->brand_opened_ = false;  // nothing but the opening card: it stays up
-      this->msg_show_(::espn::kBrandPage);
-    } else if (this->msg_shown_) {
+    if (this->msg_shown_)
       this->msg_show_("");
-    }
     return;
   }
   this->msg_pos_ = page.next;
-  if (page.next <= page.first)
-    this->brand_opened_ = false;  // back to the top next: the opening card first
   const std::string entries = ::espn::msg_entries(this->msg_list_, page.first - this->msg_from_, page.count);
-#ifdef GAMEDAY_BAR
-  if (this->plates_()) {
-    this->msg_show_(::espn::kPlatePageMark + panel_text(entries));
-    return;
-  }
-#endif
   this->msg_show_(board_lines(entries));
 }
 
@@ -6406,9 +7488,6 @@ void GamedayComponent::start_msg_job_() {
   this->job_.need_msg = true;
   this->job_.msg_url = this->msg_src_();
   this->job_.msg_from = this->msg_read_from_;
-#ifdef GAMEDAY_BAR
-  this->job_.msg_plates = this->plates_();
-#endif
   this->start_worker_();
 }
 
@@ -6455,14 +7534,6 @@ void GamedayComponent::run_msg_job_() {
     j.msg_seen = reader.seen();
     j.msg_list = std::move(reader.list());
   };
-#ifdef GAMEDAY_BAR
-  if (j.msg_plates) {
-    // A plate's line holds its quote too.
-    ::espn::MsgReader<PsString, ::espn::kPlateLineMax> plates(j.msg_from, ::espn::kMsgChunkLines);
-    read(plates);
-    return;
-  }
-#endif
   ::espn::MsgReader<PsString> reader(j.msg_from, ::espn::kMsgChunkLines);
   read(reader);
 }
@@ -6491,393 +7562,9 @@ void GamedayComponent::apply_msg_job_() {
     this->msg_total_ = j.msg_seen;
   ESP_LOGI(TAG, "Message list: entries %u to %u%s", (unsigned) j.msg_from + 1, (unsigned) (j.msg_from + j.msg_n),
            j.msg_eof ? ", the end of the file" : "");
-#ifdef GAMEDAY_BAR
-  if (j.msg_from == 0 && j.msg_plates)
-    this->plate_top_(::espn::msg_entries(this->msg_list_, 0, 1));
-#endif
   this->rebuild_state_(&this->last_fields_);
 }
 
-#ifdef GAMEDAY_BAR
-// ---- The brand pack (brand.h), bar build only -------------------------------
-
-void GamedayComponent::load_brand_() {
-  this->brand_url_pref_ = global_preferences->make_preference<PrefsBrandUrl>(fnv1_hash("gameday_brand_url_v1"));
-  this->brand_doc_pref_ = global_preferences->make_preference<PrefsBrandDoc>(fnv1_hash("gameday_brand_doc_v1"));
-  this->plate_pref_ = global_preferences->make_preference<PrefsPlateTop>(fnv1_hash("gameday_plate_top_v1"));
-  PrefsPlateTop top{};
-  if (this->plate_pref_.load(&top)) {
-    top.id[sizeof(top.id) - 1] = '\0';
-    this->plate_top_id_ = top.id;
-  }
-  PrefsBrandUrl u{};
-  if (!this->brand_url_pref_.load(&u))
-    return;  // never set: no pack
-  u.url[sizeof(u.url) - 1] = '\0';
-  if (!::espn::msg_url_ok(u.url) || u.url[0] == '\0')
-    return;
-  this->brand_url_ = u.url;
-  this->brand_read_due_ = true;  // read it again as soon as the network is up
-  // The last good file, so the look is up before that read, or without it.
-  auto *d = new PrefsBrandDoc{};
-  if (this->brand_doc_pref_.load(d) && d->size > 0 && d->size <= sizeof(d->doc)) {
-    std::string err;
-    if (::espn::brand_parse(d->doc, d->size, this->brand_, err)) {
-      this->brand_ok_ = true;
-      this->brand_doc_hash_ = fnv1_hash(std::string(d->doc, d->size));
-      ESP_LOGI(TAG, "Brand pack from flash: %s", this->brand_.name.empty() ? this->brand_.title.c_str()
-                                                                           : this->brand_.name.c_str());
-    }
-  }
-  delete d;
-}
-
-// A new address drops the pack on hand and reads the new one right away, so
-// the panel never shows one bar's look under another's address. "" turns
-// brand packs off.
-void GamedayComponent::set_brand_(const std::string &url) {
-  if (url == this->brand_url_)
-    return;
-  this->brand_url_ = url;
-  PrefsBrandUrl u{};
-  strncpy(u.url, url.c_str(), sizeof(u.url) - 1);
-  this->brand_url_pref_.save(&u);
-  if (this->brand_doc_hash_ != 0) {
-    auto *d = new PrefsBrandDoc{};
-    this->brand_doc_pref_.save(d);  // size 0: no file
-    delete d;
-  }
-  // Another bar's list: its top line is saved on the first read, no party.
-  if (!this->plate_top_id_.empty()) {
-    this->plate_top_id_.clear();
-    PrefsPlateTop top{};
-    this->plate_pref_.save(&top);
-  }
-  this->sync_prefs_();
-  this->party_line_.clear();
-  this->party_due_ = this->party_force_ = false;
-  this->brand_ = ::espn::BrandPack{};
-  this->brand_ok_ = false;
-  this->brand_doc_hash_ = 0;
-  this->brand_logo_.clear();
-  this->brand_sprite_.clear();
-  this->brand_sprite_error_.clear();
-  this->brand_status_ = -1;
-  this->brand_error_.clear();
-  this->brand_logo_error_.clear();
-  this->brand_read_ms_ = 0;
-  this->brand_fail_ms_ = 0;
-  this->brand_read_due_ = !url.empty();
-  ESP_LOGI(TAG, "Brand pack: %s", url.empty() ? "off" : url.c_str());
-  this->msg_reset_();  // the list the card reads may change with the pack
-  this->rebuild_state_(&this->last_fields_);
-}
-
-// Main loop: a read every kBrandRefreshMs after a good one, kBrandRetryMs
-// after a failed one.
-void GamedayComponent::brand_tick_() {
-  if (this->brand_url_.empty() || this->brand_read_due_ || (this->busy_ && this->job_.need_brand))
-    return;
-  const uint32_t now = millis();
-  if (this->brand_fail_ms_ != 0 ? now - this->brand_fail_ms_ >= ::espn::kBrandRetryMs
-                                : this->brand_read_ms_ == 0 || now - this->brand_read_ms_ >= ::espn::kBrandRefreshMs)
-    this->brand_read_due_ = true;
-}
-
-void GamedayComponent::start_brand_job_() {
-  this->brand_read_due_ = false;
-  ::espn::reset_in_place(this->job_);
-  this->job_.generation = this->generation_;
-  this->job_.need_brand = true;
-  this->job_.brand_url = this->brand_url_;
-  this->job_.logo_have_url = this->brand_logo_.url;
-  this->job_.logo_have_tint = this->brand_logo_.tint;
-  this->job_.logo_have_fg = this->brand_logo_.fg;
-  this->job_.logo_have_bg = this->brand_logo_.bg;
-  if (this->brand_logo_.empty())
-    this->job_.logo_have_url.clear();
-  this->job_.sprite_have_url = this->brand_sprite_.empty() ? "" : this->brand_sprite_.url;
-  this->job_.brand_keep_ok = this->brand_ok_;
-  if (this->brand_ok_) {
-    this->job_.keep_logo = this->brand_.logo;
-    this->job_.keep_logo_color = this->brand_.logo_color;
-    this->job_.keep_sprite = this->brand_.sprite;
-    this->job_.keep_rim = this->brand_.rim;
-    this->job_.keep_bg = this->brand_.background;
-  }
-  this->start_worker_();
-}
-
-namespace {
-
-// Up to max + 1 bytes of a reply, so a file past max is seen to be too big.
-template<class V> bool read_capped(std::shared_ptr<http_request::HttpContainer> &c, size_t max, V &out) {
-  uint8_t buf[512];
-  const uint32_t started = millis();
-  while (out.size() <= max && millis() - started < MSG_READ_LIMIT) {
-    int n = c->read(buf, sizeof(buf));
-    if (n <= 0)
-      return n == 0 && c->is_read_complete();
-    out.insert(out.end(), buf, buf + n);
-  }
-  return out.size() > max;  // too big: said by the caller
-}
-
-}  // namespace
-
-// Worker task: the pack, then its logo when it isn't the one on hand.
-void GamedayComponent::run_brand_job_() {
-  Job &j = this->job_;
-  std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}, {"Accept", "application/json"}};
-  auto container = this->http_->get(j.brand_url, headers);
-  std::string doc;
-  if (container == nullptr) {
-    ESP_LOGW(TAG, "Brand pack: no answer from %s", j.brand_url.c_str());
-  } else {
-    j.brand_status = container->status_code;
-    if (container->status_code != 200) {
-      ESP_LOGW(TAG, "Brand pack: HTTP %d for %s", container->status_code, j.brand_url.c_str());
-    } else if (!read_capped(container, ::espn::kBrandMaxBytes, doc)) {
-      j.brand_error = "The brand file was cut off.";
-    } else {
-      j.brand_ok = ::espn::brand_parse(doc.data(), doc.size(), j.brand_pack, j.brand_error);
-    }
-    container->end();
-  }
-  if (j.brand_ok) {
-    j.brand_doc = std::move(doc);
-    this->run_brand_logo_(j.brand_pack);
-    this->run_brand_sprite_(j.brand_pack.sprite);
-  } else if (j.brand_keep_ok) {
-    // The last good pack's logo and sprite, if they aren't on hand.
-    ::espn::BrandPack keep;
-    keep.logo = j.keep_logo;
-    keep.logo_color = j.keep_logo_color;
-    keep.rim = j.keep_rim;
-    keep.background = j.keep_bg;
-    this->run_brand_logo_(keep);
-    this->run_brand_sprite_(j.keep_sprite);
-  }
-}
-
-// Worker task: the sprite at url, unless it is the one on hand.
-void GamedayComponent::run_brand_sprite_(const std::string &url) {
-  Job &j = this->job_;
-  if (url.empty() || url == j.sprite_have_url)
-    return;
-  j.brand_sprite_read = true;
-  std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}, {"Accept", "image/png"}};
-  auto img = this->http_->get(url, headers);
-  if (img == nullptr) {
-    j.brand_sprite_error = "No answer from the sprite's address.";
-    return;
-  }
-  if (img->status_code != 200) {
-    j.brand_sprite_error = "The sprite's address answered HTTP " + std::to_string(img->status_code) + ".";
-    img->end();
-    return;
-  }
-  ::espn::PsVector<uint8_t> file;
-  const bool got = read_capped(img, ::espn::kBrandLogoMaxBytes, file);
-  img->end();
-  if (!got) {
-    j.brand_sprite_error = "The sprite file was cut off.";
-    return;
-  }
-  j.brand_sprite_error = brand_decode_sprite(file.data(), file.size(), j.brand_sprite);
-  if (j.brand_sprite_error.empty())
-    j.brand_sprite.url = url;
-}
-
-// Main loop: what the job read of the sprite at url (the pack's on hand).
-void GamedayComponent::apply_brand_sprite_(const std::string &url) {
-  Job &j = this->job_;
-  if (url.empty()) {
-    this->brand_sprite_.clear();
-    this->brand_sprite_error_.clear();
-    return;
-  }
-  if (!j.brand_sprite_read)
-    return;  // the one on hand
-  if (j.brand_sprite_error.empty()) {
-    this->brand_sprite_ = std::move(j.brand_sprite);
-    this->brand_sprite_error_.clear();
-    return;
-  }
-  // A sprite that didn't read: the plate wall goes on without one, unless
-  // the one on hand came from the same file.
-  if (this->brand_sprite_.url != url)
-    this->brand_sprite_.clear();
-  this->brand_sprite_error_ = j.brand_sprite_error;
-  ESP_LOGW(TAG, "Brand sprite: %s", j.brand_sprite_error.c_str());
-}
-
-// Worker task: p's logo, unless it is the one on hand.
-void GamedayComponent::run_brand_logo_(const ::espn::BrandPack &p) {
-  Job &j = this->job_;
-  const bool tint = p.logo_color.empty();
-  const std::string &url = tint ? p.logo : p.logo_color;
-  if (url.empty())
-    return;  // no logo: the card is words alone
-  if (url == j.logo_have_url && tint == j.logo_have_tint && (!tint || p.rim == j.logo_have_fg) &&
-      p.background == j.logo_have_bg)
-    return;  // the one on hand
-  j.brand_logo_read = true;
-  std::vector<http_request::Header> img_headers = {{"User-Agent", USER_AGENT}, {"Accept", "image/png"}};
-  auto img = this->http_->get(url, img_headers);
-  if (img == nullptr) {
-    j.brand_logo_error = "No answer from the logo's address.";
-    return;
-  }
-  if (img->status_code != 200) {
-    j.brand_logo_error = "The logo's address answered HTTP " + std::to_string(img->status_code) + ".";
-    img->end();
-    return;
-  }
-  ::espn::PsVector<uint8_t> file;
-  const bool got = read_capped(img, ::espn::kBrandLogoMaxBytes, file);
-  img->end();
-  if (!got) {
-    j.brand_logo_error = "The logo file was cut off.";
-    return;
-  }
-  j.brand_logo_error = brand_decode_logo(file.data(), file.size(), tint, p.rim, p.background, j.brand_logo);
-  if (j.brand_logo_error.empty())
-    j.brand_logo.url = url;
-}
-
-// A logo read on the fetch task becomes the one on hand: its pixels (PSRAM)
-// move, its address is copied into the string already on hand.
-void GamedayComponent::take_brand_logo_(BrandLogo &read) {
-  this->brand_logo_.pixels.swap(read.pixels);
-  this->brand_logo_.w = read.w;
-  this->brand_logo_.h = read.h;
-  this->brand_logo_.url = read.url;
-  this->brand_logo_.tint = read.tint;
-  this->brand_logo_.fg = read.fg;
-  this->brand_logo_.bg = read.bg;
-  read.clear();
-}
-
-void GamedayComponent::apply_brand_job_() {
-  Job &j = this->job_;
-  if (j.brand_url != this->brand_url_)
-    return;  // the address changed meanwhile; set_brand_ has started over
-  const uint32_t now = millis();
-  this->brand_status_ = j.brand_status;
-  if (!j.brand_ok) {
-    // Keep the last good pack; say why this one wasn't used.
-    this->brand_fail_ms_ = now == 0 ? 1 : now;
-    this->brand_error_ = j.brand_error;
-    if (!j.brand_error.empty())
-      ESP_LOGW(TAG, "Brand pack: %s Keeping the last good one.", j.brand_error.c_str());
-    if (this->brand_ok_ && j.brand_logo_read) {
-      // The kept pack's logo, read alongside the failed file.
-      if (j.brand_logo_error.empty())
-        this->take_brand_logo_(j.brand_logo);
-      this->brand_logo_error_ = j.brand_logo_error;
-      if (this->brand_card_up())
-        this->fire_action_("msg");
-    }
-    if (this->brand_ok_)
-      this->apply_brand_sprite_(this->brand_.sprite);
-    this->rebuild_state_(&this->last_fields_);
-    return;
-  }
-  this->brand_fail_ms_ = 0;
-  this->brand_read_ms_ = now == 0 ? 1 : now;
-  this->brand_error_.clear();
-  const std::string old_list = this->msg_src_();
-  // Copied, not moved: the strings on hand keep their memory when the file
-  // is the same, so a read every half hour leaves no new allocations behind
-  // (the job's, made on the fetch task, are freed with the next job).
-  this->brand_ = j.brand_pack;
-  this->brand_ok_ = true;
-  const uint32_t hash = fnv1_hash(j.brand_doc);
-  if (hash != this->brand_doc_hash_) {
-    this->brand_doc_hash_ = hash;
-    auto *d = new PrefsBrandDoc{};
-    d->size = (uint16_t) j.brand_doc.size();
-    memcpy(d->doc, j.brand_doc.data(), j.brand_doc.size());
-    this->brand_doc_pref_.save(d);
-    delete d;
-    this->sync_prefs_();
-    ESP_LOGI(TAG, "Brand pack: %s", this->brand_.name.empty() ? this->brand_.title.c_str()
-                                                              : this->brand_.name.c_str());
-  }
-  std::string().swap(j.brand_doc);  // the job lives on until the next one: no copy kept
-  const bool tint = this->brand_.logo_color.empty();
-  const std::string &logo_url = tint ? this->brand_.logo : this->brand_.logo_color;
-  if (logo_url.empty()) {
-    this->brand_logo_.clear();
-    this->brand_logo_error_.clear();
-  } else if (j.brand_logo_read) {
-    if (j.brand_logo_error.empty()) {
-      this->take_brand_logo_(j.brand_logo);
-      this->brand_logo_error_.clear();
-    } else {
-      // A logo that didn't read leaves the card with words alone, unless
-      // the one on hand came from the same file.
-      if (this->brand_logo_.url != logo_url)
-        this->brand_logo_.clear();
-      this->brand_logo_error_ = j.brand_logo_error;
-      ESP_LOGW(TAG, "Brand logo: %s", j.brand_logo_error.c_str());
-    }
-  }
-  this->apply_brand_sprite_(this->brand_.sprite);
-  if (this->msg_src_() != old_list)
-    this->msg_reset_();  // the pack's plate list changed: read it from the top
-  else if (this->brand_card_up())
-    this->fire_action_("msg");  // redraw the opening card in the new look
-  this->rebuild_state_(&this->last_fields_);
-}
-
-// ---- The plate wall (plate_wall.h), bar build only ---------------------------
-
-// The top line of a read of the plate list from the top. The list comes
-// newest first, so a different plate there is a new one: its party goes up
-// once. The first read after a new pack only saves it.
-void GamedayComponent::plate_top_(const std::string &line) {
-  this->party_line_ = line;
-  const std::string id = ::espn::plate_id(::espn::plate_line(line));
-  const ::espn::PlateNews news = ::espn::plate_news(this->plate_top_id_, id);
-  if (news == ::espn::PlateNews::NONE)
-    return;
-  if (news == ::espn::PlateNews::NEW) {
-    ESP_LOGI(TAG, "New plate on top of the list (%s): plate party next", id.c_str());
-    this->party_due_ = true;
-  }
-  this->plate_top_id_ = id;
-  PrefsPlateTop top{};
-  strncpy(top.id, id.c_str(), sizeof(top.id) - 1);
-  this->plate_pref_.save(&top);
-  this->sync_prefs_();
-}
-
-void GamedayComponent::plate_party(const char *who) {
-  if (!this->plates_() || this->party_line_.empty()) {
-    ESP_LOGI(TAG, "Plate party from %s: no plate list read yet", who);
-    return;
-  }
-  ESP_LOGI(TAG, "Plate party from %s", who);
-  this->party_due_ = true;
-  this->party_force_ = true;
-  this->msg_tick_ms_ = millis() - 1000;  // the card's next look is the next loop
-}
-
-// The event page, or "" when the pack has no event in the next two weeks (or
-// the clock isn't set): its day and time on the panel's own calendar.
-std::string GamedayComponent::event_page_() const {
-  if (this->brand_.event_name.empty() || this->brand_.event_ymd == 0 || !this->clock_set_())
-    return "";
-  const ESPTime now = this->time_->now();
-  const ::espn::PlateEvent ev = ::espn::plate_event(this->brand_.event_ymd, this->brand_.event_minute, now.year,
-                                                    now.month, now.day_of_month);
-  if (!ev.show)
-    return "";
-  return std::string(1, ::espn::kEventPageMark) + ev.day + "\n" + ev.time;
-}
-#endif  // GAMEDAY_BAR
 
 // ---- The Top 25 card (rankings.h) -------------------------------------------
 
@@ -6894,7 +7581,7 @@ uint8_t GamedayComponent::top25_slots_() const {
       slots |= (uint8_t) (1u << s);
   };
   for (uint8_t i = 0; i < FAV_MAX; i++)
-    if (this->fav_id_(i) != 0)
+    if (this->fav_counts_(i))
       add((League) this->fav_league_(i));
   if (this->live_mode_())
     for (League l : this->scan_leagues_())
@@ -6998,10 +7685,11 @@ void GamedayComponent::start_top25_job_() {
 // Worker task. About 28 KB, streamed through the parse's filter.
 void GamedayComponent::run_top25_job_() {
   Job &j = this->job_;
-  auto container = this->open_(::espn::rankings_url(::espn::top25_slot_league(j.top25_slot)));
+  EspnFetch fetch;
+  auto container = this->open_(::espn::rankings_url(::espn::top25_slot_league(j.top25_slot)), &fetch);
   if (container == nullptr)
     return;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, nullptr, &fetch);
   j.top25_ok = ::espn::parse_rankings(reader, j.top25_poll);
   container->end();
   j.top25_bytes = (uint32_t) reader.total();
@@ -7278,10 +7966,11 @@ void GamedayComponent::start_news_job_() {
 void GamedayComponent::run_news_job_() {
   Job &j = this->job_;
   std::string url = ::espn::news_url(j.news_src.league, j.news_src.id);
-  auto container = this->open_(url);
+  EspnFetch fetch;
+  auto container = this->open_(url, &fetch);
   if (container == nullptr)
     return;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, nullptr, &fetch);
   j.news_n = ::espn::parse_news(reader, j.news_list);
   container->end();
   j.news_bytes = (uint32_t) reader.total();
@@ -7466,10 +8155,15 @@ void GamedayComponent::start_season_job_() {
 void GamedayComponent::run_season_job_() {
   Job &j = this->job_;
   const uint32_t start = millis();
-  auto container = this->open_(::espn::season_url(j.season_league, j.season_id, j.season_results));
+  if (this->job_moot_) {
+    j.season_cut = true;  // a change came while the task started
+    return;
+  }
+  EspnFetch fetch;
+  auto container = this->open_(::espn::season_url(j.season_league, j.season_id, j.season_results), &fetch);
   if (container == nullptr)
     return;
-  ContainerReader reader(container, this->espn_bytes_);
+  ContainerReader reader(container, this->espn_bytes_, &this->job_moot_, &fetch);
   reader.set_time_limit(start, SEASON_READ_LIMIT);
   // Through espn_parse.cpp (ByteSource), away from this file's literal pool.
   struct Source : ::espn::ByteSource {
@@ -7482,7 +8176,11 @@ void GamedayComponent::run_season_job_() {
   container->end();
   j.season_bytes = (uint32_t) reader.total();
   j.season_ms = millis() - start;
-  if (reader.timed_out()) {
+  j.season_cut = reader.aborted();
+  if (j.season_cut) {
+    j.season_ok = false;
+    ESP_LOGI(TAG, "Season: stopped after %u bytes for a settings change", (unsigned) j.season_bytes);
+  } else if (reader.timed_out()) {
     j.season_ok = false;
     ESP_LOGW(TAG, "Season: gave up after %u s with %u bytes read", (unsigned) (SEASON_READ_LIMIT / 1000),
              (unsigned) j.season_bytes);
@@ -7496,7 +8194,8 @@ void GamedayComponent::apply_season_job_() {
   const uint32_t now = millis() == 0 ? 1 : millis();
   SeasonEntry *e = this->season_entry_(j.season_league, j.season_id, true);
   if (!j.season_ok) {
-    e->fail_ms = now;
+    if (::espn::season_read_failed(j.season_ok, j.season_cut))
+      e->fail_ms = now;
     return;
   }
   e->fail_ms = 0;
@@ -7661,15 +8360,18 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
     // The stack figures are bytes each task has never touched since boot, the
     // margin left in its worst moment so far: the loop (16 KB, gameday-common.yaml),
     // this web server task (5,632 B, web_stack.h) and the fetch tasks (16 KB); -1
-    // before there is a reading. This handler runs on the web server task,
-    // whose stack is the tightest, so the buffer stays at 128 (the longest
-    // reply is 105 bytes).
+    // before there is a reading. "min" is the least free internal heap since
+    // boot (KiB), for the nightly watch: a reading every few minutes misses
+    // the short dip each ESPN read makes. This handler runs on the web server
+    // task, whose stack is the tightest, so the buffer stays at 128 (the
+    // longest reply is 115 bytes).
     char body[128];
     const uint32_t fetch = this->fetch_stack_low_.load();
     snprintf(body, sizeof(body),
-             "{\"internal\":%.1f,\"block\":%.1f,\"psram\":%.1f,\"loop_stack\":%d,\"web_stack\":%u,"
-             "\"fetch_stack\":%d}",
+             "{\"internal\":%.1f,\"min\":%.1f,\"block\":%.1f,\"psram\":%.1f,\"loop_stack\":%d,"
+             "\"web_stack\":%u,\"fetch_stack\":%d}",
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024.0f,
+             heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024.0f,
              heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024.0f,
              heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024.0f,
              this->loop_task_ == nullptr ? -1 : (int) uxTaskGetStackHighWaterMark(this->loop_task_),
@@ -7696,9 +8398,6 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 #ifdef GAMEDAY_DEMO
     known = known || name == "demo" || name == "demo_stop";
 #endif
-#ifdef GAMEDAY_BAR
-    known = known || name == "plate_party";
-#endif
     if (!known) {
       request->send(404, "application/json", "{\"error\":\"unknown action\"}");
       return;
@@ -7724,10 +8423,6 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
         this->start_demo((uint8_t) ::espn::DemoKind::PRO);
       else if (name == "demo_stop")
         this->stop_demo();
-#endif
-#ifdef GAMEDAY_BAR
-      else if (name == "plate_party")
-        this->plate_party("the device page");
 #endif
       this->fire_action_(name);
     });
@@ -7773,6 +8468,10 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
 #ifdef USE_GAMEDAY_SAVED_NETWORKS
 // The saved networks, names only: a password never leaves the panel. The
 // list is in the order the panel tries them, the last one that worked first.
+// POST takes one of: forget=<ssid>; ssid= and password= (a form body, so the
+// password stays out of the address) to save a network without joining it;
+// switch=<ssid> to join a saved one now; scan=1 to look for the networks in
+// range, which GET then marks seen.
 void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
   auto *nets = saved_networks::global_saved_networks;
   if (nets == nullptr) {
@@ -7780,16 +8479,50 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     return;
   }
   if (request->method() == HTTP_POST) {
-    std::string ssid = request->arg("forget");
-    if (ssid.empty()) {
-      request->send(400, "application/json", "{\"error\":\"forget is required\"}");
+    if (request->hasArg("ssid")) {
+      switch (nets->add(request->arg("ssid"), request->arg("password"))) {
+        case saved_networks::AddResult::ADDED:
+          request->send(200, "application/json", "{\"ok\":true,\"added\":true}");
+          return;
+        case saved_networks::AddResult::UPDATED:
+          request->send(200, "application/json", "{\"ok\":true,\"added\":false}");
+          return;
+        case saved_networks::AddResult::ON_IT:
+          request->send(400, "application/json", "{\"error\":\"The panel is on that network now.\"}");
+          return;
+        default:
+          request->send(400, "application/json",
+                        "{\"error\":\"A network name is 1 to 32 characters, a password up to 64.\"}");
+          return;
+      }
+    }
+    if (request->hasArg("switch")) {
+      if (!nets->switch_to(request->arg("switch"))) {
+        request->send(400, "application/json", "{\"error\":\"The panel can't switch to that network now.\"}");
+        return;
+      }
+      request->send(200, "application/json", "{\"ok\":true}");
       return;
     }
-    if (!nets->forget(ssid)) {
+    if (request->hasArg("scan")) {
+      nets->scan();
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+    std::string ssid = request->arg("forget");
+    if (ssid.empty()) {
+      request->send(400, "application/json", "{\"error\":\"forget, ssid, switch or scan is required\"}");
+      return;
+    }
+    const saved_networks::Forgot forgot = nets->forget(ssid);
+    if (forgot == saved_networks::Forgot::NOT_SAVED) {
       request->send(404, "application/json", "{\"error\":\"not a saved network\"}");
       return;
     }
-    request->send(200, "application/json", "{\"ok\":true}");
+    // moving: the panel leaves this network now for another saved one.
+    request->send(200, "application/json",
+                  forgot == saved_networks::Forgot::LEAVES ? "{\"ok\":true,\"moving\":true}"
+                                                           : "{\"ok\":true,\"moving\":false}");
     return;
   }
   if (request->method() != HTTP_GET) {
@@ -7802,8 +8535,26 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     JsonObject o = list.add<JsonObject>();
     o["ssid"] = e.ssid;
     o["connected"] = e.connected;
+    o["seen"] = e.seen;
   }
+  // What the last scan found, for the Add network form to pick from.
+  JsonArray nearby = doc["nearby"].to<JsonArray>();
+  // n is a copy that ends with the call: as a char * its name is copied in.
+  nets->each_nearby([&nearby](saved_networks::Nearby &n) {
+    JsonObject o = nearby.add<JsonObject>();
+    o["ssid"] = static_cast<char *>(n.ssid);
+    o["rssi"] = n.rssi;
+    if (n.open)
+      o["open"] = true;
+  });
   doc["max"] = (int) saved_networks::SavedNetworks::max();
+  doc["scanning"] = nets->scanning();
+  const std::string switching = nets->switching_ssid();
+  if (!switching.empty())
+    doc["switching"] = switching;
+  const std::string failed = nets->switch_failed();
+  if (!failed.empty())
+    doc["failed"] = failed;
   std::string body;
   serializeJson(doc, body);
   request->send(200, "application/json", body.c_str());
@@ -7873,8 +8624,10 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
   // sport= picking a sport row takes over list= in the same request (the
   // page sends list=0 with it); sport=none with list= leaves it to list=.
   bool with_lists = false, sport_pick = false;
-  int keep_list = -1;
+  int keep_list = -1, post_mode = -1;
   for (const auto &op : ops) {
+    if (op.kind == ::espn::SetKind::MODE)
+      post_mode = op.value;
     with_lists = with_lists || op.kind == ::espn::SetKind::LISTS;
     sport_pick = sport_pick || (op.kind == ::espn::SetKind::SPORT && op.value != 0);
     if (op.kind == ::espn::SetKind::LIST)
@@ -7883,6 +8636,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
   for (const auto &op : ops) {
     switch (op.kind) {
       case ::espn::SetKind::MODE:
+        this->clear_held_(true);  // a mode picked lets go of a button in use
         this->set_mode_((uint8_t) op.value);
         break;
       case ::espn::SetKind::ROTATE:
@@ -7927,6 +8681,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
       case ::espn::SetKind::LISTS:
         this->set_lists_(::espn::parse_lists(op.text, FAV_MAX), keep_list);
         break;
+      case ::espn::SetKind::KEEPFAV:
+        this->keep_favorite_(op.team.league, op.team.id);
+        break;
       case ::espn::SetKind::REMOTE: {
         ::espn::RemoteTarget t;
         if (::espn::remote_parse(op.text, t))
@@ -7946,6 +8703,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         if (op.value != 0)
           this->set_sport_row_((uint8_t) op.value,
                                announce && (op.value != this->prefs9_.sport || !this->favorites_mode_()));
+        else if (keep_list < 0 && this->prefs9_.sport != 0 &&
+                 ::espn::sport_stop_keeps_mode(post_mode, (uint8_t) Mode::FAVORITES))
+          this->stop_sport_row_();
         else if (keep_list < 0 && this->prefs9_.sport != 0)
           this->set_active_list_(0, announce);
         break;
@@ -7978,13 +8738,25 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         this->set_field_strip(op.on);
         break;
       case ::espn::SetKind::WINBAR:
-        this->set_win_bar(op.on);
+        this->set_win_chance(op.on);
         break;
       case ::espn::SetKind::SPARK:
-        this->set_margin_spark(op.on);
+        // The score margin chart is gone. Apps from before still send it.
         break;
       case ::espn::SetKind::OPP:
         this->set_opponent_splashes(op.on);
+        break;
+      case ::espn::SetKind::BIGPLAYS:
+        this->set_big_plays(op.on);
+        break;
+      case ::espn::SetKind::FX_LISTS:
+        this->set_fx_lists_(op.text);
+        break;
+      case ::espn::SetKind::FX_LIST:
+        if (op.value > this->fx_().store.count)
+          ESP_LOGW(TAG, "No effect playlist %d", op.value);
+        else
+          this->play_fx_list_((uint8_t) op.value);
         break;
       case ::espn::SetKind::CELEBRATE:
         this->set_celebrations((::espn::CelebLevel) op.value);
@@ -8040,13 +8812,6 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         break;
       case ::espn::SetKind::MSGEVERY:
         msg_every = op.value;
-        break;
-      case ::espn::SetKind::BRAND:
-#ifdef GAMEDAY_BAR
-        this->set_brand_(op.text);
-#else
-        ESP_LOGW(TAG, "Brand packs are for the bar build; leaving brand alone");
-#endif
         break;
       case ::espn::SetKind::NICK:
         this->set_nick_(op.text);
@@ -8148,9 +8913,7 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
       return;
     }
     JsonDocument out(::espn::detail::json_allocator());
-    int brightness = this->brightness_number_ != nullptr && this->brightness_number_->has_state()
-                         ? (int) this->brightness_number_->state
-                         : -1;
+    int brightness = this->display_ != nullptr ? (int) this->display_level() : -1;
     int scroll =
         this->scroll_number_ != nullptr && this->scroll_number_->has_state() ? (int) this->scroll_number_->state : -1;
     // The live mask isn't in the state (its live list is what the panel scans
@@ -8197,13 +8960,13 @@ void GamedayComponent::handle_settings_(AsyncWebServerRequest *request) {
         target.panels = this->panels_->cols();
         target.max_panels = this->panels_->max_cols();
       }
-#if defined(USE_UPDATE) && !defined(GAMEDAY_BAR)
+#if defined(USE_UPDATE)
       target.autoupd = true;
 #endif
 #ifdef GAMEDAY_BETA_CHANNEL
       target.beta = true;
 #endif
-      target.brightness = this->brightness_number_ != nullptr;
+      target.brightness = this->display_ != nullptr;
       target.scroll = this->scroll_number_ != nullptr;
       ::espn::parse_settings(doc.as<JsonVariantConst>(), target, in);
     }
@@ -8224,12 +8987,12 @@ void GamedayComponent::apply_settings_(const ::espn::SettingsImport &in) {
     ESP_LOGW(TAG, "Left out of the import: %s", s.c_str());
   for (const auto &k : in.kept)
     ESP_LOGI(TAG, "Kept this panel's own %s", k.c_str());
-  // One flash write for the whole restore, the two numbers' own saved
-  // values included, so a panel unplugged right after "Restored" keeps it.
+  // One flash write for the whole restore, the Display light's brightness and
+  // Scroll Speed included, so a panel unplugged right after "Restored" keeps it.
   this->sync_gate_.begin();
   this->apply_ops_(in.ops);
-  if (in.brightness >= 0 && this->brightness_number_ != nullptr)
-    this->brightness_number_->make_call().set_value((float) in.brightness).perform();
+  if (in.brightness >= 0)
+    this->set_display_level(in.brightness);
   if (in.scroll >= 0 && this->scroll_number_ != nullptr)
     this->scroll_number_->make_call().set_value((float) in.scroll).perform();
   this->sync_gate_.request();

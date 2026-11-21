@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-Game Day Scoreboard is an LED panel that shows your team's live score, game clock and next game. It follows the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League. Once it's on your Wi-Fi it gets the scores from ESPN by itself, with no hub, account or other computer to run.
+Game Day Scoreboard is an LED panel that shows your team's live score, game clock and next game. It follows the NFL, college football, MLB, the NBA, the WNBA, men's and women's college basketball, the NHL, MLS and the Premier League. Once it's on your Wi-Fi it gets the scores from ESPN by itself, with no hub, account or other computer to run.
 
 ## What you need
 

@@ -9,11 +9,16 @@ Format: `## vX.Y.Z` heading, one plain summary line, then the changes
 grouped under `### ⚠️ Heads up` (anything an owner has to do or notice),
 `### ✨ New` and `### 🐛 Fixes`, leaving out a group with nothing in it. One
 short line per change, written for the person who owns the panel, not for
-the code, starting with an emoji that fits it. The detail goes on the docs
-page that describes it, not here.
+the code, starting with an emoji that fits it. Name a setting or screen by
+its label on the device page or in the docs, never by a Home Assistant or
+code name. A change no owner would see (factory test screens, internals)
+gets no line. The detail goes on the docs page that describes it, not here.
 
-Changes merged since the last release go under `## Unreleased` at the top.
-The release renames that heading to the new version. A released section
+Changes merged since the last release go under `## Unreleased` at the top,
+already in the released shape: the summary line, then the groups. A change
+to a feature that already has a line updates that line. The release
+renames that heading to the new version (scripts/promote.py) and changes
+nothing else. A released section
 stays as it shipped: a change to something it describes is a new bullet
 under `## Unreleased`.
 
@@ -32,12 +37,98 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
+Women's college basketball joins the panel, it can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, and Rain's speed works.
+
+### ⚠️ Heads up
+
+- 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
+- 🏠 On the Clock, Effects or the Smart board the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
+- 🌙 A dark panel, turned off or at night, rests: it draws nothing, turns no cards, reads nothing from ESPN but your next game and sends Home Assistant nothing about games, then catches up in a second or two when it lights
+- 🌡️ **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** leave Home Assistant, where they wrote a row every 10 to 30 seconds; delete the old entities (the chip temperature is on the device page under Diagnostics)
+
 ### ✨ New
 
-- ⛳ Golf joins the panel: follow golfers on the PGA Tour, the LPGA and the DP World Tour by their ESPN athlete id, and the tournament leaderboard takes a turn between games with your golfers pinned in wherever they stand
-- 🍺 Bar panels can wear the bar's own look: one brand file gives them its logo, colors, club name and plate list, and a new file changes it with no reflash
-- 🍻 Bar panels show the plate list as a plate wall, one member a page with their quote, throw a plate party for each new plate, and count down to the bar's next event
-- 🍺 Panels in bars run the bar build of each release, and install it on their own overnight
+- 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+- ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
+- 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
+- ⛳ Golf joins the panel: the PGA Tour, LPGA and DP World Tour leaderboards take a turn between games, with the golfers you follow pinned on
+
+### 🐛 Fixes
+
+- 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
+- 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
+- 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
+- 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
+- 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
+- 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
+
+## v2026.11.5
+
+The new Smart board shows your own text from Home Assistant, effect playlists step through your effects, and remote buttons can pick live games, any team, a page or a playlist.
+
+### ⚠️ Heads up
+
+- 💡 In Home Assistant, **Power** and **Brightness** are now one light with the panel's name that can join a light group or an area and fade; an automation or dashboard that used either needs the light instead
+
+### ✨ New
+
+- 🏠 **Smart board** under **Showing**: up to four rows of live text from Home Assistant, any entity or attribute, with color tags like [red]; it can also go up between games under **After the game**
+- 📶 **Add network** under **Wi-Fi networks** on the device page saves a network by name and password while the panel stays on its Wi-Fi, and offers to switch to it now when it's in range
+- 📉 The panel downloads a fifth of the data from ESPN or less: it asks for the scores compressed, so **ESPN data** on the device page climbs much slower
+- 🎆 **Effect playlists**: up to 4 named lists of effects (any name but **None**, the choice that stops one), each one up for 1 second to an hour, in order or shuffled, made on the Customize tab and played from there, the Home tab, a **Remote** button or Home Assistant
+- 🎮 **Live games**, **Scoreboard**, **Clock**, **Smart board** and **Effects** in the **Remote** button pickers: Live games switches the panel back to Live games with the leagues it had, so a favorite's button pressed during Live games is no longer a one-way trip; a page choice puts that page up, and an Effects button keeps its own effect, palette, speed and intensity, set with **Change** under it
+- 🏈 The **Remote** button pickers are grouped by sport, with every league: **All NFL live games** follows that league only, leaving your own Live games leagues as they are, and **Another NFL team...** puts any team on a button, marked **Button only** under **Favorites**
+- 🏟️ **Sports in playlists**: a playlist can hold whole leagues beside its teams, like NFL plus the Mavericks; it shows those leagues' live games, and its own teams take over while they play
+- 🔁 A remote button set to a team, playlist, sport or Live games now brings the panel back to the scoreboard when the Clock, Smart board or an effect is up, and ends **After the game**'s clock or Smart board until the next game's final
+
+### 🐛 Fixes
+
+- ⏱️ Live games shows a game within seconds of a change or at startup, instead of an empty board for 10 seconds or more while the panel read every league
+- 📶 **Forget** on the Wi-Fi network the panel is on moves it to your next saved network right away, instead of staying on the forgotten one until the next restart
+- 🎮 A WizMote paired or unpaired just before a power cut stays that way, instead of the old pairing coming back
+- 🪝 A webhook address no longer takes a little of the panel's memory with every event it posts, which over a week of game days without a restart could run the panel low
+- 📶 The round arrow above the app's Wi-Fi list now has the panel look for networks again, so a phone hotspot turned on after the panel started shows up
+- 🔓 After **Reset Wi-Fi** the panel stays in setup for the app instead of joining an open Wi-Fi network nearby that it never saved
+- 🌅 A panel turned back on now shows what's current: a Smart board row no longer stays frozen mid-scroll on the text it had when it went dark
+
+## v2026.11.3
+
+Pick the best game now starts off, so Live games shows a random game until you turn it on. Favorites reach the board faster: several added in a row, or a live favorite with Favorites take over on, shows within seconds.
+
+### ⚠️ Heads up
+
+- 🎲 **Pick the best game** in Live games is now off by default, and this update turns it off once; turn it back on under **Live games** on the device page
+
+### ✨ New
+
+- 📊 The win chance shows after a touchdown, field goal, turnover or a swing of 10 points or more, instead of every few seconds
+
+### 🐛 Fixes
+
+- ⭐ Adding several favorites in a row shows the right game within seconds, instead of waiting behind a schedule card's download
+- 🔁 Turning on Favorites take over, or adding a favorite while it's on, shows a favorite's game that's on now within seconds, instead of waiting hours when nothing else was live
+- 🏈 An interception, fumble or sack celebrates once, instead of again each time ESPN rewrites the play
+- 🏒 A hockey intermission stays on the board until the puck drops, records and game leaders included, instead of ending when ESPN puts up the next period's clock early
+
+## v2026.11.2
+
+Big plays: dunks, interceptions, grand slams, hat tricks and braces get their own pixel-art celebrations. The row under the clock reads in words, and each league tab in the team chooser starts with today's games.
+
+### ⚠️ Heads up
+
+- 📜 New firmware code is open source under GPLv3 instead of MIT, so anyone who builds on it keeps the author's name on it and shares their source; code released before stays MIT
+
+### ✨ New
+
+- ©️ The bottom of the device page names the firmware's author and license
+- 🎆 On **Full** celebrations your team's big plays get their own pixel-art scene: dunks and alley-oops, interceptions, pick sixes, fumbles and sacks, grand slams and walk-offs, hockey hat tricks, and soccer braces, hat tricks, penalties and late go-ahead goals, with a **Big plays** switch to turn them off
+- 🔤 On a wide board the row under the clock reads in words in place of the score margin chart and the win chance bar: the win chance ("ND 84% to win") in football and basketball, the last basket, points leaders and playoff series in basketball, shots on goal and the latest goal in hockey
+- 📋 Each league tab in the team chooser starts with that league's games today, so you can add a team from its game
+
+### 🐛 Fixes
+
+- 🏷️ A team ESPN has no logo for, like a small college on a Division I schedule, shows its abbreviation in its team color instead of an empty space
+- ⭐ A favorite you add shows within a few seconds instead of leaving the board empty for about a minute
 
 ## v2026.11.1
 

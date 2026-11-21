@@ -15,6 +15,11 @@ esp32:
       compiler_optimization: PERF
       execute_from_psram: true
       enable_idf_experimental_features: true
+      # The boot log named generic (Nov 2026). Without this the build links
+      # every vendor's flash driver into internal RAM, though only one runs.
+      # In DIO mode, which we use, the generic driver runs any 16 MB chip, so
+      # a module with a different flash vendor still boots.
+      flash_chip: generic
     sdkconfig_options:
       CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y
 
@@ -113,7 +118,7 @@ binary_sensor:
             condition:
               lambda: 'return !id(qc_active);'
             then:
-              - switch.toggle: power
+              - light.toggle: gd_display
 
 lvgl:
   byte_order: little_endian
