@@ -1891,27 +1891,29 @@
         top.appendChild(sel("Effect", effects, e.e, (v) => set({ e: v })));
         top.appendChild(sel("Palette", palettes, e.p, (v) => set({ p: v })));
         r.appendChild(top);
-        const bottom = el("div", "fxrow");
-        const num = (label, key) => {
-          const wrap = el("label", "fxval");
-          wrap.appendChild(el("span", null, label));
-          const n = el("input", "num");
-          n.type = "number";
-          n.min = 0;
-          n.max = 255;
-          n.step = 1;
-          n.value = e[key];
-          n.setAttribute("aria-label", label + " " + (j + 1) + " in " + l.n);
-          n.onchange = () => {
-            const v = Math.round(Number(n.value));
-            if (!Number.isFinite(v) || v < 0 || v > 255) { n.value = e[key]; return toast(label + " is 0 to 255"); }
-            set({ [key]: v });
-          };
-          wrap.appendChild(n);
-          return wrap;
+        // Speed and intensity are sliders, as on the Home tab; a change saves
+        // when the slider is let go.
+        const slide = (label, key) => {
+          const row = el("div", "fxrow fxslide");
+          row.appendChild(el("span", null, label));
+          const rng = el("input");
+          rng.type = "range";
+          rng.min = 0;
+          rng.max = 255;
+          rng.step = 1;
+          rng.value = e[key];
+          rng.setAttribute("aria-label", label + " " + (j + 1) + " in " + l.n);
+          const val = el("span", "val", String(e[key]));
+          val.setAttribute("aria-hidden", "true");
+          rng.oninput = () => { val.textContent = rng.value; };
+          rng.onchange = () => set({ [key]: Number(rng.value) });
+          row.appendChild(rng);
+          row.appendChild(val);
+          return row;
         };
-        bottom.appendChild(num("Speed", "s"));
-        bottom.appendChild(num("Intensity", "i"));
+        r.appendChild(slide("Speed", "s"));
+        r.appendChild(slide("Intensity", "i"));
+        const bottom = el("div", "fxrow");
         const wait = el("label", "fxval");
         wait.appendChild(el("span", null, "For"));
         const ws = el("select");

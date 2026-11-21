@@ -778,6 +778,9 @@ def parse_fx_lists(v):
     return out
 
 
+FX_POS = [0]  # FxPlayer.pos: the effect up now in the playlist playing
+
+
 def fx_show(pl, pos):
     """fx_show(): the playlist writes the four effect controls itself (the guard flag
     keeps that from counting as a hand pick)."""
@@ -797,6 +800,7 @@ def fx_play(n):
         STATE["fxlist"] = 0
         return
     STATE["fxlist"] = n
+    FX_POS[0] = 0
     fx_show(lists[n - 1], 0)
     page = entity("Select Page")
     if page["value"] != "Effects":
@@ -917,9 +921,10 @@ def apply_set(kv):
                 STATE["sport"] = ""
                 STATE["mode"] = 4
         elif k == "fxlists":
-            # set_fx_lists_() and fx_after_edit(): the one playing keeps playing when it
-            # is there unchanged (moved or renamed in its place), starts over when it
-            # changed, and stops when it is gone or empty.
+            # set_fx_lists_() and fx_after_edit(): the one playing keeps playing and
+            # keeps its place (moved, or renamed in its place unchanged); when the
+            # effect up now was changed or taken out the one at its place goes up;
+            # it stops when it is gone or empty.
             n = STATE.get("fxlist", 0)
             before = STATE["fxlists"][n - 1] if n else None
             old_names = [pl["n"] for pl in STATE["fxlists"]]
@@ -937,8 +942,17 @@ def apply_set(kv):
                 at = next((i for i, pl in enumerate(STATE["fxlists"]) if pl["n"] == before["n"]), -1)
                 if at >= 0 and STATE["fxlists"][at]["fx"]:
                     STATE["fxlist"] = at + 1
-                    if not same(before, STATE["fxlists"][at]):
-                        fx_play(at + 1)
+                    now = STATE["fxlists"][at]
+                    if not same(before, now):
+                        pos = FX_POS[0]
+                        e = before["fx"][pos] if pos < len(before["fx"]) else None
+                        if pos < len(now["fx"]) and now["fx"][pos] == e:
+                            pass
+                        elif e in now["fx"]:
+                            FX_POS[0] = now["fx"].index(e)
+                        else:
+                            FX_POS[0] = pos if pos < len(now["fx"]) else 0
+                            fx_show(now, FX_POS[0])
                 elif at < 0 and n <= len(STATE["fxlists"]) and STATE["fxlists"][n - 1]["fx"] and \
                         same(before, STATE["fxlists"][n - 1]):
                     STATE["fxlist"] = n

@@ -718,9 +718,14 @@ test("effect playlists: made, edited, played, stopped by a hand pick, deleted", 
   await expect.poll(async () => (await lastFx(request))[0].fx[1].e).toBe("Drift");
   await card.getByRole("combobox", { name: "Palette 2 in Party" }).selectOption("Sunset");
   await expect.poll(async () => (await lastFx(request))[0].fx[1].p).toBe("Sunset");
-  const speed = card.getByRole("spinbutton", { name: "Speed 2 in Party" });
-  await speed.fill("200");
-  await speed.press("Enter");
+  // Speed and intensity are sliders that save when let go.
+  const slideTo = async (name, v) => {
+    const r = card.getByRole("slider", { name });
+    await r.fill(String(v));
+    await r.dispatchEvent("change");
+  };
+  await expect(card.getByRole("spinbutton")).toHaveCount(0);
+  await slideTo("Speed 2 in Party", 200);
   await expect.poll(async () => (await lastFx(request))[0].fx[1].s).toBe(200);
   const time = card.getByRole("combobox", { name: "Time 2 in Party" });
   await expect(time.locator("option")).toHaveCount(16);
@@ -748,6 +753,19 @@ test("effect playlists: made, edited, played, stopped by a hand pick, deleted", 
   await expect(pick).toHaveValue("1");
   await expect(pick.locator("option")).toHaveText(["None", "Party"]);
   await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("Drift");
+
+  // Editing it while it plays keeps its place: another effect's change leaves
+  // Drift up, and a change to Drift itself goes up at once.
+  await tab(page, "customize");
+  await slideTo("Intensity 2 in Party", 40);
+  await expect.poll(async () => (await lastFx(request))[0].fx[1].i).toBe(40);
+  await slideTo("Speed 1 in Party", 90);
+  await expect.poll(async () => (await lastFx(request))[0].fx[0].s).toBe(90);
+  expect((await deviceState(request)).fxlist).toBe(1);
+  await expect(card).toContainText("Playing now");
+  await tab(page, "board");
+  await expect(page.getByRole("combobox", { name: "Effect", exact: true })).toHaveValue("Drift");
+  await expect(page.locator("#fxCtls .val").first()).toHaveText("90");
 
   // A hand pick of the effect stops the playlist and keeps the pick.
   await page.getByRole("combobox", { name: "Effect", exact: true }).selectOption("DNA");
@@ -1837,8 +1855,8 @@ test("between games: a row per card that is on, in the panel's order, the rest b
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#cardsOld")).toBeHidden();
   const want = (await deviceState(request)).cards;
-  // Every card on to start but news and weather (on once a town is set).
-  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather"]);
+  // Every card on to start but news and weather (on once a town is set) and the Game Day card.
+  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather", "gamedaycard"]);
   // The cards you make are switched on the Customize tab, so the list only names them.
   const own = ["custom", "message", "picture"];
   const shown = want.filter((c) => c.on && !own.includes(c.id));
@@ -1861,14 +1879,14 @@ test("between games: a row per card that is on, in the panel's order, the rest b
 
   // The cards that are off wait in the sheet, a row each with its Add button.
   const sheet = page.locator(".lsheet");
-  await expect(page.locator("#cardAdd")).toHaveText("Add a card (3 more)");
+  await expect(page.locator("#cardAdd")).toHaveText("Add a card (4 more)");
   await page.locator("#cardAdd").click();
   await expect(sheet).toBeVisible();
-  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather"]);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather", "Game Day card"]);
   await sheet.getByRole("button", { name: "Add News headlines" }).click();
   await expectSet(request, { cards: "news:1" });
   await expect.poll(async () => (await deviceState(request)).news).toBe(true);
-  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather"]);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather", "Game Day card"]);
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();
   await expect(row("news")).toHaveCount(1);

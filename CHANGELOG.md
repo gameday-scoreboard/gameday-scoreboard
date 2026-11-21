@@ -37,11 +37,18 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Game Day card puts a QR code for gameday-scoreboard.com between games, for a scoreboard other people see.
+A new Game Day card can put a QR code for gameday-scoreboard.com between games, and effect playlists keep playing from where they are while you edit them.
 
 ### ✨ New
 
 - 🔳 Game Day card: a QR code for gameday-scoreboard.com every 20 minutes between games, off until you turn it on under Between games.
+
+### 🐛 Fixes
+
+- 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
+- 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
+- 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
+- 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
 
 ## v2026.11.5
 

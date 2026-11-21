@@ -412,8 +412,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::SPARK: s.spark = op.on; break;
     case SetKind::BIGPLAYS: s.bigplays = op.on; break;
     case SetKind::FX_LISTS: {
-      // set_fx_lists_: the one playing follows fx_after_edit; a changed one
-      // starts over (still playing).
+      // set_fx_lists_: the one playing follows fx_after_edit and keeps its place.
       FxList before{};
       if (s.player.list >= 1 && s.player.list <= s.fx.count)
         before = s.fx.list[s.player.list - 1];
@@ -433,8 +432,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
         memset(b.name, 0, sizeof(b.name));
         memcpy(b.name, to.data(), std::min(to.size(), sizeof(b.name)));
       }
-      if (fx_after_edit(s.fx, s.player, before) == FxEdit::RESTART)
-        fx_start(s.fx, s.player, s.player.list, 0);
+      fx_after_edit(s.fx, s.player, before);
       break;
     }
     case SetKind::FX_LIST:
