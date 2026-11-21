@@ -32,10 +32,10 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - What the panel shows: **Favorite teams** or **Live games**. A backup saved in **My team** comes back in Favorite teams, and its team is left out. A backup saved in Live games comes back in Live games.
 - Your favorites in their order, with the WizMote's buttons 1 to 4 on the same teams
 - **Only today's games**, **Jump to the action**, **Score banner** and **Favorites take over**
-- The Live games leagues, **Switch every** and **Pick the best game**
+- The Live games leagues, **Switch every** and **Pick the best game**. A backup saved on v2026.11.2 or older brings **Pick the best game** back only when it was off. The switch started on in those releases, so a saved on may not be your choice, and the panel keeps its own setting instead.
 - **Take over**, **After the final** and **Two games at once**
 - Every ticker switch and **Opponent scores too**
-- **Celebrations** (Off, Subtle or Full)
+- **Celebrations** (Off, Subtle or Full), and **Big plays**
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
 - Game-day wake, its **Turns on** time and **After the game**
@@ -44,6 +44,8 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**
 
 The file also has your playlists, with their teams and their order, and the one Favorite teams is playing (or the [sport row](/using/favorites/#a-row-for-each-sport) it's playing). See [Playlists](/using/favorites/#playlists). It keeps the [countdowns](/using/countdowns/) too: **Countdown to the next game**, and your own countdown's name and day. It also keeps the [news card](/using/news/)'s **News headlines** switch, and the [weather card](/using/weather/)'s town and switch, and every switch in the **Between games** list. A restored town is looked up again only if the panel doesn't have it already, and a backup from older firmware leaves the cards it doesn't name as they are.
+
+Your [effect playlists](/using/effects/#effect-playlists) are in it too, each with its effects, their times and its Shuffle switch. Which one is playing isn't: a restore leaves the panel on the page it's showing. An effect the panel you restore onto doesn't have drops out of its playlist.
 
 ## What isn't
 
@@ -57,7 +59,7 @@ The panel checks the whole file before it changes anything. If a setting in it h
 
 **That file isn't a settings backup** means the file isn't one the panel saved.
 
-**That backup is too big for the panel to take** means the settings in it add up to more than the panel holds, about 8 KB. Only a panel with nearly every favorite and playlist slot full gets there.
+**That backup is too big for the panel to take** means the settings in it add up to more than the panel holds, about 12 KB. Only a panel with nearly every favorite, playlist and effect playlist slot full gets there.
 
 **This backup is from newer firmware** means the file came from a panel on a release that saves backups differently. [Update the panel](/using/updates/), then restore it.
 

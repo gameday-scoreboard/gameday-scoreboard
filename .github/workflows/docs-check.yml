@@ -1,18 +1,34 @@
 name: Docs updated
 
-# A change to the firmware or the components has to come with a docs change,
-# so the guides don't drift from what the panel does. Applies to PRs into dev
-# only; the promotion PRs into beta and main carry changes that already
-# passed here. The generated web bundles don't count as a firmware change.
+# dev stays ready to release, so a promotion needs no prep beyond
+# scripts/promote.py. Applies to PRs into dev only; the promotion PRs into
+# beta and main carry changes that already passed here. The generated web
+# bundles don't count as a firmware change.
+#
+# Docs: a change to the firmware or the components has to come with a docs
+# change, so the guides don't drift from what the panel does. The docs
+# publish from main with the release, so they describe the new behavior
+# plainly: a "Coming in the next release" note is refused. A phone app
+# feature that waits for an app update uses "Coming in the next app update".
+#
+# Changelog: a firmware change also adds its line under `## Unreleased` in
+# CHANGELOG.md, and the section stays in its released shape (a summary line,
+# the groups, an emoji on each bullet; scripts/changelog_check.py).
 #
 # A PR that changes nothing an owner or a DIY builder can see (a refactor, a
-# test, a build fix) says so on its own line in the PR description:
+# test, a build fix) says so on its own line in the PR description, which
+# skips both:
 #
 #   No owner-visible change, no docs: <why, in a few words>
 #
-# The reviewer checks that claim like any other part of the PR. The check
-# fails only when a PR has neither a docs change nor that line, which the
-# author can fix. The label "docs: not needed" still passes too.
+# A change an owner could see but that is too small or rare for the release
+# notes (a fix to a feature that hasn't shipped, an edge case the docs
+# cover) skips only the changelog line:
+#
+#   No changelog line: <why, in a few words>
+#
+# The reviewer checks those claims like any other part of the PR. The label
+# "docs: not needed" still passes the docs check too.
 
 on:
   pull_request:
@@ -37,6 +53,12 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
+          # Checked on every PR, firmware or not: a docs-only PR can add one too.
+          added=$(git diff -U0 "origin/$BASE...HEAD" -- docs/wiki/src | grep -E '^\+[^+]' || true)
+          if grep -qF 'Coming in the next release' <<<"$added"; then
+            echo "::error::This PR adds a 'Coming in the next release' note. The docs publish from main with the release, so write the new behavior in the page plainly and drop the note. A phone app feature that waits for an app update uses ':::note[Coming in the next app update]'."
+            exit 1
+          fi
           changed=$(git diff --name-only "origin/$BASE...HEAD")
           firmware=$(grep -E '^(firmware|components)/' <<<"$changed" \
             | grep -vE '^firmware/web/(bundle|bundle-demo)\.js$' || true)
@@ -67,3 +89,37 @@ jobs:
           fi
           echo "::error::This PR changes the firmware but not the docs. Add or update a page under docs/wiki/src/content/docs/, or, if nothing an owner or DIY builder can see changed, add a line to the PR description: 'No owner-visible change, no docs: <why>'."
           exit 1
+
+  changelog:
+    name: Changelog ready to release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check the Unreleased section
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          firmware=$(grep -E '^(firmware|components)/' <<<"$changed" \
+            | grep -vE '^firmware/web/(bundle|bundle-demo)\.js$' || true)
+          need=""
+          if [ -n "$firmware" ]; then
+            body=$(tr -d '\r' <<<"$BODY")
+            skip='^[[:space:]]*([-*][[:space:]]+)?(no owner-visible change, no docs|no changelog line):'
+            if grep -qiE "$skip"'[[:space:]]*[^[:space:]<].{3,}' <<<"$body"; then
+              echo "The description says this needs no changelog line:"
+              grep -iE "$skip" <<<"$body"
+            else
+              echo "Firmware changes, so the Unreleased section needs this PR's line:"
+              echo "$firmware"
+              need="--need-change"
+            fi
+          fi
+          if ! python3 scripts/changelog_check.py --base "origin/$BASE" $need; then
+            echo "::error::Add or fold this PR's line under '## Unreleased' in CHANGELOG.md, in the shape its top note gives (a summary line, the groups, an emoji on each bullet). If owners won't notice it, add a line to the PR description: 'No changelog line: <why>'."
+            exit 1
+          fi

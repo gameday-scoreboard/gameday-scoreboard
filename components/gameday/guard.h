@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // What the panel says about its heat and its power, and the one thing it does
 // about them: a dim start for a few seconds after a brownout restart. Pure,
 // with no ESPHome includes, so the host tests compile it directly.

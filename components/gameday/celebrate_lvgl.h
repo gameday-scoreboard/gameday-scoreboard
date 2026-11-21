@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Plays a celebration (celebrate_fx.h) on an LVGL canvas: an lv_timer at
 // kCelebFps draws each frame straight into the canvas's RGB565 buffer and
 // invalidates it. The page (firmware/pages/gameday-live.yaml) starts it with

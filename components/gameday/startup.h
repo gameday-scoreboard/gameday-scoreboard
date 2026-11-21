@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Startup helpers: the fallback team info a boot can start from, and how long
 // the boot screen waits for the first scoreboard. Pure, with no ESPHome
 // includes, so the host tests compile it directly.

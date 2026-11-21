@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // PSRAM for the component's own containers: logos, the favorites list, the
 // finals rotation, a scan's games. Plain new and malloc only use internal
 // RAM in this build. Pure, with no ESPHome includes, so the host tests

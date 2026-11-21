@@ -2,6 +2,7 @@
 # and the ArduinoJson single header next to this file (ArduinoJson.h, version
 # 7.4.3 to match ESPHome).
 CXX ?= g++
+CC ?= gcc
 CXXFLAGS ?= -std=c++17 -O1 -Wall -Wextra -I../components/gameday -I.
 # Link the GCC runtime in on Windows. Git Bash puts its own older
 # libstdc++-6.dll ahead of the compiler's on PATH, and the mismatched
@@ -10,7 +11,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_brand build/test_plate_wall
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -19,21 +20,52 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_logo_cache_asan
 	./build/test_picture
 	./build/test_celebrate
-	./build/test_brand
-	./build/test_plate_wall
+	./build/test_celeb_football
+	./build/test_celeb_hockey
+	./build/test_celeb_baseball
+	./build/test_celeb_soccer
+	./build/test_smart_board
 
-SRCS = test_parse.cpp golden_football.cpp test_set.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
+SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 
-build/test_parse: $(SRCS) $(wildcard ../components/gameday/*.h)
+build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) $(SRCS) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(SRCS) build/miniz.o -o $@ $(LDFLAGS)
+
+# miniz v1.15 (public domain), the version in the ESP32-S3 ROM that the
+# firmware inflates ESPN's gzip replies with.
+build/miniz.o: miniz.c
+	@mkdir -p build
+	$(CC) -O1 -c miniz.c -o $@
 
 # The celebrations: which one a score gets (celebrate.h, over decide_splash)
 # and the animation engine's math (celebrate_fx.h).
 build/test_celebrate: test_celebrate.cpp $(PARSER_ONLY) ../components/gameday/celebrate.h ../components/gameday/celebrate_fx.h $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_celebrate.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Football's big plays (celeb_football.h) on recorded ESPN reads, and their
+# frames (celeb_art_index.h).
+build/test_celeb_football: test_celeb_football.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_football.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Hockey's big plays on recorded NHL reads (celeb_hockey.h).
+build/test_celeb_hockey: test_celeb_hockey.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_hockey.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Baseball's big plays (celeb_baseball.h) on recorded ESPN plays.
+build/test_celeb_baseball: test_celeb_baseball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_baseball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Soccer's big plays (celeb_soccer.h) over recorded goals, and their
+# caption over the art (celeb_caption.h).
+build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 # Not part of `all`: renders every celebration to raw RGB565 frames for
 # render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.
@@ -43,6 +75,11 @@ build/render_celebrations: render_celebrations.cpp $(PARSER_ONLY) $(wildcard ../
 
 celebrate-gifs: build/render_celebrations
 	python3 render_celebrations.py build/render_celebrations build/celebrations
+
+# The Smart board's rows: color tags, layout and font (smart_board.h).
+build/test_smart_board: test_smart_board.cpp ../components/gameday/smart_board.h ../components/gameday/panel_text.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_smart_board.cpp -o $@ $(LDFLAGS)
 
 build/test_networks: test_networks.cpp $(wildcard ../components/saved_networks/*.h)
 	@mkdir -p build
@@ -77,18 +114,6 @@ build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache
 build/test_picture: test_picture.cpp $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_picture.cpp -o $@ $(LDFLAGS)
-
-# Brand packs on the bar build: the pack file, its defaults, the logo's
-# colors and the opening card's layout (brand.h).
-build/test_brand: test_brand.cpp ../components/gameday/brand.h ../components/gameday/message.h ../components/gameday/countdown.h ../components/gameday/night.h
-	@mkdir -p build
-	$(CXX) $(CXXFLAGS) test_brand.cpp -o $@ $(LDFLAGS)
-
-# The plate wall on the bar build: list lines, a new plate's party, names in
-# plates, the quote's rise, page times and the event page (plate_wall.h).
-build/test_plate_wall: test_plate_wall.cpp ../components/gameday/plate_wall.h ../components/gameday/message.h ../components/gameday/weather.h
-	@mkdir -p build
-	$(CXX) $(CXXFLAGS) test_plate_wall.cpp -o $@ $(LDFLAGS)
 
 # Not part of `all`: replays a folder of recorded single-event documents
 # (`.../scoreboard/<event id>`, named ev_<id>_<UTC time>.json) through the

@@ -1,6 +1,6 @@
 ---
 title: "Wi-Fi"
-description: "The networks the panel joins, the up to five it remembers, its setup hotspot, what it does when Wi-Fi drops, and its .local address."
+description: "The networks the panel joins, an IoT network, IoT VLAN or IoT subnet, the up to five it remembers, its setup hotspot, what it does when Wi-Fi drops, and its .local address."
 sidebar:
   order: 15
 ---
@@ -11,30 +11,83 @@ The panel needs Wi-Fi to read scores from ESPN. Once it's on your network, it ne
 
 The panel only joins 2.4 GHz networks. If your router has separate names for 2.4 GHz and 5 GHz, pick the 2.4 GHz one.
 
-Use your main network, not a guest network. A guest network can let the panel join but keep your phone from reaching it afterwards, so the app and the device page can't find it.
+Use your main network, not a guest network. A guest network can let the panel join but keep your phone from reaching it afterwards, so the app and the device page can't find it. A network of its own for smart home devices is different, see below.
+
+## IoT network, IoT VLAN or IoT subnet
+
+Many people keep smart home devices on a network of their own: an IoT network, IoT VLAN or IoT subnet, often with its own Wi-Fi name like "Home-IoT". The panel works there with your phone on your main network, as long as your router lets the two reach each other:
+
+| From | To | Allow | For |
+| --- | --- | --- | --- |
+| Your main network | The panel | TCP port 80 | The app, the device page and live scores in the app |
+| Your main network | The panel | TCP port 6053 | [Home Assistant](/using/home-assistant/) |
+| The panel | The internet | TCP port 443 (HTTPS) | Scores, weather and firmware updates |
+| The panel | The internet | UDP port 123 (NTP) | The clock |
+| The panel | Your router | Port 53 (DNS) | Looking up those addresses |
+
+Your phone and Home Assistant start every connection, so the panel never has to reach your main network on its own. The one exception is [Game events](/using/game-events/) sent to a web address on your main network: allow the panel to reach that address and port too.
+
+Also turn on **mDNS** between the two networks, if your router has it. Routers call it Multicast DNS, mDNS reflector, mDNS repeater or Bonjour gateway. With it on, the app lists the panel under **Found on your network**, Home Assistant discovers it, and `gameday-xxxxxx.local` works from your main network.
+
+Without mDNS between the networks:
+
+- Set the panel up from the Game Day app over Bluetooth.
+- Give the panel a fixed IP address in your router, so that address doesn't change.
+- Add it anywhere else by that IP address: **+** on the app's panel list, the device page in a browser, or the ESPHome integration in Home Assistant.
+
+To move a panel that's already set up onto your IoT network, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) and give it the IoT network from the app. Your settings stay, and the panel keeps your main network saved too.
+
+If the app says your phone is on a different network from the panel and the panel is on your IoT network on purpose, the router is blocking the way between them. Check the table above.
 
 ## Saved networks
 
 The panel remembers up to five Wi-Fi networks, like your home, a phone hotspot and a friend's house. At start-up it joins whichever saved network it can see, trying the last one that worked first. Set it up on a phone hotspot for a tailgate and it still knows your home network when you get back.
 
-**Wi-Fi networks** on the device page's Device tab lists the saved networks, in the order the panel tries them, with **Connected** beside the one it's on, or **Tried first** beside the top one. **Forget** takes a network off the list. If the panel is on that network now, it stays connected until it next restarts.
+**Wi-Fi networks** on the device page's Device tab lists the saved networks, in the order the panel tries them, with **Connected** beside the one it's on, or **Tried first** beside the top one. **Forget** takes a network off the list. Forget the network the panel is on and it moves to your other saved networks straight away, no restart needed. The device page asks first and names the one it moves to, like "Forget Home? The panel moves to iPhone now.", and the panel joins it within a few seconds. It tries the next network on the list first, then any other saved network it can see. If that network is somewhere else, like a phone hotspot, the device page loses the panel while it moves; open it again from a phone or laptop on the new network. If none of the other saved networks is in range, the panel says **Wi-Fi lost** until it finds one, and the app can reach it over Bluetooth to give it a network (see below).
+
+If it's the only saved network, the panel stays on it, and the device page says so before you confirm. It joins that network again after a restart and puts it back on the list. To take the panel off it, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi).
 
 A new password for a saved network, saved on the hotspot's setup page, doesn't replace the one that worked until the panel joins with it, in case it was mistyped. If the panel restarts before that, it tries the new password first for a minute, then goes back to the old one.
 
-When the list is full, adding a sixth network drops the one at the bottom. The panel always keeps one network to join, so forgetting the last one doesn't take it off Wi-Fi. [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) and [Factory reset](/using/buttons-and-resets/#factory-reset) clear them all.
-
-Reset Wi-Fi keeps the saved networks. Only Factory reset clears them.
+When the list is full, adding a sixth network drops the one at the bottom. The panel always keeps one network to join, so forgetting the last one doesn't take it off Wi-Fi. [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi) keeps the saved networks. Only [Factory reset](/using/buttons-and-resets/#factory-reset) clears them.
 
 ## Adding a network
 
-Every network you set the panel up on is added to the top of the list. There are two ways:
+There are three ways to add a network:
 
+- **Add network on the device page**, while the panel is on Wi-Fi. Nothing gets reset. See [Add a network from the device page](#add-a-network-from-the-device-page) below.
 - **The Game Day app** finds the panel over Bluetooth and hands it the network and password. While the panel joins, it shows **JOINING** and the network's name. See [The Game Day app](/get-started/the-app/).
 - **The panel's hotspot.** While it shows **SETUP**, the panel starts its own Wi-Fi network named **Game Day** and six letters and numbers, like **Game Day 2f6a70**. The screen shows the name. Join it from any phone or laptop and a setup page opens. Pick your Wi-Fi network, enter the password and save.
 
-The six characters are the same as in the panel's address, so two panels in one house are easy to tell apart. See [Set up your panel](/get-started/setup/).
+A network the panel joins through the app or the hotspot goes to the top of the list. The six characters in the hotspot's name are the same as in the panel's address, so two panels in one house are easy to tell apart. See [Set up your panel](/get-started/setup/).
 
-Taking the panel somewhere new? When it can't find any saved network, it says **Wi-Fi lost** and the app can reach it over Bluetooth, as below, so you can give it the new network there. To put it into setup straight away, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi).
+Taking the panel somewhere new? Add that network on the device page before you go, and the panel joins it when it gets there. If you didn't, it says **Wi-Fi lost** when it can't find any saved network, and the app can reach it over Bluetooth, as below, so you can give it the new network there. To put it into setup straight away, use [Reset Wi-Fi](/using/buttons-and-resets/#reset-wi-fi).
+
+### Add a network from the device page
+
+1. Open **Wi-Fi networks** on the device page's Device tab and tap **Add network**.
+2. Wait a few seconds while the panel looks for networks. **Networks nearby** lists the ones it can see, strongest first, with how strong each signal is. Tap one to fill in its name. Not in the list? Type the name in **Network name**.
+3. Enter the password and tap **Save**. A network marked **Open** has no password, so leave it blank.
+
+The list only shows 2.4 GHz networks, because those are the only ones the panel can join. It leaves out the network the panel is on, and marks the ones it already knows **Saved**. Tap **Look again** to scan again, for example after you turn on a phone hotspot. The panel stays on its Wi-Fi while it looks.
+
+The panel saves the network second in the list, right behind the one it's on, and stays on its Wi-Fi. It joins the new network wherever it can't find one it already knows, like a phone hotspot, a cabin or a friend's house. You can add a network that isn't in range now, too, by typing its name. A network that doesn't show its name (a hidden network) never shows in the list, but works as long as the name is typed exactly.
+
+Typing a saved network's name again replaces its password. The network the panel is on now can't be changed this way, because its password already works.
+
+### Switch to it now
+
+After you save, the panel checks which networks it can see. If the new one is in range, the page asks whether to switch to it now. If you say yes:
+
+- The panel leaves its network and shows **JOINING** and the new network's name.
+- If it joins, the page says the panel is on the new network.
+- If it can't join within 30 seconds, the panel goes back to the network it was on and shows **Can't join** and the name for a moment. The page says so once it can reach the panel again. Check the name and password, then add it again.
+
+If your phone isn't on the new network, the page can't reach the panel after the switch. Join your phone to that network, then open the panel's address again.
+
+:::note[Coming in the next app update]
+The Game Day app gets **Add network** too.
+:::
 
 ## When Wi-Fi drops
 

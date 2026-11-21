@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #include "espn_parse.h"
 #include "game_leaders.h"
 #include "weather.h"
@@ -80,7 +82,7 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if ((league == League::MCBB || league == League::NCAA) && group != 0) {
+  if ((league == League::MCBB || league == League::WCBB || league == League::NCAA) && group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }
@@ -160,7 +162,7 @@ std::string scan_url(League league, int64_t now_epoch, bool top25) {
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
-  else if (league == League::MCBB && !top25)
+  else if ((league == League::MCBB || league == League::WCBB) && !top25)
     snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
@@ -532,7 +534,7 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     add_part(out, records_line(s));
     return out;
   }
-  if (o.down_distance)
+  if (o.down_distance && !o.row_down)
     add_part(out, s.down_distance);
   if (o.clock)
     add_part(out, s.short_detail);
@@ -541,11 +543,18 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     if (!s.drive.empty())
       add_part(out, "Drive: " + s.drive);
   }
-  if (o.odds)
+  if (o.odds && !o.row_win && o.win_due)
     add_part(out, win_chance(s));
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
+}
+
+bool timeout_play(const std::string &text) {
+  std::string low = text;
+  for (char &c : low)
+    c = (char) tolower((unsigned char) c);
+  return low.find("timeout") != std::string::npos;
 }
 
 std::string win_chance(const GameSnapshot &s) {

@@ -13,8 +13,6 @@ A change is saved on the panel the moment you make it, from the page, the app, H
 
 The page is split into five tabs: **Home**, **Teams**, **Display**, **Customize** and **Device**, described below. On a phone they sit in a bar at the bottom of the screen; on a computer they're under the panel's name at the top. The open tab is kept in the page's address, so a reload stays on it. Each setting has one short line on the page, and the full rules are here in the docs. The page also fits a phone's screen now, where iPhone Safari used to draw it as a zoomed-out desktop page.
 
-Until then, the same settings are on one long page, in cards: the board and the mode buttons first, then Favorites, the Panel card (power, brightness, ticker speed, Showing, the night schedule), Ticker, Celebrations, Between games, Setup and the Device card.
-
 ## The header
 
 The top of the page shows the panel's name, big, or its nickname if you gave it one. It shrinks into a slim bar as you scroll down. A red **Not answering** pill shows next to it only while the page can't reach the panel.
@@ -44,9 +42,9 @@ A strip along the bottom edge of the board has:
 - **Brightness**, shown as a percent
 - **Refresh scores**, which reads your teams from ESPN again right away. Use it when the board looks wrong, for example after a game moved.
 
-Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock** or **Effects**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
+Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects** or **Smart board**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
 
-**Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. See [Effects](/using/effects/).
+**Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. Once you have an effect playlist, an **Effect playlist** picker there starts or stops one; you make them on the Customize tab under **Effect playlists**. See [Effects](/using/effects/).
 
 A line under the board says when the panel is holding its brightness down: **Too warm, dimming**, or **Check the power supply** with a **Clear** button after two restarts in a row from a power dip. See [Heat and power protection](/using/brightness-and-clock/#heat-and-power-protection).
 
@@ -97,14 +95,16 @@ Groups your favorites into named playlists you can switch between. **New playlis
 | Setting | What it does |
 | --- | --- |
 | **Switch every** | Moves to another game in progress after this many minutes, 1 to 30. A new panel starts at 1. |
-| **Pick the best game** | On unless you turn it off. On, the panel follows the closest game with the least time left and moves only at a break in play; off, it picks a random game every **Switch every** minutes. See [Live games](/using/modes/#live-games). |
+| **Pick the best game** | Off to start. Off, the panel picks a random live game and moves to another every **Switch every** minutes; on, it follows the closest game with the least time left and never leaves it mid-play, moving only at a break. See [Live games](/using/modes/#live-games). |
 | **Favorites take over** | Off to start. On, a game one of your favorites is playing gets the panel until it ends, and **Two favorites at once** picks between two of them. See [Favorites take over](/using/modes/#favorites-take-over). |
 
 ### Choosing teams
 
-**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
+**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
+
+Each league tab starts with that league's games today, under the same headings, and lists all of its teams under a **Teams** heading after them. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count; tap the heading to open one. A league with no games today shows just its teams.
 
 On **On now**, a search that matches none of today's games lists the teams it matches under a **Teams** heading instead, with their league, so a team that isn't playing today still turns up.
 
@@ -119,7 +119,7 @@ The chooser is for favorites only.
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. See [The ticker](/using/ticker/). |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. The remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Game-day wake** | Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
-| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, or **Show the clock** until your next game is close. |
+| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board** or **Show effects** until your next game is close. |
 
 ### Ticker
 
@@ -138,13 +138,12 @@ Only the switches for sports your panel follows are shown. Hockey and basketball
 
 ### Live pictures
 
-Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). All three start on.
+Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). Both start on. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer).
 
 | Setting | What it does |
 | --- | --- |
-| **Field strip** | Football: the field across the row, with the ball, the line to gain, the direction of play and the timeouts left. |
-| **Win chance bar** | Football and basketball: a thin bar split at ESPN's chance for each side to win. |
-| **Score margin** | Basketball and hockey: the lead over the game as a small chart. |
+| **Field strip** | Football: the field across the row, with the ball, the line to gain and the direction of play. See [Football](/using/football/#during-the-game). |
+| **Win chance** | Football and basketball: the row under the clock takes turns with the team ESPN favors in words, like "ND 84% to win", when the game comes up, after a touchdown, field goal or turnover, and when the number moves 10 points or more (basketball: when it comes up and on a move). This switch turns that line on or off. |
 
 ### Celebrations
 
@@ -155,6 +154,8 @@ A **Celebrations** choice sets how big the show is:
 - **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
+
+**Big plays**, on by default, gives some plays a pixel-art scene of their own on **Full**: a basketball dunk or alley-oop (see [Basketball](/using/basketball/)), a hockey hat trick (see [Hockey](/using/hockey/#big-plays)), a baseball grand slam or walk-off (see [Baseball](/using/baseball/#big-plays)), a soccer brace, hat trick, penalty or late go-ahead goal (see [Soccer](/using/soccer/)), and your football defense's interceptions, pick sixes, fumble recoveries and sacks (see [Football](/using/football/#big-plays)). Off, every score and the win keep their show; only the big plays go.
 
 The other side's scores stay quiet in every setting: a dim flash with white words, over in 2 seconds, and only with **Opponent scores too** on. In the Live games mode nobody is "the other side": the first team's scores always get the full show in its colors, and with **Opponent scores too** on the second team's do too.
 
@@ -191,6 +192,7 @@ Your own words, pictures and dates on the panel.
 - **Message card**: your own text, or a list from a web address, that takes turns with the scoreboard between games, with **Show it** for how often. See [Your own messages](/using/messages/).
 - **Pictures**: up to 4 of your own pictures or GIFs for the panel to show between games. **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
 - **Date countdown**: a **Name** and a **Day** to count down to, like Christmas, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/#your-own-countdown).
+- **Effect playlists**: up to 4 named lists of effects the panel steps through on its Effects page, each effect with its own palette, speed, intensity and time on screen, and a **Shuffle** switch. **Play** starts one. See [Effects](/using/effects/#effect-playlists).
 
 The Message card, Pictures and Date countdown each have a **Show between games** switch at the top, the same switch as that card's row in [Between games](#between-games).
 
@@ -217,10 +219,10 @@ The next sections are folded shut, each with a one-line summary. Tap one to open
   - **Show how to connect when the panel starts**: after it joins Wi-Fi, the panel shows a QR code for the Game Day app, then its address, for about 20 seconds. Turn it off to go straight to the scoreboard.
   - **Backup**: **Export settings** saves this panel's settings to a file, and **Import settings** loads a saved file back, onto this panel or another one. Wi-Fi networks and the WizMote pairing aren't in the file. See [Back up and restore settings](/using/backup/).
 - **Game events**: tells Home Assistant when your team scores, with a heads-up before the start and an optional web address to post them to. See [Game events](/using/game-events/).
-- **Wi-Fi networks**: the networks the panel remembers, in the order it tries them, with **Forget** for each. See [Wi-Fi](/using/wifi/).
-- **Diagnostics**: see [below](#diagnostics).
+- **Wi-Fi networks**: the networks the panel remembers, in the order it tries them, with **Forget** for each. Forgetting the network the panel is on moves it to the next saved one right away. **Add network** lists the networks the panel can see, and saves the one you tap or type, with its password, without taking the panel off its Wi-Fi, and offers to switch to it when it's in range. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
 - **Remote**: pairs and unpairs a WizMote with **Discovery** and **Unpair remote**. It also sets what buttons 1 to 4 show. See [WizMote remote](/using/remote/).
 - **Matrix**: click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/).
+- **Diagnostics**: see [below](#diagnostics).
 
 ### Diagnostics
 
@@ -238,3 +240,7 @@ A red box near the bottom of the Device tab has the three buttons that restart t
 ### FCC information
 
 Folded at the very bottom. **Show on panel** puts the panel's model, FCC ID and FCC statement on its own screen for about a minute, then it goes back to the board. A panel that was switched off turns on for it and stays on. One that is dimmed or dark for the night lights up for it, then goes back to the night setting. See [FCC information](/fcc/).
+
+## Under every tab
+
+The bottom of the page shows the firmware version, a link to the source code, where the scores come from, and the author and license: "© 2026 Brandon Harvey · GPLv3". GPLv3 links to the license notice.

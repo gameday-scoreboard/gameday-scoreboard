@@ -32,7 +32,6 @@
   "msg",
   "msgurl",
   "msgevery",
-  "brand",
   "best",
   "jump",
   "banner",
@@ -63,5 +62,9 @@
   "celebrate",
   "field",
   "winbar",
-  "spark"
+  "spark",
+  "bigplays",
+  "keepfav",
+  "fxlists",
+  "fxlist"
 ]

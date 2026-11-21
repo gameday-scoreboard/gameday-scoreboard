@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 """leagues.h's kLeagues table, read once for every Python file that needs it:
 __init__.py, scripts/build_teams.py, scripts/build_web.py and
 tests/web/mock_device.py. No ESPHome imports, so the scripts load it by path.

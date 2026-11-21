@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // The night schedule: between two times the owner sets, the panel runs at
 // its own night brightness or turns the screen off. A live game of the
 // owner's team or one of their favorites lights it at the normal brightness

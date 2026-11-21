@@ -2,7 +2,7 @@ name: Site
 
 # Republish install.gameday-scoreboard.com when only docs/site changed, without a
 # firmware release. The firmware files come from the latest release tag's
-# firmware-<variant>.zip assets (the bar releases' too, when it has them),
+# firmware-<variant>.zip assets,
 # so panels see the same manifest and binaries they saw before. Falls back to the tag's Build artifact for a release that
 # predates that asset (v1.4.3 and earlier); Build artifacts expire after 90
 # days, so that fallback is only good for 90 days after such a release.
@@ -96,13 +96,7 @@ jobs:
           ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           RUN=""
           CHECK=""
-          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare moonhub75-bar scoreboard75-bar; do
-            # Releases before the bar releases have no bar zip and no bar
-            # Build artifact to fall back on; the site goes out without them.
-            if [[ "$v" == *-bar ]] && ! echo "$ASSETS" | grep -qx "firmware-$v.zip"; then
-              echo "::warning::$TAG has no firmware-$v.zip, so the site has no $v release until the next one."
-              continue
-            fi
+          for v in moonhub75 moonhub75-2panel scoreboard75 waveshare; do
             CHECK="$CHECK $v"
             if echo "$ASSETS" | grep -qx "firmware-$v.zip"; then
               echo "$v firmware from the $TAG release asset firmware-$v.zip"
@@ -135,17 +129,17 @@ jobs:
         uses: actions/deploy-pages@v5
       # A deploy of a commit Pages had deployed before once reported success
       # and changed nothing (v1.4.3). Beta publishes redeploy main's commit,
-      # so check the beta really went live instead of leaving the bars on the
-      # old one without a word. The query string gets past the CDN's cache.
+      # so check the beta really went live instead of leaving Follow beta
+      # panels on the old one without a word. The query string gets past the CDN's cache.
       - name: The beta channel is live
         run: |
           set -uo pipefail
-          m=site/firmware/beta/scoreboard75/manifest.json
+          m=site/firmware/scoreboard75-beta/manifest.json
           if [ ! -f "$m" ]; then echo "No beta channel in this deploy."; exit 0; fi
           want=$(jq -r .version "$m")
           got=""
           for i in $(seq 1 30); do
-            got=$(curl -fsS "https://install.gameday-scoreboard.com/firmware/beta/scoreboard75/manifest.json?run=$GITHUB_RUN_ID-$i" | jq -r .version)
+            got=$(curl -fsS "https://install.gameday-scoreboard.com/firmware/scoreboard75-beta/manifest.json?run=$GITHUB_RUN_ID-$i" | jq -r .version)
             if [ "$got" = "$want" ]; then echo "Live: beta $got"; exit 0; fi
             sleep 20
           done

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Live games' "Pick the best game": which game in progress a fan would flip
 // to, from what the day's scan already reads (score, period, clock, AP
 // rank), and the upset alert when a ranked side trails late. Pure, no
@@ -37,6 +39,7 @@ inline Regulation regulation(League league) {
     case League::NBA:
       return {4, 720};
     case League::WNBA:
+    case League::WCBB:
       return {4, 600};
     case League::MCBB:
       return {2, 1200};
@@ -159,13 +162,14 @@ inline size_t best_live_game(const LiveList &games, const std::string &current,
 }
 
 // The game on the board is between plays long enough to leave it: the end
-// of a quarter, period or half inning, halftime, or not in progress at all.
-// Never in the middle of a drive.
+// of a quarter, period or half inning, halftime, a hockey intermission to the
+// faceoff, or not in progress at all. Never in the middle of a drive.
 inline bool at_break(const GameSnapshot &g) {
   if (!g.valid || g.state != GameState::IN)
     return true;
   const std::string &d = g.short_detail;
-  return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT";
+  return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT" ||
+         hockey_late_intermission(g);
 }
 
 // When Pick the best game may leave the game on the board: at a break, and
@@ -206,6 +210,19 @@ inline bool rotate_due(uint32_t elapsed_ms, uint32_t switch_ms, bool held, bool 
   return at_brk && !break_looked;
 }
 
+// A Live games scan picked the game already on the board, read from the same
+// side: keep it as it is, its last read included, so a score on the next
+// read is still compared against the one before and gets its splash. That
+// holds however the game was picked (Pick the best game on or off, or a
+// favorite's game). A different game or side, a game the board saw end, or a
+// board that isn't following a live game (nothing live, or the owner's own
+// team filling in: following false) starts fresh.
+inline bool keep_on_rescan(const GameSnapshot &board, const std::string &board_event, uint32_t board_side,
+                           bool following, const std::string &picked_event, uint32_t picked_side) {
+  return following && board.valid && board.state == GameState::IN && !board_event.empty() &&
+         picked_event == board_event && picked_side == board_side;
+}
+
 // The followed game as the scan would list it, from a poll of it, for the
 // upset check between scans. Live games put the away side in team.
 inline LiveGame live_view(const GameSnapshot &g, uint8_t league, uint8_t away_rank, uint8_t home_rank) {
@@ -219,6 +236,22 @@ inline LiveGame live_view(const GameSnapshot &g, uint8_t league, uint8_t away_ra
   v.away_rank = away_rank;
   v.home_rank = home_rank;
   return v;
+}
+
+// The switch's bits in the saved live byte (Prefs8::live). It started on
+// with kLiveRandom set meaning off, so a saved 0 was on. It is off by
+// default now, for every panel: on takes kLiveBest, which every byte saved
+// before has clear, so each panel comes up off once and keeps what its
+// owner sets after that. kLiveRandom still follows the switch, so firmware
+// from before reads the same choice after a rollback, and a panel turned
+// off there stays off here.
+constexpr uint8_t kLiveRandom = 1;
+constexpr uint8_t kLiveBest = 2;
+
+inline bool best_game_on(uint8_t live) { return (live & kLiveBest) != 0 && (live & kLiveRandom) == 0; }
+
+inline uint8_t best_game_set(uint8_t live, bool on) {
+  return on ? (uint8_t) ((live | kLiveBest) & ~kLiveRandom) : (uint8_t) ((live & ~kLiveBest) | kLiveRandom);
 }
 
 }  // namespace espn

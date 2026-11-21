@@ -1,0 +1,183 @@
+blueprint:
+  name: Game Day Scoreboard Smart board
+  description: >-
+    Fills a Game Day Scoreboard's Smart board with up to four rows of text,
+    each one a template that can read any entity's state or attribute. A row
+    can start with a color tag like [red] or [#FF6400], or take the color
+    picked below. The rows are sent again when an entity you list changes,
+    every minute if you leave that on, and when the panel comes back online.
+    See https://docs.gameday-scoreboard.com/using/smart-board/
+  domain: automation
+  source_url: https://docs.gameday-scoreboard.com/blueprints/smart-board.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    row_1:
+      name: Row 1
+      icon: mdi:numeric-1-box-outline
+      input:
+        row_1_entity:
+          name: Panel row
+          description: The panel's "Smart board row 1" entity.
+          selector:
+            entity:
+              domain: text
+              integration: esphome
+        row_1_text:
+          name: Text
+          description: "A template, like {{ states('sensor.outside_temperature') }}°F"
+          default: ""
+          selector:
+            text:
+              multiline: true
+        row_1_color:
+          name: Color
+          description: Used when the text doesn't start with its own color tag.
+          default: [255, 255, 255]
+          selector:
+            color_rgb: {}
+    row_2:
+      name: Row 2
+      icon: mdi:numeric-2-box-outline
+      collapsed: true
+      input:
+        row_2_entity:
+          name: Panel row
+          description: The panel's "Smart board row 2" entity. Leave empty to skip this row.
+          default: ""
+          selector:
+            entity:
+              domain: text
+              integration: esphome
+        row_2_text:
+          name: Text
+          default: ""
+          selector:
+            text:
+              multiline: true
+        row_2_color:
+          name: Color
+          default: [255, 255, 255]
+          selector:
+            color_rgb: {}
+    row_3:
+      name: Row 3
+      icon: mdi:numeric-3-box-outline
+      collapsed: true
+      input:
+        row_3_entity:
+          name: Panel row
+          description: The panel's "Smart board row 3" entity. Leave empty to skip this row.
+          default: ""
+          selector:
+            entity:
+              domain: text
+              integration: esphome
+        row_3_text:
+          name: Text
+          default: ""
+          selector:
+            text:
+              multiline: true
+        row_3_color:
+          name: Color
+          default: [255, 255, 255]
+          selector:
+            color_rgb: {}
+    row_4:
+      name: Row 4
+      icon: mdi:numeric-4-box-outline
+      collapsed: true
+      input:
+        row_4_entity:
+          name: Panel row
+          description: The panel's "Smart board row 4" entity. Leave empty to skip this row.
+          default: ""
+          selector:
+            entity:
+              domain: text
+              integration: esphome
+        row_4_text:
+          name: Text
+          default: ""
+          selector:
+            text:
+              multiline: true
+        row_4_color:
+          name: Color
+          default: [255, 255, 255]
+          selector:
+            color_rgb: {}
+    when:
+      name: When to send
+      icon: mdi:refresh
+      input:
+        watch:
+          name: Send when these change
+          description: The entities your rows show, so a row changes the moment they do.
+          selector:
+            entity:
+              multiple: true
+        every_minute:
+          name: Also every minute
+          description: For rows with the time, or anything that changes without an entity to watch.
+          default: true
+          selector:
+            boolean: {}
+
+mode: queued
+max: 3
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input watch
+  - trigger: time_pattern
+    minutes: "*"
+    enabled: !input every_minute
+  # The panel came back online: it doesn't keep its rows through a restart
+  - trigger: state
+    entity_id: !input row_1_entity
+    from: unavailable
+  - trigger: homeassistant
+    event: start
+
+variables:
+  e1: !input row_1_entity
+  e2: !input row_2_entity
+  e3: !input row_3_entity
+  e4: !input row_4_entity
+  t1: !input row_1_text
+  t2: !input row_2_text
+  t3: !input row_3_text
+  t4: !input row_4_text
+  c1: !input row_1_color
+  c2: !input row_2_color
+  c3: !input row_3_color
+  c4: !input row_4_color
+  rows: >-
+    {% set out = namespace(list=[]) %}
+    {% for e, t, c in [(e1, t1, c1), (e2, t2, c2), (e3, t3, c3), (e4, t4, c4)] %}
+      {% if e %}
+        {% set text = (t | string).strip() %}
+        {# The picked color goes first; a tag the text starts with comes after it and wins #}
+        {% set tag = '' if c in [[255, 255, 255], none, ''] else '[#%02X%02X%02X]' % (c[0] | int, c[1] | int, c[2] | int) %}
+        {% set out.list = out.list + [{'entity': e, 'value': (tag ~ text)[:255]}] %}
+      {% endif %}
+    {% endfor %}
+    {{ out.list }}
+
+actions:
+  - repeat:
+      for_each: "{{ rows }}"
+      sequence:
+        # Only what changed, so a scrolling row isn't sent again for nothing
+        - if:
+            - condition: template
+              value_template: "{{ states(repeat.item.entity) != repeat.item.value }}"
+          then:
+            - action: text.set_value
+              target:
+                entity_id: "{{ repeat.item.entity }}"
+              data:
+                value: "{{ repeat.item.value }}"

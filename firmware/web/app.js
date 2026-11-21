@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Game Day Scoreboard device page.
 // Scores and settings come from the gameday component's own routes:
 //   GET  /gameday/state           one JSON document with the game and every setting
@@ -44,9 +46,15 @@
     nba: { prefix: "NBA", tab: "NBA", name: "NBA", path: "basketball/nba", logo: "nba", byId: false, scan: "" },
     wnba: { prefix: "WNBA", tab: "WNBA", name: "WNBA", path: "basketball/wnba", logo: "wnba", byId: false, scan: "" },
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
+    wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
+  // The league's name in "All NFL live games": its short name, or the long one
+  // where the short one is an abbreviation owners don't use.
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
+  // "NFL", "NFL and NHL", "NFL, NBA and NHL".
+  const andJoin = (a) => (a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0] || "");
   const logoUrl = (league, id, abbr) => {
     const l = lgInfo(league);
     return `https://a.espncdn.com/i/teamlogos/${l.logo}/500-dark/${l.byId ? id : String(abbr).toLowerCase()}.png`;
@@ -97,6 +105,7 @@
         </div>
         <div class="team" id="tB"><img alt=""><div class="abbr">---</div><div class="rec"></div><div class="pips"><i></i><i></i><i></i></div></div>
       </div>
+      <div class="sbview" id="sbView" hidden><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbrow"></div><div class="sbhint">Send rows from Home Assistant</div></div>
       <div class="gname" id="gname" hidden></div>
       <div class="msg" id="msg" hidden></div>
       <div class="ticker" id="ticker">Waiting for the device</div>
@@ -112,7 +121,12 @@
       <div class="cbody">
         <div id="showCtls"></div>
         <div id="fxCtls" hidden>
+          <div class="ctl" id="fxPickRow" hidden><label for="fxPick">Effect playlist</label><select id="fxPick"></select></div>
           <p class="hint">The effect stays on until you pick another page.</p>
+        </div>
+        <div id="sbCtls" hidden>
+          <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows, and writes over a row you change here the next time it updates it.</p>
+          <div class="sbrows" id="sbRows"></div>
         </div>
       </div>
     </div>
@@ -136,7 +150,7 @@
       <button data-mode="5" aria-pressed="false">Live games<small>Games on right now, in leagues you pick</small></button>
     </div>
     <div class="teambar livebar" id="livebar" hidden>
-      <div class="cur"><div><div class="name" id="liveName">Showing a game in progress. Picks another when it ends.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
+      <div class="cur"><div><div class="name" id="liveName">Showing a random live game.</div><div class="lg" id="liveLg" hidden></div><div class="chips" id="liveChips" role="group" aria-label="Leagues"></div><button class="linkbtn" id="liveAuto" hidden>Back to automatic</button></div></div>
     </div>
     <div class="teambar favbar" id="favbar" hidden>
       <div class="cur"><div><div class="name" id="favName">None of your teams are playing. Showing their next games.</div><button class="linkbtn" id="favStart" hidden>Add a team</button></div></div>
@@ -162,7 +176,7 @@
       <div class="card">
         <h2>Playlists</h2>
         <div class="cbody">
-          <p class="hint">Groups of favorites you can switch between.</p>
+          <p class="hint">Groups of favorites and sports you can switch between.</p>
           <div id="listCtls"></div>
           <div class="actions" id="listActions"><button class="btn" id="listAdd">New playlist</button></div>
         </div>
@@ -189,7 +203,7 @@
           <p class="hint">Follows a live game, then moves to the next one.</p>
           <div class="livectls">
           <div class="stepper"><label for="rotate">Switch every</label><input type="number" id="rotate" min="1" max="30" step="1"><span>min</span></div>
-          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>The closest game with the least time left, moving only at a break in play. Off, a random game.</small></div>
+          <div class="stepper"><span>Pick the best game</span><button class="sw" data-set="best" aria-label="Pick the best game"></button><small>Off, a random live game, a new one every Switch every minutes. On, the closest game with the least time left, and it never leaves mid-play: it moves only at a break.</small></div>
           <div class="stepper"><span>Favorites take over</span><button class="sw" data-set="favtake" aria-label="Favorites take over"></button><small>A game one of your favorites is playing gets the panel until it ends.</small></div>
           <div class="stepper" id="liveCollideRow" hidden><label for="liveCollide">Two favorites at once</label><select id="liveCollide">
             <option value="0">Stick with the higher team</option><option value="1">Alternate</option>
@@ -222,7 +236,7 @@
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option>
             </select></div>
           </div>
         </div>
@@ -241,13 +255,12 @@
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="vizCard">
         <h2>Live pictures</h2>
-        <p class="hint">Drawn under the clock during a game. Not on a single 64x64 panel.</p>
+        <p class="hint">Under the clock during a game. Not on a single 64x64 panel.</p>
         <div id="vizCtls">
           <div class="ctl" data-sport="football"><label>Field strip<small>Football: where the ball is and the line to gain.</small></label><button class="sw" data-set="field" aria-label="Field strip"></button></div>
-          <div class="ctl" data-sport="football basketball"><label>Win chance bar<small>Football and basketball: each side's chance to win, as a thin bar.</small></label><button class="sw" data-set="winbar" aria-label="Win chance bar"></button></div>
-          <div class="ctl" data-sport="basketball hockey"><label>Score margin<small>Basketball and hockey: the lead over the game, as a small chart.</small></label><button class="sw" data-set="spark" aria-label="Score margin"></button></div>
+          <div class="ctl" data-sport="football basketball"><label>Win chance<small>Football and basketball: ESPN's favorite in words, "ND 84% to win", when the game comes up, after a touchdown, field goal or turnover, and on a swing of 10 points or more (basketball: the swing only).</small></label><button class="sw" data-set="winbar" aria-label="Win chance"></button></div>
         </div>
       </div>
       <div class="card">
@@ -259,6 +272,7 @@
               <option value="2">Full</option><option value="1">Subtle</option><option value="0">Off</option>
             </select></div>
             <div class="ctl"><label>Opponent scores too<small>Celebrates the other team's scores too, as a dim flash.</small></label><button class="sw" data-set="opp" aria-label="Opponent scores too"></button></div>
+            <div class="ctl"><label>Big plays<small>On Full, a dunk or an alley-oop gets its own animation. Scores and the win keep theirs either way.</small></label><button class="sw" data-set="bigplays" aria-label="Big plays"></button></div>
           </div>
         </div>
       </div>
@@ -319,18 +333,6 @@
           <div class="actions"><button class="btn primary" id="msgSave">Save</button><button class="btn" id="msgClear">Clear</button></div>
         </div>
       </div>
-      <div class="card" id="brandCard" hidden>
-        <h2>Bar look</h2>
-        <div class="cbody">
-          <p class="hint">Your bar's logo, colors and plate list from one brand file. The panel opens the message card with them.</p>
-          <label class="fl" for="brandUrl">Brand file address<small>A web address we give you. The panel reads it again every half hour.</small></label>
-          <input type="url" id="brandUrl" class="field" maxlength="160" placeholder="https://" autocomplete="off">
-          <p class="hint" id="brandRead" hidden></p>
-          <div class="ctl" id="brandLogoRow" hidden><label>Logo</label><img id="brandLogo" class="brandlogo" alt="The bar's logo"></div>
-          <div class="ctl" id="brandPartyRow" hidden><label>Plate party<small>Shows the newest plate's party now, even over a game.</small></label><button class="btn" id="brandParty">Plate party</button></div>
-          <div class="actions"><button class="btn primary" id="brandSave">Save</button><button class="btn" id="brandClear">Clear</button></div>
-        </div>
-      </div>
       <div class="card" id="picCard" hidden>
         <h2>Pictures</h2>
         <div class="cbody">
@@ -350,6 +352,14 @@
           <div class="ctl"><label for="cdname">Name</label><input type="text" id="cdname" maxlength="20" placeholder="Christmas" autocomplete="off"></div>
           <div class="ctl"><label for="cddate">Day</label><input type="date" id="cddate" min="2020-01-01" max="2099-12-31"></div>
           <button class="btn" id="cdClear" hidden>Clear the countdown</button>
+        </div>
+      </div>
+      <div class="card" id="fxCard" hidden>
+        <h2>Effect playlists</h2>
+        <div class="cbody">
+          <p class="hint">Effects the panel steps through on its Effects page, each for as long as you pick. Changing the effect by hand stops the playlist.</p>
+          <div id="fxListCtls"></div>
+          <div class="actions" id="fxListActions"><button class="btn" id="fxListAdd">New effect playlist</button></div>
         </div>
       </div>
     </div>
@@ -378,10 +388,6 @@
           <div class="ctl" id="betaRow" hidden>
             <label>Follow beta<small>Switches to beta firmware for new features early. It may have bugs.</small></label>
             <button class="sw" data-set="beta" aria-label="Follow beta"></button>
-          </div>
-          <div class="ctl" id="barRow" hidden>
-            <label>Bar build<small>Installs bar updates on its own overnight, never during a live game.</small></label>
-            <a class="btn" id="barReport" href="#">Something wrong?</a>
           </div>
         </div>
       </div>
@@ -431,9 +437,51 @@
       <details class="card fold" id="netsCard" hidden>
         <summary><h2>Wi-Fi networks</h2><span class="fsum" id="netsSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
         <div class="cbody">
-          <p class="hint">Networks this panel knows. Add more in the Game Day app.</p>
+          <p class="hint">Networks this panel knows, in the order it tries them.</p>
           <div id="nets"></div>
           <p class="hint" id="netsEmpty" hidden>No saved networks.</p>
+          <p class="hint" id="netMsg" role="status" hidden></p>
+          <div class="actions" id="netAddRow"><button class="btn" id="netAdd">Add network</button></div>
+          <div id="netForm" hidden>
+            <div id="netScan">
+              <div class="nethead"><span class="fl">Networks nearby<small>The 2.4 GHz networks the panel can see, strongest first. Tap one to use it.</small></span><button class="btn" id="netRescan">Look again</button></div>
+              <p class="hint" id="netScanMsg" role="status" hidden></p>
+              <div id="netNearby"></div>
+            </div>
+            <label class="fl" for="netName">Network name<small>Or type it, for a hidden network. 2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
+            <input type="text" id="netName" class="field" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
+            <label class="fl" for="netPass">Password<small>Blank for an open network.</small></label>
+            <input type="password" id="netPass" class="field" maxlength="64" autocomplete="new-password" enterkeyhint="done">
+            <div class="actions"><button class="btn primary" id="netSave">Save</button><button class="btn" id="netCancel">Cancel</button></div>
+          </div>
+        </div>
+      </details>
+      <details class="card fold" id="remoteCard">
+        <summary><h2>Remote</h2><span class="fsum" id="remoteSum">WizMote</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Pair a WizMote: turn on discovery, then press any button on the remote.</p>
+          <div class="ctl"><label>Status</label><span class="val" id="wizStatus" style="min-width:0;text-align:left"></span></div>
+          <div id="remoteCtls"></div>
+          <div class="actions" id="remoteActions" style="margin-top:8px"></div>
+          <p class="hint" id="remoteBtnHint">Choose what remote buttons 1 to 4 show. A button that picks teams, a playlist or Live games also brings the panel back to the scoreboard.</p>
+          <div id="remoteBtns"></div>
+        </div>
+      </details>
+      <details class="card fold" id="matrixCard">
+        <summary><h2>Matrix</h2><span class="fsum" id="matrixSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
+        <div class="cbody">
+          <p class="hint">Pick the layout that matches your panel.</p>
+          <div class="panels" id="panels">
+            <button class="panelpick" data-cols="1" aria-label="One 64x64 panel">
+              <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
+              <span>One 64x64 panel</span>
+            </button>
+            <button class="panelpick" data-cols="2" aria-label="One 128x64 panel, or two 64x64 side by side">
+              <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
+              <span>One 128x64 panel</span>
+              <small>or two 64x64 side by side</small>
+            </button>
+          </div>
         </div>
       </details>
       <details class="card fold" id="diagCard">
@@ -462,34 +510,6 @@
           <div class="ctl"><label>ESPN data<small>Scores and logos since the panel started</small></label><span class="val" id="espnData"></span></div>
         </div>
       </details>
-      <details class="card fold" id="remoteCard">
-        <summary><h2>Remote</h2><span class="fsum" id="remoteSum">WizMote</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="cbody">
-          <p class="hint">Pair a WizMote: turn on discovery, then press any button on the remote.</p>
-          <div class="ctl"><label>Status</label><span class="val" id="wizStatus" style="min-width:0;text-align:left"></span></div>
-          <div id="remoteCtls"></div>
-          <div class="actions" id="remoteActions" style="margin-top:8px"></div>
-          <p class="hint" id="remoteBtnHint">Choose what remote buttons 1 to 4 show.</p>
-          <div id="remoteBtns"></div>
-        </div>
-      </details>
-      <details class="card fold" id="matrixCard">
-        <summary><h2>Matrix</h2><span class="fsum" id="matrixSum"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-        <div class="cbody">
-          <p class="hint">Pick the layout that matches your panel.</p>
-          <div class="panels" id="panels">
-            <button class="panelpick" data-cols="1" aria-label="One 64x64 panel">
-              <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="30" y="6" width="36" height="36" rx="3"/></svg>
-              <span>One 64x64 panel</span>
-            </button>
-            <button class="panelpick" data-cols="2" aria-label="One 128x64 panel, or two 64x64 side by side">
-              <svg viewBox="0 0 96 48" aria-hidden="true"><rect x="10" y="6" width="36" height="36" rx="3"/><rect x="50" y="6" width="36" height="36" rx="3"/></svg>
-              <span>One 128x64 panel</span>
-              <small>or two 64x64 side by side</small>
-            </button>
-          </div>
-        </div>
-      </details>
       <div class="card dangercard">
         <div class="cbody">
           <p class="hint">Reboot keeps everything. Reset Wi-Fi forgets the network. Factory reset erases every setting.</p>
@@ -510,6 +530,8 @@
       <span id="ver"></span><span>·</span>
       <a href="https://github.com/gameday-scoreboard/gameday-scoreboard" target="_blank" rel="noopener">gameday-scoreboard</a>
       <span>·</span><span>scores from ESPN</span>
+      <br><span id="credit">© 2026 Brandon Harvey</span><span>·</span>
+      <a href="https://github.com/gameday-scoreboard/gameday-scoreboard/blob/main/NOTICE.md" target="_blank" rel="noopener">GPLv3</a>
     </p>
   </div>
 
@@ -639,11 +661,11 @@
   const stateForm = {
     mode: Number, rotate: Number, lockon: Number, release: Number, collide: Number,
     down: (v) => v === "1", count: (v) => v === "1", match: (v) => v === "1", play: (v) => v === "1", odds: (v) => v === "1", leaders: (v) => v === "1", opp: (v) => v === "1",
-    celebrate: Number,
+    celebrate: Number, bigplays: (v) => v === "1",
     best: (v) => v === "1",
     bootaddr: (v) => v === "1", today: (v) => v === "1", jump: (v) => v === "1", banner: (v) => v === "1", favtake: (v) => v === "1",
     countdown: (v) => v === "1", top25: (v) => v === "1", news: (v) => v === "1", gameleaders: (v) => v === "1",
-    field: (v) => v === "1", winbar: (v) => v === "1", spark: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
+    field: (v) => v === "1", winbar: (v) => v === "1", autoupd: (v) => v === "1", beta: (v) => v === "1",
     // "next:0,clock:1" onto the list the page shows: the cards named change, the rest stay.
     cards: (v) => {
       const pairs = new Map(v.split(",").map((p) => p.split(":")));
@@ -660,9 +682,12 @@
       return Object.assign({ n, f: favSlots.map((k, i) => (k && keys.includes(k) ? i : -1)).filter((i) => i >= 0) }, listOpts(keys));
     }),
     list: Number,
+    // Effect playlists (fx_playlists.h) from their set text, as the state lists them.
+    fxlists: (v) => fxFromText(v),
+    fxlist: Number,
     sport: (v) => (v === "none" ? "" : v),
     remote1: String, remote2: String, remote3: String, remote4: String,
-    msg: String, msgurl: String, msgevery: Number, nick: String, brand: String,
+    msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
     wake: (v) => v === "1", wakelead: Number, after: String,
@@ -673,6 +698,8 @@
     favs: (a, b) => (a || []).map(refKey).filter(Boolean).join(",") === (b || []).map(refKey).filter(Boolean).join(","),
     lists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
     list: (a, b) => (a || 0) === (b || 0),
+    fxlists: (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []),
+    fxlist: (a, b) => (a || 0) === (b || 0),
     cards: (a, b) => (a || []).map((c) => c.id + ":" + c.on).join() === (b || []).map((c) => c.id + ":" + c.on).join(),
   };
   const same = (k, a, b) => (sameForm[k] ? sameForm[k](a, b) : a === b);
@@ -727,6 +754,12 @@
   // short). They go to the settings import instead, which reads a JSON body
   // whole, as {"schema": 1, "lists": [{"n": "Football", "t": ["nfl:6"]}], "list": 2}.
   const setRequest = (params) => {
+    // Effect playlists run to about 3 KB, so they go the same way, as
+    // {"schema": 1, "fxlists": [{"n": "Party", "shuffle": true, "fx": [...]}]}.
+    if (params.fxlists !== undefined) {
+      const doc = { schema: 1, fxlists: fxFromText(String(params.fxlists)) };
+      return ["/gameday/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) }];
+    }
     if (params.lists === undefined) return ["/gameday/set?" + qs(params), { method: "POST" }];
     const doc = {
       schema: 1,
@@ -740,6 +773,8 @@
         if ("today" in o) e.today = o.today;
         if (o.color) e.color = o.color;
         if (o.icon) e.icon = o.icon;
+        // Always, [] for none: a playlist sent without lg keeps the sports it had.
+        e.lg = o.lg;
         return e;
       }),
     };
@@ -870,8 +905,59 @@
     return g.sit || "";
   };
 
+  // The Smart board (firmware/pages/smart_board.yaml): while the panel shows
+  // it, so does the board here, from the four row entities. Tags parse as in
+  // sb_parse (components/gameday/smart_board.h): [name] or [#RRGGBB] sets
+  // the color of what follows, anything else in brackets is text.
+  const SB_COLORS = { red: "ff2020", orange: "ff8000", yellow: "ffd000", green: "20e040", cyan: "00e0e0",
+    blue: "3070ff", purple: "a040ff", pink: "ff60c0", white: "ffffff", gray: "808080", grey: "808080" };
+  const sbParse = (raw) => {
+    const s = String(raw || "").slice(0, 255);
+    const segs = [{ c: "ffffff", t: "" }];
+    for (let i = 0; i < s.length;) {
+      const m = s[i] === "[" ? /^\[(#[0-9a-fA-F]{6}|[A-Za-z]{1,7})\]/.exec(s.slice(i)) : null;
+      const c = m && (m[1][0] === "#" ? m[1].slice(1).toLowerCase() : SB_COLORS[m[1].toLowerCase()]);
+      if (!c) {
+        // Spaces before the first word don't count, so "[red] Door" lines up.
+        if (!(s[i] === " " && segs.length === 1 && !segs[0].t)) segs[segs.length - 1].t += s[i];
+        i++;
+        continue;
+      }
+      if (!segs[segs.length - 1].t) segs[segs.length - 1].c = c;  // a tag at the start, or two in a row
+      else segs.push({ c, t: "" });
+      i += m[0].length;
+    }
+    while (segs.length > 1 && !segs[segs.length - 1].t) segs.pop();
+    segs[segs.length - 1].t = segs[segs.length - 1].t.replace(/ +$/, "");
+    return segs.some((g) => g.t) ? segs : null;
+  };
+  const entValue = (name) => {
+    const e = ents[byName[name]];
+    return e ? (e.value ?? e.state ?? "") : "";
+  };
+  const renderSmart = () => {
+    const on = entValue("Select Page") === "Smart board";
+    $("#board").classList.toggle("smart", on);
+    $("#sbView").hidden = !on;
+    if (!on) return;
+    let any = false;
+    $("#sbView").querySelectorAll(".sbrow").forEach((row, i) => {
+      const segs = sbParse(entValue("Smart board row " + (i + 1)));
+      row.hidden = !segs;
+      row.textContent = "";
+      (segs || []).forEach((g) => {
+        const span = el("span", null, g.t);
+        span.style.color = "#" + g.c;
+        row.appendChild(span);
+      });
+      any = any || !!segs;
+    });
+    $("#sbView .sbhint").hidden = any;
+  };
+
   const renderBoard = () => {
     const b = $("#board");
+    renderSmart();
     const g = game;
     const st = $("#gstate");
     const msg = $("#msg");
@@ -989,6 +1075,7 @@
     setGD({ live: "" });
     toast("Leagues follow your favorites");
   };
+  const everyMin = (m) => (Number(m) > 1 ? m + " minutes" : "minute");
   const renderLiveBar = () => {
     const auto = liveAuto();
     // With nothing live the device shows the first favorite's card, or with
@@ -998,9 +1085,12 @@
     $("#liveName").textContent = lock ? (lock.name || lock.abbr) + " are on, so the panel stays on the game until it ends"
       : S.fallback ? "Nothing live right now. Showing your team until a game starts."
         : S.recap ? "Nothing live right now. Showing recent finals."
-          : S.best ? "Showing the best game on" : "Showing a game in progress. Picks another when it ends.";
-    $("#liveLg").textContent = auto ? "Leagues follow your favorites. Tap one to choose by hand." : "";
-    $("#liveLg").hidden = !auto;
+          : S.best ? "Showing the best game on. It moves only at a break in play."
+            : "Showing a random live game. A new one every " + everyMin(S.rotate) + ", or when it ends.";
+    // A league button in use: its one league, the owner's own chips stay as they are.
+    const only = S.live_only ? "Remote button " + S.held + ": " + liveName(S.live_only) + " games only, until you pick a mode, a playlist or another button." : "";
+    $("#liveLg").textContent = only || (auto ? "Leagues follow your favorites. Tap one to choose by hand." : "");
+    $("#liveLg").hidden = !only && !auto;
     $("#liveChips").classList.toggle("auto", auto);
     $("#liveAuto").hidden = auto || String(S.mode || 0) !== "5";
     renderLiveChips();
@@ -1060,7 +1150,16 @@
       // Says why the board shows what it does. Locked covers the lead-in
       // before kickoff and the stretch after the final, not only the game.
       const team = shown ? shown.t.name || shown.t.abbr : "";
-      $("#favName").textContent = !set
+      // A button-only team on its own while its button is in use.
+      const heldV = S.held && !S.live_only && S.remote && S.remote[S.held - 1] ? S.remote[S.held - 1].v : "";
+      const held = heldV.startsWith("team:") ? teamByKey(heldV.slice(5)) : null;
+      const sportList = !held && playing && (playing.lg || []).length ? playing : null;
+      $("#favName").textContent = held && !S.locked
+        ? "Showing the " + held[3] + " from remote button " + S.held + ", until you pick a mode, a playlist or another button"
+        : sportList
+        ? "Playing your " + sportList.n + " playlist: live " + andJoin(sportList.lg.map(liveName)) + " games" +
+          (sportList.f.length ? ", and its teams while they play" : "") + (S.sched && S.sched === S.list ? ", on its schedule" : "")
+        : !set
         ? "Add a team to get started"
         : S.locked && shown
           ? team + (shown.s === "PRE" ? " play soon" : shown.s === "POST" ? " just finished" : " are on")
@@ -1307,6 +1406,10 @@
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
   let favSlots = [];
+  // The button-only teams among them (state favs[].btn): a remote button
+  // added each, it counts toward the 16 but plays only on its button.
+  let btnKeys = [];
+  const realFavKeys = () => favKeys.filter((k) => !btnKeys.includes(k));
   // From the WizMote Status entity. Without a paired remote the favorite
   // rows leave out which button lands on them.
   let remotePaired = false;
@@ -1316,7 +1419,9 @@
   const postFavs = (keys) => setGD({ favs: keys.join(",") });
   // The WizMote's buttons (state remote, set remote1 to remote4): what each is
   // set to, as text: fav (its own favorite), team:nfl:6, list:Name,
-  // sport:football, all or none. A held post stands in until the panel answers.
+  // sport:football, all, live, league:nfl, none, or a page under Showing:
+  // scoreboard, clock, smartboard, fx:Effect,Palette,speed,intensity. A held
+  // post stands in until the panel answers.
   const remoteTargets = () => [1, 2, 3, 4].map((b) => {
     const h = S && S["remote" + b];
     const r = (S && S.remote && S.remote[b - 1]) || { v: "fav", gone: false };
@@ -1326,7 +1431,8 @@
   // favorite by default, or the team it was set to. Buttons whose target is
   // gone are on their own favorite for now.
   const remoteButtonFor = (key, i) => remoteTargets()
-    .map((r, b) => ((r.v === "fav" || r.gone ? b === i : r.v === "team:" + key) ? b + 1 : 0)).filter(Boolean).join(", ");
+    .map((r, b) => ((r.v === "fav" || r.gone ? b === i && !btnKeys.includes(key) : r.v === "team:" + key) ? b + 1 : 0))
+    .filter(Boolean).join(", ");
   const renderFavs = () => {
     const host = $("#favCtls");
     host.innerHTML = "";
@@ -1340,7 +1446,11 @@
       row.appendChild(img);
       const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
       const btn = remoteButtonFor(key, favSlots.indexOf(key));
-      if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
+      if (btnKeys.includes(key)) {
+        // Added by a remote button: shown, marked, and no favorite anywhere else.
+        row.classList.add("btnonly");
+        name.appendChild(el("small", null, (t ? lgInfo(t[0]).name + " · " : "") + "Button only" + (btn ? " (button " + btn + ")" : "")));
+      } else if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -1370,6 +1480,10 @@
   // already in the list (checked).
   const toggleFav = (t) => {
     const key = keyOf(t);
+    if (btnKeys.includes(key)) {
+      setGD({ keepfav: key });
+      return toast("The " + t[3] + " are a favorite now");
+    }
     if (favKeys.includes(key)) {
       postFavs(favKeys.filter((k) => k !== key));
       return toast("Removed the " + t[3]);
@@ -1422,8 +1536,8 @@
   const sportOf = (lg) => lgInfo(lg).path.split("/")[0];
   // A playlist's options (playlists.h ListOpt) ride in its lists= text as @
   // tokens among its teams: @d:06 the schedule's days (0 Sunday), @t:11:00-23:00
-  // its hours, @only, @today:1 or @today:0, and its look, @c:blue and @i:star.
-  // The state carries them as fields.
+  // its hours, @only, @today:1 or @today:0, its look, @c:blue and @i:star, and
+  // its sports, @lg:nfl. The state carries them as fields.
   const listOpts = (toks) => {
     const o = { days: "", start: "00:00", end: "00:00", only: false };
     let color = "", icon = "";
@@ -1438,11 +1552,13 @@
     if (!o.days) { o.start = "00:00"; o.end = "00:00"; }
     o.color = color;
     o.icon = icon;
+    o.lg = Object.keys(LEAGUES).filter((lg) => toks.includes("@lg:" + lg));
     return o;
   };
   const optTokens = (l) => (l.days ? ",@d:" + l.days + (l.start !== l.end ? ",@t:" + l.start + "-" + l.end : "") : "")
     + (l.only ? ",@only" : "") + ("today" in l ? (l.today ? ",@today:1" : ",@today:0") : "")
-    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "");
+    + (l.color ? ",@c:" + l.color : "") + (l.icon ? ",@i:" + l.icon : "")
+    + (l.lg || []).map((lg) => ",@lg:" + lg).join("");
   const listsParam = (ls) => ls.map((l) => l.n + "=" + l.f.map((i) => favSlots[i]).filter(Boolean).join(",") + optTokens(l)).join(";");
   // set_lists_ keeps the playing playlist by name, so a rename of it says again which one it is.
   const postLists = (ls, list) => setGD(list === undefined ? { lists: listsParam(ls) } : { lists: listsParam(ls), list });
@@ -1504,7 +1620,7 @@
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favSlots.forEach((key, fi) => {
-        if (!key) return;
+        if (!key || btnKeys.includes(key)) return;
         const t = teamByKey(key);
         const on = l.f.includes(fi);
         const c = el("button", "chip", t ? t[2] : key);
@@ -1517,6 +1633,31 @@
         chips.appendChild(c);
       });
       box.appendChild(chips);
+      // Its sports (playlists.h list_league_token): with one, the playlist
+      // plays as Live games over its sports and its teams take over.
+      const lgs = l.lg || [];
+      const sports = el("div", "psports");
+      sports.appendChild(el("span", "plabel", "Sports"));
+      const sc = el("span", "chips");
+      sc.setAttribute("role", "group");
+      sc.setAttribute("aria-label", "Sports in " + l.n);
+      Object.keys(LEAGUES).filter((lg) => TEAMS.some((t) => t[0] === lg)).forEach((lg) => {
+        const c = el("button", "chip", lgInfo(lg).name);
+        c.title = "All " + liveName(lg) + " live games";
+        const on = lgs.includes(lg);
+        setOn(c, on, "aria-pressed");
+        c.onclick = () => {
+          const was = cur().lg || [];
+          put({ lg: Object.keys(LEAGUES).filter((k) => (k === lg ? !was.includes(k) : was.includes(k))) });
+        };
+        sc.appendChild(c);
+      });
+      sports.appendChild(sc);
+      if (lgs.length) {
+        sports.appendChild(el("small", "phint", "Plays live " + andJoin(lgs.map(liveName)) + " games. " +
+          (l.f.length ? "Its teams take over while their game is on." : "Add teams to have them take over while they play.")));
+      }
+      box.appendChild(sports);
       // Its options: the schedule's days and hours, Only this list's games,
       // its own Only today's games. Every change posts the playlists whole,
       // from the playlists as they are now: the card isn't redrawn while a
@@ -1575,7 +1716,8 @@
       setOn(sw, !!l.only, "aria-checked");
       sw.onclick = () => put({ only: !cur().only });
       only.appendChild(sw);
-      opts.appendChild(only);
+      // A sport playlist plays live games: Favorite teams' own rules don't apply.
+      if (!lgs.length) opts.appendChild(only);
       const today = el("div", "ctl");
       const tl = el("label", null, "Only today's games");
       const ts = el("select");
@@ -1589,7 +1731,7 @@
       };
       today.appendChild(tl);
       today.appendChild(ts);
-      opts.appendChild(today);
+      if (!lgs.length) opts.appendChild(today);
       // Its look: a color and an icon, each with None, for its name on the
       // panel and in Playing.
       const look = (label, key, items, draw) => {
@@ -1615,10 +1757,8 @@
       box.appendChild(opts);
       host.appendChild(box);
     });
-    const none = !favKeys.length;
-    if (none) host.appendChild(el("p", "hint", "Add favorites first, then group them here."));
-    else if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
-    $("#listActions").hidden = none;
+    if (!ls.length) host.appendChild(el("p", "hint", "No playlists yet."));
+    $("#listActions").hidden = false;
     $("#listAdd").hidden = ls.length >= listMax();
   };
   $("#listAdd").onclick = () => {
@@ -1627,6 +1767,228 @@
     while (ls.some((l) => l.n === "Playlist " + n)) n++;
     postLists(ls.concat([{ n: "Playlist " + n, f: [] }]));
   };
+  // ---- effect playlists ------------------------------------------------------
+  // Effect playlists (components/gameday/fx_playlists.h): named lists of
+  // effects the panel steps through on its Effects page. The state lists
+  // them as [{n, shuffle, fx: [{e, p, s, i, w}]}], an effect and a palette
+  // by name, w in seconds; fxlist is the one playing (0 none). Every change
+  // posts them all as set text: Name=effect|palette|speed|intensity|seconds,
+  // ...,@shuffle;Name2=...
+  const fxLists = () => (S && S.fxlists) || [];
+  const fxWaits = () => (S && S.fxwaits) || [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 120, 300, 600, 900, 1800, 3600];
+  const FX_WAIT_NEW = 15;  // fx_playlists.h kFxWaitDefault
+  const fxListsText = (ls) => ls.map((l) => l.n + "=" + l.fx.map((e) => [e.e, e.p, e.s, e.i, e.w].join("|"))
+    .concat(l.shuffle ? ["@shuffle"] : []).join(",")).join(";");
+  function fxFromText(v) {
+    return v.split(";").filter(Boolean).map((p) => {
+      const at = p.indexOf("=");
+      const toks = (at < 0 ? "" : p.slice(at + 1)).split(",").filter(Boolean);
+      return {
+        n: at < 0 ? p : p.slice(0, at),
+        shuffle: toks.includes("@shuffle"),
+        fx: toks.filter((t) => t[0] !== "@").map((t) => {
+          const [e, pal, s, i, w] = t.split("|");
+          return { e, p: pal || "", s: Number(s), i: Number(i), w: Number(w) };
+        }),
+      };
+    });
+  }
+  const postFx = (ls) => setGD({ fxlists: fxListsText(ls) });
+  // "1 s", "45 s", "1 min", "1 hour"
+  const waitText = (w) => (w < 60 ? w + " s" : w < 3600 ? w / 60 + " min" : w / 3600 + (w === 3600 ? " hour" : " hours"));
+  const fxOptions = (name) => { const e = ents[byName[name]]; return (e && e.option) || []; };
+  const fxMade = () => S && S.fxlists !== undefined;
+  let fxSig = "";
+  const renderFxLists = () => {
+    $("#fxCard").hidden = !fxMade();
+    const pick = $("#fxPick");
+    $("#fxPickRow").hidden = !fxMade() || !fxLists().length;
+    if (!fxMade()) return;
+    // The Home tab's picker: None, then the playlists, as Home Assistant's
+    // Effect playlist select lists them.
+    const opts = [["0", "None"]].concat(fxLists().map((l, i) => [String(i + 1), l.n]));
+    if (opts.map((o) => o.join("=")).join("\n") !== Array.from(pick.options).map((o) => o.value + "=" + o.text).join("\n")) {
+      pick.innerHTML = "";
+      opts.forEach(([v, t]) => { const o = el("option", null, t); o.value = v; pick.appendChild(o); });
+    }
+    if (document.activeElement !== pick) pick.value = String(S.fxlist || 0);
+    // Redrawn only when something changed, so a name being typed keeps its place.
+    const sig = JSON.stringify(fxLists()) + "|" + (S.fxlist || 0) + "|" + fxOptions("Effect").length + "|" +
+      fxOptions("Effect Palette").length + "|" + JSON.stringify(remoteTargets());
+    const host = $("#fxListCtls");
+    if (sig === fxSig || (document.activeElement && host.contains(document.activeElement) &&
+        document.activeElement.matches("input, select"))) return;
+    fxSig = sig;
+    host.innerHTML = "";
+    const ls = fxLists();
+    const effects = fxOptions("Effect"), palettes = fxOptions("Effect Palette");
+    ls.forEach((l, i) => {
+      // Every change posts the playlists whole, from the playlists as they are now.
+      const cur = () => fxLists()[i] || l;
+      const put = (patch) => postFx(fxLists().map((o, k) => (k === i ? Object.assign({}, o, patch) : o)));
+      const box = el("div", "plist fxlist");
+      const row = el("div", "ctl");
+      const name = el("input", "field pname");
+      name.value = l.n;
+      name.maxLength = 16;
+      name.setAttribute("aria-label", "Effect playlist name");
+      name.onchange = () => {
+        const n = cleanName(name.value);
+        if (!n || n === l.n) { name.value = l.n; return; }
+        if (ls.some((o, k) => k !== i && o.n === n)) { name.value = l.n; return toast("Another effect playlist has that name"); }
+        // "None" is Home Assistant's choice to stop a playlist.
+        if (n === "None") { name.value = l.n; return toast("That name is taken"); }
+        put({ n });
+        // Done typing: let the card redraw under its new name.
+        name.blur();
+      };
+      row.appendChild(name);
+      const btns = remoteTargets().map((r, b) => (r.v === "fxlist:" + l.n ? b + 1 : 0)).filter(Boolean);
+      if (btns.length) row.appendChild(el("small", "pbtn", (btns.length > 1 ? "Buttons " : "Button ") + btns.join(", ")));
+      const playing = S.fxlist === i + 1;
+      const play = el("button", "btn" + (playing ? "" : " primary"), playing ? "Stop" : "Play");
+      play.setAttribute("aria-label", (playing ? "Stop " : "Play ") + l.n);
+      play.disabled = !l.fx.length;
+      play.onclick = () => setGD({ fxlist: playing ? 0 : i + 1 });
+      row.appendChild(play);
+      const ctl = el("span", "favmove");
+      const mk = (label, title, fn) => {
+        const b = el("button", null, label);
+        b.title = title;
+        b.setAttribute("aria-label", title + " " + l.n);
+        b.onclick = fn;
+        ctl.appendChild(b);
+      };
+      const swap = (j) => {
+        if (j < 0 || j >= ls.length) return;
+        const next = ls.slice();
+        next[i] = ls[j];
+        next[j] = ls[i];
+        postFx(next);
+      };
+      mk("▲", "Move up", () => swap(i - 1));
+      mk("▼", "Move down", () => swap(i + 1));
+      mk("✕", "Delete", () => { if (confirm("Delete the effect playlist " + l.n + "?")) postFx(ls.filter((_, k) => k !== i)); });
+      row.appendChild(ctl);
+      box.appendChild(row);
+      if (playing) box.appendChild(el("p", "hint fxplaying", "Playing now"));
+      // Its effects: each one's effect, palette, speed, intensity and how
+      // long it stays up, in order.
+      const list = el("div", "fxentries");
+      list.setAttribute("role", "group");
+      list.setAttribute("aria-label", "Effects in " + l.n);
+      const putFx = (fx) => put({ fx });
+      l.fx.forEach((e, j) => {
+        const r = el("div", "fxentry");
+        const sel = (label, items, value, onSet) => {
+          const s = el("select");
+          s.setAttribute("aria-label", label + " " + (j + 1) + " in " + l.n);
+          // One the panel no longer offers stays listed, so the row says what it holds.
+          (items.includes(value) || !value ? items : [value].concat(items)).forEach((o) => s.appendChild(el("option", null, o)));
+          s.value = value;
+          s.onchange = () => onSet(s.value);
+          return s;
+        };
+        const set = (patch) => putFx(cur().fx.map((x, k) => (k === j ? Object.assign({}, x, patch) : x)));
+        const top = el("div", "fxrow");
+        top.appendChild(el("span", "fxnum", String(j + 1)));
+        top.appendChild(sel("Effect", effects, e.e, (v) => set({ e: v })));
+        top.appendChild(sel("Palette", palettes, e.p, (v) => set({ p: v })));
+        r.appendChild(top);
+        // Speed and intensity are sliders, as on the Home tab; a change saves
+        // when the slider is let go.
+        const slide = (label, key) => {
+          const row = el("div", "fxrow fxslide");
+          row.appendChild(el("span", null, label));
+          const rng = el("input");
+          rng.type = "range";
+          rng.min = 0;
+          rng.max = 255;
+          rng.step = 1;
+          rng.value = e[key];
+          rng.setAttribute("aria-label", label + " " + (j + 1) + " in " + l.n);
+          const val = el("span", "val", String(e[key]));
+          val.setAttribute("aria-hidden", "true");
+          rng.oninput = () => { val.textContent = rng.value; };
+          rng.onchange = () => set({ [key]: Number(rng.value) });
+          row.appendChild(rng);
+          row.appendChild(val);
+          return row;
+        };
+        r.appendChild(slide("Speed", "s"));
+        r.appendChild(slide("Intensity", "i"));
+        const bottom = el("div", "fxrow");
+        const wait = el("label", "fxval");
+        wait.appendChild(el("span", null, "For"));
+        const ws = el("select");
+        ws.setAttribute("aria-label", "Time " + (j + 1) + " in " + l.n);
+        fxWaits().forEach((w) => { const o = el("option", null, waitText(w)); o.value = String(w); ws.appendChild(o); });
+        ws.value = String(e.w);
+        ws.onchange = () => set({ w: Number(ws.value) });
+        wait.appendChild(ws);
+        bottom.appendChild(wait);
+        const mv = el("span", "favmove");
+        const mkFx = (label, title, fn) => {
+          const b = el("button", null, label);
+          b.title = title;
+          b.setAttribute("aria-label", title + " effect " + (j + 1) + " in " + l.n);
+          b.onclick = fn;
+          mv.appendChild(b);
+        };
+        const swapFx = (k) => {
+          const f = cur().fx;
+          if (k < 0 || k >= f.length) return;
+          const next = f.slice();
+          next[j] = f[k];
+          next[k] = f[j];
+          putFx(next);
+        };
+        mkFx("▲", "Move up", () => swapFx(j - 1));
+        mkFx("▼", "Move down", () => swapFx(j + 1));
+        mkFx("✕", "Remove", () => putFx(cur().fx.filter((_, k) => k !== j)));
+        bottom.appendChild(mv);
+        r.appendChild(bottom);
+        list.appendChild(r);
+      });
+      if (!l.fx.length) list.appendChild(el("p", "hint", "No effects yet."));
+      box.appendChild(list);
+      const acts = el("div", "fxacts");
+      // A new effect starts as what the panel shows now, for 15 seconds.
+      const add = el("button", "btn", "Add an effect");
+      add.setAttribute("aria-label", "Add an effect to " + l.n);
+      add.hidden = l.fx.length >= ((S && S.fxmax) || 8) || !effects.length;
+      add.onclick = () => {
+        const now = (name, dflt) => { const v = entValue(name); return v === "" ? dflt : v; };
+        const e = now("Effect", effects[0]);
+        putFx(cur().fx.concat([{
+          e: effects.includes(e) ? e : effects[0], p: now("Effect Palette", palettes[0] || ""),
+          s: Number(now("Effect Speed", 128)), i: Number(now("Effect Intensity", 128)), w: FX_WAIT_NEW,
+        }]));
+      };
+      acts.appendChild(add);
+      box.appendChild(acts);
+      const shuffle = el("div", "ctl");
+      shuffle.appendChild(el("label", null, "Shuffle"));
+      const sw = el("button", "sw");
+      sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-label", "Shuffle " + l.n);
+      setOn(sw, !!l.shuffle, "aria-checked");
+      sw.onclick = () => put({ shuffle: !cur().shuffle });
+      shuffle.appendChild(sw);
+      box.appendChild(shuffle);
+      host.appendChild(box);
+    });
+    if (!ls.length) host.appendChild(el("p", "hint", "No effect playlists yet."));
+    $("#fxListAdd").hidden = ls.length >= ((S && S.fxlistmax) || 4);
+  };
+  $("#fxListAdd").onclick = () => {
+    const ls = fxLists();
+    let n = ls.length + 1;
+    while (ls.some((l) => l.n === "Effects " + n)) n++;
+    postFx(ls.concat([{ n: "Effects " + n, shuffle: false, fx: [] }]));
+  };
+  $("#fxPick").onchange = () => setGD({ fxlist: Number($("#fxPick").value) });
+
   const listPick = $("#favList");
   // All favorites, the sport rows, then the owner's playlists, as the panel's
   // Home Assistant select lists them. A sport row's value is "s:" + its sport.
@@ -1654,30 +2016,158 @@
   listPick.onchange = () => setGD(listPick.value.startsWith("s:")
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
-  // The Remote card's four pickers, one per button, grouped: its own
-  // favorite, each favorite team, the sport rows, the playlists, all, nothing.
+  // The Remote card's four pickers, one per button: its own favorite and the
+  // playlists, then a group per sport, all nine leagues: its leagues' live
+  // games, the sport row (My football teams), its favorites and "Another
+  // NFL team", which opens a second list with every team in that league.
+  // Then All favorites, Live games, Nothing, and the pages under Showing. A
+  // team that isn't a favorite joins the favorites as a button-only team
+  // (playlists.h), so 16 saved already leave no room for one. An Effects button keeps an
+  // effect of its own (fx:Effect,Palette,speed,intensity): picking Effects
+  // saves what Effects is set to now, and Change opens its own controls,
+  // which change the button, not what the panel is playing.
   let remoteSig = "";
-  const renderRemote = () => {
+  const SPORTS = [["football", "Football"], ["baseball", "Baseball"], ["basketball", "Basketball"],
+    ["hockey", "Hockey"], ["soccer", "Soccer"]];
+  // A team's league, from a target or key ("team:nfl:6", "nfl:6").
+  const keyLeague = (k) => k.replace(/^team:/, "").split(":")[0];
+  // Which league's team list a button shows ("" for none): one picked with
+  // Another NFL team, kept while the page is open, or the league of the
+  // button's own team when that team is button-only.
+  const remotePick = ["", "", "", ""];
+  const remoteGroups = () => {
+    const real = realFavKeys();
+    const rows = sportRows();
+    const groups = [["", [["fav", "Its own favorite"]]], ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])]];
+    for (const [sp, title] of SPORTS) {
+      const lgs = Object.keys(LEAGUES).filter((lg) => sportOf(lg) === sp && TEAMS.some((t) => t[0] === lg));
+      if (!lgs.length) continue;
+      const opts = lgs.map((lg) => ["league:" + lg, "All " + liveName(lg) + " live games"]);
+      const mine = real.filter((k) => lgs.includes(keyLeague(k)));
+      if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
+      for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      groups.push([title, opts]);
+    }
+    groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
+    // Effect playlists, in full so they never read as a team playlist; one
+    // with no effects can't play, so it isn't offered.
+    groups.push(["Showing", [["scoreboard", "Scoreboard"], ["clock", "Clock"], ["smartboard", "Smart board"], ["fx", "Effects"]]
+      .concat(fxLists().filter((l) => l.fx.length).map((l) => ["fxlist:" + l.n, "Effect playlist: " + l.n]))]);
+    return groups;
+  };
+  const setRemoteTeam = (b, key) => {
+    const t = teamByKey(key);
+    if (favKeys.includes(key)) {
+      setGD({ ["remote" + (b + 1)]: "team:" + key });
+      return;
+    }
+    if (favKeys.length >= favMax()) {
+      toast("Your favorites are full (" + favMax() + "). Remove one to put another team on a button.");
+      remotePick[b] = "";
+      remoteSig = "";
+      if (document.activeElement) document.activeElement.blur();
+      return renderRemote();
+    }
+    setGD({ ["remote" + (b + 1)]: "team:" + key });
+    toast("The " + (t ? t[3] : key) + " are on button " + (b + 1) + " only, not in your favorites elsewhere");
+  };
+  const fxOpen = new Set();  // buttons whose Change controls are open
+  const fxParse = (v) => {
+    const [e, p, sp, it] = v.slice(3).split(",");
+    return { e: e || "", p: p || "Default", sp: Number(sp || 128), it: Number(it || 128) };
+  };
+  const fxText = (f) => "fx:" + [f.e, f.p, f.sp, f.it].join(",");
+  // What the Effects page is set to now, from its own entities.
+  const fxNow = () => ({ e: entValue("Effect") || "Matrix", p: entValue("Effect Palette") || "Default",
+    sp: Math.round(Number(entValue("Effect Speed") || 128)), it: Math.round(Number(entValue("Effect Intensity") || 128)) });
+  const entOptions = (name) => { const e = ents[byName[name]]; return (e && e.option) || []; };
+  // sel: the button's picker, whose Effects choice follows each change.
+  const renderFxEdit = (host, b, f, sel) => {
+    const save = (part) => {
+      // From what the button holds now: the controls aren't redrawn while one has focus.
+      const v = fxText(Object.assign(fxParse(remoteTargets()[b].v), part));
+      const o = sel.querySelector("option[data-fx]");
+      if (o) {
+        const g = fxParse(v);
+        o.value = v;
+        o.textContent = "Effects: " + g.e + ", " + g.p;
+        sel.value = v;
+      }
+      setGD({ ["remote" + (b + 1)]: v });
+    };
+    const pick = (label, name, key) => {
+      const row = el("div", "ctl");
+      row.appendChild(el("label", null, label));
+      const sel = el("select");
+      sel.setAttribute("aria-label", "Button " + (b + 1) + " " + label.toLowerCase());
+      const opts = entOptions(name);
+      for (const o of opts.includes(f[key]) ? opts : [f[key], ...opts]) {
+        const x = el("option", null, o);
+        x.value = o;
+        sel.appendChild(x);
+      }
+      sel.value = f[key];
+      sel.onchange = () => save({ [key]: sel.value });
+      row.appendChild(sel);
+      host.appendChild(row);
+    };
+    const slide = (label, key) => {
+      const row = el("div", "ctl");
+      row.appendChild(el("label", null, label));
+      const r = el("input");
+      r.type = "range";
+      r.min = 0;
+      r.max = 255;
+      r.step = 1;
+      r.value = f[key];
+      r.setAttribute("aria-label", "Button " + (b + 1) + " " + label.toLowerCase());
+      const val = el("span", "val", String(f[key]));
+      val.setAttribute("aria-hidden", "true");
+      r.oninput = () => { val.textContent = r.value; };
+      r.onchange = () => save({ [key]: Number(r.value) });
+      row.appendChild(r);
+      row.appendChild(val);
+      host.appendChild(row);
+    };
+    pick("Effect", "Effect", "e");
+    pick("Palette", "Effect Palette", "p");
+    slide("Speed", "sp");
+    slide("Intensity", "it");
+  };
+  // force: redraw even with focus in the card (its own Change link).
+  const renderRemote = (force) => {
     const host = $("#remoteBtns");
     const targets = remoteTargets();
-    const groups = [["", [["fav", "Its own favorite"]]],
-      ["Favorites", favKeys.map((k) => { const t = teamByKey(k); return ["team:" + k, t ? t[3] : k]; })],
-      ["By sport", sportRows().map((k) => ["sport:" + k, "All " + k])],
-      ["Your playlists", lists().map((l) => ["list:" + l.n, l.n])],
-      ["", [["all", "All favorites"], ["none", "Nothing"]]]];
-    const sig = JSON.stringify([groups, targets, favSlots]);
-    if (sig === remoteSig || (document.activeElement && host.contains(document.activeElement))) return;
+    const groups = remoteGroups();
+    const sig = JSON.stringify([groups, targets, favSlots, btnKeys, remotePick, S.held || 0, [...fxOpen],
+      entOptions("Effect").length, entOptions("Effect Palette").length]);
+    if (!force && (sig === remoteSig || (document.activeElement && host.contains(document.activeElement)))) return;
     remoteSig = sig;
     host.innerHTML = "";
     targets.forEach((r, b) => {
+      const isFx = r.v.startsWith("fx:");
+      const f = isFx ? fxParse(r.v) : null;
       const row = el("div", "ctl rbtn");
       const label = el("label", null, "Button " + (b + 1));
-      const t = teamByKey(favSlots[b] || "");
-      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : favSlots[b] ? "" : " (empty)");
-      const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now" : "That team left your favorites")
-        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "." : "";
+      // A button-only team's place counts as empty for its own favorite.
+      const ownKey = favSlots[b] && !btnKeys.includes(favSlots[b]) ? favSlots[b] : "";
+      const t = teamByKey(ownKey);
+      const own = "Favorite " + (b + 1) + (t ? ": " + t[3] : ownKey ? "" : " (empty)");
+      const solo = r.v.startsWith("team:") && btnKeys.includes(r.v.slice(5));
+      const inUse = S.held === b + 1 ? " In use now." : "";
+      const note = r.gone ? (r.v.startsWith("list:") ? "That playlist is gone" : r.v.startsWith("sport:") ? "No favorites in that sport now"
+        : r.v.startsWith("fxlist:") ? "That effect playlist is gone or has no effects"
+        : isFx ? "This panel doesn't have that effect" : "That team left your favorites")
+        + ", so it is " + own.toLowerCase() + " for now." : r.v === "fav" ? own + "."
+          : solo ? "Button only: not in All favorites, playlists or take over." + inUse
+            : r.v.startsWith("league:") ? "Leaves your own Live games leagues as they are." + inUse : "";
       if (note) label.appendChild(el("small", null, note));
       row.appendChild(label);
+      // A button-only team shows as Another NFL team with the team picked in
+      // the second list; a favorite shows in its sport.
+      const pickLg = remotePick[b] || (solo ? keyLeague(r.v) : "");
+      const shown = pickLg ? "pick:" + pickLg : r.v;
       const sel = el("select");
       sel.setAttribute("aria-label", "Remote button " + (b + 1));
       let found = false;
@@ -1685,32 +2175,98 @@
         if (!opts.length) continue;
         const into = g ? el("optgroup") : sel;
         if (g) { into.label = g; sel.appendChild(into); }
-        for (const [v, text] of opts) {
-          const o = el("option", null, text);
+        for (const [v0, text] of opts) {
+          // The Effects choice stands for this button's own effect.
+          const v = v0 === "fx" && isFx ? r.v : v0;
+          const o = el("option", null, v0 === "fx" && isFx ? "Effects: " + f.e + ", " + f.p : text);
           o.value = v;
-          found = found || v === r.v;
+          if (v0 === "fx") o.dataset.fx = "";
+          found = found || v === shown;
           into.appendChild(o);
         }
       }
       if (!found) {
         // Set to something that is gone: shown as it is, so it comes back when its target does.
-        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^sport:/, "") + " (gone)");
+        const o = el("option", null, r.v.replace(/^team:/, "").replace(/^list:/, "Playlist ").replace(/^fxlist:/, "Effect playlist: ")
+          .replace(/^sport:/, "") + " (gone)");
         o.value = r.v;
         sel.appendChild(o);
       }
-      sel.value = r.v;
-      sel.onchange = () => setGD({ ["remote" + (b + 1)]: sel.value });
-      row.appendChild(sel);
+      sel.value = shown;
+      sel.onchange = () => {
+        if (sel.value.startsWith("pick:")) {
+          // Opens the league's team list; nothing changes until a team is picked.
+          remotePick[b] = sel.value.slice(5);
+          remoteSig = "";
+          sel.blur();  // a redraw waits while focus is in the card
+          renderRemote();
+          const next = $("#rteam" + b);
+          if (next) next.focus();
+          return;
+        }
+        remotePick[b] = "";
+        if (sel.value === "fx") {
+          fxOpen.delete(b);
+          setGD({ ["remote" + (b + 1)]: fxText(fxNow()) });
+        } else {
+          setGD({ ["remote" + (b + 1)]: sel.value });
+        }
+      };
+      const pickers = el("span", "rpick");
+      pickers.appendChild(sel);
+      if (pickLg) {
+        const team = el("select", "rteam");
+        team.id = "rteam" + b;
+        team.setAttribute("aria-label", "Remote button " + (b + 1) + " team");
+        const first = el("option", null, "Pick a team");
+        first.value = "";
+        team.appendChild(first);
+        for (const tm of TEAMS.filter((x) => x[0] === pickLg).slice().sort((x, y) => x[3].localeCompare(y[3]))) {
+          const o = el("option", null, tm[3]);
+          o.value = keyOf(tm);
+          team.appendChild(o);
+        }
+        team.value = r.v.startsWith("team:") && keyLeague(r.v) === pickLg ? r.v.slice(5) : "";
+        // The league's list stays open with the pick, also while the panel answers.
+        team.onchange = () => {
+          if (!team.value) return;
+          team.blur();  // so the card redraws with the panel's answer
+          setRemoteTeam(b, team.value);
+        };
+        pickers.appendChild(team);
+      }
+      row.appendChild(pickers);
       host.appendChild(row);
+      if (!isFx) return;
+      const more = el("div", "rfx");
+      const change = el("button", "linkbtn", fxOpen.has(b) ? "Done" : "Change");
+      change.type = "button";
+      change.dataset.b = b;
+      change.setAttribute("aria-expanded", fxOpen.has(b) ? "true" : "false");
+      change.onclick = () => {
+        if (fxOpen.has(b)) fxOpen.delete(b); else fxOpen.add(b);
+        renderRemote(true);
+        const again = host.querySelector('.rfx .linkbtn[data-b="' + b + '"]');
+        if (again) again.focus();
+      };
+      more.appendChild(change);
+      host.appendChild(more);
+      if (fxOpen.has(b)) {
+        const edit = el("div", "rfxedit");
+        edit.appendChild(el("p", "hint", "Button " + (b + 1) + "'s own effect. Changing it here doesn't change what the panel is playing."));
+        renderFxEdit(edit, b, f, sel);
+        host.appendChild(edit);
+      }
     });
   };
   const renderSettings = () => {
     if (!S) return;
     document.querySelectorAll(".sw[data-set]").forEach((sw) => setOn(sw, !!S[sw.dataset.set], "aria-checked"));
     favSlots = (S.favs || []).map(refKey);
+    btnKeys = (S.favs || []).filter((f) => f && f.id && f.btn).map(refKey);
     const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = favSlots.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets());
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -1737,6 +2293,8 @@
     document.querySelectorAll("#tickerCtls .ctl[data-sport], #vizCtls .ctl[data-sport]").forEach((row) => {
       row.hidden = sports.size > 0 && !row.dataset.sport.split(" ").some((sp) => sports.has(sp));
     });
+    // Hockey, baseball or soccer alone: nothing here to turn off.
+    $("#vizCard").hidden = [...document.querySelectorAll("#vizCtls .ctl")].every((row) => row.hidden);
     // Firmware from before the countdown card leaves these out.
     $("#cdCard").hidden = $("#cdOwnCard").hidden = S.countdown === undefined;
     // The Between games list; firmware from before it has a switch per card.
@@ -1752,23 +2310,15 @@
     renderWeather();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
-    // Older firmware and the bar and demo builds have no beta to follow.
+    // Older firmware and the demo build have no beta to follow.
     $("#betaRow").hidden = S.beta === undefined;
     // The rollback line and the important mark in the firmware box read this
     // document, which can land after the update entity does.
     if (((S.update_failed || "") !== fwFailed || !!S.update_important !== fwImportant) && ents[byName["Firmware"]])
       renderUpdate(ents[byName["Firmware"]]);
-    // The bar build: a note, and an email to us with the panel's name in it.
-    $("#barRow").hidden = !S.bar;
-    if (S.bar) {
-      const who = S.name || "this panel";
-      $("#barReport").href = "mailto:" + S.bar.report + "?subject=" + encodeURIComponent("Bar panel " + who) +
-        "&body=" + encodeURIComponent("Panel: " + who + "\nWhat's wrong:\n");
-    }
     $("#ticker").textContent = S.status || "";
     $("#play").textContent = game && game.lp ? "Last play: " + game.lp : "";
     renderMsg();
-    renderBrand();
     renderPics();
     renderEvents();
   };
@@ -1905,57 +2455,6 @@
     toast("Message card off");
   };
 
-  // ---- the bar build's brand pack (components/gameday/brand.h) ----------------
-  let brandSeen = null;
-  const renderBrand = () => {
-    // Only the bar build reads brand packs.
-    $("#brandCard").hidden = S.brand === undefined;
-    if (S.brand === undefined) return;
-    const input = $("#brandUrl");
-    if (S.brand !== brandSeen && document.activeElement !== input) {
-      brandSeen = S.brand;
-      input.value = S.brand;
-    }
-    const read = S.brandread;
-    const line = $("#brandRead");
-    line.hidden = !S.brand;
-    const logo = read && read.ok && read.logo_ok ? read.logo : "";
-    $("#brandLogoRow").hidden = !logo;
-    if (logo && $("#brandLogo").getAttribute("src") !== logo) $("#brandLogo").src = logo;
-    // The plate wall shows the pack's list while the panel has no list of its own.
-    $("#brandPartyRow").hidden = !(S.brand && read && read.ok && read.list && !S.msgurl);
-    if (!S.brand) return;
-    const kept = read && read.ok ? " Showing the last look it read." : "";
-    let text;
-    if (!read || read.status === undefined || read.status < 0) text = read && read.ok ? "Showing the saved look. Reading the file again." : "Not read yet.";
-    else if (read.status === 0) text = "The panel couldn't reach that address. It tries again in a few minutes." + kept;
-    else if (read.status !== 200) text = "That address answered with an error (HTTP " + read.status + "). It tries again in a few minutes." + kept;
-    else if (read.error) text = read.error + kept;
-    else text = "Loaded: " + (read.name || read.title || "the brand file") + ".";
-    if (read && read.ok && read.warning) text += " Left out: " + read.warning + ".";
-    if (read && read.logo_error) text += " " + read.logo_error;
-    if (read && read.sprite_error) text += " " + read.sprite_error;
-    line.textContent = text;
-  };
-  $("#brandParty").onclick = () => {
-    doAction("plate_party");
-    toast("Plate party");
-  };
-  $("#brandSave").onclick = () => {
-    const url = $("#brandUrl").value.trim();
-    if (url && !/^https?:\/\/\S+$/.test(url)) return toast("The brand file's address starts with http:// or https://");
-    if (!asciiUrl(url)) return toast(ASCII_URL);
-    brandSeen = null;
-    setGD({ brand: url });
-    toast(url ? "Brand file saved" : "Bar look off");
-  };
-  $("#brandClear").onclick = () => {
-    $("#brandUrl").value = "";
-    brandSeen = null;
-    setGD({ brand: "" });
-    toast("Bar look off");
-  };
-
   // ---- game-day wake and after the game (components/gameday/wake.h) ----------
   const wakeSeen = { lead: null, after: null };
   const renderWake = () => {
@@ -1985,7 +2484,9 @@
     $("#afterHint").textContent = S.after === "off"
       ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
       : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
-        : "The final, then your next game, as before.";
+        : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
+          : S.after === "effects" ? "Once the final has been up a while, and whenever no game of yours is on, the panel plays the effect Showing's Effects page is set to, until your next game is close."
+            : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2207,10 +2708,10 @@
   // GET /gameday/settings is the file; POST takes one back, checked whole on
   // the panel before anything changes. Firmware without it answers 404 and the
   // section stays hidden.
-  // The panel takes a backup of up to 8192 bytes (settings_doc.h
+  // The panel takes a backup of up to 12288 bytes (settings_doc.h
   // kSettingsMaxBytes), sent compact. A file can be bigger than that on disk:
   // pages before this one saved it indented.
-  const BACKUP_MAX = 8192;
+  const BACKUP_MAX = 12288;
   const BACKUP_FILE_MAX = 65536;
   const backupNote = (t) => { const n = $("#bkNote"); n.textContent = t; n.hidden = !t; };
   // tries: how many more times to ask when the panel doesn't answer.
@@ -2290,16 +2791,24 @@
 
   // ---- controls --------------------------------------------------------
   const controlDefs = [
-    // icon: drawn as a round button (Power, Refresh) or before a slider
-    // (Brightness, whose number shows as a percent of its range).
-    { name: "Power", into: "#quickCtls", label: "Panel on", icon: "power" },
-    { name: "Brightness", into: "#quickCtls", label: "Brightness", icon: "sun", pct: true },
+    // icon: drawn as a round button (Panel on, Refresh) or before a slider.
+    // The panel's light is both: its on/off as the round button, its
+    // brightness as a slider shown as a percent. It has the panel's own
+    // name, so it is matched by its domain (the only light).
+    { domain: "light", into: "#quickCtls", label: "Panel on", icon: "power", slider: { label: "Brightness", icon: "sun" } },
     { name: "Scroll Speed", into: "#panelCtls", label: "Ticker speed" },
     // onValue: the effect controls show only while the panel is on its Effects
     // page, whoever put it there (this page, Home Assistant, or the panel
     // taking the screen back), so it follows the entity's value, not the tap.
-    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => ($("#fxCtls").hidden = v !== "Effects") },
+    { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => {
+      $("#fxCtls").hidden = v !== "Effects";
+      $("#sbCtls").hidden = v !== "Smart board";
+    } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
+    { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },
+    { name: "Smart board row 2", into: "#sbRows", label: "Row 2", sbRow: true },
+    { name: "Smart board row 3", into: "#sbRows", label: "Row 3", sbRow: true },
+    { name: "Smart board row 4", into: "#sbRows", label: "Row 4", sbRow: true },
     { name: "Effect Palette", into: "#fxCtls", label: "Palette" },
     { name: "Effect Speed", into: "#fxCtls", label: "Speed" },
     { name: "Effect Intensity", into: "#fxCtls", label: "Intensity" },
@@ -2323,9 +2832,180 @@
   };
   const icon = (k) => `<svg class="cico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 
+  // A slider row: the value waits while a finger or the mouse holds the
+  // thumb, and follows the panel again after that, focused or not.
+  const sliderRow = (labelText, iconName, min, max, step, pct, onSet) => {
+    const row = el("div", iconName ? "ctl c-" + iconName : "ctl");
+    const label = el("label", null, labelText);
+    const r = el("input");
+    r.id = label.htmlFor = "ctl-" + labelText.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    r.type = "range";
+    r.min = min;
+    r.max = max;
+    r.step = step;
+    const val = el("span", "val");
+    val.setAttribute("aria-hidden", "true");
+    const show = (v) => (val.textContent = pct ? Math.round((v - r.min) / (r.max - r.min) * 100) + "%" : v);
+    let dragging = false;
+    r.onpointerdown = () => {
+      dragging = true;
+      const end = () => {
+        dragging = false;
+        window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
+      };
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+    };
+    r.oninput = () => show(r.value);
+    r.onchange = () => onSet(r.value);
+    row.appendChild(label);
+    if (iconName) row.insertAdjacentHTML("beforeend", icon(iconName));
+    row.appendChild(r);
+    row.appendChild(val);
+    return { row, set(v) { if (!dragging) { r.value = v; show(v); } } };
+  };
+
+  // The panel's light: on/off as a round button, brightness 1 to 255 as a
+  // slider. Moving the slider on a dark panel turns it on, as it does in
+  // Home Assistant.
+  const buildLight = (def, e, host) => {
+    const row = el("div", "ctl c-" + def.icon);
+    row.appendChild(el("label", null, def.label));
+    const sw = el("button", "sw round");
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-label", def.label);
+    sw.innerHTML = icon(def.icon);
+    setOn(sw, false, "aria-checked");
+    let known = false;  // what the panel last said
+    sw.onclick = async () => {
+      const on = !sw.classList.contains("on");
+      setOn(sw, on, "aria-checked");
+      if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
+      if (on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
+    };
+    row.appendChild(sw);
+    host.appendChild(row);
+    const level = sliderRow(def.slider.label, def.slider.icon, 1, 255, 1, true, (v) => post(e.id, "turn_on", { brightness: v }));
+    host.appendChild(level.row);
+    return {
+      update(ev) {
+        known = ev.state === "ON" || ev.value === true;
+        setOn(sw, known, "aria-checked");
+        if (ev.brightness != null) level.set(Math.max(1, ev.brightness));
+      },
+    };
+  };
+
+  // A Smart board row on the Home tab: what the panel shows, in its colors,
+  // with an editor that takes plain words and a color, so nobody types tags.
+  // A row with several colors shows them all; saving it from here keeps one.
+  const SB_SWATCHES = ["ffffff", "ff2020", "ff8000", "ffd000", "20e040", "00e0e0", "3070ff", "a040ff", "ff60c0", "808080"];
+  const buildSbRow = (def, e, host) => {
+    const row = el("div", "sbedit");
+    const head = el("div", "sbhead");
+    head.appendChild(el("span", "sbnum", def.label));
+    const line = el("div", "sbline");
+    head.appendChild(line);
+    const edit = el("button", "btn", "Edit");
+    head.appendChild(edit);
+    row.appendChild(head);
+
+    const form = el("div", "sbform");
+    form.hidden = true;
+    const text = el("input");
+    text.type = "text";
+    text.maxLength = 240;
+    text.placeholder = "What the row says";
+    text.setAttribute("aria-label", def.label + " text");
+    const sw = el("div", "sbswatches");
+    sw.setAttribute("role", "radiogroup");
+    sw.setAttribute("aria-label", def.label + " color");
+    const custom = el("input", "sbcustom");
+    custom.type = "color";
+    custom.setAttribute("aria-label", "Another color");
+    let color = "ffffff";
+    const pick = (c) => {
+      color = c;
+      sw.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.c === c)));
+      custom.value = "#" + c;
+      text.style.color = "#" + c;
+    };
+    SB_SWATCHES.forEach((c) => {
+      const b = el("button", "sbsw");
+      b.type = "button";
+      b.dataset.c = c;
+      b.style.background = "#" + c;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", Object.keys(SB_COLORS).find((k) => SB_COLORS[k] === c) || "#" + c);
+      b.onclick = () => pick(c);
+      sw.appendChild(b);
+    });
+    custom.oninput = () => pick(custom.value.slice(1).toLowerCase());
+    sw.appendChild(custom);
+    const many = el("p", "hint", "This row has more than one color. Saving it here gives it one.");
+    const acts = el("div", "sbacts");
+    const save = el("button", "btn", "Save");
+    const clear = el("button", "btn", "Clear row");
+    const cancel = el("button", "btn", "Cancel");
+    acts.append(save, clear, cancel);
+    form.append(el("span", "sbnum", def.label), text, sw, many, acts);
+    row.appendChild(form);
+    host.appendChild(row);
+
+    let raw = "";
+    const show = () => {
+      const segs = sbParse(raw);
+      line.textContent = "";
+      line.classList.toggle("empty", !segs);
+      if (!segs) line.textContent = "Empty";
+      (segs || []).forEach((g) => {
+        const s = el("span", null, g.t);
+        s.style.color = "#" + g.c;
+        line.appendChild(s);
+      });
+      edit.textContent = segs ? "Edit" : "Add";
+      edit.setAttribute("aria-label", (segs ? "Edit " : "Add ") + def.label.toLowerCase());
+    };
+    const close = () => {
+      form.hidden = true;
+      head.hidden = false;
+      show();
+    };
+    edit.onclick = () => {
+      const segs = sbParse(raw);
+      text.value = (segs || []).map((g) => g.t).join("");
+      pick(segs ? segs[0].c : "ffffff");
+      many.hidden = !segs || segs.length < 2;
+      head.hidden = true;
+      form.hidden = false;
+      text.focus();
+    };
+    // A save the panel never got leaves the editor open with what was typed.
+    const send = async (value) => {
+      if (!(await post(e.id, "set", { value }))) return;
+      raw = value;
+      close();
+    };
+    save.onclick = () => {
+      const t = text.value.trim();
+      send(t ? "[#" + color.toUpperCase() + "]" + t : "");
+    };
+    text.onkeydown = (ev) => {
+      if (ev.key === "Enter") save.onclick();
+      if (ev.key === "Escape") close();
+    };
+    clear.onclick = () => send("");
+    cancel.onclick = close;
+    show();
+    // The panel's value waits while the row is being edited.
+    return { update(ev) { raw = String(ev.value ?? ev.state ?? ""); if (form.hidden) show(); } };
+  };
+
   const buildControl = (def, e) => {
     const domain = domainOf(e);
     const host = $(def.into);
+    if (def.sbRow) return buildSbRow(def, e, host);
     if (domain === "button") {
       const b = el("button", "btn" + (def.danger ? " danger" : ""), def.label);
       if (def.icon) {
@@ -2347,6 +3027,7 @@
       host.appendChild(b);
       return { update() {} };
     }
+    if (domain === "light") return buildLight(def, e, host);
     const row = el("div", def.icon ? "ctl c-" + def.icon : "ctl");
     const label = el("label", null, def.label);
     const id ="ctl-" + def.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -2366,7 +3047,7 @@
         setOn(sw, on, "aria-checked");
         // A tap the panel never got goes back to what it last said.
         if (!(await post(e.id, on ? "turn_on" : "turn_off"))) return setOn(sw, known, "aria-checked");
-        if (def.name === "Power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
+        if (def.icon === "power" && on && nightHolding()) doAction("night_skip").then(() => scheduleState(300));
       };
       row.appendChild(sw);
       host.appendChild(row);
@@ -2402,6 +3083,18 @@
       row.appendChild(val);
       host.appendChild(row);
       return { update(ev) { if (!dragging) { r.value = ev.value; show(ev.value); } } };
+    }
+    if (domain === "text") {
+      const t = el("input");
+      t.id = label.htmlFor = id;
+      t.type = "text";
+      t.maxLength = e.max_length ?? 255;
+      t.spellcheck = false;
+      t.onchange = () => post(e.id, "set", { value: t.value });
+      row.appendChild(t);
+      host.appendChild(row);
+      // The panel's value waits while somebody is typing in the box.
+      return { update(ev) { if (document.activeElement !== t) t.value = ev.value ?? ev.state ?? ""; } };
     }
     if (domain === "select") {
       const s = el("select");
@@ -2490,42 +3183,67 @@
     for (const g of shown) {
       if (g.state !== lastState) {
         lastState = g.state;
-        const heading = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
-        tiles.appendChild(el("div", "gh", heading[g.state] || "Final"));
+        tiles.appendChild(el("div", "gh", GAME_HEADING[g.state] || "Final"));
       }
-      const card = el("div", "game" + (g.state === "in" ? " live" : ""));
-      const mkSide = (s) => {
-        const t = teamById(g.league, s.id);
-        const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
-        b.disabled = !t;
-        b.title = t ? t[3] : "Not in the team list";
-        if (t) {
-          b.dataset.key = keyOf(t);
-          b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
-        }
-        const img = el("img");
-        img.loading = "lazy";
-        img.src = logoUrl(g.league, s.id, s.abbr);
-        img.alt = "";
-        b.appendChild(img);
-        const txt = el("div", "st");
-        txt.appendChild(el("div", "n", s.name));
-        txt.appendChild(el("div", "a", s.abbr));
-        b.appendChild(txt);
-        b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
-        b.onclick = () => {
-          if (t) toggleFav(t);
-        };
-        return b;
-      };
-      card.appendChild(mkSide(g.away));
-      const mid = el("div", "gm");
-      mid.appendChild(el("div", "at", "@"));
-      mid.appendChild(el("div", "det", g.detail));
-      card.appendChild(mid);
-      card.appendChild(mkSide(g.home));
-      tiles.appendChild(card);
+      tiles.appendChild(gameCard(g));
     }
+  };
+  const GAME_HEADING = { in: "Live now", pre: "Later today", post: "Final", off: "Postponed or canceled" };
+  // One game: a button per side that adds or takes out that team.
+  const gameCard = (g) => {
+    const card = el("div", "game" + (g.state === "in" ? " live" : ""));
+    const mkSide = (s) => {
+      const t = teamById(g.league, s.id);
+      const b = el("button", "side" + (t && favKeys.includes(keyOf(t)) ? " on" : ""));
+      b.disabled = !t;
+      b.title = t ? t[3] : "Not in the team list";
+      if (t) {
+        b.dataset.key = keyOf(t);
+        b.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+      }
+      const img = el("img");
+      img.loading = "lazy";
+      img.src = logoUrl(g.league, s.id, s.abbr);
+      img.alt = "";
+      b.appendChild(img);
+      const txt = el("div", "st");
+      txt.appendChild(el("div", "n", s.name));
+      txt.appendChild(el("div", "a", s.abbr));
+      b.appendChild(txt);
+      b.appendChild(el("div", "sc", g.state === "pre" || g.state === "off" ? "" : String(s.score)));
+      b.onclick = () => {
+        if (t) toggleFav(t);
+      };
+      return b;
+    };
+    card.appendChild(mkSide(g.away));
+    const mid = el("div", "gm");
+    mid.appendChild(el("div", "at", "@"));
+    mid.appendChild(el("div", "det", g.detail));
+    card.appendChild(mid);
+    card.appendChild(mkSide(g.home));
+    return card;
+  };
+  // Fold finals and postponed games shut so the team list stays near the top on a busy day
+  const leagueGames = (slot, list) => {
+    const mine = list.filter((g) => g.league === league);
+    if (!mine.length) return;
+    for (const state of ["in", "pre", "post", "off"]) {
+      const group = mine.filter((g) => g.state === state);
+      if (!group.length) continue;
+      if (state === "in" || state === "pre") {
+        slot.appendChild(el("div", "gh", GAME_HEADING[state]));
+        for (const g of group) slot.appendChild(gameCard(g));
+        continue;
+      }
+      const fold = el("details", "gfold");
+      fold.appendChild(el("summary", "gh", GAME_HEADING[state] + " (" + group.length + ")"));
+      const inner = el("div", "games");
+      for (const g of group) inner.appendChild(gameCard(g));
+      fold.appendChild(inner);
+      slot.appendChild(fold);
+    }
+    slot.appendChild(el("div", "gh", "Teams"));
   };
 
   // ---- team chooser ------------------------------------------------------
@@ -2534,7 +3252,7 @@
   // After a favorites change, mark the tiles in place so the list keeps its scroll.
   const markPicked = () => {
     document.querySelectorAll("#tiles [data-key]").forEach((b) => {
-      const on = favKeys.includes(b.dataset.key);
+      const on = realFavKeys().includes(b.dataset.key);
       b.classList.toggle("on", on);
       b.setAttribute("aria-pressed", String(on));
     });
@@ -2550,9 +3268,10 @@
   const searchTeams = (q) => TEAMS.filter((t) => (t[3] + " " + t[2]).toLowerCase().includes(q));
   // One team's tile: logo, name, league and abbreviation; a tap adds or takes it out.
   const teamTile = (t) => {
-    const tile = el("button", "tile" + (favKeys.includes(keyOf(t)) ? " on" : ""));
+    const on = realFavKeys().includes(keyOf(t));
+    const tile = el("button", "tile" + (on ? " on" : ""));
     tile.dataset.key = keyOf(t);
-    tile.setAttribute("aria-pressed", String(favKeys.includes(keyOf(t))));
+    tile.setAttribute("aria-pressed", String(on));
     const img = el("img");
     img.loading = "lazy";
     img.src = logoUrl(t[0], t[1], t[2]);
@@ -2565,16 +3284,29 @@
   };
   const renderTiles = () => {
     if (league === "now") return renderGames();
-    $("#tiles").className = "tiles";
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
-    const list = q ? searchTeams(q) : TEAMS.filter((t) => t[0] === league);
-    if (!list.length) {
-      tiles.appendChild(el("div", "none", "No team matches"));
+    if (q) {
+      tiles.className = "tiles";
+      const found = searchTeams(q);
+      if (!found.length) tiles.appendChild(el("div", "none", "No team matches"));
+      for (const t of found) tiles.appendChild(teamTile(t));
       return;
     }
-    for (const t of list) tiles.appendChild(teamTile(t));
+    // Show the teams at once, so a slow ESPN read can't hold them up.
+    // Today's games go in above them when the list arrives.
+    tiles.className = "games";
+    const slot = el("div", "gslot");
+    const grid = el("div", "tiles");
+    for (const t of TEAMS.filter((t) => t[0] === league)) grid.appendChild(teamTile(t));
+    tiles.appendChild(slot);
+    tiles.appendChild(grid);
+    if (gamesFresh()) return leagueGames(slot, games);
+    const lg = league;
+    loadGames().then((list) => {
+      if (league === lg && slot.isConnected && !slot.firstChild) leagueGames(slot, list);
+    });
   };
   $("#favAdd").onclick = () => openPicker();
   $("#favStart").onclick = () => { showPane("teams"); openPicker(); };
@@ -2776,6 +3508,7 @@
     renderData();
     renderHealth();
     renderWifi();
+    renderFxLists();
   };
 
   const renderData = () => {
@@ -2829,7 +3562,7 @@
     $("#hHeap").textContent = Math.round(h.heap_kb) + " KiB, largest piece " + Math.round(h.block_kb) + " KiB";
     $("#hEspn").textContent = h.espn == null ? "None yet"
       : (h.espn === 200 ? "OK" : h.espn === 0 ? "No answer" : "HTTP " + h.espn) + ", " + span(h.espn_ago) + " ago";
-    const chan = { stable: "stable", beta: "beta", bar: "bar" }[h.channel];
+    const chan = { stable: "stable", beta: "beta" }[h.channel];
     // The build time comes in Unix seconds; shown in the browser's own time
     const builtText = h.built ? dayTime(h.built) : "";
     $("#hFw").textContent = (h.version || "") + (chan ? " " + chan : "") + (builtText ? ", built " + builtText : "");
@@ -3130,11 +3863,11 @@
       // The panel rolled back from this very version (a crash in its first
       // minute); it won't install it on its own again, but Install still tries.
       const failed = !!(S && S.update_failed && S.update_failed === u.value);
-      const nightly = S && (S.autoupd || S.bar) ? " It installs on its own between 3 and 5 AM." : "";
+      const nightly = S && S.autoupd ? " It installs on its own between 3 and 5 AM." : "";
       fwWaiting = true;
       if (failed) {
         $("#fwText").textContent = "The update to " + latest + " didn't take and the panel went back to " + (cur || "its old version");
-        sub.textContent = "Install tries it again." + (S.autoupd || S.bar ? " It won't install this one on its own." : "");
+        sub.textContent = "Install tries it again." + (S.autoupd ? " It won't install this one on its own." : "");
       } else if (fwImportant) {
         // The release is marked important (its summary starts with
         // "Important:"): it fixes something broken, so the box says so.
@@ -3178,7 +3911,9 @@
   // GET /gameday/wifi lists the networks the panel remembers, names only, in
   // the order it tries them. Firmware without the list answers 404 and the
   // section stays hidden.
+  let netsDoc = { networks: [], max: 5 };  // the last list the panel gave
   const renderNetworks = (j) => {
+    netsDoc = j;
     const nets = j.networks || [];
     const list = $("#nets");
     list.innerHTML = "";
@@ -3189,12 +3924,27 @@
       else if (i === 0) label.appendChild(el("small", null, "Tried first"));
       row.appendChild(label);
       const b = el("button", "btn danger", "Forget");
+      // Forgetting the network the panel is on moves it to the others now,
+      // the top one first. The only one stays: the panel always keeps a
+      // network to join, so it saves that one again when it next joins.
+      const others = nets.filter((o) => o !== n);
+      const next = others.length ? others[0].ssid : "";
       b.onclick = async () => {
-        if (!confirm("Forget " + n.ssid + "?")) return;
+        let ask = "Forget " + n.ssid + "?";
+        if (n.connected && next) {
+          ask += " The panel moves to " + next + " now" + (others.length > 1 ? ", or another saved network if it can't see " + next + "." : ".");
+        } else if (n.connected) {
+          ask += " It's the only saved network, so the panel stays on it and saves it again after a restart. Reset Wi-Fi takes the panel off it.";
+        }
+        if (!confirm(ask)) return;
         b.disabled = true;
         try {
           const r = await fetch("/gameday/wifi?forget=" + encodeURIComponent(n.ssid), { method: "POST" });
-          toast(r.ok ? "Forgot " + n.ssid + (n.connected ? "; it stays connected until the next restart" : "") : "Could not forget " + n.ssid);
+          const j = r.ok ? await r.json().catch(() => ({})) : null;
+          if (!j) toast("Could not forget " + n.ssid);
+          else if (j.moving) toast("Forgot " + n.ssid + ". Moving to " + (others.length > 1 ? "the next saved network" : next) + " now");
+          else if (n.connected && !others.length) toast("Forgot " + n.ssid + ". It's the only saved network, so the panel stays on it");
+          else toast("Forgot " + n.ssid);
         } catch (_) {
           toast("Could not forget " + n.ssid);
         }
@@ -3220,21 +3970,225 @@
     }
   };
 
+  // Add network saves a name and password without joining it (POST
+  // ssid=&password=, a form body so the password stays out of the address).
+  // The panel then scans; when it can see the network, the page offers to
+  // switch to it now (POST switch=). The panel goes back to the network it
+  // was on if it can't join in 30 s, and GET then names it as failed.
+  const netMsg = (t) => {
+    const m = $("#netMsg");
+    m.textContent = t || "";
+    m.hidden = !t;
+  };
+  const wifiDoc = async (ms) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), ms);
+    try {
+      const r = await fetch("/gameday/wifi?_=" + Date.now(), { cache: "no-store", signal: ctl.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+  const bytes = (s) => new TextEncoder().encode(s).length;
+  // Networks nearby: opening the form asks the panel to scan (POST scan=1,
+  // about 4 s, the panel stays on its network) and lists what GET then names
+  // under "nearby", strongest first. Tapping one fills in the name. The
+  // network the panel is on is left out: adding it again does nothing.
+  const scanMsg = (t) => {
+    const m = $("#netScanMsg");
+    m.textContent = t || "";
+    m.hidden = !t;
+  };
+  // The same line as the Wi-Fi card's: weak below -75 dBm.
+  const signalWord = (rssi) => (rssi >= -60 ? "Strong" : rssi >= -75 ? "Good" : "Weak");
+  const markNetPick = () => {
+    const name = $("#netName").value.trim();
+    document.querySelectorAll("#netNearby .netpick").forEach((b) => setOn(b, b.dataset.ssid === name, "aria-pressed"));
+  };
+  const renderNearby = (j) => {
+    const box = $("#netNearby");
+    box.innerHTML = "";
+    const on = ((j && j.networks) || []).find((n) => n.connected);
+    const saved = new Set(((j && j.networks) || []).map((n) => n.ssid));
+    const list = ((j && j.nearby) || []).filter((n) => !on || n.ssid !== on.ssid);
+    if (!list.length) return scanMsg("The panel can't see another 2.4 GHz network. Type its name below, or move closer and look again.");
+    scanMsg("");
+    list.forEach((n) => {
+      const b = el("button", "netpick");
+      b.type = "button";
+      b.dataset.ssid = n.ssid;
+      const name = el("span", null, n.ssid);
+      if (saved.has(n.ssid)) name.appendChild(el("small", null, "Saved"));
+      b.appendChild(name);
+      b.appendChild(el("span", "val", n.open ? "Open, " + signalWord(n.rssi).toLowerCase() : signalWord(n.rssi)));
+      b.onclick = () => {
+        $("#netName").value = n.ssid;
+        $("#netPass").value = "";
+        markNetPick();
+        netMsg(n.open ? n.ssid + " is open, so leave the password blank." : "");
+        (n.open ? $("#netSave") : $("#netPass")).focus();
+      };
+      box.appendChild(b);
+    });
+    markNetPick();
+  };
+  let scanRun = 0;  // a newer look, or a closed form, ends the one before
+  const lookNearby = async () => {
+    const run = ++scanRun;
+    const again = $("#netRescan");
+    again.disabled = true;
+    scanMsg("Looking for networks…");
+    try {
+      await fetch("/gameday/wifi?scan=1", { method: "POST" });
+    } catch (_) {}
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      await nap(1500);
+      if (run !== scanRun) return;
+      try {
+        j = await wifiDoc(4000);
+      } catch (_) {
+        j = null;
+        continue;
+      }
+      if (!j.scanning) break;
+    }
+    if (run !== scanRun) return;
+    again.disabled = false;
+    if (!j) return scanMsg("The panel didn't answer. Type the network's name below, or look again.");
+    renderNetworks(j);
+    renderNearby(j);
+  };
+  const openNetForm = (open) => {
+    $("#netForm").hidden = !open;
+    $("#netAddRow").hidden = open;
+    scanRun++;
+    if (!open) return;
+    $("#netName").value = "";
+    $("#netPass").value = "";
+    $("#netNearby").innerHTML = "";
+    lookNearby();
+  };
+  $("#netAdd").onclick = () => {
+    netMsg("");
+    openNetForm(true);
+  };
+  $("#netCancel").onclick = () => openNetForm(false);
+  $("#netRescan").onclick = () => lookNearby();
+  $("#netName").addEventListener("input", markNetPick);
+  $("#netName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netPass").focus(); });
+  $("#netPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netSave").click(); });
+
+  const switchTo = async (ssid, home) => {
+    let r = null;
+    try {
+      r = await fetch("/gameday/wifi?switch=" + encodeURIComponent(ssid), { method: "POST" });
+    } catch (_) {}
+    if (!r || !r.ok) return netMsg("The panel can't switch to " + ssid + " right now. It's still on " + home + ".");
+    netMsg("Switching to " + ssid + ". The panel shows JOINING while it tries.");
+    // The panel is off Wi-Fi for a few seconds at least, longer when the new
+    // network doesn't work. Ask until it answers with how it went.
+    const until = Date.now() + 90000;
+    await nap(5000);
+    while (Date.now() < until) {
+      let j;
+      try {
+        j = await wifiDoc(3000);
+      } catch (_) {
+        await nap(3000);
+        continue;
+      }
+      if (!j.switching) {
+        renderNetworks(j);
+        if ((j.networks || []).some((n) => n.ssid === ssid && n.connected)) return netMsg("The panel is on " + ssid + " now.");
+        if (j.failed === ssid)
+          return netMsg("The panel couldn't join " + ssid + ", so it went back to " + home + ". Check the name and password, then add it again.");
+      }
+      await nap(3000);
+    }
+    netMsg("This page can't reach the panel. If your phone isn't on " + ssid + ", join it, then open the panel's address again.");
+  };
+
+  // After a save: wait for the panel's scan (about 4 s), then offer the
+  // switch when the network is in range.
+  const offerSwitch = async (ssid) => {
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      await nap(1500);
+      try {
+        j = await wifiDoc(4000);
+      } catch (_) {
+        j = null;
+        continue;
+      }
+      if (!j.scanning) break;
+    }
+    if (j) renderNetworks(j);
+    const list = (j && j.networks) || [];
+    const n = list.find((x) => x.ssid === ssid);
+    const on = list.find((x) => x.connected);
+    const home = on ? on.ssid : "its network";
+    const saved = "Saved " + ssid + ". The panel joins it wherever it can't find a network it already knows.";
+    if (!n || !n.seen || n.connected) return netMsg(saved);
+    if (!confirm("The panel can see " + ssid + ". Switch to it now?\n\nIf your phone isn't on " + ssid + ", this page loses the panel until your phone joins it too. If the panel can't join " + ssid + ", it goes back to " + home + " within a minute."))
+      return netMsg(saved);
+    switchTo(ssid, home);
+  };
+
+  $("#netSave").onclick = async () => {
+    const ssid = $("#netName").value.trim();
+    const pass = $("#netPass").value;
+    if (!ssid || bytes(ssid) > 32) return netMsg("A network name is 1 to 32 characters.");
+    if (pass && (pass.length < 8 || bytes(pass) > 64 || (pass.length === 64 && !/^[0-9a-f]{64}$/i.test(pass))))
+      return netMsg("A Wi-Fi password is 8 to 63 characters.");
+    const list = netsDoc.networks || [];
+    if (list.some((n) => n.ssid === ssid && n.connected)) return netMsg("The panel is on " + ssid + " now, so its password already works.");
+    const known = list.some((n) => n.ssid === ssid);
+    if (known && !confirm(ssid + " is already saved. Replace its password?")) return;
+    if (!known && list.length >= (netsDoc.max || 5) &&
+        !confirm("The list is full, so adding " + ssid + " drops " + list[list.length - 1].ssid + ". Add it?")) return;
+    $("#netSave").disabled = true;
+    let r = null;
+    try {
+      r = await fetch("/gameday/wifi", { method: "POST", body: new URLSearchParams({ ssid, password: pass }) });
+    } catch (_) {}
+    $("#netSave").disabled = false;
+    if (!r || !r.ok) {
+      let why = "";
+      try {
+        why = (await r.json()).error || "";
+      } catch (_) {}
+      return netMsg(why || "The panel didn't save " + ssid + ". Try again.");
+    }
+    openNetForm(false);
+    netMsg("Saved " + ssid + ". Checking whether the panel can see it…");
+    offerSwitch(ssid);
+  };
+
   // ---- event stream ------------------------------------------------------
   const onState = (e) => {
     ents[e.id] = Object.assign(ents[e.id] || {}, e);
     if (e.name) byName[e.name] = e.id;
     const name = ents[e.id].name;
-    const def = controlDefs.find((d) => d.name === name);
+    const def = controlDefs.find((d) => (d.domain ? d.domain === domainOf(ents[e.id]) : d.name === name));
     if (def) {
       if (!built[e.id]) built[e.id] = buildControl(def, ents[e.id]);
       built[e.id].update(ents[e.id]);
       if (def.onValue) def.onValue(ents[e.id].value);
     }
+    if (name === "Select Page" || /^Smart board row [1-4]$/.test(name || "")) renderSmart();
+    // The Effects buttons' Change controls list these entities' options.
+    if ((name === "Effect" || name === "Effect Palette") && S) renderRemote();
     switch (name) {
       // Sent on every board update: re-read the state document. Its value is
       // Home Assistant's shorter line, so the ticker and last play come from there.
       case "Game Status": scheduleState(150); break;
+      // The panel publishes it whenever an effect playlist starts or stops
+      // (a hand pick, Showing leaving Effects): re-read which one plays.
+      case "Effect playlist": if (S && S.fxlists !== undefined) scheduleState(150); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": {
         $("#wizStatus").textContent = e.value || "";

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #pragma once
 
 #include <atomic>
@@ -37,7 +39,8 @@ using ::espn::PsramAllocator;
 // Everything a logo allocates goes to PSRAM, not just its pixels. Plain new
 // and malloc only use internal RAM in this build, so the PNG download and
 // each entry's small objects used to land there, and a full cache broke
-// internal RAM into pieces too small for the fetch task's 16 KB stack.
+// internal RAM into pieces too small for the 16 KB fetch task stack it then
+// held.
 class LogoCache {
  public:
   void set_http(http_request::HttpRequestComponent *http) { this->http_ = http; }

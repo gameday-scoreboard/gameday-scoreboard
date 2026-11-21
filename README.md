@@ -2,7 +2,7 @@
 
 ![A final score on the panel: HBR 24, IRN 10, HBR WINS!](docs/wiki/src/assets/final-hbr-irn.jpg)
 
-A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's college basketball, the NHL, MLS and the Premier League.
+A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's and women's college basketball, the NHL, MLS and the Premier League.
 
 Watch the [full demo](https://install.gameday-scoreboard.com/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
 
@@ -50,10 +50,11 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 | Setting | What it does |
 | --- | --- |
 | Show | Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every minute unless you change Switch every (1 to 30 minutes) |
-| Favorites | Up to 16 teams in your order, from all 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's college basketball team, a tab per league, plus an "On now" tab |
+| Favorites | Up to 16 teams in your order, from all 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's and women's college basketball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
 | Ticker: Down and distance, Count and at-bat, Match stats, Last play, "Odds, TV and win chance", Pre-game season leaders | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. Before kickoff in football, each team's passing leader, and during the game who is favored to win. The page shows only the ones for sports your panel follows |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |
+| Big plays | On Full celebrations, a dunk or an alley-oop, or a soccer brace, hat trick, penalty or late go-ahead goal, gets its own pixel-art scene; turn it off to keep only the score and win splashes |
 | Favorites | Up to 16 teams in priority order. "Only today's games" keeps the playlist to the favorites playing today. The first four are the numbered buttons on a WizMote remote |
 | Remote | Pair a WizMote: turn discovery on, press any button on the remote. ON/OFF, brightness and NIGHT buttons control the panel |
 | Panels | One 64x64 panel, or one 128x64 panel or two 64x64 side by side. Changing it restarts the device |
@@ -64,7 +65,7 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 
 ## Home Assistant is optional
 
-The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Mode, Power, Brightness, Scroll Speed, Select Page with Page Next and Page Previous, Game Status, Last Play, Firmware, Install Updates Automatically, Check for Updates, Refresh Now, Reboot, Reset Wi-Fi, Factory Reset, IP, ESPN Data, Chip Temperature and the WizMote entities (Auto-Discovery, MAC Address, Status and Clear WizMote Pairing). Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
+The device runs on its own, but it is a normal ESPHome device. If Home Assistant is on the same network it will discover it with the controls worth automating: Mode, Power, Brightness, Scroll Speed, Select Page with Page Next and Page Previous, Game Status, Last Play, Firmware, Install Updates Automatically, Check for Updates, Refresh Now, Reboot, Reset Wi-Fi, Factory Reset, IP, ESPN Data and the WizMote entities (Auto-Discovery, MAC Address, Status and Clear WizMote Pairing). Favorites, timezone, ticker options, splashes and the panel count are set from the device page only. The API has no encryption key in the prebuilt binary; build from YAML if you want one.
 
 Game Live, Team Score and Opponent Score follow the game in Game Status, and the panel fires an `esphome.gameday_score` event on every score in that game (`team`, `opponent`, `play`, `points`, `team_score`, `opponent_score`, `sport`, `my_team`) and `esphome.gameday_final` when it ends. Values arrive as text. To flash a light when your team scores a touchdown:
 
@@ -128,4 +129,4 @@ Contributions are welcome: bug reports from game days, test fixtures from odd ga
 
 ## License
 
-MIT.
+GPLv3, with an attribution term, from November 2026. Code released before that stays MIT. [NOTICE.md](NOTICE.md) says why it changed and what each license covers.

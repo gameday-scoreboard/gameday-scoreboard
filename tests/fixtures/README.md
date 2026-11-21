@@ -11,6 +11,8 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nfl_dal.json` | `.../football/nfl/teams/6/schedule`, trimmed to the first 5 events (recorded 2026-09-08) |
 | `schedule_ncaa_bc.json` | `.../football/college-football/teams/103/schedule`, trimmed to the first 5 events (recorded 2026-09-08; the first is already final) |
 | `scoreboard_ncaa_live.json` | `.../football/college-football/scoreboard?groups=80&limit=200` (mix of pre, in, post) |
+| `scoreboard_ncaa_live.json.gz` | `scoreboard_ncaa_live.json` gzipped by Python (file name in the header, mtime 0) |
+| `espn_team_nfl_dal.json.gz` | `.../football/nfl/teams/dal` as ESPN sends it with `Accept-Encoding: gzip`, still compressed (recorded 2026-10-13) |
 | `scoreboard_ncaa_conf_titles.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20251206`, conference title games, all final (recorded 2026-10-08) |
 | `scoreboard_ncaa_cfp_quarterfinals.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20260101`, CFP quarterfinals at neutral sites (recorded 2026-10-08) |
 | `scoreboard_ncaa_cfp_final.json` | `.../college-football/scoreboard?groups=80&limit=300&dates=20260119`, CFP national championship (recorded 2026-10-08) |
@@ -22,6 +24,9 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `event_nfl_ot.json` | `.../football/nfl/scoreboard/401772834`, NYG @ DAL, Final/OT 37-40, period 5 (recorded 2026-11-06) |
 | `event_nfl_ot_tie.json` | `.../football/nfl/scoreboard/401772921`, GB @ DAL, Final/OT 40-40: overtime ran out, no winner on either side (recorded 2026-11-06) |
 | `event_nfl_pre_dal.json` | `.../football/nfl/scoreboard/401873007`, DAL @ GB four days out, with both records and each side's passing, rushing and receiving leaders (recorded 2026-10-14) |
+| `event_nfl_sack_before.json`, `event_nfl_sack.json` | `.../football/nfl/scoreboard/401873045`, NYJ @ KC live, the read before KC sacks G.Smith and the read with it: last play type "Sack", the play's team and the ball both NYJ's (recorded 2026-11-08) |
+| `event_nfl_fumble_before.json`, `event_nfl_fumble.json` | `.../football/nfl/scoreboard/401873040`, DAL @ IND live, the read before DAL recovers J.Taylor's fumble and the read with it: "Fumble Recovery (Opponent)", the play's team and the ball both DAL's (recorded 2026-11-08) |
+| `event_nfl_interception_before.json`, `event_nfl_interception.json` | `.../football/nfl/scoreboard/401873049`, GB @ NE live, the read before GB intercepts D.Maye and the read with it: "Pass Interception Return", the play's team and the ball both GB's (recorded 2026-11-08) |
 | `event_ncaa_pre_weather.json` | `.../college-football/scoreboard/401858498`, RUTG @ NU (24) the morning of the game: week 8, and a forecast with its words in `conditionId` and "33" in `displayValue` (recorded 2026-10-24) |
 | `rankings_cfb_20261025.json` | `sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1`, the AP poll for week 9, with a tie at 20 and two newly ranked teams (recorded 2026-10-29) |
 | `rankings_mcbb_20261019.json` | `sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/rankings/1`, the preseason AP poll, every record 0-0 (recorded 2026-10-29) |
@@ -38,6 +43,7 @@ Recorded from ESPN on 2026-09-05 with a `curl/8.0` User-Agent (ESPN returns
 | `schedule_nhl_ana_inseason.json` | `.../hockey/nhl/teams/25/schedule` in season: 14 finals (6-7-1, one overtime loss) and 70 games ahead (recorded 2026-11-03) |
 | `schedule_nhl_ana_2026.json` | `.../hockey/nhl/teams/25/schedule?season=2026&seasontype=2`: 82 finals, 15 in overtime and 8 in a shootout, 43-33-6 (recorded 2026-11-03) |
 | `schedule_mcbb_ala_2026_post.json` | `.../basketball/mens-college-basketball/teams/333/schedule?season=2026&seasontype=3`: three NCAA tournament games, "Midwest Region - Sweet 16" last (recorded 2026-11-03) |
+| `plays_nba_20261107.json` | `.../basketball/nba/summary?event=<id>` for three 11/7 finals (SA @ POR, HOU @ PHX, ORL @ GS), the play-by-play cut to what the panel's live read carries for each play: `[wallclock (Unix s), type.text, text (scoring plays only), scoreValue, team.id, homeScore, awayScore]`, and each team's id, abbreviation and color. 17 dunks and 9 alley-oops; the big plays test replays it at 10 s reads (recorded 2026-11-08) |
 
 The other six `schedule_*` files recorded on 2026-10-31 (not `schedule_mlb_col_missed.json`), and the four recorded on 2026-11-03, keep only the fields a schedule parse reads
 (every event, each cut to its date, season type, week, status, notes,
@@ -144,6 +150,21 @@ past game only in its final state, so there is no live college fixture:
 | `event_mcbb_ot.json` | 401851437 PENN @ YALE, Ivy League final, Final/OT 88-84 |
 | `event_mcbb_pre.json` | 401925733 OAK @ MICH, 2026-27 opener, pre-game |
 | `team_mcbb_mich.json` | `.../basketball/mens-college-basketball/teams/130` (next event is the opener) |
+
+Women's college basketball, recorded 2026-11-06 with the season just
+started, from `.../basketball/womens-college-basketball`. The women's game
+plays quarters: the event documents' `format.regulation.periods` is 4
+(the men's say 2), and the final's line scores have four entries a side.
+Like the men's, the ungrouped scoreboard lists only the ranked teams'
+games (2 of the day's 45), so the day document was recorded with the
+Division I group:
+
+| File | Source |
+| --- | --- |
+| `team_wcbb_uconn.json` | `.../basketball/womens-college-basketball/teams/41` (next event is Iowa at UConn on 2026-11-08) |
+| `event_wcbb_pre.json` | `.../scoreboard/401919954`, Stonehill at Notre Dame, scheduled for that night |
+| `event_wcbb_final.json` | `.../scoreboard/401827322`, Texas Tech at Cincinnati, Final 71-60 on 2026-01-10 |
+| `day_wcbb_20261106.json` | `.../scoreboard?groups=50&limit=300&dates=20261106`, all 45 Division I games: 42 scheduled, one live, one at halftime, one at the end of a period |
 NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 `.../hockey/nhl/scoreboard/<event id>`:
 
@@ -151,10 +172,14 @@ NHL, recorded 2026-10-07 and 2026-10-08 UTC from the single-event endpoint
 | --- | --- |
 | `event_nhl_live.json` | 401892455 COL @ WPG, 3:21 left in the 1st, 0-0, a delay of game penalty as the last play |
 | `event_nhl_end.json` | 401891830 PIT @ WSH, End of 1st (status END_PERIOD, the intermission), 2-1 WSH |
+| `event_nhl_late_intermission.json` | 401892697 MIN @ TOR, 2026-11-12, late in the second intermission: status IN_PROGRESS, period 3, displayClock "20:00", shortDetail "20:00 - 3rd", the last play still "End of 2nd Period" (type "Period End") before the puck drops, 2-2 |
+| `event_nhl_faceoff.json` | 401892698 COL @ OTT, 2026-11-12, the first read after the puck dropped for the 3rd: 19:41, the faceoff as the last play (the read before was "20:00 - 3rd" with "End of 2nd Period"), 2-1 OTT |
 | `event_nhl_final.json` | 401891830 PIT @ WSH, Final 5-3 WSH |
 | `event_nhl_pre.json` | 401892456 EDM @ ANA, pre-game with odds and O/U |
 | `event_nhl_final_so.json` | 401803369 PIT @ CAR, 2026-03-10, Final/SO 5-4 CAR (recorded after the fact) |
 | `event_nhl_final_2ot.json` | 401869781 OTT @ CAR, 2026 playoffs, Final/2OT 3-2 CAR, series line (recorded after the fact) |
+| `event_nhl_goal.json` | 401892674 FLA @ BOS, 2026-11-08, 3:55 left in the 1st, 3-0 BOS, a goal as the last play (Geekie, with athletesInvolved; no period or clock on the play) |
+| `event_nhl_hattrick_final.json` | 401892640 DAL @ WSH, 2026-11-03, Final 6-5 DAL, Robertson's hat trick: the game's goal leaders list every scorer with the player's id and count (recorded 2026-11-08, after the fact). test_celeb_hockey.cpp puts it back in the 3rd period with his count at 1 to 4 for the reads around his third goal |
 | `team_nhl_edm.json` | `.../hockey/nhl/teams/6` (next event is the EDM @ ANA game above) |
 
 `football_golden.txt` is written by the host tests (`GOLDEN_WRITE=1`) and
@@ -229,8 +254,8 @@ or its limits change.
 Not from ESPN either: `api/` is the panel's own HTTP API as the companion
 app sees it. `state.json` is a `GET /gameday/state` document with every key
 the firmware can send, so it has some together that a real panel never sends
-at once (the bar build's `bar` next to `beta`, favorites rows next to the
-team's upcoming games, a reason for an empty board next to a live game).
+at once (favorites rows next to the team's upcoming games, a reason for an
+empty board next to a live game).
 `wifi.json` is `GET /gameday/wifi`, `set_params.json` every `POST
 /gameday/set` parameter and `actions.json` every `POST /gameday/action` verb
 (`demo` and `demo_stop` only in demo builds). `settings.json` is `GET

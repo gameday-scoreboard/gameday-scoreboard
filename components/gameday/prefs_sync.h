@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // When a settings change reaches flash. ESPHome's ESP32 preferences keep every
 // save() in memory and write flash from a 60 s timer or a clean shutdown, so a
 // panel unplugged within the minute of a change comes back without it. The

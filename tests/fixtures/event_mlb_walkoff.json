@@ -1,0 +1,1265 @@
+{
+ "id": "401696970",
+ "uid": "s:1~l:10~e:401696970",
+ "date": "2025-09-01T17:10Z",
+ "name": "Toronto Blue Jays at Cincinnati Reds",
+ "shortName": "TOR @ CIN",
+ "season": {
+  "year": 2025,
+  "type": 2,
+  "slug": "regular-season"
+ },
+ "competitions": [
+  {
+   "id": "401696970",
+   "uid": "s:1~l:10~e:401696970~c:401696970",
+   "date": "2025-09-01T17:10Z",
+   "attendance": 21773,
+   "type": {
+    "id": "1",
+    "abbreviation": "STD"
+   },
+   "timeValid": true,
+   "neutralSite": false,
+   "conferenceCompetition": false,
+   "playByPlayAvailable": true,
+   "recent": false,
+   "wasSuspended": false,
+   "venue": {
+    "id": "83",
+    "fullName": "Great American Ball Park",
+    "address": {
+     "city": "Cincinnati",
+     "state": "Ohio"
+    },
+    "indoor": false
+   },
+   "competitors": [
+    {
+     "id": "17",
+     "uid": "s:1~l:10~t:17",
+     "type": "team",
+     "order": 0,
+     "homeAway": "home",
+     "winner": false,
+     "team": {
+      "id": "17",
+      "uid": "s:1~l:10~t:17",
+      "location": "Cincinnati",
+      "name": "Reds",
+      "abbreviation": "CIN",
+      "displayName": "Cincinnati Reds",
+      "shortDisplayName": "Reds",
+      "color": "c6011f",
+      "alternateColor": "ffffff",
+      "isActive": true,
+      "links": [
+       {
+        "rel": [
+         "clubhouse",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/_/name/cin/cincinnati-reds",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/roster/_/name/cin/cincinnati-reds",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:17&section=roster",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/stats/_/name/cin/cincinnati-reds",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:17&section=stats",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/schedule/_/name/cin",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:17&section=scores",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/cin.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/scoreboard/cin.png"
+     },
+     "score": "5",
+     "linescores": [
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 1
+      },
+      {
+       "value": 2.0,
+       "displayValue": "2",
+       "period": 2
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 3
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 4
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 5
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 6
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 7
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 8
+      },
+      {
+       "value": 3.0,
+       "displayValue": "3",
+       "period": 9
+      }
+     ],
+     "statistics": [
+      {
+       "name": "hits",
+       "abbreviation": "H",
+       "displayValue": "11"
+      },
+      {
+       "name": "runs",
+       "abbreviation": "R",
+       "displayValue": "5"
+      },
+      {
+       "name": "avg",
+       "abbreviation": "AVG",
+       "displayValue": ".306"
+      },
+      {
+       "name": "saves",
+       "abbreviation": "SV",
+       "displayValue": "0"
+      },
+      {
+       "name": "losses",
+       "abbreviation": "L",
+       "displayValue": "0"
+      },
+      {
+       "name": "wins",
+       "abbreviation": "W",
+       "displayValue": "1"
+      },
+      {
+       "name": "ERA",
+       "abbreviation": "ERA",
+       "displayValue": "4.00"
+      },
+      {
+       "name": "errors",
+       "abbreviation": "E",
+       "displayValue": "0"
+      }
+     ],
+     "leaders": [
+      {
+       "name": "avg",
+       "displayName": "Batting Average",
+       "shortDisplayName": "BA",
+       "abbreviation": "AVG",
+       "leaders": [
+        {
+         "displayValue": "3-4, 2B, 2 RBI, R",
+         "value": 0.75,
+         "athlete": {
+          "id": "35020",
+          "fullName": "Ke'Bryan Hayes",
+          "displayName": "Ke'Bryan Hayes",
+          "shortName": "K. Hayes",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/35020"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/35020.png",
+          "jersey": "3",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "17"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "17"
+         }
+        }
+       ]
+      },
+      {
+       "name": "homeRuns",
+       "displayName": "Home Runs",
+       "shortDisplayName": "HR",
+       "abbreviation": "HR",
+       "leaders": [
+        {
+         "displayValue": "0-1",
+         "value": 0.0,
+         "athlete": {
+          "id": "33743",
+          "fullName": "Miguel Andujar",
+          "displayName": "Miguel Andujar",
+          "shortName": "M. Andujar",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/33743"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/33743.png",
+          "jersey": "41",
+          "position": {
+           "abbreviation": "DH"
+          },
+          "team": {
+           "id": "17"
+          },
+          "active": false
+         },
+         "team": {
+          "id": "17"
+         }
+        }
+       ]
+      },
+      {
+       "name": "RBIs",
+       "displayName": "Runs Batted In",
+       "shortDisplayName": "RBI",
+       "abbreviation": "RBI",
+       "leaders": [
+        {
+         "displayValue": "3-4, 2B, 2 RBI, R",
+         "value": 2.0,
+         "athlete": {
+          "id": "35020",
+          "fullName": "Ke'Bryan Hayes",
+          "displayName": "Ke'Bryan Hayes",
+          "shortName": "K. Hayes",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/35020"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/35020.png",
+          "jersey": "3",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "17"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "17"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "RAT",
+       "abbreviation": "RAT",
+       "leaders": [
+        {
+         "displayValue": "3-4, 2B, 2 RBI, R",
+         "value": 68.75,
+         "athlete": {
+          "id": "35020",
+          "fullName": "Ke'Bryan Hayes",
+          "displayName": "Ke'Bryan Hayes",
+          "shortName": "K. Hayes",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/35020"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/35020.png",
+          "jersey": "3",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "17"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "17"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "MLB",
+       "abbreviation": "MLB",
+       "leaders": [
+        {
+         "displayValue": "3-4, 2B, 2 RBI, R",
+         "value": 68.75,
+         "athlete": {
+          "id": "35020",
+          "fullName": "Ke'Bryan Hayes",
+          "displayName": "Ke'Bryan Hayes",
+          "shortName": "K. Hayes",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/35020"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/35020.png",
+          "jersey": "3",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "17"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "17"
+         }
+        }
+       ]
+      }
+     ],
+     "probables": [
+      {
+       "name": "probableStartingPitcher",
+       "displayName": "Probable Starting Pitcher",
+       "shortDisplayName": "Starter",
+       "abbreviation": "SP",
+       "playerId": 39635,
+       "athlete": {
+        "id": "39635",
+        "fullName": "Hunter Greene",
+        "displayName": "Hunter Greene",
+        "shortName": "H. Greene",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/39635"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/39635.png",
+        "jersey": "21",
+        "position": "SP",
+        "team": {
+         "id": "17"
+        }
+       },
+       "statistics": [
+        {
+         "name": "saves",
+         "abbreviation": "SV",
+         "displayValue": "0",
+         "rankDisplayValue": "Tied-219th"
+        },
+        {
+         "name": "losses",
+         "abbreviation": "L",
+         "displayValue": "4",
+         "rankDisplayValue": "Tied-199th"
+        },
+        {
+         "name": "wins",
+         "abbreviation": "W",
+         "displayValue": "7",
+         "rankDisplayValue": "Tied-92nd"
+        },
+        {
+         "name": "ERA",
+         "abbreviation": "ERA",
+         "displayValue": "2.76"
+        },
+        {
+         "name": "errors",
+         "abbreviation": "E",
+         "displayValue": "0",
+         "rankDisplayValue": "Tied-668th"
+        }
+       ],
+       "record": "(7-4, 2.76)"
+      }
+     ],
+     "hits": 11,
+     "errors": 0,
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "Game",
+       "type": "total",
+       "summary": "70-68"
+      },
+      {
+       "name": "Home",
+       "type": "home",
+       "summary": "38-31"
+      },
+      {
+       "name": "Road",
+       "type": "road",
+       "summary": "32-37"
+      }
+     ]
+    },
+    {
+     "id": "14",
+     "uid": "s:1~l:10~t:14",
+     "type": "team",
+     "order": 1,
+     "homeAway": "away",
+     "winner": false,
+     "team": {
+      "id": "14",
+      "uid": "s:1~l:10~t:14",
+      "location": "Toronto",
+      "name": "Blue Jays",
+      "abbreviation": "TOR",
+      "displayName": "Toronto Blue Jays",
+      "shortDisplayName": "Blue Jays",
+      "color": "134a8e",
+      "alternateColor": "6cace5",
+      "isActive": true,
+      "links": [
+       {
+        "rel": [
+         "clubhouse",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/_/name/tor/toronto-blue-jays",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/roster/_/name/tor/toronto-blue-jays",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:14&section=roster",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/stats/_/name/tor/toronto-blue-jays",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:14&section=stats",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/mlb/team/schedule/_/name/tor",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:1~l:10~t:14&section=scores",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/tor.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/scoreboard/tor.png"
+     },
+     "score": "4",
+     "linescores": [
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 1
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 2
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 3
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 4
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 5
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 6
+      },
+      {
+       "value": 1.0,
+       "displayValue": "1",
+       "period": 7
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 8
+      },
+      {
+       "value": 3.0,
+       "displayValue": "3",
+       "period": 9
+      }
+     ],
+     "statistics": [
+      {
+       "name": "hits",
+       "abbreviation": "H",
+       "displayValue": "8"
+      },
+      {
+       "name": "runs",
+       "abbreviation": "R",
+       "displayValue": "4"
+      },
+      {
+       "name": "avg",
+       "abbreviation": "AVG",
+       "displayValue": ".242"
+      },
+      {
+       "name": "saves",
+       "abbreviation": "SV",
+       "displayValue": "0"
+      },
+      {
+       "name": "losses",
+       "abbreviation": "L",
+       "displayValue": "1"
+      },
+      {
+       "name": "wins",
+       "abbreviation": "W",
+       "displayValue": "0"
+      },
+      {
+       "name": "ERA",
+       "abbreviation": "ERA",
+       "displayValue": "5.40"
+      },
+      {
+       "name": "errors",
+       "abbreviation": "E",
+       "displayValue": "1"
+      }
+     ],
+     "leaders": [
+      {
+       "name": "avg",
+       "displayName": "Batting Average",
+       "shortDisplayName": "BA",
+       "abbreviation": "AVG",
+       "leaders": [
+        {
+         "displayValue": "4-4, HR, 2 2B, 2 RBI, 2 R",
+         "value": 1.0,
+         "athlete": {
+          "id": "38904",
+          "fullName": "Bo Bichette",
+          "displayName": "Bo Bichette",
+          "shortName": "B. Bichette",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/38904"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/38904.png",
+          "jersey": "19",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "14"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "14"
+         }
+        }
+       ]
+      },
+      {
+       "name": "homeRuns",
+       "displayName": "Home Runs",
+       "shortDisplayName": "HR",
+       "abbreviation": "HR",
+       "leaders": [
+        {
+         "displayValue": "4-4, HR, 2 2B, 2 RBI, 2 R",
+         "value": 1.0,
+         "athlete": {
+          "id": "38904",
+          "fullName": "Bo Bichette",
+          "displayName": "Bo Bichette",
+          "shortName": "B. Bichette",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/38904"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/38904.png",
+          "jersey": "19",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "14"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "14"
+         }
+        }
+       ]
+      },
+      {
+       "name": "RBIs",
+       "displayName": "Runs Batted In",
+       "shortDisplayName": "RBI",
+       "abbreviation": "RBI",
+       "leaders": [
+        {
+         "displayValue": "4-4, HR, 2 2B, 2 RBI, 2 R",
+         "value": 2.0,
+         "athlete": {
+          "id": "38904",
+          "fullName": "Bo Bichette",
+          "displayName": "Bo Bichette",
+          "shortName": "B. Bichette",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/38904"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/38904.png",
+          "jersey": "19",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "14"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "14"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "RAT",
+       "abbreviation": "RAT",
+       "leaders": [
+        {
+         "displayValue": "4-4, HR, 2 2B, 2 RBI, 2 R",
+         "value": 76.0,
+         "athlete": {
+          "id": "38904",
+          "fullName": "Bo Bichette",
+          "displayName": "Bo Bichette",
+          "shortName": "B. Bichette",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/38904"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/38904.png",
+          "jersey": "19",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "14"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "14"
+         }
+        }
+       ]
+      },
+      {
+       "name": "MLBRating",
+       "displayName": "MLB Rating",
+       "shortDisplayName": "MLB",
+       "abbreviation": "MLB",
+       "leaders": [
+        {
+         "displayValue": "4-4, HR, 2 2B, 2 RBI, 2 R",
+         "value": 76.0,
+         "athlete": {
+          "id": "38904",
+          "fullName": "Bo Bichette",
+          "displayName": "Bo Bichette",
+          "shortName": "B. Bichette",
+          "links": [
+           {
+            "rel": [
+             "playercard",
+             "desktop",
+             "athlete"
+            ],
+            "href": "https://www.espn.com/mlb/player/_/id/38904"
+           }
+          ],
+          "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/38904.png",
+          "jersey": "19",
+          "position": {
+           "abbreviation": "3B"
+          },
+          "team": {
+           "id": "14"
+          },
+          "active": true
+         },
+         "team": {
+          "id": "14"
+         }
+        }
+       ]
+      }
+     ],
+     "probables": [
+      {
+       "name": "probableStartingPitcher",
+       "displayName": "Probable Starting Pitcher",
+       "shortDisplayName": "Starter",
+       "abbreviation": "SP",
+       "playerId": 33148,
+       "athlete": {
+        "id": "33148",
+        "fullName": "Chris Bassitt",
+        "displayName": "Chris Bassitt",
+        "shortName": "C. Bassitt",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/33148"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/33148.png",
+        "jersey": "40",
+        "position": "SP",
+        "team": {
+         "id": "14"
+        }
+       },
+       "statistics": [
+        {
+         "name": "saves",
+         "abbreviation": "SV",
+         "displayValue": "0",
+         "rankDisplayValue": "Tied-219th"
+        },
+        {
+         "name": "losses",
+         "abbreviation": "L",
+         "displayValue": "9",
+         "rankDisplayValue": "Tied-56th"
+        },
+        {
+         "name": "wins",
+         "abbreviation": "W",
+         "displayValue": "11",
+         "rankDisplayValue": "Tied-29th"
+        },
+        {
+         "name": "ERA",
+         "abbreviation": "ERA",
+         "displayValue": "3.96",
+         "rankDisplayValue": "29th"
+        },
+        {
+         "name": "errors",
+         "abbreviation": "E",
+         "displayValue": "2",
+         "rankDisplayValue": "Tied-307th"
+        }
+       ],
+       "record": "(11-9, 3.96)"
+      }
+     ],
+     "hits": 8,
+     "errors": 1,
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "Game",
+       "type": "total",
+       "summary": "79-59"
+      },
+      {
+       "name": "Home",
+       "type": "home",
+       "summary": "45-24"
+      },
+      {
+       "name": "Road",
+       "type": "road",
+       "summary": "34-35"
+      }
+     ]
+    }
+   ],
+   "notes": [],
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 9,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "Bot 9th",
+     "shortDetail": "Bot 9th"
+    }
+   },
+   "broadcasts": [
+    {
+     "market": "away",
+     "names": [
+      "MLB.TV",
+      "Sportsnet",
+      "TVA"
+     ]
+    },
+    {
+     "market": "home",
+     "names": [
+      "FanDuel SN OH"
+     ]
+    }
+   ],
+   "leaders": [
+    {
+     "name": "MLBRating",
+     "displayName": "MLB Rating",
+     "shortDisplayName": "RAT",
+     "abbreviation": "RAT",
+     "leaders": [
+      {
+       "displayValue": "4-4, HR, 2 2B, 2 RBI, 2 R",
+       "value": 76.0,
+       "athlete": {
+        "id": "38904",
+        "fullName": "Bo Bichette",
+        "displayName": "Bo Bichette",
+        "shortName": "B. Bichette",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/38904"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/38904.png",
+        "jersey": "19",
+        "position": {
+         "abbreviation": "3B"
+        },
+        "team": {
+         "id": "14"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "14"
+       }
+      },
+      {
+       "displayValue": "3-4, 2B, 2 RBI, R",
+       "value": 68.75,
+       "athlete": {
+        "id": "35020",
+        "fullName": "Ke'Bryan Hayes",
+        "displayName": "Ke'Bryan Hayes",
+        "shortName": "K. Hayes",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/mlb/player/_/id/35020"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/mlb/players/full/35020.png",
+        "jersey": "3",
+        "position": {
+         "abbreviation": "3B"
+        },
+        "team": {
+         "id": "17"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "17"
+       }
+      }
+     ]
+    }
+   ],
+   "format": {
+    "regulation": {
+     "periods": 9
+    }
+   },
+   "startDate": "2025-09-01T17:10Z",
+   "broadcast": "",
+   "geoBroadcasts": [
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "2",
+      "type": "Home"
+     },
+     "media": {
+      "shortName": "FanDuel SN OH"
+     },
+     "lang": "en",
+     "region": "us"
+    },
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "3",
+      "type": "Away"
+     },
+     "media": {
+      "shortName": "Sportsnet"
+     },
+     "lang": "en",
+     "region": "us"
+    },
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "3",
+      "type": "Away"
+     },
+     "media": {
+      "shortName": "TVA"
+     },
+     "lang": "en",
+     "region": "us"
+    }
+   ],
+   "highlights": [],
+   "headlines": [
+    {
+     "type": "Recap",
+     "description": "\u2014 Noelvi Marte hit a game-ending, two-run single after Cincinnati lost the tying run on a rare lodged ball call, and the Reds rallied to beat the Toronto Blue Jays 5-4 Monday following a ninth-inning bullpen meltdown.",
+     "shortLinkText": "Marte hits walk-off single after Reds lose tying run on lodged ball, Cincinnati tops Blue Jays 5-4"
+    }
+   ],
+   "situation": {
+    "lastPlay": {
+     "id": "4016969701705990057",
+     "type": {
+      "id": "57",
+      "text": "Play Result",
+      "type": "play-result"
+     },
+     "alternativeType": {
+      "id": "2",
+      "text": "Single",
+      "abbreviation": "1B",
+      "alternativeText": "Single",
+      "type": "single"
+     },
+     "text": "Marte singled to left, McLain scored and Friedl scored.",
+     "scoreValue": 2,
+     "team": {
+      "id": "17"
+     },
+     "atBatId": "4016969701705",
+     "summaryType": "S"
+    },
+    "balls": 0,
+    "strikes": 0,
+    "outs": 1,
+    "onFirst": true,
+    "onSecond": false,
+    "onThird": false
+   }
+  }
+ ],
+ "links": [
+  {
+   "language": "en-US",
+   "rel": [
+    "summary",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/game/_/gameId/401696970/blue-jays-reds",
+   "text": "Gamecast",
+   "shortText": "Gamecast",
+   "isExternal": false,
+   "isPremium": false
+  },
+  {
+   "language": "en-US",
+   "rel": [
+    "boxscore",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/boxscore/_/gameId/401696970",
+   "text": "Box Score",
+   "shortText": "Box Score",
+   "isExternal": false,
+   "isPremium": false
+  },
+  {
+   "language": "en-US",
+   "rel": [
+    "pbp",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/playbyplay/_/gameId/401696970",
+   "text": "Play-by-Play",
+   "shortText": "Play-by-Play",
+   "isExternal": false,
+   "isPremium": false
+  },
+  {
+   "language": "en-US",
+   "rel": [
+    "recap",
+    "desktop",
+    "event"
+   ],
+   "href": "https://www.espn.com/mlb/recap?gameId=401696970",
+   "text": "Recap",
+   "shortText": "Recap",
+   "isExternal": false,
+   "isPremium": false
+  }
+ ],
+ "status": {
+  "clock": 0.0,
+  "displayClock": "0:00",
+  "period": 9,
+  "type": {
+   "id": "2",
+   "name": "STATUS_IN_PROGRESS",
+   "state": "in",
+   "completed": false,
+   "description": "In Progress",
+   "detail": "Bot 9th",
+   "shortDetail": "Bot 9th"
+  }
+ }
+}
