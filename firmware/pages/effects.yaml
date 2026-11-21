@@ -277,6 +277,9 @@ script:
             # LVGL marked nothing dirty while paused, so the whole scoreboard
             # must be redrawn over the last effect frame.
             - script.execute: gd_repaint
+            # Stopped by Power off or the night's screen-off: pause again
+            # (pages/guard.yaml)
+            - script.execute: gd_dark_check
 
 # The Effects page: black, nothing on it; wled_fx draws over it.
 lvgl:

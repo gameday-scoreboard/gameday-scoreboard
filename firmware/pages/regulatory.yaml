@@ -42,6 +42,7 @@ script:
             - hub75.set_brightness:
                 id: matrix
                 brightness: !lambda 'return id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level(), false);'
+            - script.execute: gd_dark_check  # drawing again at night (pages/guard.yaml)
             - while:
                 condition:
                   lambda: |-
