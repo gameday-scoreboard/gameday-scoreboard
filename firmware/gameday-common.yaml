@@ -318,6 +318,10 @@ crash_report:
 
 wifi:
   power_save_mode: none
+  # Allocate Wi-Fi and lwIP buffers in PSRAM first, so ESPN and update
+  # fetches leave more internal RAM for TLS and the loop. ESP-IDF falls back
+  # to internal RAM when PSRAM can't serve an allocation.
+  use_psram: true
   # Named per panel in on_boot.
   ap: {}
   # Bluetooth (improv_ble) is only needed to hand the panel Wi-Fi
