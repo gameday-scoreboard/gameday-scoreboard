@@ -98,6 +98,10 @@ In both apps, **Only today's games**, **Jump to the action** and **Score banner*
 On Android, **Setup** has **Walk through the settings again** too. It opens the walkthrough from setup: your teams, what the panel shows, the ticker and switching, and the timezone.
 :::
 
+:::note[Coming in the next app update]
+On iPhone, **Add network** under Wi-Fi networks in **Device** lists the networks the panel can see, strongest first, with how strong each signal is, as on the device page. It leaves out the network the panel is on and marks the ones it already knows **Saved**. Tap one to fill in its name, or type the name of a hidden network. **Look again** looks once more. The list shows once the panel runs firmware that sends it. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
+:::
+
 In both apps, Settings has three pages for the panel, like the device page's tabs:
 
 - **Display**: ticker speed, the night schedule (iPhone), the ticker, celebrations and **Between games**. **Showing** moved to the Board. On Android, the **Celebrations** card also has a **Celebrations** choice, **Full**, **Subtle** or **Off**, for how big the show is (see [Celebrations](/using/device-page/#celebrations)). It shows once the panel runs firmware with that setting.

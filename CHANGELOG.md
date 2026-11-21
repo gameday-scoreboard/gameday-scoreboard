@@ -37,10 +37,15 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-The panel can play an effect whenever no game of yours is on, effect playlists keep playing while you edit them, and Rain's speed works.
+The panel can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, effect playlists keep playing as you edit them, Rain's speed works, and Home Assistant names the panel Scoreboard by Game Day.
+
+### ⚠️ Heads up
+
+- 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
 
 ### ✨ New
 
+- 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 
 ### 🐛 Fixes
@@ -49,6 +54,7 @@ The panel can play an effect whenever no game of yours is on, effect playlists k
 - 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
 - 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
+- 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
 
 ## v2026.11.5
 

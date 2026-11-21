@@ -11,6 +11,17 @@
       "seen": false
     }
   ],
+  "nearby": [
+    {
+      "ssid": "Home Wi-Fi",
+      "rssi": -52
+    },
+    {
+      "ssid": "Coffee Shop",
+      "rssi": -78,
+      "open": true
+    }
+  ],
   "max": 5,
   "scanning": false,
   "switching": "Garage",

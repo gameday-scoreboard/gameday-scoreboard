@@ -2787,8 +2787,9 @@ test("a network is added by name, and the page offers to switch when the panel s
   const rows = page.locator("#nets .ctl");
   const msg = page.locator("#netMsg");
   await expect(rows).toHaveCount(2);
+  // The scans the open form asks for are checked in their own test.
   const posts = async () =>
-    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi");
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi" && !p.q.scan);
   const add = async (name, pass) => {
     if (await page.locator("#netAdd").isVisible()) await page.locator("#netAdd").click();
     await page.locator("#netName").fill(name);
@@ -2851,6 +2852,61 @@ test("a network is added by name, and the page offers to switch when the panel s
   await add("Lake", "lakepass1");
   await expect.poll(() => asked[asked.length - 1]).toBe("The list is full, so adding Lake drops n5. Add it?");
   expect(await posts()).toEqual([]);
+});
+
+test("the Add network form lists the networks the panel can see, and a tap fills in the name", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "device");
+  await unfold(page, "#netsCard");
+  await page.locator("#netAdd").click();
+  const picks = page.locator("#netNearby .netpick");
+  // Strongest first, without the network the panel is on; a saved one says so.
+  await expect(picks).toHaveCount(4);
+  await expect(picks.nth(0)).toContainText("Cabin");
+  await expect(picks.nth(0).locator(".val")).toHaveText("Strong");
+  await expect(picks.nth(1).locator(".val")).toHaveText("Good");
+  await expect(picks.nth(2)).toContainText("Coffee Shop");
+  await expect(picks.nth(2).locator(".val")).toHaveText("Open, weak");
+  await expect(picks.nth(3)).toContainText("iPhone");
+  await expect(picks.nth(3).locator("small")).toHaveText("Saved");
+  const scans = async () =>
+    (await (await request.get("/_log")).json()).filter((p) => p.path === "/gameday/wifi" && p.q.scan);
+  expect((await scans()).length).toBe(1);
+
+  // A tap fills in the name and moves on to the password.
+  await picks.nth(1).click();
+  await expect(page.locator("#netName")).toHaveValue("Attic");
+  await expect(picks.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#netPass")).toBeFocused();
+  // An open one says to leave the password blank.
+  await page.locator("#netPass").fill("something");
+  await picks.nth(2).click();
+  await expect(page.locator("#netName")).toHaveValue("Coffee Shop");
+  await expect(page.locator("#netPass")).toHaveValue("");
+  await expect(page.locator("#netMsg")).toHaveText("Coffee Shop is open, so leave the password blank.");
+  // Typing another name takes the mark off.
+  await page.locator("#netName").fill("Hidden");
+  await expect(page.locator("#netNearby .netpick.on")).toHaveCount(0);
+
+  // Look again scans again.
+  await page.locator("#netRescan").click();
+  await expect(page.locator("#netRescan")).toBeEnabled();
+  expect((await scans()).length).toBe(2);
+
+  // Nothing else in range: the page says to type it.
+  await page.locator("#netCancel").click();
+  await reset(request, {}, [], [{ ssid: "Home", connected: true }]);
+  await page.route("**/gameday/wifi?_=*", async (route) => {
+    const r = await route.fetch();
+    const j = await r.json();
+    j.nearby = [{ ssid: "Home", rssi: -50 }];
+    await route.fulfill({ response: r, json: j });
+  });
+  await page.locator("#netAdd").click();
+  await expect(page.locator("#netScanMsg")).toHaveText(
+    "The panel can't see another 2.4 GHz network. Type its name below, or move closer and look again.");
+  await expect(picks).toHaveCount(0);
 });
 
 test("the stale tag follows the device's consecutive misses", async ({ page, request }) => {

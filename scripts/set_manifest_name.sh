@@ -2,10 +2,10 @@
 # Give every manifest.json under a folder the product name. The web installer
 # shows it ("Installing <name>") and Home Assistant titles the panel's update
 # with it. build-action fills it from the ESPHome project name,
-# bharvey88.gameday-scoreboard, which has to stay as it is: panels advertise
-# it over mDNS, the iOS app finds panels by it and factory_flash.py checks it
-# in the boot log. Only the name changes; the checksums cover the bins, not
-# the manifest, so check_site_firmware.sh still passes.
+# Game Day.Scoreboard, which stays as it is: panels advertise it over mDNS,
+# both apps find panels by it and factory_flash.py checks it in the boot log.
+# Only the name changes; the checksums cover the bins, not the manifest, so
+# check_site_firmware.sh still passes.
 # It also sets new_install_improv_wait_time. After flashing, the installer
 # offers the WiFi form only if the controller answers Improv within that
 # many seconds (10 by default), and a first boot (PSRAM, the matrix, a
