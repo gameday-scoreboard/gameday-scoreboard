@@ -144,16 +144,18 @@ static void test_font() {
 // What Showing has up (showing.h): the Scoreboard follows games, a page
 // somebody picked reads nothing, a page After the game put up keeps its reads.
 static void test_showing() {
-  CHECK(showing_now("Scoreboard", false, false) == Showing::BOARD);
-  CHECK(showing_now(nullptr, false, false) == Showing::BOARD);  // before the first page
-  CHECK(showing_now("", true, true) == Showing::BOARD);
-  CHECK(showing_now("Clock", false, false) == Showing::PICKED);
-  CHECK(showing_now("Clock", true, true) == Showing::PICKED);
-  CHECK(showing_now("Effects", false, false) == Showing::PICKED);
-  CHECK(showing_now("Effects", true, false) == Showing::AUTO);
-  CHECK(showing_now("Smart board", false, true) == Showing::PICKED);
-  CHECK(showing_now("Smart board", false, false) == Showing::AUTO);
-  CHECK(showing_now("Smart board", true, true) == Showing::PICKED);
+  CHECK(showing_now("Scoreboard", false, false, true) == Showing::BOARD);
+  CHECK(showing_now(nullptr, false, false, true) == Showing::BOARD);  // before the first page
+  CHECK(showing_now("", true, true, true) == Showing::BOARD);
+  CHECK(showing_now("Clock", false, false, true) == Showing::PICKED);
+  CHECK(showing_now("Clock", true, true, true) == Showing::PICKED);
+  CHECK(showing_now("Effects", false, false, true) == Showing::PICKED);
+  CHECK(showing_now("Effects", true, false, true) == Showing::AUTO);
+  CHECK(showing_now("Smart board", false, true, true) == Showing::PICKED);
+  CHECK(showing_now("Smart board", false, false, true) == Showing::AUTO);
+  CHECK(showing_now("Smart board", true, true, true) == Showing::PICKED);
+  CHECK(showing_now("Flights", false, false, true) == Showing::PICKED);
+  CHECK(showing_now("Flights", false, true, false) == Showing::AUTO);
   CHECK(looking_for(true, "NFL ", "Dallas Cowboys") == "live NFL games");
   CHECK(looking_for(true, "", nullptr) == "live games");
   CHECK(looking_for(false, "", "Dallas Cowboys") == "Dallas Cowboys");

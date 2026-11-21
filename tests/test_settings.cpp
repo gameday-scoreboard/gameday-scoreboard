@@ -106,11 +106,14 @@ void test_export() {
     SCHECK(own || set_keys.count(k), "the export writes %s, which POST /gameday/set doesn't take", k.c_str());
   }
   // Every set key but the remote's four slots (favs has them) is exported,
-  // and the ones that only do something once (set_key_once), like fxlist.
+  // and the ones that only do something once (set_key_once), like fxlist,
+  // and the secrets (set_key_secret).
   for (const char *k : kSetKeys) {
     std::string key = k;
     bool slot = key.size() == 4 && key.compare(0, 3, "fav") == 0;
-    SCHECK(slot || set_key_once(k) || !out[k].isNull(), "the export leaves out %s; add it to settings_from_state", k);
+    SCHECK(slot || set_key_once(k) || set_key_secret(k) || !out[k].isNull(),
+           "the export leaves out %s; add it to settings_from_state", k);
+    SCHECK(!set_key_secret(k) || out[k].isNull(), "the export writes the secret %s", k);
   }
   SCHECK(out["fxlist"].isNull(), "the export keeps which effect playlist plays");
 
@@ -132,7 +135,8 @@ void test_export() {
 
 void test_types() {
   for (const char *k : kSetKeys)
-    SCHECK(set_key_once(k) || setting_type(k) != SettingType::NONE, "set key %s has no type in settings_doc.h's setting_type", k);
+    SCHECK(set_key_once(k) || set_key_secret(k) || setting_type(k) != SettingType::NONE,
+           "set key %s has no type in settings_doc.h's setting_type", k);
   SCHECK(setting_type("brightness") == SettingType::NONE, "brightness is not a set key");
 }
 
@@ -147,7 +151,7 @@ void test_round_trip() {
   // only do something once (set_key_once)
   size_t want = sizeof(kSetKeys) / sizeof(kSetKeys[0]) - 4;
   for (const char *k : kSetKeys)
-    want -= set_key_once(k) ? 1 : 0;
+    want -= set_key_once(k) || set_key_secret(k) ? 1 : 0;
   SCHECK(in.ops.size() == want, "the fixture gives %zu ops, not %zu", in.ops.size(), want);
   SCHECK(in.brightness == 128 && in.scroll == 5, "brightness %d scroll %d", in.brightness, in.scroll);
   SCHECK(!in.restart, "the same panel count restarts the panel");
@@ -170,7 +174,8 @@ void test_round_trip() {
   size_t j = 0;
   for (const char *key : kSetKeys) {
     std::string k = key;
-    if ((k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs") || set_key_once(key))  // fav1 to fav4: favs has them
+    // fav1 to fav4: favs has them
+    if ((k.size() == 4 && k.compare(0, 3, "fav") == 0 && k != "favs") || set_key_once(key) || set_key_secret(key))
       continue;
     JsonVariantConst v = fx[key];
     SCHECK(!v.isNull(), "the fixture has no %s", key);
@@ -496,6 +501,11 @@ void test_fx_playlists() {
   SCHECK(in.error.empty() && find(in, SetKind::FX_LIST) == nullptr && in.skipped.size() == 1 &&
              in.skipped[0] == "fxlist",
          "fxlist in a backup should be left out");
+  // A secret written into a backup by hand is left out the same way.
+  in = import(R"({"schema":1,"flkey":"abc123","flrad":3})");
+  SCHECK(in.error.empty() && find(in, SetKind::FL_KEY) == nullptr && in.skipped.size() == 1 &&
+             in.skipped[0] == "flkey" && find(in, SetKind::FL_RADIUS) != nullptr,
+         "flkey in a backup should be left out");
 }
 
 // Playlists come back by name and team, as lists= text in the order given.

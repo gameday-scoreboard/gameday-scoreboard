@@ -6628,6 +6628,7 @@ static void test_wake() {
   CHECK_EQ(after_parse("clock"), 2);
   CHECK_EQ(after_parse("smartboard"), 3);
   CHECK_EQ(after_parse("effects"), 4);
+  CHECK_EQ(after_parse("flights"), 5);
   CHECK_EQ(std::string(after_word((uint8_t) After::EFFECTS)), std::string("effects"));
   CHECK_EQ(after_parse("effect"), -1);
   CHECK_EQ(after_parse(""), -1);
@@ -6832,18 +6833,20 @@ static void test_wake() {
   // A remote press that follows a team or asks for the Scoreboard ends the
   // clock or Smart board between games; it comes back only after the next
   // game's final.
-  for (uint8_t after : {(uint8_t) After::CLOCK, (uint8_t) After::SMART, (uint8_t) After::EFFECTS}) {
+  for (uint8_t after :
+       {(uint8_t) After::CLOCK, (uint8_t) After::SMART, (uint8_t) After::EFFECTS, (uint8_t) After::FLIGHTS}) {
     p.after = after;
     auto page = [&](const WakeState &s) {
-      return after == (uint8_t) After::CLOCK   ? wake_clock(p, s, in)
-             : after == (uint8_t) After::SMART ? wake_smart(p, s, in)
-                                               : wake_effects(p, s, in);
+      return after == (uint8_t) After::CLOCK     ? wake_clock(p, s, in)
+             : after == (uint8_t) After::SMART   ? wake_smart(p, s, in)
+             : after == (uint8_t) After::EFFECTS ? wake_effects(p, s, in)
+                                                 : wake_flights(p, s, in);
     };
     // Each choice puts up its own page only.
     at(kick - 3 * 3600);
     {
       WakeState s0;
-      CHECK_EQ(wake_clock(p, s0, in) + wake_smart(p, s0, in) + wake_effects(p, s0, in), 1);
+      CHECK_EQ(wake_clock(p, s0, in) + wake_smart(p, s0, in) + wake_effects(p, s0, in) + wake_flights(p, s0, in), 1);
     }
     WakeState s;
     in.kick = kick;
@@ -6872,6 +6875,7 @@ static void test_wake() {
   CHECK_EQ(std::string(wake_word(false, true)), std::string("clock"));
   CHECK_EQ(std::string(wake_word(false, false)), std::string(""));
   CHECK_EQ(std::string(wake_word(false, false, false, true)), std::string("effects"));
+  CHECK_EQ(std::string(wake_word(false, false, false, false, true)), std::string("flights"));
 
   // Effects between games: up only while nothing else needs the screen.
   FxBetween fx;

@@ -10,6 +10,7 @@
 #include <string>
 
 #include "flights.h"
+#include "flights_page.h"
 
 using namespace espn;
 
@@ -552,6 +553,114 @@ static void test_text() {
   CHECK_EQ(vrate_dir(-768), -1);
 }
 
+// The page's screens (flights_page.h).
+static void test_page() {
+  FlPageIn in;
+  in.radius = "10 mi";
+  FlView v;
+  Sky empty;
+  fl_compose(in, empty, -1, nullptr, v);
+  CHECK(v.screen == FlScreen::MESSAGE);
+  CHECK_STR(v.sub, "Set your town on the device page");
+
+  in.home = true;
+  fl_compose(in, empty, -1, nullptr, v);
+  CHECK_STR(v.sub, "Looking for planes");
+  in.err = FlErr::NET;
+  fl_compose(in, empty, -1, nullptr, v);
+  CHECK_STR(v.sub, "Can't reach flight data");
+  in.err = FlErr::LIMIT;
+  in.wait_s = 3 * 3600 - 10;
+  fl_compose(in, empty, -1, nullptr, v);
+  CHECK_STR(v.title, "Flight data paused");
+  CHECK_STR(v.sub, "Daily limit, back in 3h");
+  in.wait_s = 90;
+  fl_compose(in, empty, -1, nullptr, v);
+  CHECK_STR(v.sub, "Back in 2 min");
+  in.wait_s = 0;
+  in.fresh = true;
+  fl_compose(in, empty, -1, nullptr, v);
+  CHECK_STR(v.sub, "No planes within 10 mi");
+  in.err = FlErr::NONE;
+
+  // The card: an airline flight climbing out, with a route that fits.
+  Plane a = at("a1b2c3", 3.86f, 225, 90, 310);
+  snprintf(a.call, sizeof(a.call), "AAL2192");
+  snprintf(a.reg, sizeof(a.reg), "N7605P");
+  snprintf(a.type, sizeof(a.type), "B738");
+  a.alt_ft = 12400;
+  a.vrate_fpm = 1800;
+  Plane b = at("d4e5f6", 8, 10, 180, 120);
+  snprintf(b.reg, sizeof(b.reg), "N123AB");
+  b.alt_ft = 3500;
+  Sky s = sky_of({a, b});
+  Route r;
+  r.found = true;
+  snprintf(r.from, sizeof(r.from), "DFW");
+  snprintf(r.to, sizeof(r.to), "ORD");
+  fl_compose(in, s, 0, &r, v);
+  CHECK(v.screen == FlScreen::CARD);
+  CHECK_STR(v.call, "AAL2192");
+  CHECK_STR(v.airline, "American");
+  CHECK_STR(v.line2, "DFW > ORD");
+  CHECK(v.route);
+  CHECK_STR(v.type, "Boeing 737-800");
+  CHECK_STR(v.alt, "12,400 ft  357 mph");
+  CHECK_STR(v.where, "2.4 mi SW");
+  CHECK_EQ((int) v.vdir, 1);
+  CHECK(!v.emergency);
+  // No route: the registration. One panel: the narrow names, speed apart.
+  in.wide = false;
+  fl_compose(in, s, 0, nullptr, v);
+  CHECK_STR(v.line2, "N7605P");
+  CHECK(!v.route);
+  CHECK_STR(v.airline, "");
+  CHECK_STR(v.type, "737-800");
+  CHECK_STR(v.alt, "12,400 ft");
+  CHECK_STR(v.speed, "357 mph");
+  // A plane with no callsign goes by its registration, with nothing under it.
+  fl_compose(in, s, 1, nullptr, v);
+  CHECK_STR(v.call, "N123AB");
+  CHECK_STR(v.line2, "");
+  in.wide = true;
+
+  // The list's turn: the nearest four, a row each, or two rows on one panel.
+  in.list_turn = true;
+  fl_compose(in, s, 0, nullptr, v);
+  CHECK(v.screen == FlScreen::LIST);
+  CHECK_EQ((int) v.rows, 2);
+  CHECK_STR(v.row[0], "AAL2192 12,400 2.4 mi");
+  CHECK_STR(v.row[1], "N123AB  3,500  5.0 mi");
+  in.wide = false;
+  fl_compose(in, s, 0, nullptr, v);
+  CHECK_STR(v.row[0], "AAL2192");
+  CHECK_STR(v.row2[0], "12,400 2.4mi");
+  in.wide = true;
+  // One plane: the card stays.
+  Sky one = sky_of({a});
+  fl_compose(in, one, 0, nullptr, v);
+  CHECK(v.screen == FlScreen::CARD);
+
+  // About to pass over the house: the card keeps the screen and says when.
+  Plane o = at("0a0b0c", 1.0f, 180, 0, 360);
+  snprintf(o.call, sizeof(o.call), "SWA100");
+  o.alt_ft = 3000;
+  o.emergency = true;
+  Sky over = sky_of({o, b});
+  fl_compose(in, over, 0, nullptr, v);
+  CHECK(v.screen == FlScreen::CARD);
+  CHECK(v.overhead);
+  CHECK(v.emergency);
+  CHECK_STR(v.where, "Overhead in 5 s");
+  CHECK_EQ((int) v.vdir, 0);
+  in.wide = false;
+  fl_compose(in, over, 0, nullptr, v);
+  CHECK_STR(v.where, "Overhead 5s");
+
+  CHECK_STR(fl_err_word(FlErr::LIMIT), "limit");
+  CHECK_STR(fl_err_word(FlErr::NONE), "none");
+}
+
 int main() {
   test_urls();
   test_sky_adsblol();
@@ -562,6 +671,7 @@ int main() {
   test_pick();
   test_names();
   test_text();
+  test_page();
   printf("test_flights: %d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

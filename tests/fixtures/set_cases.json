@@ -12,6 +12,7 @@
     "favs": ["", "", "", ""], "lists": [], "list": 0, "sport": "", "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "field": true, "winbar": true, "spark": true, "opp": true, "celebrate": 2, "bigplays": true, "best": false, "bootaddr": true,
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0,
+    "flrad": 1, "flface": 0, "flrx": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
     "wake": false, "wakelead": 15, "after": "scoreboard"
   },
@@ -228,6 +229,7 @@
     {"name": "wake lead that isn't a whole number is refused", "set": [["wakelead", "15m"]], "expect": {"wakelead": 15}},
     {"name": "the clock after the game", "start": {"after": "off"}, "set": [["after", "clock"]], "expect": {"after": "clock"}},
     {"name": "effects after the game", "start": {"after": "clock"}, "set": [["after", "effects"]], "expect": {"after": "effects"}},
+    {"name": "flights after the game", "start": {"after": "clock"}, "set": [["after", "flights"]], "expect": {"after": "flights"}},
     {"name": "an after-the-game choice this firmware doesn't have is refused", "start": {"after": "clock"}, "set": [["after", "fireworks"]],
      "expect": {"after": "clock"}},
     {"name": "wake off keeps its lead and after-the-game choice", "start": {"wake": true, "wakelead": 45, "after": "off"},
@@ -333,6 +335,21 @@
     {"name": "the playing effect playlist renamed keeps playing", "start": {"fxlists": [{"n": "A", "shuffle": false, "fx": [{"e": "Matrix", "p": "Default", "s": 128, "i": 128, "w": 15}]}, {"n": "B", "shuffle": false, "fx": [{"e": "Drift", "p": "Sunset", "s": 64, "i": 200, "w": 300}, {"e": "DNA", "p": "Default", "s": 128, "i": 128, "w": 15}]}], "fxlist": 2}, "set": [["fxlists", "A=Matrix;Bee=Drift|Sunset|64|200|300,DNA"]], "expect": {"fxlist": 2}},
     {"name": "the playing effect playlist changed starts over", "start": {"fxlists": [{"n": "A", "shuffle": false, "fx": [{"e": "Matrix", "p": "Default", "s": 128, "i": 128, "w": 15}]}, {"n": "B", "shuffle": false, "fx": [{"e": "Drift", "p": "Sunset", "s": 64, "i": 200, "w": 300}, {"e": "DNA", "p": "Default", "s": 128, "i": 128, "w": 15}]}], "fxlist": 1}, "set": [["fxlists", "B=Drift|Sunset|64|200|300,DNA;A=Plasma Ball"]], "expect": {"fxlist": 2, "fxlists": [{"n": "B", "shuffle": false, "fx": [{"e": "Drift", "p": "Sunset", "s": 64, "i": 200, "w": 300}, {"e": "DNA", "p": "Default", "s": 128, "i": 128, "w": 15}]}, {"n": "A", "shuffle": false, "fx": [{"e": "Plasma Ball", "p": "Default", "s": 128, "i": 128, "w": 15}]}]}},
     {"name": "the playing effect playlist deleted stops", "start": {"fxlists": [{"n": "A", "shuffle": false, "fx": [{"e": "Matrix", "p": "Default", "s": 128, "i": 128, "w": 15}]}, {"n": "B", "shuffle": false, "fx": [{"e": "Drift", "p": "Sunset", "s": 64, "i": 200, "w": 300}, {"e": "DNA", "p": "Default", "s": 128, "i": 128, "w": 15}]}], "fxlist": 1}, "set": [["fxlists", "B=Drift|Sunset|64|200|300,DNA"]], "expect": {"fxlist": 0}},
-    {"name": "the playing effect playlist emptied stops", "start": {"fxlists": [{"n": "A", "shuffle": false, "fx": [{"e": "Matrix", "p": "Default", "s": 128, "i": 128, "w": 15}]}, {"n": "B", "shuffle": false, "fx": [{"e": "Drift", "p": "Sunset", "s": 64, "i": 200, "w": 300}, {"e": "DNA", "p": "Default", "s": 128, "i": 128, "w": 15}]}], "fxlist": 1}, "set": [["fxlists", "A=;B=Drift|Sunset|64|200|300,DNA"]], "expect": {"fxlist": 0}}
+    {"name": "the playing effect playlist emptied stops", "start": {"fxlists": [{"n": "A", "shuffle": false, "fx": [{"e": "Matrix", "p": "Default", "s": 128, "i": 128, "w": 15}]}, {"n": "B", "shuffle": false, "fx": [{"e": "Drift", "p": "Sunset", "s": 64, "i": 200, "w": 300}, {"e": "DNA", "p": "Default", "s": 128, "i": 128, "w": 15}]}], "fxlist": 1}, "set": [["fxlists", "A=;B=Drift|Sunset|64|200|300,DNA"]], "expect": {"fxlist": 0}},
+    {"name": "flights within the fourth step", "set": [["flrad", "3"]], "expect": {"flrad": 3}},
+    {"name": "flights step past the last is refused", "set": [["flrad", "5"]], "expect": {"flrad": 1}},
+    {"name": "flights step takes no text", "set": [["flrad", "ten"]], "expect": {"flrad": 1}},
+    {"name": "flights facing south", "set": [["flface", "5"]], "expect": {"flface": 5}},
+    {"name": "flights facing back to any way", "start": {"flface": 5}, "set": [["flface", "0"]], "expect": {"flface": 0}},
+    {"name": "flights facing past northwest is refused", "set": [["flface", "9"]], "expect": {"flface": 0}},
+    {"name": "flights receiver by address", "set": [["flrx", "192.168.1.50"]], "expect": {"flrx": "192.168.1.50"}},
+    {"name": "flights receiver by full address", "set": [["flrx", "http://adsb.local:8080/data/aircraft.json"]],
+     "expect": {"flrx": "http://adsb.local:8080/data/aircraft.json"}},
+    {"name": "flights receiver with a space is refused", "start": {"flrx": "adsb.local"}, "set": [["flrx", "adsb local"]], "expect": {"flrx": "adsb.local"}},
+    {"name": "flights receiver cleared", "start": {"flrx": "adsb.local"}, "set": [["flrx", ""]], "expect": {"flrx": ""}},
+    {"name": "flights key set is never echoed", "set": [["flkey", "0123456789abcdef"]], "expect": {"flkey_set": true, "flkey": null}},
+    {"name": "flights key cleared", "start": {"flkey": "0123456789abcdef"}, "set": [["flkey", ""]], "expect": {"flkey_set": false}},
+    {"name": "flights key with a space is refused", "start": {"flkey": "abc"}, "set": [["flkey", "a b"]], "expect": {"flkey_set": true}},
+    {"name": "flights key past 63 bytes is refused", "set": [["flkey", "0123456789012345678901234567890123456789012345678901234567890123"]], "expect": {"flkey_set": false}}
   ]
 }
