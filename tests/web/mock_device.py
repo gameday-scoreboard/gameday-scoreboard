@@ -85,6 +85,13 @@ from leagues_table import leagues  # noqa: E402
 
 LEAGUES = [row["key"] for row in leagues()]
 LEAGUE_SPORT = {row["key"]: row["sport"].lower() for row in leagues()}
+# leagues.h leaderboard_sport(): golf ranks a field, so its tours have no Live games.
+LEADERBOARD_SPORTS = ("golf",)
+GAME_LEAGUES = [lg for lg in LEAGUES if LEAGUE_SPORT[lg] not in LEADERBOARD_SPORTS]
+# The state's lbleagues: each leaderboard league with its name (leaderboards.h leaderboard_name).
+LB_NAMES = {"pga": "PGA Tour", "lpga": "LPGA", "eur": "DP World Tour"}
+LB_LEAGUES = [{"key": lg, "name": LB_NAMES.get(lg, lg.upper()), "sport": LEAGUE_SPORT[lg]}
+              for lg in LEAGUES if LEAGUE_SPORT[lg] in LEADERBOARD_SPORTS]
 # leagues.h kSportKeys: the sport rows' words, in Sport order.
 SPORT_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSportKeys\[kSportCount\] = \{(.*?)\};",
                                                     (REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"),
@@ -151,8 +158,16 @@ URI_MAX = 512
 FORM_MAX = 1024
 
 
+def athlete_league(lg):
+    """known_team(): a favorite in a leaderboard league is an athlete, any id."""
+    return LEAGUE_SPORT.get(lg) in LEADERBOARD_SPORTS
+
+
 def team(lg, tid):
-    """put_team(): league, id, abbr and name, or an empty object."""
+    """put_team(): league, id, abbr and name, or an empty object. A golfer
+    has the ref alone."""
+    if athlete_league(lg) and tid:
+        return {"l": lg, "id": tid}
     if (lg, tid) not in TEAMS:
         return {}
     abbr, name = TEAMS[(lg, tid)]
@@ -183,8 +198,9 @@ INITIAL = {
     # The weather card (weather.h): the town, the switch and the degrees (0
     # auto, 1 F, 2 C); wx once a town is set.
     "town": "", "wxon": False, "wxunit": 0,
-    # The Golf leaderboard card's tours (golf.h golf_tours_keys), slot order.
-    "golftours": "",
+    # The leaderboard cards' leagues (leaderboards.h leaderboards_text), every sport written out.
+    "leaderboards": "golf:",
+    "lbleagues": LB_LEAGUES,
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
@@ -451,7 +467,8 @@ def parse_team_ref(v):
     lg, colon, tid = v.partition(":")
     m = re.match(r"\s*\d+", tid)
     ref = (lg, int(m.group())) if colon and lg in LEAGUES and m else None
-    return ref if ref in TEAMS else None
+    return ref if ref in TEAMS or (ref and athlete_league(lg) and ref[1] > 0) else None
+
 
 
 def timezone_index(v):
@@ -468,7 +485,7 @@ def counts(t):
 def live_auto_leagues():
     """live_leagues() with a mask of 0: the favorites' leagues, NFL with none."""
     used = {t["l"] for t in STATE["favs"] if counts(t)}
-    return [lg for lg in LEAGUES if lg in used] or ["nfl"]
+    return [lg for lg in GAME_LEAGUES if lg in used] or ["nfl"]
 
 
 def no_team_default():
@@ -492,7 +509,7 @@ def state_doc():
         if STATE["sport"] not in STATE["sports"]:
             STATE["sport"] = ""
     if no_team_default():
-        STATE["live"] = list(LEAGUES)
+        STATE["live"] = list(GAME_LEAGUES)
     elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
     else:
@@ -520,8 +537,43 @@ def state_doc():
     return STATE
 
 
-# The golf tours in slot order (golf.h golf_slot): PGA, LPGA, DP World Tour.
-GOLF_TOURS = ("pga", "lpga", "eur")
+# The golf tours in kLeagues order: PGA, LPGA, DP World Tour.
+GOLF_TOURS = tuple(lg for lg in LEAGUES if LEAGUE_SPORT[lg] == "golf")
+
+
+def parse_leaderboards(v):
+    """leaderboards.h parse_leaderboards(): (on, named sports, skipped) from
+    "golf:pga,lpga;racing:"; a sport or league this firmware lacks is skipped."""
+    on, named, skipped = {}, set(), []
+    for part in v.split(";"):
+        if not part:
+            continue
+        sport, colon, keys = part.partition(":")
+        if not colon or sport not in LEADERBOARD_SPORTS:
+            skipped.append(sport)
+            continue
+        named.add(sport)
+        on[sport] = set()
+        for key in keys.split(","):
+            if not key:
+                continue
+            if LEAGUE_SPORT.get(key) == sport:
+                on[sport].add(key)
+            else:
+                skipped.append(f"{sport}:{key}")
+    return on, named, skipped
+
+
+def leaderboards_text(on):
+    """leaderboards.h leaderboards_text(): every leaderboard sport, its leagues in kLeagues order."""
+    return ";".join(sport + ":" + ",".join(lg for lg in LEAGUES if lg in on.get(sport, ()))
+                    for sport in SPORT_KEYS if sport in LEADERBOARD_SPORTS)
+
+
+def leaderboards_on():
+    return parse_leaderboards(STATE.get("leaderboards", ""))[0]
+
+
 
 
 def cards_on():
@@ -548,7 +600,7 @@ def card_ok(cid):
         return not no_team_default() and bool(leagues & {"ncaa", "mcbb"})
     if cid == "golf":
         # golf_slots_(): a tour picked on the card, or a followed golfer's tour.
-        return bool(STATE.get("golftours")) or any(t.get("l") in GOLF_TOURS for t in STATE["favs"] if t)
+        return bool(leaderboards_on().get("golf")) or any(t.get("l") in GOLF_TOURS for t in STATE["favs"] if t)
     return True
 
 
@@ -617,7 +669,7 @@ def remote_parse(v):
     if v.startswith("sport:"):
         return v if v[6:] in SPORT_KEYS else None
     if v.startswith("league:"):
-        return v if v[7:] in LEAGUES else None
+        return v if v[7:] in GAME_LEAGUES else None
     if v.startswith("list:") and len(v) > 5:
         return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
     if v.startswith("fxlist:") and len(v) > 7:
@@ -984,7 +1036,7 @@ def apply_set(kv):
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
         elif k == "live":
-            keys = [lg for lg in LEAGUES if lg in v.split(",")]
+            keys = [lg for lg in GAME_LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
             LIVE_LIST[0] = keys
         elif k == "tz":
@@ -1020,10 +1072,13 @@ def apply_set(kv):
                 wx_lookup(town)
         elif k == "wxon":
             STATE["wxon"] = v == "1"
-        elif k == "golftours":
-            # golf_tours_from_keys(): golf keys only, back in slot order.
-            picked = set(v.split(","))
-            STATE["golftours"] = ",".join(t for t in GOLF_TOURS if t in picked)
+        elif k == "leaderboards":
+            # The sports named take their leagues; the others keep theirs.
+            on, named, _skipped = parse_leaderboards(v)
+            if named:
+                cur = leaderboards_on()
+                cur.update(on)
+                STATE["leaderboards"] = leaderboards_text(cur)
         elif k == "wxunit":
             if v in ("0", "1", "2"):
                 STATE["wxunit"] = int(v)
@@ -1391,6 +1446,11 @@ def import_settings(doc):
                     k == "after" and v not in AFTER) or (
                     re.fullmatch(r"remote[1-4]", k) and remote_parse(v) is None):
                 skipped.append(f"{k}={v}")
+            elif k == "leaderboards":
+                _on, named, lb_skipped = parse_leaderboards(v)
+                skipped += [f"{k}={e}" for e in lb_skipped]
+                if named:
+                    kv.append((k, v))
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
                     kept.append(k)
@@ -1404,8 +1464,8 @@ def import_settings(doc):
             if any(not isinstance(e, str) for e in v):
                 return fail(k + " should be a list of text.")
             if k == "live":
-                skipped += [f"live={e}" for e in v if e not in LEAGUES]
-                kv.append(("live", ",".join(e for e in v if e in LEAGUES)))
+                skipped += [f"live={e}" for e in v if e not in GAME_LEAGUES]
+                kv.append(("live", ",".join(e for e in v if e in GAME_LEAGUES)))
                 continue
             favs = []
             for e in v:

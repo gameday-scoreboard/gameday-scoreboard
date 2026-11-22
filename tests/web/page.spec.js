@@ -2569,16 +2569,25 @@ test("the Golf leaderboard card picks its tours with chips", async ({ page, requ
   const chips = row.locator("#golfChips .chip");
   await expect(chips).toHaveText(["PGA Tour", "LPGA", "DP World Tour"]);
   await chips.nth(2).click();
-  await expectSet(request, { golftours: "eur" });
+  await expectSet(request, { leaderboards: "golf:eur" });
   await expect(chips.nth(2)).toHaveAttribute("aria-pressed", "true");
   await expect(row).not.toHaveClass(/\bwaiting\b/);
   // A second tour comes back in tour order; a tap takes one off.
   await chips.nth(0).click();
-  await expectSet(request, { golftours: "pga,eur" });
+  await expectSet(request, { leaderboards: "golf:pga,eur" });
   await chips.nth(2).click();
-  await expectSet(request, { golftours: "pga" });
-  // Firmware from before the tours has no chips.
-  await reset(request, { golftours: null });
+  await expectSet(request, { leaderboards: "golf:pga" });
+  await chips.nth(0).click();
+  await expectSet(request, { leaderboards: "golf:" });
+  await expect((await deviceState(request)).leaderboards).toBe("golf:");
+  // The chips are the tours the panel names, whatever the page's own table has.
+  await reset(request, { lbleagues: [{ key: "pga", name: "PGA TOUR", sport: "golf" }, { key: "f1", name: "Formula 1", sport: "racing" }] });
+  await page.goto("/");
+  await tab(page, "display");
+  await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();
+  await expect(page.locator("#golfChips .chip")).toHaveText(["PGA TOUR"]);
+  // Firmware from before the setting has no chips.
+  await reset(request, { lbleagues: null });
   await page.goto("/");
   await tab(page, "display");
   await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();

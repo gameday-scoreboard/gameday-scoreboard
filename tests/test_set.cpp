@@ -83,7 +83,7 @@ struct Settings {
   std::string town;
   bool wxon{false};
   int wxunit{0};
-  uint8_t golftours{0};  // Prefs10::golf_tours
+  uint32_t leaderboards{0};  // the leaderboards blob, a bit per League (leaderboards.h)
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -237,8 +237,11 @@ void load(Settings &s, JsonObjectConst o) {
   flag("wxon", s.wxon);
   if (o["town"].is<const char *>())
     s.town = o["town"].as<const char *>();
-  if (o["golftours"].is<const char *>())
-    s.golftours = golf_tours_from_keys(o["golftours"].as<const char *>());
+  if (o["leaderboards"].is<const char *>()) {
+    LeaderboardsText t;
+    parse_leaderboards(o["leaderboards"].as<const char *>(), t);
+    s.leaderboards = leaderboards_apply(0, t);
+  }
   // As the backup lists them: {"next": true, ...}.
   for (JsonPairConst p : o["cards"].as<JsonObjectConst>())
     if (const CardRow *r = card_row(p.key().c_str()))
@@ -474,7 +477,13 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       break;
     case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::WXUNIT: s.wxunit = op.value; break;
-    case SetKind::GOLF_TOURS: s.golftours = (uint8_t) op.value; break;
+    case SetKind::LEADERBOARDS: {
+      LeaderboardsText t;
+      t.on = (uint32_t) op.value;
+      t.named = op.named;
+      s.leaderboards = leaderboards_apply(s.leaderboards, t);
+      break;
+    }
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -616,7 +625,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
-  doc["golftours"] = golf_tours_keys(s.golftours);
+  doc["leaderboards"] = leaderboards_text(s.leaderboards);
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -809,10 +818,37 @@ void test_parse_set() {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
                  parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
                  parse_set(key, "none", op, kFavMax) || parse_set(key, "next:1", op, kFavMax) ||
-                 parse_set(key, "clock", op, kFavMax) ||
+                 parse_set(key, "clock", op, kFavMax) || parse_set(key, "golf:", op, kFavMax) ||
                  parse_set(key, "fav", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
+}
+
+// leaderboards: a save names one sport, a backup every sport (leaderboards.h).
+void test_leaderboards() {
+  const uint32_t pga = league_bit32(League::PGA), lpga = league_bit32(League::LPGA), eur = league_bit32(League::EUR);
+  LeaderboardsText t;
+  SCHECK(parse_leaderboards("golf:eur,pga", t) && t.on == (pga | eur) && t.named == (pga | lpga | eur) && t.skipped.empty(),
+         "one sport's leagues");
+  SCHECK(leaderboards_text(leaderboards_apply(lpga, t)) == "golf:pga,eur", "a save replaces golf, in kLeagues order");
+  SCHECK(parse_leaderboards("golf:", t) && t.on == 0 && leaderboards_apply(pga | lpga, t) == 0, "golf: turns golf off");
+  SCHECK(parse_leaderboards("golf:pga,nfl,f1", t) && t.on == pga && t.skipped.size() == 2 && t.skipped[0] == "golf:nfl" &&
+             t.skipped[1] == "golf:f1",
+         "a league of another sport, or one this firmware lacks, is skipped");
+  SCHECK(parse_leaderboards("golf:lpga;racing:f1,nascar", t) && t.on == lpga && t.skipped.size() == 1 &&
+             t.skipped[0] == "racing",
+         "a backup's sport this firmware lacks is skipped whole");
+  SCHECK(!parse_leaderboards("racing:f1", t) && t.named == 0, "only unknown sports changes nothing");
+  SCHECK(!parse_leaderboards("football:nfl", t) && t.skipped.size() == 1, "a sport of games has no leaderboards");
+  SCHECK(!parse_leaderboards("", t) && !parse_leaderboards("pga,lpga", t), "empty, or golftours' old form");
+  SCHECK(parse_leaderboards("golf:pga;golf:eur", t) && t.on == eur, "a sport named twice takes its last part");
+  SCHECK(leaderboards_text(0) == "golf:", "every sport written out, even with none on");
+  SCHECK(leaderboard_mask_all() == (pga | lpga | eur), "the leaderboard leagues");
+  SetOp op;
+  SCHECK(parse_set("leaderboards", "golf:pga;racing:", op, kFavMax) && op.kind == SetKind::LEADERBOARDS &&
+             (uint32_t) op.value == pga && op.refused.size() == 1,
+         "set takes a backup's value and logs the rest");
+  SCHECK(!parse_set("leaderboards", "racing:f1", op, kFavMax), "set refuses a value with no sport it has");
 }
 
 void test_live_leagues() {
@@ -830,6 +866,20 @@ void test_live_leagues() {
   SCHECK(live_mask_from_keys("xfl,MLB") == 0, "unknown and upper-case keys");
   SCHECK(live_mask_from_keys("mlb,,mlb") == (1u << (uint8_t) League::MLB), "repeats and empty items");
   SCHECK(live_mask_from_keys("nhl,") == (1u << (uint8_t) League::NHL), "trailing comma");
+
+  // Leaderboard leagues have no games for Live games to follow.
+  const uint8_t pga = (uint8_t) League::PGA;
+  SCHECK(live_mask_from_keys("pga,lpga,eur") == 0, "live=pga is auto, not a list that scans nothing");
+  SCHECK(live_mask_from_keys("pga,nhl") == (1u << (uint8_t) League::NHL), "a golf key beside a league is dropped");
+  SCHECK(keys(live_leagues(0, {pga})) == "nfl", "auto with only a golfer followed reads NFL");
+  SCHECK(keys(live_leagues(0, {pga, (uint8_t) League::NBA})) == "nba", "auto skips a golfer's tour");
+  SCHECK(keys(live_leagues((uint16_t) (1u << pga), none)) == "nfl", "a saved golf-only mask reads NFL");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, {pga}))) == "nfl",
+         "Live games following only a golfer scans NFL");
+  SCHECK(live_mask_games((uint16_t) ((1u << pga) | (1u << (uint8_t) League::MLB))) == (1u << (uint8_t) League::MLB),
+         "a saved mask loses its golf bits");
+  RemoteTarget t;
+  SCHECK(!remote_parse("league:pga", t), "a remote button can't hold Live games on a golf tour");
 }
 
 // What each mode's scan reads is what its finals rotation walks.
@@ -845,12 +895,25 @@ void test_scan_leagues() {
   SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
 }
 
-// A panel in Favorites with none set runs Live games over every league.
+// A panel in Favorites with none set runs Live games over every league with games.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl,pga,lpga,eur", "every league, kLeagues order");
-  SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl",
-         "the no-team default's scan reads every league with games, golf left out");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl", "every game league, kLeagues order");
+  SCHECK(no_team_leagues().size() == kGameLeagueCount, "one entry per game league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
+         "the no-team default's scan reads its whole list");
+  // game_league_slot numbers the game leagues 0 to kGameLeagueCount - 1, once each.
+  bool seen[kGameLeagueCount] = {};
+  for (const auto &l : kLeagues) {
+    size_t s = game_league_slot((uint8_t) l.league);
+    if (leaderboard_sport(l.sport)) {
+      SCHECK(s == kGameLeagueCount, "%s has no game slot", l.key);
+    } else {
+      SCHECK(s < kGameLeagueCount && !seen[s], "%s has its own game slot", l.key);
+      if (s < kGameLeagueCount)
+        seen[s] = true;
+    }
+  }
+  SCHECK(game_league_slot(200) == kGameLeagueCount, "an unknown league has no game slot");
   const uint8_t favs = (uint8_t) Mode::FAVORITES;
   SCHECK(no_team_default(favs, false), "Favorites with none set");
   SCHECK(!no_team_default(favs, true), "Favorites with one set");
@@ -1420,6 +1483,7 @@ int run_set_tests(int &total_checks) {
   test_playlists();
   test_parse_set();
   test_cards();
+  test_leaderboards();
   test_live_leagues();
   test_scan_leagues();
   test_no_team();

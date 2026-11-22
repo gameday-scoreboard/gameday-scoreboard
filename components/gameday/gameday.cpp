@@ -462,6 +462,7 @@ void GamedayComponent::setup() {
       this->prefs7_.flags |= FAV7_TODAY;
     this->pref7_.save(&this->prefs7_);  // same reason as Prefs4 above
   }
+  this->prefs7_.live_mask = ::espn::live_mask_games(this->prefs7_.live_mask);
   this->pref8_ = global_preferences->make_preference<Prefs8>(fnv1_hash("gameday_prefs8_v1"));
   if (!this->pref8_.load(&this->prefs8_)) {
     // Firmware before this had one switch for every sport: start baseball
@@ -498,6 +499,7 @@ void GamedayComponent::setup() {
     this->prefs10_.sched_applied = this->prefs10_.sched_before = 0;
     this->prefs10_.sched_sport = this->prefs10_.sched_mode = 0;
   }
+  this->load_leaderboards_();
   this->pref11_ = global_preferences->make_preference<Prefs11>(fnv1_hash("gameday_prefs11_v1"));
   if (!this->pref11_.load(&this->prefs11_))
     this->prefs11_ = Prefs11{};  // each button on its own favorite
@@ -6689,7 +6691,19 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["town"] = (const char *) this->wx_.town;
   doc["wxon"] = this->weather_on();
   doc["wxunit"] = this->wx_.unit;
-  doc["golftours"] = ::espn::golf_tours_keys(this->prefs10_.golf_tours);
+  // Every leaderboard sport's leagues, "golf:pga,lpga", and the leagues the
+  // page and the apps draw as chips. lbleagues has its own key so the backup
+  // never copies the list (settings_doc.h settings_from_state).
+  doc["leaderboards"] = ::espn::leaderboards_text(this->leaderboards_);
+  JsonArray lb = doc["lbleagues"].to<JsonArray>();
+  for (const auto &info : ::espn::kLeagues) {
+    if (!::espn::leaderboard_sport(info.sport))
+      continue;
+    JsonObject o = lb.add<JsonObject>();
+    o["key"] = info.key;
+    o["name"] = ::espn::leaderboard_name(info.league);
+    o["sport"] = ::espn::kSportKeys[(int) info.sport];
+  }
   const bool wx_f = this->wx_fahrenheit_();
   if (this->wx_.town[0] != '\0') {
     JsonObject wx = doc["wx"].to<JsonObject>();
@@ -7719,11 +7733,45 @@ void GamedayComponent::apply_top25_job_() {
 
 // ---- The golf card (golf.h) --------------------------------------------------
 
-// The tours the card shows: the ones picked on the card, and each tour a
-// followed golfer plays on (a golfer has no team entry, so the favorites
-// entries never carry one).
+void GamedayComponent::load_leaderboards_() {
+  this->lb_pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("gameday_leaderboards_v1"));
+  if (this->lb_pref_.load(&this->leaderboards_)) {
+    this->leaderboards_ &= ::espn::leaderboard_mask_all();
+    return;
+  }
+  // First boot with the blob: a test build's Golf card tours move over once.
+  this->leaderboards_ = 0;
+  for (int s = 0; s < ::espn::kGolfSlots; s++)
+    if (this->prefs10_.old_golf_tours & (1u << s))
+      this->leaderboards_ |= ::espn::league_bit32(::espn::golf_slot_league(s));
+  if (this->prefs10_.old_golf_tours != 0) {
+    ESP_LOGI(TAG, "Leaderboards: %s, from the Golf card's tours", ::espn::leaderboards_text(this->leaderboards_).c_str());
+    this->prefs10_.old_golf_tours = 0;
+    this->pref10_.save(&this->prefs10_);
+  }
+  this->lb_pref_.save(&this->leaderboards_);
+}
+
+void GamedayComponent::set_leaderboards_(uint32_t mask) {
+  mask &= ::espn::leaderboard_mask_all();
+  if (mask == this->leaderboards_)
+    return;
+  this->leaderboards_ = mask;
+  this->lb_pref_.save(&this->leaderboards_);
+  this->sync_prefs_();
+  this->golf_since_ms_ = 0;  // a new tour's first turn comes a minute from now
+  ESP_LOGI(TAG, "Leaderboards: %s", ::espn::leaderboards_text(mask).c_str());
+  this->rebuild_state_(&this->last_fields_);
+}
+
+// The tours the card shows: the ones picked in the leaderboards setting, and
+// each tour a followed golfer plays on (a golfer has no team entry, so the
+// favorites entries never carry one).
 uint8_t GamedayComponent::golf_slots_() const {
-  uint8_t slots = this->prefs10_.golf_tours & (uint8_t) ((1u << ::espn::kGolfSlots) - 1);
+  uint8_t slots = 0;
+  for (uint8_t s = 0; s < ::espn::kGolfSlots; s++)
+    if (this->leaderboards_ & ::espn::league_bit32(::espn::golf_slot_league(s)))
+      slots |= (uint8_t) (1u << s);
   for (uint8_t i = 0; i < FAV_MAX; i++) {
     if (this->fav_id_(i) == 0)
       continue;
@@ -8838,13 +8886,15 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
       case ::espn::SetKind::WXUNIT:
         this->set_wx_unit((uint8_t) op.value);
         break;
-      case ::espn::SetKind::GOLF_TOURS:
-        if (this->prefs10_.golf_tours != (uint8_t) op.value) {
-          this->prefs10_.golf_tours = (uint8_t) op.value;
-          this->pref10_.save(&this->prefs10_);
-          this->golf_since_ms_ = 0;  // a new tour's first turn comes a minute from now
-        }
+      case ::espn::SetKind::LEADERBOARDS: {
+        for (const auto &bad : op.refused)
+          ESP_LOGW(TAG, "Leaderboards: no %s here, leaving it", bad.c_str());
+        ::espn::LeaderboardsText t;
+        t.on = (uint32_t) op.value;
+        t.named = op.named;
+        this->set_leaderboards_(::espn::leaderboards_apply(this->leaderboards_, t));
         break;
+      }
       case ::espn::SetKind::NIGHT:
         night.on = op.on ? 1 : 0;
         break;

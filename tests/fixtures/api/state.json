@@ -176,7 +176,12 @@
   "town": "75019",
   "wxon": true,
   "wxunit": 0,
-  "golftours": "pga",
+  "leaderboards": "golf:pga",
+  "lbleagues": [
+    {"key": "pga", "name": "PGA Tour", "sport": "golf"},
+    {"key": "lpga", "name": "LPGA", "sport": "golf"},
+    {"key": "eur", "name": "DP World Tour", "sport": "golf"}
+  ],
   "wx": {
     "place": "Coppell, Texas",
     "lat": 32.9546,

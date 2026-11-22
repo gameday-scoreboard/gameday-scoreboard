@@ -113,33 +113,6 @@ inline uint32_t golf_read_ms(const GolfBoard &b, int64_t now_epoch) {
   return kGolfIdleReadMs;
 }
 
-// The tours the owner picked on the Golf leaderboard card, a bit per slot,
-// from "pga,lpga" (golf league keys; others are skipped) and back, in slot
-// order.
-inline uint8_t golf_tours_from_keys(const std::string &keys) {
-  uint8_t mask = 0;
-  size_t start = 0;
-  while (start < keys.size()) {
-    size_t comma = keys.find(',', start);
-    std::string key = keys.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
-    start = comma == std::string::npos ? keys.size() : comma + 1;
-    const LeagueInfo *info = league_by_key(key.c_str());
-    if (info != nullptr && golf_slot(info->league) >= 0)
-      mask |= (uint8_t) (1u << golf_slot(info->league));
-  }
-  return mask;
-}
-inline std::string golf_tours_keys(uint8_t mask) {
-  std::string out;
-  for (int s = 0; s < kGolfSlots; s++)
-    if (mask & (1u << s)) {
-      if (!out.empty())
-        out += ',';
-      out += league_key(golf_slot_league(s));
-    }
-  return out;
-}
-
 // "PGA R2", over the rows; a final reads "PGA FINAL", and before the first
 // round just the tour.
 inline std::string golf_header(const GolfBoard &b) {

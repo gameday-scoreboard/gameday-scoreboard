@@ -48,6 +48,7 @@
 #include "board_text.h"
 #include "health.h"
 #include "hook.h"
+#include "leaderboards.h"
 #include "line_score.h"
 #include "live_scan.h"
 #include "message.h"
@@ -1095,14 +1096,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int8_t sched_before;
     uint8_t sched_mode;
     uint8_t sched_sport;  // the sport row playing before, 1 + Sport; 0 = none
-    // The tours the Golf leaderboard card shows without a followed golfer,
-    // a bit per golf slot (golf.h). Was spare, so older firmware picks none.
-    uint8_t golf_tours;
+    // Test builds kept the Golf card's tours here, a bit per tour (PGA,
+    // LPGA, DP World Tour). The first boot with the leaderboards blob moves
+    // them there and zeroes this byte, so it is spare again.
+    uint8_t old_golf_tours;
     uint8_t spare[3];
   } __attribute__((packed));
   static_assert(sizeof(Prefs10) == 104, "Prefs10 is a fixed-size blob");
   ESPPreferenceObject pref10_;
   Prefs10 prefs10_{};
+  // The leaderboards setting (leaderboards.h): a bit per League, in its own blob.
+  ESPPreferenceObject lb_pref_;
+  uint32_t leaderboards_{0};
+  void load_leaderboards_();
+  void set_leaderboards_(uint32_t mask);
   // The options of playlist n (1..count); every other list has none.
   ::espn::ListOpt list_opt_(uint8_t n) const;
   // Every 10 s from loop(): a schedule that starts puts its playlist on, one

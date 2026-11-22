@@ -73,7 +73,7 @@ inline SettingType setting_type(const char *k) {
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
                                       "sport", "town", "after", "remote1", "remote2", "remote3", "remote4",
-                                      "golftours"};
+                                      "leaderboards"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -127,7 +127,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "odds",     "leaders",  "field",    "winbar",      "spark",      "opp",      "celebrate",   "bigplays",    "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
-                                      "top25",    "golftours", "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
+                                      "top25",    "leaderboards", "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4",
                                       "fxlists"};
@@ -229,7 +229,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
-        if (live_mask & (1u << (uint8_t) l.league))
+        if (live_mask_games(live_mask) & (1u << (uint8_t) l.league))
           live.add(l.key);
     } else if (strcmp(k, "tz") == 0) {
       if (s["tz_name"].is<const char *>())
@@ -420,6 +420,17 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             out.kept.push_back(k);
           continue;
         }
+        if (k == "leaderboards") {
+          // A sport or league from newer firmware is left out and listed;
+          // the sports this one has still restore.
+          parse_set(k, text, op, target.fav_max);
+          for (const auto &s : op.refused)
+            out.skipped.push_back(k + "=" + s);
+          op.refused.clear();
+          if (op.named == 0)
+            continue;
+          break;
+        }
         if (strncmp(k.c_str(), "remote", 6) == 0 && !parse_set(k, text, op, target.fav_max)) {
           // A team or sport this firmware doesn't know: left out and listed.
           out.skipped.push_back(k + "=" + text);
@@ -440,7 +451,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           std::string keys;
           for (JsonVariantConst e : list) {
             const char *lk = e.as<const char *>();
-            if (league_by_key(lk) == nullptr) {
+            const LeagueInfo *info = league_by_key(lk);
+            if (info == nullptr || leaderboard_sport(info->sport)) {
               out.skipped.push_back("live=" + std::string(lk));
               continue;
             }

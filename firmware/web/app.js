@@ -56,6 +56,14 @@
     eur: { prefix: "DPWT", tab: "DPWT", name: "DP World Tour", path: "golf/eur", logo: "golf", byId: true, scan: "", golf: true },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
+  // The leaderboards setting, "golf:pga,lpga;racing:" (leaderboards.h), as a
+  // Map of sport to its league keys and back. A save names one sport; the
+  // panel keeps the others as they are.
+  const lbParse = (v) => new Map(String(v || "").split(";").filter(Boolean).map((p) => {
+    const i = p.indexOf(":");
+    return [i < 0 ? p : p.slice(0, i), i < 0 ? [] : p.slice(i + 1).split(",").filter(Boolean)];
+  }));
+  const lbText = (m) => [...m].map(([sport, keys]) => sport + ":" + keys.join(",")).join(";");
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
   const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
@@ -681,7 +689,12 @@
       return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    town: String, wxon: (v) => v === "1", wxunit: Number, golftours: String,
+    town: String, wxon: (v) => v === "1", wxunit: Number,
+    leaderboards: (v) => {
+      const m = lbParse(S && S.leaderboards);
+      for (const [sport, keys] of lbParse(v)) m.set(sport, keys);
+      return lbText(m);
+    },
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -1230,26 +1243,27 @@
   // A card's own settings go inside its row; while it is off they wait here,
   // still in the page, since the renders look their fields up by id.
   const cardExtras = () => ({ weather: $("#wxBox"), golf: $("#golfBox") });
-  // The Golf leaderboard card's tours (golftours, golf.h slot order). Built
-  // once and updated in place, as the Live games chips are.
-  const GOLF_TOURS = Object.keys(LEAGUES).filter((lg) => LEAGUES[lg].golf);
-  const golfTours = () => String(S.golftours || "").split(",").filter((k) => GOLF_TOURS.includes(k));
+  // The Golf leaderboard card's tours: the panel's golf leaderboard leagues
+  // (state lbleagues), saved as leaderboards=golf:... Built once and updated
+  // in place, as the Live games chips are.
+  const golfTours = () => (S.lbleagues || []).filter((l) => l.sport === "golf").map((l) => l.key);
   const renderGolfChips = () => {
-    $("#golfBox").hidden = S.golftours === undefined;  // firmware from before the tours
+    $("#golfBox").hidden = !Array.isArray(S.lbleagues);  // firmware from before the setting
+    if (!Array.isArray(S.lbleagues)) return;
     const host = $("#golfChips");
-    const on = golfTours();
+    const on = lbParse(S.leaderboards).get("golf") || [];
     if (host.children.length) {
       for (const b of host.children) setOn(b, on.includes(b.dataset.lg), "aria-pressed");
       return;
     }
-    for (const lg of GOLF_TOURS) {
-      const b = el("button", "chip", LEAGUES[lg].name);
-      b.dataset.lg = lg;
-      setOn(b, on.includes(lg), "aria-pressed");
+    for (const l of S.lbleagues.filter((x) => x.sport === "golf")) {
+      const b = el("button", "chip", l.name);
+      b.dataset.lg = l.key;
+      setOn(b, on.includes(l.key), "aria-pressed");
       b.onclick = () => {
-        const cur = golfTours();
-        const next = cur.includes(lg) ? cur.filter((k) => k !== lg) : cur.concat([lg]);
-        setGD({ golftours: GOLF_TOURS.filter((k) => next.includes(k)).join(",") });
+        const cur = lbParse(S.leaderboards).get("golf") || [];
+        const next = cur.includes(l.key) ? cur.filter((k) => k !== l.key) : cur.concat([l.key]);
+        setGD({ leaderboards: "golf:" + golfTours().filter((k) => next.includes(k)).join(",") });
       };
       host.appendChild(b);
     }
