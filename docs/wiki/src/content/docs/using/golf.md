@@ -25,7 +25,9 @@ A golfer you follow:
 
 A golfer who isn't playing this week simply isn't on the board. They come back the next time they play.
 
-The search needs the phone or computer you're using to reach ESPN. The panel itself only stores each golfer's ESPN number.
+Golf has no games, so it never joins [Live games](/using/modes/). A panel in Live games that follows only golfers watches the NFL until you pick leagues, and a golf tour can't be picked there.
+
+The search needs the phone or computer you're using to reach ESPN. The panel keeps each golfer's name with their ESPN number, so the golfer shows by name on any phone or computer you open the device page on, and in a [backup](/using/backup/).
 
 ## When it shows
 
