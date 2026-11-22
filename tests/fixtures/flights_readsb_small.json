@@ -1,0 +1,8 @@
+{"now":1795298268.0,"messages":1204331,"aircraft":[
+{"hex":"ae1234","flight":"RCH123  ","t":"C17","alt_baro":4000,"gs":300.0,"track":90.0,"baro_rate":1500,"squawk":"7700","emergency":"none","lat":33.0,"lon":-96.95,"seen_pos":0.0,"dbFlags":1,"seen":0.1,"rssi":-12.0},
+{"hex":"a1b2c3","flight":"SWA99   ","alt_baro":30000,"gs":450.0,"track":270.0,"seen":3.0,"rssi":-28.0},
+{"hex":"a4d5e6","flight":"DAL1     ","alt_baro":11000,"gs":250.0,"track":10.0,"lat":32.97,"lon":-96.98,"seen_pos":75.0,"seen":2.0},
+{"hex":"a7f8a9","flight":"UAL5    ","alt_baro":35000,"gs":480.0,"track":180.0,"lat":34.0,"lon":-96.99,"seen_pos":0.5,"seen":0.5},
+{"hex":"A0B0C0","flight":"AAL7    ","t":"B738","alt_baro":"ground","gs":3.0,"lat":32.90,"lon":-97.04,"seen_pos":1.0,"seen":1.0},
+{"hex":"~2b0c41","r":"N12345","t":"P28A","alt_geom":2500,"gs":120.0,"track":180.0,"geom_rate":-800,"squawk":"1200","emergency":"minfuel","lat":32.93,"lon":-97.0,"seen_pos":2.0,"seen":2.0}
+]}

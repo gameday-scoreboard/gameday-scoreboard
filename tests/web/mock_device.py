@@ -118,6 +118,11 @@ FX_WAIT_DEFAULT = int(re.search(r"kFxWaitDefault = (\d+);", FX_H)[1])
 AFTER = tuple(re.findall(r'return "(\w+)";', re.search(r"after_word\(.*?\n}\n",
                          (REPO / "components/gameday/wake.h").read_text(encoding="utf-8"), re.S).group(0)))
 FAV_MAX = int(re.search(r"FAV_MAX = (\d+);", (REPO / "components/gameday/gameday.h").read_text(encoding="utf-8"))[1])
+# The Flights page's distance steps (flights.h): miles, km and the default step.
+FLIGHTS_H = (REPO / "components/gameday/flights.h").read_text(encoding="utf-8")
+FL_RADIUS_MI = [int(x) for x in re.search(r"kFlRadiusMi\[kFlRadiusSteps\] = \{(.*?)\};", FLIGHTS_H)[1].split(",")]
+FL_RADIUS_KM = [int(x) for x in re.search(r"kFlRadiusKm\[kFlRadiusSteps\] = \{(.*?)\};", FLIGHTS_H)[1].split(",")]
+FL_RADIUS_DEFAULT = int(re.search(r"kFlRadiusDefault = (\d+);", FLIGHTS_H)[1])
 # PanelLayout refuses a count past this (gameday-common.yaml).
 MAX_COLS = int(re.search(r"^\s*max_cols: (\d+)", (REPO / "firmware/gameday-common.yaml").read_text(encoding="utf-8"),
                          re.M)[1])
@@ -183,6 +188,12 @@ INITIAL = {
     # The weather card (weather.h): the town, the switch and the degrees (0
     # auto, 1 F, 2 C); wx once a town is set.
     "town": "", "wxon": False, "wxunit": 0,
+    # The Flights page (flights.h): distance step, facing, receiver, whether
+    # an adsb.lol key is set (the key itself is never sent), and fl, what the
+    # page is doing: rebuilt by state_doc() from these.
+    "flrad": FL_RADIUS_DEFAULT, "flface": 0, "flrx": "", "flkey_set": False,
+    "fl": {"on": False, "src": "adsblol", "n": 0, "heard": 0, "read_s": -1, "wait_s": 0, "err": "none",
+           "place": "", "radius": ""},
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
@@ -224,7 +235,7 @@ ENTITIES = [
     {"id": "number/Scroll Speed", "domain": "number", "name": "Scroll Speed", "state": "5", "value": "5",
      "min_value": "1", "max_value": "10", "step": "1"},
     {"id": "select/Select Page", "domain": "select", "name": "Select Page", "state": "Scoreboard",
-     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board"]},
+     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board", "Flights"]},
     # The Smart board's rows (firmware/pages/smart_board.yaml), which Home Assistant fills
     *({"id": f"text/Smart board row {n}", "domain": "text", "name": f"Smart board row {n}", "state": "",
        "value": "", "max_length": 255} for n in range(1, 5)),
@@ -386,11 +397,18 @@ def add_picture(raw):
     return 200, {"ok": True, "slot": slot}
 
 
+# The adsb.lol key the page set: kept here, never in the state (set_key_secret).
+FL_KEY = [""]
+
+
 def reset_state(overrides):
     PIC_FILES.clear()
     STATE.clear()
     STATE.update(copy.deepcopy(INITIAL))
     STATE.update(overrides)
+    FL_KEY[0] = STATE.pop("flkey", "")
+    if FL_KEY[0]:
+        STATE["flkey_set"] = True
     # A null override drops the key, like firmware that doesn't send it.
     for k in [k for k, v in STATE.items() if v is None]:
         del STATE[k]
@@ -515,7 +533,30 @@ def state_doc():
     STATE.setdefault("live_only", "")
     STATE["remote"] = [{"v": b.get("v", "fav"), "gone": remote_gone(i + 1, b.get("v", "fav"))}
                        for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
+    if "fl" in STATE:
+        # The weather town is home; the distance in the weather's units (auto is miles for these Texas towns).
+        fl = STATE["fl"]
+        step = STATE.get("flrad", FL_RADIUS_DEFAULT)
+        km = STATE.get("wxunit") == 2
+        fl["radius"] = f"{FL_RADIUS_KM[step]} km" if km else f"{FL_RADIUS_MI[step]} mi"
+        fl["place"] = (STATE.get("wx") or {}).get("place", "")
+        fl["src"] = "receiver" if STATE.get("flrx") else "adsblol"
+        # It reads only while Flights is up on a lit screen. The first read
+        # finds the planes near the Coppell fixture (flights_adsblol_point_dfw25.json):
+        # 11 within the distance, 8 of them on the card's list. A test that
+        # sets read_s or err keeps them.
+        light = next(e for e in ENTITIES if e["domain"] == "light")
+        fl["on"] = entity("Select Page")["value"] == "Flights" and light["state"] == "ON"
+        if fl["on"] and fl["place"] and fl["read_s"] < 0 and fl["err"] == "none":
+            fl.update(n=8, heard=11, read_s=20)
+        elif not fl["on"] and fl["read_s"] < 0:
+            fl.update(n=0, heard=0)
     return STATE
+
+
+def fl_text_ok(v):
+    """set_request.h fl_text_ok(): printable ASCII with no spaces, at most kFlTextMax bytes."""
+    return len(v.encode()) <= LIMITS["kFlTextMax"] and all("!" <= c <= "~" for c in v)
 
 
 def cards_on():
@@ -1015,6 +1056,19 @@ def apply_set(kv):
             if v in ("0", "1", "2"):
                 STATE["wxunit"] = int(v)
                 wx_units()
+        elif k == "flrad":
+            if whole_int(v) and 0 <= int(v) < len(FL_RADIUS_MI):
+                STATE["flrad"] = int(v)
+        elif k == "flface":
+            if whole_int(v) and 0 <= int(v) <= 8:
+                STATE["flface"] = int(v)
+        elif k == "flrx":
+            if fl_text_ok(v):
+                STATE["flrx"] = v
+        elif k == "flkey":
+            if fl_text_ok(v):
+                FL_KEY[0] = v
+                STATE["flkey_set"] = bool(v)
         elif k == "nick":
             # utf8_only(): parse_qs turns bytes that aren't UTF-8 into U+FFFD; the firmware drops them.
             STATE["nick"] = message_clean(v.replace("\ufffd", ""), LIMITS["kNickMax"], False)
@@ -1218,7 +1272,8 @@ def import_settings(doc):
     for k in SET_KEYS:
         if k not in doc or doc[k] is None:
             continue
-        if (k == "sport" and not favorites) or k in ("keepfav", "fxlist"):  # set_key_once: no setting to restore
+        # set_key_once: no setting to restore; set_key_secret: never in a backup
+        if (k == "sport" and not favorites) or k in ("keepfav", "fxlist", "flkey"):
             continue
         v, kind = doc[k], SETTINGS_TYPES.get(k)
         if k == "lists":
@@ -1350,6 +1405,7 @@ def import_settings(doc):
             lo, hi = {"mode": (0, LIMITS["kModeCount"] - 1), "panels": (1, MAX_COLS), "collide": (0, 1),
                       "msgevery": (0, LIMITS["kMsgEveryMax"]), "nightlevel": (1, 255), "celebrate": (0, 2),
                       "pregame": (0, LIMITS["kPregameMax"]), "wxunit": (0, 2),
+                      "flrad": (0, len(FL_RADIUS_MI) - 1), "flface": (0, 8),
                       "list": (0, LIMITS["kListMax"]), "fxlist": (0, LIMITS["kFxListMax"])}.get(k, (None, None))
             if k in ranges:
                 lo, hi = LIMITS[ranges[k][0]], LIMITS[ranges[k][1]]
@@ -1381,7 +1437,7 @@ def import_settings(doc):
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
                     kept.append(k)
-            elif k in ("nightstart", "nightend") and not night_time(v):
+            elif (k in ("nightstart", "nightend") and not night_time(v)) or (k == "flrx" and not fl_text_ok(v)):
                 return fail(k + " isn't a value the panel takes.")
             else:
                 kv.append((k, v))
@@ -1423,7 +1479,7 @@ def import_settings(doc):
                 skipped.append(f"{name}={doc[name]}")
                 continue
             numbers[ent] = doc[name]
-    known = (set(SET_KEYS) - {"keepfav", "fxlist"}) | {"schema", "version", "name", "brightness", "scroll"}
+    known = (set(SET_KEYS) - {"keepfav", "fxlist", "flkey"}) | {"schema", "version", "name", "brightness", "scroll"}
     skipped += [k for k in doc if k not in known]
     restart = any(k == "panels" and int(v) != STATE.get("panels") for k, v in kv)
     # Applied in kSetKeys order; favs slot by slot, keeping empty slots.
@@ -1556,6 +1612,23 @@ def selftest():
     for e in ENTITIES:
         e.update(next(x for x in ENTITIES_INITIAL if x["id"] == e["id"]))
     print(f"settings backup: {bad} failures in all")
+
+    # The adsb.lol key goes in and never comes back out, in the state or a backup.
+    reset_state({})
+    apply_set([("flkey", "sekrit-key-123")])
+    if not state_doc()["flkey_set"] or "sekrit" in json.dumps(state_doc()) or "sekrit" in json.dumps(settings_doc()):
+        bad += 1
+        print("FAIL the adsb.lol key wasn't kept, or came back in the state or the backup")
+    apply_set([("flkey", "two words")])
+    apply_set([("flrx", "a b")])
+    if FL_KEY[0] != "sekrit-key-123" or STATE["flrx"] != "":
+        bad += 1
+        print("FAIL a key or receiver address with a space was taken")
+    apply_set([("flkey", "")])
+    if state_doc()["flkey_set"]:
+        bad += 1
+        print("FAIL an empty key didn't clear it")
+    reset_state({})
 
     for path, want in (("/button/Reset%20Wi-Fi/press", True), ("/light/Game%20Day%20Scoreboard%202f6a70/turn_off", True),
                        ("/number/Scroll%20Speed/set", True), ("/update/Firmware/install", True),

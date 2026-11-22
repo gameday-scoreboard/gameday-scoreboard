@@ -243,4 +243,13 @@ inline int health_json(char *buf, size_t size, const Health &h) {
                   h.psram_kb, rssi, espn, h.version, (long long) h.built, h.channel);
 }
 
+// The "ages" object in /gameday/state: seconds since the last weather and
+// plane reads (-1 for none yet) and the seconds left before Flights tries
+// again. The cached document's own read_s values stop counting between
+// rebuilds, so the page takes these.
+inline int ages_json(char *buf, size_t size, int32_t wx_read_s, int32_t fl_read_s, uint32_t fl_wait_s) {
+  return snprintf(buf, size, "{\"wx_read_s\":%ld,\"fl_read_s\":%ld,\"fl_wait_s\":%lu}", (long) wx_read_s,
+                  (long) fl_read_s, (unsigned long) fl_wait_s);
+}
+
 }  // namespace espn

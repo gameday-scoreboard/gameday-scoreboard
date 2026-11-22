@@ -122,6 +122,12 @@ RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
 // them, but accepts curl.
 static const char *const USER_AGENT = "curl/8.0";
+// adsb.lol and adsbdb ask callers to say who they are.
+#ifdef ESPHOME_PROJECT_VERSION
+static const char *const FL_USER_AGENT = "GameDayScoreboard/" ESPHOME_PROJECT_VERSION " (+https://gameday-scoreboard.com)";
+#else
+static const char *const FL_USER_AGENT = "GameDayScoreboard (+https://gameday-scoreboard.com)";
+#endif
 
 static const uint32_t MINUTE = 60 * 1000;
 static const uint32_t SCHEDULE_INTERVAL = 6 * 60 * MINUTE;
@@ -518,6 +524,7 @@ void GamedayComponent::setup() {
   this->load_nick_();
   this->load_hook_();
   this->load_wx_();
+  this->load_fl_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -1498,10 +1505,13 @@ void GamedayComponent::keep_favorite_(uint8_t league, uint32_t id) {
 }
 
 void GamedayComponent::remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx) {
-  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_ || this->wake_fx_) &&
-      !this->wake_state_.held) {
+  if (page == ::espn::RemoteKind::SCOREBOARD &&
+      (this->wake_clock_ || this->wake_smart_ || this->wake_fx_ || this->wake_fl_) && !this->wake_state_.held) {
     ESP_LOGI(TAG, "After the game: the remote asked for the scoreboard, so no %s until the next game's final",
-             this->wake_clock_ ? "clock" : this->wake_smart_ ? "Smart board" : "effects");
+             this->wake_clock_   ? "clock"
+             : this->wake_smart_ ? "Smart board"
+             : this->wake_fl_    ? "Flights"
+                                 : "effects");
     this->wake_state_.held = true;
     this->wake_tick_();
   }
@@ -2344,6 +2354,7 @@ void GamedayComponent::loop() {
   this->season_tick_();
   this->picture_tick_();
   this->fx_between_tick_();  // after the cards' ticks, so a card's turn takes the screen at once
+  this->fl_tick_();
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
   if (millis() - this->ha_tick_ms_ >= 15000) {
@@ -2394,6 +2405,17 @@ void GamedayComponent::loop() {
           this->news_fail_ms_ = this->gave_up_ms_;
         if (this->job_.need_season)
           this->season_entry_(this->job_.season_league, this->job_.season_id, true)->fail_ms = this->gave_up_ms_;
+        if (this->job_.need_fl == 2) {
+          this->fl_fail_ms_ = this->gave_up_ms_;
+          this->fl_backoff_ms_ = this->fl_fail_.fail(false, 0, random_uint32());
+          this->fl_err_ = ::espn::FlErr::NET;
+        } else if (this->job_.need_fl == 1) {
+          this->fl_rx_fails_ = ::espn::miss_count_after(this->fl_rx_fails_);
+          this->fl_err_ = ::espn::FlErr::NET;
+        } else if (this->job_.need_fl == 3) {
+          this->fl_route_fail_ms_ = this->gave_up_ms_;
+          this->fl_route_backoff_ms_ = this->fl_route_fail_.fail(false, 0, random_uint32());
+        }
         if (this->job_.need_wx >= 3) {
           this->kick_fail_ms_ = this->gave_up_ms_;
           this->kick_backoff_ms_ = this->kick_fail_.fail(false, 0, random_uint32());
@@ -2471,13 +2493,26 @@ void GamedayComponent::loop() {
     this->start_season_job_();
     return;
   }
+  // The Flights page's reads, only while it is up on a lit screen, one at a
+  // time like the rest. On a picked page there are no ESPN reads to keep out
+  // of the way of; up After the game, they wait for a gap between ESPN's
+  // reads as the weather's do.
+  if (this->fl_on_ && network::is_connected() &&
+      (paused || (!side_wait && ::espn::wx_gap_ok(this->espn_quiet_ms_()))) &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
+    const uint8_t fl = this->fl_due_();
+    if (fl != 0) {
+      this->start_fl_job_(fl);
+      return;
+    }
+  }
   // The weather's lookup and forecast reads, the same way: between ESPN
   // reads, never alongside one, and not while a game the panel follows is
   // live. They also wait while the next ESPN read is near, so even a read
   // that runs to its timeout is done before ESPN's turn (wx_gap_).
   // A town typed on the device page is looked up on a picked page too.
-  if ((!paused || this->wx_lookup_due_) && !side_wait && network::is_connected() &&
-      ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
+  if ((!paused || this->wx_lookup_due_) && network::is_connected() &&
+      (paused || (!side_wait && ::espn::wx_gap_ok(this->espn_quiet_ms_()))) &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     if (this->wx_due_()) {
       this->start_wx_job_();
@@ -3251,8 +3286,9 @@ void GamedayComponent::wake_tick_() {
   const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) && !live_other;
   const bool smart = ::espn::wake_smart(this->wake_, this->wake_state_, in) && !live_other;
   const bool fx = ::espn::wake_effects(this->wake_, this->wake_state_, in) && !live_other;
+  const bool flights = ::espn::wake_flights(this->wake_, this->wake_state_, in) && !live_other;
   const bool changed = clock != this->wake_clock_ || smart != this->wake_smart_ || fx != this->wake_fx_ ||
-                       was_asleep != this->wake_state_.asleep;
+                       flights != this->wake_fl_ || was_asleep != this->wake_state_.asleep;
   if (fx != this->wake_fx_) {
     // fx_between_tick_ puts the page up or takes it down on its next check.
     ESP_LOGI(TAG, fx ? "After the game: effects until the next game is near"
@@ -3267,6 +3303,12 @@ void GamedayComponent::wake_tick_() {
                         : "After the game: back to the scoreboard");
     this->wake_smart_ = smart;
     this->fire_action_("smartboard");
+  }
+  if (flights != this->wake_fl_) {
+    ESP_LOGI(TAG, flights ? "After the game: Flights until the next game is near"
+                          : "After the game: back to the scoreboard");
+    this->wake_fl_ = flights;
+    this->fire_action_("flights");
   }
   if (clock != this->wake_clock_) {
     ESP_LOGI(TAG, clock ? "After the game: the clock until the next game is near"
@@ -3645,7 +3687,8 @@ void GamedayComponent::restart_board_(bool keep_cards, bool owner_pick) {
     if (at.has_value())
       page = f->page->option_at(*at);
   }
-  return ::espn::showing_now(page, this->fx_ours_, this->sb_pinned_ != nullptr && *this->sb_pinned_);
+  return ::espn::showing_now(page, this->fx_ours_, this->sb_pinned_ != nullptr && *this->sb_pinned_,
+                             this->fl_pinned_ != nullptr && *this->fl_pinned_);
 }
 
 void GamedayComponent::showing_tick_() {
@@ -3762,7 +3805,7 @@ void GamedayComponent::board_changed_(bool board_cleared) {
 
 ::espn::JobKind GamedayComponent::job_kind_() const {
   const Job &j = this->job_;
-  if (j.need_msg || j.need_top25 || j.need_news || j.need_wx != 0 || j.need_clock)
+  if (j.need_msg || j.need_top25 || j.need_news || j.need_wx != 0 || j.need_fl != 0 || j.need_clock)
     return ::espn::JobKind::SIDE;
   if (j.need_season)
     return ::espn::JobKind::SEASON;
@@ -4529,6 +4572,10 @@ void GamedayComponent::run_job_() {
     this->run_wx_job_();
     return;
   }
+  if (j.need_fl != 0) {
+    this->run_fl_job_();
+    return;
+  }
   if (j.need_clock) {
     // Any status will do, a 404 or a 503 carries the date just the same.
     std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
@@ -4703,6 +4750,10 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_wx != 0) {
     this->apply_wx_job_();  // a forecast is the same whatever the board follows
+    return;
+  }
+  if (j.need_fl != 0) {
+    this->apply_fl_job_();  // the sky is the same whatever the board follows
     return;
   }
   if (j.need_clock) {
@@ -6135,6 +6186,361 @@ void GamedayComponent::day_tick_() {
   this->redraw_board_();
 }
 
+// ---- The Flights page (flights.h, flights_page.h) -----------------------------
+
+// Built for size, as flights.h is.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
+
+void GamedayComponent::load_fl_() {
+  this->fl_pref_ = global_preferences->make_preference<PrefsFl>(fnv1_hash("gameday_fl_v1"));
+  if (!this->fl_pref_.load(&this->fl_)) {
+    this->fl_ = PrefsFl{};
+    this->fl_.rad = ::espn::kFlRadiusDefault;
+  }
+  // A later firmware's blob, or damage, goes back to the defaults field by field.
+  if (this->fl_.rad >= ::espn::kFlRadiusSteps)
+    this->fl_.rad = ::espn::kFlRadiusDefault;
+  if (this->fl_.face > 8)
+    this->fl_.face = 0;
+  this->fl_.rx[::espn::kFlTextMax] = '\0';
+  this->fl_.key[::espn::kFlTextMax] = '\0';
+  if (!::espn::fl_text_ok(this->fl_.rx))
+    memset(this->fl_.rx, 0, sizeof(this->fl_.rx));
+  if (!::espn::fl_text_ok(this->fl_.key))
+    memset(this->fl_.key, 0, sizeof(this->fl_.key));
+}
+
+void GamedayComponent::set_fl_(const PrefsFl &p) {
+  if (memcmp(&p, &this->fl_, sizeof(p)) == 0)
+    return;
+  const bool rx = strcmp(p.rx, this->fl_.rx) != 0, key = strcmp(p.key, this->fl_.key) != 0;
+  const bool rad = p.rad != this->fl_.rad;
+  this->fl_ = p;
+  if (rx) {
+    // A new receiver gets its own tries, starting now.
+    this->fl_rx_fails_ = 0;
+    this->fl_rx_ms_ = 0;
+    ESP_LOGI(TAG, "Flights: receiver %s", p.rx[0] != '\0' ? p.rx : "none, adsb.lol only");
+  }
+  if (key) {
+    // A new key can lift a limit, so adsb.lol is asked again now.
+    this->fl_fail_ms_ = 0;
+    this->fl_fail_.clear();
+    this->fl_lol_ms_ = 0;
+    ESP_LOGI(TAG, "Flights: adsb.lol key %s", p.key[0] != '\0' ? "set" : "cleared");
+  }
+  if (rad) {
+    // Read the new distance now; until then the page draws the planes within it.
+    this->fl_rx_ms_ = 0;
+    this->fl_lol_ms_ = 0;
+  }
+  char radius[16];
+  this->fl_radius_text_(radius, sizeof(radius));
+  ESP_LOGI(TAG, "Flights: within %s, facing %s", radius,
+           p.face == 0 ? "any way" : ::espn::compass8((p.face - 1) * 45.0f));
+  this->fl_pref_.save(&this->fl_);
+  this->sync_prefs_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::fl_radius_text_(char *out, size_t n) const {
+  const bool metric = this->fl_metric_();
+  snprintf(out, n, "%u %s", (unsigned) (metric ? ::espn::kFlRadiusKm[this->fl_.rad] : ::espn::kFlRadiusMi[this->fl_.rad]),
+           metric ? "km" : "mi");
+}
+
+uint32_t GamedayComponent::fl_wait_s_() const {
+  if (this->fl_fail_ms_ == 0)
+    return 0;
+  const uint32_t since = millis() - this->fl_fail_ms_;
+  return since < this->fl_backoff_ms_ ? (this->fl_backoff_ms_ - since) / 1000 : 0;
+}
+
+int GamedayComponent::fl_card_index_() const {
+  if (this->fl_card_[0] == '\0')
+    return -1;
+  const ::espn::Sky &sky = this->fl_data_.sky;
+  for (uint8_t i = 0; i < sky.n; i++)
+    if (strcmp(sky.p[i].hex, this->fl_card_) == 0)
+      return i;
+  return -1;
+}
+
+const GamedayComponent::FlRouteSlot *GamedayComponent::fl_route_slot_(const char *call) const {
+  if (!::espn::airline_call(call))
+    return nullptr;
+  const uint32_t now = millis();
+  for (const auto &r : this->fl_data_.routes) {
+    if (r.call[0] == '\0' || strcmp(r.call, call) != 0)
+      continue;
+    return now - r.at_ms < (r.route.found ? ::espn::kFlRouteHitMs : ::espn::kFlRouteMissMs) ? &r : nullptr;
+  }
+  return nullptr;
+}
+
+// Whether the Flights page is up on a lit screen: only then does it read.
+void GamedayComponent::fl_tick_() {
+  const uint32_t now = millis();
+  if (now - this->fl_tick_ms_ < 250)
+    return;
+  this->fl_tick_ms_ = now;
+  bool on = false;
+  const FxState *f = this->fx_state_;
+  if (f != nullptr && f->page != nullptr) {
+    auto at = f->page->active_index();
+    const char *page = at.has_value() ? f->page->option_at(*at) : nullptr;
+    on = page != nullptr && strcmp(page, "Flights") == 0;
+  }
+  on = on && this->power_on_ && this->display_on() && this->guard_brightness(255) != 0;
+  if (on == this->fl_on_)
+    return;
+  this->fl_on_ = on;
+  this->fl_on_ms_ = now;
+  ESP_LOGI(TAG, on ? "Flights: up, reading the planes near home" : "Flights: down, no more reads");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+// Main loop: the read due now, if any. The receiver first, every 10 s; after
+// two failures in a row adsb.lol takes over and the receiver is tried once
+// a minute until it answers. adsb.lol every 60 s, 30 s with a key, and not
+// while a failure's wait runs. Then the card's plane's route, when adsbdb
+// hasn't been asked about its callsign lately.
+uint8_t GamedayComponent::fl_due_() {
+  if (this->busy_ || !this->wx_place_known_() || this->demo_playing_())
+    return 0;
+  const uint32_t now = millis();
+  if (this->fl_.rx[0] != '\0') {
+    const uint32_t gap = this->fl_receiver_() ? ::espn::kFlReceiverMs : ::espn::kFlReceiverRetryMs;
+    if (this->fl_rx_ms_ == 0 || now - this->fl_rx_ms_ >= gap)
+      return 1;
+  }
+  if (!this->fl_receiver_()) {
+    const bool waiting = this->fl_fail_ms_ != 0 && now - this->fl_fail_ms_ < this->fl_backoff_ms_;
+    const uint32_t gap = this->fl_.key[0] != '\0' ? ::espn::kFlLolKeyMs : ::espn::kFlLolMs;
+    if (!waiting && (this->fl_lol_ms_ == 0 || now - this->fl_lol_ms_ >= gap))
+      return 2;
+  }
+  if (this->fl_read_ms_ == 0 || now - this->fl_read_ms_ >= ::espn::kFlStaleMs)
+    return 0;
+  const int card = this->fl_card_index_();
+  if (card < 0)
+    return 0;
+  const char *call = this->fl_data_.sky.p[card].call;
+  if (!::espn::airline_call(call) || this->fl_route_slot_(call) != nullptr)
+    return 0;
+  if (this->fl_route_ms_ != 0 && now - this->fl_route_ms_ < ::espn::kFlRouteGapMs)
+    return 0;
+  if (this->fl_route_fail_ms_ != 0 && now - this->fl_route_fail_ms_ < this->fl_route_backoff_ms_)
+    return 0;
+  return 3;
+}
+
+void GamedayComponent::start_fl_job_(uint8_t kind) {
+  ::espn::reset_in_place(this->job_);
+  Job &j = this->job_;
+  j.generation = this->generation_;
+  j.need_fl = kind;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  if (kind == 3) {
+    const int card = this->fl_card_index_();
+    if (card >= 0)
+      memcpy(j.fl_call, this->fl_data_.sky.p[card].call, sizeof(j.fl_call));
+    j.fl_url = ::espn::route_url(j.fl_call);
+    this->fl_route_ms_ = now;
+  } else {
+    j.fl_lat = this->wx_.lat;
+    j.fl_lon = this->wx_.lon;
+    j.fl_radius_km = this->fl_radius_km_();
+    if (kind == 1) {
+      j.fl_url = ::espn::receiver_url(this->fl_.rx);
+      this->fl_rx_ms_ = now;
+    } else {
+      j.fl_url = ::espn::point_url(j.fl_lat, j.fl_lon, ::espn::radius_nm_for(j.fl_radius_km));
+      j.fl_key = this->fl_.key;
+      this->fl_lol_ms_ = now;
+    }
+  }
+  this->start_worker_();
+}
+
+// Worker task.
+void GamedayComponent::run_fl_job_() {
+  Job &j = this->job_;
+  static const char *const kWhat[] = {"", "the receiver", "adsb.lol", "adsbdb"};
+  const char *what = kWhat[j.need_fl < 4 ? j.need_fl : 0];
+  if (j.fl_url.empty())
+    return;
+  std::vector<http_request::Header> headers = {{"User-Agent", FL_USER_AGENT}, {"Accept", "application/json"}};
+  if (!j.fl_key.empty())
+    headers.push_back({"x-api-key", j.fl_key});
+  ESP_LOGD(TAG, "Flights: reading %s", what);
+  auto container = this->http_->get(j.fl_url, headers, {"retry-after", "x-ratelimit-reset"});
+  if (container == nullptr) {
+    ESP_LOGW(TAG, "Flights: no answer from %s", what);
+    return;
+  }
+  j.fl_status = container->status_code;
+  if (container->status_code != 200) {
+    if (j.need_fl == 3 && container->status_code == 404) {
+      j.fl_ok = true;  // adsbdb doesn't know the callsign: a Route not found
+    } else {
+      ESP_LOGW(TAG, "Flights: HTTP %d from %s", container->status_code, what);
+      if (::espn::is_throttle_status(container->status_code)) {
+        j.fl_wait_ms = ::espn::parse_retry_after_ms(container->get_response_header("retry-after"));
+        if (j.fl_wait_ms == 0)
+          j.fl_wait_ms = ::espn::parse_retry_after_ms(container->get_response_header("x-ratelimit-reset"));
+      }
+    }
+    container->end();
+    return;
+  }
+  ContainerReader reader(container, this->fl_bytes_);
+  struct Source : ::espn::WxSource {
+    explicit Source(ContainerReader &r) : r(r) {}
+    int read() override { return this->r.read(); }
+    size_t readBytes(char *dst, size_t n) override { return this->r.readBytes(dst, n); }
+    ContainerReader &r;
+  } source(reader);
+  const bool ok = j.need_fl == 3 ? ::espn::parse_route_from(source, j.fl_route)
+                                 : ::espn::parse_sky_from(source, j.fl_lat, j.fl_lon, j.fl_radius_km, j.fl_sky);
+  container->end();
+  if (!ok) {
+    ESP_LOGW(TAG, "Flights: %s's answer didn't parse after %u bytes", what, (unsigned) reader.total());
+    return;
+  }
+  j.fl_ok = true;
+}
+
+void GamedayComponent::apply_fl_job_() {
+  Job &j = this->job_;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  if (j.need_fl == 3) {
+    if (!j.fl_ok) {
+      this->fl_route_fail_ms_ = now;
+      this->fl_route_backoff_ms_ =
+          this->fl_route_fail_.fail(::espn::is_throttle_status(j.fl_status), j.fl_wait_ms, random_uint32());
+      ESP_LOGW(TAG, "Flights: route lookup failed, next in %us", (unsigned) (this->fl_route_backoff_ms_ / 1000));
+      return;
+    }
+    this->fl_route_fail_ms_ = 0;
+    this->fl_route_fail_.clear();
+    FlData &d = this->fl_data_;
+    FlRouteSlot *slot = nullptr;
+    for (auto &r : d.routes)
+      if (strcmp(r.call, j.fl_call) == 0)
+        slot = &r;
+    if (slot == nullptr) {
+      slot = &d.routes[d.route_next];
+      d.route_next = (uint8_t) ((d.route_next + 1) % ::espn::kFlRouteCache);
+    }
+    memcpy(slot->call, j.fl_call, sizeof(slot->call));
+    slot->at_ms = now;
+    slot->route = j.fl_route;
+    if (j.fl_route.found)
+      ESP_LOGI(TAG, "Flights: %s is listed %s to %s", j.fl_call, j.fl_route.from, j.fl_route.to);
+    else
+      ESP_LOGI(TAG, "Flights: adsbdb has no route for %s", j.fl_call);
+    return;
+  }
+  const bool rx = j.need_fl == 1;
+  if (!j.fl_ok) {
+    this->fl_err_ = j.fl_status == 0     ? ::espn::FlErr::NET
+                    : j.fl_status == 429 ? ::espn::FlErr::LIMIT
+                                         : ::espn::FlErr::HTTP;
+    if (rx) {
+      this->fl_rx_fails_ = ::espn::miss_count_after(this->fl_rx_fails_);
+      ESP_LOGW(TAG, "Flights: the receiver failed %u time(s) in a row%s", (unsigned) this->fl_rx_fails_,
+               this->fl_rx_fails_ == ::espn::kFlReceiverFails ? ", adsb.lol until it answers again" : "");
+    } else {
+      this->fl_fail_ms_ = now;
+      if (j.fl_status == 429 && j.fl_wait_ms > 0) {
+        // A daily limit can run for hours, past the backoff's hour: wait what it says.
+        this->fl_fail_.fail(true, 0, 0);
+        this->fl_backoff_ms_ = std::min(j.fl_wait_ms, ::espn::kFlLimitMaxMs);
+      } else {
+        this->fl_backoff_ms_ =
+            this->fl_fail_.fail(::espn::is_throttle_status(j.fl_status), j.fl_wait_ms, random_uint32());
+      }
+      ESP_LOGW(TAG, "Flights: adsb.lol failed %u time(s) in a row, next try in %us", (unsigned) this->fl_fail_.streak,
+               (unsigned) (this->fl_backoff_ms_ / 1000));
+    }
+    this->rebuild_state_(&this->last_fields_);
+    return;
+  }
+  if (rx) {
+    if (this->fl_rx_fails_ >= ::espn::kFlReceiverFails)
+      ESP_LOGI(TAG, "Flights: the receiver answers again");
+    this->fl_rx_fails_ = 0;
+  } else {
+    this->fl_fail_ms_ = 0;
+    this->fl_fail_.clear();
+  }
+  this->fl_err_ = ::espn::FlErr::NONE;
+  if (j.fl_lat != this->wx_.lat || j.fl_lon != this->wx_.lon ||
+      j.fl_radius_km != this->fl_radius_km_())
+    return;  // the town or the distance changed meanwhile; the next read is for the new ones
+  ::espn::Sky &sky = this->fl_data_.sky;
+  sky = j.fl_sky;
+  this->fl_read_ms_ = now;
+  const int card = ::espn::pick_card(sky, this->fl_card_, this->fl_.face);
+  if (card >= 0)
+    memcpy(this->fl_card_, sky.p[card].hex, sizeof(this->fl_card_));
+  else
+    this->fl_card_[0] = '\0';
+  ESP_LOGD(TAG, "Flights: %u heard within the distance from %s, the card %s", (unsigned) sky.heard,
+           rx ? "the receiver" : "adsb.lol", card >= 0 ? ::espn::plane_label(sky.p[card]) : "none");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::flights_view(::espn::FlView &v, bool wide) const {
+  const uint32_t now = millis();
+  ::espn::FlPageIn in;
+  in.home = this->wx_place_known_();
+  in.fresh = this->fl_read_ms_ != 0 && now - this->fl_read_ms_ < ::espn::kFlStaleMs;
+  in.err = this->fl_err_;
+  in.wait_s = this->fl_wait_s_();
+  char radius[16];
+  this->fl_radius_text_(radius, sizeof(radius));
+  in.radius = radius;
+  in.metric = this->fl_metric_();
+  in.wide = wide;
+  in.list_turn = ((now - this->fl_on_ms_) / ::espn::kFlTurnMs) % 2 == 1;
+  // The read's planes moved on to now (a copy: the read stays as it came),
+  // nearest first, within the distance as it is set now.
+  ::espn::Sky sky;
+  int card = -1;
+  const ::espn::Route *route = nullptr;
+  if (in.home && in.fresh) {
+    const float secs = (float) (now - this->fl_read_ms_) / 1000.0f;
+    const float radius_km = this->fl_radius_km_();
+    const ::espn::Sky &read = this->fl_data_.sky;
+    for (uint8_t i = 0; i < read.n; i++) {
+      ::espn::Plane p = read.p[i];
+      ::espn::plane_advance(p, secs, this->wx_.lat, this->wx_.lon);
+      if (p.dist_km <= radius_km)
+        ::espn::detail::sky_insert(sky, p);
+    }
+    for (uint8_t i = 0; i < sky.n && this->fl_card_[0] != '\0'; i++)
+      if (strcmp(sky.p[i].hex, this->fl_card_) == 0)
+        card = i;
+    if (card < 0)
+      card = ::espn::pick_card(sky, nullptr, this->fl_.face);
+    if (card >= 0) {
+      const FlRouteSlot *r = this->fl_route_slot_(sky.p[card].call);
+      if (r != nullptr && ::espn::route_fits(r->route, sky.p[card]))
+        route = &r->route;
+    }
+  }
+  ::espn::fl_compose(in, sky, card, route, v);
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
+
 // ---- finals rotation ------------------------------------------------------------
 
 // Main loop: the next day the rotation needs read, if any. Going back, per
@@ -6614,7 +7020,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["wakelead"] = this->wake_.lead;
   doc["after"] = ::espn::after_word(this->wake_.after);
   doc["wake_now"] =
-      ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_, this->wake_fx_);
+      ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_, this->wake_fx_, this->wake_fl_);
 #if defined(USE_UPDATE)
   // Left out where nothing can be installed (the demo build), so the page
   // and the app hide the switch.
@@ -6721,6 +7127,35 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
         }
       }
     }
+  }
+  // The Flights page (flights.h): its settings, the adsb.lol key only as
+  // whether one is set, and fl, what the page is doing. on: it is up on a
+  // lit screen, so it reads. src: where its planes come from now,
+  // "receiver" or "adsblol". n: the planes it has from the last read (the
+  // nearest 16), heard: all of them within the distance. read_s: seconds
+  // since that read, -1 for none since the start. wait_s: what is left of
+  // adsb.lol's wait after a failure. err: the last read's failure, "none",
+  // "net" (no answer), "limit" (adsb.lol's limit) or "http". place: the
+  // weather town it centers on, "" for none. radius: the distance as the
+  // page says it.
+  doc["flrad"] = this->fl_.rad;
+  doc["flface"] = this->fl_.face;
+  doc["flrx"] = (const char *) this->fl_.rx;
+  doc["flkey_set"] = this->fl_.key[0] != '\0';
+  {
+    const bool fresh = this->fl_read_ms_ != 0 && millis() - this->fl_read_ms_ < ::espn::kFlStaleMs;
+    char radius[16];
+    this->fl_radius_text_(radius, sizeof(radius));
+    JsonObject fl = doc["fl"].to<JsonObject>();
+    fl["on"] = this->fl_on_;
+    fl["src"] = this->fl_receiver_() ? "receiver" : "adsblol";
+    fl["n"] = fresh ? this->fl_data_.sky.n : 0;
+    fl["heard"] = fresh ? this->fl_data_.sky.heard : 0;
+    fl["read_s"] = this->fl_read_ms_ != 0 ? (int32_t) ((millis() - this->fl_read_ms_) / 1000) : -1;
+    fl["wait_s"] = this->fl_wait_s_();
+    fl["err"] = ::espn::fl_err_word(this->fl_err_);
+    fl["place"] = (const char *) this->wx_.place;
+    fl["radius"] = (const char *) radius;
   }
   // The game events (ha_events.h): the webhook's address, "" for none, the
   // reminder's lead in minutes, and with an address, how the posts went:
@@ -6971,6 +7406,15 @@ void GamedayComponent::wifi_tick_() {
     this->wifi_hist_.sample(now_s, up, this->wifi_rssi_);
   }
 #endif
+}
+
+std::string GamedayComponent::ages_json_() const {
+  const uint32_t now = millis();
+  const int32_t wx = this->wx_read_ms_ != 0 ? (int32_t) ((now - this->wx_read_ms_) / 1000) : -1;
+  const int32_t fl = this->fl_read_ms_ != 0 ? (int32_t) ((now - this->fl_read_ms_) / 1000) : -1;
+  char buf[80];
+  ::espn::ages_json(buf, sizeof(buf), wx, fl, this->fl_wait_s_());
+  return buf;
 }
 
 std::string GamedayComponent::wifi_json_() {
@@ -8174,6 +8618,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       body.append(health.data(), health.size());
       body += ",\"wifi\":";
       body.append(wifi.data(), wifi.size());
+      body += ",\"ages\":";
+      body += this->ages_json_();
       body += '}';
     }
     request->send(200, "application/json", body.c_str());
@@ -8404,7 +8850,8 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   for (const auto &p : kv) {
     ::espn::SetOp op;
     if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
-      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
+      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(),
+               ::espn::set_key_secret(p.first.c_str()) ? "(hidden)" : p.second.c_str());
       continue;
     }
     ops.push_back(std::move(op));
@@ -8444,6 +8891,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
   ::espn::WakePrefs wake = this->wake_;
+  PrefsFl fl = this->fl_;
   // list= with lists= names the playlist playing after the change (a rename
   // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
   // sport= picking a sport row takes over list= in the same request (the
@@ -8681,6 +9129,20 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
       case ::espn::SetKind::AFTER:
         wake.after = (uint8_t) op.value;
         break;
+      case ::espn::SetKind::FL_RADIUS:
+        fl.rad = (uint8_t) op.value;
+        break;
+      case ::espn::SetKind::FL_FACE:
+        fl.face = (uint8_t) op.value;
+        break;
+      case ::espn::SetKind::FL_RX:
+        memset(fl.rx, 0, sizeof(fl.rx));
+        memcpy(fl.rx, op.text.data(), std::min(op.text.size(), sizeof(fl.rx) - 1));
+        break;
+      case ::espn::SetKind::FL_KEY:
+        memset(fl.key, 0, sizeof(fl.key));
+        memcpy(fl.key, op.text.data(), std::min(op.text.size(), sizeof(fl.key) - 1));
+        break;
     }
   }
   if (::espn::night_keep_hours(night, this->night_))
@@ -8688,6 +9150,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
              ::espn::night_clock12(night.start).c_str(), ::espn::night_clock12(night.end).c_str());
   this->set_night_(night);
   this->set_wake_(wake);
+  this->set_fl_(fl);
   if (hook_url_set || pregame >= 0)
     this->set_hook_(hook_url_set ? &hook_url : nullptr, pregame);
   if (wx_on >= 0)

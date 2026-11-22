@@ -38,7 +38,9 @@ contributors; read it too.
   notes (CI refuses a PR that adds one). A phone app feature that waits
   for an app update uses `:::note[Coming in the next app update]`.
   `cd docs/wiki && npm run build` must pass.
-- PR descriptions say what changed and how it was tested, nothing else: no
+- PR descriptions say what changed, how it was tested, and who the change
+  builds on (the data sources and projects it credits, with links), nothing
+  else: no
   links to private repos or trackers, no card numbers or `Closes` lines
   for them, no private notes. No AI attribution or Claude-headed
   comments in PR text, comments or reviews. Reviews and progress notes go
