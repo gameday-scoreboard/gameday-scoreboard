@@ -14,9 +14,11 @@ Flash (the OTA image):
 Static internal RAM and other heap: absolute caps in budget.json. Going
 over a cap fails. Raising a static_ram or heap cap in a pull request needs
 the owner's approval.
-JSON documents (PSRAM on the panel): no cap; fails when one figure grows more
-than max_growth.json against the base. max_growth also limits static_ram and
-heap growth.
+JSON documents (PSRAM on the panel): every read fails over budget.json's
+json_ceiling, or over its own host.<read>.json where it has one (the reads
+that take a whole day's or season's document). Also fails when one figure
+grows more than max_growth.json against the base. max_growth also limits
+static_ram and heap growth.
 
 The owner approves with a commit status on a commit of the pull request:
 context budget/owner-approval, state success, description exactly
@@ -321,6 +323,11 @@ def check(budget: dict, sizes: dict, base: dict, base_label: str, absent_ok: fro
                     if base_budget is not None and cap is not None and old_cap is not None and cap > old_cap:
                         need(metric, name, "cap_raise", cap - old_cap,
                              f"{what} cap raised by {cap - old_cap:,} B ({old_cap:,} to {cap:,})")
+                if metric == "json":
+                    ceiling = limits[name].get("json", budget.get("json_ceiling"))
+                    fig.update(cap=ceiling)
+                    if ceiling is not None and now > ceiling:
+                        errors.append(f"{what} is {now:,} B, over its ceiling of {ceiling:,} B by {now - ceiling:,} B")
                 if fig["growth"] is not None and metric in growth_cap and metric != "flash" \
                         and fig["growth"] > growth_cap[metric]:
                     errors.append(f"{what} grew {fig['growth']:,} B ({was:,} to {now:,} B) against {base_label}; "
@@ -445,11 +452,11 @@ def summary(report: dict) -> str:
         if f:
             lines.append(f"| {name} | {fmt(f['base'])} | {fmt(f['now'])} | {change(f)} | {fmt(f.get('cap'))} | {left(f)} |")
     lines += ["", "### ESPN reads on the host", "",
-              "| Read | Heap | Change | Cap | Left | JSON | Change |", "|---|--:|--:|--:|--:|--:|--:|"]
+              "| Read | Heap | Change | Cap | Left | JSON | Change | Ceiling |", "|---|--:|--:|--:|--:|--:|--:|--:|"]
     for name, v in report["host"].items():
         h, j = v.get("heap") or {}, v.get("json") or {}
         lines.append(f"| {name} | {fmt(h.get('now'))} | {change(h)} | {fmt(h.get('cap'))} | {left(h)} | "
-                     f"{fmt(j.get('now'))} | {change(j)} |")
+                     f"{fmt(j.get('now'))} | {change(j)} | {fmt(j.get('cap'))} |")
 
     lines += ["", "### ELF sections", ""]
     for name, v in report["variants"].items():
@@ -709,6 +716,20 @@ def selftest() -> None:
     assert pr(now=sizes(850_000, js=150))["ok"]
     js = pr(now=sizes(850_000, js=151))
     assert len(js["errors"]) == 1 and "grew 51 B" in js["errors"][0]
+
+    # JSON: every read under json_ceiling, or under its own json entry in
+    # place of it, higher or lower.
+    ceil_bud = {**budget, "json_ceiling": 120}
+    assert pr(bud=ceil_bud, now=sizes(850_000, js=120))["ok"]
+    over = pr(bud=ceil_bud, now=sizes(850_000, js=121))
+    assert over["errors"] == ["x JSON documents (PSRAM on the panel) is 121 B, over its ceiling of 120 B by 1 B"], over
+    assert over["host"]["x"]["json"]["cap"] == 120 and "| 121 | +21 | 120 |" in summary(over)
+    own = {**ceil_bud, "host": {"x": {"heap": 20, "json": 140}}}
+    assert pr(bud=own, now=sizes(850_000, js=140), base_bud=own)["ok"]
+    assert "over its ceiling of 140 B" in pr(bud=own, now=sizes(850_000, js=141), base_bud=own)["errors"][0]
+    tight = {**ceil_bud, "host": {"x": {"heap": 20, "json": 110}}}
+    assert not pr(bud=tight, now=sizes(850_000, js=111), base_bud=tight)["ok"]
+    assert pr(now=sizes(850_000, js=150))["host"]["x"]["json"]["cap"] is None
 
     # The release block can't be stretched in a change without approval.
     stretched = {**budget, "release": {"tag": "v1", "flash": {"a": 820_000}, "allowance_flash": 120_000}}

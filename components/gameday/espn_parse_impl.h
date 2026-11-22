@@ -638,109 +638,360 @@ template<typename TInput> bool parse_rankings(TInput &input, Poll &out) {
   return true;
 }
 
-// Parses a tour's scoreboard document (golf.h): the first event with a
-// field, its state and round, and the leaderboard rows the panel keeps —
-// the top kGolfTopRows, plus the followed golfers (fav_ids, this tour's
-// athlete ids) wherever they stand, up to kGolfFavRows more. The document
-// is 90-600 KB, most of it statistics and hole-by-hole linescores for the
-// whole field; the filter keeps only what a row needs, and a golfer's thru
-// is the count of hole linescores the filter lets through for the current
-// round (the PGA Tour document carries them, the LPGA and DP World Tour
-// ones do not, so their rows have no thru — the document's own limit, not
-// an invented one). Competitors arrive in leaderboard order.
-template<typename TInput>
-bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fav_count, GolfBoard &out) {
-  JsonDocument filter(detail::json_allocator());
-  JsonObject ev = filter["events"].add<JsonObject>();
-  ev["name"] = true;
-  ev["date"] = true;
-  ev["endDate"] = true;
-  ev["status"]["type"]["state"] = true;
-  JsonObject comp = ev["competitions"].add<JsonObject>();
-  comp["status"]["period"] = true;
-  comp["status"]["type"]["state"] = true;
-  comp["status"]["type"]["detail"] = true;
-  comp["status"]["type"]["shortDetail"] = true;
-  JsonObject c = comp["competitors"].add<JsonObject>();
+namespace detail {
+
+// One byte of parse_golf's input, -1 at the end: a string in the host tests,
+// or a stream with read() such as the panel's ContainerReader.
+template<typename T> inline int next_byte(T &in, size_t & /*at*/) { return in.read(); }
+inline int next_byte(std::string &s, size_t &at) { return at < s.size() ? (unsigned char) s[at++] : -1; }
+inline int next_byte(const std::string &s, size_t &at) { return at < s.size() ? (unsigned char) s[at++] : -1; }
+
+// Walks a JSON document as it streams in, so a parse can step through its
+// containers and deserialize one array element at a time. It is also the
+// reader deserializeJson takes for each element. ArduinoJson stops right
+// after an object's closing brace or a string's closing quote, so the walk
+// carries on from there. It accepts and refuses what ArduinoJson does when
+// it reads the whole document through a filter.
+template<typename TInput> class JsonWalk {
+ public:
+  explicit JsonWalk(TInput &in) : in_(in), key_(json_allocator()), sink_(json_allocator()) {}
+
+  // ArduinoJson's reader interface.
+  int read() {
+    const int c = this->look_();
+    this->held_ = false;
+    return c;
+  }
+  size_t readBytes(char *dst, size_t n) {
+    size_t k = 0;
+    for (int c; k < n && (c = this->read()) >= 0; k++)
+      dst[k] = (char) c;
+    return k;
+  }
+
+  bool failed() const { return this->failed_; }
+
+  // The next character after white space, left unread. -1 at the end.
+  int peek() {
+    int c;
+    while ((c = this->look_()) == ' ' || c == '\t' || c == '\r' || c == '\n')
+      this->held_ = false;
+    return c;
+  }
+
+  // Steps into the object or array that comes next. limit is the nesting
+  // left, counted as ArduinoJson's NestingLimit counts it, and becomes the
+  // limit of the members.
+  bool enter(char open, uint8_t &limit) {
+    if (this->failed_ || limit == 0 || this->peek() != open)
+      return this->fail_();
+    this->held_ = false;
+    limit--;
+    return true;
+  }
+
+  // Reads the next member's key into key[n]. A key that doesn't fit, or
+  // holds a NUL, reads as "" so it matches none. False after the closing
+  // brace and on an error (failed()).
+  bool next_key(bool &first, char *key, size_t n) {
+    if (!this->step_(first, '}'))
+      return false;
+    const int c = this->peek();
+    key[0] = '\0';
+    if (c == '"' || c == '\'') {
+      // ArduinoJson reads a quoted key, so its escapes decode as they do in
+      // a whole-document read.
+      if (deserializeJson(this->key_, *this))
+        return this->fail_();
+      const JsonString k = this->key_.template as<JsonString>();
+      if (k.size() < n && strlen(k.c_str()) == k.size())
+        memcpy(key, k.c_str(), k.size() + 1);
+    } else {
+      // ArduinoJson also takes a key with no quotes, made of letters,
+      // digits and the characters between '_' and 'z'.
+      size_t len = 0;
+      for (int k; (k = this->look_()) > 0 && is_key_char_(k); len++) {
+        if (len + 1 < n)
+          key[len] = (char) k;
+        this->held_ = false;
+      }
+      if (len == 0)
+        return this->fail_();
+      key[len < n ? len : 0] = '\0';
+    }
+    if (this->peek() != ':')
+      return this->fail_();
+    this->held_ = false;
+    return true;
+  }
+
+  // Moves to the array's next element. False after the closing bracket and
+  // on an error.
+  bool next_item(bool &first) { return this->step_(first, ']'); }
+
+  // Skips the value that comes next, with limit as for enter().
+  // A null filter keeps nothing.
+  bool skip(uint8_t limit) { return this->value(this->sink_, JsonVariantConst(), limit); }
+
+  // Deserializes the value that comes next into doc through filter. The
+  // walk reads a number, true, false or null itself and leaves doc empty,
+  // because ArduinoJson reads one character past a number and the walk
+  // would lose it.
+  bool value(JsonDocument &doc, JsonVariantConst filter, uint8_t limit) {
+    int c = this->peek();
+    if (this->failed_)
+      return false;
+    if (c == '{' || c == '[' || c == '"' || c == '\'') {
+      if (deserializeJson(doc, *this, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(limit)))
+        return this->fail_();
+      return true;
+    }
+    doc.clear();
+    if (c == 't' || c == 'f' || c == 'n') {
+      for (const char *word = c == 't' ? "true" : c == 'f' ? "false" : "null"; *word != '\0'; word++) {
+        if (this->look_() != *word)
+          return this->fail_();
+        this->held_ = false;
+      }
+      return true;
+    }
+    // Take the characters a number can have, as ArduinoJson does. A value
+    // the filter skips may have none.
+    char number[64];
+    size_t len = 0;
+    for (; (c = this->look_()) > 0 && is_number_char_(c); len++) {
+      if (len < sizeof(number))
+        number[len] = (char) c;
+      this->held_ = false;
+    }
+    if (!(filter == true))
+      return true;
+    // A value the filter keeps must be a number ArduinoJson reads, in at
+    // most 63 characters.
+    if (len == 0 || len >= sizeof(number) || deserializeJson(doc, number, len))
+      return this->fail_();
+    return true;
+  }
+
+ private:
+  int look_() {
+    if (!this->held_) {
+      const int c = next_byte(this->in_, this->at_);
+      // ArduinoJson ends a document at a NUL too.
+      this->byte_ = c > 0 ? c : -1;
+      this->held_ = true;
+    }
+    return this->byte_;
+  }
+  bool fail_() {
+    this->failed_ = true;
+    return false;
+  }
+  static bool is_number_char_(int c) {
+    return (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.' || c == 'e' || c == 'E';
+  }
+  static bool is_key_char_(int c) { return (c >= '0' && c <= '9') || (c >= '_' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+  // Moves past the comma before the next member or element, or reads the
+  // closing character and returns false.
+  bool step_(bool &first, char close) {
+    if (this->failed_)
+      return false;
+    const int c = this->peek();
+    if (c == close) {
+      this->held_ = false;
+      return false;
+    }
+    if (!first) {
+      if (c != ',')
+        return this->fail_();
+      this->held_ = false;
+    }
+    first = false;
+    return true;
+  }
+
+  TInput &in_;
+  size_t at_{0};
+  int byte_{-1};
+  bool held_{false};
+  bool failed_{false};
+  JsonDocument key_;   // the key next_key() read
+  JsonDocument sink_;  // what a skipped value is read into: always empty
+};
+
+// The fields of one golfer that parse_golf reads.
+inline void fill_golf_competitor_filter(JsonObject c) {
   c["id"] = true;
   c["order"] = true;
   c["score"] = true;
   c["athlete"]["shortName"] = true;
   c["athlete"]["displayName"] = true;
-  // A team event (the Zurich Classic's pairs) lists teams, not golfers:
-  // "Smalley/Springer", with the pair's score.
+  // A team event (the Zurich Classic's pairs) lists teams with the pair's
+  // score: "Smalley/Springer".
   c["team"]["displayName"] = true;
   JsonObject ls = c["linescores"].add<JsonObject>();
   ls["period"] = true;
   ls["displayValue"] = true;
-  ls["linescores"].add<JsonObject>()["period"] = true;
-  JsonDocument doc(detail::json_allocator());
-  DeserializationError err = deserializeJson(doc, input, DeserializationOption::Filter(filter),
-                                             DeserializationOption::NestingLimit(20));
-  if (err)
-    return false;
-  // The event to show: an in-progress one wins, else the first with a field.
-  JsonObjectConst pick;
-  for (JsonObjectConst e : doc["events"].as<JsonArrayConst>()) {
-    JsonObjectConst cp = e["competitions"][0];
-    if (cp["competitors"].as<JsonArrayConst>().size() == 0)
-      continue;
-    if (pick.isNull())
-      pick = e;
-    if (detail::str_or_empty(e["status"]["type"]["state"]) == "in") {
-      pick = e;
-      break;
+  // Only the number of holes counts, so each hole is kept empty.
+  ls["linescores"].add<JsonObject>();
+}
+
+// An event's or its competition's status.
+inline void fill_golf_status_filter(JsonObject s) {
+  s["period"] = true;
+  s["type"]["state"] = true;
+  s["type"]["detail"] = true;
+  s["type"]["shortDetail"] = true;
+}
+
+// The whole document's filter: everything parse_golf reads. The fuzz seeds
+// cut the fixtures down with it.
+inline void fill_golf_filter(JsonDocument &f) {
+  JsonObject ev = f["events"].add<JsonObject>();
+  ev["name"] = true;
+  ev["date"] = true;
+  ev["endDate"] = true;
+  fill_golf_status_filter(ev["status"].to<JsonObject>());
+  JsonObject comp = ev["competitions"].add<JsonObject>();
+  fill_golf_status_filter(comp["status"].to<JsonObject>());
+  fill_golf_competitor_filter(comp["competitors"].add<JsonObject>());
+}
+
+// One golfer's line for a round, kept until the competition's status says
+// which round is current. The status comes after the competitors.
+struct GolfLine {
+  int period{0};
+  uint8_t thru{0};
+  char today[6]{};
+};
+constexpr uint8_t kGolfLines = 8;  // rounds kept per golfer
+
+struct GolfPending {
+  GolfRow row;
+  uint8_t lines{0};
+  GolfLine line[kGolfLines];
+};
+
+// One event of a tour's document, read as it streams in.
+struct GolfEvent {
+  GolfBoard b;
+  bool listed{false};    // its first competition lists competitors
+  bool round_in{false};  // the competition's own state is "in"
+  uint8_t top{0};        // rows kept from the top of the leaderboard
+  uint8_t favs{0};       // followed golfers kept past the top
+  PsVector<GolfPending> rows;
+
+  void clear_field() {
+    this->listed = false;
+    this->b.field = 0;
+    this->top = this->favs = 0;
+    this->rows.clear();
+  }
+};
+
+// parse_golf's state between the walk's steps: the filters, the document
+// each value is read into, the event being read and the one picked so far.
+class GolfRead {
+ public:
+  GolfRead(const uint32_t *fav_ids, size_t fav_count)
+      : doc(json_allocator()), all_(json_allocator()), filters_(json_allocator()), fav_ids_(fav_ids), fav_count_(fav_count) {
+    this->all_.set(true);
+    fill_golf_status_filter(this->filters_["status"].to<JsonObject>());
+    fill_golf_competitor_filter(this->filters_["golfer"].to<JsonObject>());
+    // Give back the rest of the document's first block, most of its 4 KB.
+    this->filters_.shrinkToFit();
+  }
+
+  JsonDocument doc;
+  bool done{false};  // an event in progress is picked, so later events are only skipped
+
+  // A second "events" key replaces the first, as it does in ArduinoJson.
+  void restart() {
+    this->have_pick_ = false;
+    this->done = false;
+    this->pick_ = GolfEvent();
+  }
+
+  void begin_event() {
+    this->cur_ = GolfEvent();
+    this->cur_.rows.reserve(kGolfRowsMax);
+  }
+
+  // The filter for one of the event's own keys. Null for a key the board
+  // doesn't use.
+  JsonVariantConst event_filter(const char *key) const {
+    if (strcmp(key, "name") == 0 || strcmp(key, "date") == 0 || strcmp(key, "endDate") == 0)
+      return this->all_.as<JsonVariantConst>();
+    if (strcmp(key, "status") == 0)
+      return this->status_filter();
+    return JsonVariantConst();
+  }
+  JsonVariantConst status_filter() const { return this->filters_["status"]; }
+  JsonVariantConst golfer_filter() const { return this->filters_["golfer"]; }
+
+  void event_value(const char *key, JsonVariantConst v) {
+    GolfBoard &b = this->cur_.b;
+    if (strcmp(key, "name") == 0) {
+      snprintf(b.event, sizeof(b.event), "%s", str_or_empty(v).c_str());
+    } else if (strcmp(key, "date") == 0) {
+      b.start_epoch = parse_iso8601_z(str_or_empty(v));
+    } else if (strcmp(key, "endDate") == 0) {
+      b.end_epoch = parse_iso8601_z(str_or_empty(v));
+    } else {
+      const std::string state = str_or_empty(v["type"]["state"]);
+      b.state = state == "in" ? GolfState::IN : state == "post" ? GolfState::POST : GolfState::PRE;
     }
   }
-  if (pick.isNull())
-    return false;
-  JsonObjectConst comp0 = pick["competitions"][0];
-  GolfBoard b;
-  b.league = league;
-  const std::string estate = detail::str_or_empty(pick["status"]["type"]["state"]);
-  b.state = estate == "in" ? GolfState::IN : estate == "post" ? GolfState::POST : GolfState::PRE;
-  // The event stays "in" from the first tee time to the last putt; the
-  // competition's own state says whether a round is being played right now
-  // ("post" overnight and while play is stopped: "Round 3 - Suspended").
-  b.round_live = b.state == GolfState::IN && detail::str_or_empty(comp0["status"]["type"]["state"]) == "in";
-  snprintf(b.event, sizeof(b.event), "%s", detail::str_or_empty(pick["name"]).c_str());
-  std::string detail = detail::str_or_empty(comp0["status"]["type"]["shortDetail"]);
-  if (detail.empty())
-    detail = detail::str_or_empty(comp0["status"]["type"]["detail"]);
-  snprintf(b.detail, sizeof(b.detail), "%s", detail.c_str());
-  b.round = (uint8_t) (comp0["status"]["period"] | 0);
-  b.start_epoch = parse_iso8601_z(detail::str_or_empty(pick["date"]));
-  b.end_epoch = parse_iso8601_z(detail::str_or_empty(pick["endDate"]));
-  auto fav = [&](uint32_t id) {
-    for (size_t i = 0; i < fav_count; i++)
-      if (fav_ids[i] == id)
-        return true;
-    return false;
-  };
-  size_t fav_kept = 0;
-  for (JsonObjectConst gc : comp0["competitors"].as<JsonArrayConst>()) {
-    b.field++;
-    GolfRow r;
+
+  // A new "competitions" key: whatever an earlier one listed is gone.
+  void clear_competition() {
+    this->cur_.clear_field();
+    this->competition_status(JsonVariantConst());
+  }
+  void clear_field() { this->cur_.clear_field(); }
+
+  // The status of the event's first competition: the round, and whether
+  // it is being played right now. The event stays "in" from the first tee
+  // time to the last putt. The competition's state is "post" overnight and
+  // while play is stopped ("Round 3 - Suspended").
+  void competition_status(JsonVariantConst s) {
+    GolfBoard &b = this->cur_.b;
+    this->cur_.round_in = str_or_empty(s["type"]["state"]) == "in";
+    std::string detail = str_or_empty(s["type"]["shortDetail"]);
+    if (detail.empty())
+      detail = str_or_empty(s["type"]["detail"]);
+    snprintf(b.detail, sizeof(b.detail), "%s", detail.c_str());
+    b.round = (uint8_t) (s["period"] | 0);
+  }
+
+  // One element of the first competition's competitors, null when it is
+  // not an object. Every element counts in the field. The top kGolfTopRows
+  // become rows, and followed golfers past them up to kGolfFavRows more.
+  void golfer(JsonObjectConst gc) {
+    GolfEvent &ev = this->cur_;
+    ev.listed = true;
+    ev.b.field++;
+    GolfPending p;
+    GolfRow &r = p.row;
     r.pos = (uint16_t) (gc["order"] | 0);
-    r.id = (uint32_t) atol(detail::str_or_empty(gc["id"]).c_str());
-    const bool is_fav = fav(r.id);
-    if (r.pos > kGolfTopRows && !is_fav)
-      continue;
-    if (r.pos > kGolfTopRows && fav_kept >= kGolfFavRows)
-      continue;
-    if (r.pos > kGolfTopRows)
-      fav_kept++;
+    r.id = (uint32_t) atol(str_or_empty(gc["id"]).c_str());
+    const bool is_fav = this->fav_(r.id);
+    // The top is full at kGolfTopRows rows even when a document repeats an
+    // order or has none, so a read keeps kGolfRowsMax rows at most.
+    const bool top = r.pos <= kGolfTopRows && ev.top < kGolfTopRows;
+    if (!top && (!is_fav || ev.favs >= kGolfFavRows))
+      return;
     r.favorite = is_fav;
-    snprintf(r.name, sizeof(r.name), "%s", ascii_fold(detail::str_or_empty(gc["athlete"]["shortName"])).c_str());
+    snprintf(r.name, sizeof(r.name), "%s", ascii_fold(str_or_empty(gc["athlete"]["shortName"])).c_str());
     // The surname from the full name, for a narrow panel: the last word.
-    std::string full = ascii_fold(detail::str_or_empty(gc["athlete"]["displayName"]));
+    std::string full = ascii_fold(str_or_empty(gc["athlete"]["displayName"]));
     size_t sp = full.rfind(' ');
     snprintf(r.last, sizeof(r.last), "%s", (sp == std::string::npos ? full : full.substr(sp + 1)).c_str());
     // A pair in a team event goes by the pair's name, "Smalley/Springer",
     // and on a single panel by the first name and the second's initial,
     // "Smalley/S", which fits the row.
     if (r.name[0] == '\0' && r.last[0] == '\0') {
-      const std::string pair = ascii_fold(detail::str_or_empty(gc["team"]["displayName"]));
+      const std::string pair = ascii_fold(str_or_empty(gc["team"]["displayName"]));
       snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
       const size_t slash = pair.find('/');
       const std::string narrow = slash != std::string::npos && slash + 1 < pair.size() ? pair.substr(0, slash + 2) : pair;
@@ -749,30 +1000,193 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
     // Neither a golfer nor a pair (a team game's document read by mistake):
     // it counts in the field but is never a row.
     if (r.name[0] == '\0' && r.last[0] == '\0')
-      continue;
+      return;
     int total = 0;
-    const std::string score = detail::str_or_empty(gc["score"]);
+    const std::string score = str_or_empty(gc["score"]);
     if (golf_score(score.c_str(), total))
       snprintf(r.score, sizeof(r.score), "%s", score.c_str());
-    // The current round's line: its score to par and how many holes of it
-    // the document shows. A round not started yet reads "-".
+    // Each round's score to par and how many holes of it the document
+    // shows. The PGA Tour's document lists the holes, the LPGA's and the DP
+    // World Tour's don't, so their rows have no thru. A later line for the
+    // same round wins, as does a later score that reads as one.
     for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
-      if ((gl["period"] | 0) != (int) b.round)
-        continue;
-      const std::string dv = detail::str_or_empty(gl["displayValue"]);
+      const int period = gl["period"] | 0;
+      GolfLine *line = nullptr;
+      for (uint8_t i = 0; i < p.lines && line == nullptr; i++)
+        if (p.line[i].period == period)
+          line = &p.line[i];
+      if (line == nullptr) {
+        if (p.lines >= kGolfLines)
+          continue;
+        line = &p.line[p.lines++];
+        line->period = period;
+      }
+      const std::string dv = str_or_empty(gl["displayValue"]);
       int round_score = 0;
       if (golf_score(dv.c_str(), round_score))
-        snprintf(r.today, sizeof(r.today), "%s", dv.c_str());
-      size_t holes = gl["linescores"].as<JsonArrayConst>().size();
-      r.thru = (uint8_t) (holes > 18 ? 18 : holes);
+        snprintf(line->today, sizeof(line->today), "%s", dv.c_str());
+      const size_t holes = gl["linescores"].as<JsonArrayConst>().size();
+      line->thru = (uint8_t) (holes > 18 ? 18 : holes);
     }
-    b.rows.push_back(r);
+    if (top)
+      ev.top++;
+    else
+      ev.favs++;
+    ev.rows.push_back(p);
   }
-  if (b.rows.empty())
+
+  // The event to show: an in-progress one wins, else the first with a
+  // field.
+  void end_event() {
+    if (!this->cur_.listed)
+      return;
+    if (this->cur_.b.state == GolfState::IN) {
+      this->pick_ = std::move(this->cur_);
+      this->have_pick_ = true;
+      this->done = true;
+    } else if (!this->have_pick_) {
+      this->pick_ = std::move(this->cur_);
+      this->have_pick_ = true;
+    }
+  }
+
+  // The picked event's board, with each row's line for the current round.
+  bool finish(League league, GolfBoard &out) {
+    if (!this->have_pick_)
+      return false;
+    GolfEvent &ev = this->pick_;
+    GolfBoard &b = ev.b;
+    b.league = league;
+    b.round_live = b.state == GolfState::IN && ev.round_in;
+    b.rows.clear();
+    b.rows.reserve(ev.rows.size());
+    for (const GolfPending &p : ev.rows) {
+      GolfRow r = p.row;
+      for (uint8_t i = 0; i < p.lines; i++)
+        if (p.line[i].period == (int) b.round) {
+          memcpy(r.today, p.line[i].today, sizeof(r.today));
+          r.thru = p.line[i].thru;
+        }
+      b.rows.push_back(r);
+    }
+    if (b.rows.empty())
+      return false;
+    b.valid = true;
+    out = std::move(b);
+    return true;
+  }
+
+ private:
+  bool fav_(uint32_t id) const {
+    for (size_t i = 0; i < this->fav_count_; i++)
+      if (this->fav_ids_[i] == id)
+        return true;
     return false;
-  b.valid = true;
-  out = std::move(b);
-  return true;
+  }
+
+  JsonDocument all_;      // the filter that keeps everything
+  JsonDocument filters_;  // the status filter and the golfer filter
+  const uint32_t *fav_ids_;
+  size_t fav_count_;
+  GolfEvent cur_, pick_;
+  bool have_pick_{false};
+};
+
+// The first competition of an event: its status, and its competitors one
+// at a time. limit is the nesting left at the competitions array.
+template<typename TInput> void golf_competitions(JsonWalk<TInput> &w, GolfRead &g, uint8_t limit) {
+  g.clear_competition();
+  if (w.peek() != '[') {
+    w.skip(limit);
+    return;
+  }
+  w.enter('[', limit);
+  char key[16];
+  for (bool first = true, zero = true; w.next_item(first); zero = false) {
+    uint8_t comp = limit;
+    if (!zero || w.peek() != '{') {
+      w.skip(limit);
+      continue;
+    }
+    w.enter('{', comp);
+    for (bool kf = true; w.next_key(kf, key, sizeof(key));) {
+      if (strcmp(key, "status") == 0) {
+        if (w.value(g.doc, g.status_filter(), comp))
+          g.competition_status(g.doc.as<JsonVariantConst>());
+      } else if (strcmp(key, "competitors") != 0) {
+        w.skip(comp);
+      } else {
+        g.clear_field();
+        uint8_t list = comp;
+        if (w.peek() != '[') {
+          w.skip(comp);
+          continue;
+        }
+        w.enter('[', list);
+        for (bool cf = true; w.next_item(cf);)
+          if (w.value(g.doc, g.golfer_filter(), list))
+            g.golfer(g.doc.as<JsonObjectConst>());
+      }
+    }
+  }
+}
+
+}  // namespace detail
+
+// Parses a tour's scoreboard document (golf.h): the first event with a
+// field, its state and round, and the leaderboard rows the panel keeps.
+// Those are the top kGolfTopRows, plus the followed golfers (fav_ids, this
+// tour's athlete ids) wherever they stand, up to kGolfFavRows more.
+// Competitors arrive in leaderboard order. The document is 90-600 KB, most
+// of it statistics and hole-by-hole linescores for the whole field, so it
+// is walked as it streams in and each golfer is deserialized on their own.
+// A read holds one golfer's document at a time, a few KB.
+template<typename TInput>
+bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fav_count, GolfBoard &out) {
+  detail::JsonWalk<TInput> w(input);
+  detail::GolfRead g(fav_ids, fav_count);
+  char key[16];
+  // ArduinoJson's NestingLimit as the whole-document read had it.
+  uint8_t root = 20;
+  if (!w.enter('{', root))
+    return false;
+  for (bool rf = true; w.next_key(rf, key, sizeof(key));) {
+    if (strcmp(key, "events") != 0) {
+      w.skip(root);
+      continue;
+    }
+    g.restart();
+    if (w.peek() != '[') {
+      w.skip(root);
+      continue;
+    }
+    uint8_t events = root;
+    w.enter('[', events);
+    for (bool ef = true; w.next_item(ef);) {
+      uint8_t ev = events;
+      if (g.done || w.peek() != '{') {
+        w.skip(events);
+        continue;
+      }
+      w.enter('{', ev);
+      g.begin_event();
+      for (bool kf = true; w.next_key(kf, key, sizeof(key));) {
+        if (strcmp(key, "competitions") == 0) {
+          detail::golf_competitions(w, g, ev);
+          continue;
+        }
+        JsonVariantConst filter = g.event_filter(key);
+        if (filter.isNull())
+          w.skip(ev);
+        else if (w.value(g.doc, filter, ev))
+          g.event_value(key, g.doc.as<JsonVariantConst>());
+      }
+      g.end_event();
+    }
+  }
+  if (w.failed())
+    return false;
+  return g.finish(league, out);
 }
 
 // Games that have not started yet, in the order ESPN lists them (by date).

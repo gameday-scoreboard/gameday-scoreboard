@@ -78,8 +78,9 @@ is the short version.
   approval past the per-release allowance or when one PR adds more than
   32 KB. Static internal RAM and heap have tight caps: going over fails,
   and raising a cap in budget.json (with the reason in `about`) needs the
-  owner's approval. JSON documents fail only when one grows more than
-  `max_growth.json` against dev's last build. The job summary has the
+  owner's approval. JSON documents fail over `json_ceiling`, or over the
+  read's own `json` cap where budget.json gives one, and when one grows
+  more than `max_growth.json` against dev's last build. The job summary has the
   tables, room left in the OTA slot and the section diff; the
   `budget-report` artifact has the same figures as JSON. To see what
   moved the bytes, read "Where the bytes went" at the end of that summary:
