@@ -856,6 +856,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
   void wifi_tick_();
   std::string wifi_json_();
+  // Seconds since the weather and plane reads, and the flights wait left,
+  // worked out per request because the cached state document goes stale
+  std::string ages_json_() const;
   ::espn::WifiHistory wifi_hist_;
   std::mutex wifi_mutex_;
   uint32_t wifi_sample_ms_{0};

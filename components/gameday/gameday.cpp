@@ -2507,8 +2507,8 @@ void GamedayComponent::loop() {
   // live. They also wait while the next ESPN read is near, so even a read
   // that runs to its timeout is done before ESPN's turn (wx_gap_).
   // A town typed on the device page is looked up on a picked page too.
-  if ((!paused || this->wx_lookup_due_) && !side_wait && network::is_connected() &&
-      ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
+  if ((!paused || this->wx_lookup_due_) && network::is_connected() &&
+      (paused || (!side_wait && ::espn::wx_gap_ok(this->espn_quiet_ms_()))) &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     if (this->wx_due_()) {
       this->start_wx_job_();
@@ -7349,6 +7349,15 @@ void GamedayComponent::wifi_tick_() {
 #endif
 }
 
+std::string GamedayComponent::ages_json_() const {
+  const uint32_t now = millis();
+  const int32_t wx = this->wx_read_ms_ != 0 ? (int32_t) ((now - this->wx_read_ms_) / 1000) : -1;
+  const int32_t fl = this->fl_read_ms_ != 0 ? (int32_t) ((now - this->fl_read_ms_) / 1000) : -1;
+  char buf[80];
+  ::espn::ages_json(buf, sizeof(buf), wx, fl, this->fl_wait_s_());
+  return buf;
+}
+
 std::string GamedayComponent::wifi_json_() {
   const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
   std::lock_guard<std::mutex> lock(this->wifi_mutex_);
@@ -8547,6 +8556,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       body.append(health.data(), health.size());
       body += ",\"wifi\":";
       body.append(wifi.data(), wifi.size());
+      body += ",\"ages\":";
+      body += this->ages_json_();
       body += '}';
     }
     request->send(200, "application/json", body.c_str());

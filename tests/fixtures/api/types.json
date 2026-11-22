@@ -1,6 +1,10 @@
 {
   "state": {
     "after": "string",
+    "ages": "object",
+    "ages.fl_read_s": "int",
+    "ages.fl_wait_s": "int",
+    "ages.wx_read_s": "int",
     "autoupd": "bool",
     "banner": "bool",
     "best": "bool",

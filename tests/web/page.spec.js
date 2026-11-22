@@ -3844,6 +3844,8 @@ test("flights: the status line says what the page is doing", async ({ page, requ
     [{ fl: flDoc({ err: "net" }) }, "Can't reach flight data"],
     [{ fl: flDoc({ err: "http", wait_s: 240 }) }, "Can't reach flight data, tries again in 4 min"],
     [{ flrx: "192.168.1.50", fl: flDoc({ err: "net" }) }, "Can't reach your receiver"],
+    // The panel's cached document keeps an old read_s; the live ages win.
+    [{ fl: flDoc({ n: 8, read_s: 0 }), ages: { wx_read_s: -1, fl_read_s: 45, fl_wait_s: 0 } }, "8 planes nearby, from adsb.lol, read 45 s ago"],
   ];
   for (const [o, want] of cases) {
     await reset(request, Object.assign({}, flTown, o));

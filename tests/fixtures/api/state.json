@@ -405,5 +405,10 @@
     "last": "signal",
     "last_ago": 420,
     "last_down": 12
+  },
+  "ages": {
+    "wx_read_s": 312,
+    "fl_read_s": -1,
+    "fl_wait_s": 0
   }
 }

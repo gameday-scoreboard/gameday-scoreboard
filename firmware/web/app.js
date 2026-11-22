@@ -762,6 +762,15 @@
       if (!connected && !restart && Date.now() - streamAt > 10000) connect();
       if (r.ok) {
         D = await r.json();
+        // The panel caches the rest of the document, so the live ages win
+        const ages = D.ages;
+        if (ages) {
+          if (D.wx && D.wx.read_s !== undefined && ages.wx_read_s !== undefined) D.wx.read_s = ages.wx_read_s;
+          if (D.fl && ages.fl_read_s !== undefined) {
+            D.fl.read_s = ages.fl_read_s;
+            D.fl.wait_s = ages.fl_wait_s;
+          }
+        }
         for (const k of Object.keys(held)) {
           const h = held[k];
           if (h.ack && (same(k, D[k], h.v) || left > h.ack + APPLY_MS)) delete held[k];
