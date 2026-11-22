@@ -601,8 +601,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void set_top25_cols(uint32_t cols) { this->top25_cols_ = cols >= 2 ? 2 : 1; }
   // The golf card's page (gd_golf_card in firmware/pages/gameday-live.yaml):
   // its header, "" while the card is down, and up to two columns of rows.
-  const std::string &golf_head() const { return this->golf_head_; }
-  const std::string &golf_col(int i) const { return this->golf_col_[i == 1 ? 1 : 0]; }
+  const char *golf_head() const { return this->golf_ != nullptr ? this->golf_->head.c_str() : ""; }
+  const char *golf_col(int i) const { return this->golf_ != nullptr ? this->golf_->col[i == 1 ? 1 : 0].c_str() : ""; }
   // cols counts narrow columns; wide says the display has room for the
   // wide rows (today's score and thru) in one full-width column instead.
   void set_golf_layout(uint32_t cols, bool wide) {
@@ -774,22 +774,29 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void top25_show_();
   void top25_hide_();
   // The golf card: one leaderboard per tour (golf.h slots), read while the
-  // panel follows a golfer in that tour.
-  ::espn::GolfBoard golf_[::espn::kGolfSlots];
-  uint32_t golf_read_ms_[::espn::kGolfSlots]{};  // millis() of the last good read, 0 = none
-  uint32_t golf_fail_ms_[::espn::kGolfSlots]{};  // millis() of the last failed read, 0 = none since
-  int64_t golf_read_epoch_[::espn::kGolfSlots]{};  // the clock at the last good read, for golf_read_ms
+  // panel follows a golfer in that tour or the leaderboards setting picks
+  // it. The boards and the card's turns live in PSRAM, made when a tour is
+  // first on and freed once none is, so a panel without golf keeps none.
+  struct GolfCard {
+    ::espn::GolfBoard board[::espn::kGolfSlots];
+    uint32_t read_ms[::espn::kGolfSlots]{};    // millis() of the last good read, 0 = none
+    uint32_t fail_ms[::espn::kGolfSlots]{};    // millis() of the last failed read, 0 = none since
+    int64_t read_epoch[::espn::kGolfSlots]{};  // the clock at the last good read, for golf_read_ms
+    uint8_t read_slot{0};
+    int slot{-1};  // the tour up now, or the last one shown
+    uint32_t page{0};
+    uint32_t pages{0};
+    bool shown{false};
+    uint32_t since_ms{0};  // when the page went up, or the card last came down
+    PsString head, col[2];
+  };
+  GolfCard *golf_{nullptr};
+  GolfCard &golf_card_();
+  void golf_free_();
   bool golf_read_due_{false};
-  uint8_t golf_read_slot_{0};
-  int golf_slot_{-1};  // the tour up now, or the last one shown
-  uint32_t golf_page_{0};
-  uint32_t golf_pages_{0};
-  uint32_t golf_cols_{1};
   bool golf_wide_{false};
-  bool golf_shown_{false};
-  uint32_t golf_since_ms_{0};  // when the page went up, or the card last came down
+  uint8_t golf_cols_{1};
   uint32_t golf_tick_ms_{0};
-  std::string golf_head_, golf_col_[2];
   uint8_t golf_slots_() const;  // bit per slot: the tours with a followed golfer
   void golf_tick_();
   void golf_show_();
@@ -1921,13 +1928,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
   static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League: the walks back and forward (recap.h,
-  // RecapWalk), the kickoff the forward walk found (0 for none) and its
-  // fwd_match: "BOS at NYR", the first game on that day.
-  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
-  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
-  int64_t recap_fwd_next_[::espn::kLeagueCount]{};
-  std::string recap_fwd_match_[::espn::kLeagueCount];
+  // Per league with games, indexed by game_league_slot (leagues.h): the
+  // walks back and forward (recap.h, RecapWalk), the kickoff the forward
+  // walk found (0 for none) and its fwd_match: "BOS at NYR", the first game
+  // on that day. A leaderboard league has no finals to walk.
+  ::espn::RecapWalk recap_back_[::espn::kGameLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kGameLeagueCount];
+  int64_t recap_fwd_next_[::espn::kGameLeagueCount]{};
+  std::string recap_fwd_match_[::espn::kGameLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
   void apply_recap_job_();
   void recap_absorb_(const Job &j, int64_t tnow);  // a scan's finals, games to come and next kickoff

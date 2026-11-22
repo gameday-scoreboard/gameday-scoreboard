@@ -2395,7 +2395,7 @@ void GamedayComponent::loop() {
         if (this->job_.need_top25)
           this->top25_fail_ms_[this->job_.top25_slot] = this->gave_up_ms_;
         if (this->job_.need_golf)
-          this->golf_fail_ms_[this->job_.golf_slot] = this->gave_up_ms_;
+          this->golf_card_().fail_ms[this->job_.golf_slot] = this->gave_up_ms_;
         if (this->job_.need_news)
           this->news_fail_ms_ = this->gave_up_ms_;
         if (this->job_.need_season)
@@ -6166,9 +6166,10 @@ void GamedayComponent::day_tick_() {
 bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   const uint16_t leagues = this->recap_leagues_();
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
-    if (!(leagues & ::espn::recap_bit(i)))
+    const size_t g = ::espn::game_league_slot(i);
+    if (!(leagues & ::espn::recap_bit(i)) || g >= ::espn::kGameLeagueCount)
       continue;
-    if (this->recap_back_[i].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
+    if (this->recap_back_[g].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
                                       j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = false;
@@ -6179,9 +6180,10 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   if (this->recap_scan_next_ != 0)
     return false;  // a game later today: that is the next kickoff
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
-    if (!(leagues & ::espn::recap_bit(i)))
+    const size_t g = ::espn::game_league_slot(i);
+    if (!(leagues & ::espn::recap_bit(i)) || g >= ::espn::kGameLeagueCount)
       continue;
-    if (this->recap_fwd_[i].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[i], tnow, j.recap_day)) {
+    if (this->recap_fwd_[g].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[g], tnow, j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = true;
       j.recap_league = i;
@@ -6193,7 +6195,8 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
 
 void GamedayComponent::apply_recap_job_() {
   Job &j = this->job_;
-  if (j.recap_league >= ::espn::kLeagueCount)
+  const size_t g = ::espn::game_league_slot(j.recap_league);
+  if (g >= ::espn::kGameLeagueCount)
     return;
   uint8_t i = j.recap_league;
   int64_t tnow = (int64_t) this->time_->timestamp_now();
@@ -6208,20 +6211,20 @@ void GamedayComponent::apply_recap_job_() {
   if (j.recap_forward) {
     bool found = j.next_kickoff > tnow;
     if (found) {
-      this->recap_fwd_next_[i] = j.next_kickoff;
+      this->recap_fwd_next_[g] = j.next_kickoff;
       // The game the Next card names. The scan keeps a college day's ranked
       // games first, so the first kickoff may not be among them.
-      this->recap_fwd_match_[i].clear();
+      this->recap_fwd_match_[g].clear();
       for (const auto &p : j.pending)
         if (p.kickoff_epoch == j.next_kickoff) {
-          this->recap_fwd_match_[i] = ::espn::recap_matchup(p);
+          this->recap_fwd_match_[g] = ::espn::recap_matchup(p);
           break;  // the first one kept at that time: best ranked, then ESPN's order
         }
     }
-    if (!this->recap_fwd_[i].fwd_read(today, found)) {
+    if (!this->recap_fwd_[g].fwd_read(today, found)) {
       ESP_LOGI(TAG, "No %s kickoff in the next week", ::espn::recap_league_word(i));
-      this->recap_fwd_next_[i] = 0;
-      this->recap_fwd_match_[i].clear();
+      this->recap_fwd_next_[g] = 0;
+      this->recap_fwd_match_[g].clear();
     }
   } else {
     ::espn::RecapDay d;
@@ -6229,8 +6232,8 @@ void GamedayComponent::apply_recap_job_() {
     d.day = j.recap_day;
     d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
-    this->recap_back_[i].back_read(today, ::espn::recap_count(this->recap_days_, i));
-    if (this->recap_back_[i].step == ::espn::RecapWalk::kDone)
+    this->recap_back_[g].back_read(today, ::espn::recap_count(this->recap_days_, i));
+    if (this->recap_back_[g].step == ::espn::RecapWalk::kDone)
       ESP_LOGI(TAG, "Recent %s finals: %u", ::espn::recap_league_word(i),
                (unsigned) ::espn::recap_count(this->recap_days_, i));
   }
@@ -6252,12 +6255,13 @@ int64_t GamedayComponent::recap_next_kickoff_(std::string *matchup) const {
   std::string match;
   const uint16_t leagues = this->recap_leagues_();
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
-    if (!(leagues & ::espn::recap_bit(i)))
+    const size_t g = ::espn::game_league_slot(i);
+    if (!(leagues & ::espn::recap_bit(i)) || g >= ::espn::kGameLeagueCount)
       continue;
-    int64_t k = this->recap_fwd_next_[i];
+    int64_t k = this->recap_fwd_next_[g];
     if (k > tnow && (best == 0 || k < best)) {
       best = k;
-      match = this->recap_fwd_match_[i];
+      match = this->recap_fwd_match_[g];
     }
   }
   if (best != 0 && best == this->recap_scan_next_)
@@ -7767,7 +7771,8 @@ void GamedayComponent::set_leaderboards_(uint32_t mask) {
   this->leaderboards_ = mask;
   this->lb_pref_.save(&this->leaderboards_);
   this->sync_prefs_();
-  this->golf_since_ms_ = 0;  // a new tour's first turn comes a minute from now
+  if (this->golf_ != nullptr)
+    this->golf_->since_ms = 0;  // a new tour's first turn comes a minute from now
   ESP_LOGI(TAG, "Leaderboards: %s", ::espn::leaderboards_text(mask).c_str());
   this->rebuild_state_(&this->last_fields_);
 }
@@ -7825,28 +7830,49 @@ uint8_t GamedayComponent::golf_slots_() const {
   return slots;
 }
 
-void GamedayComponent::golf_hide_() {
-  if (!this->golf_shown_)
+GamedayComponent::GolfCard &GamedayComponent::golf_card_() {
+  if (this->golf_ == nullptr)
+    this->golf_ = new (::espn::psram_alloc(sizeof(GolfCard))) GolfCard();
+  return *this->golf_;
+}
+
+void GamedayComponent::golf_free_() {
+  if (this->golf_ == nullptr)
     return;
-  this->golf_shown_ = false;
-  this->golf_head_.clear();
-  this->golf_col_[0].clear();
-  this->golf_col_[1].clear();
-  this->golf_since_ms_ = millis();
+  this->golf_hide_();
+  this->golf_->~GolfCard();
+  ::espn::psram_free(this->golf_);
+  this->golf_ = nullptr;
+  this->golf_read_due_ = false;
+}
+
+void GamedayComponent::golf_hide_() {
+  if (this->golf_ == nullptr || !this->golf_->shown)
+    return;
+  GolfCard &c = *this->golf_;
+  c.shown = false;
+  c.head.clear();
+  c.col[0].clear();
+  c.col[1].clear();
+  c.since_ms = millis();
   this->fire_action_("golf");  // gd_golf_card in firmware/pages/gameday-live.yaml
 }
 
 void GamedayComponent::golf_show_() {
-  const ::espn::GolfBoard &b = this->golf_[this->golf_slot_];
-  this->golf_shown_ = true;
-  this->golf_head_ = ::espn::golf_header(b);
+  GolfCard &c = this->golf_card_();
+  const ::espn::GolfBoard &b = c.board[c.slot];
+  c.shown = true;
+  const std::string head = ::espn::golf_header(b);
+  c.head.assign(head.data(), head.size());
   // A wide display draws one full-width column of wide rows; the component
   // counts it as one column, so page math stays golf_pages(board, cols).
   const uint32_t shown_cols = this->golf_wide_ ? 1 : this->golf_cols_;
-  for (uint32_t c = 0; c < 2; c++)
-    this->golf_col_[c] = c < shown_cols ? ::espn::golf_column(b, this->golf_page_, shown_cols, c, this->golf_wide_)
-                                        : std::string();
-  this->golf_since_ms_ = millis();
+  for (uint32_t col = 0; col < 2; col++) {
+    const std::string text =
+        col < shown_cols ? ::espn::golf_column(b, c.page, shown_cols, col, this->golf_wide_) : std::string();
+    c.col[col].assign(text.data(), text.size());
+  }
+  c.since_ms = millis();
   this->fire_action_("golf");
 }
 
@@ -7856,9 +7882,18 @@ void GamedayComponent::golf_tick_() {
     return;
   this->golf_tick_ms_ = now;
   const uint8_t slots = this->golf_on() ? this->golf_slots_() : 0;
+  if (slots == 0) {
+    // No tour on: the boards go, unless a read for one is under way.
+    if (!(this->busy_ && this->job_.need_golf))
+      this->golf_free_();
+    else
+      this->golf_hide_();
+    return;
+  }
+  GolfCard &c = this->golf_card_();
   // Between games only, as the Top 25 card, and not over it or the other
   // between-games cards.
-  const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && this->card_between_(now) &&
+  const bool between = this->clock_set_() && this->time_ != nullptr && this->card_between_(now) &&
                        !this->msg_shown_ && !this->news_shown_ && !this->pic_shown_ && !this->season_shown_ &&
                        !this->top25_shown_;
   if (!between) {
@@ -7872,20 +7907,19 @@ void GamedayComponent::golf_tick_() {
     for (uint8_t s = 0; s < ::espn::kGolfSlots; s++) {
       if (!(slots & (1u << s)))
         continue;
-      const bool may_read = this->golf_fail_ms_[s] == 0 || now - this->golf_fail_ms_[s] >= ::espn::kGolfRetryMs;
-      if (may_read && (this->golf_read_ms_[s] == 0 || now - this->golf_read_ms_[s] >= ::espn::golf_read_ms(this->golf_[s], this->golf_read_epoch_[s]))) {
+      const bool may_read = c.fail_ms[s] == 0 || now - c.fail_ms[s] >= ::espn::kGolfRetryMs;
+      if (may_read && (c.read_ms[s] == 0 || now - c.read_ms[s] >= ::espn::golf_read_ms(c.board[s], c.read_epoch[s]))) {
         this->golf_read_due_ = true;
-        this->golf_read_slot_ = s;
+        c.read_slot = s;
         break;
       }
     }
   }
-  if (this->golf_shown_) {
-    if (now - this->golf_since_ms_ < ::espn::kGolfPageMs)
+  if (c.shown) {
+    if (now - c.since_ms < ::espn::kGolfPageMs)
       return;
-    if (this->golf_page_ + 1 < this->golf_pages_ && (slots & (1u << this->golf_slot_)) &&
-        ::espn::golf_fresh(this->golf_[this->golf_slot_], epoch)) {
-      this->golf_page_++;
+    if (c.page + 1 < c.pages && (slots & (1u << c.slot)) && ::espn::golf_fresh(c.board[c.slot], epoch)) {
+      c.page++;
       this->golf_show_();
     } else {
       this->golf_hide_();
@@ -7893,32 +7927,32 @@ void GamedayComponent::golf_tick_() {
     return;
   }
   // The first turn comes a minute after the card could first take one.
-  if (this->golf_since_ms_ == 0)
-    this->golf_since_ms_ = (now - ::espn::kGolfEveryMs + 60u * 1000u) | 1u;
-  if (now - this->golf_since_ms_ < ::espn::kGolfEveryMs)
+  if (c.since_ms == 0)
+    c.since_ms = (now - ::espn::kGolfEveryMs + 60u * 1000u) | 1u;
+  if (now - c.since_ms < ::espn::kGolfEveryMs)
     return;
   uint8_t ready = 0;
   for (uint8_t s = 0; s < ::espn::kGolfSlots; s++)
-    if ((slots & (1u << s)) && ::espn::golf_fresh(this->golf_[s], epoch))
+    if ((slots & (1u << s)) && ::espn::golf_fresh(c.board[s], epoch))
       ready |= (uint8_t) (1u << s);
-  const int next = ::espn::golf_next(ready, this->golf_slot_);
+  const int next = ::espn::golf_next(ready, c.slot);
   if (next < 0)
     return;
-  this->golf_slot_ = next;
-  this->golf_page_ = 0;
-  this->golf_pages_ = ::espn::golf_pages(this->golf_[next], this->golf_wide_ ? 1 : this->golf_cols_);
-  ESP_LOGI(TAG, "Golf: a turn, %s, %u pages", ::espn::golf_header(this->golf_[next]).c_str(),
-           (unsigned) this->golf_pages_);
+  c.slot = next;
+  c.page = 0;
+  c.pages = ::espn::golf_pages(c.board[next], this->golf_wide_ ? 1 : this->golf_cols_);
+  ESP_LOGI(TAG, "Golf: a turn, %s, %u pages", ::espn::golf_header(c.board[next]).c_str(), (unsigned) c.pages);
   this->golf_show_();
 }
 
 void GamedayComponent::start_golf_job_() {
   this->golf_read_due_ = false;
+  const uint8_t slot = this->golf_card_().read_slot;
   ::espn::reset_in_place(this->job_);
   this->job_.generation = this->generation_;
   this->job_.need_golf = true;
-  this->job_.golf_slot = this->golf_read_slot_;
-  const League league = ::espn::golf_slot_league(this->golf_read_slot_);
+  this->job_.golf_slot = slot;
+  const League league = ::espn::golf_slot_league(slot);
   for (uint8_t i = 0; i < FAV_MAX; i++)
     if (this->fav_id_(i) != 0 && (League) this->fav_league_(i) == league)
       this->job_.golf_favs.push_back(this->fav_id_(i));
@@ -7946,32 +7980,39 @@ void GamedayComponent::apply_golf_job_() {
   Job &j = this->job_;
   const uint8_t s = j.golf_slot;
   const uint32_t now = millis() == 0 ? 1 : millis();
+  // Every tour went off while the read ran: the card stays unmade.
+  if (this->golf_ == nullptr && this->golf_slots_() == 0)
+    return;
+  GolfCard &c = this->golf_card_();
   if (!j.golf_ok) {
-    this->golf_fail_ms_[s] = now;
+    c.fail_ms[s] = now;
     return;
   }
-  this->golf_fail_ms_[s] = 0;
-  this->golf_read_ms_[s] = now;
-  this->golf_read_epoch_[s] = this->time_ != nullptr ? (int64_t) this->time_->now().timestamp : 0;
+  c.fail_ms[s] = 0;
+  c.read_ms[s] = now;
+  c.read_epoch[s] = this->time_ != nullptr ? (int64_t) this->time_->now().timestamp : 0;
   // A turn on the old board ends here; the next turn shows the new one.
-  if (this->golf_shown_ && this->golf_slot_ == (int) s)
+  if (c.shown && c.slot == (int) s)
     this->golf_hide_();
-  this->golf_[s] = std::move(j.golf_board);
+  c.board[s] = std::move(j.golf_board);
   // A followed golfer added without a name (an app that sends none) takes
   // ESPN's from the board. A kept name is never replaced, so flash is
   // written once per golfer.
+  const ::espn::GolfBoard &b = c.board[s];
   bool named = false;
-  for (const auto &r : this->golf_[s].rows)
-    if (r.favorite && r.name[0] != '\0' && this->fav_name_((uint8_t) this->golf_[s].league, r.id).empty())
-      named = this->put_fav_name_((uint8_t) this->golf_[s].league, r.id, r.name) || named;
+  for (const auto &r : b.rows)
+    if (r.favorite && r.name[0] != 0 && this->fav_name_((uint8_t) b.league, r.id).empty())
+      named = this->put_fav_name_((uint8_t) b.league, r.id, r.name) || named;
   if (named) {
     this->fav_names_pref_.save(this->fav_names_);
     this->sync_prefs_();
     this->rebuild_state_(&this->last_fields_);
   }
-  ESP_LOGI(TAG, "Golf: %s %s, %u of %u golfers (%u bytes)", ::espn::golf_header(this->golf_[s]).c_str(),
-           this->golf_[s].event, (unsigned) this->golf_[s].rows.size(), (unsigned) this->golf_[s].field,
-           (unsigned) j.golf_bytes);
+  // PSRAM figures too: the boards and every read's document live there.
+  ESP_LOGI(TAG, "Golf: %s %s, %u of %u golfers (%u bytes), PSRAM free %u KB, largest block %u KB",
+           ::espn::golf_header(b).c_str(), b.event, (unsigned) b.rows.size(), (unsigned) b.field,
+           (unsigned) j.golf_bytes, (unsigned) (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+           (unsigned) (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
 }
 
 // ---- The news card (news.h) -------------------------------------------------
