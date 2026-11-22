@@ -1584,13 +1584,23 @@ def selftest():
             return {c["id"]: c["on"] for c in value}
         return value
 
+    def favnames(favs):
+        """Each followed athlete's name and abbr as favs[] reports them, by league:id."""
+        return {f'{t["l"]}:{t["id"]}': {k: t[k] for k in ("name", "abbr") if k in t}
+                for t in favs if t and athlete_league(t["l"]) and t.get("name")}
+
     bad = 0
     for case in fx["cases"]:
         start = {**fx["base"], **case.get("start", {})}
-        start["favs"] = [to_team(r) for r in start["favs"]]
+        names = start.pop("favnames", {})
+        refs = start["favs"]
         if "cards" in start:
             start["cards"] = [{"id": cid, "on": on} for cid, on in start["cards"].items()]
         reset_state(start)
+        # Names already kept, followed or not, then the start's favorites with theirs.
+        for ref, name in names.items():
+            FAV_NAMES[parse_team_ref(ref)] = name
+        STATE["favs"] = [to_team(r) for r in refs]
         kv = [(k, v) for key in SET_KEYS for k, v in case["set"] if k == key]
         status = 200 if kv else 400
         if kv:
@@ -1600,7 +1610,7 @@ def selftest():
             bad += 1
             print(f"FAIL {case['name']}: status {status}")
         for key, want in case["expect"].items():
-            have = compact(key, got.get(key))
+            have = favnames(got["favs"]) if key == "favnames" else compact(key, got.get(key))
             if json.dumps(have) != json.dumps(want):
                 bad += 1
                 print(f"FAIL {case['name']}: {key} is {json.dumps(have)}, expected {json.dumps(want)}")

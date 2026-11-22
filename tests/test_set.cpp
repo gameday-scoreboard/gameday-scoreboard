@@ -64,6 +64,7 @@ struct Settings {
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
+  FavNames names{};  // followed athletes' names (fav_names.h), kept by league and id
   // Playlists as the firmware keeps them: a name, a mask over favs and the
   // options (Prefs9 and Prefs10), its color and icon (Prefs12) and its
   // sports (Prefs13).
@@ -141,6 +142,15 @@ void load(Settings &s, JsonObjectConst o) {
         s.favs[i++] = team_ref(f.as<const char *>());
     for (; i < kFavMax; i++)
       s.favs[i] = TeamRef{};
+  }
+  // A case's start may hold names already kept, {"pga:9478": "Scottie Scheffler"},
+  // followed or not: flash keeps a dropped golfer's name until its entry is reused.
+  if (o["favnames"].is<JsonObjectConst>()) {
+    s.names = FavNames{};
+    for (JsonPairConst p : o["favnames"].as<JsonObjectConst>()) {
+      TeamRef t = team_ref(p.key().c_str());
+      fav_name_put(s.names, t.league, t.id, p.value() | "", {});
+    }
   }
   if (o["lists"].is<JsonArrayConst>()) {
     s.lists.clear();
@@ -320,11 +330,19 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::COLLIDE: s.collide = op.on; break;
     case SetKind::TODAY: s.today = op.on; break;
     case SetKind::LIVE: s.live_mask = op.mask; break;
-    case SetKind::FAVS:
+    case SetKind::FAVS: {
       for (int i = 0; i < kFavMax; i++)
         s.favs[i] = i < (int) op.teams.size() ? op.teams[i] : TeamRef{};
       remap(s, before);
+      // put_fav_names_: each name sent is kept; a ref sent alone keeps the name there is.
+      std::vector<std::pair<uint8_t, uint32_t>> now;
+      for (const auto &f : s.favs)
+        if (f.id != 0)
+          now.emplace_back(f.league, f.id);
+      for (size_t i = 0; i < op.teams.size() && i < op.names.size(); i++)
+        fav_name_put(s.names, op.teams[i].league, op.teams[i].id, op.names[i], now);
       break;
+    }
     case SetKind::FAV_SLOT:
       s.favs[op.slot - 1] = op.team;
       remap(s, before);
@@ -513,6 +531,18 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   JsonArray favs = doc["favs"].to<JsonArray>();
   for (int i = 0; i < fav_n; i++)
     favs.add(team_str(s.favs[i]));
+  // put_team's name and abbr for each followed athlete with a kept name, by
+  // league:id; set_cases.json compares favs as refs alone.
+  JsonObject favnames = doc["favnames"].to<JsonObject>();
+  for (int i = 0; i < fav_n; i++) {
+    std::string name = fav_name_get(&s.names, s.favs[i].league, s.favs[i].id);
+    if (!athlete_league(s.favs[i].league) || name.empty())
+      continue;
+    JsonObject n = favnames[team_str(s.favs[i])].to<JsonObject>();
+    n["name"] = name;
+    if (!athlete_abbr(name).empty())
+      n["abbr"] = athlete_abbr(name);
+  }
   JsonArray lists = doc["lists"].to<JsonArray>();
   for (const auto &l : s.lists) {
     JsonObject o = lists.add<JsonObject>();
@@ -879,6 +909,11 @@ void test_fav_names() {
          "a new name replaces it");
   SCHECK(!fav_name_put(n, nfl, 6, "Cowboys", favs) && fav_name_get(&n, nfl, 6).empty(), "a team keeps no name");
   SCHECK(fav_name_get(nullptr, pga, 9478).empty(), "none kept");
+  // An app that sends refs alone: the name stays. Dropped and followed again
+  // with no name, the golfer still has it, until another name needs the entry.
+  std::vector<std::pair<uint8_t, uint32_t>> dropped = {{(uint8_t) League::NBA, 6}};
+  SCHECK(!fav_name_put(n, pga, 9478, "", dropped) && fav_name_get(&n, pga, 9478) == "S. Scheffler",
+         "a drop forgets nothing");
   // Full: an athlete no longer followed gives up its entry.
   FavNames full{};
   std::vector<std::pair<uint8_t, uint32_t>> all;

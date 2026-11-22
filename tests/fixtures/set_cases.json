@@ -5,13 +5,15 @@
     "and against tests/web/mock_device.py by its --selftest, so the page's mock can't drift.",
     "Each case starts from base plus its own start, sends set (key, value pairs, applied in",
     "kSetKeys order) and compares the keys in expect. Teams are written league:id, \"\" for none.",
+    "favnames: the names the panel keeps for followed athletes (fav_names.h). In start, league:id to the",
+    "name, followed or not; in expect, each followed athlete's name and abbr as favs[] reports them.",
     "status 400: no key in the request is one the firmware takes, so nothing changes."
   ],
   "base": {
     "mode": 5, "rotate": 1, "lockon": 15, "release": 30, "collide": 0,
     "favs": ["", "", "", ""], "lists": [], "list": 0, "sport": "", "today": false, "jump": false, "banner": true, "favtake": false, "live": [], "live_auto": true, "tz": 1, "tz_auto": true,
     "down": true, "count": true, "match": true, "play": true, "odds": true, "leaders": true, "field": true, "winbar": true, "spark": true, "opp": true, "celebrate": 2, "bigplays": true, "best": false, "bootaddr": true,
-    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0, "leaderboards": "golf:",
+    "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0, "leaderboards": "golf:", "favnames": {},
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
     "wake": false, "wakelead": 15, "after": "scoreboard"
   },
@@ -109,6 +111,11 @@
     {"name": "live skips a golf tour beside a league", "set": [["live", "pga,nhl"]], "expect": {"live": ["nhl"], "live_auto": false}},
     {"name": "auto with only a golfer followed reads NFL", "start": {"favs": ["pga:9478", "", "", ""]}, "set": [["live", ""]], "expect": {"live": ["nfl"], "live_auto": true}},
     {"name": "auto skips a golfer's tour", "start": {"favs": ["pga:9478", "nba:6", "", ""]}, "set": [["live", ""]], "expect": {"live": ["nba"], "live_auto": true}},
+    {"name": "a golfer followed with a name reports it", "set": [["favs", "nfl:6,pga:9478:Scottie Scheffler"]], "expect": {"favs": ["nfl:6", "pga:9478", "", ""], "favnames": {"pga:9478": {"name": "Scottie Scheffler", "abbr": "Scheffler"}}}},
+    {"name": "an app that sends refs alone keeps the golfer's name", "start": {"favs": ["pga:9478", "", "", ""], "favnames": {"pga:9478": "Scottie Scheffler"}}, "set": [["favs", "pga:9478"]], "expect": {"favs": ["pga:9478", "", "", ""], "favnames": {"pga:9478": {"name": "Scottie Scheffler", "abbr": "Scheffler"}}}},
+    {"name": "a dropped golfer's name isn't reported", "start": {"favs": ["pga:9478", "", "", ""], "favnames": {"pga:9478": "Scottie Scheffler"}}, "set": [["favs", "nba:6"]], "expect": {"favs": ["nba:6", "", "", ""], "favnames": {}}},
+    {"name": "a golfer followed again with no name gets the kept one back", "start": {"favs": ["nba:6", "", "", ""], "favnames": {"pga:9478": "Scottie Scheffler"}}, "set": [["favs", "pga:9478"]], "expect": {"favs": ["pga:9478", "", "", ""], "favnames": {"pga:9478": {"name": "Scottie Scheffler", "abbr": "Scheffler"}}}},
+    {"name": "a golfer with no name kept reports none", "set": [["favs", "pga:46046"]], "expect": {"favs": ["pga:46046", "", "", ""], "favnames": {}}},
     {"name": "an explicit list ignores the favorites", "start": {"favs": ["mlb:15", "", "", ""]}, "set": [["live", "nhl"]], "expect": {"live": ["nhl"], "live_auto": false}},
 
     {"name": "no favorite keeps every league over a saved list", "start": {"mode": 4, "live": ["mlb"], "live_auto": false}, "set": [["rotate", "5"]],
