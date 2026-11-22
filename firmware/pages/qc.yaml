@@ -68,6 +68,7 @@ script:
       - hub75.set_brightness:
           id: matrix
           brightness: !lambda 'return id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level(), false);'
+      - script.execute: gd_dark_check  # drawing again on a dark panel (pages/guard.yaml)
       - script.execute: gd_repaint
 
   - id: qc_stop

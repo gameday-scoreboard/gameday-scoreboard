@@ -23,7 +23,7 @@ The night schedule dims the panel, or turns its screen off, between two times yo
 
 A live game for your team or one of your favorites keeps the panel at its normal brightness until the game ends, so a late game still shows. Then the night setting comes back until the end time.
 
-While night mode is on, the device page says so under the board, like **Night mode until 7:00 AM**, so a dark panel doesn't look broken. The panel keeps following your games all night, and the board is up to date the moment it lights up again.
+While night mode is on, the device page says so under the board, like **Night mode until 7:00 AM**, so a dark panel doesn't look broken. While the screen is off at night, the panel rests: it draws nothing, turns no cards and sends Home Assistant nothing about games. It only watches for your next game, so it can light up when a game of yours goes live. When it lights up it says **Looking for** your team, or the live games it follows, for the second or two it takes to catch up.
 
 You can always get past the schedule. During its hours, any of these turns night mode off for the rest of that night and brings the panel back to its normal brightness:
 
@@ -44,7 +44,7 @@ A running [effect](/using/effects/) dims with the night brightness like the boar
 
 ## Turning the panel off and on
 
-**Panel on** turns the panel's lights off and on. While it's off, the panel keeps following the game and takes the [Smart board](/using/smart-board/) rows Home Assistant sends, so the whole screen is up to date the moment it comes back on.
+**Panel on** turns the panel's lights off and on. While it's off, the panel rests: it draws nothing, turns no cards and sends Home Assistant nothing about games, but it still takes the [Smart board](/using/smart-board/) rows Home Assistant sends. With **Game-day wake** on, it watches for your next game so it can turn on before it; with it off, it reads nothing from ESPN until you turn it back on. Back on, it says **Looking for** your team, or the live games it follows, for the second or two it takes to catch up.
 
 You can also turn it off and on with:
 
@@ -82,7 +82,7 @@ The app and the settings backup have the same settings.
 
 ## Showing: the scoreboard or the clock
 
-**Showing** picks the page the panel shows: the **Scoreboard**, a **Clock** page, [Effects](/using/effects/) or the [Smart board](/using/smart-board/). The scoreboard is the page that follows your games; the clock page is a plain clock for when you want one. Home Assistant has the same choice as **Select Page**. On any page but the Scoreboard, the panel stops reading scores from ESPN and sends Home Assistant nothing about games, since nothing on the screen needs them. Back on the Scoreboard it says **Looking for** your team, or the live games it follows, until the scores are in, usually a second or two. Turning the panel off or night mode keeps the Scoreboard page, so it keeps following your games then.
+**Showing** picks the page the panel shows: the **Scoreboard**, a **Clock** page, [Effects](/using/effects/) or the [Smart board](/using/smart-board/). The scoreboard is the page that follows your games; the clock page is a plain clock for when you want one. Home Assistant has the same choice as **Select Page**. On any page but the Scoreboard, the panel stops reading scores from ESPN and sends Home Assistant nothing about games, since nothing on the screen needs them. Back on the Scoreboard it says **Looking for** your team, or the live games it follows, until the scores are in, usually a second or two. Turned off, or dark at night, the panel rests the same way on any page (see **Panel on** and night mode above).
 
 ### The off-season clock
 

@@ -2,7 +2,7 @@
 
 ESPHome firmware for a standalone sports scoreboard on an ESP32-S3
 driving HUB75 LED panels: the NFL, college football, MLB, the NBA, the
-WNBA, men's college basketball, the NHL, MLS and the Premier League. It
+WNBA, men's and women's college basketball, the NHL, MLS and the Premier League. It
 follows games from ESPN's public API by itself and serves its own
 settings page. CONTRIBUTING.md has the same ground for people; this file
 is the short version.

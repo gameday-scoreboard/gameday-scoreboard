@@ -2315,6 +2315,7 @@ void GamedayComponent::loop() {
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
   this->fx_tick_();  // the effect playlist's next effect, when one is due
   this->showing_tick_();  // a picked page stops the reads below (showing.h)
+  this->standby_tick_();  // a dark screen stops them too, but for what could light it
   if (this->logo_held_ && this->logo_hold_done_())
     this->draw_(this->last_fields_);
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
@@ -2368,7 +2369,7 @@ void GamedayComponent::loop() {
     return;
 #endif
   // The finals rotation turns its cards on its own clock, fetch or no fetch.
-  if (this->recap_on_ && !this->demo_playing_())
+  if (this->recap_on_ && !this->demo_playing_() && !this->standby_ && this->showing_ != ::espn::Showing::PICKED)
     this->recap_tick_();
   this->countdown_tick_();
   if (this->busy_) {
@@ -2461,7 +2462,10 @@ void GamedayComponent::loop() {
   // A page somebody picked under Showing has nothing from ESPN on it: no
   // reads at all until the Scoreboard is back (showing.h), but the clock
   // the Clock page needs still comes from ESPN when the time servers fail.
-  const bool paused = this->showing_ == ::espn::Showing::PICKED;
+  // A dark screen reads no cards either, and only the game reads that could
+  // light it again (standby_read_due_()).
+  const bool picked = this->showing_ == ::espn::Showing::PICKED;
+  const bool paused = picked || this->standby_;
   if (this->board_first_ms_ != 0 && millis() - this->board_first_ms_ >= ::espn::kBoardFirstMs)
     this->board_first_ms_ = 0;
   // The message card's list, between ESPN reads and outside their timing,
@@ -2542,8 +2546,10 @@ void GamedayComponent::loop() {
              this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
-  if (paused)
+  if (picked || (this->standby_ && !this->standby_read_due_()))
     return;
+  if (this->standby_)
+    this->standby_ms_ = millis();
   this->start_job_();
 }
 
@@ -3476,6 +3482,10 @@ bool GamedayComponent::followed_game_live_() const {
   // the automatic update waiting for its end.
   if (this->showing_ == ::espn::Showing::PICKED)
     return false;
+  // Dark, a game read more than 5 minutes ago is no longer known to be on:
+  // the owner turned the panel off during it, and the standby reads skip it.
+  if (this->standby_ && millis() - this->game_read_ms_ > 5 * 60 * 1000)
+    return false;
   if (this->game_.valid && this->game_.state == GameState::IN)
     return true;
   if (this->favorites_mode_())
@@ -3732,6 +3742,52 @@ std::string GamedayComponent::looking_for() const {
       team = nullptr;
   }
   return ::espn::looking_for(this->live_mode_(), this->live_word_(), team);
+}
+
+void GamedayComponent::standby_tick_() {
+  const uint32_t now = millis();
+  if (now - this->standby_tick_ms_ < 1000)
+    return;
+  this->standby_tick_ms_ = now;
+  const bool dark = this->screen_dark();
+  if (dark == this->standby_)
+    return;
+  this->standby_ = dark;
+  this->fire_action_("screen");  // pages/guard.yaml pauses or resumes LVGL
+  if (dark) {
+    this->standby_ms_ = now;  // what the panel knew was fresh a moment ago
+    ESP_LOGI(TAG, "Screen dark: no cards, side reads or game states to Home Assistant, and only the reads "
+                  "that could light it again");
+    return;
+  }
+  // The board is as old as the dark: start over as a team change does, with
+  // the boot screen's "Looking for", no old score on the board, and no event
+  // for a score from while it was dark. A return from a picked page this
+  // same loop already did (showing_tick_), and a page After the game put
+  // up has no board to show.
+  if (this->showing_ != ::espn::Showing::BOARD || !this->board_ready_) {
+    ESP_LOGI(TAG, "Screen lit");
+    return;
+  }
+  ESP_LOGI(TAG, "Screen lit: reading everything again");
+  this->ha_tracker_.clear();
+  this->board_ready_ = false;
+  this->board_pending_ms_ = now == 0 ? 1 : now;
+  this->restart_board_(false, false);
+}
+
+// While dark, a read only when it could light the screen again (showing.h,
+// standby_every_ms).
+bool GamedayComponent::standby_read_due_() const {
+  const bool night_dark = this->power_on_ && this->display_on();
+  if (!night_dark && !this->wake_.on)
+    return false;
+  if (!this->clock_set_() || this->time_ == nullptr)
+    return true;
+  const int64_t epoch = (int64_t) this->time_->timestamp_now();
+  const uint32_t every =
+      ::espn::standby_every_ms(night_dark, this->wake_.on, epoch, this->owner_next_kick_(epoch), this->wake_.lead);
+  return every != 0 && millis() - this->standby_ms_ >= every;
 }
 
 void GamedayComponent::board_changed_(bool board_cleared) {
@@ -4673,6 +4729,9 @@ void GamedayComponent::run_job_() {
 // Main loop: fold the worker's result into the component state and render.
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
+  const ::espn::JobKind kind = this->job_kind_();
+  if (kind == ::espn::JobKind::BOARD || kind == ::espn::JobKind::FAV_TEAM)
+    this->game_read_ms_ = millis();
   if (j.need_msg) {
     this->apply_msg_job_();  // whatever the board follows, the card is the same
     return;
@@ -5301,7 +5360,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
                                            this->score_log_.lines(g.event_id));
   const GameSnapshot &ha = this->ha_game_();
-  f.ha_quiet = this->showing_ != ::espn::Showing::BOARD;
+  f.ha_quiet = this->showing_ != ::espn::Showing::BOARD || this->standby_;
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;
   if (ha.valid && ha.state != GameState::NOT_FOUND) {
@@ -7490,7 +7549,7 @@ void GamedayComponent::ha_track_() {
   // Off the Scoreboard nothing goes to Home Assistant (showing.h). Back on
   // it from a picked page, the tracker starts fresh (showing_tick_), so a
   // score from while it was away never fires.
-  if (this->showing_ != ::espn::Showing::BOARD)
+  if (this->showing_ != ::espn::Showing::BOARD || this->standby_)
     return;
   // The finals rotation turns through other games' cards, none of them followed.
   if (this->recap_on_ && !this->demo_playing_())
@@ -7786,6 +7845,9 @@ void GamedayComponent::msg_show_(const std::string &page) {
 
 // Not over a live game, the demo, a splash or the panel's trouble line.
 bool GamedayComponent::card_between_(uint32_t now) const {
+  // Nobody sees a card on a dark screen or under a picked page.
+  if (this->standby_ || this->showing_ == ::espn::Showing::PICKED)
+    return false;
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   return !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&

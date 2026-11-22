@@ -444,6 +444,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   }
   // What the boot screen's hold says it is looking for (showing.h).
   std::string looking_for() const;
+  // The screen shows nothing: Power off, or the night schedule's screen-off.
+  // pages/guard.yaml pauses LVGL on the "screen" action while it is.
+  bool screen_dark() { return !(this->power_on_ && this->display_on()) || this->guard_brightness(255) == 0; }
   // pages/smart_board.yaml's gd_sb_pinned, read for showing_now_().
   void set_sb_pinned_ref(const bool *pinned) { this->sb_pinned_ = pinned; }
   // Stored inverted so panels from before this setting keep showing it.
@@ -1252,6 +1255,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::Showing showing_{::espn::Showing::BOARD};
   ::espn::Showing showing_now_() const;
   void showing_tick_();  // from loop(): a picked page stops the reads, the Scoreboard brings them back
+  // A dark screen (screen_dark()): no card turns, no side reads, nothing to
+  // Home Assistant, and only the game reads that could light it again
+  // (standby_read_due_()). standby_ms_ is millis() of the last of those.
+  bool standby_{false};
+  uint32_t standby_ms_{0};
+  uint32_t standby_tick_ms_{0};
+  uint32_t game_read_ms_{0};  // millis() of the last board or favorite game read applied
+  void standby_tick_();
+  bool standby_read_due_() const;
   // Somebody picked a team, a mode or the favorites: the effect between
   // games ends until after the next game's final, as a remote press does.
   void fx_between_end_(const char *why);

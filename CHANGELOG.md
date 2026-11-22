@@ -37,12 +37,13 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Flights page shows the planes flying over your home, the panel can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, and Home Assistant names the panel Scoreboard by Game Day.
+A new Flights page shows the planes flying over your home, women's college basketball joins the panel, it can play an effect whenever no game of yours is on, and Add network lists the Wi-Fi networks nearby.
 
 ### ⚠️ Heads up
 
 - 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
-- 🏠 On the Clock, Effects or the Smart board the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
+- 🏠 On the Clock, Effects, the Smart board or Flights the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
+- 🌙 A dark panel, turned off or at night, rests: it draws nothing, turns no cards, reads nothing from ESPN but your next game and sends Home Assistant nothing about games, then catches up in a second or two when it lights
 - 🌡️ **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** leave Home Assistant, where they wrote a row every 10 to 30 seconds; delete the old entities (the chip temperature is on the device page under Diagnostics)
 
 ### ✨ New
@@ -50,6 +51,7 @@ A new Flights page shows the planes flying over your home, the panel can play an
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 - ✈️ **Flights** under **Showing** and **After the game**: the planes near your home with their airline, route, type, altitude and distance, from adsb.lol's free community data or your own ADS-B receiver
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
+- 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
 
 ### 🐛 Fixes
 
