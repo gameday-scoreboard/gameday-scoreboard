@@ -27,6 +27,7 @@ static std::string slurp(const fs::path &p) {
 }
 
 static const size_t kMaxEvents = 4;
+static const size_t kMaxCompetitors = 12;
 
 int main(int argc, char **argv) {
   if (argc != 4) {
@@ -63,6 +64,7 @@ int main(int argc, char **argv) {
         rank["team"]["$ref"] = true;
       },
       [](JsonDocument &f) { f["articles"][0]["headline"] = true; },
+      [](JsonDocument &f) { espn::detail::fill_golf_filter(f); },
       // The game summary, with the header's teams so the fuzzer finds the
       // event and team ids parse_summary checks.
       [](JsonDocument &f) {
@@ -86,6 +88,12 @@ int main(int argc, char **argv) {
       JsonArray events = doc["events"];
       while (events.size() > kMaxEvents)
         events.remove(kMaxEvents);
+      // A golf leaderboard's field is a hundred golfers or more.
+      for (JsonObject ev : events) {
+        JsonArray field = ev["competitions"][0]["competitors"];
+        while (field.size() > kMaxCompetitors)
+          field.remove(kMaxCompetitors);
+      }
       std::string out;
       serializeJson(doc, out);
       if (out.size() < 32 || !seen.insert(out).second)

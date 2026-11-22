@@ -1,10 +1,12 @@
 // Fuzz target: one input goes through every ESPN parser the panel runs (the
-// scoreboards, team, schedule, season, event, summary, Top 25 and news
-// reads), the text built from what they read, and the finals rotation
+// scoreboards, team, schedule, season, event, summary, Top 25, news and
+// golf reads), the text built from what they read, and the finals rotation
 // (recap.h). ESPN's documents share one shape (events, competitions,
 // competitors), so a mutated scoreboard also reaches the event and team
 // parsers. See fuzz_main.cpp and the fuzz targets in the Makefile.
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <string>
@@ -279,6 +281,35 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     std::string list;
     ChunkReader r(data, size, chunk);
     sink = sink + (size_t) (parse_news(r, list) + 1) + list.size();
+  }
+
+  {
+    // A golf tour's leaderboard (golf.h), with the input's ids followed.
+    // The stream and the string must give the same board.
+    uint32_t favs[8];
+    size_t fav_count = 0;
+    for (const Pick &p : picks)
+      if (fav_count < 8)
+        favs[fav_count++] = p.team_id;
+    GolfBoard a, b;
+    ChunkReader r(data, size, chunk);
+    const bool ok_a = parse_golf(r, League::PGA, favs, fav_count, a);
+    const bool ok_b = parse_golf(json, League::LPGA, favs, fav_count, b);
+    if (ok_a != ok_b || a.rows.size() != b.rows.size() || a.field != b.field || a.round != b.round) {
+      fprintf(stderr, "parse_golf read the stream as %d with %zu rows, the string as %d with %zu\n", ok_a,
+              a.rows.size(), ok_b, b.rows.size());
+      abort();
+    }
+    if (ok_a) {
+      if (a.rows.size() > kGolfRowsMax) {
+        fprintf(stderr, "parse_golf kept %zu rows\n", a.rows.size());
+        abort();
+      }
+      for (uint32_t pg = 0; pg < golf_pages(a, 2); pg++)
+        for (uint32_t col = 0; col < 2; col++)
+          sink = sink + golf_column(a, pg, 2, col, true).size() + golf_column(a, pg, 2, col, false).size();
+      sink = sink + golf_header(a).size() + golf_read_ms(a, now) + (golf_fresh(a, now) ? 1 : 0);
+    }
   }
 
   GameSnapshot prev;
