@@ -84,37 +84,30 @@ script:
             lv_obj_set_pos(l, 0, y);
           };
           lv_obj_t *rows[::espn::kFlListRows] = {id(gd_fl_r1), id(gd_fl_r2), id(gd_fl_r3), id(gd_fl_r4)};
-          lv_obj_t *rows2[::espn::kFlListRows] = {id(gd_fl_s1), id(gd_fl_s2), id(gd_fl_s3), id(gd_fl_s4)};
 
-          // The layout for the panel's width, once and again when it changes
+          // The layout for the panel's width, once and again when it changes.
+          // The widgets below leave their place, width and font to this.
           static int32_t laid = 0;
           if (laid != W) {
             laid = W;
             for (lv_obj_t *c : {id(gd_fl_msg), id(gd_fl_card), id(gd_fl_list)})
               lv_obj_set_size(c, W, 64);
-            if (wide) {
-              place(id(gd_fl_call), f16, 0);
-              place(id(gd_fl_airline), f8, 5);
-              place(id(gd_fl_l2), f12, 16);
-              place(id(gd_fl_l3), f12, 28);
-              place(id(gd_fl_l4), f12, 40);
-              place(id(gd_fl_l5), f12, 52);
-              place(id(gd_fl_l6), f8, 0);
-            } else {
-              place(id(gd_fl_call), f12, 0);
-              place(id(gd_fl_airline), f8, 0);
-              place(id(gd_fl_l2), f12, 13);
-              place(id(gd_fl_l3), f8, 27);
-              place(id(gd_fl_l4), f8, 36);
-              place(id(gd_fl_l6), f8, 45);
-              place(id(gd_fl_l5), f8, 55);
-            }
+            // The card's lines: the font (0 spleen_8, 1 spleen_12, 2
+            // spleen_16) and y of each, two panels then one
+            lv_obj_t *card[] = {id(gd_fl_call), id(gd_fl_airline), id(gd_fl_l2), id(gd_fl_l3),
+                                id(gd_fl_l4),   id(gd_fl_l5),      id(gd_fl_l6)};
+            static const uint8_t kAt[2][7][2] = {
+                {{2, 0}, {0, 5}, {1, 16}, {1, 28}, {1, 40}, {1, 52}, {0, 0}},
+                {{1, 0}, {0, 0}, {1, 13}, {0, 27}, {0, 36}, {0, 55}, {0, 45}}};
+            const lv_font_t *fonts[] = {f8, f12, f16};
+            for (size_t i = 0; i < 7; i++)
+              place(card[i], fonts[kAt[wide ? 0 : 1][i][0]], kAt[wide ? 0 : 1][i][1]);
             lv_obj_set_hidden(id(gd_fl_airline), !wide);
             lv_obj_set_hidden(id(gd_fl_l6), wide);
+            // One panel puts a row's second line, in grey, under it
             for (size_t i = 0; i < ::espn::kFlListRows; i++) {
               place(rows[i], wide ? f12 : f8, wide ? 2 + 16 * (int32_t) i : 16 * (int32_t) i);
-              place(rows2[i], f8, 16 * (int32_t) i + 8);
-              lv_obj_set_hidden(rows2[i], wide);
+              lv_label_set_recolor(rows[i], !wide);
             }
           }
 
@@ -147,16 +140,29 @@ script:
             const lv_font_t *f5 = wide ? f12 : f8;
             lv_point_t sz;
             lv_text_get_size(&sz, v.where, f5, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-            const int32_t ax = sz.x + 3, ay = lv_obj_get_y(l5) + (lv_font_get_line_height(f5) - 7) / 2;
-            lv_obj_set_pos(id(gd_fl_up)->obj, ax, ay);
-            lv_obj_set_pos(id(gd_fl_down)->obj, ax, ay);
-            lv_obj_set_hidden(id(gd_fl_up)->obj, v.vdir <= 0);
-            lv_obj_set_hidden(id(gd_fl_down)->obj, v.vdir >= 0);
+            lv_obj_t *cv = id(gd_fl_arrow);
+            lv_obj_set_pos(cv, sz.x + 3, lv_obj_get_y(l5) + (lv_font_get_line_height(f5) - 7) / 2);
+            lv_obj_set_hidden(cv, v.vdir == 0);
+            // Drawn again only when it turns: 5 by 7 pixels, a row a byte
+            // with bit 4 the left pixel, green up, orange down
+            static int8_t drawn = 0;
+            if (v.vdir != 0 && v.vdir != drawn) {
+              drawn = v.vdir;
+              static const uint8_t kUp[7] = {0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x04};
+              const lv_color_t c = lv_color_hex(v.vdir > 0 ? 0x40D040 : 0xFF8040);
+              lv_canvas_fill_bg(cv, lv_color_black(), LV_OPA_COVER);
+              for (int32_t y = 0; y < 7; y++)
+                for (int32_t x = 0; x < 5; x++)
+                  if (kUp[v.vdir > 0 ? y : 6 - y] & (0x10 >> x))
+                    lv_canvas_set_px(cv, x, y, c, LV_OPA_COVER);
+            }
           } else {
             for (size_t i = 0; i < ::espn::kFlListRows; i++) {
               const bool on = i < v.rows;
-              put(rows[i], on ? v.row[i] : "");
-              put(rows2[i], on ? v.row2[i] : "");
+              char t[48] = "";
+              if (on)
+                snprintf(t, sizeof(t), wide ? "%s" : "%s\n#909090 %s#", v.row[i], v.row2[i]);
+              put(rows[i], t);
               ink(rows[i], on && v.row_emergency[i] ? 0xFF2020 : 0xFFFFFF);
             }
           }
@@ -184,10 +190,6 @@ lvgl:
         # A message: the title and the line under it
         - obj:
             id: gd_fl_msg
-            x: 0
-            y: 0
-            width: 64
-            height: 64
             pad_all: 0
             border_width: 0
             bg_opa: TRANSP
@@ -195,31 +197,19 @@ lvgl:
             widgets:
               - label:
                   id: gd_fl_title
-                  x: 0
-                  y: 6
-                  width: 64
                   text_align: CENTER
                   long_mode: CLIP
                   text: "Flights"
                   text_color: 0xFFFFFF
-                  text_font: spleen_12
               - label:
                   id: gd_fl_sub
-                  x: 0
-                  y: 24
-                  width: 64
                   text_align: CENTER
                   long_mode: WRAP
                   text: "Looking for planes"
                   text_color: 0x909090
-                  text_font: spleen_8
         # The card for one plane
         - obj:
             id: gd_fl_card
-            x: 0
-            y: 0
-            width: 64
-            height: 64
             pad_all: 0
             border_width: 0
             bg_opa: TRANSP
@@ -228,112 +218,56 @@ lvgl:
             widgets:
               - label:
                   id: gd_fl_call
-                  x: 0
-                  y: 0
-                  width: 64
                   long_mode: CLIP
                   text: ""
-                  text_color: 0xFFFFFF
-                  text_font: spleen_12
               - label:
                   id: gd_fl_airline
-                  x: 0
-                  y: 5
-                  width: 64
                   text_align: RIGHT
                   long_mode: CLIP
                   text: ""
                   text_color: 0x909090
-                  text_font: spleen_8
               - label:
                   id: gd_fl_l2
-                  x: 0
-                  y: 13
-                  width: 64
                   long_mode: CLIP
                   text: ""
-                  text_color: 0xA0A0A0
-                  text_font: spleen_12
               - label:
                   id: gd_fl_l3
-                  x: 0
-                  y: 27
-                  width: 64
                   long_mode: CLIP
                   text: ""
                   text_color: 0xC0C0C0
-                  text_font: spleen_8
               - label:
                   id: gd_fl_l4
-                  x: 0
-                  y: 36
-                  width: 64
                   long_mode: CLIP
                   text: ""
                   text_color: 0xFFFFFF
-                  text_font: spleen_8
               - label:
                   id: gd_fl_l6
-                  x: 0
-                  y: 45
-                  width: 64
                   long_mode: CLIP
                   text: ""
                   text_color: 0xFFFFFF
-                  text_font: spleen_8
               - label:
                   id: gd_fl_l5
-                  x: 0
-                  y: 55
-                  width: 64
                   long_mode: CLIP
                   text: ""
-                  text_color: 0xFFFFFF
-                  text_font: spleen_8
-              # Climbing and descending
-              - line:
-                  id: gd_fl_up
-                  points:
-                    - 2, 6
-                    - 2, 0
-                    - 0, 2
-                    - 2, 0
-                    - 4, 2
-                  line_width: 1
-                  line_color: 0x40D040
-                  hidden: true
-              - line:
-                  id: gd_fl_down
-                  points:
-                    - 2, 0
-                    - 2, 6
-                    - 0, 4
-                    - 2, 6
-                    - 4, 4
-                  line_width: 1
-                  line_color: 0xFF8040
+              # Climbing or descending, drawn by gd_fl_draw
+              - canvas:
+                  id: gd_fl_arrow
+                  width: 5
+                  height: 7
                   hidden: true
         # The nearest four
         - obj:
             id: gd_fl_list
-            x: 0
-            y: 0
-            width: 64
-            height: 64
             pad_all: 0
             border_width: 0
             bg_opa: TRANSP
             scrollbar_mode: "OFF"
             hidden: true
             widgets:
-              - label: {id: gd_fl_r1, x: 0, y: 0, width: 64, long_mode: CLIP, text: "", text_color: 0xFFFFFF, text_font: spleen_8}
-              - label: {id: gd_fl_s1, x: 0, y: 8, width: 64, long_mode: CLIP, text: "", text_color: 0x909090, text_font: spleen_8}
-              - label: {id: gd_fl_r2, x: 0, y: 16, width: 64, long_mode: CLIP, text: "", text_color: 0xFFFFFF, text_font: spleen_8}
-              - label: {id: gd_fl_s2, x: 0, y: 24, width: 64, long_mode: CLIP, text: "", text_color: 0x909090, text_font: spleen_8}
-              - label: {id: gd_fl_r3, x: 0, y: 32, width: 64, long_mode: CLIP, text: "", text_color: 0xFFFFFF, text_font: spleen_8}
-              - label: {id: gd_fl_s3, x: 0, y: 40, width: 64, long_mode: CLIP, text: "", text_color: 0x909090, text_font: spleen_8}
-              - label: {id: gd_fl_r4, x: 0, y: 48, width: 64, long_mode: CLIP, text: "", text_color: 0xFFFFFF, text_font: spleen_8}
-              - label: {id: gd_fl_s4, x: 0, y: 56, width: 64, long_mode: CLIP, text: "", text_color: 0x909090, text_font: spleen_8}
+              - label: {id: gd_fl_r1, long_mode: CLIP, text: ""}
+              - label: {id: gd_fl_r2, long_mode: CLIP, text: ""}
+              - label: {id: gd_fl_r3, long_mode: CLIP, text: ""}
+              - label: {id: gd_fl_r4, long_mode: CLIP, text: ""}
 
 lvgl_page_manager:
   pages:

@@ -1440,7 +1440,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t need_fl{0};
     std::string fl_url;
     std::string fl_key;  // the owner's adsb.lol key, "" for none
-    double fl_lat{0}, fl_lon{0};
+    float fl_lat{0}, fl_lon{0};
     float fl_radius_km{0};
     ::espn::Sky fl_sky;
     char fl_call[9]{};  // the callsign a route lookup is for

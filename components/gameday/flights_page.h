@@ -13,6 +13,12 @@
 
 #include "flights.h"
 
+// Built for size, as flights.h is.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
+
 namespace espn {
 
 // Why the last read failed, for the state document and the page's message.
@@ -32,10 +38,11 @@ inline const char *fl_err_word(FlErr e) {
 }
 
 // The owner's receiver is read this often, adsb.lol every 60 s, or every
-// 20 s with the owner's own key.
+// 30 s with the owner's own key (a free key is 1,000 reads a day: about
+// 8 hours on screen, as 500 a day at 60 s is without one).
 constexpr uint32_t kFlReceiverMs = 10 * 1000;
 constexpr uint32_t kFlLolMs = 60 * 1000;
-constexpr uint32_t kFlLolKeyMs = 20 * 1000;
+constexpr uint32_t kFlLolKeyMs = 30 * 1000;
 // Failed reads of the receiver in a row before adsb.lol takes over. While
 // it has, the receiver is tried again this often, and takes back over the
 // first time it answers.
@@ -103,7 +110,7 @@ inline const char *fl_alt_short(char *out, size_t n, const Plane &p, bool metric
   if (p.ground)
     snprintf(out, n, "Ground");
   else if (p.alt_ft != kAltUnknown)
-    fl_grouped(out, n, metric ? lround(p.alt_ft * 0.3048) : (long) p.alt_ft);
+    fl_grouped(out, n, metric ? fl_ft_to_m(p.alt_ft) : (long) p.alt_ft);
   return out;
 }
 
@@ -197,7 +204,7 @@ inline void fl_compose(const FlPageIn &in, const Sky &sky, int card, const Route
   } else if (p.call[0] && p.reg[0]) {
     snprintf(v.line2, sizeof(v.line2), "%s", p.reg);
   }
-  snprintf(v.type, sizeof(v.type), "%s", p.type[0] ? plane_type_name(p.type, in.wide) : "");
+  plane_type_name(v.type, sizeof(v.type), p.type, in.wide);
   char alt[16], speed[16];
   alt_text(alt, sizeof(alt), p, in.metric);
   speed_text(speed, sizeof(speed), p.ground ? NAN : p.gs_kt, in.metric);
@@ -228,3 +235,7 @@ inline FlFlags &fl_flags() {
 }
 
 }  // namespace espn
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif

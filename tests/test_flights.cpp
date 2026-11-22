@@ -333,6 +333,12 @@ static void test_geometry() {
   CHECK_NEAR(g.lat, p.lat, 1e-12);
 }
 
+// plane_type_name into a buffer of the page's size.
+static const char *type_name(const char *code, bool wide) {
+  static char buf[24];
+  return plane_type_name(buf, sizeof(buf), code, wide);
+}
+
 static Plane at(const char *hex, float dist_km, float brg_deg, float track = NAN, float gs_kt = NAN) {
   Plane p;
   snprintf(p.hex, sizeof(p.hex), "%s", hex);
@@ -459,37 +465,49 @@ static void test_names() {
   CHECK(airline_short("") == nullptr);
   CHECK(airline_short(nullptr) == nullptr);
   // The table: one row a code, names that fit.
-  size_t na = sizeof(kAirlines) / sizeof(kAirlines[0]);
-  CHECK(na >= 60);
+  size_t na = 0;
   bool fits = true, unique = true;
-  for (size_t i = 0; i < na; i++) {
-    fits = fits && strlen(kAirlines[i].icao) == 3 && strlen(kAirlines[i].name) <= 14;
-    for (size_t k = i + 1; k < na; k++)
-      unique = unique && strcmp(kAirlines[i].icao, kAirlines[k].icao) != 0;
+  for (const char *e = kAirlines; *e; e += strlen(e) + 1, na++) {
+    fits = fits && fl_upper(e[0]) && fl_upper(e[1]) && fl_upper(e[2]) && strlen(e + 3) >= 1 && strlen(e + 3) <= 14;
+    for (const char *k = e + strlen(e) + 1; *k; k += strlen(k) + 1)
+      unique = unique && memcmp(e, k, 3) != 0;
   }
+  CHECK(na >= 60);
   CHECK(fits);
   CHECK(unique);
 
-  CHECK_STR(plane_type_name("A321", false), "A321");
-  CHECK_STR(plane_type_name("A321", true), "Airbus A321");
-  CHECK_STR(plane_type_name("B738", false), "737-800");
-  CHECK_STR(plane_type_name("B738", true), "Boeing 737-800");
-  CHECK_STR(plane_type_name("E75L", false), "E175");
-  CHECK_STR(plane_type_name("CRJ9", false), "CRJ-900");
-  CHECK_STR(plane_type_name("B38M", true), "Boeing 737 MAX 8");
-  CHECK_STR(plane_type_name("ZZZZ", true), "ZZZZ");
-  CHECK_STR(plane_type_name("", false), "");
-  CHECK_STR(plane_type_name(nullptr, false), "");
-  size_t nt = sizeof(kTypes) / sizeof(kTypes[0]);
-  CHECK(nt >= 70);
+  CHECK_STR(type_name("A321", false), "A321");
+  CHECK_STR(type_name("A321", true), "Airbus A321");
+  CHECK_STR(type_name("B738", false), "737-800");
+  CHECK_STR(type_name("B738", true), "Boeing 737-800");
+  CHECK_STR(type_name("E75L", false), "E175");
+  CHECK_STR(type_name("CRJ9", false), "CRJ-900");
+  CHECK_STR(type_name("B38M", true), "Boeing 737 MAX 8");
+  CHECK_STR(type_name("ZZZZ", true), "ZZZZ");
+  CHECK_STR(type_name("", false), "");
+  CHECK_STR(type_name(nullptr, false), "");
+  // Each row: the code, the narrow name, the wide name ("" for the same).
+  auto next_type = [](const char *e) {
+    for (int f = 0; f < 3; f++)
+      e += strlen(e) + 1;
+    return e;
+  };
+  size_t nt = 0;
   fits = unique = true;
-  for (size_t i = 0; i < nt; i++) {
-    fits = fits && strlen(kTypes[i].narrow) <= 9 && strlen(kTypes[i].wide) <= 20;
-    for (size_t k = i + 1; k < nt; k++)
-      unique = unique && strcmp(kTypes[i].code, kTypes[k].code) != 0;
+  for (const char *e = kTypes; *e; e = next_type(e), nt++) {
+    const char *narrow = e + strlen(e) + 1, *wide = narrow + strlen(narrow) + 1;
+    fits = fits && strlen(e) >= 3 && strlen(e) <= 4 && *narrow && strlen(narrow) <= 9 &&
+           strlen(type_name(e, true)) <= 20 && strcmp(wide, narrow) != 0 &&
+           ((uint8_t) wide[0] > ' ' || strlen(wide) <= 1);
+    for (const char *k = next_type(e); *k; k = next_type(k))
+      unique = unique && strcmp(e, k) != 0;
   }
+  CHECK(nt >= 70);
   CHECK(fits);
   CHECK(unique);
+  CHECK_STR(type_name("MD11", true), "MD-11");
+  CHECK_STR(type_name("B06", true), "Bell 206 JetRanger");
+  CHECK_STR(type_name("K35R", false), "KC-135");
 
   CHECK(plane_emergency("7700", nullptr));
   CHECK(plane_emergency("7600", "none"));

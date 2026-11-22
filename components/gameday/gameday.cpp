@@ -6129,6 +6129,12 @@ void GamedayComponent::day_tick_() {
 
 // ---- The Flights page (flights.h, flights_page.h) -----------------------------
 
+// Built for size, as flights.h is.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
+
 void GamedayComponent::load_fl_() {
   this->fl_pref_ = global_preferences->make_preference<PrefsFl>(fnv1_hash("gameday_fl_v1"));
   if (!this->fl_pref_.load(&this->fl_)) {
@@ -6172,9 +6178,10 @@ void GamedayComponent::set_fl_(const PrefsFl &p) {
     this->fl_rx_ms_ = 0;
     this->fl_lol_ms_ = 0;
   }
-  ESP_LOGI(TAG, "Flights: within %u %s, facing %s", (unsigned) (this->fl_metric_() ? ::espn::kFlRadiusKm[p.rad]
-                                                                                      : ::espn::kFlRadiusMi[p.rad]),
-           this->fl_metric_() ? "km" : "mi", p.face == 0 ? "any way" : ::espn::compass8((p.face - 1) * 45.0f));
+  char radius[16];
+  this->fl_radius_text_(radius, sizeof(radius));
+  ESP_LOGI(TAG, "Flights: within %s, facing %s", radius,
+           p.face == 0 ? "any way" : ::espn::compass8((p.face - 1) * 45.0f));
   this->fl_pref_.save(&this->fl_);
   this->sync_prefs_();
   this->rebuild_state_(&this->last_fields_);
@@ -6239,7 +6246,7 @@ void GamedayComponent::fl_tick_() {
 
 // Main loop: the read due now, if any. The receiver first, every 10 s; after
 // two failures in a row adsb.lol takes over and the receiver is tried once
-// a minute until it answers. adsb.lol every 60 s, 20 s with a key, and not
+// a minute until it answers. adsb.lol every 60 s, 30 s with a key, and not
 // while a failure's wait runs. Then the card's plane's route, when adsbdb
 // hasn't been asked about its callsign lately.
 uint8_t GamedayComponent::fl_due_() {
@@ -6413,7 +6420,7 @@ void GamedayComponent::apply_fl_job_() {
     this->fl_fail_.clear();
   }
   this->fl_err_ = ::espn::FlErr::NONE;
-  if (j.fl_lat != (double) this->wx_.lat || j.fl_lon != (double) this->wx_.lon ||
+  if (j.fl_lat != this->wx_.lat || j.fl_lon != this->wx_.lon ||
       j.fl_radius_km != this->fl_radius_km_())
     return;  // the town or the distance changed meanwhile; the next read is for the new ones
   ::espn::Sky &sky = this->fl_data_.sky;
@@ -6470,6 +6477,10 @@ void GamedayComponent::flights_view(::espn::FlView &v, bool wide) const {
   }
   ::espn::fl_compose(in, sky, card, route, v);
 }
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
 
 // ---- finals rotation ------------------------------------------------------------
 

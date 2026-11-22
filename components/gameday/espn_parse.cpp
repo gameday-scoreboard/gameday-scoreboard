@@ -298,7 +298,7 @@ bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
 bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
-bool parse_sky_from(WxSource &input, double home_lat, double home_lon, float radius_km, Sky &out) {
+bool parse_sky_from(WxSource &input, float home_lat, float home_lon, float radius_km, Sky &out) {
   return parse_sky(input, home_lat, home_lon, radius_km, out);
 }
 bool parse_route_from(WxSource &input, Route &out) { return parse_route(input, out); }
