@@ -110,6 +110,40 @@ inline const LeagueInfo *league_info(League league) {
   return nullptr;
 }
 
+// A leaderboard sport ranks a field (golf) instead of pairing two teams in a
+// game. Its leagues have no Live games, no scan and no finals rotation; the
+// Golf leaderboard card shows them instead (the leaderboards setting).
+constexpr bool leaderboard_sport(Sport s) { return s == Sport::GOLF; }
+
+inline bool leaderboard_league(League league) {
+  const LeagueInfo *l = league_info(league);
+  return l != nullptr && leaderboard_sport(l->sport);
+}
+
+// The leagues with games between two teams, for arrays only those use.
+constexpr size_t game_league_count() {
+  size_t n = 0;
+  for (const auto &l : kLeagues)
+    n += leaderboard_sport(l.sport) ? 0 : 1;
+  return n;
+}
+constexpr size_t kGameLeagueCount = game_league_count();
+
+// A game league's place in those arrays: its rank among the game leagues by
+// League value. kGameLeagueCount for a leaderboard league or a value this
+// firmware doesn't have.
+constexpr size_t game_league_slot(uint8_t league) {
+  size_t below = 0;
+  bool game = false;
+  for (const auto &l : kLeagues) {
+    if ((uint8_t) l.league == league)
+      game = !leaderboard_sport(l.sport);
+    else if ((uint8_t) l.league < league && !leaderboard_sport(l.sport))
+      below++;
+  }
+  return game ? below : kGameLeagueCount;
+}
+
 // The league's name in "All NFL live games", as the device page says it: its
 // short name, or the long one where the short one is an abbreviation owners
 // don't use (app.js liveName).

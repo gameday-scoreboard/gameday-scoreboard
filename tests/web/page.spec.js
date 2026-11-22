@@ -2530,8 +2530,12 @@ test("a golf tab finds golfers by name with ESPN's search and follows one", asyn
       { id: "3116147", displayName: "Ian Werner Scheffler", sport: "soccer", league: "club.friendly" },
     ] } });
   });
-  await page.route("https://site.web.api.espn.com/apis/common/v3/sports/golf/pga/athletes/9478", (route) =>
-    route.fulfill({ json: { athlete: { displayName: "Scottie Scheffler" } } }));
+  // The page never looks a followed golfer up: the panel has the name.
+  const lookups = [];
+  await page.route("https://site.web.api.espn.com/apis/common/v3/sports/**", (route) => {
+    lookups.push(route.request().url());
+    return route.abort();
+  });
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
@@ -2545,12 +2549,25 @@ test("a golf tab finds golfers by name with ESPN's search and follows one", asyn
   await expect(page.locator("#tiles .tile")).toContainText("PGA Tour");
   expect(asked).toEqual(["schef"]);
   await page.locator("#tiles .tile").click();
-  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,pga:9478" });
+  // The name goes with the follow, and the panel reports it back.
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,pga:9478:Scottie Scheffler" });
   await expect(page.locator("#tiles .tile")).toHaveAttribute("aria-pressed", "true");
+  const golfer = (await deviceState(request)).favs[3];
+  expect(golfer).toEqual({ l: "pga", id: 9478, name: "Scottie Scheffler", abbr: "Scheffler" });
   // Back on the Teams tab the golfer is listed by name.
   await page.locator("#close").click();
   await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("Scottie Scheffler");
   await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("PGA Tour golfer");
+  // A move sends the refs alone; the panel keeps the name.
+  await page.locator("#favCtls .ctl.fav").last().getByRole("button", { name: "Move up" }).click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,pga:9478,ncaa:145" });
+  await expect(page.locator("#favCtls .ctl.fav").nth(2)).toContainText("Scottie Scheffler");
+  // Reloaded, with nothing kept in this browser, the name still comes from the panel.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await tab(page, "teams");
+  await expect(page.locator("#favCtls .ctl.fav").nth(2)).toContainText("Scottie Scheffler");
+  expect(lookups).toEqual([]);
   // A team tab's box searches teams again.
   await page.locator("#favAdd").click();
   await page.locator(".tabs button", { hasText: "NHL" }).click();
@@ -2569,16 +2586,25 @@ test("the Golf leaderboard card picks its tours with chips", async ({ page, requ
   const chips = row.locator("#golfChips .chip");
   await expect(chips).toHaveText(["PGA Tour", "LPGA", "DP World Tour"]);
   await chips.nth(2).click();
-  await expectSet(request, { golftours: "eur" });
+  await expectSet(request, { leaderboards: "golf:eur" });
   await expect(chips.nth(2)).toHaveAttribute("aria-pressed", "true");
   await expect(row).not.toHaveClass(/\bwaiting\b/);
   // A second tour comes back in tour order; a tap takes one off.
   await chips.nth(0).click();
-  await expectSet(request, { golftours: "pga,eur" });
+  await expectSet(request, { leaderboards: "golf:pga,eur" });
   await chips.nth(2).click();
-  await expectSet(request, { golftours: "pga" });
-  // Firmware from before the tours has no chips.
-  await reset(request, { golftours: null });
+  await expectSet(request, { leaderboards: "golf:pga" });
+  await chips.nth(0).click();
+  await expectSet(request, { leaderboards: "golf:" });
+  await expect((await deviceState(request)).leaderboards).toBe("golf:");
+  // The chips are the tours the panel names, whatever the page's own table has.
+  await reset(request, { lbleagues: [{ key: "pga", name: "PGA TOUR", sport: "golf" }, { key: "f1", name: "Formula 1", sport: "racing" }] });
+  await page.goto("/");
+  await tab(page, "display");
+  await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();
+  await expect(page.locator("#golfChips .chip")).toHaveText(["PGA TOUR"]);
+  // Firmware from before the setting has no chips.
+  await reset(request, { lbleagues: null });
   await page.goto("/");
   await tab(page, "display");
   await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();

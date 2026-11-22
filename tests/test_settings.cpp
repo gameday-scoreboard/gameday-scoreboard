@@ -362,6 +362,41 @@ void test_left_out() {
   SCHECK(skipped(in, "live=xfl") && live != nullptr && live->mask == (1u << (uint8_t) League::NFL),
          "live wasn't kept to the leagues this firmware has");
   SCHECK(find(in, SetKind::MODE) != nullptr && find(in, SetKind::MODE)->value == 1, "mode wasn't applied");
+
+  // Leaderboards: a sport or league this firmware lacks is left out and
+  // listed, and golf still restores. A golf tour never restores into Live games.
+  in = import(R"({"schema":1,"leaderboards":"golf:pga,f1;racing:f1","live":["pga","nhl"]})");
+  const SetOp *lb = find(in, SetKind::LEADERBOARDS);
+  SCHECK(in.error.empty() && lb != nullptr && (uint32_t) lb->value == league_bit32(League::PGA) &&
+             lb->named == leaderboard_sport_mask(Sport::GOLF) && lb->refused.empty(),
+         "golf didn't restore beside a sport from newer firmware: '%s'", in.error.c_str());
+  SCHECK(skipped(in, "leaderboards=racing") && skipped(in, "leaderboards=golf:f1"), "the unknown sport and league aren't listed");
+  live = find(in, SetKind::LIVE);
+  SCHECK(skipped(in, "live=pga") && live != nullptr && live->mask == (1u << (uint8_t) League::NHL),
+         "a golf tour went into Live games");
+  in = import(R"({"schema":1,"leaderboards":"racing:f1","down":false})");
+  SCHECK(in.error.empty() && find(in, SetKind::LEADERBOARDS) == nullptr && skipped(in, "leaderboards=racing") &&
+             find(in, SetKind::DOWN) != nullptr,
+         "a backup naming only an unknown sport refused the rest: '%s'", in.error.c_str());
+  refused(R"({"schema":1,"leaderboards":["golf:pga"]})", "leaderboards as a list");
+  // A backup from a panel with golf off still turns golf off here.
+  in = import(R"({"schema":1,"leaderboards":"golf:"})");
+  lb = find(in, SetKind::LEADERBOARDS);
+  SCHECK(lb != nullptr && lb->value == 0 && lb->named == leaderboard_sport_mask(Sport::GOLF), "golf: didn't turn golf off");
+
+  // A golfer comes back with the name the backup carries after the id.
+  in = import(R"({"schema":1,"favs":["nfl:6","pga:9478:Scottie Scheffler","pga:46046"]})");
+  const SetOp *favs = find(in, SetKind::FAVS);
+  SCHECK(in.error.empty() && favs != nullptr && favs->teams.size() == 3 && favs->names.size() == 3 &&
+             favs->names[1] == "Scottie Scheffler" && favs->names[0].empty() && favs->names[2].empty(),
+         "a golfer's name didn't restore: '%s'", in.error.c_str());
+  JsonDocument state, out;
+  deserializeJson(state, R"({"favs":[{"l":"nfl","id":6,"abbr":"DAL","name":"Dallas Cowboys"},
+    {"l":"pga","id":9478,"name":"Scottie Scheffler","abbr":"Scheffler"},{"l":"pga","id":46046}]})");
+  settings_from_state(state.as<JsonObjectConst>(), 0, -1, -1, out);
+  SCHECK(out["favs"][0] == "nfl:6" && out["favs"][1] == "pga:9478:Scottie Scheffler" && out["favs"][2] == "pga:46046",
+         "the backup's favs don't carry the golfer's name alone");
+
   // A backup from when My team was a mode comes back as Favorites.
   SettingsImport old = import(R"({"schema":1,"mode":0,"team":"nfl:6"})");
   const SetOp *old_mode = find(old, SetKind::MODE);

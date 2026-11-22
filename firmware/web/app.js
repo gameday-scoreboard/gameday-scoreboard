@@ -56,6 +56,14 @@
     eur: { prefix: "DPWT", tab: "DPWT", name: "DP World Tour", path: "golf/eur", logo: "golf", byId: true, scan: "", golf: true },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
+  // The leaderboards setting, "golf:pga,lpga;racing:" (leaderboards.h), as a
+  // Map of sport to its league keys and back. A save names one sport; the
+  // panel keeps the others as they are.
+  const lbParse = (v) => new Map(String(v || "").split(";").filter(Boolean).map((p) => {
+    const i = p.indexOf(":");
+    return [i < 0 ? p : p.slice(0, i), i < 0 ? [] : p.slice(i + 1).split(",").filter(Boolean)];
+  }));
+  const lbText = (m) => [...m].map(([sport, keys]) => sport + ":" + keys.join(",")).join(";");
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
   const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
@@ -681,9 +689,20 @@
       return ((S && S.cards) || []).map((c) => (pairs.has(c.id) ? Object.assign({}, c, { on: pairs.get(c.id) === "1" }) : c));
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
-    town: String, wxon: (v) => v === "1", wxunit: Number, golftours: String,
+    town: String, wxon: (v) => v === "1", wxunit: Number,
+    leaderboards: (v) => {
+      const m = lbParse(S && S.leaderboards);
+      for (const [sport, keys] of lbParse(v)) m.set(sport, keys);
+      return lbText(m);
+    },
     live: (v) => v.split(",").filter(Boolean),
-    favs: (v) => v.split(",").filter(Boolean).map(ref),
+    // An athlete's name rides after the id; a list sent without one keeps the name the panel has.
+    favs: (v) => v.split(",").filter(Boolean).map((k) => {
+      const r = ref(k);
+      const was = ((S && S.favs) || []).find((f) => f && f.l === r.l && f.id === r.id);
+      const name = k.split(":").slice(2).join(":") || (was && !teamByKey(r.l + ":" + r.id) && was.name);
+      return name ? Object.assign(r, { name }) : r;
+    }),
     // Teams as places in favs, which is how the state document lists them.
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
       const [n, refs] = p.split("=");
@@ -1230,26 +1249,27 @@
   // A card's own settings go inside its row; while it is off they wait here,
   // still in the page, since the renders look their fields up by id.
   const cardExtras = () => ({ weather: $("#wxBox"), golf: $("#golfBox") });
-  // The Golf leaderboard card's tours (golftours, golf.h slot order). Built
-  // once and updated in place, as the Live games chips are.
-  const GOLF_TOURS = Object.keys(LEAGUES).filter((lg) => LEAGUES[lg].golf);
-  const golfTours = () => String(S.golftours || "").split(",").filter((k) => GOLF_TOURS.includes(k));
+  // The Golf leaderboard card's tours: the panel's golf leaderboard leagues
+  // (state lbleagues), saved as leaderboards=golf:... Built once and updated
+  // in place, as the Live games chips are.
+  const golfTours = () => (S.lbleagues || []).filter((l) => l.sport === "golf").map((l) => l.key);
   const renderGolfChips = () => {
-    $("#golfBox").hidden = S.golftours === undefined;  // firmware from before the tours
+    $("#golfBox").hidden = !Array.isArray(S.lbleagues);  // firmware from before the setting
+    if (!Array.isArray(S.lbleagues)) return;
     const host = $("#golfChips");
-    const on = golfTours();
+    const on = lbParse(S.leaderboards).get("golf") || [];
     if (host.children.length) {
       for (const b of host.children) setOn(b, on.includes(b.dataset.lg), "aria-pressed");
       return;
     }
-    for (const lg of GOLF_TOURS) {
-      const b = el("button", "chip", LEAGUES[lg].name);
-      b.dataset.lg = lg;
-      setOn(b, on.includes(lg), "aria-pressed");
+    for (const l of S.lbleagues.filter((x) => x.sport === "golf")) {
+      const b = el("button", "chip", l.name);
+      b.dataset.lg = l.key;
+      setOn(b, on.includes(l.key), "aria-pressed");
       b.onclick = () => {
-        const cur = golfTours();
-        const next = cur.includes(lg) ? cur.filter((k) => k !== lg) : cur.concat([lg]);
-        setGD({ golftours: GOLF_TOURS.filter((k) => next.includes(k)).join(",") });
+        const cur = lbParse(S.leaderboards).get("golf") || [];
+        const next = cur.includes(l.key) ? cur.filter((k) => k !== l.key) : cur.concat([l.key]);
+        setGD({ leaderboards: "golf:" + golfTours().filter((k) => next.includes(k)).join(",") });
       };
       host.appendChild(b);
     }
@@ -1439,37 +1459,13 @@
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
-  // A golfer has no team table: the name comes from ESPN's athlete lookup,
-  // which answers any page, and is kept in this browser. Until it answers,
-  // the ESPN id stands in.
+  // A golfer has no team table: the panel keeps the name sent with the
+  // follow (favs= "pga:9478:Scottie Scheffler") and reports it in the state.
+  // Until it has one, the ESPN id stands in.
   const ESPN_COMMON = "https://site.web.api.espn.com/apis/common/v3/";
-  const GOLFER_STORE = "gdGolfers";
-  const golferNames = (() => {
-    try { return JSON.parse(localStorage.getItem(GOLFER_STORE) || "{}") || {}; } catch (e) { return {}; }
-  })();
-  const golferAsked = new Set();
-  const saveGolfer = (key, name) => {
-    if (!name || golferNames[key] === name) return;
-    golferNames[key] = name;
-    try { localStorage.setItem(GOLFER_STORE, JSON.stringify(golferNames)); } catch (e) { /* kept for this visit only */ }
-  };
   const golferName = (key) => {
-    if (golferNames[key]) return golferNames[key];
-    const [lg, id] = key.split(":");
-    if (!golferAsked.has(key) && LEAGUES[lg]) {
-      golferAsked.add(key);
-      fetch(ESPN_COMMON + "sports/" + LEAGUES[lg].path + "/athletes/" + id)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j) => {
-          const n = j && j.athlete && j.athlete.displayName;
-          if (!n) return;
-          saveGolfer(key, n);
-          renderFavs();
-          if ($("#modal").classList.contains("open")) renderTiles();
-        })
-        .catch(() => {});
-    }
-    return "Golfer " + id;
+    const f = ((S && S.favs) || []).find((x) => refKey(x) === key);
+    return (f && f.name) || "Golfer " + key.split(":")[1];
   };
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
@@ -2336,7 +2332,8 @@
     btnKeys = (S.favs || []).filter((f) => f && f.id && f.btn).map(refKey);
     const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets()) + "|" +
+      (S.favs || []).map((f) => (f && f.name) || "").join(",");
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -3373,8 +3370,8 @@
         return toast("Stopped following " + name);
       }
       if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
-      saveGolfer(key, name);
-      postFavs(favKeys.concat([key]));
+      // The name goes with the follow; the panel keeps it (fav_names.h).
+      postFavs(favKeys.concat([key + ":" + name.replace(/[,;]/g, "")]));
       toast("Following " + name);
     };
     return tile;

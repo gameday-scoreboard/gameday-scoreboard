@@ -6492,13 +6492,6 @@ static void test_golf() {
   CHECK_EQ(std::string(tb.rows[0].score), std::string("-30"));
   CHECK_EQ(golf_row(tb.rows[0]), std::string(" 1 Smalley/S  -30"));
 
-  // The tours picked on the card: golf keys only, back in slot order.
-  CHECK_EQ((int) golf_tours_from_keys("eur,nfl,pga"), 5);
-  CHECK_EQ(golf_tours_keys(golf_tours_from_keys("eur,nfl,pga")), std::string("pga,eur"));
-  CHECK_EQ((int) golf_tours_from_keys(""), 0);
-  CHECK_EQ(golf_tours_keys(0), std::string(""));
-  CHECK_EQ(golf_tours_keys(7), std::string("pga,lpga,eur"));
-
   // Not golf: a team game's document and an empty one both refuse.
   GolfBoard no;
   std::string nfl = slurp("fixtures/event_nfl_pre.json");
@@ -6507,17 +6500,15 @@ static void test_golf() {
   CHECK(!parse_golf(empty, League::PGA, nullptr, 0, no));
 
   // A golfer favorite is a known favorite (set_request.h). Golf leagues
-  // sit in the Live games lists like any other, but a scan never reads a
-  // tour (scan_leagues leaves them out: a leaderboard is not a game), and
+  // never enter the Live games lists (a leaderboard is not a game), and
   // the tours take turns in slot order.
   CHECK(known_team((uint8_t) League::PGA, 5077389));
   CHECK(known_team((uint8_t) League::LPGA, 10484));
   CHECK(!known_team((uint8_t) League::PGA, 0));
   std::vector<League> live = live_leagues(0, {(uint8_t) League::PGA, (uint8_t) League::NFL});
-  CHECK_EQ(live.size(), (size_t) 2);
-  CHECK(live[0] == League::NFL && live[1] == League::PGA);
-  // But a Live games scan never reads a tour: scan_leagues leaves golf out.
-  std::vector<League> scan = scan_leagues((uint8_t) Mode::LIVE, live);
+  CHECK_EQ(live.size(), (size_t) 1);
+  CHECK(live[0] == League::NFL);
+  std::vector<League> scan = scan_leagues((uint8_t) Mode::LIVE, {League::NFL, League::PGA});
   CHECK_EQ(scan.size(), (size_t) 1);
   CHECK(scan[0] == League::NFL);
   CHECK_EQ(golf_next(0b101, 0), 2);

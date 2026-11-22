@@ -64,6 +64,7 @@ struct Settings {
   std::string cdname;
   uint32_t cdymd{0};
   TeamRef favs[16];
+  FavNames names{};  // followed athletes' names (fav_names.h), kept by league and id
   // Playlists as the firmware keeps them: a name, a mask over favs and the
   // options (Prefs9 and Prefs10), its color and icon (Prefs12) and its
   // sports (Prefs13).
@@ -83,7 +84,7 @@ struct Settings {
   std::string town;
   bool wxon{false};
   int wxunit{0};
-  uint8_t golftours{0};  // Prefs10::golf_tours
+  uint32_t leaderboards{0};  // the leaderboards blob, a bit per League (leaderboards.h)
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -141,6 +142,15 @@ void load(Settings &s, JsonObjectConst o) {
         s.favs[i++] = team_ref(f.as<const char *>());
     for (; i < kFavMax; i++)
       s.favs[i] = TeamRef{};
+  }
+  // A case's start may hold names already kept, {"pga:9478": "Scottie Scheffler"},
+  // followed or not: flash keeps a dropped golfer's name until its entry is reused.
+  if (o["favnames"].is<JsonObjectConst>()) {
+    s.names = FavNames{};
+    for (JsonPairConst p : o["favnames"].as<JsonObjectConst>()) {
+      TeamRef t = team_ref(p.key().c_str());
+      fav_name_put(s.names, t.league, t.id, p.value() | "", {});
+    }
   }
   if (o["lists"].is<JsonArrayConst>()) {
     s.lists.clear();
@@ -237,8 +247,11 @@ void load(Settings &s, JsonObjectConst o) {
   flag("wxon", s.wxon);
   if (o["town"].is<const char *>())
     s.town = o["town"].as<const char *>();
-  if (o["golftours"].is<const char *>())
-    s.golftours = golf_tours_from_keys(o["golftours"].as<const char *>());
+  if (o["leaderboards"].is<const char *>()) {
+    LeaderboardsText t;
+    parse_leaderboards(o["leaderboards"].as<const char *>(), t);
+    s.leaderboards = leaderboards_apply(0, t);
+  }
   // As the backup lists them: {"next": true, ...}.
   for (JsonPairConst p : o["cards"].as<JsonObjectConst>())
     if (const CardRow *r = card_row(p.key().c_str()))
@@ -317,11 +330,19 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::COLLIDE: s.collide = op.on; break;
     case SetKind::TODAY: s.today = op.on; break;
     case SetKind::LIVE: s.live_mask = op.mask; break;
-    case SetKind::FAVS:
+    case SetKind::FAVS: {
       for (int i = 0; i < kFavMax; i++)
         s.favs[i] = i < (int) op.teams.size() ? op.teams[i] : TeamRef{};
       remap(s, before);
+      // put_fav_names_: each name sent is kept; a ref sent alone keeps the name there is.
+      std::vector<std::pair<uint8_t, uint32_t>> now;
+      for (const auto &f : s.favs)
+        if (f.id != 0)
+          now.emplace_back(f.league, f.id);
+      for (size_t i = 0; i < op.teams.size() && i < op.names.size(); i++)
+        fav_name_put(s.names, op.teams[i].league, op.teams[i].id, op.names[i], now);
       break;
+    }
     case SetKind::FAV_SLOT:
       s.favs[op.slot - 1] = op.team;
       remap(s, before);
@@ -474,7 +495,13 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       break;
     case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::WXUNIT: s.wxunit = op.value; break;
-    case SetKind::GOLF_TOURS: s.golftours = (uint8_t) op.value; break;
+    case SetKind::LEADERBOARDS: {
+      LeaderboardsText t;
+      t.on = (uint32_t) op.value;
+      t.named = op.named;
+      s.leaderboards = leaderboards_apply(s.leaderboards, t);
+      break;
+    }
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -504,6 +531,18 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   JsonArray favs = doc["favs"].to<JsonArray>();
   for (int i = 0; i < fav_n; i++)
     favs.add(team_str(s.favs[i]));
+  // put_team's name and abbr for each followed athlete with a kept name, by
+  // league:id; set_cases.json compares favs as refs alone.
+  JsonObject favnames = doc["favnames"].to<JsonObject>();
+  for (int i = 0; i < fav_n; i++) {
+    std::string name = fav_name_get(&s.names, s.favs[i].league, s.favs[i].id);
+    if (!athlete_league(s.favs[i].league) || name.empty())
+      continue;
+    JsonObject n = favnames[team_str(s.favs[i])].to<JsonObject>();
+    n["name"] = name;
+    if (!athlete_abbr(name).empty())
+      n["abbr"] = athlete_abbr(name);
+  }
   JsonArray lists = doc["lists"].to<JsonArray>();
   for (const auto &l : s.lists) {
     JsonObject o = lists.add<JsonObject>();
@@ -616,7 +655,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
-  doc["golftours"] = golf_tours_keys(s.golftours);
+  doc["leaderboards"] = leaderboards_text(s.leaderboards);
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -809,10 +848,84 @@ void test_parse_set() {
     bool known = parse_set(key, "1", op, kFavMax) || parse_set(key, "nfl:6", op, kFavMax) ||
                  parse_set(key, "", op, kFavMax) || parse_set(key, "07:00", op, kFavMax) ||
                  parse_set(key, "none", op, kFavMax) || parse_set(key, "next:1", op, kFavMax) ||
-                 parse_set(key, "clock", op, kFavMax) ||
+                 parse_set(key, "clock", op, kFavMax) || parse_set(key, "golf:", op, kFavMax) ||
                  parse_set(key, "fav", op, kFavMax);
     SCHECK(known, "kSetKeys has %s but parse_set refuses every value", key);
   }
+}
+
+// leaderboards: a save names one sport, a backup every sport (leaderboards.h).
+void test_leaderboards() {
+  const uint32_t pga = league_bit32(League::PGA), lpga = league_bit32(League::LPGA), eur = league_bit32(League::EUR);
+  LeaderboardsText t;
+  SCHECK(parse_leaderboards("golf:eur,pga", t) && t.on == (pga | eur) && t.named == (pga | lpga | eur) && t.skipped.empty(),
+         "one sport's leagues");
+  SCHECK(leaderboards_text(leaderboards_apply(lpga, t)) == "golf:pga,eur", "a save replaces golf, in kLeagues order");
+  SCHECK(parse_leaderboards("golf:", t) && t.on == 0 && leaderboards_apply(pga | lpga, t) == 0, "golf: turns golf off");
+  SCHECK(parse_leaderboards("golf:pga,nfl,f1", t) && t.on == pga && t.skipped.size() == 2 && t.skipped[0] == "golf:nfl" &&
+             t.skipped[1] == "golf:f1",
+         "a league of another sport, or one this firmware lacks, is skipped");
+  SCHECK(parse_leaderboards("golf:lpga;racing:f1,nascar", t) && t.on == lpga && t.skipped.size() == 1 &&
+             t.skipped[0] == "racing",
+         "a backup's sport this firmware lacks is skipped whole");
+  SCHECK(!parse_leaderboards("racing:f1", t) && t.named == 0, "only unknown sports changes nothing");
+  SCHECK(!parse_leaderboards("football:nfl", t) && t.skipped.size() == 1, "a sport of games has no leaderboards");
+  SCHECK(!parse_leaderboards("", t) && !parse_leaderboards("pga,lpga", t), "empty, or golftours' old form");
+  SCHECK(parse_leaderboards("golf:pga;golf:eur", t) && t.on == eur, "a sport named twice takes its last part");
+  SCHECK(leaderboards_text(0) == "golf:", "every sport written out, even with none on");
+  SCHECK(leaderboard_mask_all() == (pga | lpga | eur), "the leaderboard leagues");
+  SetOp op;
+  SCHECK(parse_set("leaderboards", "golf:pga;racing:", op, kFavMax) && op.kind == SetKind::LEADERBOARDS &&
+             (uint32_t) op.value == pga && op.refused.size() == 1,
+         "set takes a backup's value and logs the rest");
+  SCHECK(!parse_set("leaderboards", "racing:f1", op, kFavMax), "set refuses a value with no sport it has");
+}
+
+// A followed golfer's name rides after the id in favs and is kept by league
+// and id (fav_names.h).
+void test_fav_names() {
+  const uint8_t pga = (uint8_t) League::PGA, nfl = (uint8_t) League::NFL;
+  SetOp op;
+  SCHECK(parse_set("favs", "nfl:6:Cowboys,pga:9478:Scottie Scheffler,pga:46046", op, kFavMax) && op.teams.size() == 3 &&
+             op.names.size() == 3,
+         "favs with a name parses");
+  SCHECK(op.teams[1].league == pga && op.teams[1].id == 9478 && op.names[1] == "Scottie Scheffler",
+         "a golfer keeps the name after the id");
+  SCHECK(op.names[0].empty() && op.names[2].empty(), "a team's text after the id is ignored; no name is \"\"");
+  SCHECK(fav_ref_name("pga:1:  Ludvig \xc3\x85" "berg \xf0\x9f\x98\x80 ") == "Ludvig \xc3\x85" "berg", "a name is trimmed, emoji left out");
+  SCHECK(fav_ref_name("pga:1:Christiaan Bezuidenhout Jr.") == "Christiaan Bezuidenhout", "cut to 23 bytes");
+  SCHECK(fav_ref_name("pga:1:Christiaan Bezuidenhou\xc3\xb8x") == "Christiaan Bezuidenhou", "never cut inside a character");
+  SCHECK(athlete_abbr("Scottie Scheffler") == "Scheffler" && athlete_abbr("Davis Love III") == "Love" &&
+             athlete_abbr("Matt Fitzpatrick") == "" && athlete_abbr("Scheffler") == "",
+         "the short form is the surname when it fits");
+
+  FavNames n{};
+  std::vector<std::pair<uint8_t, uint32_t>> favs = {{nfl, 6}, {pga, 9478}};
+  SCHECK(fav_name_put(n, pga, 9478, "Scottie Scheffler", favs), "a new name is a change");
+  SCHECK(!fav_name_put(n, pga, 9478, "Scottie Scheffler", favs), "the same name again writes nothing");
+  SCHECK(!fav_name_put(n, pga, 9478, "", favs) && fav_name_get(&n, pga, 9478) == "Scottie Scheffler",
+         "no name keeps the one kept");
+  SCHECK(fav_name_put(n, pga, 9478, "S. Scheffler", favs) && fav_name_get(&n, pga, 9478) == "S. Scheffler",
+         "a new name replaces it");
+  SCHECK(!fav_name_put(n, nfl, 6, "Cowboys", favs) && fav_name_get(&n, nfl, 6).empty(), "a team keeps no name");
+  SCHECK(fav_name_get(nullptr, pga, 9478).empty(), "none kept");
+  // An app that sends refs alone: the name stays. Dropped and followed again
+  // with no name, the golfer still has it, until another name needs the entry.
+  std::vector<std::pair<uint8_t, uint32_t>> dropped = {{(uint8_t) League::NBA, 6}};
+  SCHECK(!fav_name_put(n, pga, 9478, "", dropped) && fav_name_get(&n, pga, 9478) == "S. Scheffler",
+         "a drop forgets nothing");
+  // Full: an athlete no longer followed gives up its entry.
+  FavNames full{};
+  std::vector<std::pair<uint8_t, uint32_t>> all;
+  for (uint32_t id = 1; id <= kFavNamesMax; id++) {
+    all.emplace_back(pga, id);
+    fav_name_put(full, pga, id, "Golfer " + std::to_string(id), all);
+  }
+  SCHECK(!fav_name_put(full, pga, 999, "Seventeenth", all), "no room while all 16 are followed");
+  all[4] = {pga, 999};
+  SCHECK(fav_name_put(full, pga, 999, "Seventeenth", all) && fav_name_get(&full, pga, 999) == "Seventeenth" &&
+             fav_name_get(&full, pga, 5).empty() && fav_name_get(&full, pga, 6) == "Golfer 6",
+         "the unfollowed golfer's entry is reused");
 }
 
 void test_live_leagues() {
@@ -830,6 +943,20 @@ void test_live_leagues() {
   SCHECK(live_mask_from_keys("xfl,MLB") == 0, "unknown and upper-case keys");
   SCHECK(live_mask_from_keys("mlb,,mlb") == (1u << (uint8_t) League::MLB), "repeats and empty items");
   SCHECK(live_mask_from_keys("nhl,") == (1u << (uint8_t) League::NHL), "trailing comma");
+
+  // Leaderboard leagues have no games for Live games to follow.
+  const uint8_t pga = (uint8_t) League::PGA;
+  SCHECK(live_mask_from_keys("pga,lpga,eur") == 0, "live=pga is auto, not a list that scans nothing");
+  SCHECK(live_mask_from_keys("pga,nhl") == (1u << (uint8_t) League::NHL), "a golf key beside a league is dropped");
+  SCHECK(keys(live_leagues(0, {pga})) == "nfl", "auto with only a golfer followed reads NFL");
+  SCHECK(keys(live_leagues(0, {pga, (uint8_t) League::NBA})) == "nba", "auto skips a golfer's tour");
+  SCHECK(keys(live_leagues((uint16_t) (1u << pga), none)) == "nfl", "a saved golf-only mask reads NFL");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, live_leagues(0, {pga}))) == "nfl",
+         "Live games following only a golfer scans NFL");
+  SCHECK(live_mask_games((uint16_t) ((1u << pga) | (1u << (uint8_t) League::MLB))) == (1u << (uint8_t) League::MLB),
+         "a saved mask loses its golf bits");
+  RemoteTarget t;
+  SCHECK(!remote_parse("league:pga", t), "a remote button can't hold Live games on a golf tour");
 }
 
 // What each mode's scan reads is what its finals rotation walks.
@@ -845,12 +972,25 @@ void test_scan_leagues() {
   SCHECK(keys(scan_leagues(kModeCount, live)) == "", "an unknown mode scans none");
 }
 
-// A panel in Favorites with none set runs Live games over every league.
+// A panel in Favorites with none set runs Live games over every league with games.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl,pga,lpga,eur", "every league, kLeagues order");
-  SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
-  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl",
-         "the no-team default's scan reads every league with games, golf left out");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl", "every game league, kLeagues order");
+  SCHECK(no_team_leagues().size() == kGameLeagueCount, "one entry per game league");
+  SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
+         "the no-team default's scan reads its whole list");
+  // game_league_slot numbers the game leagues 0 to kGameLeagueCount - 1, once each.
+  bool seen[kGameLeagueCount] = {};
+  for (const auto &l : kLeagues) {
+    size_t s = game_league_slot((uint8_t) l.league);
+    if (leaderboard_sport(l.sport)) {
+      SCHECK(s == kGameLeagueCount, "%s has no game slot", l.key);
+    } else {
+      SCHECK(s < kGameLeagueCount && !seen[s], "%s has its own game slot", l.key);
+      if (s < kGameLeagueCount)
+        seen[s] = true;
+    }
+  }
+  SCHECK(game_league_slot(200) == kGameLeagueCount, "an unknown league has no game slot");
   const uint8_t favs = (uint8_t) Mode::FAVORITES;
   SCHECK(no_team_default(favs, false), "Favorites with none set");
   SCHECK(!no_team_default(favs, true), "Favorites with one set");
@@ -1420,6 +1560,8 @@ int run_set_tests(int &total_checks) {
   test_playlists();
   test_parse_set();
   test_cards();
+  test_leaderboards();
+  test_fav_names();
   test_live_leagues();
   test_scan_leagues();
   test_no_team();

@@ -1092,17 +1092,17 @@ script:
   - id: gd_golf_card
     then:
       - lambda: |-
-          const std::string &head = id(gameday_ctl).golf_head();
-          if (head.empty()) {
+          const char *head = id(gameday_ctl).golf_head();
+          if (head[0] == 0) {
             lv_obj_add_flag(id(tt_golf), LV_OBJ_FLAG_HIDDEN);
             return;
           }
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
           lv_obj_set_size(id(tt_golf), W, 64);
           lv_obj_set_width(id(tt_golf_head_lbl), W);
-          lv_label_set_text(id(tt_golf_head_lbl), head.c_str());
+          lv_label_set_text(id(tt_golf_head_lbl), head);
           lv_obj_set_width(id(tt_golf_col0_lbl), W - 2);
-          lv_label_set_text(id(tt_golf_col0_lbl), id(gameday_ctl).golf_col(0).c_str());
+          lv_label_set_text(id(tt_golf_col0_lbl), id(gameday_ctl).golf_col(0));
           lv_obj_move_foreground(id(tt_golf));
           lv_obj_clear_flag(id(tt_golf), LV_OBJ_FLAG_HIDDEN);
 

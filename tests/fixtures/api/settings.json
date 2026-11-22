@@ -59,7 +59,7 @@
   },
   "countdown": true,
   "top25": true,
-  "golftours": "pga",
+  "leaderboards": "golf:pga",
   "news": false,
   "cdname": "Christmas",
   "cddate": "2026-12-25",
