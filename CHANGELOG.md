@@ -53,6 +53,8 @@ A new Flights page shows the planes flying over your home, the panel can play an
 
 ### 🐛 Fixes
 
+- 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
+- ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
 - 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
