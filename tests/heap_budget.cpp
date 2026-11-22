@@ -20,6 +20,7 @@
 
 #include "espn_parse.h"
 #include "espn_parse_impl.h"
+#include "flights.h"
 #include "game_leaders.h"
 #include "weather.h"
 
@@ -254,6 +255,23 @@ int main() {
     measure("weather_hour", [&] {
       WxHour h;
       return parse_hour(json, h);
+    });
+  }
+  // The Flights page's reads (flights.h): adsb.lol's planes around home,
+  // every 20 to 60 s while the page is on screen, and a callsign's route
+  // from adsbdb.
+  {
+    std::string json = slurp("fixtures/flights_adsblol_point_dfw25.json");
+    measure("flights_sky", [&] {
+      Sky s;
+      return parse_sky(json, 32.96, -96.99, 25 * 1.852f, s) && s.n > 0;
+    });
+  }
+  {
+    std::string json = slurp("fixtures/flights_adsbdb_aal2192.json");
+    measure("flights_route", [&] {
+      Route r;
+      return parse_route(json, r) && r.found;
     });
   }
   {

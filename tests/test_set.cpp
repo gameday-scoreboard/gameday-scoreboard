@@ -85,6 +85,10 @@ struct Settings {
   bool wxon{false};
   int wxunit{0};
   uint32_t leaderboards{0};  // the leaderboards blob, a bit per League (leaderboards.h)
+  // The Flights page (flights.h): its distance step, facing, receiver and
+  // adsb.lol key, which the state gives back only as flkey_set.
+  int flrad{kFlRadiusDefault}, flface{0};
+  std::string flrx, flkey;
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -209,6 +213,13 @@ void load(Settings &s, JsonObjectConst o) {
   num("msgevery", s.msgevery);
   num("pregame", s.pregame);
   num("wxunit", s.wxunit);
+  num("flrad", s.flrad);
+  num("flface", s.flface);
+  if (o["flrx"].is<const char *>())
+    s.flrx = o["flrx"].as<const char *>();
+  // A case starts with a key set by its own value; the state has only flkey_set.
+  if (o["flkey"].is<const char *>())
+    s.flkey = o["flkey"].as<const char *>();
   if (o["hook"].is<const char *>())
     s.hook = o["hook"].as<const char *>();
   if (o["msg"].is<const char *>())
@@ -502,6 +513,10 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       s.leaderboards = leaderboards_apply(s.leaderboards, t);
       break;
     }
+    case SetKind::FL_RADIUS: s.flrad = op.value; break;
+    case SetKind::FL_FACE: s.flface = op.value; break;
+    case SetKind::FL_RX: s.flrx = op.text; break;
+    case SetKind::FL_KEY: s.flkey = op.text; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -656,6 +671,10 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
   doc["leaderboards"] = leaderboards_text(s.leaderboards);
+  doc["flrad"] = s.flrad;
+  doc["flface"] = s.flface;
+  doc["flrx"] = s.flrx;
+  doc["flkey_set"] = !s.flkey.empty();
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);

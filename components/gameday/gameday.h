@@ -41,6 +41,8 @@
 #include "espn_parse.h"
 #include "fav_names.h"
 #include "favorites.h"
+#include "flights.h"
+#include "flights_page.h"
 #include "fx_playlists.h"
 #include "game_leaders.h"
 #include "row_text.h"
@@ -565,6 +567,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // page goes up until the next game is near (pages/smart_board.yaml, on
   // the "smartboard" action, which fires each time this changes).
   bool smart_between() const { return this->wake_smart_; }
+  // pages/flights.yaml's gd_fl_pinned, read for showing_now_().
+  void set_fl_pinned_ref(const bool *pinned) { this->fl_pinned_ = pinned; }
+  // After the game is Flights and it is between games: the Flights page goes
+  // up until the next game is near (pages/flights.yaml, on the "flights"
+  // action, which fires each time this changes).
+  bool flights_between() const { return this->wake_fl_; }
+  // What the Flights page draws now (flights_page.h), wide for two panels:
+  // the last read's planes moved on to where they are now. Main loop only.
+  void flights_view(::espn::FlView &v, bool wide) const;
   // After the game is Effects: the panel put the Effects page up itself,
   // between games, so the page's start doesn't count as somebody picking
   // it (no night skip, no lighting a dark panel). pages/effects.yaml.
@@ -889,6 +900,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
   void wifi_tick_();
   std::string wifi_json_();
+  // Seconds since the weather and plane reads, and the flights wait left,
+  // worked out per request because the cached state document goes stale
+  std::string ages_json_() const;
   ::espn::WifiHistory wifi_hist_;
   std::mutex wifi_mutex_;
   uint32_t wifi_sample_ms_{0};
@@ -1079,6 +1093,62 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t espn_quiet_ms_() const;
   std::atomic<uint64_t> wx_bytes_{0};
   std::atomic<uint32_t> wx_requests_{0};
+  // The Flights page (flights.h, flights_page.h, pages/flights.yaml): its
+  // settings in their own blob, fixed size with spare bytes like the wake's.
+  struct PrefsFl {
+    uint8_t rad;   // the distance step, 0 to kFlRadiusSteps - 1
+    uint8_t face;  // the way the owner's window faces, 0 any, 1 to 8 for N to NW
+    char rx[::espn::kFlTextMax + 1];   // the owner's receiver, "" for none
+    char key[::espn::kFlTextMax + 1];  // the owner's adsb.lol key, never sent back
+    uint8_t spare[6];
+  } __attribute__((packed));
+  ESPPreferenceObject fl_pref_;
+  PrefsFl fl_{};
+  void load_fl_();
+  void set_fl_(const PrefsFl &p);
+  // A route adsbdb answered, kept for kFlRouteHitMs (kFlRouteMissMs when it
+  // knew none); call "" for an empty slot.
+  struct FlRouteSlot {
+    char call[9]{};
+    uint32_t at_ms{0};
+    ::espn::Route route;
+  };
+  // The last read's planes and the routes: in PSRAM, read only on the main loop.
+  struct FlData {
+    ::espn::Sky sky;
+    FlRouteSlot routes[::espn::kFlRouteCache];
+    uint8_t route_next{0};
+  };
+  FlData &fl_data_{psram_object<FlData>()};
+  bool fl_on_{false};      // the Flights page is up on a lit screen
+  uint32_t fl_on_ms_{0};   // when it came up, for the card's and the list's turns
+  uint32_t fl_tick_ms_{0};
+  uint32_t fl_read_ms_{0};  // millis() of the last good read of the planes, 0 = none
+  uint32_t fl_rx_ms_{0};    // millis() of the last try of the receiver, 0 = none
+  uint32_t fl_lol_ms_{0};   // and of adsb.lol
+  uint8_t fl_rx_fails_{0};  // the receiver's failed reads in a row
+  ::espn::FlErr fl_err_{::espn::FlErr::NONE};  // the last read's
+  uint32_t fl_fail_ms_{0};     // millis() of adsb.lol's last failure, 0 = none since it answered
+  uint32_t fl_backoff_ms_{0};  // the wait that failure started
+  ::espn::Backoff fl_fail_;
+  char fl_card_[8]{};  // the card's plane, by its address; "" for none
+  uint32_t fl_route_ms_{0};       // millis() of the last route lookup, 0 = none
+  uint32_t fl_route_fail_ms_{0};  // and of the last that failed, 0 = none since one answered
+  uint32_t fl_route_backoff_ms_{0};
+  ::espn::Backoff fl_route_fail_;
+  std::atomic<uint64_t> fl_bytes_{0};
+  void fl_tick_();      // from loop(): whether the page is up, and its turn
+  uint8_t fl_due_();    // the Job's need_fl for a read due now, 0 for none
+  void start_fl_job_(uint8_t kind);
+  void run_fl_job_();
+  void apply_fl_job_();
+  bool fl_metric_() const { return !this->wx_fahrenheit_(); }
+  float fl_radius_km_() const { return ::espn::fl_radius_km(this->fl_.rad, this->fl_metric_()); }
+  void fl_radius_text_(char *out, size_t n) const;
+  bool fl_receiver_() const { return this->fl_.rx[0] != '\0' && this->fl_rx_fails_ < ::espn::kFlReceiverFails; }
+  uint32_t fl_wait_s_() const;  // left on adsb.lol's wait, 0 for none
+  int fl_card_index_() const;   // the card's plane in fl_data_.sky, -1 for none
+  const FlRouteSlot *fl_route_slot_(const char *call) const;  // a cached answer still good, or nullptr
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
   // size is fixed for the same reason as Prefs7's.
   struct Prefs9 {
@@ -1244,6 +1314,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // What Showing has up (showing.h). showing_ is what loop() last acted on;
   // showing_now_() reads the page select itself.
   const bool *sb_pinned_{nullptr};
+  const bool *fl_pinned_{nullptr};
   ::espn::Showing showing_{::espn::Showing::BOARD};
   ::espn::Showing showing_now_() const;
   void showing_tick_();  // from loop(): a picked page stops the reads, the Scoreboard brings them back
@@ -1449,6 +1520,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool wx_ok{false};
     int wx_status{0};  // HTTP status, 0 for no answer
     uint32_t wx_retry_after_ms{0};
+    // The Flights page (flights.h): 1 reads the planes near home from the
+    // owner's receiver, 2 from adsb.lol, 3 looks the card's plane's route up
+    // on adsbdb, on this task like the weather.
+    uint8_t need_fl{0};
+    std::string fl_url;
+    std::string fl_key;  // the owner's adsb.lol key, "" for none
+    float fl_lat{0}, fl_lon{0};
+    float fl_radius_km{0};
+    ::espn::Sky fl_sky;
+    char fl_call[9]{};  // the callsign a route lookup is for
+    ::espn::Route fl_route;
+    bool fl_ok{false};
+    int fl_status{0};        // HTTP status, 0 for no answer
+    uint32_t fl_wait_ms{0};  // a refusal's Retry-After, else its x-ratelimit-reset; 0 for none
   };
   void start_job_();
   void start_worker_();
@@ -1786,7 +1871,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // through a restart. wake_clock_ is the clock between games, on the board
   // now (clock_fields_); wake_smart_ the Smart board between games, which
   // pages/smart_board.yaml puts up on the "smartboard" action; wake_fx_ an
-  // effect between games, which fx_between_tick_ puts up.
+  // effect between games, which fx_between_tick_ puts up; wake_fl_ the
+  // Flights page between games, which pages/flights.yaml puts up on the
+  // "flights" action.
   ESPPreferenceObject wake_pref_;
   ::espn::WakePrefs wake_{};
   ::espn::WakeState wake_state_{};
@@ -1794,6 +1881,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool wake_clock_{false};
   bool wake_smart_{false};
   bool wake_fx_{false};
+  bool wake_fl_{false};
   bool power_on_{true};
   // Live games with Favorites take over: the next start of a favorite's
   // game from the last scan, 0 for none.

@@ -37,24 +37,27 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Women's college basketball and golf leaderboards join the panel, it can play an effect whenever no game of yours is on, Add network lists the Wi-Fi networks nearby, and effect playlists keep playing as you edit them.
+A new Flights page shows the planes flying over your home, women's college basketball and golf leaderboards join the panel, it can play an effect whenever no game of yours is on, and Add network lists the Wi-Fi networks nearby.
 
 ### ⚠️ Heads up
 
 - 📱 Update the Game Day app too: an older app doesn't find the panel once it runs this release
-- 🏠 On the Clock, Effects or the Smart board the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
+- 🏠 On the Clock, Effects, the Smart board or Flights the panel stops reading scores, and Home Assistant's game entities and game events wait for the Scoreboard; back on it, scores from while it was away don't fire
 - 🌙 A dark panel, turned off or at night, rests: it draws nothing, turns no cards, reads nothing from ESPN but your next game and sends Home Assistant nothing about games, then catches up in a second or two when it lights
 - 🌡️ **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** leave Home Assistant, where they wrote a row every 10 to 30 seconds; delete the old entities (the chip temperature is on the device page under Diagnostics)
 
 ### ✨ New
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+- ✈️ **Flights** under **Showing** and **After the game**: the planes near your home with their airline, route, type, altitude and distance, from adsb.lol's free community data or your own ADS-B receiver
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 - 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
 - ⛳ Golf leaderboards between games: pick the PGA Tour, LPGA or DP World Tour on the **Golf leaderboard** card, or search golfers by name and they're pinned on wherever they stand
 
 ### 🐛 Fixes
 
+- 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
+- ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
 - 🎚️ Speed and intensity for each effect in an effect playlist are sliders instead of number boxes
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
