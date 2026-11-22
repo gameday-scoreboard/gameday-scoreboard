@@ -650,12 +650,11 @@ inline int next_byte(const std::string &s, size_t &at) { return at < s.size() ? 
 // containers and deserialize one array element at a time. It is also the
 // reader deserializeJson takes for each element. ArduinoJson stops right
 // after an object's closing brace or a string's closing quote, so the walk
-// carries on from there.
+// carries on from there. It accepts and refuses what ArduinoJson does when
+// it reads the whole document through a filter.
 template<typename TInput> class JsonWalk {
  public:
-  explicit JsonWalk(TInput &in) : in_(in), none_(json_allocator()), sink_(json_allocator()) {
-    this->none_.set(false);
-  }
+  explicit JsonWalk(TInput &in) : in_(in), key_(json_allocator()), sink_(json_allocator()) {}
 
   // ArduinoJson's reader interface.
   int read() {
@@ -691,26 +690,35 @@ template<typename TInput> class JsonWalk {
     return true;
   }
 
-  // Reads the next member's key into key[n]. A key too long for it reads
-  // as "" so it matches none. False after the closing brace and on an
-  // error (failed()).
+  // Reads the next member's key into key[n]. A key that doesn't fit, or
+  // holds a NUL, reads as "" so it matches none. False after the closing
+  // brace and on an error (failed()).
   bool next_key(bool &first, char *key, size_t n) {
     if (!this->step_(first, '}'))
       return false;
-    const int quote = this->peek();
-    if (quote != '"' && quote != '\'')
-      return this->fail_();
-    this->held_ = false;
-    size_t len = 0;
-    for (int c; (c = this->read()) != quote; len++) {
-      if (c == '\\')
-        c = this->read();
-      if (c < 0)
+    const int c = this->peek();
+    key[0] = '\0';
+    if (c == '"' || c == '\'') {
+      // ArduinoJson reads a quoted key, so its escapes decode as they do in
+      // a whole-document read.
+      if (deserializeJson(this->key_, *this))
         return this->fail_();
-      if (len + 1 < n)
-        key[len] = (char) c;
+      const JsonString k = this->key_.template as<JsonString>();
+      if (k.size() < n && strlen(k.c_str()) == k.size())
+        memcpy(key, k.c_str(), k.size() + 1);
+    } else {
+      // ArduinoJson also takes a key with no quotes, made of letters,
+      // digits and the characters between '_' and 'z'.
+      size_t len = 0;
+      for (int k; (k = this->look_()) > 0 && is_key_char_(k); len++) {
+        if (len + 1 < n)
+          key[len] = (char) k;
+        this->held_ = false;
+      }
+      if (len == 0)
+        return this->fail_();
+      key[len < n ? len : 0] = '\0';
     }
-    key[len < n ? len : 0] = '\0';
     if (this->peek() != ':')
       return this->fail_();
     this->held_ = false;
@@ -722,12 +730,13 @@ template<typename TInput> class JsonWalk {
   bool next_item(bool &first) { return this->step_(first, ']'); }
 
   // Skips the value that comes next, with limit as for enter().
-  bool skip(uint8_t limit) { return this->value(this->sink_, this->none_.template as<JsonVariantConst>(), limit); }
+  // A null filter keeps nothing.
+  bool skip(uint8_t limit) { return this->value(this->sink_, JsonVariantConst(), limit); }
 
-  // Deserializes the value that comes next into doc through filter. A
-  // number, true, false or null is skipped and leaves doc empty, because
-  // ArduinoJson reads one character past a number and the walk would lose
-  // it.
+  // Deserializes the value that comes next into doc through filter. The
+  // walk reads a number, true, false or null itself and leaves doc empty,
+  // because ArduinoJson reads one character past a number and the walk
+  // would lose it.
   bool value(JsonDocument &doc, JsonVariantConst filter, uint8_t limit) {
     int c = this->peek();
     if (this->failed_)
@@ -738,10 +747,30 @@ template<typename TInput> class JsonWalk {
       return true;
     }
     doc.clear();
-    size_t n = 0;
-    for (; (c = this->look_()) > 0 && strchr(",:]} \t\r\n", c) == nullptr; n++)
+    if (c == 't' || c == 'f' || c == 'n') {
+      for (const char *word = c == 't' ? "true" : c == 'f' ? "false" : "null"; *word != '\0'; word++) {
+        if (this->look_() != *word)
+          return this->fail_();
+        this->held_ = false;
+      }
+      return true;
+    }
+    // Take the characters a number can have, as ArduinoJson does. A value
+    // the filter skips may have none.
+    char number[64];
+    size_t len = 0;
+    for (; (c = this->look_()) > 0 && is_number_char_(c); len++) {
+      if (len < sizeof(number))
+        number[len] = (char) c;
       this->held_ = false;
-    return n > 0 || this->fail_();
+    }
+    if (!(filter == true))
+      return true;
+    // A value the filter keeps must be a number ArduinoJson reads, in at
+    // most 63 characters.
+    if (len == 0 || len >= sizeof(number) || deserializeJson(doc, number, len))
+      return this->fail_();
+    return true;
   }
 
  private:
@@ -758,6 +787,10 @@ template<typename TInput> class JsonWalk {
     this->failed_ = true;
     return false;
   }
+  static bool is_number_char_(int c) {
+    return (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.' || c == 'e' || c == 'E';
+  }
+  static bool is_key_char_(int c) { return (c >= '0' && c <= '9') || (c >= '_' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
   // Moves past the comma before the next member or element, or reads the
   // closing character and returns false.
   bool step_(bool &first, char close) {
@@ -782,7 +815,7 @@ template<typename TInput> class JsonWalk {
   int byte_{-1};
   bool held_{false};
   bool failed_{false};
-  JsonDocument none_;  // the filter that keeps nothing
+  JsonDocument key_;   // the key next_key() read
   JsonDocument sink_;  // what a skipped value is read into: always empty
 };
 
@@ -948,8 +981,6 @@ class GolfRead {
     const bool top = r.pos <= kGolfTopRows && ev.top < kGolfTopRows;
     if (!top && (!is_fav || ev.favs >= kGolfFavRows))
       return;
-    if (!top)
-      ev.favs++;
     r.favorite = is_fav;
     snprintf(r.name, sizeof(r.name), "%s", ascii_fold(str_or_empty(gc["athlete"]["shortName"])).c_str());
     // The surname from the full name, for a narrow panel: the last word.
@@ -999,6 +1030,8 @@ class GolfRead {
     }
     if (top)
       ev.top++;
+    else
+      ev.favs++;
     ev.rows.push_back(p);
   }
 
@@ -1148,8 +1181,7 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
         else if (w.value(g.doc, filter, ev))
           g.event_value(key, g.doc.as<JsonVariantConst>());
       }
-      if (!w.failed())
-        g.end_event();
+      g.end_event();
     }
   }
   if (w.failed())

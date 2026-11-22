@@ -6653,6 +6653,95 @@ static void test_golf_stream() {
   CHECK_EQ((int) rb.field, 40);
   CHECK_EQ(rb.rows.size(), (size_t) kGolfRowsMax);
   CHECK_EQ(rb.rows.back().id, 35u);
+
+  // A followed golfer with no name gets no row and leaves the favorites'
+  // room to the named ones.
+  json = R"({"events":[{"competitions":[{"competitors":[)";
+  for (int i = 1; i <= 17; i++)
+    json += std::string(i > 1 ? "," : "") + "{\"id\":\"" + std::to_string(i == 11 ? 100 : i > 11 ? 89 + i : i) +
+            "\",\"order\":" + std::to_string(i) + (i == 11 ? "}" : ",\"athlete\":{\"shortName\":\"G\"}}");
+  json += "]}]}]}";
+  const uint32_t followed[] = {100, 101, 102, 103, 104, 105, 106};
+  GolfBoard nb;
+  CHECK(parse_golf(json, League::PGA, followed, 7, nb));
+  CHECK_EQ(nb.rows.size(), (size_t) kGolfRowsMax);
+  CHECK_EQ(nb.rows.back().id, 106u);
+
+  // Only the first competition is read: the second's golfers and round
+  // are left out.
+  json = R"({"events":[{"competitions":[
+    {"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. First"}}]},
+    {"competitors":[{"id":"2","order":1,"athlete":{"shortName":"B. Second"}},
+                    {"id":"3","order":2,"athlete":{"shortName":"C. Third"}}],"status":{"period":3}}]}]})";
+  GolfBoard cb;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, cb));
+  CHECK_EQ((int) cb.field, 1);
+  CHECK_EQ(cb.rows.size(), (size_t) 1);
+  CHECK_EQ(cb.rows[0].id, 1u);
+  CHECK_EQ((int) cb.round, 0);
+
+  // A repeated key replaces the first, as in a whole-document read: a
+  // second "events" list starts the pick over, and a second "competitions"
+  // that isn't a list leaves the event with no field.
+  json = R"({"events":[{"name":"First Live","status":{"type":{"state":"in"}},"competitions":[{"competitors":[
+      {"id":"1","order":1,"athlete":{"shortName":"A. A"}}]}]}],
+    "events":[{"name":"Second","status":{"type":{"state":"post"}},"competitions":[{"competitors":[
+      {"id":"2","order":1,"athlete":{"shortName":"B. B"}}]}]}]})";
+  GolfBoard eb2;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, eb2));
+  CHECK_EQ(std::string(eb2.event), std::string("Second"));
+  json = R"({"events":[
+    {"name":"Cleared","competitions":[{"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"}}],
+      "status":{"period":2}}],"competitions":{"note":1}},
+    {"name":"Kept","competitions":[{"competitors":[{"id":"2","order":1,"athlete":{"shortName":"B. B"}}]}]}]})";
+  GolfBoard kb;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, kb));
+  CHECK_EQ(std::string(kb.event), std::string("Kept"));
+
+  // A golfer's lines past kGolfLines rounds are left out: round 9 of nine
+  // reads as no score yet, round 8 as its own.
+  std::string lines;
+  for (int round = 1; round <= 9; round++)
+    lines += std::string(round > 1 ? "," : "") + "{\"period\":" + std::to_string(round) + ",\"displayValue\":\"-" +
+             std::to_string(round) + "\",\"linescores\":[{},{}]}";
+  for (int round : {8, 9}) {
+    json = R"({"events":[{"competitions":[{"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"},"linescores":[)" +
+           lines + R"(]}],"status":{"period":)" + std::to_string(round) + "}}]}]}";
+    GolfBoard pb;
+    CHECK(parse_golf(json, League::PGA, nullptr, 0, pb));
+    CHECK_EQ(std::string(pb.rows[0].today), std::string(round == 8 ? "-8" : ""));
+    CHECK_EQ((int) pb.rows[0].thru, round == 8 ? 2 : 0);
+  }
+
+  // Keys and strings with escapes, a key with no quotes and one written
+  // with \u: the same as a whole-document read takes them.
+  json = R"({"we\"ird\\key":"va\"l\\ue }]",'single':'q\'s',
+    "events":[{"name":"va\"l\\ue }]","x\"y":{"a\\":"}"},competitions:[{"c\\\"":1,
+      "competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"}}]}]}]})";
+  GolfBoard xb;
+  GolfStream xin{json};
+  CHECK(parse_golf(xin, League::PGA, nullptr, 0, xb));
+  CHECK_EQ(std::string(xb.event), std::string("va\"l\\ue }]"));
+  CHECK_EQ(xb.rows.size(), (size_t) 1);
+
+  // A number or a word runs only as far as ArduinoJson reads one, and an
+  // event field that must be read needs a real number. Each document reads
+  // once its bad value is made good.
+  const std::string field = R"("competitions":[{"competitors":[{"order":1,"athlete":{"shortName":"A"}}]}])";
+  const std::pair<const char *, const char *> values[] = {
+      {R"("x":1"y",)", R"("x":1,)"}, {R"("x":tru,)", R"("x":true,)"}, {R"("x":1{},)", R"("x":1,)"},
+      {R"("x":5[1],)", R"("x":5,)"}, {R"("name":1.2.3,)", R"("name":1.2,)"}};
+  for (const auto &v : values) {
+    json = R"({"events":[{)" + std::string(v.first) + field + "}]}";
+    CHECK(!parse_golf(json, League::PGA, nullptr, 0, no));
+    json = R"({"events":[{)" + std::string(v.second) + field + "}]}";
+    CHECK(parse_golf(json, League::PGA, nullptr, 0, no));
+  }
+  json = R"({"x":-1.5e3,"y":null,"events":[{"name":12,"date":false,"competitions":[{"competitors":[
+    {"order":1,"athlete":{"shortName":"A"}}]}]}]})";
+  GolfBoard sb2;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, sb2));
+  CHECK_EQ(std::string(sb2.event), std::string(""));
 }
 
 static void test_rankings() {
