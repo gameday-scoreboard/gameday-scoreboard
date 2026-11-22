@@ -384,6 +384,19 @@ void test_left_out() {
   lb = find(in, SetKind::LEADERBOARDS);
   SCHECK(lb != nullptr && lb->value == 0 && lb->named == leaderboard_sport_mask(Sport::GOLF), "golf: didn't turn golf off");
 
+  // A golfer comes back with the name the backup carries after the id.
+  in = import(R"({"schema":1,"favs":["nfl:6","pga:9478:Scottie Scheffler","pga:46046"]})");
+  const SetOp *favs = find(in, SetKind::FAVS);
+  SCHECK(in.error.empty() && favs != nullptr && favs->teams.size() == 3 && favs->names.size() == 3 &&
+             favs->names[1] == "Scottie Scheffler" && favs->names[0].empty() && favs->names[2].empty(),
+         "a golfer's name didn't restore: '%s'", in.error.c_str());
+  JsonDocument state, out;
+  deserializeJson(state, R"({"favs":[{"l":"nfl","id":6,"abbr":"DAL","name":"Dallas Cowboys"},
+    {"l":"pga","id":9478,"name":"Scottie Scheffler","abbr":"Scheffler"},{"l":"pga","id":46046}]})");
+  settings_from_state(state.as<JsonObjectConst>(), 0, -1, -1, out);
+  SCHECK(out["favs"][0] == "nfl:6" && out["favs"][1] == "pga:9478:Scottie Scheffler" && out["favs"][2] == "pga:46046",
+         "the backup's favs don't carry the golfer's name alone");
+
   // A backup from when My team was a mode comes back as Favorites.
   SettingsImport old = import(R"({"schema":1,"mode":0,"team":"nfl:6"})");
   const SetOp *old_mode = find(old, SetKind::MODE);

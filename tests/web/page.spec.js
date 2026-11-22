@@ -2530,8 +2530,12 @@ test("a golf tab finds golfers by name with ESPN's search and follows one", asyn
       { id: "3116147", displayName: "Ian Werner Scheffler", sport: "soccer", league: "club.friendly" },
     ] } });
   });
-  await page.route("https://site.web.api.espn.com/apis/common/v3/sports/golf/pga/athletes/9478", (route) =>
-    route.fulfill({ json: { athlete: { displayName: "Scottie Scheffler" } } }));
+  // The page never looks a followed golfer up: the panel has the name.
+  const lookups = [];
+  await page.route("https://site.web.api.espn.com/apis/common/v3/sports/**", (route) => {
+    lookups.push(route.request().url());
+    return route.abort();
+  });
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
@@ -2545,12 +2549,25 @@ test("a golf tab finds golfers by name with ESPN's search and follows one", asyn
   await expect(page.locator("#tiles .tile")).toContainText("PGA Tour");
   expect(asked).toEqual(["schef"]);
   await page.locator("#tiles .tile").click();
-  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,pga:9478" });
+  // The name goes with the follow, and the panel reports it back.
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,pga:9478:Scottie Scheffler" });
   await expect(page.locator("#tiles .tile")).toHaveAttribute("aria-pressed", "true");
+  const golfer = (await deviceState(request)).favs[3];
+  expect(golfer).toEqual({ l: "pga", id: 9478, name: "Scottie Scheffler", abbr: "Scheffler" });
   // Back on the Teams tab the golfer is listed by name.
   await page.locator("#close").click();
   await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("Scottie Scheffler");
   await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("PGA Tour golfer");
+  // A move sends the refs alone; the panel keeps the name.
+  await page.locator("#favCtls .ctl.fav").last().getByRole("button", { name: "Move up" }).click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,pga:9478,ncaa:145" });
+  await expect(page.locator("#favCtls .ctl.fav").nth(2)).toContainText("Scottie Scheffler");
+  // Reloaded, with nothing kept in this browser, the name still comes from the panel.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await tab(page, "teams");
+  await expect(page.locator("#favCtls .ctl.fav").nth(2)).toContainText("Scottie Scheffler");
+  expect(lookups).toEqual([]);
   // A team tab's box searches teams again.
   await page.locator("#favAdd").click();
   await page.locator(".tabs button", { hasText: "NHL" }).click();

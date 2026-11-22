@@ -500,6 +500,7 @@ void GamedayComponent::setup() {
     this->prefs10_.sched_sport = this->prefs10_.sched_mode = 0;
   }
   this->load_leaderboards_();
+  this->load_fav_names_();
   this->pref11_ = global_preferences->make_preference<Prefs11>(fnv1_hash("gameday_prefs11_v1"));
   if (!this->pref11_.load(&this->prefs11_))
     this->prefs11_ = Prefs11{};  // each button on its own favorite
@@ -6423,12 +6424,19 @@ void GamedayComponent::save_team_cache_(const ::espn::Team *team) {
 
 // ---- device page routes -----------------------------------------------------
 
-static void put_team(JsonObject o, uint8_t league, uint32_t id) {
-  // A golfer has no team entry: the ref alone, and the page names him from
-  // the tour's own list. His name is on the panel's board, not in a table.
-  if (::espn::golf_league((League) league)) {
+// name: an athlete's kept name (fav_names.h), "" for a team or none kept.
+static void put_team(JsonObject o, uint8_t league, uint32_t id, const std::string &name = std::string()) {
+  // A golfer has no team entry: the ref, and the name the panel keeps, with
+  // the surname as the short form when it is short enough.
+  if (::espn::athlete_league(league)) {
     o["l"] = ::espn::league_key((League) league);
     o["id"] = id;
+    if (!name.empty()) {
+      o["name"] = name;
+      std::string abbr = ::espn::athlete_abbr(name);
+      if (!abbr.empty())
+        o["abbr"] = abbr;
+    }
     return;
   }
   for (size_t i = 0; i < ::espn::kTeamCount; i++) {
@@ -6468,7 +6476,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   for (uint8_t i = 0; i < fav_n; i++) {
     JsonObject o = favs.add<JsonObject>();
     if (this->fav_id_(i) != 0)
-      put_team(o, this->fav_league_(i), this->fav_id_(i));
+      put_team(o, this->fav_league_(i), this->fav_id_(i), this->fav_name_(this->fav_league_(i), this->fav_id_(i)));
     if (this->fav_id_(i) != 0 && this->fav_solo_(i))
       o["btn"] = true;  // a button-only team (playlists.h): on a remote button, no favorite elsewhere
   }
@@ -7764,6 +7772,41 @@ void GamedayComponent::set_leaderboards_(uint32_t mask) {
   this->rebuild_state_(&this->last_fields_);
 }
 
+// ---- Followed athletes' names (fav_names.h) -----------------------------------
+
+void GamedayComponent::load_fav_names_() {
+  this->fav_names_pref_ = global_preferences->make_preference<::espn::FavNames>(fnv1_hash("gameday_favnames_v1"));
+  auto *n = new (::espn::psram_alloc(sizeof(::espn::FavNames))) ::espn::FavNames();
+  if (this->fav_names_pref_.load(n)) {
+    this->fav_names_ = n;
+    return;
+  }
+  ::espn::psram_free(n);  // none kept yet: made with the first name
+}
+
+bool GamedayComponent::put_fav_name_(uint8_t league, uint32_t id, const std::string &name) {
+  if (!::espn::athlete_league(league) || name.empty())
+    return false;
+  if (this->fav_names_ == nullptr)
+    this->fav_names_ = new (::espn::psram_alloc(sizeof(::espn::FavNames))) ::espn::FavNames();
+  std::vector<std::pair<uint8_t, uint32_t>> favs;
+  for (uint8_t i = 0; i < FAV_MAX; i++)
+    if (this->fav_id_(i) != 0)
+      favs.emplace_back(this->fav_league_(i), this->fav_id_(i));
+  return ::espn::fav_name_put(*this->fav_names_, league, id, name, favs);
+}
+
+void GamedayComponent::put_fav_names_(const std::vector<::espn::TeamRef> &teams, const std::vector<std::string> &names) {
+  bool changed = false;
+  for (size_t i = 0; i < teams.size() && i < names.size(); i++)
+    changed = this->put_fav_name_(teams[i].league, teams[i].id, names[i]) || changed;
+  if (!changed)
+    return;
+  this->fav_names_pref_.save(this->fav_names_);
+  this->sync_prefs_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
 // The tours the card shows: the ones picked in the leaderboards setting, and
 // each tour a followed golfer plays on (a golfer has no team entry, so the
 // favorites entries never carry one).
@@ -7914,6 +7957,18 @@ void GamedayComponent::apply_golf_job_() {
   if (this->golf_shown_ && this->golf_slot_ == (int) s)
     this->golf_hide_();
   this->golf_[s] = std::move(j.golf_board);
+  // A followed golfer added without a name (an app that sends none) takes
+  // ESPN's from the board. A kept name is never replaced, so flash is
+  // written once per golfer.
+  bool named = false;
+  for (const auto &r : this->golf_[s].rows)
+    if (r.favorite && r.name[0] != '\0' && this->fav_name_((uint8_t) this->golf_[s].league, r.id).empty())
+      named = this->put_fav_name_((uint8_t) this->golf_[s].league, r.id, r.name) || named;
+  if (named) {
+    this->fav_names_pref_.save(this->fav_names_);
+    this->sync_prefs_();
+    this->rebuild_state_(&this->last_fields_);
+  }
   ESP_LOGI(TAG, "Golf: %s %s, %u of %u golfers (%u bytes)", ::espn::golf_header(this->golf_[s]).c_str(),
            this->golf_[s].event, (unsigned) this->golf_[s].rows.size(), (unsigned) this->golf_[s].field,
            (unsigned) j.golf_bytes);
@@ -8727,6 +8782,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         for (const auto &t : op.teams)
           list.emplace_back(t.league, t.id);
         this->set_favorites_(list);
+        this->put_fav_names_(op.teams, op.names);
         break;
       }
       case ::espn::SetKind::FAV_SLOT:

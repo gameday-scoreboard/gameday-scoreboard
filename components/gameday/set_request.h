@@ -15,6 +15,7 @@
 
 #include "cards.h"
 #include "countdown.h"
+#include "fav_names.h"
 #include "golf.h"
 #include "hook.h"
 #include "leaderboards.h"
@@ -538,6 +539,7 @@ struct SetOp {
   uint32_t named{0};  // LEADERBOARDS
   TeamRef team;
   std::vector<TeamRef> teams;
+  std::vector<std::string> names;    // FAVS: each team's athlete name (fav_names.h), "" for none
   std::vector<std::string> refused;  // favs entries left out, for the log
   std::string text;
   uint32_t ymd{0};
@@ -616,7 +618,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "favs") {
     // "mlb:15,nfl:6,..." in priority order; "" clears the list. Unknown teams
-    // and repeats drop out; the rest keep their order up to fav_max.
+    // and repeats drop out; the rest keep their order up to fav_max. An
+    // athlete may carry a name after the id, "pga:9478:Scottie Scheffler".
     op.kind = SetKind::FAVS;
     size_t start = 0;
     while (start < v.size() && op.teams.size() < fav_max) {
@@ -631,8 +634,10 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
       bool dup = false;
       for (const auto &f : op.teams)
         dup = dup || f == t;
-      if (!dup)
+      if (!dup) {
         op.teams.push_back(t);
+        op.names.push_back(athlete_league(t.league) ? fav_ref_name(ref) : std::string());
+      }
     }
     return true;
   }

@@ -696,7 +696,13 @@
       return lbText(m);
     },
     live: (v) => v.split(",").filter(Boolean),
-    favs: (v) => v.split(",").filter(Boolean).map(ref),
+    // An athlete's name rides after the id; a list sent without one keeps the name the panel has.
+    favs: (v) => v.split(",").filter(Boolean).map((k) => {
+      const r = ref(k);
+      const was = ((S && S.favs) || []).find((f) => f && f.l === r.l && f.id === r.id);
+      const name = k.split(":").slice(2).join(":") || (was && !teamByKey(r.l + ":" + r.id) && was.name);
+      return name ? Object.assign(r, { name }) : r;
+    }),
     // Teams as places in favs, which is how the state document lists them.
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
       const [n, refs] = p.split("=");
@@ -1453,37 +1459,13 @@
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
-  // A golfer has no team table: the name comes from ESPN's athlete lookup,
-  // which answers any page, and is kept in this browser. Until it answers,
-  // the ESPN id stands in.
+  // A golfer has no team table: the panel keeps the name sent with the
+  // follow (favs= "pga:9478:Scottie Scheffler") and reports it in the state.
+  // Until it has one, the ESPN id stands in.
   const ESPN_COMMON = "https://site.web.api.espn.com/apis/common/v3/";
-  const GOLFER_STORE = "gdGolfers";
-  const golferNames = (() => {
-    try { return JSON.parse(localStorage.getItem(GOLFER_STORE) || "{}") || {}; } catch (e) { return {}; }
-  })();
-  const golferAsked = new Set();
-  const saveGolfer = (key, name) => {
-    if (!name || golferNames[key] === name) return;
-    golferNames[key] = name;
-    try { localStorage.setItem(GOLFER_STORE, JSON.stringify(golferNames)); } catch (e) { /* kept for this visit only */ }
-  };
   const golferName = (key) => {
-    if (golferNames[key]) return golferNames[key];
-    const [lg, id] = key.split(":");
-    if (!golferAsked.has(key) && LEAGUES[lg]) {
-      golferAsked.add(key);
-      fetch(ESPN_COMMON + "sports/" + LEAGUES[lg].path + "/athletes/" + id)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j) => {
-          const n = j && j.athlete && j.athlete.displayName;
-          if (!n) return;
-          saveGolfer(key, n);
-          renderFavs();
-          if ($("#modal").classList.contains("open")) renderTiles();
-        })
-        .catch(() => {});
-    }
-    return "Golfer " + id;
+    const f = ((S && S.favs) || []).find((x) => refKey(x) === key);
+    return (f && f.name) || "Golfer " + key.split(":")[1];
   };
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
@@ -2350,7 +2332,8 @@
     btnKeys = (S.favs || []).filter((f) => f && f.id && f.btn).map(refKey);
     const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets()) + "|" +
+      (S.favs || []).map((f) => (f && f.name) || "").join(",");
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -3387,8 +3370,8 @@
         return toast("Stopped following " + name);
       }
       if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
-      saveGolfer(key, name);
-      postFavs(favKeys.concat([key]));
+      // The name goes with the follow; the panel keeps it (fav_names.h).
+      postFavs(favKeys.concat([key + ":" + name.replace(/[,;]/g, "")]));
       toast("Following " + name);
     };
     return tile;

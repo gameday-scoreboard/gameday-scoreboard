@@ -105,6 +105,17 @@ inline std::string team_ref_text(JsonObjectConst t) {
   return std::string(l) + ":" + std::to_string(id);
 }
 
+// A favorite as the backup's favs list writes it: the ref, and an athlete's
+// kept name after it, "pga:9478:Scottie Scheffler" (fav_names.h).
+inline std::string fav_ref_text(JsonObjectConst t) {
+  std::string ref = team_ref_text(t);
+  const LeagueInfo *info = league_by_key(t["l"] | "");
+  std::string name = athlete_name_clean(t["name"] | "");
+  if (ref.empty() || info == nullptr || !athlete_league((uint8_t) info->league) || name.empty())
+    return ref;
+  return ref + ":" + name;
+}
+
 // The settings document from the state document (GET /gameday/state), which
 // the panel keeps built on its main loop, so the web server never reads a
 // setting while the loop changes it. live_mask is Live games' own list (0 for
@@ -140,7 +151,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
         continue;
       std::vector<std::string> favs;
       for (JsonVariantConst f : s["favs"].as<JsonArrayConst>())
-        favs.push_back(f.is<JsonObjectConst>() && !(f["btn"] | false) ? team_ref_text(f) : std::string());
+        favs.push_back(f.is<JsonObjectConst>() && !(f["btn"] | false) ? fav_ref_text(f) : std::string());
       while (!favs.empty() && favs.back().empty())
         favs.pop_back();
       JsonArray list = out["favs"].to<JsonArray>();
@@ -488,6 +499,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
               if (f == t)
                 t = TeamRef{};
           op.teams.push_back(t);
+          op.names.push_back(t.id != 0 && athlete_league(t.league) ? fav_ref_name(text) : std::string());
         }
         break;
       }

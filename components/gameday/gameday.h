@@ -39,6 +39,7 @@
 #include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
+#include "fav_names.h"
 #include "favorites.h"
 #include "fx_playlists.h"
 #include "game_leaders.h"
@@ -1110,6 +1111,19 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t leaderboards_{0};
   void load_leaderboards_();
   void set_leaderboards_(uint32_t mask);
+  // Followed athletes' names (fav_names.h), in their own blob. The copy in
+  // RAM is PSRAM, made when the blob loads or the first name comes in.
+  static_assert(FAV_MAX == ::espn::kFavNamesMax, "a kept name per favorite");
+  ESPPreferenceObject fav_names_pref_;
+  ::espn::FavNames *fav_names_{nullptr};
+  void load_fav_names_();
+  // Keeps each athlete's name from names (parallel to the favorites list
+  // just set), saving only what changed.
+  void put_fav_names_(const std::vector<::espn::TeamRef> &teams, const std::vector<std::string> &names);
+  bool put_fav_name_(uint8_t league, uint32_t id, const std::string &name);  // no save
+  std::string fav_name_(uint8_t league, uint32_t id) const {
+    return ::espn::fav_name_get(this->fav_names_, league, id);
+  }
   // The options of playlist n (1..count); every other list has none.
   ::espn::ListOpt list_opt_(uint8_t n) const;
   // Every 10 s from loop(): a schedule that starts puts its playlist on, one

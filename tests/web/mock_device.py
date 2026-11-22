@@ -158,16 +158,34 @@ URI_MAX = 512
 FORM_MAX = 1024
 
 
+# Followed athletes' names, kept by league and id (fav_names.h).
+FAV_NAMES = {}
+
+
 def athlete_league(lg):
-    """known_team(): a favorite in a leaderboard league is an athlete, any id."""
+    """fav_names.h athlete_league(): a favorite in a leaderboard league is an athlete."""
     return LEAGUE_SPORT.get(lg) in LEADERBOARD_SPORTS
 
 
+def athlete_abbr(name):
+    """fav_names.h athlete_abbr(): the surname past a suffix, when it is 10 bytes or fewer."""
+    words = name.split()
+    while len(words) > 1 and words[-1] in ("Jr.", "Jr", "Sr.", "Sr", "II", "III", "IV"):
+        words.pop()
+    return words[-1] if len(words) >= 2 and len(words[-1].encode("utf-8")) <= 10 else ""
+
+
 def team(lg, tid):
-    """put_team(): league, id, abbr and name, or an empty object. A golfer
-    has the ref alone."""
+    """put_team(): league, id, abbr and name, or an empty object. An athlete
+    has the name the panel keeps, and its surname as abbr when short enough."""
     if athlete_league(lg) and tid:
-        return {"l": lg, "id": tid}
+        out = {"l": lg, "id": tid}
+        name = FAV_NAMES.get((lg, tid), "")
+        if name:
+            out["name"] = name
+            if athlete_abbr(name):
+                out["abbr"] = athlete_abbr(name)
+        return out
     if (lg, tid) not in TEAMS:
         return {}
     abbr, name = TEAMS[(lg, tid)]
@@ -406,6 +424,7 @@ def add_picture(raw):
 
 def reset_state(overrides):
     PIC_FILES.clear()
+    FAV_NAMES.clear()
     STATE.clear()
     STATE.update(copy.deepcopy(INITIAL))
     STATE.update(overrides)
@@ -469,6 +488,10 @@ def parse_team_ref(v):
     ref = (lg, int(m.group())) if colon and lg in LEAGUES and m else None
     return ref if ref in TEAMS or (ref and athlete_league(lg) and ref[1] > 0) else None
 
+
+def athlete_name_clean(v):
+    """fav_names.h athlete_name_clean(): one line, no list separators, 23 bytes at most."""
+    return message_clean(v.replace(",", "").replace(";", "").replace("�", ""), 23, False)
 
 
 def timezone_index(v):
@@ -948,6 +971,10 @@ def apply_set(kv):
                 ref = parse_team_ref(part)
                 if ref and ref not in refs:
                     refs.append(ref)
+                    # An athlete's name after the id, kept with its league and id.
+                    name = athlete_name_clean(part.split(":", 2)[2]) if athlete_league(ref[0]) and part.count(":") >= 2 else ""
+                    if name:
+                        FAV_NAMES[ref] = name
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
             # A button-only team keeps its mark wherever it moved (remap_lists_).
             solo = {r for r, t in zip(before, STATE["favs"]) if r and t.get("btn")}
@@ -1163,6 +1190,13 @@ def team_text(t):
     return f"{t['l']}:{t['id']}" if t and t.get("id") else ""
 
 
+def fav_text(t):
+    """settings_doc.h fav_ref_text(): an athlete's kept name rides after the id."""
+    ref = team_text(t)
+    name = athlete_name_clean(t.get("name", "")) if ref and athlete_league(t["l"]) else ""
+    return ref + ":" + name if name else ref
+
+
 def settings_doc():
     """settings_from_state(): the backup GET /gameday/settings writes."""
     s = state_doc()
@@ -1170,7 +1204,7 @@ def settings_doc():
     for k in SETTINGS_ORDER:
         if k == "favs":
             # A button-only team stays out: its button's team brings it back.
-            favs = [team_text(t) if counts(t) else "" for t in s["favs"]]
+            favs = [fav_text(t) if counts(t) else "" for t in s["favs"]]
             while favs and not favs[-1]:
                 favs.pop()
             out["favs"] = favs

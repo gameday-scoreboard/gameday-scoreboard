@@ -851,6 +851,48 @@ void test_leaderboards() {
   SCHECK(!parse_set("leaderboards", "racing:f1", op, kFavMax), "set refuses a value with no sport it has");
 }
 
+// A followed golfer's name rides after the id in favs and is kept by league
+// and id (fav_names.h).
+void test_fav_names() {
+  const uint8_t pga = (uint8_t) League::PGA, nfl = (uint8_t) League::NFL;
+  SetOp op;
+  SCHECK(parse_set("favs", "nfl:6:Cowboys,pga:9478:Scottie Scheffler,pga:46046", op, kFavMax) && op.teams.size() == 3 &&
+             op.names.size() == 3,
+         "favs with a name parses");
+  SCHECK(op.teams[1].league == pga && op.teams[1].id == 9478 && op.names[1] == "Scottie Scheffler",
+         "a golfer keeps the name after the id");
+  SCHECK(op.names[0].empty() && op.names[2].empty(), "a team's text after the id is ignored; no name is \"\"");
+  SCHECK(fav_ref_name("pga:1:  Ludvig \xc3\x85" "berg \xf0\x9f\x98\x80 ") == "Ludvig \xc3\x85" "berg", "a name is trimmed, emoji left out");
+  SCHECK(fav_ref_name("pga:1:Christiaan Bezuidenhout Jr.") == "Christiaan Bezuidenhout", "cut to 23 bytes");
+  SCHECK(fav_ref_name("pga:1:Christiaan Bezuidenhou\xc3\xb8x") == "Christiaan Bezuidenhou", "never cut inside a character");
+  SCHECK(athlete_abbr("Scottie Scheffler") == "Scheffler" && athlete_abbr("Davis Love III") == "Love" &&
+             athlete_abbr("Matt Fitzpatrick") == "" && athlete_abbr("Scheffler") == "",
+         "the short form is the surname when it fits");
+
+  FavNames n{};
+  std::vector<std::pair<uint8_t, uint32_t>> favs = {{nfl, 6}, {pga, 9478}};
+  SCHECK(fav_name_put(n, pga, 9478, "Scottie Scheffler", favs), "a new name is a change");
+  SCHECK(!fav_name_put(n, pga, 9478, "Scottie Scheffler", favs), "the same name again writes nothing");
+  SCHECK(!fav_name_put(n, pga, 9478, "", favs) && fav_name_get(&n, pga, 9478) == "Scottie Scheffler",
+         "no name keeps the one kept");
+  SCHECK(fav_name_put(n, pga, 9478, "S. Scheffler", favs) && fav_name_get(&n, pga, 9478) == "S. Scheffler",
+         "a new name replaces it");
+  SCHECK(!fav_name_put(n, nfl, 6, "Cowboys", favs) && fav_name_get(&n, nfl, 6).empty(), "a team keeps no name");
+  SCHECK(fav_name_get(nullptr, pga, 9478).empty(), "none kept");
+  // Full: an athlete no longer followed gives up its entry.
+  FavNames full{};
+  std::vector<std::pair<uint8_t, uint32_t>> all;
+  for (uint32_t id = 1; id <= kFavNamesMax; id++) {
+    all.emplace_back(pga, id);
+    fav_name_put(full, pga, id, "Golfer " + std::to_string(id), all);
+  }
+  SCHECK(!fav_name_put(full, pga, 999, "Seventeenth", all), "no room while all 16 are followed");
+  all[4] = {pga, 999};
+  SCHECK(fav_name_put(full, pga, 999, "Seventeenth", all) && fav_name_get(&full, pga, 999) == "Seventeenth" &&
+             fav_name_get(&full, pga, 5).empty() && fav_name_get(&full, pga, 6) == "Golfer 6",
+         "the unfollowed golfer's entry is reused");
+}
+
 void test_live_leagues() {
   std::vector<uint8_t> none;
   SCHECK(keys(live_leagues(0, none)) == "nfl", "auto, no favorites is NFL");
@@ -1484,6 +1526,7 @@ int run_set_tests(int &total_checks) {
   test_parse_set();
   test_cards();
   test_leaderboards();
+  test_fav_names();
   test_live_leagues();
   test_scan_leagues();
   test_no_team();
